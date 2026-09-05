@@ -336,9 +336,18 @@ public static class CampaignBoards
     /// <c>[@MessageBox@]</c>'s own row (<c>MB_P_BACKGROUND</c>, <c>MB_P_ICON</c>,
     /// <c>MB_B_CENTER</c>, <c>MB_T_MESSAGE</c>), offset by where the 410x300 art lands; the
     /// reference (<c>OriginalScreenshots/Campaign Flight Check Change Plane Export dialog.png</c>)
-    /// puts its edges at the centred one.</summary>
+    /// puts its edges at the centred one and shows OK on its normal frame in the box's own white,
+    /// the pointer being elsewhere.</summary>
     public static BoardPanel Dialog(CampaignModal modal, CampaignLayout? layout = null) =>
-        Dialog(modal.Message, new[] { new DialogButton(DialogCenterKey, modal.Button, 2, BoardInk.LabelActivate) }, layout);
+        Dialog(
+            modal.Message,
+            new[]
+            {
+                new DialogButton(
+                    DialogCenterKey, modal.Button,
+                    ComposedBoard.PlaqueFrame(StripFrames, focused: false, pressed: false), ComposedBoard.DialogInk(pressed: false)),
+            },
+            layout);
 
     /// <summary>The messagebox over any of its button sets: the single centred OK (<c>MB_B_CENTER</c>,
     /// the <c>0x1</c> box) or the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the
@@ -426,6 +435,26 @@ public static class CampaignBoards
         var (x, _, width) = (layout ?? CampaignLayout.Fallback).Box(
             CampaignLayout.AmmoSection, "OL_S_AMMODESC", 566f, 96f, 172f);
         return (x, 92f, width);
+    }
+
+    /// <summary>An open drop-down's list as a pointer sees it: the window under the field, the
+    /// thumb on its track in the scrollbar column; null while the list is closed or fits its
+    /// window.</summary>
+    public static ListWindow? ComboWindow(CampaignCombo combo)
+    {
+        ArgumentNullException.ThrowIfNull(combo);
+        if (!combo.Open || !combo.Scrolls)
+        {
+            return null;
+        }
+
+        float top = combo.Y + ComboFieldHeight;
+        float height = combo.Visible * combo.RowHeight;
+        return new ListWindow(
+            combo.X, top, combo.Width, height,
+            combo.X + combo.Width - ComboArrowWidth, ThumbY(combo, top, height), ComboArrowWidth, ScrollThumbHeight,
+            top + ScrollArrowHeight, height - (ScrollArrowHeight * 2f),
+            combo.Entries.Count, combo.RowsDisplayed, combo.First);
     }
 
     /// <summary>Where the <paramref name="index"/>-th list row of a screen sits, as x, y and wrap
@@ -529,12 +558,10 @@ public static class CampaignBoards
 
     // Where the thumb sits in the track between the two arrows: the window's own position in the
     // list, so a full list's thumb is at the bottom and an unscrolled one's is at the top.
-    private static float ThumbY(CampaignCombo combo, float top, float height)
-    {
-        float track = height - (ScrollArrowHeight * 2f) - ScrollThumbHeight;
-        int span = Math.Max(1, combo.Entries.Count - combo.RowsDisplayed);
-        return top + ScrollArrowHeight + (Math.Max(0f, track) * combo.First / span);
-    }
+    private static float ThumbY(CampaignCombo combo, float top, float height) =>
+        ListWindow.ThumbYFor(
+            top + ScrollArrowHeight, height - (ScrollArrowHeight * 2f), ScrollThumbHeight,
+            combo.First, combo.Entries.Count - combo.RowsDisplayed);
 
     // A field's words, inset from its left edge and sat on the row's own baseline the way the
     // reference draws them: the text is vertically centred in a 16-pixel field at an 11-pixel face.

@@ -21,15 +21,12 @@ public sealed record OriginalHangarInks(
 /// seven <c>0x1100</c> edges: every tab is a sibling reachable from every other, READY TO PURCHASE
 /// opens the totals, CANCEL drops the scratch plane and SELL PLANES opens the inventory. Each tab's
 /// dropdowns bind to the feature's operations; a pick that changes the airframe raises the
-/// defaults ask as a dialog over the page. Remake-only until the tab bar is filmed: the top-level
-/// door, the export wording on the wallet-free door, the standing tab drawn in its disabled state,
-/// the open list under its box, keyboard and pad focus, and where the running total shows.
+/// defaults ask as a dialog. Entered wallet-free from Instant Action's Build Custom Plane and over
+/// the wallet from the cabin's PLANE CONSTRUCTION. Remake-only until the tab bar is filmed: the
+/// export wording, the standing tab drawn disabled, the open list, keyboard and pad focus.
 /// </summary>
 public sealed partial class OriginalShell
 {
-    /// <summary>The hangar door's key on the top level.</summary>
-    public const string HangarKey = "HANGAR";
-
     /// <summary>The layout section the name screen is composed from.</summary>
     public const string PlaneNameSection = "PlaneName";
 
@@ -92,9 +89,6 @@ public sealed partial class OriginalShell
 
     /// <summary>The paint tab's pattern dropdown.</summary>
     public const string PatternDropKey = "PT_D_PATTERN";
-
-    // The hub door under the Dogfight door, one plaque plus air below it.
-    private const float HangarDoorY = DoorY + 72f;
 
     // The plane picture's authored corner, the four PX_P_PLANE panes' own.
     private const float PlaneX = 16f;
@@ -183,10 +177,10 @@ public sealed partial class OriginalShell
     private bool IsHub => IsHangarTab || _screen == OriginalScreen.HangarPurchase;
 
     /// <summary>Opens the hangar from the screen showing: a build over the saved-plane store,
-    /// wallet-free from the top level's door and over <paramref name="wallet"/> from the cabin's
-    /// PLANE CONSTRUCTION, entered through the name screen as the original's own chain does. The
-    /// screen the door was pressed on is where CANCEL and a commit return to. Nothing happens when
-    /// the shell has no feature or no store.</summary>
+    /// wallet-free from Instant Action's Build Custom Plane and over <paramref name="wallet"/> from
+    /// the cabin's PLANE CONSTRUCTION, entered through the name screen as the original's own chain
+    /// does. The screen the door was pressed on is where CANCEL and a commit return to. Nothing
+    /// happens when the shell has no feature or no store.</summary>
     public void OpenHangar(IHangarWallet? wallet = null)
     {
         if (_hangar == null || _planes == null)
@@ -194,7 +188,9 @@ public sealed partial class OriginalShell
             return;
         }
 
-        _hangar.Open(_planes, wallet);
+        // Over a wallet the build store is the campaign's own, so ownership and the file it names
+        // cannot end up in two different directories when a suite or an aid seats a scratch store.
+        _hangar.Open(wallet != null ? _campaign?.Planes ?? _planes : _planes, wallet);
         _hangarReturn = IsHangarScreen ? OriginalScreen.TopLevel : _screen;
         _hangarName = string.Empty;
         _hangarDefaults = true;
@@ -205,15 +201,16 @@ public sealed partial class OriginalShell
 
     /// <summary>Opens a hangar tab directly on a default-configuration build named
     /// <paramref name="name"/>, the screenshot aids' door: the name screen's OK with the box
-    /// checked, then the tab. Nothing happens without a feature or a store.</summary>
-    public void OpenHangarTab(OriginalScreen tab, string name)
+    /// checked, then the tab, over <paramref name="wallet"/> when the shot wants the campaign's
+    /// cash note. Nothing happens without a feature or a store.</summary>
+    public void OpenHangarTab(OriginalScreen tab, string name, IHangarWallet? wallet = null)
     {
         if (_hangar == null || _planes == null)
         {
             return;
         }
 
-        OpenHangar();
+        OpenHangar(wallet);
         _hangarName = name;
         AcceptName();
         if (tab != OriginalScreen.HangarAirframe)
@@ -329,6 +326,24 @@ public sealed partial class OriginalShell
     // The paper buttons whose authored label colours are the page's black, not the tabs' white.
     private static bool IsPaperButton(string key) =>
         key is PurchaseNowKey or InventorySellKey or InventoryExportKey or AskOkKey or AskCancelKey;
+
+    // The wallet mark on every priced row the funds could not cover after that pick, baked into
+    // the item texts so the closed box, the open list and the focus read the same row.
+    private static void MarkUnaffordable(HangarFeature hangar, string[] items, Func<int, int> costWith)
+    {
+        if (hangar.Wallet == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < items.Length; i++)
+        {
+            if (hangar.Unaffordable(costWith(i)))
+            {
+                items[i] = HangarFeature.UnaffordableMark + items[i];
+            }
+        }
+    }
 
     // A rating's bar: the five authored segment panes, the first n drawn for n stars.
     private static void ComposeBar(MenuLayoutScreen hub, List<BoardPicture> pictures, string prefix, int filled)
@@ -506,13 +521,19 @@ public sealed partial class OriginalShell
     }
 
     // Back onto the entry screen. The cabin re-reads its profile on the way, so a purchase or a
-    // sale through the wallet shows on it.
+    // sale through the wallet shows on it; the Instant Action screen re-reads its Pilot Plane
+    // list, so a build saved here is offered without leaving it.
     private void ReturnFromHangar()
     {
         if (_hangarReturn == OriginalScreen.CampaignCabin)
         {
             ResumeCampaign();
             return;
+        }
+
+        if (_hangarReturn == OriginalScreen.InstantAction)
+        {
+            RefreshInstantActionRoster();
         }
 
         Open(_hangarReturn);
@@ -851,6 +872,68 @@ public sealed partial class OriginalShell
         return true;
     }
 
+    // The hangar's lists for the pointer: an open dropdown's list alone while one stands.
+    private void HangarLists(List<OriginalList> lists)
+    {
+        if (_hangarOpen != null && OpenHangarListWindow() is { } window)
+        {
+            lists.Add(new OriginalList(_hangarOpen, window, ScrollHangarList));
+        }
+    }
+
+    // The open list's window under its box, the thumb between its two arrows on the right edge;
+    // null while the items fit the authored window.
+    private ListWindow? OpenHangarListWindow()
+    {
+        if (_hangarOpen == null)
+        {
+            return null;
+        }
+
+        string section = _screen == OriginalScreen.HangarInventory ? InventorySection : SectionOf(_screen);
+        if (_layout.Screen(section)?.Widget(_hangarOpen) is not { } widget || HangarListFor(_hangarOpen) is not { } list)
+        {
+            return null;
+        }
+
+        var box = HubBox(widget);
+        int count = list.Items.Count;
+        int window = Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
+        if (count <= window)
+        {
+            return null;
+        }
+
+        var upSize = StripSize(StripArt(widget.Art, 3), FallbackArrowWidth, FallbackArrowHeight);
+        var downSize = StripSize(StripArt(widget.Art, 4), FallbackArrowWidth, FallbackArrowHeight);
+        var thumb = StripSize(StripArt(widget.Art, 0, 1), upSize.Width, 11f);
+        float top = box.Y + box.Height;
+        float height = window * box.Height;
+        float trackHeight = height - upSize.Height - downSize.Height;
+        int first = Math.Clamp(_hangarListTop, 0, count - window);
+        return new ListWindow(
+            box.X, top, box.Width + upSize.Width, height,
+            box.X + box.Width, ListWindow.ThumbYFor(top + upSize.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
+            top + upSize.Height, trackHeight, count, window, first);
+    }
+
+    // Puts the open list's window at top; a focused item the move would hide is pulled to the
+    // window's nearer edge, since the window otherwise follows the focus back.
+    private void ScrollHangarList(int top)
+    {
+        if (_hangarOpen == null || HangarListFor(_hangarOpen) is not { } list || OpenHangarListWindow() is not { } window)
+        {
+            return;
+        }
+
+        _hangarListTop = Math.Clamp(top, 0, window.LastTop);
+        int focused = _focus[(int)_screen];
+        if (focused >= 0 && focused < list.Items.Count)
+        {
+            _focus[(int)_screen] = Math.Clamp(focused, _hangarListTop, _hangarListTop + window.Rows - 1);
+        }
+    }
+
     // One dropdown's list over the feature: its items, the standing pick, what a pick does, and
     // for the paint colours and decals the swatch or tile a row draws instead of words.
     private HangarList? HangarListFor(string key)
@@ -870,6 +953,7 @@ public sealed partial class OriginalShell
                     names[i] = hangar.AirframeName(i);
                 }
 
+                MarkUnaffordable(hangar, names, hangar.CostWithAirframe);
                 return new HangarList(names, hangar.AirframeChosen ? scratch.Airframe : -1, i => hangar.PickAirframe(i));
             case EngineDropKey:
                 var engines = new string[CustomPlaneDef.EngineNone + 1];
@@ -878,6 +962,7 @@ public sealed partial class OriginalShell
                     engines[i] = i == CustomPlaneDef.EngineNone ? hangar.Strings.Text(1165, "None") : hangar.EngineName(scratch.Airframe, i);
                 }
 
+                MarkUnaffordable(hangar, engines, hangar.CostWithEngine);
                 return new HangarList(engines, scratch.Engine, i => hangar.SetEngine(i));
             case PatternDropKey:
                 var patterns = hangar.WearablePatterns();
@@ -907,6 +992,7 @@ public sealed partial class OriginalShell
                 units[i] = hangar.ArmourLabel(i);
             }
 
+            MarkUnaffordable(hangar, units, i => hangar.CostWithArmour(zone, i));
             return new HangarList(units, hangar.ArmourUnits(zone), i => hangar.SetArmour(zone, i));
         }
 
@@ -918,6 +1004,7 @@ public sealed partial class OriginalShell
                 guns[i] = hangar.GunCycleName(i);
             }
 
+            MarkUnaffordable(hangar, guns, i => hangar.CostWithGun(slot, i));
             return new HangarList(guns, HangarFeature.GunCycleIndex(scratch.Guns[slot]), i => hangar.SetGun(slot, i));
         }
 
@@ -929,6 +1016,7 @@ public sealed partial class OriginalShell
                 counts[i] = hangar.HardpointsLabel(i);
             }
 
+            MarkUnaffordable(hangar, counts, i => hangar.CostWithHardpoints(wing, i));
             return new HangarList(counts, wing == 0 ? scratch.LeftHardpoints : scratch.RightHardpoints, i => hangar.SetHardpoints(wing, i));
         }
 
@@ -1214,11 +1302,13 @@ public sealed partial class OriginalShell
 
         if (hangar.Wallet is { } wallet)
         {
+            // The cash note's two authored rows, on every tab and the totals page alike; the figure
+            // takes the problems ink once the build outruns it, the mark's own colour.
             AddHangarText(hub, lines, "PX_T_CASHTITLE", HubTextFont, BoardInk.Row);
             if (hub.Widget("PX_T_CASH") is { } cash)
             {
                 lines.Add(new BoardLine("$" + wallet.Funds.ToString(CultureInfo.InvariantCulture), cash.Int("X"), cash.Int("Y"),
-                    cash.Int("Width"), HubLabelFont, BoardInk.Row, -1, false, Justify(cash)));
+                    cash.Int("Width"), HubLabelFont, hangar.TotalUnaffordable() ? BoardInk.Heading : BoardInk.Row, -1, false, Justify(cash)));
             }
         }
 
@@ -1699,6 +1789,13 @@ public sealed partial class OriginalShell
 
             panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 1f, item.Width - 8f, HubItemFont,
                 i == focus ? BoardInk.RowFocused : BoardInk.Row, i));
+        }
+
+        string section = _screen == OriginalScreen.HangarInventory ? InventorySection : SectionOf(_screen);
+        if (OpenHangarListWindow() is { } window && _layout.Screen(section)?.Widget(_hangarOpen) is { } widget
+            && StripArt(widget.Art, 0, 1) is { } thumb)
+        {
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
         }
 
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));

@@ -13,15 +13,15 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The in-game launchscreen shown on a bare launch. Free Flight and Dogfight go straight to
-/// Chapter then Plane; Instant Action opens its own five-step wizard (Environment, MissionType,
-/// Waves, Wingmen, Plane). Dogfight withholds the launch gesture until two players have joined;
-/// see <see cref="CanLaunch"/>. Input is polled per player through <see cref="MenuInput"/> rather
-/// than Godot's input map, since the join flow needs a named device. More than one player splits
-/// the Plane screen into <see cref="SplitScreen.PaneRect"/> panes. Re-entrant on return from
-/// flight; see <see cref="ShowMenu"/>. The Built-in presentation's screen graph: player 1's
-/// commands arrive through the host's first seat, every launch and the quit leave through
-/// <see cref="IMenuHost.Exit"/>, and narration plays through the host's audio service. Module
-/// map: docs/architecture.md. Wizard decode: docs/formats/instant-action.md.
+/// Chapter then Plane; Instant Action opens its own five-step wizard. Dogfight withholds the
+/// launch until two players have joined; see <see cref="CanLaunch"/>. Input is polled per player
+/// through <see cref="MenuInput"/>, not Godot's input map, since the join flow needs a named
+/// device; the mouse through the rows' own <c>gui_input</c> (<see cref="PointerEvent"/>). More
+/// than one player splits the Plane screen into <see cref="SplitScreen.PaneRect"/> panes.
+/// Re-entrant on return from flight; see <see cref="ShowMenu"/>. The Built-in presentation's
+/// screen graph: player 1's commands arrive through the host's first seat, every launch and the
+/// quit leave through <see cref="IMenuHost.Exit"/>, and narration plays through the host's audio
+/// service. Module map: docs/architecture.md. Wizard decode: docs/formats/instant-action.md.
 /// </summary>
 public sealed partial class LaunchMenu : CanvasLayer
 {
@@ -36,13 +36,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     public const string CampaignRow = "Campaign";
 
     /// <summary>The row that opens the Options screen, the last on the Mode screen. Options hold
-    /// the one process-wide choice so far, the menu presentation, and every presentation exposes
-    /// them so a player can always get back to Built-in.</summary>
+    /// the process-wide choices (the difficulty, the menu presentation, the graphics mode), and
+    /// every presentation exposes them so a player can always get back to Built-in.</summary>
     public const string OptionsRow = "Options";
 
     /// <summary>The row that opens the rebinding screen, inside Options. It is not beside the
-    /// presentation and graphics steppers as a third choice: those two are process-wide and leave
-    /// through <c>OptionsApplyExit</c>, while a keymap is per player and saves itself.</summary>
+    /// three steppers as a further choice: those are process-wide and leave through
+    /// <c>OptionsApplyExit</c>, while a keymap is per player and saves itself.</summary>
     public const string ControlsRow = "Controls...";
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
@@ -151,6 +151,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // This screen's view of the shared setup's seats, player 1 first, one wrapper per seat with
     // the poller behind it and its last frame; SyncSlots keeps it in step with the feature.
     private readonly List<Slot> _slots = new();
+    // Player 1's row controls by absolute row index, as last built, for RowControl.
+    private readonly Dictionary<int, Control> _rowControls = new();
     private int _slotsRevision = -1;
     // The menu host: its first seat is player 1's commands, its feature set holds Free Flight's and
     // Instant Action's state and launch rules and the shared player setup, its audio service plays
@@ -172,11 +174,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // The Options screen's cursor and the two choices its stepper rows would apply, seeded from
+    // The Options screen's cursor and the three choices its stepper rows would apply, seeded from
     // the saved options when the screen opens so it shows back what was asked for, not what is
     // active: availability can make Built-in active, and the graphics mode a running process
     // resolved is the one the process started under.
     private int _optionsIndex;
+    private int _difficultyChoice = Difficulty.Normal;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
@@ -272,6 +275,17 @@ public sealed partial class LaunchMenu : CanvasLayer
     // Frames left to draw the pressed plaque depressed. The original's own button art carries that
     // frame, and a confirm that changes nothing on screen reads as a dead button on a pad.
     private int _pressFrames;
+
+    // The mouse's commands since the last frame, folded into player 1's next frame by WithPointer:
+    // a hover is a cursor step onto its row, a click is Accept, a wheel notch a step. Held for the
+    // frame rather than applied in the event, since Rebuild replaces the very controls the event
+    // is dispatched through.
+    private MenuCommands _pointer = MenuCommands.None;
+    // The row the left button went down on and whether the pointer is still over it, Godot's own
+    // button rule: a release confirms only inside the control that took the press. Null between
+    // clicks, and cleared by Rebuild, which frees the control the press landed on.
+    private int? _pressRow;
+    private bool _pressInside;
 
     private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign, Options, Controls }
 
@@ -378,6 +392,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Controls => _controlsIndex,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
+
+    // The row player 1's mouse steps from: the cursor of the list its rows were built from, which
+    // on a split aircraft screen is pane 1's fit row while that pane is in its loadout.
+    private int PointerIndex =>
+        _screen == Screen.Plane && _slots[0].InLoadout ? _slots[0].FitRow : CurrentIndex;
 
     // The font the bands and the fit columns are measured in, or null before the theme has one.
     private Font? MenuFont => _zones.GetThemeDefaultFont();
@@ -651,6 +670,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Hide the menu (the host is about to build a session).</summary>
     public void HideMenu() => Visible = false;
 
+    /// <summary>The control drawing player 1's row <paramref name="index"/>, or null when that row
+    /// is not drawn (outside a list's window, or a composed campaign board). A check injects the
+    /// mouse events Godot would dispatch through its <c>gui_input</c> and mouse-exit signals.</summary>
+    public Control? RowControl(int index) => _rowControls.TryGetValue(index, out var row) ? row : null;
+
     /// <summary>Applies one frame of player 1's semantic commands in place of a device poll, then
     /// redraws if anything changed. The scripted journey suites drive the real screens through
     /// this, and the frame shape is the one a menu input source hands a presentation. Needs
@@ -661,7 +685,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Player 1's frame alone: the other seats read idle, not whatever their last poll held.
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = MenuCommands.None;
-        Apply(frame);
+        Apply(WithPointer(frame));
         bool dirty;
         try
         {
@@ -827,7 +851,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
         var seat = _host.Seats[0];
         seat.CapturingText = NamePage() != null;
-        Apply(seat.Poll((float)delta));
+        Apply(WithPointer(seat.Poll((float)delta)));
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
         dirty |= HandleInput();
@@ -1014,6 +1038,77 @@ public sealed partial class LaunchMenu : CanvasLayer
         p1.Loadout = frame.Loadout;
         p1.Presets = frame.Contents;
         _slots[0].Frame = frame;
+    }
+
+    // The mouse's pending commands folded into player 1's frame, then dropped. The frame's own
+    // step wins over a hover, so a pad press and a pointer move in one frame cannot each take
+    // the cursor to a different row; focus stays one thing.
+    private MenuCommands WithPointer(MenuCommands frame)
+    {
+        var pointer = _pointer;
+        _pointer = MenuCommands.None;
+        if (ReferenceEquals(pointer, MenuCommands.None))
+            return frame;
+        return frame with
+        {
+            MoveY = frame.MoveY != 0 ? frame.MoveY : pointer.MoveY,
+            Accept = frame.Accept || pointer.Accept,
+        };
+    }
+
+    // Puts one of player 1's rows under the mouse. The control takes Godot's own hit test (its
+    // labels stay Ignore, so the row is hit as a whole) and routes its events into the frame.
+    private void Pointable(Control row, int index)
+    {
+        row.MouseFilter = Control.MouseFilterEnum.Stop;
+        row.GuiInput += ev => PointerEvent(index, ev);
+        row.MouseEntered += () => { if (_pressRow == index) _pressInside = true; };
+        row.MouseExited += () => { if (_pressRow == index) _pressInside = false; };
+        _rowControls[index] = row;
+    }
+
+    // One mouse event over a row, or over the list between rows (row null, the wheel alone). A
+    // motion focuses the row, a wheel notch steps the cursor, and the left button confirms on the
+    // release when it went down on this row and the pointer never left it.
+    private void PointerEvent(int? row, InputEvent ev)
+    {
+        switch (ev)
+        {
+            case InputEventMouseMotion when row is { } hovered:
+                _pointer = _pointer with { MoveY = hovered - PointerIndex };
+                break;
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp }:
+                _pointer = _pointer with { MoveY = _pointer.MoveY - 1 };
+                break;
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelDown }:
+                _pointer = _pointer with { MoveY = _pointer.MoveY + 1 };
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left } button when row is { } pressed:
+                if (button.Pressed)
+                {
+                    _pressRow = pressed;
+                    _pressInside = true;
+                }
+                else
+                {
+                    if (_pressRow == pressed && _pressInside)
+                        Click(pressed);
+                    _pressRow = null;
+                }
+
+                break;
+        }
+    }
+
+    // A press and release on one row: the cursor steps onto it and Accept lands there in the same
+    // frame, so no redraw can come between the two. A locked aircraft pick cannot move its cursor,
+    // so a click on any other row is refused rather than confirming the locked one under it.
+    private void Click(int row)
+    {
+        int delta = row - PointerIndex;
+        if (delta != 0 && _screen == Screen.Plane && _slots[0].Locked && !_slots[0].InLoadout)
+            return;
+        _pointer = _pointer with { MoveY = delta, Accept = true };
     }
 
     // Start on an unclaimed pad joins a new player on the Plane or Campaign screen; the scan
@@ -1350,20 +1445,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // Both choice rows are two-way steppers; the apply row has nothing to step.
-                if (_optionsIndex == 0)
+                // The three choice rows are steppers; the doors under them have nothing to step.
+                switch (_optionsIndex)
                 {
-                    TogglePresentationChoice();
-                    return true;
+                    case 0: StepDifficultyChoice(dir); return true;
+                    case 1: TogglePresentationChoice(); return true;
+                    case 2: ToggleGraphicsChoice(); return true;
+                    default: return false;
                 }
-
-                if (_optionsIndex == 1)
-                {
-                    ToggleGraphicsChoice();
-                    return true;
-                }
-
-                return false;
             case Screen.MissionType:
                 // The lives stepper rides the same screen as the mission choice (decision 18),
                 // so it never competes with the vertical list cursor above.
@@ -1427,22 +1516,27 @@ public sealed partial class LaunchMenu : CanvasLayer
             case Screen.Options:
                 if (_optionsIndex == 0)
                 {
-                    TogglePresentationChoice();
+                    StepDifficultyChoice(1);
                 }
                 else if (_optionsIndex == 1)
                 {
-                    ToggleGraphicsChoice();
+                    TogglePresentationChoice();
                 }
                 else if (_optionsIndex == 2)
+                {
+                    ToggleGraphicsChoice();
+                }
+                else if (_optionsIndex == 3)
                 {
                     _screen = Screen.Controls;
                     OpenControls();
                 }
                 else
                 {
-                    // The launcher persists both choices and restarts the menu; the screen stays
+                    // The launcher persists every choice and restarts the menu; the screen stays
                     // standing for the host to hide.
-                    _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice));
+                    _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
+                        Difficulty.Word(_difficultyChoice)));
                 }
 
                 break;
@@ -1700,9 +1794,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // table for everything else (the two profile-seeded starters and the reward aircraft, neither
     // of which is hangar-built). Without them the flight check and ammo screens read every plane
     // as fit-less.
-    private CampaignFlow NewCampaignFlow(CampaignProfileStore store)
+    private CampaignFlow NewCampaignFlow(CampaignProfileStore store, CustomPlaneStore? planes = null)
     {
-        _campaignFeature.Open(store, CustomPlaneStore.UserPlanes(), Fits, _dataRoot);
+        _campaignFeature.Open(store, planes ?? CustomPlaneStore.UserPlanes(), Fits, _dataRoot);
         return new CampaignFlow(_campaignFeature, CampaignLayoutOverride);
     }
 
@@ -1743,7 +1837,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Two of the aids need a roster to pick from and five need a profile part-way through the
         // campaign; the seeded store carries both, since a second profile changes no later screen.
         bool seeded = value != "campaign-empty" && value != "campaign-entry";
-        _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"));
+        _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         _screen = Screen.Campaign;
         _error = "";
         PrimeJoins(); // this entry point needs the same held-Start guard as OpenCampaign
@@ -1759,14 +1853,15 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        float argument = 0f;
-        if (colon >= 0)
-        {
-            float.TryParse(startScreen[(colon + 1)..], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out argument);
-        }
+        string word = colon < 0 ? string.Empty : startScreen[(colon + 1)..];
+        float.TryParse(word, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float argument);
 
         WalkCampaignAid(flow, value, argument);
+        if (value == "campaign-planeselection" && word == CampaignAidProfiles.ExportArgument)
+        {
+            PressExport(flow);
+        }
 
         // On every screen but the briefing the argument is a cursor step count instead, so a shot
         // can show focus on a plaque other than the opening one. Each step is one pad press.
@@ -1774,6 +1869,21 @@ public sealed partial class LaunchMenu : CanvasLayer
         for (int i = 0; value is not ("campaign-briefing" or "campaign-guestcheck") && i < (int)argument; i++)
         {
             flow.Move(1);
+        }
+    }
+
+    // The pilot's EXPORT press on plane selection, so the shot is the one-button messagebox
+    // standing over the screen; the aid's flow writes into the scratch build store.
+    private void PressExport(CampaignFlow flow)
+    {
+        for (int row = 0; row < flow.Page.RowCount; row++)
+        {
+            if (flow.Page.Button(row).Button == BoardButton.ExportPlane)
+            {
+                flow.FocusRow(row);
+                flow.Accept();
+                return;
+            }
         }
     }
 
@@ -1958,6 +2068,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _campaign = null;
                 _campaignFeature.Discard();
                 _error = "";
+
+                // An EXPORT in the campaign that was just left added a plane to the pickers, and the
+                // sortie screens are reached from here without another Show to re-read on.
+                RefreshRoster();
                 return true;
         }
     }
@@ -2182,6 +2296,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void Rebuild()
     {
         _viewSize = GetViewport().GetVisibleRect().Size;
+        // Every layout below frees the row controls, so a press on one of them cannot complete.
+        _rowControls.Clear();
+        _pressRow = null;
 
         // A campaign screen is a composed board at authored pixel positions, not a row list, so it
         // takes the whole window and neither of the other two layouts draws behind it.
@@ -2251,12 +2368,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         column.AddChild(Spacer((int)(ZonePad * s)));
         column.AddChild(Label(Heading(), (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
 
-        // The persistent price/weight line comes from HangarFlow.TotalsLine, error-coloured when
-        // over and empty where the focused row has no plane to price. Its slot is reserved on every
-        // screen, so gaining or losing a total never moves the rows under it.
+        // The hangar's totals with the campaign's money on hand beside them, error-coloured when
+        // over either. The slot is reserved on every screen, so gaining or losing a line never
+        // moves the rows under it.
         var totals = _screen == Screen.Hangar ? _hangar : null;
-        column.AddChild(Reserved(totals?.TotalsLine ?? "", (int)(DetailFont * s),
-            totals is { TotalsOverweight: true } ? ErrorColor : DetailColor));
+        column.AddChild(Reserved(TotalsAndWallet(totals), (int)(DetailFont * s),
+            totals is { TotalsOverweight: true } or { WalletShort: true } ? ErrorColor : DetailColor));
 
         // The rows in a column of their own so the hangar's art can stand beside them.
         var content = new VBoxContainer();
@@ -2271,7 +2388,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             : _screen == Screen.Controls ? Math.Min(count, _controlsTop + ControlsWindow)
             : count;
         for (int i = first; i < last; i++)
-            content.AddChild(Row(i, s));
+        {
+            var row = Row(i, s);
+            Pointable(row, i);
+            content.AddChild(row);
+        }
+
+        // The wheel between the rows: the column passes what no row took.
+        content.GuiInput += ev => PointerEvent(null, ev);
 
         // C22's art seam: a hangar page may hand the shell one decoded TGA with a caption
         // (blueprint, icon, paint preview), plus a second one for the focused row (E48's decal
@@ -2323,6 +2447,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         _optionsIndex = 0;
         var saved = OptionsStore.UserOptions().Load();
+        _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
         _presentationChoice = saved.MenuPresentation ?? PresentationId.BuiltIn.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
     }
@@ -2638,6 +2763,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             + "       L / Y  Unbind       P / X  Defaults       Esc / B  Back without saving";
     }
 
+    // A three-way stepper with wrap, Normal / Hard / Hardest in the campaign selector's order.
+    private void StepDifficultyChoice(int dir) =>
+        _difficultyChoice = ((Difficulty.Clamp(_difficultyChoice) + dir) % 3 + 3) % 3;
+
     private void TogglePresentationChoice() =>
         _presentationChoice = _presentationChoice == PresentationId.Original.Value
             ? PresentationId.BuiltIn.Value
@@ -2854,8 +2983,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             for (int i = 0; i < fitRows.Count; i++)
             {
                 bool selected = i == slot.FitRow;
-                box.AddChild(FitRowControl(fitRows, i, (int)(RowFont * paneScale),
-                    selected ? color : RowColor, selected));
+                var fitRow = FitRowControl(fitRows, i, (int)(RowFont * paneScale),
+                    selected ? color : RowColor, selected);
+                if (player == 0)
+                    Pointable(fitRow, i);
+                box.AddChild(fitRow);
             }
 
             box.AddChild(Label(_roster[slot.PlaneIndex].Name, (int)(DetailFont * paneScale),
@@ -2865,12 +2997,18 @@ public sealed partial class LaunchMenu : CanvasLayer
             return box;
         }
 
+        // The mouse is seat 0's device, so only player 1's pane takes it.
         for (int i = 0; i < _roster.Count; i++)
         {
             bool sel = i == slot.PlaneIndex;
-            box.AddChild(CursorRow.Build(_roster[i].Name, (int)(RowFont * paneScale),
-                sel ? color : RowColor, sel));
+            var row = CursorRow.Build(_roster[i].Name, (int)(RowFont * paneScale), sel ? color : RowColor, sel);
+            if (player == 0)
+                Pointable(row, i);
+            box.AddChild(row);
         }
+
+        if (player == 0)
+            box.GuiInput += ev => PointerEvent(null, ev);
 
         box.AddChild(Label(PlaneStat(_roster[slot.PlaneIndex].Node), (int)(DetailFont * paneScale),
             DetailColor, HorizontalAlignment.Center));
@@ -2929,6 +3067,20 @@ public sealed partial class LaunchMenu : CanvasLayer
         var label = Label(text, fontSize, color, HorizontalAlignment.Center);
         label.CustomMinimumSize = new Vector2(0f, LineHeight(fontSize));
         return label;
+    }
+
+    // The one reserved line over a hangar screen: the totals, then the wallet where a campaign funds
+    // the build, either alone when the other is empty.
+    private string TotalsAndWallet(HangarFlow? flow)
+    {
+        if (flow == null || _screen != Screen.Hangar)
+        {
+            return "";
+        }
+
+        string totals = flow.TotalsLine;
+        string wallet = flow.WalletLine;
+        return totals.Length > 0 && wallet.Length > 0 ? totals + "      " + wallet : totals + wallet;
     }
 
     // The stock fit behind a roster row, or null when the table has no def flying that model.
@@ -3050,7 +3202,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => Modes.Length + 3, // + the trailing campaign, hangar and options rows
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
-        Screen.Options => 4, // the two steppers, the controls door, then the apply row
+        Screen.Options => 5, // the three steppers, the controls door, then the apply row
         Screen.Controls => ControlsHeaderRows + _controls.Actions.Count + ControlsFooterRows,
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
@@ -3104,13 +3256,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Mode => index < Modes.Length ? Modes[index].Label
                 : index == Modes.Length ? CampaignRow
                 : index == Modes.Length + 1 ? HangarRow : OptionsRow,
-            Screen.Hangar => _hangar?.Page.RowText(index) ?? "",
+            Screen.Hangar => _hangar?.RowText(index) ?? "",
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
             Screen.Options => index switch
             {
-                0 => $"Menu presentation: {PresentationChoiceLabel()}",
-                1 => $"Graphics: {GraphicsChoiceLabel()}",
-                2 => ControlsRow,
+                0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
+                1 => $"Menu presentation: {PresentationChoiceLabel()}",
+                2 => $"Graphics: {GraphicsChoiceLabel()}",
+                3 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3405,15 +3558,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
             : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
             : focus == Modes.Length + 1 ? "Build a plane in the hangar and fly it."
-            : "Choose which presentation draws the menus, and the graphics mode.",
+            : "Choose the difficulty, which presentation draws the menus, and the graphics mode.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
         Screen.Options => focus switch
         {
-            0 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            1 => GraphicsDetail(),
-            2 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
-            _ => "Saves both choices and restarts the menu at its top level; unfinished setup is discarded.",
+            0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
+            1 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
+            2 => GraphicsDetail(),
+            3 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),
         Screen.Presets => PresetDetail(focus),

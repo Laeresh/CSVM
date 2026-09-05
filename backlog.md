@@ -2355,8 +2355,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   RECORDS, not on the build directory, which the two modes share; counting files would let an
   Instant Action build refuse a campaign purchase. Read what the reserved six are for before
   choosing the number, since a cap of 25 and a cap of 19 are different readings of the same decode.
-  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules), `BL-651` (the other
-  half of the two modes over one store).
+  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules). The other half of the
+  two modes over one store is the export gate, `CustomPlaneDef.AwaitingExport`.
 
 - `BL-637` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A targeted patrol boat shows no name line. The answer is per roster
   block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence
@@ -2418,7 +2418,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is already known to the page, which centres the unselected tab's label in `TabWidth`
   (`CampaignScrapbookPage.cs:34`). *⚠ Traps:* the same switch is what leaves every other non-scrap
   row on that page unreachable, so fix the class of row rather than special-casing the two tabs.
-  *Cross-refs:* `BL-707`, the same page's scrolling.
+  *Cross-refs:* the pointer's wheel and thumb reach the campaign lists through `OriginalShell.Lists`,
+  which is a window rather than a row box and so does not answer for these tabs.
 
 - `BL-706` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The PLANE NAME dialog
   sits off-centre.** *Evidence:* reported at the controls over E44's pointer sweep, "Plane
@@ -2487,6 +2488,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   record keeps two dwords either way, so mission-side damage still reads per wing; couple the UI,
   not the model. A saved profile with unequal wings must still load. *Cross-refs:* `BL-723`,
   `docs/org/hangar.md`.
+
+- `BL-744` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **The export notice
+  draws the message box's `?` icon where the original draws `!`.** *Evidence:*
+  `OriginalScreenshots/Campaign Flight Check Change Plane Export dialog.png` shows the `!` frame of
+  `MB_B_Icon.Png`; the remake's one-button message box over the plane-selection screen
+  (`CSVM/src/UI/CampaignBoards.cs`, `Dialog(modal.Message, ...)`, and Original's `ComposeDialog` in
+  `CSVM/src/UI/Menu/Original/OriginalCampaign.cs`) always draws the `?` frame. *Fix shape:* decode
+  which icon frame each message-box call site selects (the delete confirm keeps `?`, the export
+  notice takes `!`) and carry the frame on the modal. *⚠ Traps:* do not key the icon on the button
+  count; the original's two-button confirms and one-button notices may each use either frame.
 
 ## Splitscreen
 

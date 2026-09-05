@@ -31,13 +31,13 @@ public class OriginalShellTests
 
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
         Assert.Equal(
-            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, OriginalShell.HangarKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
+            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
             shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
         // The decoded rows with no remake destination yet are disabled; Instant Action,
-        // Preferences (the Options door) and Quit react. The hangar door stands only over a
-        // saved-plane store, which this shell has none of.
-        Assert.Equal(new[] { true, true, false, false, true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
+        // Preferences (the Options door) and Quit react. The hangar is reached through Instant
+        // Action's Build Custom Plane, so no door of its own stands here.
+        Assert.Equal(new[] { true, true, false, true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
         // A decoded button's rectangle is its authored corner and its measured strip's frame.
         var quit = shell.Rows.Single(r => r.Key == "MM_B_QUIT");
         Assert.Equal((280f, 530f, 240f, 50f), (quit.X, quit.Y, quit.Width, quit.Height));
@@ -60,7 +60,7 @@ public class OriginalShellTests
         step = shell.Step(Pointer(290f, 290f));
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         Assert.Empty(step.Cues);
-        Assert.Equal(3, shell.Hover);
+        Assert.Equal(2, shell.Hover);
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void TheGameOptionsPageTakesBothChoicesAndAppliesThemAsOneExit()
+    public void TheGameOptionsPageTakesEveryChoiceAndAppliesThemAsOneExit()
     {
         var shell = Shell(out _);
         shell.Step(Down);
@@ -208,8 +208,29 @@ public class OriginalShellTests
         Assert.Equal(OriginalShell.GameOptionsDoorKey, shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
+        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
+        Assert.Equal(OriginalShell.DifficultyKey, shell.FocusedKey);
+
+        // The first row is the original's own Difficulty dropdown over the three campaign tiers:
+        // its list opens on Accept, and the third item picks Hardest.
+        shell.Step(Accept);
+        Assert.Equal(OriginalShell.DifficultyKey, shell.OpenGameOption);
+        Assert.Equal(new[] { "Normal", "Hard", "Hardest" }, shell.Rows.Select(r => r.Label));
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Null(shell.OpenGameOption);
+        Assert.Equal(CSVM.Flight.Difficulty.Hardest, shell.DifficultyChoice);
+        Assert.Equal("Hardest", shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey).Label);
+        // A sideways step wraps back onto Normal, then on to Hard.
+        shell.Step(Right);
+        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
+        shell.Step(Right);
+        Assert.Equal(CSVM.Flight.Difficulty.Hard, shell.DifficultyChoice);
+
+        shell.Step(Down);
         Assert.Equal(OriginalShell.PresentationKey, shell.FocusedKey);
 
         // Accept on the closed dropdown opens its list; picking the second item closes it and
@@ -241,6 +262,7 @@ public class OriginalShellTests
         var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
         Assert.Equal(PresentationId.BuiltIn, exit.Presentation);
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
+        Assert.Equal("hard", exit.Difficulty);
     }
 
     [Fact]
@@ -248,6 +270,9 @@ public class OriginalShellTests
     {
         var shell = Shell(out _);
         shell.OpenGameOptions();
+        shell.Step(Right);
+        Assert.Equal(CSVM.Flight.Difficulty.Hard, shell.DifficultyChoice);
+        shell.Step(Down);
         shell.Step(Right);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
 
@@ -259,11 +284,12 @@ public class OriginalShellTests
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
+        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
 
         // Back on the open list closes it; the next Back is CANCEL CHANGES.
         shell.OpenGameOptions();
         shell.Step(Accept);
-        Assert.Equal(OriginalShell.PresentationKey, shell.OpenGameOption);
+        Assert.Equal(OriginalShell.DifficultyKey, shell.OpenGameOption);
         shell.Step(Back);
         Assert.Null(shell.OpenGameOption);
         Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
@@ -277,20 +303,24 @@ public class OriginalShellTests
     [Fact]
     public void TheRowsOpenOnTheSavedWords()
     {
-        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value };
+        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value, Difficulty = "hardest" };
         var shell = Shell(out _, () => saved);
         shell.OpenGameOptions();
 
         Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
+        Assert.Equal(CSVM.Flight.Difficulty.Hardest, shell.DifficultyChoice);
         Assert.Equal("BUILT-IN", shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey).Label);
+        Assert.Equal("Hardest", shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey).Label);
 
         // A file that never set the fields opens the rows on the shipped defaults.
         saved.GraphicsMode = null;
         saved.MenuPresentation = null;
+        saved.Difficulty = null;
         shell.OpenGameOptions();
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
+        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
     }
 
     /// <summary>The graphics row's description reads the choice against the running mode, so a
@@ -356,25 +386,30 @@ public class OriginalShellTests
         var shell = Shell(out _);
         shell.OpenGameOptions();
 
-        // Row one's dropdown box at the authored corner and width, row two's checkbox at the
-        // head-turn box's offset from its own row, then the two decoded plaques.
+        // Row one's dropdown box at the authored Difficulty dropdown's corner and width, row two's
+        // one row down at the pitch, row three's checkbox at the head-turn box's offset from its
+        // own row, then the two decoded plaques.
+        var difficulty = shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey);
+        Assert.Equal((135f, 295f, 144f, 17f), (difficulty.X, difficulty.Y, difficulty.Width, difficulty.Height));
         var menu = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
-        Assert.Equal((135f, 295f, 144f, 17f), (menu.X, menu.Y, menu.Width, menu.Height));
+        Assert.Equal((135f, 355f, 144f, 17f), (menu.X, menu.Y, menu.Width, menu.Height));
         var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
-        Assert.Equal((250f, 340f, 16f, 16f), (graphics.X, graphics.Y, graphics.Width, graphics.Height));
+        Assert.Equal((250f, 400f, 16f, 16f), (graphics.X, graphics.Y, graphics.Width, graphics.Height));
         var accept = shell.Rows.Single(r => r.Key == OriginalShell.GameOptionsAcceptKey);
         Assert.Equal((200f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
 
         var board = shell.Compose();
         Assert.Equal(new[] { "PM_Logo.png", "PP_GoBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
         Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
-        Assert.Contains(board.Lines, l => l.Text == "Menu" && l.X == 130f && l.Y == 280f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select the menu presentation." && l.X == 340f && l.Y == 290f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 340f && l.Width == 112f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal) && l.Y == 350f);
-        // The third authored row is left empty: the page draws two titles, two descriptions and
-        // its own tab title, and nothing at the Auto Head Turn line.
-        Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
+        Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
+        Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Menu" && l.X == 130f && l.Y == 340f && l.Width == 170f);
+        Assert.Contains(board.Lines, l => l.Text == "Select the menu presentation." && l.X == 340f && l.Y == 350f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 400f && l.Width == 112f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal) && l.Y == 410f);
+        // The three authored rows are all taken: three titles, three descriptions and the page's
+        // own tab title.
+        Assert.Equal(7, board.Lines.Count(l => l.Row < 0));
         // The checkbox draws unchecked and unfocused: the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
     }
@@ -426,7 +461,7 @@ public class OriginalShellTests
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(), _ => null);
 
         var rows = shell.Rows;
-        Assert.Equal(new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, OriginalShell.HangarKey }, rows.Select(r => r.Key));
+        Assert.Equal(new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey }, rows.Select(r => r.Key));
         var board = shell.Compose();
         Assert.Empty(board.Plaques);
         Assert.Contains(board.Lines, l => l.Text == "FREE FLIGHT");

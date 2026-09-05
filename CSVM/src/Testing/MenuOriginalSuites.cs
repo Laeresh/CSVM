@@ -33,11 +33,17 @@ internal static class MenuOriginalSuites
         + "Free Flight door focused, a pointer frame over Quit takes focus and cues the rollover, a "
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
-        + "GAME OPTIONS door open the decoded page whose dropdown and checkbox take both choices "
-        + "and whose CANCEL CHANGES drops them, a switch to Built-in "
+        + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
+        + "three rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
+        + "aircraft column and over Instant Action's contents window moves each one row and clamps "
+        + "at the head, a drag down each thumb's track lands the window on its last row without "
+        + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
+        + "pad claims it so it can never join as another seat, joining is open on the Instant Action "
+        + "screen and a second seat joined there stays seated, the campaign flight check carries the "
+        + "seat strip with two seats and none with one, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
-        + "Original fresh, Built-in's Options route steps both choices, opens and leaves the "
-        + "rebinding screen behind its Controls door and emits the apply exit "
+        + "Original fresh, Built-in's Options route steps the difficulty and both other choices, "
+        + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
         + "carrying them, the force flag recovers "
         + "and a missing layout falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
@@ -60,8 +66,9 @@ internal static class MenuOriginalSuites
         // ⚠ The debrief return below opens the campaign, so the presentation is pointed at a
         // scratch store: nothing here may read or write user://Profiles.
         string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer", "Profiles");
+        var player1 = new MenuInput { Keyboard = true };
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
         {
             CampaignProfiles = new CSVM.Session.CampaignProfileStore(profiles),
         });
@@ -79,6 +86,8 @@ internal static class MenuOriginalSuites
             Pointer(ctx, host, seat, shell, audio);
             Fly(ctx, host, seat, shell, exits);
             Return(ctx, host, shell, exits);
+            Lists(ctx, host, seat, shell);
+            Seats(ctx, host, seat, shell, player1);
             OriginalOptionsRoute(ctx, host, seat, shell, exits);
             SwitchToBuiltIn(ctx, host, seat, shell);
             BuiltInOptionsRoute(ctx, host, seat, exits);
@@ -107,7 +116,7 @@ internal static class MenuOriginalSuites
             $"a cold start opens on the top level ({shell?.Screen})");
         ctx.Check(shell?.FocusedKey == OriginalShell.FreeFlightKey,
             $"with the Free Flight door focused ({shell?.FocusedKey})");
-        ctx.Check(shell?.Rows.Count == 9, $"the top level is the six decoded rows plus the three doors ({shell?.Rows.Count})");
+        ctx.Check(shell?.Rows.Count == 8, $"the top level is the six decoded rows plus the two doors ({shell?.Rows.Count})");
         ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
             $"the OS pointer is hidden while Original draws its own ({Godot.Input.MouseMode})");
         return shell;
@@ -211,6 +220,138 @@ internal static class MenuOriginalSuites
             $"and a top-level show closes that campaign again ({shell.Screen})");
     }
 
+    // Seats and joining. A scripted run has no pad, so the claim is driven through the poller's
+    // own record of the pad seat 0 last steered with, and the join through the feature, which is
+    // where a pad's Start lands; the per-screen rule itself is read off the shell.
+    // The pointer's wheel and thumb over the two lists this screen graph reaches: the sortie
+    // screens' aircraft column and Instant Action's contents window, each wheeled a row, dragged
+    // down its track and left back at its head, with the list's own arrows still stepping it.
+    private static void Lists(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
+    {
+        var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.FreeFlight, $"the Free Flight door opens the aircraft column again ({shell.Screen})");
+        WheelAndDrag(ctx, host, seat, shell, fit, "AIRFRAMES", "the sortie screens' aircraft column");
+        ctx.Check(shell.PickedAirframe == null && shell.Screen == OriginalScreen.FreeFlight,
+            $"and the wheel and the drag picked nothing and left no screen ({shell.PickedAirframe ?? "none"}, {shell.Screen})");
+        Press(host, seat, Back);
+
+        WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction, $"Instant Action opens its contents window ({shell.Screen})");
+        WheelAndDrag(ctx, host, seat, shell, fit, OriginalShell.ContentsKey, "Instant Action's contents window");
+        var down = Row(shell, OriginalShell.ContentsDownKey);
+        ctx.Check(down != null, $"the contents window carries its authored down arrow");
+        if (down != null)
+        {
+            int top = shell.ContentsTop;
+            Press(host, seat, Pointer(fit, down.X + 2f, down.Y + 2f, pressed: true, clicked: true));
+            ctx.Check(shell.ContentsTop == top + 1,
+                $"and the arrow still steps the window one row, the wheel having changed nothing about it ({top} -> {shell.ContentsTop})");
+            var up = Row(shell, OriginalShell.ContentsUpKey)!;
+            Press(host, seat, Pointer(fit, up.X + 2f, up.Y + 2f, pressed: true, clicked: true));
+            ctx.Check(shell.ContentsTop == top, $"and the up arrow steps it back ({shell.ContentsTop})");
+        }
+
+        Press(host, seat, Back);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"Back leaves Instant Action for the top level ({shell.Screen})");
+    }
+
+    // One list under the pointer: a wheel step down moves its window by exactly one row, a step
+    // past the head clamps there, and a thumb taken at the top of its track and dragged to the
+    // foot lands the window on its last row without activating whatever the click stood over.
+    private static void WheelAndDrag(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        BoardFit fit, string key, string what)
+    {
+        var list = List(shell, key);
+        ctx.Check(list is { Window.Scrolls: true },
+            $"{what} is a scrolling list the pointer can see ({list?.Window.Count ?? -1} rows in a window of {list?.Window.Rows ?? -1})");
+        if (list is not { Window.Scrolls: true })
+        {
+            return;
+        }
+
+        var window = list.Window;
+        float x = window.X + (window.Width / 2f);
+        float y = window.Y + (window.Height / 2f);
+        Press(host, seat, Pointer(fit, x, y, wheel: 1));
+        ctx.Check(List(shell, key)?.Window.Top == window.Top + 1,
+            $"a wheel step over it moves the window one row ({window.Top} -> {List(shell, key)?.Window.Top})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -3));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and three steps back up clamp at the head ({List(shell, key)?.Window.Top})");
+
+        var head = List(shell, key)!.Window;
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f, pressed: true, clicked: true));
+        ctx.Check(shell.Dragging == key, $"a click on its thumb takes hold of it ({shell.Dragging ?? "nothing"})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f + head.TrackHeight - head.ThumbHeight, pressed: true));
+        ctx.Check(List(shell, key)?.Window.Top == head.LastTop,
+            $"and dragging it the length of its track lands the window on its last row ({List(shell, key)?.Window.Top} of {head.LastTop})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f));
+        ctx.Check(shell.Dragging == null, $"letting the button go ends the drag ({shell.Dragging ?? "nothing"})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -head.Count));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and the wheel brings it home ({List(shell, key)?.Window.Top})");
+    }
+
+    private static void Seats(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, MenuInput player1)
+    {
+        var original = host.Active as OriginalPresentation;
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        ctx.Check(original?.Devices != null && !shell.JoiningOpen,
+            $"the top level keeps joining closed ({shell.Screen}, open={shell.JoiningOpen})");
+        if (original?.Devices is not { } devices)
+        {
+            return;
+        }
+
+        player1.LastActivePad = 2;
+        host.Tick(Dt);
+        ctx.Check(devices.P1Pad == 2 && devices.IsClaimed(2),
+            $"seat 0 steering with pad 2 claims it, so the join scan skips that pad ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
+        player1.LastActivePad = -1;
+
+        WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.JoiningOpen,
+            $"the Instant Action screen opens joining ({shell.Screen}, open={shell.JoiningOpen})");
+        var s2 = new ScriptedSeat();
+        ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2, $"a second seat joins there ({host.Seats.Count})");
+        Press(host, seat, Down);
+        ctx.Check(host.Seats.Count == 2 && shell.Screen == OriginalScreen.InstantAction,
+            $"and stays seated while seat 0 keeps steering the screen ({host.Seats.Count}, {shell.Screen})");
+
+        host.Show(MenuReturnDestination.TopLevel);
+        shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true), CampaignAidProfiles.Planes());
+        ctx.Check(shell.ShowCabin(CampaignAidProfiles.Pilot), $"the scratch campaign seats its pilot");
+        shell.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && shell.JoiningOpen,
+            $"the flight check opens joining too ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(StripSeats(shell) == 2, $"its board carries the seat strip naming both seats ({StripSeats(shell)} lines)");
+        Press(host, s2, Back);
+        ctx.Check(host.Seats.Count == 1, $"the second seat's Back unjoins it ({host.Seats.Count})");
+        ctx.Check(StripSeats(shell) == 0, $"and the strip goes with it, leaving the authored board alone ({StripSeats(shell)} lines)");
+        host.Show(MenuReturnDestination.TopLevel);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<CampaignFeature>().IsOpen,
+            $"a top-level show closes the scratch campaign again ({shell.Screen})");
+    }
+
+    // How many seat lines the composed board's overlays carry: the strip's lines are the only
+    // overlay text that begins with a player tag.
+    private static int StripSeats(OriginalShell shell)
+    {
+        int count = 0;
+        foreach (var panel in shell.Compose().Overlays)
+        {
+            foreach (var line in panel.Lines)
+            {
+                count += line.Text.StartsWith("P", System.StringComparison.Ordinal) && line.Text.Length > 1 && char.IsDigit(line.Text[1]) ? 1 : 0;
+            }
+        }
+
+        return count;
+    }
+
     // The switch, as the launcher performs it after an Options exit: from mid-setup on the Free
     // Flight screen, Deactivate discards the feature's pick and Built-in opens on its Mode screen.
     private static void SwitchToBuiltIn(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
@@ -233,9 +374,10 @@ internal static class MenuOriginalSuites
         ctx.Check(menu?.ShownRowCount == 6, $"whose sixth row is the Options door ({menu?.ShownRowCount})");
     }
 
-    // Built-in's Options route: the last Mode row opens Options, Right steps the presentation to
-    // Original, Right on the row under it steps the graphics mode, and the apply row's Accept
-    // leaves as the one exit the launcher persists both choices from.
+    // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
+    // Hard, Right on the row under it steps the presentation to Original, Right on the next steps
+    // the graphics mode, and the apply row's Accept leaves as the one exit the launcher persists
+    // every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -247,8 +389,11 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 4,
-            $"Accept opens the Options screen with its four rows ({menu.ShownScreen}, {menu.ShownRowCount})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 5 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its five rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
+        Press(host, seat, Down);
         string before = menu.ShownRowText;
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText != before && menu.ShownRowText.StartsWith("Menu presentation: ", System.StringComparison.Ordinal),
@@ -261,7 +406,7 @@ internal static class MenuOriginalSuites
             $"Right steps the graphics row under it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the third row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the fourth row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -274,15 +419,15 @@ internal static class MenuOriginalSuites
             $"Apply leaves through the host as an OptionsApplyExit ({exits.Count}, {exits[^1].GetType().Name})");
         if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
-            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics,
-                $"carrying both stepped choices ({applied.Presentation}, {applied.Graphics})");
+            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard",
+                $"carrying every stepped choice ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty})");
         }
 
         ctx.Check(!host.Shown, $"and the presentation is hidden for the launcher to act (shown={host.Shown})");
     }
 
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose two rows take both choices
+    // Preferences page, its GAME OPTIONS door the decoded page, whose three rows take every choice
     // and whose CANCEL CHANGES drops them; the walk leaves the top level as it found it.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
@@ -291,16 +436,16 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.FocusedKey == OriginalShell.GameOptionsDoorKey,
             $"PREFERENCES opens the Preferences page with its GAME OPTIONS door focused ({shell.Screen}, {shell.FocusedKey})");
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalShell.PresentationKey,
-            $"GAME OPTIONS opens the decoded page on its Menu dropdown ({shell.Screen}, {shell.FocusedKey})");
+        ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalShell.DifficultyKey,
+            $"GAME OPTIONS opens the decoded page on its Difficulty dropdown, the first row ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "GAME OPTIONS" or "Menu" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 3, $"drawing the section's own tab title over our two row titles ({titles} of 3)");
+        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {
@@ -309,8 +454,16 @@ internal static class MenuOriginalSuites
 
         ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
         Press(host, seat, Accept);
+        ctx.Check(shell.OpenGameOption == OriginalShell.DifficultyKey && shell.Rows.Count == 3,
+            $"Accept opens the dropdown over the three campaign tiers ({shell.OpenGameOption}, {shell.Rows.Count})");
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.DifficultyChoice == CSVM.Flight.Difficulty.Hard && shell.FocusedKey == OriginalShell.DifficultyKey,
+            $"and picking the second closes it on Hard ({shell.DifficultyChoice}, {shell.FocusedKey})");
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
         ctx.Check(shell.OpenGameOption == OriginalShell.PresentationKey && shell.Rows.Count == 2,
-            $"Accept opens the dropdown over the two shipped presentations ({shell.OpenGameOption}, {shell.Rows.Count})");
+            $"Accept on the Menu row under it opens the dropdown over the two shipped presentations ({shell.OpenGameOption}, {shell.Rows.Count})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.PresentationChoice == PresentationId.BuiltIn.Value,
@@ -322,8 +475,8 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalShell.GameOptionsCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.PresentationChoice == PresentationId.Original.Value
-            && shell.GraphicsChoice == GraphicsMode.Default,
-            $"CANCEL CHANGES lands back on Preferences with both edits dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.GraphicsChoice})");
+            && shell.GraphicsChoice == GraphicsMode.Default && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal,
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.GraphicsChoice}, {shell.DifficultyChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
@@ -389,8 +542,23 @@ internal static class MenuOriginalSuites
         return null;
     }
 
-    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false) =>
-        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked) };
+    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false, int wheel = 0) =>
+        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked, wheel) };
+
+    // The screen's list under that key, or null. Read fresh after every frame, since a window that
+    // moved is a new record.
+    private static OriginalList? List(OriginalShell shell, string key)
+    {
+        foreach (var list in shell.Lists)
+        {
+            if (list.Key == key)
+            {
+                return list;
+            }
+        }
+
+        return null;
+    }
 
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)
     {

@@ -84,6 +84,8 @@ specified in [`cli.md`](cli.md).
 | `L` | Y | on a menu screen, open the loadout for whatever the screen is about (a wingman's fit, a locked player seat's) |
 | `P` | X | on a menu screen, open its contents list, which is the Instant Action presets today |
 | | Start | on a menu screen, claim a seat with a pad no seat owns yet. Which pad pressed it is a raw device read rather than an action, because a seat's bindings answer for every pad it holds at once and cannot say which one moved. The join gesture has no default of its own for the same reason |
+| mouse · LMB | | on an Original menu screen, the pointer focuses whatever row it stands on and a click confirms it. Built-in's screens take no mouse yet (`BL-654`) |
+| mouse wheel · thumb drag | | on an Original menu screen, a wheel step over a list moves that list's window by one row, and its scrollbar thumb can be dragged down the track, the window following in proportion. Every list takes both: the scrapbook's contents page, an open drop-down on a campaign board or in Plane Construction, Instant Action's dropdowns and its contents window, and the aircraft column on Free Flight and Dogfight. The wheel is a remake comfort on top of the decoded screens; the lists' own arrows are unchanged, and a list that fits its window ignores the wheel |
 | — | | a results board (mission wrap-up, dogfight, race, stunt run) halts the sim and carries its own Photo Mode · Restart · Exit menu, driven by player 1. The pause key does nothing while one is up. Photo Mode leads because the resting row must be the harmless one, and on a results board Restart throws away the run just finished |
 | — | | **while any board is up the camera holds still.** It keeps the pose it had when the board appeared, so moving the menu cursor no longer swings the view (`BL-429`); the free look is the Photo Mode row |
 | Photo Mode row | | hands that player's pane to the `--freecam` controls over the frozen world, hides the board and the whole pilot HUD, and starts locked onto your own aircraft so entering never jumps. The halt is never dropped, so it stays a still frame with the audio paused. `Esc` (pad `B`) brings the board back, leaving the camera where you flew it. Splitscreen: only the pausing player's pane, the other panes stay frozen |
@@ -98,6 +100,7 @@ specified in [`cli.md`](cli.md).
 | `F11` | | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | | at the launchscreen: back, and quit from the Mode screen. In flight it opens the pause board instead — a board menu's Exit item is what leaves a session, so a pad can reach it too |
+| mouse | | at the launchscreen (Built-in): the pointer over a row moves the cursor onto it, a press and release on the same row confirms it (letting go elsewhere confirms nothing), and the wheel steps the cursor over a list. Player 1's device, so on a split aircraft screen only player 1's pane takes it; the campaign boards under Built-in stay on the keys. Original's own pointer is described in `docs/menu-presentations.md` |
 
 ## `--viewer`
 

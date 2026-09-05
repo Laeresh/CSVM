@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Flight;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -11,14 +12,15 @@ public sealed record OriginalInstantActionInks(
 
 /// <summary>
 /// The Original Instant Action screen, composed from the decoded <c>[@InstantAction@]</c> rows over
-/// the shared <see cref="InstantActionFeature"/>: the Table of Contents window with its scroll
-/// arrows, the dropdowns at their authored lines, the enemy rows paged by the up and down buttons
-/// (the first wave beside the pilot fields, waves two to four on the second page), the radio pair
-/// and the five buttons. Decoded rules bound here: a contents row applies its preset, View Story
-/// writes the preset's name as the story title, the ace duel hides every enemy control, the
+/// the shared <see cref="InstantActionFeature"/>: the contents window and its arrows, the dropdowns,
+/// the paged enemy rows, the radio pair and the five buttons. Decoded rules bound here: a contents
+/// row applies its preset, View Story writes its name, the ace duel hides every enemy control, the
 /// wingman plane hides at zero wingmen, a changed militia resets its aircraft, stunt flying bars
-/// the clouds. Remake-only until the screen is filmed: the open list drawn under its box, a
-/// sideways step changing a value, both halves shown together, Build and Weapon Loadout disabled.
+/// the clouds. The Pilot Plane list is the sortie screens' roster (<c>Stock Fury</c>, <c>&lt;build
+/// name&gt; Fury</c>); the wingman list stays stock. Build opens the hangar wallet-free and returns
+/// here with the list re-read; Weapon Loadout opens the loadout screen for the seat the radio
+/// names; a joined second seat is named by the strip and walked through its own aircraft screen
+/// by FLY MISSION. Remake-only readings: docs/org/menu-inventory.md.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -92,8 +94,12 @@ public sealed partial class OriginalShell
     private static readonly string[] WaveKeyPrefixes = { "IA_D_NENEMY", "IA_D_EGROUP", "IA_D_DIFFICULTY", "IA_D_PLANEE" };
 
     private readonly InstantActionFeature _instantAction;
+    private IReadOnlyList<MenuAircraft> _iaPilotRoster = OriginalRosters.Roster(Array.Empty<CustomPlaneDef>());
+    private string? _iaPilotBuild;
+    private LoadoutChoice? _iaSpareFit;
     private int _iaPage;
     private string? _iaOpen;
+    private int _iaListTop;
     private int _iaContentsTop;
     private int _iaRadio;
     private string _iaStoryTitle = string.Empty;
@@ -104,6 +110,41 @@ public sealed partial class OriginalShell
     /// <summary>The open dropdown's key, or null when none is open.</summary>
     public string? OpenDropdown => _iaOpen;
 
+    /// <summary>The Pilot Plane list: the roster the sortie screens read, the eleven stock
+    /// airframes and then the saved builds, as of the last <see cref="RefreshInstantActionRoster"/>.</summary>
+    public IReadOnlyList<MenuAircraft> PilotRoster => _iaPilotRoster;
+
+    /// <summary>The picked Pilot Plane row's index into <see cref="PilotRoster"/>: the picked
+    /// build's row while it still flies the feature's airframe, else that airframe's stock row.</summary>
+    public int PilotRow
+    {
+        get
+        {
+            string node = _instantAction.PlayerPlane.Node;
+            int stock = -1;
+            for (int i = 0; i < _iaPilotRoster.Count; i++)
+            {
+                var row = _iaPilotRoster[i];
+                if (row.Node != node)
+                {
+                    continue;
+                }
+
+                if (row.IsCustom && row.Name == _iaPilotBuild)
+                {
+                    return i;
+                }
+
+                if (!row.IsCustom && stock < 0)
+                {
+                    stock = i;
+                }
+            }
+
+            return stock;
+        }
+    }
+
     /// <summary>Which enemy page shows: 0 the pilot fields with the first wave, 1 waves two to four.</summary>
     public int EnemyPage => _iaPage;
 
@@ -113,8 +154,14 @@ public sealed partial class OriginalShell
     /// <summary>Whose loadout the Weapon Loadout button targets: 0 the pilot, 1 the wingmen.</summary>
     public int LoadoutTarget => _iaRadio;
 
+    /// <summary>The pilot's fit, seat 0's own so the sortie screens and this one edit one choice; a
+    /// shell with no seat joined keeps a spare so the screen still works.</summary>
+    public LoadoutChoice PilotFit => Seat0?.Fit ?? (_iaSpareFit ??= new LoadoutChoice());
+
     /// <summary>The story title View Story last wrote, or "".</summary>
     public string StoryTitle => _iaStoryTitle;
+
+    private bool IsInstantActionFamily => _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout;
 
     /// <summary>Opens the Instant Action screen: the environment is confirmed so the launch's base
     /// def is the environment's own, and no list is open.</summary>
@@ -126,8 +173,32 @@ public sealed partial class OriginalShell
             _iaPage = 0;
         }
 
+        RefreshInstantActionRoster();
         _iaOpen = null;
         Open(OriginalScreen.InstantAction);
+    }
+
+    /// <summary>Re-reads the saved builds into the Pilot Plane list through the sortie screens'
+    /// roster rule. Every entry to the screen calls it; a return from the hangar calls it too, so
+    /// a build saved there is offered without leaving the screen.</summary>
+    public void RefreshInstantActionRoster()
+    {
+        _iaPilotRoster = OriginalRosters.Roster(_planes?.List() ?? Array.Empty<CustomPlaneDef>());
+    }
+
+    /// <summary>Opens one of the screen's dropdowns as a press on it would, for a scripted pose;
+    /// false when the screen is not showing or the key names no dropdown.</summary>
+    public bool OpenInstantActionDropdown(string key)
+    {
+        if (_screen != OriginalScreen.InstantAction || DropdownFor(key) is not { } list)
+        {
+            return false;
+        }
+
+        _iaOpen = key;
+        _iaListTop = 0;
+        _focus[(int)_screen] = Math.Max(0, list.Current);
+        return true;
     }
 
     private static OriginalInstantActionInks ReadInstantActionInks(MenuLayout layout)
@@ -160,6 +231,11 @@ public sealed partial class OriginalShell
     // A dropdown's box: its authored corner and width, one item high.
     private static (float X, float Y, float Width, float Height) DropBox(MenuLayoutWidget widget) =>
         (widget.Int("X"), widget.Int("Y"), widget.Int("Width", (int)FallbackDropWidth), widget.Int("ItemHeight", (int)FallbackItemHeight));
+
+    // How many rows a dropdown's open list shows at once: its authored TotalDisplayed, never more
+    // than it has items and never none.
+    private static int OpenListRows(MenuLayoutWidget widget, int count) =>
+        Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
 
     // The n-th art a row names as a strip; arrows and radios carry their frame count in the row,
     // the dropdown arrows are the same four-frame strips the page buttons draw.
@@ -198,6 +274,27 @@ public sealed partial class OriginalShell
         return int.TryParse(key[(ContentsKey.Length + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : -1;
     }
 
+    // The stock airframe a roster row flies as, matched on the node rather than the row's name:
+    // a build's row is named for the build, and a name-keyed lookup would land on the wrong def.
+    private static InstantActionAirframe? AirframeOf(MenuAircraft row)
+    {
+        foreach (var airframe in InstantActionFeature.Airframes)
+        {
+            if (airframe.Node == row.Node)
+            {
+                return airframe;
+            }
+        }
+
+        return null;
+    }
+
+    private static string PilotRowText(MenuAircraft row)
+    {
+        string airframe = AirframeOf(row)?.Name ?? row.Name;
+        return row.IsCustom ? row.Name + " " + airframe : "Stock " + airframe;
+    }
+
     // The rows: an open list's items alone while one is open, else the screen's widgets.
     private void BuildInstantActionRows(List<OriginalRow> rows)
     {
@@ -207,19 +304,65 @@ public sealed partial class OriginalShell
             return;
         }
 
-        if (_iaOpen != null && screen.Widget(_iaOpen) is { } open && DropdownFor(_iaOpen) is { } list)
+        if (!AddOpenListRows(screen, rows))
         {
-            var box = DropBox(open);
-            for (int i = 0; i < list.Items.Count; i++)
-            {
-                rows.Add(new OriginalRow($"{_iaOpen}:{i}", list.Items[i], OriginalRowKind.ListRow,
-                    box.X, box.Y + (box.Height * (i + 1)), box.Width, box.Height, list.Allowed(i), 0, null));
-            }
+            BuildInstantActionWidgets(screen, rows);
+        }
+    }
 
-            return;
+    // The open list's windowed items as the only rows; false when no list of this screen is open.
+    private bool AddOpenListRows(MenuLayoutScreen screen, List<OriginalRow> rows)
+    {
+        if (_iaOpen == null || screen.Widget(_iaOpen) is not { } open || DropdownFor(_iaOpen) is not { } list)
+        {
+            return false;
         }
 
-        BuildInstantActionWidgets(screen, rows);
+        BuildOpenList(open, list, rows);
+        return true;
+    }
+
+    // An open list's rows: every item keyed <key>:<index> under the box, so a pose or a walk picks
+    // a row by index whatever the window shows; the ones outside the authored window unseen and
+    // unhit, the window following the focused item, and the list's arrows while there is more.
+    private void BuildOpenList(MenuLayoutWidget open, DropdownList list, List<OriginalRow> rows)
+    {
+        var box = DropBox(open);
+        int count = list.Items.Count;
+        int window = OpenListRows(open, count);
+        int focused = _focus[(int)_screen];
+        if (focused >= 0 && focused < count)
+        {
+            if (focused < _iaListTop)
+            {
+                _iaListTop = focused;
+            }
+            else if (focused >= _iaListTop + window)
+            {
+                _iaListTop = focused - window + 1;
+            }
+        }
+
+        _iaListTop = Math.Clamp(_iaListTop, 0, Math.Max(0, count - window));
+        for (int i = 0; i < count; i++)
+        {
+            bool visible = i >= _iaListTop && i < _iaListTop + window;
+            rows.Add(new OriginalRow($"{_iaOpen}:{i}", list.Items[i], OriginalRowKind.ListRow,
+                box.X, box.Y + (box.Height * (i - _iaListTop + 1)), box.Width, box.Height, list.Allowed(i), 0, null, visible));
+        }
+
+        if (window < count)
+        {
+            var up = StripArt(open.Art, 1);
+            var down = StripArt(open.Art, 2);
+            var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
+            var downSize = StripSize(down, FallbackArrowWidth, FallbackArrowHeight);
+            rows.Add(new OriginalRow($"{_iaOpen}:up", string.Empty, OriginalRowKind.Button,
+                box.X + box.Width, box.Y + box.Height, upSize.Width, upSize.Height, _iaListTop > 0, 0, up));
+            rows.Add(new OriginalRow($"{_iaOpen}:down", string.Empty, OriginalRowKind.Button,
+                box.X + box.Width, box.Y + (box.Height * (window + 1)) - downSize.Height, downSize.Width, downSize.Height,
+                _iaListTop + window < count, 0, down));
+        }
     }
 
     // The screen's widgets in focus order: the left page (the contents window, its arrows, View
@@ -257,7 +400,7 @@ public sealed partial class OriginalShell
         }
 
         AddStrip(screen, rows, ViewStoryKey, OriginalRowKind.TextButton, true, 0);
-        AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, false, 0);
+        AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, _hangar != null && _planes != null, 0);
 
         bool ace = _instantAction.IsAceDuel;
         if (_iaPage == 0)
@@ -291,7 +434,7 @@ public sealed partial class OriginalShell
 
         AddStrip(screen, rows, PlayerRadioKey, OriginalRowKind.Radio, true, 1);
         AddStrip(screen, rows, WingmanRadioKey, OriginalRowKind.Radio, true, 1);
-        AddStrip(screen, rows, WeaponLoadoutKey, OriginalRowKind.TextButton, false, 1);
+        AddStrip(screen, rows, WeaponLoadoutKey, OriginalRowKind.TextButton, true, 1);
         AddStrip(screen, rows, FlyMissionKey, OriginalRowKind.TextButton, true, 1);
         AddStrip(screen, rows, ExitKey, OriginalRowKind.Button, true, 1);
     }
@@ -304,7 +447,7 @@ public sealed partial class OriginalShell
         }
     }
 
-    private void AddDropdown(MenuLayoutScreen screen, List<OriginalRow> rows, string key)
+    private void AddDropdown(MenuLayoutScreen screen, List<OriginalRow> rows, string key, int column = 1)
     {
         if (screen.Widget(key) is not { } widget || DropdownFor(key) is not { } list)
         {
@@ -314,7 +457,7 @@ public sealed partial class OriginalShell
         var box = DropBox(widget);
         string value = list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
         rows.Add(new OriginalRow(key, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
-            true, 1, StripArt(widget.Art, 4)));
+            true, column, StripArt(widget.Art, 4)));
     }
 
     private void AddStrip(MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled, int column)
@@ -347,17 +490,73 @@ public sealed partial class OriginalShell
         return _iaContentsTop;
     }
 
+    // The pilot's list over the roster; the wingman's stays the stock table (the original offers
+    // the wingmen no builds), so the two dropdowns are built apart on purpose.
+    private DropdownList PilotDropdown() =>
+        new(Names(_iaPilotRoster, PilotRowText), PilotRow, _ => true, SelectPilotRow);
+
+    private DropdownList WingmanPlaneDropdown() =>
+        new(Names(InstantActionFeature.Airframes, a => a.Name), _instantAction.WingmanPlaneIndex, _ => true, _instantAction.SelectWingmanPlane);
+
+    // A pick moves the feature onto the row's stock airframe either way, so the presets, the def's
+    // nominal name and the wingman screens keep the stock vocabulary; the build rides as the overlay.
+    private void SelectPilotRow(int row)
+    {
+        if (row < 0 || row >= _iaPilotRoster.Count)
+        {
+            return;
+        }
+
+        var pick = _iaPilotRoster[row];
+        var airframes = InstantActionFeature.Airframes;
+        string before = _instantAction.PlayerPlane.Node;
+        for (int i = 0; i < airframes.Count; i++)
+        {
+            if (airframes[i].Node == pick.Node)
+            {
+                _instantAction.SelectPlayerPlane(i);
+                break;
+            }
+        }
+
+        _iaPilotBuild = pick.IsCustom ? pick.Name : null;
+        DropPilotFitIfMoved(before);
+    }
+
+    // A changed airframe drops the pilot's fit, the wingman rule applied to the pilot: gun slots
+    // and pylons are per airframe, so a fit for one has nowhere to live on another.
+    private void DropPilotFitIfMoved(string before)
+    {
+        if (before != _instantAction.PlayerPlane.Node)
+        {
+            PilotFit.ResetToStock();
+        }
+    }
+
+    // The picked pilot row, or the feature's stock airframe when the roster has lost it.
+    private MenuAircraft PilotPick()
+    {
+        int row = PilotRow;
+        if (row >= 0)
+        {
+            return _iaPilotRoster[row];
+        }
+
+        var stock = _instantAction.PlayerPlane;
+        return new MenuAircraft(stock.Name, stock.Node);
+    }
+
     private DropdownList? DropdownFor(string key)
     {
         var ia = _instantAction;
         switch (key)
         {
             case PlayerPlaneKey:
-                return new DropdownList(Names(InstantActionFeature.Airframes, a => a.Name), ia.PlayerPlaneIndex, _ => true, ia.SelectPlayerPlane);
+                return PilotDropdown();
             case WingmenKey:
                 return new DropdownList(Counts(InstantActionFeature.MaxWingmen), ia.NumWingmen, _ => true, ia.SetWingmen);
             case WingmanPlaneKey:
-                return new DropdownList(Names(InstantActionFeature.Airframes, a => a.Name), ia.WingmanPlaneIndex, _ => true, ia.SelectWingmanPlane);
+                return WingmanPlaneDropdown();
             case MissionKey:
                 return new DropdownList(Names(ia.MissionTypes, m => m.Label), ia.MissionTypeIndex, _ => true, i =>
                 {
@@ -407,7 +606,7 @@ public sealed partial class OriginalShell
             }
         }
 
-        return null;
+        return LoadoutDropdownFor(key);
     }
 
     // A sideways step on the focused dropdown picks the next allowed value with wrap; on a radio
@@ -499,9 +698,12 @@ public sealed partial class OriginalShell
                         // Selecting a contents row applies its preset over every other control,
                         // the list's own select callback; the environment is re-confirmed so the
                         // launch's base def follows the preset's chapter.
+                        string before = _instantAction.PlayerPlane.Node;
                         _instantAction.ApplyPreset(int.Parse(suffix, CultureInfo.InvariantCulture));
                         _instantAction.ConfirmEnvironment();
+                        _iaPilotBuild = null;
                         _iaPage = 0;
+                        DropPilotFitIfMoved(before);
                         break;
                 }
 
@@ -510,6 +712,16 @@ public sealed partial class OriginalShell
 
             if (DropdownFor(prefix) is { } list)
             {
+                switch (suffix)
+                {
+                    case "up":
+                        ScrollOpenList(_iaListTop - 1);
+                        return null;
+                    case "down":
+                        ScrollOpenList(_iaListTop + 1);
+                        return null;
+                }
+
                 int index = int.Parse(suffix, CultureInfo.InvariantCulture);
                 if (list.Allowed(index))
                 {
@@ -544,10 +756,27 @@ public sealed partial class OriginalShell
             case WingmanRadioKey:
                 _iaRadio = 1;
                 return null;
+            case BuildKey:
+                OpenHangar();
+                return null;
+            case WeaponLoadoutKey:
+                OpenLoadout();
+                return null;
             case FlyMissionKey:
+                if (_setup.Seats.Count > 1)
+                {
+                    // A second pilot joined here picks on the per-seat screen first; the launch
+                    // then carries every seat.
+                    return BeginInstantActionSeatWalk();
+                }
+
+                // A build flies its airframe's stock node with the def riding along; the def's
+                // own player plane stays the airframe's stock name. An edited fit rides the seat.
+                var pilot = PilotPick();
+                var fit = PilotFit;
                 return _instantAction.BuildExit(new[]
                 {
-                    new MenuSeatChoice(_instantAction.PlayerPlane.Node, Array.Empty<int>()),
+                    new MenuSeatChoice(pilot.Node, Array.Empty<int>(), fit.IsStock ? null : fit, pilot.Custom),
                 });
             case ExitKey:
                 Open(OriginalScreen.TopLevel);
@@ -557,10 +786,112 @@ public sealed partial class OriginalShell
         if (row.Kind == OriginalRowKind.Dropdown && DropdownFor(row.Key) is { } open)
         {
             _iaOpen = row.Key;
+            _iaListTop = 0;
             _focus[(int)_screen] = Math.Max(0, open.Current);
         }
 
         return null;
+    }
+
+    // The screen's lists for the pointer: an open dropdown's list alone while one stands (on the
+    // loadout screen too, whose section has no contents window), else the contents window.
+    private void InstantActionLists(List<OriginalList> lists)
+    {
+        var screen = _layout.Screen(_screen == OriginalScreen.InstantActionLoadout ? LoadoutSection : InstantActionSection);
+        if (screen == null)
+        {
+            return;
+        }
+
+        if (_iaOpen != null)
+        {
+            if (OpenListWindow(screen) is { } open)
+            {
+                lists.Add(new OriginalList(_iaOpen, open, ScrollOpenList));
+            }
+
+            return;
+        }
+
+        if (screen.Widget(ContentsKey) is { } list && ContentsWindow(list) is { } contents)
+        {
+            lists.Add(new OriginalList(ContentsKey, contents, top => _iaContentsTop = top));
+        }
+    }
+
+    // The contents list's window, its thumb on the track between the two arrows placed by how far
+    // the window has scrolled; null while the presets fit the window.
+    private ListWindow? ContentsWindow(MenuLayoutWidget list)
+    {
+        int window = Math.Max(1, list.Int("TotalDisplayed", 14));
+        int count = InstantActionFeature.Presets.Count;
+        if (count <= window)
+        {
+            return null;
+        }
+
+        float itemHeight = list.Int("ItemHeight", (int)FallbackItemHeight);
+        float x = list.Int("X");
+        float y = list.Int("Y");
+        float width = list.Int("Width", 277);
+        var arrow = StripSize(StripArt(list.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
+        var thumb = StripSize(StripArt(list.Art, 0, 1), arrow.Width, 11f);
+        float height = window * itemHeight;
+        float trackHeight = height - (2f * arrow.Height);
+        int top = ContentsTopClamped(window);
+        return new ListWindow(
+            x, y, width + arrow.Width, height,
+            x + width, ListWindow.ThumbYFor(y + arrow.Height, trackHeight, thumb.Height, top, count - window), thumb.Width, thumb.Height,
+            y + arrow.Height, trackHeight, count, window, top);
+    }
+
+    // An open dropdown's list window under its box: the authored TotalDisplayed rows, the arrows
+    // on its right edge and the thumb between them; null while the items fit the window.
+    private ListWindow? OpenListWindow(MenuLayoutScreen screen)
+    {
+        if (_iaOpen == null || screen.Widget(_iaOpen) is not { } widget || DropdownFor(_iaOpen) is not { } list)
+        {
+            return null;
+        }
+
+        var box = DropBox(widget);
+        int count = list.Items.Count;
+        int window = OpenListRows(widget, count);
+        if (count <= window)
+        {
+            return null;
+        }
+
+        var arrow = StripSize(StripArt(widget.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
+        var thumb = StripSize(StripArt(widget.Art, 0, 1), arrow.Width, 11f);
+        float top = box.Y + box.Height;
+        float height = window * box.Height;
+        float trackHeight = height - (2f * arrow.Height);
+        int first = Math.Clamp(_iaListTop, 0, count - window);
+        return new ListWindow(
+            box.X, top, box.Width + arrow.Width, height,
+            box.X + box.Width, ListWindow.ThumbYFor(top + arrow.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
+            top + arrow.Height, trackHeight, count, window, first);
+    }
+
+    // Puts an open list's window at top; a focused item the move would hide is pulled to the
+    // window's nearer edge, since the window otherwise follows the focus back.
+    private void ScrollOpenList(int top)
+    {
+        var screen = _layout.Screen(InstantActionSection);
+        if (_iaOpen == null || screen?.Widget(_iaOpen) is not { } widget || DropdownFor(_iaOpen) is not { } list)
+        {
+            return;
+        }
+
+        int count = list.Items.Count;
+        int window = OpenListRows(widget, count);
+        _iaListTop = Math.Clamp(top, 0, Math.Max(0, count - window));
+        int focused = _focus[(int)_screen];
+        if (focused >= 0 && focused < count)
+        {
+            _focus[(int)_screen] = Math.Clamp(focused, _iaListTop, _iaListTop + window - 1);
+        }
     }
 
     // The screen as drawn: the background under everything, the text rows, the widgets in their
@@ -639,34 +970,82 @@ public sealed partial class OriginalShell
             ComposeInstantActionRow(widgets[i], i == widgetFocus, i == widgetPressed, i, fills, lines, plaques, pictures);
         }
 
-        if (_iaOpen != null && rows.Count > 0)
+        if (_iaOpen != null)
         {
-            var panelFills = new List<BoardFill>();
-            var panelLines = new List<BoardLine>();
-            var first = rows[0];
-            var last = rows[rows.Count - 1];
-            float height = last.Y + last.Height - first.Y;
-            panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 255, 255, 255, 0.94f));
-            panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 0, 0, 0, 1f, Border: true));
-            for (int i = 0; i < rows.Count; i++)
-            {
-                var item = rows[i];
-                if (i == focus)
-                {
-                    panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f));
-                }
+            ComposeOpenList(screen, rows, focus, overlays, ItemFont);
+        }
 
-                panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, ItemFont,
-                    item.Enabled ? (i == focus ? BoardInk.RowFocused : BoardInk.Row) : BoardInk.Detail, i));
+        // The seat strip in the same desk-margin band as the campaign boards': the page's own
+        // words start at IA_T_TABLETITLE (155, 94), so the top-left corner is clear.
+        if (CampaignSeatPanel(onPaper: true) is { } strip)
+        {
+            overlays.Add(strip);
+        }
+    }
+
+    // An open list as the overlay over the finished page: the visible items on a paper panel with
+    // the focused one marked, then the arrows and the thumb once the list outruns its window. The
+    // loadout screen's lists come through here too, in their own item font.
+    private void ComposeOpenList(MenuLayoutScreen screen, IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays, float itemFont)
+    {
+        var panelFills = new List<BoardFill>();
+        var panelLines = new List<BoardLine>();
+        var panelPictures = new List<BoardPicture>();
+        float top = float.MaxValue, bottom = float.MinValue, left = 0f, width = 0f;
+        foreach (var row in rows)
+        {
+            if (row.Visible && row.Kind == OriginalRowKind.ListRow)
+            {
+                top = Math.Min(top, row.Y);
+                bottom = Math.Max(bottom, row.Y + row.Height);
+                left = row.X;
+                width = row.Width;
+            }
+        }
+
+        if (top < bottom)
+        {
+            panelFills.Add(new BoardFill(left, top, width, bottom - top, 255, 255, 255, 0.94f));
+            panelFills.Add(new BoardFill(left, top, width, bottom - top, 0, 0, 0, 1f, Border: true));
+        }
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var item = rows[i];
+            if (!item.Visible)
+            {
+                continue;
             }
 
-            overlays.Add(new BoardPanel(panelFills, Array.Empty<BoardPicture>(), panelLines));
+            if (item.Kind == OriginalRowKind.Button && item.Art != null)
+            {
+                int frame = item.Enabled ? ComposedBoard.PlaqueFrame(item.Art.Frames, i == focus, i == _pressed) : 0;
+                panelPictures.Add(new BoardPicture(item.Art, item.X, item.Y, frame));
+                continue;
+            }
+
+            if (i == focus)
+            {
+                panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f));
+            }
+
+            panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, itemFont,
+                item.Enabled ? (i == focus ? BoardInk.RowFocused : BoardInk.Row) : BoardInk.Detail, i));
         }
+
+        if (OpenListWindow(screen) is { } window && _iaOpen != null && screen.Widget(_iaOpen) is { } widget
+            && StripArt(widget.Art, 0, 1) is { } thumb)
+        {
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
+        }
+
+        overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
     }
 
     private void ComposeInstantActionRow(
         OriginalRow row, bool focused, bool pressed, int index,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures,
+        float itemFont = ItemFont)
     {
         switch (row.Kind)
         {
@@ -702,7 +1081,7 @@ public sealed partial class OriginalShell
                     pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
                 }
 
-                lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), ItemFont,
+                lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
                     focused ? BoardInk.RowFocused : BoardInk.Row, index));
                 break;
             case OriginalRowKind.Radio when row.Art != null:
@@ -727,25 +1106,10 @@ public sealed partial class OriginalShell
     // the window has scrolled.
     private void ComposeContentsThumb(MenuLayoutScreen screen, List<BoardPicture> pictures)
     {
-        if (screen.Widget(ContentsKey) is not { } list || StripArt(list.Art, 0, 1) is not { } thumb)
+        if (screen.Widget(ContentsKey) is { } list && StripArt(list.Art, 0, 1) is { } thumb && ContentsWindow(list) is { } window)
         {
-            return;
+            pictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
         }
-
-        int window = Math.Max(1, list.Int("TotalDisplayed", 14));
-        int count = InstantActionFeature.Presets.Count;
-        if (count <= window)
-        {
-            return;
-        }
-
-        float itemHeight = list.Int("ItemHeight", (int)FallbackItemHeight);
-        var arrow = StripSize(StripArt(list.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
-        var size = StripSize(thumb, arrow.Width, 11f);
-        float trackTop = list.Int("Y") + arrow.Height;
-        float track = (window * itemHeight) - (2f * arrow.Height) - size.Height;
-        float y = trackTop + (track * ContentsTopClamped(window) / (count - window));
-        pictures.Add(new BoardPicture(thumb, list.Int("X") + list.Int("Width", 277), y));
     }
 
     private void AddText(MenuLayoutScreen screen, List<BoardLine> lines, string key, float size, string? text = null)

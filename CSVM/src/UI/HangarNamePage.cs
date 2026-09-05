@@ -67,6 +67,9 @@ public sealed class HangarNamePage : HangarPage
         _freeform = !string.Equals(Scratch.Name, Composed(), StringComparison.Ordinal);
     }
 
+    /// <summary>A name costs nothing, so no row here takes the wallet mark.</summary>
+    public override int? CostWith(int row) => null;
+
     /// <inheritdoc/>
     public override string RowText(int row) => row switch
     {

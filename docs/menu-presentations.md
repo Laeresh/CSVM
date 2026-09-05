@@ -122,12 +122,13 @@ showed is not a fresh press, `CapturingText` says whether typed characters feed 
 `DeviceLabel` names the device for a join strip. `MenuCommands` is already device-neutral: `MoveY`
 and `MoveX` with auto-repeat applied, the edges `Accept`, `Back`, `Join`, `Loadout`, `Contents`,
 `Erase`, the `Typed` characters, and an optional `MenuPointer` (window pixels, `Pressed`, `Clicked`
-on the press edge; null when the seat's devices have none). A presentation reads meaning and never a
-key, button or axis.
+on the press edge, `Wheel` as the steps turned since the last poll and positive toward a list's
+foot; null when the seat's devices have none). A presentation reads meaning and never a key, button
+or axis.
 
 The shipped sources: `BuiltInSeat` wraps one `MenuInput` (seat 0's reads the keyboard plus every
 unclaimed pad; a joined seat's reads its one pad); `PointerSeat` wraps a seat and adds the mouse as
-its pointer through two injected delegates; `MenuIdleSource` is a seat with no device, what the
+its pointer through three injected delegates; `MenuIdleSource` is a seat with no device, what the
 `--debug-join=` aid seats. A source is not synonymous with a pad, and a later flight-control binding
 plugs in as another `IMenuInputSource` with no change to any presentation.
 
@@ -136,9 +137,50 @@ The seats themselves are the `PlayerSetupFeature`'s. Once that feature is regist
 anywhere shows up in every presentation's `Seats` read. The pad side (`MenuSeatDevices`,
 `CSVM/src/UI/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
 hotplug reconciliation, the Start-to-join scan (each presentation decides on which screens it is
-open), and `FlightPads`, the binding a launch carries per seat. A presentation with a pointer maps
-the window-pixel pointer into its own space; Original does it through the same `BoardFit` its board
-view draws with.
+open), and `FlightPads`, the binding a launch carries per seat. Both presentations call
+`ClaimP1Pad` every frame while joining is closed (Built-in off its Plane screen, Original wherever
+`OriginalShell.JoiningOpen` is false), so the pad seat 0 steers with is seat 0's for good and can
+never join as a further seat. Original opens joining on the four screens that launch a flight
+(Free Flight, Dogfight, Instant Action and the campaign flight check) and, once a second seat has
+joined, draws the sortie screens' seat strip over every campaign board and over the Instant Action
+screen as an overlay in the desk margin; a solo campaign shows the authored board alone. A
+presentation with a pointer maps the window-pixel pointer into its own space; Original does it
+through the same `BoardFit` its board view draws with. Built-in reads no `MenuPointer` at all: its rows are Godot
+`Control`s, so player 1's rows take Godot's own hit test through `gui_input` (`LaunchMenu.Pointable`)
+and fold the mouse into the next frame's commands (a hover is the cursor step onto that row, a
+press and release on one row is that step plus Accept in one frame, a wheel notch is a step; the
+frame's own step outranks a hover, so a pad and the mouse cannot each own a row). The centred
+layout's lists, the hangar pages and player 1's pane on a split aircraft screen are pointable;
+the campaign boards under Built-in are one composed surface and stay on the keys and pads.
+
+Under Original a seat picks its aircraft on a screen of its own, not down a list every seat shares.
+Seat 0 picks on the sortie screen or in the Instant Action Pilot Plane row; then each joined seat in
+player order gets the per-seat aircraft screen (`OriginalSeatPlane.cs`), the campaign plane-selection
+board's shape over the sortie roster, where Accept selects, a second Accept confirms and Back undoes
+the selection or unjoins. Joining stays closed on that screen. The walk ends on the sortie screen
+with FLY live, or as the Instant Action launch, and FLY goes live only when every joined seat is
+Confirmed. Seat 0's own controller drives the screen too, so one pad at the desk can walk it, and
+seat 0's Back there cancels the walk with every seat kept. Nothing on that screen is decoded.
+
+The wheel and the thumb reach the lists through one seam. `OriginalShell.Lists` answers the screen's
+scrolling lists as `OriginalList` records, topmost first, each a key, a `ListWindow`
+(`CSVM/src/UI/ListWindow.cs`) the list widget built from its own geometry, and the write that puts
+the window's first row somewhere else. Nothing is listed under a dialog, and while a drop-down is
+open its list is the only one, since it hangs over the screen. Per frame the shell takes the thumb
+first (a held thumb owns the pointer until it is let go, and the click that took hold activates
+nothing under it), then a wheel step over the list the pointer stands in, then re-reads the rows and
+hit-tests. A write that moves a window also pulls the focus to the window's nearer edge when it
+stood on a row the move would hide, because the window otherwise follows the focus straight back.
+The arrows and the keyboard do not go through any of this, so the wheel is an addition on top of the
+decoded screens rather than a change to them. Original's mouse is the only one today; Built-in's is
+`BL-654`.
+
+The windows themselves are the list widgets': `CampaignBoards.ComboWindow` for an open campaign
+drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's contents page, and
+Original's own for the hangar's dropdowns, Instant Action's dropdowns and contents window, and the
+sortie screens' aircraft column. An open dropdown on Instant Action shows at most the authored
+`TotalDisplayed` rows and keeps every item as a row keyed `<key>:<index>`, drawn and hit only inside
+the window, so a scripted pose and a suite walk still pick by index whatever the window shows.
 
 ## Options, selection and availability
 
@@ -146,8 +188,8 @@ view draws with.
 `user://options.json`, independent of any profile: version-tolerant (an unknown version invalidates
 the file, an unknown value drops only that field, a field the file does not carry reads as never
 set), read as empty when missing or malformed, written atomically. Its fields are
-`menuPresentation` (`built-in`, `original`) and `graphicsMode` (`original`, `enhanced`); a value
-outside a field's set reads as never set.
+`menuPresentation` (`built-in`, `original`), `graphicsMode` (`original`, `enhanced`) and
+`difficulty` (`normal`, `hard`, `hardest`); a value outside a field's set reads as never set.
 
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set, the two writes in `Serialize` and
@@ -159,7 +201,10 @@ written before the field existed loads with everything it does have, and the ver
 reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
 what "never set" falls back to and where the saved value sits among its other sources; for the
 graphics mode that is `GraphicsMode.Resolve`, where the `--graphics=` flag beats the saved option,
-which beats the `graphics.mode` config key (`docs/cli.md`).
+which beats the `graphics.mode` config key (`docs/cli.md`); for the difficulty it is
+`SessionSpec.WithSavedDifficulty`, applied by `Launcher.LaunchSession` at every launch, where a
+parsed `--difficulty=` flag beats the saved word, a `--det` run reads no saved option, and the
+default is `normal`.
 
 A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
 writer, so the options file has exactly one, and no test or suite that drives an Options screen
@@ -302,8 +347,10 @@ scan automatically; anything it adds to the shared namespace falls under the fir
 `--menu=<value>` opens the cold start on one screen for a `--screenshot`, and its values belong to
 the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in's unless
 `--presentation=original` is set, in which case the same flag carries Original's own values
-(`free-flight`, `dogfight`, `instant-action`, `options`, the `plane-*` hangar poses, `campaign` and
-the shared scratch-store campaign poses, `campaign-delete`), and any other value opens that
+(`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
+list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`, the
+`plane-*` hangar poses, `campaign` and the shared scratch-store campaign
+poses, `campaign-delete`), and any other value opens that
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 
 A new presentation's aids follow the same rules: they select a screen of its own graph, they never
@@ -325,8 +372,9 @@ the contract above, not from Original's code. In particular it does not inherit:
 - **The 4:3 board fit.** `BoardFit`'s uniform fit, centring and letterboxing, and the nearest
   sampling of extracted art, are the rule for screens composed in the original's coordinate space.
   A presentation that lays out for the window's own aspect owes `BoardFit` nothing.
-- **The remake-only screens and rules.** Original's Free Flight, Dogfight and BUILD PLANE doors and
-  screens, the words and control kinds its Game Options rows take, its three disabled Preferences
+- **The remake-only screens and rules.** Original's Free Flight and Dogfight doors and screens, its
+  wallet-free hangar entry and Weapon Loadout screen behind the Instant Action screen's two buttons,
+  the words and control kinds its Game Options rows take, its three disabled Preferences
   page doors, its keyboard and pad focus over a pointer-driven original, and its pointer hotspot are
   readings recorded in the inventory as remake-only. A new
   presentation makes its own choices for the same operations and records them the same way.

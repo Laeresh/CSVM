@@ -52,6 +52,9 @@ public sealed class HangarEnginePage : HangarPage
         return $"${line.Cost}   {line.Weight} lbs.   Power {HangarEconomy.PowerStat(Scratch.Airframe, row)}";
     }
 
+    /// <summary>What the build would cost with that engine fitted.</summary>
+    public override int? CostWith(int row) => Flow.Feature.CostWithEngine(row);
+
     /// <inheritdoc/>
     public override bool Accept(int row)
     {

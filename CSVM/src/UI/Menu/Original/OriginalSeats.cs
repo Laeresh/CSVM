@@ -6,12 +6,14 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// The Original shell's two sortie screens, Free Flight and the remake-only Dogfight, over the
 /// shared player setup: the chapter column, the aircraft column as a window onto the shared
-/// roster (the stock airframes, then the saved customs) with every seat's cursor tagged on it,
-/// the seat strip, the join hint, BACK and FLY. Seat 0 drives the focus, the pointer, the
-/// chapter and FLY; a later seat (a joined pad) walks its own cursor on the aircraft column,
-/// selects with Accept, confirms with Accept again and leaves with Back from browsing. FLY is
-/// seat 0's confirmation and the launch in one press, so it stands only once every other seat
-/// has confirmed and, for Dogfight, a second seat has joined. Nothing here is decoded.
+/// roster (the stock airframes, then the saved customs), the seat strip, the join hint, BACK and
+/// FLY. Seat 0 alone drives the screen: the focus, the pointer, the chapter, its aircraft and
+/// FLY. Once seat 0 has picked, each joined seat picks in turn on the per-seat screen
+/// (<c>OriginalSeatPlane.cs</c>); on the sortie screen itself a later seat can only leave with
+/// Back. FLY is seat 0's confirmation and the launch in one press, so it stands only once every
+/// other seat has confirmed and, for Dogfight, a second seat has joined. Also the joining rule
+/// the presentation reads (<see cref="JoiningOpen"/>) and the same seat strip over the campaign
+/// boards and the Instant Action screen once a second seat has joined. Nothing here is decoded.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -26,17 +28,31 @@ public sealed partial class OriginalShell
     // The Dogfight door under the Free Flight door, one plaque plus air below it.
     private const float DogfightDoorY = DoorY + 36f;
 
-    // The seat strip under the chapter column, the aircraft tags at the column's right edge, the
-    // hint between the two plaques, the scroll marks over and under the aircraft window.
+    // The seat strip under the chapter column, the hint between the two plaques, the scroll
+    // marks over and under the aircraft window.
     private const float SeatStripY = 468f;
     private const float SeatStripPitch = 14f;
     private const float SeatStripWidth = 360f;
     private const float SeatFont = 12f;
-    private const float TagWidth = 60f;
     private const float HintX = 190f;
     private const float HintWidth = 420f;
     private const float HintY = 546f;
     private const float MarkSize = 12f;
+
+    // The aircraft column's scrollbar, remake chrome on a remake screen: a thin track down the
+    // window's right edge with a thumb no shorter than a row, drawn only once the roster outruns
+    // the window.
+    private const string AirframeListKey = "AIRFRAMES";
+    private const float AirframeBarWidth = 6f;
+    private const float AirframeThumbMin = 20f;
+
+    // The campaign boards' seat strip, in the desk margin above every board's clipboard. The top
+    // left is the one band no campaign screen puts a plaque in: the book's tab sits at x 558 and
+    // the briefing's buttons and every ACCEPT/FLY row sit at the bottom. Built-in's hint band
+    // already claims the same rows for remake chrome. Four seats end at y 62.
+    private const float CampaignStripX = 8f;
+    private const float CampaignStripY = 6f;
+    private const float CampaignStripPad = 3f;
 
     private int _pickedVersusChapter = -1;
     private int _airframeTop;
@@ -56,6 +72,13 @@ public sealed partial class OriginalShell
 
     /// <summary>The first roster row the aircraft column shows.</summary>
     public int AirframeTop => _airframeTop;
+
+    /// <summary>Whether Start on a free pad joins a seat on the standing screen: the four screens
+    /// that launch a flight. The two sortie screens give a joined seat an aircraft column, the
+    /// flight check a check of its own; Instant Action opens so a second pilot can join before
+    /// FLY MISSION rather than nowhere at all. Everywhere else a pad's Start does nothing.</summary>
+    public bool JoiningOpen =>
+        _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight or OriginalScreen.InstantAction or OriginalScreen.CampaignFlightCheck;
 
     private bool IsSortie => _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight;
 
@@ -83,8 +106,9 @@ public sealed partial class OriginalShell
     public static string AirframeKey(int index) => AirframeKeyPrefix + index;
 
     /// <summary>Applies one frame of one seat's commands. Seat 0's frame is <see cref="Step"/>;
-    /// a later seat walks its own cursor on the aircraft column, selects and confirms with
-    /// Accept, and leaves on Back while browsing (from any screen, as a guest may).</summary>
+    /// a later seat drives the per-seat aircraft screen while it is that seat's, its own check on
+    /// the campaign's flight check, and anywhere else can only leave with Back (from any screen,
+    /// as a guest may).</summary>
     public OriginalStep StepSeat(int index, MenuCommands commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
@@ -100,39 +124,23 @@ public sealed partial class OriginalShell
         }
 
         var seat = seats[index];
-        bool changed = false;
-        if (!IsSortie)
+        bool own = _screen == OriginalScreen.SeatPlane
+            ? ReferenceEquals(seat, _pickingSeat)
+            : _screen == OriginalScreen.CampaignFlightCheck && _campaign?.Field.Current == index;
+        if (own)
         {
-            // On the campaign's flight check a joined seat drives its own check, the frame it is
-            // showing; anywhere else off the sortie screens a later seat can only leave.
-            if (_screen == OriginalScreen.CampaignFlightCheck && _campaign?.Field.Current == index)
+            _steppingSeat = index;
+            try
             {
                 return Step(commands);
             }
-
-            if (commands.Back)
+            finally
             {
-                changed = _setup.Unjoin(seat);
+                _steppingSeat = 0;
             }
-
-            return new OriginalStep(Array.Empty<string>(), null, changed);
         }
 
-        int count = _setup.Roster.Count;
-        if (commands.MoveY != 0 && !seat.Locked && count > 0)
-        {
-            changed |= _setup.Browse(seat, (((seat.Cursor + commands.MoveY) % count) + count) % count);
-        }
-
-        if (commands.Accept)
-        {
-            changed |= seat.Locked ? _setup.Confirm(seat) : _setup.Select(seat);
-        }
-        else if (commands.Back)
-        {
-            changed |= _setup.Back(seat) == SeatBack.Browsing ? _setup.Unjoin(seat) : true;
-        }
-
+        bool changed = commands.Back && _setup.Unjoin(seat);
         return new OriginalStep(Array.Empty<string>(), null, changed);
     }
 
@@ -147,6 +155,35 @@ public sealed partial class OriginalShell
     {
         string name = seat.Cursor < roster.Count ? roster[seat.Cursor].Name : string.Empty;
         return seat.Confirmed ? $"{name}  READY" : seat.Locked ? name : "choosing";
+    }
+
+    // The seat strip over a campaign board, drawn only once a second seat has joined so a solo
+    // campaign shows the authored screen alone. No pick status: the campaign's picks are the
+    // flight field's, so the strip says who is seated and, on the flight check, whose check shows.
+    // ⚠ Pass onPaper on the Instant Action screen: its palette is one dark paper ink, which the
+    // black scrim would swallow, so that strip needs a light ground instead.
+    private BoardPanel? CampaignSeatPanel(bool onPaper = false)
+    {
+        var seats = _setup.Seats;
+        if (seats.Count < 2)
+        {
+            return null;
+        }
+
+        int current = StripFocus();
+        var lines = new List<BoardLine>(seats.Count);
+        for (int i = 0; i < seats.Count; i++)
+        {
+            lines.Add(new BoardLine($"P{i + 1}  {seats[i].Source.DeviceLabel}", CampaignStripX,
+                CampaignStripY + (i * SeatStripPitch), SeatStripWidth, SeatFont,
+                i == current ? BoardInk.RowFocused : BoardInk.Detail));
+        }
+
+        byte tone = onPaper ? (byte)235 : (byte)0;
+        var scrim = new BoardFill(CampaignStripX - CampaignStripPad, CampaignStripY - CampaignStripPad,
+            SeatStripWidth + (2f * CampaignStripPad), (seats.Count * SeatStripPitch) + (2f * CampaignStripPad),
+            tone, tone, tone, onPaper ? 0.82f : 0.45f);
+        return new BoardPanel(new[] { scrim }, Array.Empty<BoardPicture>(), lines);
     }
 
     // The sortie screen's rows: the chapters and BACK in column 0, the aircraft window and FLY in
@@ -187,6 +224,48 @@ public sealed partial class OriginalShell
 
         var flySize = PlaqueSize();
         rows.Add(TextButton(FlyKey, "FLY", RightColumnX + ListWidth - flySize.Width, PlaqueY, FlyEnabled(), 1));
+    }
+
+    // The aircraft column as the pointer's one list on a sortie screen.
+    private void SortieLists(List<OriginalList> lists)
+    {
+        if (AirframeWindowFor(_setup.Roster.Count) is { } window)
+        {
+            lists.Add(new OriginalList(AirframeListKey, window, ScrollAirframes));
+        }
+    }
+
+    // The column's window, thumb and track; null while the roster fits the window.
+    private ListWindow? AirframeWindowFor(int count)
+    {
+        if (count <= AirframeWindow)
+        {
+            return null;
+        }
+
+        int lastTop = count - AirframeWindow;
+        int top = Math.Clamp(_airframeTop, 0, lastTop);
+        float height = AirframeWindow * RowPitch;
+        float thumbHeight = Math.Max(AirframeThumbMin, height * AirframeWindow / count);
+        float thumbY = ListWindow.ThumbYFor(ListTop, height, thumbHeight, top, lastTop);
+        return new ListWindow(
+            RightColumnX, ListTop, ListWidth, height,
+            RightColumnX + ListWidth - AirframeBarWidth, thumbY, AirframeBarWidth, thumbHeight,
+            ListTop, height, count, AirframeWindow, top);
+    }
+
+    // Puts the window's first row at top; a focus standing on an aircraft row the move would hide
+    // is pulled to the window's nearer edge, since the window otherwise slides back to it.
+    private void ScrollAirframes(int top)
+    {
+        int count = _setup.Roster.Count;
+        _airframeTop = Math.Clamp(top, 0, Math.Max(0, count - AirframeWindow));
+        int offset = _chapters.Count + 1;
+        int focused = _focus[(int)_screen] - offset;
+        if (focused >= 0 && focused < count)
+        {
+            _focus[(int)_screen] = offset + Math.Clamp(focused, _airframeTop, _airframeTop + AirframeWindow - 1);
+        }
     }
 
     private bool FlyEnabled()
@@ -315,7 +394,7 @@ public sealed partial class OriginalShell
         {
             if (!seats[i].Confirmed)
             {
-                return $"Waiting for P{i + 1} to confirm (A again)";
+                return $"Waiting for P{i + 1} to pick an aircraft";
             }
         }
 
@@ -324,11 +403,23 @@ public sealed partial class OriginalShell
             : "FLY when ready, or press START on a free pad to join";
     }
 
-    // The sortie screen's own words: the heading, the column labels, the seat strip, the aircraft
-    // tags, the scroll marks, the hint and the controls line. The rows themselves are drawn by
-    // Compose's row loop.
-    private void ComposeSortie(IReadOnlyList<OriginalRow> rows, List<BoardLine> lines)
+    // The sortie screen's own words: the heading, the column labels, the seat strip, the scroll
+    // marks, the hint and the controls line, plus the aircraft column's scrollbar as an overlay.
+    // The rows themselves are drawn by Compose's row loop.
+    private void ComposeSortie(IReadOnlyList<OriginalRow> rows, List<BoardLine> lines, List<BoardPanel> overlays)
     {
+        if (AirframeWindowFor(_setup.Roster.Count) is { } window)
+        {
+            overlays.Add(new BoardPanel(
+                new[]
+                {
+                    new BoardFill(window.ThumbX, window.TrackTop, window.ThumbWidth, window.TrackHeight, 0x40, 0x40, 0x40, 0.5f),
+                    new BoardFill(window.ThumbX, window.ThumbY, window.ThumbWidth, window.ThumbHeight, 0xC0, 0xC0, 0xC0, 0.9f),
+                },
+                Array.Empty<BoardPicture>(),
+                Array.Empty<BoardLine>()));
+        }
+
         lines.Add(new BoardLine(_screen == OriginalScreen.Dogfight ? "DOGFIGHT" : "FREE FLIGHT",
             LeftColumnX, ListTop - 44f, 0f, HeadingFont, BoardInk.Heading));
         lines.Add(new BoardLine("MAP", LeftColumnX, ListTop - 20f, 0f, RowFont, BoardInk.Detail));
@@ -356,35 +447,6 @@ public sealed partial class OriginalShell
         if (_airframeTop + AirframeWindow < roster.Count)
         {
             lines.Add(new BoardLine("▼", markX, ListTop + (AirframeWindow * RowPitch), 16f, MarkSize, BoardInk.Detail, -1, false, BoardJustify.Center));
-        }
-
-        // Later seats' cursors on the visible aircraft rows: the tag, a tick once selected, two
-        // once confirmed.
-        foreach (var row in rows)
-        {
-            if (!row.Visible || !TryAirframeIndex(row.Key, out int index))
-            {
-                continue;
-            }
-
-            var tags = new List<string>();
-            bool locked = false;
-            for (int i = 1; i < seats.Count; i++)
-            {
-                if (seats[i].Cursor != index)
-                {
-                    continue;
-                }
-
-                tags.Add($"P{i + 1}{(seats[i].Confirmed ? " ✓✓" : seats[i].Locked ? " ✓" : string.Empty)}");
-                locked |= seats[i].Locked;
-            }
-
-            if (tags.Count > 0)
-            {
-                lines.Add(new BoardLine(string.Join("  ", tags), row.X + row.Width - TagWidth - 6f, row.Y + 3f, TagWidth,
-                    SeatFont, locked ? BoardInk.RowFocused : BoardInk.Detail, -1, false, BoardJustify.Right));
-            }
         }
     }
 }

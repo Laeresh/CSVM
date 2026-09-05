@@ -60,9 +60,9 @@ internal static class MenuPlayerSetupSuites
         + "a guest's Back unjoins, four seats close the join and a fifth is refused, a lock and an "
         + "unjoin land on one frame, and Deactivate discards every seat but the first; in Original "
         + "the Dogfight door opens the Dogfight screen, FLY waits for a second seat with the hint "
-        + "naming it, a joined seat walks, selects and confirms on the aircraft column, FLY leaves "
-        + "as a Dogfight launch for both seats, Free Flight launches both too, and a guest's Back "
-        + "unjoins from the top level")]
+        + "naming it, a joined seat gets its own aircraft screen where Back unjoins it and leaves "
+        + "FLY dark and two Accepts select and confirm, FLY leaves as a Dogfight launch for both "
+        + "seats, Free Flight launches both too, and a guest's Back unjoins from the top level")]
     internal static void MenuPlayerSetupSeats(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -360,14 +360,22 @@ internal static class MenuPlayerSetupSuites
 
             var s2 = new ScriptedSeat();
             ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2, $"a second seat joins ({host.Seats.Count})");
+            host.Tick(Dt);
+            ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && shell.PickingSeat == 1,
+                $"seat 0's pick standing, the join opens the second seat's own aircraft screen ({shell.Screen}, picking {shell.PickingSeat})");
+            Press(host, s2, Back);
+            ctx.Check(host.Seats.Count == 1 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight
+                && Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: false },
+                $"its Back there unjoins it, the Dogfight screen returns and FLY stays dark ({host.Seats.Count}, {shell.Screen})");
+            setup.Join(s2);
+            host.Tick(Dt);
             Press(host, s2, Down);
             Press(host, s2, Accept);
-            ctx.Check(setup.Seats[1].Locked && setup.Seats[1].Cursor == 1 && HasLine(shell, "P2 ✓"),
-                $"the seat's frames reach the shell through the presentation: one row down and selected, tagged on the row");
-            ctx.Check(Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: false },
-                $"FLY still waits while the second seat has not confirmed");
+            ctx.Check(setup.Seats[1].Locked && setup.Seats[1].Cursor == 1,
+                $"the seat's frames reach the shell through the presentation: one row down and selected ({setup.Seats[1].Cursor})");
             Press(host, s2, Accept);
-            ctx.Check(setup.Seats[1].Confirmed, $"Accept again confirms it");
+            ctx.Check(setup.Seats[1].Confirmed && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight,
+                $"Accept again confirms it and the Dogfight screen returns ({shell.Screen})");
             Press(host, seat0, Up);
             ctx.Check(shell.FocusedKey == CSVM.UI.Menu.Original.OriginalShell.FlyKey, $"Up from the first airframe now wraps onto the live FLY ({shell.FocusedKey})");
             Press(host, seat0, Accept);

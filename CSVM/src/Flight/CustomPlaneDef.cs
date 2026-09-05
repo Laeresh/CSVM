@@ -166,6 +166,12 @@ public sealed class CustomPlaneDef
         }
     }
 
+    /// <summary>Whether the campaign built or granted this aircraft and nobody has pressed EXPORT on
+    /// it yet, which is what keeps it out of the Instant Action and Free Flight pickers. ⚠ False is
+    /// the meaning of an absent field and must stay so: a file written before this existed, and every
+    /// plane built at a wallet-free door, reads as exported.</summary>
+    public bool AwaitingExport { get; set; }
+
     /// <summary>Paint slot 1, the identity/body colour, resolved from its index pair. Derived, as
     /// the original's own record +0x68 is: <c>FUN_00406840</c> recomputes that RGBA cache from the
     /// colour and shade indices before every save, so the pair is what a plane's paint IS.</summary>

@@ -269,10 +269,12 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
 - `src/UI/Menu/FreeFlightFeature.cs` — Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs` — Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
-- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its four partials below.
+- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its six partials below.
 - `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
-- `src/UI/Menu/Original/OriginalInstantAction.cs` — the shell's Instant Action screen (a `partial`): the contents list, dropdowns, enemy pages.
+- `src/UI/Menu/Original/OriginalSeatPlane.cs` — the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
+- `src/UI/Menu/Original/OriginalInstantAction.cs` — the shell's Instant Action screen (a `partial`): the contents list, dropdowns, enemy pages, the Build and Weapon Loadout doors.
+- `src/UI/Menu/Original/OriginalLoadout.cs` — the shell's Instant Action Weapon Loadout (a `partial`): the decoded ammo chrome over the pilot's or the wingmen's shared fit.
 - `src/UI/Menu/Original/OriginalHangar.cs` — the shell's hangar (a `partial`): the name screen, the tabbed hub, the totals page, the inventory.
 - `src/UI/Menu/Original/OriginalCampaign.cs` — the shell's campaign (a `partial`): the nine decoded screens over the shared board component.
 - `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView`, seats polled.
@@ -280,7 +282,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalAssetManifest.cs` — the required/optional file manifest derived from the layout, and the check over a tree.
 - `src/UI/Menu/Original/OriginalRosters.cs` — the Original sortie screens' chapter labels and the eleven stock airframes with their nodes.
 - `src/UI/Menu/Original/OriginalCues.cs` — the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
-- `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge; device reads injected.
+- `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
 - `src/Session/MenuCueTable.cs` — the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Photo, Restart, Exit.
@@ -325,6 +327,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignCombo.cs` — a campaign screen's drop-down field: its authored box, its scrolling window, and a candidate it never commits itself.
 - `src/UI/CampaignModal.cs` — the one-button dialog a campaign screen raises over the board, held by the flow because two screens reach the same box.
 - `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.
+- `src/UI/ListWindow.cs` — a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
 - `src/UI/BoardFit.cs` — how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
 - `src/UI/ComposedBoard.cs` — what a composed campaign screen is made of: backdrop, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
 - `src/UI/CampaignBoards.cs` — the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.

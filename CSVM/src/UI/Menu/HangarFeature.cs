@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -67,6 +68,11 @@ public sealed class HangarFeature : IMenuFeature
 
     /// <summary>The GUNS dropdown's row count: five calibres single, five twinned, No Gun.</summary>
     public const int GunCycleRows = 11;
+
+    /// <summary>The prefix both presentations put on a row the wallet cannot cover. A mark only:
+    /// the row stays pickable, since the decoded flow refuses at the purchase and never at the
+    /// part (docs/org/hangar.md, "The cash note").</summary>
+    public const string UnaffordableMark = "✕ ";
 
     // Beyond letters and digits: the separators a plane name uses. Every one is legal in a
     // filename, which is what keeps the store's own sanitisation from rewriting a typed name.
@@ -587,6 +593,11 @@ public sealed class HangarFeature : IMenuFeature
         }
 
         int cost = Bill.Total.Cost;
+
+        // The door decides the crossing: a build funded by a campaign wallet waits for that
+        // campaign's EXPORT before any picker lists it, a build from a wallet-free door is already
+        // an Instant Action aeroplane and carries no marker at all.
+        Scratch.AwaitingExport = Wallet != null;
         store.Save(Scratch);
         BuiltPlaneName = Scratch.Name;
         Message = string.Empty;
@@ -759,6 +770,63 @@ public sealed class HangarFeature : IMenuFeature
         return bill.Total.Weight > bill.Capacity
             ? line + "   ⚠ " + Strings.Text(1227, "OVERWEIGHT")
             : line;
+    }
+
+    /// <summary>The money on hand as the construction screens show it over a wallet, langui 1149
+    /// (<c>$$$ on Hand:</c>) with the funds, or "" on a wallet-free door, where nothing is drawn.</summary>
+    public string WalletLine() =>
+        Wallet is { } wallet
+            ? Strings.Text(1149, "$$$ on Hand:") + " $" + wallet.Funds.ToString(CultureInfo.InvariantCulture)
+            : string.Empty;
+
+    /// <summary>Whether a build priced at <paramref name="cost"/> is beyond the wallet; always false
+    /// on a wallet-free door. ⚠ Never gate a pick on this: the decoded flow refuses at the purchase
+    /// (callback 2264), and hiding what cannot be afforded yet hides what is being saved toward.</summary>
+    public bool Unaffordable(int cost) => Wallet is { } wallet && !wallet.CanAfford(cost);
+
+    /// <summary>Whether the build as it stands is beyond the wallet.</summary>
+    public bool TotalUnaffordable() => Unaffordable(Bill.Total.Cost);
+
+    /// <summary>The build's total cost were <paramref name="airframe"/> picked, every other pick
+    /// kept: what the wallet would have to cover after that row.</summary>
+    public int CostWithAirframe(int airframe)
+    {
+        int keep = Scratch.Airframe;
+        Scratch.Airframe = airframe;
+        int cost = Bill.Total.Cost;
+        Scratch.Airframe = keep;
+        return cost;
+    }
+
+    /// <summary>The build's total cost were <paramref name="engine"/> picked.</summary>
+    public int CostWithEngine(int engine)
+    {
+        int keep = Scratch.Engine;
+        Scratch.Engine = engine;
+        int cost = Bill.Total.Cost;
+        Scratch.Engine = keep;
+        return cost;
+    }
+
+    /// <summary>The build's total cost were zone <paramref name="zone"/> at <paramref name="units"/>.</summary>
+    public int CostWithArmour(int zone, int units) =>
+        Bill.Total.Cost + ((Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits) - ArmourUnits(zone)) * HangarEconomy.ArmourUnitCost);
+
+    /// <summary>The build's total cost were slot <paramref name="slot"/> on cycle row <paramref name="cycleRow"/>.</summary>
+    public int CostWithGun(int slot, int cycleRow)
+    {
+        var keep = Scratch.Guns[slot];
+        Scratch.Guns[slot] = GunOfCycle(cycleRow);
+        int cost = Bill.Total.Cost;
+        Scratch.Guns[slot] = keep;
+        return cost;
+    }
+
+    /// <summary>The build's total cost were wing <paramref name="wing"/> carrying <paramref name="count"/> hardpoints.</summary>
+    public int CostWithHardpoints(int wing, int count)
+    {
+        int current = wing == 0 ? Scratch.LeftHardpoints : Scratch.RightHardpoints;
+        return Bill.Total.Cost + ((Math.Clamp(count, 0, CustomPlaneDef.MaxHardpointsPerWing) - current) * HangarEconomy.HardpointCost);
     }
 
     /// <summary>Drops the open build: the scratch plane, its store and wallet, the roster, the ask

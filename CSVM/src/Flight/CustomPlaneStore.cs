@@ -114,6 +114,14 @@ public sealed class CustomPlaneStore
             WriteInts(w, "decals", new[] { def.NoseDecal, def.TailDecal, def.WingDecal });
             w.WriteEndObject();
 
+            // Written only while the plane is waiting for the campaign's EXPORT. Absence is what a
+            // file written before the field existed carries, and it has to keep meaning exported, or
+            // every build already on disk would vanish from the pickers on an update.
+            if (def.AwaitingExport)
+            {
+                w.WriteBoolean("awaitingExport", true);
+            }
+
             // Written only for a plane the campaign exported. A hangar-built plane has no loadout
             // to carry, and omitting the block is what keeps its file the one earlier builds wrote.
             if (def.HasLoadout)
@@ -208,6 +216,8 @@ public sealed class CustomPlaneStore
                 }
             }
 
+            def.AwaitingExport = root.TryGetProperty("awaitingExport", out var waiting)
+                && waiting.ValueKind == JsonValueKind.True;
             if (root.TryGetProperty("loadout", out var loadout) && loadout.ValueKind == JsonValueKind.Object)
             {
                 ReadInts(loadout, "ammo", def.Ammo);

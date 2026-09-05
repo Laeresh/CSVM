@@ -987,8 +987,8 @@ counts, the paint pattern with its colour, shade and decal indices, and the name
 fields the original derives at commit, which are recomputed rather than stored. Engine-free, so
 screens edit it, `HangarEconomy` prices it and `CustomPlaneStore` persists it without a session.
 `Ammo` and `Ordnance` carry the campaign loadout export in `OwnedPlane`'s own encoding, written
-only by `SetLoadout` and left alone by `Clamp`, since their vocabulary belongs to
-`CampaignLoadout`. Record layout: [../formats/paint.md](../formats/paint.md).
+only by `SetLoadout` and left alone by `Clamp`; `AwaitingExport` is the export gate the plane
+pickers read. Record layout: [../formats/paint.md](../formats/paint.md).
 
 ## src/Flight/CustomPlaneRecord.cs
 Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
@@ -1005,7 +1005,8 @@ over a plain absolute directory through `System.IO` so it unit-tests without an 
 original, so saving over an existing name replaces its file. A missing or malformed file reads as
 nothing rather than throwing, since a corrupt save must never break a plane picker. The current
 schema stores paint as the original's index pairs, the first schema still loads and upgrades on
-its next save, and the optional exported-loadout block deliberately did not raise the version.
+its next save, and the two optional fields (the exported loadout, the export gate) deliberately did
+not raise the version, both being absent from a file that predates them.
 
 ## src/Flight/CustomPlaneBuild.cs
 The join from a saved `CustomPlaneDef` onto the three things a spawn consumes, pure and engine-free

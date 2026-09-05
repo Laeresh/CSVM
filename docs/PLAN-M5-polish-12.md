@@ -99,26 +99,26 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The Instant Action screen and the export crossing
 
-1. ☐ `BL-691` The export message box draws its OK button in ink the plaque hides
-2. ☐ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
-3. ☐ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
-4. ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
+1. ☑ `BL-691` The export message box draws its OK button in ink the plaque hides
+2. ☑ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
+3. ☑ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
+4. ☑ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
 
 ### Wave B — Seats and joining
 
-11. ☐ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
-12. ☐ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
+11. ☑ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
+12. ☑ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
 
 ### Wave C — The campaign boards and Game Options
 
-21. ☐ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
-22. ☐ `BL-655` The campaign hangar never shows the wallet while a plane is being built
-23. ☐ `BL-570` The difficulty setting has no menu row
+21. ☑ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
+22. ☑ `BL-655` The campaign hangar never shows the wallet while a plane is being built
+23. ☑ `BL-570` The difficulty setting has no menu row
 
 ### Wave D — The pointer
 
-31. ☐ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
-32. ☐ `BL-654` Built-in takes no mouse input
+31. ☑ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
+32. ☑ `BL-654` Built-in takes no mouse input
 
 ### Wave E — At the controls
 
@@ -144,7 +144,7 @@ in parallel worktrees. `E41` is last and needs the author at the controls; it ca
 
 # Wave A — The Instant Action screen and the export crossing
 
-## A1 ☐ `BL-691` The export message box draws its OK button in ink the plaque hides
+## A1 ☑ `BL-691` The export message box draws its OK button in ink the plaque hides
 
 **Goal.** The one-button message box over the plane-selection screen shows its OK button as the
 original does: light text on a dark plaque inside a bordered strip.
@@ -176,7 +176,25 @@ whole cause.** `CampaignBoards.cs:341` chooses strip frame 2 and `BoardInk.Label
 line, so a wrong frame would present identically and the ink fix would leave it invisible. The
 second half of the same report, "needed 2 exports but then it worked", is `A4`, not this item.
 
-## A2 ☐ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** Both halves of the trap were real. The ink was the reported cause in both
+presentations: Original's `ComposeDialog` took `PlaqueInk` through the plane-selection screen's
+`Paper` palette (dim blue on the black rollover frame), and Built-in's `Dialog(modal)` took
+`LabelActivate`, `Paper`'s black on black. The frame was wrong on the Built-in path as well: it
+chose the rollover frame 2 (pure black, `0,0,0`), where the original's shot shows OK on the normal
+frame 1 (charcoal, the strip's `35,35,35` reading `51,51,51` in the capture) with the pointer
+elsewhere. The messagebox's inks are the layout's own globals (`G2`/`G3` white on the two dark
+frames, `G4` black on the light depressed one), so `BoardInk` gained `DialogPressed` beside
+`Dialog`, `ComposedBoard.DialogInk(pressed)` names the rule, both composition sites use it, and
+Built-in's box draws frame 1. To shoot the box, `--menu=campaign-planeselection:export` presses
+the pilot's EXPORT in both presentations over a scratch build store (`CampaignAidProfiles.Planes`),
+which every scratch-store campaign aid now opens over, so no aid can write `user://Planes`. The
+`campaign-layout-parity` suite covers the new aid; three unit facts pin the frame, the ink and the
+scratch write. Left as found: the box's icon draws the `?` frame where the original's export
+notice shows `!`, not part of this item.
+
+## A2 ☑ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
 
 **Goal.** Original's Instant Action Pilot Plane dropdown offers the saved custom builds after the
 eleven stock airframes, each row named `Stock <airframe>` or `<build name> <airframe>`, and a
@@ -208,7 +226,23 @@ name. Screenshot with `--presentation=original --menu=instant-action:<steps>` fo
 def. The `Stock <airframe>` prefix is a text of this dropdown only; the sortie screens and Built-in
 keep their names, or every menu suite asserting row text moves.
 
-## A3 ☐ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** Landed as designed. `OriginalShell` holds a `PilotRoster` read through
+`OriginalRosters.Roster(_planes.List())` by `RefreshInstantActionRoster()`, which
+`OpenInstantAction()` calls on every entry and which `A3` calls when Build returns to the screen;
+the wingman dropdown is built by its own `WingmanPlaneDropdown()` over the stock table. The row
+text is applied in `PilotRowText` alone, the airframe found by node (`AirframeOf`), and a pick moves
+the feature onto the airframe's stock row with the build kept as an overlay (`_iaPilotBuild`), so
+the def's `PlayerPlane` stays the stock name `GameSession` resolves by and the seat carries the
+build's def (`MenuSeatChoice.Custom`) on the airframe's stock node. `--menu=instant-action:pilot-plane`
+opens the list for a shot. `menu-original-instant-action` gained the walk; a perturbation dropping
+the airframe suffix failed its four row-text checks. Finding for the sortie, not fixed here: with
+the author's eight builds the open list is nineteen rows and runs past the page's foot over the
+button row, since the remake's open list has no window although the layout's dropdown authors
+`TotalDisplayed 20`.
+
+## A3 ☑ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
 
 **Goal.** Both buttons open: Weapon Loadout edits the loadout of the seat the Player/Wingman radio
 names, Build Custom Plane opens the shared wallet-free hangar and Back returns to the Instant
@@ -242,7 +276,28 @@ Removing the door changes the top level's row count and every focus index after 
 `OriginalShell` focus table is per screen, so re-check the `TopLevelButtons` walk in
 `MenuOriginalSuites`.
 
-## A4 ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** Landed as designed, with one screen more than the approach named. Original had no
+loadout screen of its own (the sortie screens launch stock fits and the campaign's ammo page runs
+over `OwnedPlane`, not `LoadoutChoice`), so Weapon Loadout got one: `OriginalLoadout.cs` composes
+the decoded `[@OrdinanceLayout@]` chrome over the fit the radio names, seat 0's `PlayerSeat.Fit`
+for the pilot (which now rides the Instant Action exit, and drops on an airframe change as the
+wingman fit does) and `InstantActionFeature.WingmanFit` for the wingmen; the section's four
+ammunition and eight rocket fields map onto the airframe's firable gun slots and pylons over the
+stock table's option lists, CANCEL and Back restore a snapshot of the picks, ACCEPT keeps them.
+Build Custom Plane calls `OpenHangar()` with the Instant Action screen as the return, and
+`ReturnFromHangar` re-runs `RefreshInstantActionRoster()` on the way back. The top-level `HangarKey`
+row and constant are gone (eight rows now); `OriginalScreen.InstantActionLoadout` sits after
+`InstantAction`. `--menu=instant-action:weapon-loadout` shoots the new screen. Suites: the three
+`menu-original-hangar` walks enter through Build, `menu-original-instant-action` gained the loadout
+and build walks, `menu-original-tracer` counts eight rows; the coverage test walks the loadout
+screen by every input family and reaches the top level through Exit. Fixed on the way: A2 had left
+`OriginalInstantActionTests` expecting `Autogyro` where the row now reads `Stock Autogyro`. Not
+filmed: which sound plays and how the original's own loadout screen behaves under Instant Action
+stay `CAP-50`'s.
+
+## A4 ☑ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
 
 **Goal.** A campaign aircraft appears in the Instant Action and Free Flight pickers only once the
 player has pressed Export on it, and the first press takes.
@@ -277,11 +332,34 @@ never hangar-built and have no entry there, which is why the campaign roster res
 the ownership record; a per-mode store would strand them. A file written before the marker existed
 must read as exported, or every existing player's builds vanish from Instant Action on update.
 
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** The "2 exports" half is closed, and not by `A1` alone. `CampaignFeature.ExportPlane`
+always wrote the store's record on the first press, so the store was never the second press's
+doing; the suite walk asserts it by re-reading the file straight after one `PressExport`. What was
+actually stale is the picker: both presentations read the build store on entry (Original at
+`Activate`, Built-in at `Show`) and nothing re-read it on the way out of the campaign, so a plane
+exported mid-visit was missing from the sortie lists that visit. `OriginalShell.CloseCampaign` and
+`LaunchMenu`'s campaign exit now re-read it, which is the one door every way out of the campaign
+passes through. `A1`'s invisible OK is why the press read as having done nothing at the controls.
+
+The marker is `CustomPlaneDef.AwaitingExport`, written as `"awaitingExport": true` and **written
+only when true**, so the absence of the field means exported and every file already on disk stays
+in the pickers. `HangarFeature.Commit` sets it from the door (`Wallet != null`), so a campaign
+build waits and a build from either wallet-free door never carries it; `CampaignDirector`'s awarded
+aircraft are saved with it; `ExportPlane` clears it. `PlayerSetupFeature.BuildRoster` and
+`PlanePickerRoster.Build` skip a def that carries it, which covers every human picker in both
+presentations from two places. The two profile-seeded starters are untouched: they have no file in
+the build store at all, and the campaign roster still resolves them from the ownership record.
+Fixed on the way: Original's cabin opened PLANE CONSTRUCTION over the shell's own store while the
+campaign feature held another, so ownership and the file it names could land in two directories
+under a scratch store; the door now takes the campaign's store, as Built-in's already did.
+
 ---
 
 # Wave B — Seats and joining
 
-## B11 ☐ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
+## B11 ☑ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
 
 **Goal.** Under Original a pad pressing START joins on the Instant Action screen as it does on Free
 Flight, Dogfight and the flight check; seat 0's own pad can never join as an extra seat; and once a
@@ -316,7 +394,29 @@ Accept (`OriginalSeats.StepSeat`, `:129`), and FLY going live only then is the d
 `--debug-join=` seats device-less players who can never confirm (`OriginalPresentation.DebugJoin`,
 `:564`), so it can show the strip but cannot exercise a join. Do not lower `MinimumSeats`.
 
-## B12 ☐ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** All three findings held and each landed. (a) The joining rule moved onto the shell as
+`OriginalShell.JoiningOpen` (in `OriginalSeats.cs`), covering Instant Action beside Free Flight,
+Dogfight and the flight check; the presentation reads it for the prime and the scan alike. (c)
+`OriginalPresentation` calls `ClaimP1Pad` once on `Activate` and on every frame joining is closed,
+as Built-in does off its Plane screen, so the pad seat 0 steers with is claimed before any join
+screen opens. The `--run-tests` bundle disables pads, so the tracer drives the claim through
+`MenuInput.LastActivePad` and reads `OriginalPresentation.Devices` back; under `--det` the claim
+flaps once per frame between `Sync` (no connected pad) and the re-claim, which is why the suite
+resets the field after its assertion. (b) `CampaignSeatPanel` composes the strip as a `BoardPanel`
+overlay in `ComposeCampaign`, only with two or more seats, at authored (8, 6) with the sortie
+strip's 14-pixel pitch and a 0.45 black scrim: the top-left desk margin, the one band no campaign
+screen puts a plaque in (the book's tab sits at x 558, every other button on the bottom row); on
+the briefing it lies over the top-left photo scrap, a picture rather than a plaque. The strip
+carries no pick status, since the campaign's picks are the flight field's; on the flight check the
+seat whose check shows draws focused. Shots: `.scratch/bl703_strip.png`,
+`.scratch/bl703_nostrip.png` (byte-identical to the pre-change shot) and
+`.scratch/bl703_montage.png`. Left open for `A3` and `B12`: Original's Instant Action FLY MISSION
+still builds its exit for seat 0 alone (`OriginalInstantAction.cs`, the `FlyMissionKey` case), so a
+seat joined on that screen is seated and kept but not flown; `MinimumSeats` is untouched.
+
+## B12 ☑ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
 
 **Goal.** On Free Flight and Dogfight under Original, seat 0 picks on the sortie screen and each
 joined seat then picks on a screen of its own in the campaign plane-selection screen's shape, in
@@ -348,11 +448,40 @@ as part of `E41`.
 seat reaches Confirmed by, so keep the two-press walk. Nothing here is decoded; do not go looking
 for an original layout to copy.
 
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** The shared aircraft column is gone from the sortie screens along with the per-seat
+tags it carried: seat 0 alone picks there, and `OriginalScreen.SeatPlane` is a new screen each
+joined seat gets in player order once seat 0's pick stands. `OriginalSeatPlane.cs` holds it as a
+shell partial whose `SeatPlanePage` is an `ICampaignPage`, so `CampaignBoards.For` draws it in the
+campaign plane-selection board's shape with no new list widget: the same `CampaignCombo`, the same
+silhouette, ratings and weapon column, ACCEPT and CANCEL SELECTIONS. `BuildCampaignRows` was split
+so `BuildPageRows` serves any board page, which is what makes the shared row and pointer machinery
+(and so `D31`'s wheel) reach the new screen for free. `StepSeat` no longer walks a cursor of its
+own: it routes the picking seat's frame into `Step` under `_steppingSeat`, so one code path applies
+Accept and Back whoever pressed them, and seat 0's own controller can walk the screen. Back means
+what it did: browsing it unjoins, selected it undoes the selection, and from seat 0 it cancels the
+walk and keeps every seat. `Step` re-reads the walk every frame, so a seat joining after seat 0's
+pick is walked too, and a seat that vanishes mid-screen advances it. FLY reads the gate it always
+did. Joining stays closed on the new screen (`JoiningOpen`).
+
+Both gaps B11 left are closed. FLY MISSION on Instant Action now walks a joined seat first
+(`BeginInstantActionSeatWalk`, the `FlyMissionKey` case, the only exit edit): seat 0's pick becomes
+the Pilot Plane row, the setup's roster becomes `PilotRoster` so every seat's cursor indexes the
+same rows, and the launch after the last confirm carries every seat. The Instant Action screen also
+draws `CampaignSeatPanel()` in the same desk-margin band, which clears the book (the page's own
+words start at `IA_T_TABLETITLE`, 155,94); its palette is one dark paper ink, so that strip takes a
+light ground instead of the campaign boards' black scrim (`onPaper`). The board's second crew block
+would otherwise sit empty on a one-pilot screen, so the wingman heading's slot carries the other
+seats' standing instead. Shots: `.scratch/bl704_seat2.png` (the per-seat screen on Free Flight
+under `--menu=free-flight:seat-plane --debug-join=1`, a new aid that poses seat 0's pick) and
+`.scratch/bl704_ia_strip.png`.
+
 ---
 
 # Wave C — The campaign boards and Game Options
 
-## C21 ☐ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
+## C21 ☑ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
 
 **Goal.** Entering the briefing screen plays its reveal from the start, as the narration already
 does, without reloading the briefing from disk.
@@ -379,7 +508,23 @@ before and after and compare.
 the same frame or every briefing shot moves. Do not reset by clearing the cache on `MissionSeq`;
 reset the script, not the load.
 
-## C22 ☐ `BL-655` The campaign hangar never shows the wallet while a plane is being built
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** Landed one seam up from the Approach, in `CampaignFlow.GoTo`, which every entry of
+the briefing screen in both presentations passes through (Original's `ShowCampaign` walks its
+mirrored flow through it; Built-in's cabin, flight-check, contents and scrapbook pages call it
+directly): opening the briefing restarts a reveal whose clock has moved and leaves a fresh one
+alone, so the load stays cached on the feature, a first entry still reads one narration start, and
+the `--menu=campaign-briefing:24` aid lands on the same frame (raw-pixel md5 identical before and
+after under Original and under Built-in, one narration start each). REPLAY BRIEFING keeps its own
+`Restart` call, since it is a press on the screen rather than an entry. `menu-original-campaign`
+and `menu-campaign-journey` each drive the reveal past its first placed element after REPLAY,
+return to the cabin, re-enter, and read a clock under a second, the fresh element count, no
+revealed objective and a narration count of three, where the unchanged build read ten seconds and
+two. The Original suite's earlier assertion that the re-entry "reopens the briefing where REPLAY
+left it" was the defect pinned as expected behaviour and is replaced.
+
+## C22 ☑ `BL-655` The campaign hangar never shows the wallet while a plane is being built
 
 **Goal.** Every Plane Construction screen after the buy row (airframe, engine, hardpoints, armour,
 guns) shows the money on hand beside the running total, and marks a row the remaining funds cannot
@@ -396,8 +541,12 @@ the totals row draws.
 beside the totals on each hangar page over a `CampaignWallet` (`HangarFlow.Campaign`, null on the
 wallet-free doors, where nothing is drawn), and a mark on any row whose price exceeds the funds
 left, in both presentations (`OriginalHangar.cs`'s composers and Built-in's hangar pages).
-`<TODO: the original's own layout for the money line on the part screens, from the langui strings
-and any capture; none is cited yet.>`
+The original's own layout, from the data: `PLANECONSTRUCTION.SCRIPT` puts `px_t_cashtitle`
+(langui 1149) and `px_t_cash` on the hub chrome at 615,0 and 615,25, over the sticky-note art in
+`PX_BackGround.jpg`, so the note stands on every tab and the totals page beside `PLANE COST:
+$%1!d!` (1036) in the header; `OriginalScreenshots\Campaign CAP-40 Plane Construction 1.png` and
+`2.png` show it on the Engine and Armor tabs (`$$$ on Hand` / `$21840`). No dropdown row is marked
+in the original (`docs/org/hangar.md`, "The cash note").
 
 **Model recommendation.** medium.
 
@@ -410,7 +559,23 @@ the mark while remaining selectable. Screenshot each page under
 purchase, not at the part, and a screen that hides parts you cannot yet afford also hides what you
 are saving toward.
 
-## C23 ☐ `BL-570` The difficulty setting has no menu row
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** Original already composed the two cash rows over a wallet (`OriginalHangar.cs`,
+`ComposeHubChrome`), but no `--menu=` aid could reach the hub over one and nothing marked a row;
+Built-in drew the wallet on the buy row alone. Now `HangarFlow.WalletLine` puts langui 1149 with
+the funds beside the totals on every page after the buy row (empty over the wallet-free doors and
+on the inventory, whose buy row keeps it), `IHangarPage.CostWith` gives each row the total its
+pick would leave and `HangarFlow.RowUnaffordable` / `RowText` prefix `HangarFeature.UnaffordableMark`
+(`✕ `) where the funds fall short, with the line error-coloured; Original bakes the same mark
+into its priced dropdown lists (airframe, engine, armour, guns, hardpoints) and draws the cash
+figure in the problems ink once the build outruns it. Paint, name and the inventory rows take no
+mark, Purchase Now keeps its own flag, and no pick is refused. Original gained the shared
+`campaign-hangar` aid with a `:tab` argument (`docs/cli.md`), which is what the eight
+`.scratch/bl655_*.png` shots and `bl655_montage.png` were taken with; the suites read the aid
+profile's $900 against a $9610 Devastator. The decode: `docs/org/hangar.md`, "The cash note".
+
+## C23 ☑ `BL-570` The difficulty setting has no menu row
 
 **Goal.** Difficulty (Normal / Hard / Hardest) is the first row of Original's Game Options page
 and a stepper on Built-in's Options screen, persisted in the options file, read by a normal launch,
@@ -446,11 +611,28 @@ path or a wave flies at two difficulties. It selects a hit-point tier only; the 
 say it changes how well the enemy flies or shoots. The Game Options screenshot aid's row index
 moves by one.
 
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** `OptionsDef.Difficulty` carries one of the three campaign words (`Flight.Difficulty.Word`),
+validated on read against that set alone, no version bump. Original's Game Options table opens with
+the Difficulty dropdown at the authored `GO_D_DIFFICULTY` box over Normal / Hard / Hardest, with
+Menu and Enhanced Graphics one row down each (the checkbox now sits on the head-turn row its offset
+was read from); Built-in's Options screen is five rows with a wrapping Difficulty stepper first.
+`OptionsApplyExit` carries the word and `Launcher.ApplyOptions` saves it. `Launcher.LaunchSession`
+folds the saved word into the spec through `SessionSpec.WithSavedDifficulty` at every launch: a
+parsed `--difficulty=` flag (`DifficultyExplicit`) wins, a `--det` run reads no saved option, and a
+missing or refused word changes nothing, so the tier reaches `FlightRosterPolicy.Difficulty` on a
+plain launch and an Options apply reaches the next flight without a restart. Instant Action is
+untouched; a wave's own skill still outranks the session's per spawn. The `game-options:checked`
+aid steps down twice now. New suite `options-difficulty-launch`; `OptionsStoreTests`,
+`OriginalShellTests`, `OriginalCoverageTests`, `menu-original-tracer` and `menu-launch-return`
+updated for the new first row.
+
 ---
 
 # Wave D — The pointer
 
-## D31 ☐ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
+## D31 ☑ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
 
 **Goal.** Every list under Original scrolls with the mouse wheel and its thumb can be dragged; the
 arrows keep doing what they do.
@@ -478,7 +660,38 @@ the arrows' behaviour is unchanged. At the controls in `E41`.
 decoded screens and must not change what the arrows do. A wheel that works on one screen and not the
 next reads as broken. Built-in's wheel is `D32`'s, not this item's.
 
-## D32 ☐ `BL-654` Built-in takes no mouse input
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** `MenuPointer` carries a `Wheel` count of the steps turned since the last poll, positive
+toward a list's foot; `PointerSeat` takes it as a third injected read and drains it every frame,
+pointer or none, and `Launcher` counts it in `_Input` because the wheel is an event rather than a
+held state. `ListWindow` (`CSVM/src/UI/ListWindow.cs`) is the new shared record: a list's box, its
+thumb on its track, and the arithmetic for a wheel step, a proportional drag and where a thumb
+stands, so every list draws its thumb by the one rule. `OriginalShell.Lists` answers the screen's
+scrolling lists as `OriginalList` records, each a key, a window its own widget built, and the write
+that moves it; the shell takes a held thumb first (its click activating nothing under it), then a
+wheel step over the list the pointer stands in, then re-reads the rows and hit-tests. A move that
+would hide the focused row pulls the focus to the window's nearer edge, since the window otherwise
+follows the focus straight back. The lists covered are the scrapbook's contents page, an open
+drop-down on any campaign board, every hangar dropdown including Plane Construction's decals,
+Instant Action's dropdowns and its contents window, and the aircraft column on Free Flight and
+Dogfight, which gains a drawn scrollbar. Nothing the arrows or the keyboard do changed; a list that
+fits its window ignores the wheel.
+`BL-743` is closed with it: an Instant Action dropdown's open list is now windowed to the layout's
+authored `TotalDisplayed`, the window following the focused row, with the list's own arrow pair on
+its right edge. Every item stays a row keyed `<key>:<index>`, drawn and hit only inside the window,
+so a scripted pose and the `MenuInstantActionSuites` walks still pick by index. ⚠ For the user's
+eyes: the Pilot Plane list's authored window is 20 rows from the dropdown's line, which reaches the
+page foot over BUILD CUSTOM PLANE the way an open drop-down covers what is under it. The window is
+what stops a longer store from running off the page; if the authored 20 reads as too tall at the
+controls, that is a separate reading of the layout, not this fix.
+New coverage: `ListWindowTests`, `CampaignComboTests`'s two scroll cases,
+`CampaignPreviousMissionsPageTests`'s pointer-window cases, and a wheel-and-drag walk in both
+`menu-original-tracer` (the aircraft column, Instant Action's contents window, and its arrows still
+stepping) and `menu-original-campaign` (the contents page and the decal list). No new suite, so no
+registration count or weight moved.
+
+## D32 ☑ `BL-654` Built-in takes no mouse input
 
 **Goal.** Built-in's launchscreen takes the mouse: a pointer over a row focuses it, a press and
 release on the same row confirms, a wheel over a list scrolls it. Original is unchanged (it already
@@ -496,8 +709,10 @@ is Godot's own: switch the row controls to `MouseFilterEnum.Stop`, route their `
 same `MenuCommands` the keyboard produces (a hover is a focus move to that row, a click is Accept,
 a wheel is a cursor step), and keep focus one thing so a pointer move and a pad press cannot each
 own a different row. Reuse `PointerSeat` for the read where the seat model allows it.
-`<TODO: whether Built-in's rows are reachable as individual Controls on every screen, or some
-screens draw rows as one label block; the Approach assumes per-row Controls.>`
+Every centred-layout screen (Mode, Chapter, the wizard, Options, Controls, the hangar pages, a
+lone pilot's aircraft list and loadout) draws one `CursorRow` control per row, and the split
+aircraft screen one per roster row per pane; only the campaign screens draw no row controls, being
+one `ComposedBoardView` surface.
 
 **Model recommendation.** high. An `[L]` item over the largest UI file in the repo, with every
 menu suite's walk as its regression surface.
@@ -509,6 +724,26 @@ menu suite's walk as its regression surface.
 **⚠ Traps.** Focus must stay one thing. A `MouseFilter` change on a container can swallow input
 meant for the panes behind it (the splitscreen rig sits under the same layer set); check
 `SplitScreen.cs:197-270`'s `Ignore` controls stay ignored. Do not add mouse to the flight HUD.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed: build, 3402 units, 251 engine suites over four shards, 18 goldens hash-identical, engine errors clean, exit 0. After main's `BL-740` and `BL-742` merged in, the whole unit project (3404) and all fifteen menu suites passed again on the combined tree.
+
+**Outcome.** Landed as Godot's own hit test, no `MenuPointer` read: `LaunchMenu.Pointable` sets
+player 1's row controls to `MouseFilterEnum.Stop` and connects their `gui_input` and mouse-enter
+and mouse-exit signals to `PointerEvent`, which holds the mouse's commands for the frame
+(`WithPointer` folds them into player 1's frame in `_Process` and `Drive`) because `Rebuild` frees
+the very control an event is dispatched through. A motion is the cursor step onto the row, a press
+and release on one row is that step plus Accept in the same frame (the release rule is
+`BaseButton`'s: it confirms only while the pointer is still inside the pressed control, so a drag
+off cancels), a wheel notch is a step, with the list column passing the wheel between rows. The
+frame's own step outranks a hover, so a pad and the mouse cannot each own a row; a click off a
+locked airframe is refused rather than confirming the locked one. The campaign boards under
+Built-in stay on the keys (no row controls; the TODO's answer above); the split aircraft screen
+takes the mouse in player 1's pane alone, the mouse being seat 0's device. `SplitScreen.cs` and
+`PointerSeat` are untouched; the containers under the rows keep their filters. New suite
+`menu-host-pointer` in `MenuHostSuites.cs` injects the events through the row controls' signals
+(`LaunchMenu.RowControl`), red with the wiring off, green with it on. A hover cannot be posed
+headless (the aid cannot move the mouse, and the focused row is the one cursor either device
+moves), so `.scratch/bl654_hover.png` shows the aircraft list as the row controls now draw it.
 
 ---
 
@@ -527,8 +762,22 @@ names, Weapon Loadout, Build and back, a join on START), Free Flight with a seco
 its own screen, a campaign flight check with a second seat joined and seen, an export whose OK
 reads and takes first time, a briefing left for the cabin and re-entered, Plane Construction with
 the wallet on every page, Game Options with Difficulty first, and the wheel and thumb drag on the
-scrapbook and the previous-missions page. Then Built-in with the mouse. `<TODO: the order of the
-walk and which items share a screen; settle it when the last item lands.>`
+scrapbook and the previous-missions page. Then Built-in with the mouse. The order, one sitting
+under Original with two pads and a mouse: (1) the top level, eight doors and no BUILD PLANE
+(`A3`); (2) Instant Action: the Pilot Plane list with `Stock` rows and the saved builds after
+them, the open list stopping at twenty rows with its arrows and the wheel over it (`A2`, `D31`),
+Weapon Loadout with the radio on Pilot and on Wingmen, Build Custom Plane to the hangar and Back
+with the list re-read (`A3`), START on the second pad joining and the strip naming it, FLY MISSION
+walking the second seat through its own screen and launching both (`B11`, `B12`); (3) Free
+Flight: the second seat's own plane-selection screen, Back unjoining, FLY dark until it confirms,
+the aircraft column's wheel and thumb (`B12`, `D31`); (4) the campaign: a flight check with the
+second seat joined and the strip in the desk margin (`B11`), Plane Construction with the cash
+note on every tab and a marked row still pickable (`C22`), a plane built there absent from Free
+Flight until one EXPORT whose OK reads (`A1`, `A4`), a briefing left for the cabin and re-entered
+from the start (`C21`), the wheel and thumb on the previous-missions page and the scrapbook
+(`D31`); (5) Game Options with Difficulty first, applied and read by a campaign launch (`C23`).
+Then Built-in: hover, click and wheel on the Mode, aircraft and Options screens, and a mouse
+resting over the list while a pad steps (`D32`).
 
 **Model recommendation.** n/a, the author at the controls.
 

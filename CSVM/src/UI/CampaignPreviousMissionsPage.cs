@@ -436,6 +436,28 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         }
     }
 
+    /// <summary>The list as a pointer sees it, its window and the scrollbar's thumb; null while
+    /// the missions fit the window and there is no scrollbar.</summary>
+    public ListWindow? PointerWindow
+    {
+        get
+        {
+            var seqs = Seqs();
+            int top = Window(seqs.Count);
+            if (seqs.Count <= _visibleRows)
+            {
+                return null;
+            }
+
+            var (thumbY, thumbHeight) = Thumb(seqs.Count, top);
+            return new ListWindow(
+                _listX, _listY, _listWidth, WindowHeight,
+                ScrollX, thumbY, ScrollWidth, thumbHeight,
+                _listY + ScrollButton, WindowHeight - (2f * ScrollButton),
+                seqs.Count, _visibleRows, top);
+        }
+    }
+
     // How tall the window is, which is where the scrollbar's lower arrow sits.
     private float WindowHeight => _visibleRows * _rowHeight;
 
@@ -455,6 +477,19 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         }
 
         return (_listX, _listY + ((row - top) * _rowHeight), _listWidth, _rowHeight);
+    }
+
+    /// <summary>Puts the window's first row at <paramref name="top"/>, clamped, pulling the cursor
+    /// to the window's nearer edge when it stands on a mission row the move would hide; the
+    /// pointer's wheel and thumb, which move the window rather than the cursor.</summary>
+    public void ScrollTo(int top)
+    {
+        int count = Seqs().Count;
+        _top = Math.Clamp(top, 0, Math.Max(0, count - _visibleRows));
+        if (Flow.Row < count)
+        {
+            Flow.FocusRow(Math.Clamp(Flow.Row, _top, _top + _visibleRows - 1));
+        }
     }
 
     /// <summary>A mission row draws no list text of its own: its three lines already stand at their

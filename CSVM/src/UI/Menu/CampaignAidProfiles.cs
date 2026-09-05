@@ -31,6 +31,10 @@ public static class CampaignAidProfiles
     /// own 90-second window covers.</summary>
     public const int MissionsFlown = 3;
 
+    /// <summary>The <c>campaign-planeselection</c> aid's argument that presses the pilot's EXPORT,
+    /// so the shot is the one-button messagebox standing over the screen.</summary>
+    public const string ExportArgument = "export";
+
     // The completed-objective mask those runs record. Bit 0 alone would leave every scrapbook page
     // blank, since the story scraps are gated on the objectives that unlock them, so the aid
     // records a clean run: bits 0 to 12, the range the shipped rows' own gates use.
@@ -38,6 +42,11 @@ public static class CampaignAidProfiles
 
     /// <summary>The store's directory.</summary>
     public static string Directory => Path.Combine(Path.GetTempPath(), "CSVM", "menu-aid-profiles");
+
+    /// <summary>The build store the scratch-store aids open the campaign over, a subdirectory of
+    /// <see cref="Directory"/> emptied with it: the export aid's write lands here and never in
+    /// <c>user://Planes</c>.</summary>
+    public static Flight.CustomPlaneStore Planes() => new(Path.Combine(Directory, "Planes"));
 
     /// <summary>A fresh scratch store: emptied, then seeded with the two players when
     /// <paramref name="seeded"/>, the first of them progressed through the first three missions

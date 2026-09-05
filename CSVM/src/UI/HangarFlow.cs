@@ -82,6 +82,11 @@ public interface IHangarPage
     /// plane, which hides the row (E50).</summary>
     CustomPlaneDef? TotalsPlane(int row);
 
+    /// <summary>The build's total cost with <paramref name="row"/>'s pick in effect (the build as it
+    /// stands on a stepper row, the alternative on a pick row), or null where the row prices nothing
+    /// (an action, a free pick, a name). What the wallet mark compares against the funds.</summary>
+    int? CostWith(int row);
+
     /// <summary>The horizontal stepper on the focused row. Returns whether anything changed.</summary>
     bool Step(int row, int dir);
 
@@ -239,6 +244,18 @@ public sealed class HangarFlow
     public bool TotalsOverweight =>
         Page.TotalsPlane(RowInPage()) is { } plane
         && HangarEconomy.Price(plane).Verdict == PurchaseVerdict.Overweight;
+
+    /// <summary>The money on hand beside the totals on every screen after the buy row, langui 1149
+    /// with the profile's funds; "" over the wallet-free doors and on the plane-selection screen,
+    /// whose buy row already carries it as its detail.</summary>
+    public string WalletLine =>
+        Campaign is null || Screen == HangarScreen.PlaneSelection ? string.Empty : _feature.WalletLine();
+
+    /// <summary>Whether the plane <see cref="TotalsLine"/> prices is beyond the wallet, so the shell
+    /// can colour the line; false wherever <see cref="WalletLine"/> is empty.</summary>
+    public bool WalletShort =>
+        WalletLine.Length > 0 && Page.TotalsPlane(RowInPage()) is { } plane
+        && _feature.Unaffordable(HangarEconomy.Price(plane).Total.Cost);
 
     /// <summary>Whether an airframe has been picked outright on the AIRFRAME screen. A new plane
     /// starts false, so nothing reads as chosen before the pilot chooses (E49): the model still
@@ -472,6 +489,17 @@ public sealed class HangarFlow
     /// 3310 + calibre), prefixed "(2) " when twinned (format 506), or None for an empty slot.</summary>
     public string GunName(GunChoice gun) => _feature.GunName(gun);
 
+    /// <summary>Whether a row's pick would leave the build beyond the wallet: the page's
+    /// <see cref="IHangarPage.CostWith"/> against the funds, never true over a wallet-free door.</summary>
+    public bool RowUnaffordable(int row) =>
+        Campaign is not null && Page.CostWith(row) is { } cost && _feature.Unaffordable(cost);
+
+    /// <summary>Row <paramref name="row"/>'s text as the shell draws it: the page's own, prefixed
+    /// with <see cref="HangarFeature.UnaffordableMark"/> where <see cref="RowUnaffordable"/> holds.
+    /// The mark changes nothing about what the row does.</summary>
+    public string RowText(int row) =>
+        (RowUnaffordable(row) ? HangarFeature.UnaffordableMark : string.Empty) + Page.RowText(row);
+
     // The page for a screen, built on first sight and kept, so a page may hold state of its own.
     // Every screen's page is real and lives in its own file; the placeholder survives only as
     // the default arm's guard.
@@ -553,6 +581,9 @@ public abstract class HangarPage : IHangarPage
 
     /// <inheritdoc/>
     public virtual CustomPlaneDef? TotalsPlane(int row) => Scratch;
+
+    /// <inheritdoc/>
+    public virtual int? CostWith(int row) => HangarEconomy.Price(Scratch).Total.Cost;
 
     /// <inheritdoc/>
     public virtual bool Step(int row, int dir) => false;
@@ -658,6 +689,10 @@ public sealed class HangarPlaneSelectionPage : HangarPage
     /// own totals would be a stale figure from a build this screen has not started yet.</remarks>
     public override CustomPlaneDef? TotalsPlane(int row) =>
         !_removing && row >= 1 && row <= Flow.Saved.Count ? Flow.Saved[row - 1] : null;
+
+    /// <summary>Nothing here is bought: an owned plane is already paid for and the actions price
+    /// nothing, so no row takes the wallet mark.</summary>
+    public override int? CostWith(int row) => null;
 
     /// <inheritdoc/>
     public override bool Accept(int row)

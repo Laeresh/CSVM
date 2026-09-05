@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// from <see cref="PlaneName"/> on, which is what the shell reads its two branches off.</summary>
 public enum OriginalScreen
 {
-    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight, Dogfight and hangar doors.</summary>
+    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight and Dogfight doors.</summary>
     TopLevel,
 
     /// <summary>The remake-only Free Flight screen: a chapter list, the aircraft list, the seats, BACK and FLY.</summary>
@@ -18,6 +18,10 @@ public enum OriginalScreen
 
     /// <summary>The remake-only Dogfight screen: the Free Flight screen's shape over the Dogfight gate.</summary>
     Dogfight,
+
+    /// <summary>The remake-only per-seat aircraft screen: the campaign plane-selection board's
+    /// shape over the sortie roster, one joined seat picking at a time.</summary>
+    SeatPlane,
 
     /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS
     /// door live and its three other doors drawn disabled.</summary>
@@ -30,6 +34,10 @@ public enum OriginalScreen
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
     InstantAction,
+
+    /// <summary>The Instant Action screen's Weapon Loadout, the decoded <c>[@OrdinanceLayout@]</c>
+    /// chrome over the fit of the seat the radio pair names.</summary>
+    InstantActionLoadout,
 
     /// <summary>The decoded <c>[@Campaign@]</c> player profile screen: the name box, the roster,
     /// CONTINUE, DELETE PLAYER and CANCEL.</summary>
@@ -126,6 +134,12 @@ public sealed record OriginalRow(
 /// the picture changed.</summary>
 public sealed record OriginalStep(IReadOnlyList<string> Cues, MenuExit? Exit, bool Changed);
 
+/// <summary>One scrolling list on the screen showing, for the pointer's wheel and thumb drag:
+/// its window as the list widget describes it and the write that puts the window's first row
+/// somewhere else, which also pulls the focus inside the window when it stood on a row the move
+/// would hide. The arrows and the keyboard never go through this.</summary>
+public sealed record OriginalList(string Key, ListWindow Window, Action<int> ScrollTo);
+
 /// <summary>The colours the shell writes in, read off the layout: the file-wide four state
 /// colours and the paper plaque's own label tail.</summary>
 public sealed record OriginalInks(
@@ -139,10 +153,10 @@ public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutCol
 
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
-/// remake-only Free Flight, Dogfight and hangar doors, the sortie screens, the Options screen over
-/// the decoded Preferences chrome with the Game Options page behind its live door, and the decoded
-/// Instant Action, campaign and hangar screens over their shared features (each family its own
-/// partial file), driven by each seat's semantic commands and composed into a
+/// remake-only Free Flight and Dogfight doors, the sortie screens, the Options screen over the
+/// decoded Preferences chrome with the Game Options page behind its live door, and the decoded
+/// Instant Action, loadout, campaign and hangar screens over their shared features (each family
+/// its own partial file), driven by each seat's semantic commands and composed into a
 /// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat
 /// 0's pointer arrives already mapped into that space; hovering a live row moves the focus onto
 /// it, so keyboard, pad and pointer share one cursor. A dialog (the original's messagebox) may
@@ -159,6 +173,9 @@ public sealed partial class OriginalShell
 
     /// <summary>The Free Flight screen's launch button.</summary>
     public const string FlyKey = "FLY";
+
+    /// <summary>The Game Options page's difficulty dropdown, the page's first row.</summary>
+    public const string DifficultyKey = "DIFFICULTY";
 
     /// <summary>The Game Options page's menu-presentation dropdown.</summary>
     public const string PresentationKey = "PRESENTATION";
@@ -230,16 +247,19 @@ public sealed partial class OriginalShell
     private int _hover = -1;
     private int _pressed = -1;
     private (float X, float Y)? _pointer;
+    // A thumb drag in progress: which list, where the pointer took hold and where the window stood.
+    private (string Key, float StartY, int StartTop)? _drag;
     private int _pickedChapter = -1;
     private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
+    private int _difficulty = CSVM.Flight.Difficulty.Normal;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
     /// <paramref name="flightDevices"/> a seat with its launch's devices; the chapters default to
-    /// <see cref="OriginalRosters"/>, a missing Instant Action feature to a private one. The hangar
-    /// door stands only over <paramref name="hangar"/> and <paramref name="planes"/> together, the
-    /// Campaign row only over <paramref name="campaign"/> and <paramref name="profiles"/> together.</summary>
+    /// <see cref="OriginalRosters"/>, a missing Instant Action feature to a private one. Instant
+    /// Action's Build Custom Plane stands only over <paramref name="hangar"/> and <paramref name="planes"/>
+    /// together, the Campaign row only over <paramref name="campaign"/> and <paramref name="profiles"/> together.</summary>
     public OriginalShell(
         MenuLayout layout,
         FreeFlightFeature free,
@@ -317,6 +337,44 @@ public sealed partial class OriginalShell
     /// <summary>The row under the pointer, or -1.</summary>
     public int Hover => _hover;
 
+    /// <summary>The screen's scrolling lists as the pointer sees them, the topmost first: none
+    /// under a dialog, an open dropdown's list alone while one stands, else the screen's own.</summary>
+    public IReadOnlyList<OriginalList> Lists
+    {
+        get
+        {
+            var lists = new List<OriginalList>();
+            if (_dialog != null)
+            {
+                return lists;
+            }
+
+            switch (_screen)
+            {
+                case OriginalScreen.FreeFlight:
+                case OriginalScreen.Dogfight:
+                    SortieLists(lists);
+                    break;
+                case OriginalScreen.InstantAction:
+                case OriginalScreen.InstantActionLoadout:
+                    InstantActionLists(lists);
+                    break;
+                case OriginalScreen.SeatPlane:
+                case var _ when IsCampaignScreen:
+                    CampaignLists(lists);
+                    break;
+                case var _ when IsHangarScreen:
+                    HangarLists(lists);
+                    break;
+            }
+
+            return lists;
+        }
+    }
+
+    /// <summary>The list whose thumb the pointer is dragging, or null.</summary>
+    public string? Dragging => _drag?.Key;
+
     /// <summary>The picked chapter's code, or null.</summary>
     public string? PickedChapter => _pickedChapter >= 0 ? _chapters[_pickedChapter].Code : null;
 
@@ -325,6 +383,10 @@ public sealed partial class OriginalShell
 
     /// <summary>The graphics mode word the Game Options page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
+    /// would apply.</summary>
+    public int DifficultyChoice => _difficulty;
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
@@ -340,12 +402,20 @@ public sealed partial class OriginalShell
         Open(OriginalScreen.TopLevel);
     }
 
-    /// <summary>Opens a screen directly, the screenshot aids' door.</summary>
+    /// <summary>Opens a screen directly, the screenshot aids' door. Any screen but the per-seat
+    /// one ends a seat walk in progress.</summary>
     public void Open(OriginalScreen screen)
     {
         _screen = screen;
         _hover = -1;
         _pressed = -1;
+        if (screen != OriginalScreen.SeatPlane)
+        {
+            _pickingSeat = null;
+            _seatPage = null;
+        }
+
+        _drag = null;
         if (screen == OriginalScreen.GameOptions)
         {
             ReadSavedOptions();
@@ -361,6 +431,13 @@ public sealed partial class OriginalShell
         MenuExit? exit = null;
         SyncCampaignField();
         bool changed = TypeName(commands, cues);
+        if (_screen == OriginalScreen.SeatPlane && _pickingSeat is not { Joined: true })
+        {
+            // The seat this screen was picking for has gone: the walk moves on or ends.
+            exit = AdvanceSeatWalk();
+            changed = true;
+        }
+
         var rows = Rows;
         int focus = EnsureFocus(rows);
 
@@ -368,7 +445,17 @@ public sealed partial class OriginalShell
         {
             changed |= _pointer != (pointer.X, pointer.Y);
             _pointer = (pointer.X, pointer.Y);
-            int over = HitTest(rows, pointer.X, pointer.Y);
+            // The thumb and the wheel come before the rows: a held thumb owns the pointer until
+            // it is let go, and a wheel step moves the rows the hit test then reads.
+            bool dragging = DragThumb(pointer, ref changed);
+            if (!dragging && pointer.Wheel != 0)
+            {
+                changed |= WheelList(pointer);
+            }
+
+            rows = Rows;
+            focus = EnsureFocus(rows);
+            int over = dragging ? -1 : HitTest(rows, pointer.X, pointer.Y);
             if (over != _hover)
             {
                 _hover = over;
@@ -396,7 +483,11 @@ public sealed partial class OriginalShell
             int pressed = pointer.Pressed && over >= 0 && rows[over].Enabled ? over : -1;
             changed |= pressed != _pressed;
             _pressed = pressed;
-            if (pointer.Clicked && over >= 0 && rows[over].Enabled)
+            if (dragging)
+            {
+                // A drag's click was spent on the thumb; nothing under the pointer is activated.
+            }
+            else if (pointer.Clicked && over >= 0 && rows[over].Enabled)
             {
                 if (!HoverOnly(rows[over]))
                 {
@@ -433,9 +524,9 @@ public sealed partial class OriginalShell
         if (commands.MoveX != 0)
         {
             // A sideways step changes a value where a screen has one under the cursor (an Instant
-            // Action dropdown or radio, a Game Options row, a hangar dropdown or tab, a closed
-            // campaign field); anywhere else it crosses columns.
-            if (_screen == OriginalScreen.InstantAction && StepInstantActionValue(rows, focus, commands.MoveX))
+            // Action or loadout dropdown, a radio, a Game Options row, a hangar dropdown or tab, a
+            // closed campaign field); anywhere else it crosses columns.
+            if (IsInstantActionFamily && StepInstantActionValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -475,6 +566,12 @@ public sealed partial class OriginalShell
             changed = true;
         }
 
+        // With seat 0's aircraft picked, a joined seat still to confirm gets its own screen.
+        if (exit == null && IsSortie && BeginSeatWalkIfDue())
+        {
+            changed = true;
+        }
+
         return new OriginalStep(cues, exit, changed);
     }
 
@@ -497,7 +594,8 @@ public sealed partial class OriginalShell
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
-        bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.Options or OriginalScreen.GameOptions
+        bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
+            or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.SeatPlane
             || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
@@ -514,15 +612,21 @@ public sealed partial class OriginalShell
             case OriginalScreen.InstantAction:
                 ComposeInstantAction(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
+            case OriginalScreen.InstantActionLoadout:
+                ComposeLoadout(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
+                break;
             case var _ when IsCampaignScreen:
                 ComposeCampaign(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
+                break;
+            case OriginalScreen.SeatPlane:
+                ComposeSeatPlane(focus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case var _ when IsHangarScreen:
                 ComposeHangar(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
-                ComposeSortie(rows, lines);
+                ComposeSortie(rows, lines, overlays);
                 break;
             case OriginalScreen.Options:
                 ComposeOptions(pictures, lines);
@@ -683,10 +787,89 @@ public sealed partial class OriginalShell
         return ordinal;
     }
 
+    // A thumb drag: a click on a list's thumb takes hold of it, and while the button stays down
+    // the window follows the pointer down the track; letting go ends it. True while one holds.
+    private bool DragThumb(MenuPointer pointer, ref bool changed)
+    {
+        if (_drag is { } drag)
+        {
+            if (!pointer.Pressed)
+            {
+                _drag = null;
+                changed = true;
+                return false;
+            }
+
+            foreach (var list in Lists)
+            {
+                if (list.Key != drag.Key)
+                {
+                    continue;
+                }
+
+                int top = list.Window.TopAfterDrag(drag.StartTop, pointer.Y - drag.StartY);
+                if (top != list.Window.Top)
+                {
+                    list.ScrollTo(top);
+                    changed = true;
+                }
+
+                return true;
+            }
+
+            // The list the drag began on is gone with its screen.
+            _drag = null;
+            return false;
+        }
+
+        if (!pointer.Clicked)
+        {
+            return false;
+        }
+
+        foreach (var list in Lists)
+        {
+            if (list.Window.OnThumb(pointer.X, pointer.Y))
+            {
+                _drag = (list.Key, pointer.Y, list.Window.Top);
+                _hover = -1;
+                changed = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A wheel step over a list moves its window by that many rows; the first list containing the
+    // pointer takes it, and a list that fits its window ignores it.
+    private bool WheelList(MenuPointer pointer)
+    {
+        foreach (var list in Lists)
+        {
+            if (!list.Window.Contains(pointer.X, pointer.Y))
+            {
+                continue;
+            }
+
+            int top = list.Window.TopAfterWheel(pointer.Wheel);
+            if (top == list.Window.Top)
+            {
+                return false;
+            }
+
+            list.ScrollTo(top);
+            return true;
+        }
+
+        return false;
+    }
+
     // The rows of a screen that has no page of its own (the top level, the sortie screens, the
     // Options screen): a decoded strip in its state frame, a paper plaque with its label (an
     // outlined label where the plaque art is missing), and list text. Nothing is focused or
-    // pressed while a dialog stands over the screen.
+    // pressed while a dialog stands over the screen. A row outside its list's window draws
+    // nothing, since the window is what the pointer scrolls.
     private void ComposeRows(IReadOnlyList<OriginalRow> rows, int focus, List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
     {
         for (int i = 0; i < rows.Count; i++)
@@ -820,9 +1003,6 @@ public sealed partial class OriginalShell
                     case DogfightKey:
                         Open(OriginalScreen.Dogfight);
                         break;
-                    case HangarKey:
-                        OpenHangar();
-                        break;
                     case CampaignKey:
                         OpenCampaign();
                         break;
@@ -842,6 +1022,10 @@ public sealed partial class OriginalShell
                 return ActivateSortie(row);
             case OriginalScreen.InstantAction:
                 return ActivateInstantAction(row);
+            case OriginalScreen.InstantActionLoadout:
+                return ActivateLoadout(row);
+            case OriginalScreen.SeatPlane:
+                return ActivateSeatPlane(row);
             case var _ when IsCampaignScreen:
                 return ActivateCampaign(row);
             case var _ when IsHangarScreen:
@@ -867,11 +1051,11 @@ public sealed partial class OriginalShell
     }
 
     // Back with a dialog standing takes its declining answer, the messagebox script's own Escape.
-    // On a sortie screen it first undoes seat 0's own pick, a stage at a time; browsing, it leaves
-    // the screen. On the Instant Action screen and the Game Options page the first Back closes an
-    // open list and the next one leaves, the page's leaving being CANCEL CHANGES. The campaign and
-    // the hangar walk their own graphs back. The top level quits outright, as MAINMENU.SCRIPT's
-    // Quit terminates with no confirm.
+    // On a sortie screen it undoes seat 0's pick a stage at a time, then leaves; the per-seat
+    // screen has its own, whose meaning depends on who pressed it. On Instant Action, its loadout
+    // and Game Options the first Back closes an open list and the next leaves (CANCEL LOADOUT,
+    // CANCEL CHANGES). The campaign and the hangar walk their own graphs back. The top level
+    // quits outright, as MAINMENU.SCRIPT's Quit terminates with no confirm.
     private MenuExit? Back()
     {
         if (_dialog is { } dialog)
@@ -885,13 +1069,24 @@ public sealed partial class OriginalShell
             return new QuitExit();
         }
 
+        if (_screen == OriginalScreen.SeatPlane)
+        {
+            return BackSeatPlane();
+        }
+
         if (IsSortie && Seat0 is { } seat && _setup.Back(seat) != SeatBack.Browsing)
         {
             return null;
         }
 
-        if (_screen == OriginalScreen.InstantAction && CloseInstantActionDropdown())
+        if (IsInstantActionFamily && CloseInstantActionDropdown())
         {
+            return null;
+        }
+
+        if (_screen == OriginalScreen.InstantActionLoadout)
+        {
+            CloseLoadout(keep: false);
             return null;
         }
 
@@ -924,7 +1119,6 @@ public sealed partial class OriginalShell
             case OriginalScreen.TopLevel:
                 rows.Add(TextButton(FreeFlightKey, "FREE FLIGHT", DoorX, DoorY, true, 0));
                 rows.Add(TextButton(DogfightKey, "DOGFIGHT", DoorX, DogfightDoorY, true, 0));
-                rows.Add(TextButton(HangarKey, "BUILD PLANE", DoorX, HangarDoorY, _hangar != null && _planes != null, 0));
                 var main = _layout.Screen(OriginalAvailability.MainMenuSection);
                 foreach (string key in TopLevelButtons)
                 {
@@ -939,6 +1133,16 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.InstantAction:
                 BuildInstantActionRows(rows);
+                break;
+            case OriginalScreen.InstantActionLoadout:
+                BuildLoadoutRows(rows);
+                break;
+            case OriginalScreen.SeatPlane:
+                if (_seatPage is { } seatPage)
+                {
+                    BuildPageRows(seatPage, rows);
+                }
+
                 break;
             case var _ when IsCampaignScreen:
                 BuildCampaignRows(rows);

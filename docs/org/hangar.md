@@ -283,6 +283,24 @@ plane slots 0 and 1, naming them from `langui` 511 `IDS_PILOTPLANENAME` "Gypsy M
 (the Lvl-2 tier) and 2 hardpoints per wing. Templates 0 to 10 in that array are the eleven
 stock airframe builds, one per airframe id.
 
+### The cash note
+
+The money on hand is drawn by the Plane Construction hub's own chrome, not by any tab:
+`PLANECONSTRUCTION.SCRIPT` creates `px_t_cashtitle` (`langui` 1149 `IDS_PX_CASH_TITLE`, `$$$ on
+Hand:`, authored at 615,0, 120 wide, centred, black) and `px_t_cash` (the figure, at 615,25,
+120 by 55, centred), and the sticky-note art they sit on is part of `PX_BackGround.jpg`. Because
+the hub hosts every tab script (`AIRFRAME.SCRIPT` to `PAINT.SCRIPT`) and the totals page inside
+it, the note stands on every construction screen, beside `px_t_planecost` (`langui` 1036 `PLANE
+COST:  $%1!d!`) in the header. The two `OriginalScreenshots\Campaign CAP-40 Plane Construction
+*.png` captures show exactly that: the Engine and Armor tabs of a build, `$$$ on Hand` / `$21840`
+on the note and `PLANE COST: $9930` / `$9190` in the header.
+
+**No dropdown row is marked in the original.** The tab scripts' fill callbacks (2200, 2218,
+2246, 2248, 2244) write names alone, and the only funds check anywhere on the path is callback
+2264's `INSUFFICIENT FUNDS` at the Purchase button. Both presentations' mark on a row the wallet
+cannot cover (`HangarFeature.UnaffordableMark`) and Built-in's wallet line beside the totals are
+remake additions, and by that decode they are never a gate: every marked row stays pickable.
+
 ### The sell price is the full build cost
 
 Both the confirmation prompt and the credit compute it the same way, and neither applies a

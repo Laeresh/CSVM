@@ -222,6 +222,8 @@ public partial class Launcher : Node3D
     // (a no-content-arg launch): the host owns the shared features, the first seat and the active
     // presentation, and hands every typed exit to OnMenuExit.
     private MenuHost? _menuHost;
+    // Wheel steps turned since the menu seat last read them, positive toward a list's foot.
+    private int _menuWheel;
     private MenuAudioService? _menuAudio;
     // The decoded menu layout the Original presentation composes from, loaded once by the
     // availability check and handed to every Original instance the registry creates.
@@ -749,6 +751,24 @@ public partial class Launcher : Node3D
         MirrorEngineLog();
     }
 
+    public override void _Input(InputEvent @event)
+    {
+        // The wheel is an event, never a held state, so it is counted here and handed to the
+        // menu seat's poll; nothing else about it is read while the menu is up.
+        if (_menuHost is { Shown: true } && @event is InputEventMouseButton { Pressed: true } wheel)
+        {
+            switch (wheel.ButtonIndex)
+            {
+                case MouseButton.WheelDown:
+                    _menuWheel++;
+                    break;
+                case MouseButton.WheelUp:
+                    _menuWheel--;
+                    break;
+            }
+        }
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
@@ -1003,6 +1023,9 @@ public partial class Launcher : Node3D
     // CLI launch leaves the log to tell the story, exactly as the single-root class did).
     private bool LaunchSession()
     {
+        // The saved difficulty, read at every launch so an Options apply reaches the next flight
+        // in the same process. The flag and --det rules are the spec's (WithSavedDifficulty).
+        _spec = _spec.WithSavedDifficulty(OptionsStore.UserOptions().Load().Difficulty);
         _session = new GameSession(_spec, new LauncherContext
         {
             RepoRoot = _repoRoot,
@@ -1206,7 +1229,7 @@ public partial class Launcher : Node3D
         // Seat 0 is player 1, so it navigates on the menu keymap that player saved.
         seatInput.LoadSavedKeymap(1);
         var builtInSeat = new BuiltInSeat(seatInput);
-        var seat = new PointerSeat(builtInSeat, MousePosition, () => Input.IsMouseButtonPressed(MouseButton.Left));
+        var seat = new PointerSeat(builtInSeat, MousePosition, () => Input.IsMouseButtonPressed(MouseButton.Left), TakeMenuWheel);
         var registry = new PresentationRegistry();
         // The factories read the aid when they run, which is inside a Show: the cold start's
         // instance gets it, and the fresh instance a switch creates gets none.
@@ -1271,6 +1294,14 @@ public partial class Launcher : Node3D
         return (at.X, at.Y);
     }
 
+    // The wheel steps counted since the last read, the wheel half of seat 0's pointer.
+    private int TakeMenuWheel()
+    {
+        int steps = _menuWheel;
+        _menuWheel = 0;
+        return steps;
+    }
+
     // The Options route's apply, the one writer of the options file: persist every choice the
     // screen took, then end the active presentation (discarding every feature's transient state),
     // re-select with the saved request in place of any session override, and show the selected
@@ -1289,8 +1320,9 @@ public partial class Launcher : Node3D
         var options = store.Load();
         options.MenuPresentation = requested.Value;
         options.GraphicsMode = applied.Graphics;
+        options.Difficulty = applied.Difficulty;
         store.Save(options);
-        Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics}");
+        Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
         _menuHost.Deactivate();
         string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
         string why = reason == null ? "" : $" reason={reason}";

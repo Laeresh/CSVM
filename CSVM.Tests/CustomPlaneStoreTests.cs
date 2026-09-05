@@ -232,6 +232,47 @@ public class CustomPlaneStoreTests
         Assert.All(def.Ordnance, cell => Assert.Equal(CustomPlaneDef.NoOrdnancePick, cell));
     }
 
+    /// <summary>The export marker round-trips, and only a plane still waiting for EXPORT puts it in
+    /// the file: a plane the campaign has exported, and every plane built at a wallet-free door,
+    /// writes exactly the file they wrote before the field existed.</summary>
+    [Fact]
+    public void RoundTrip_AwaitingExport()
+    {
+        var store = new CustomPlaneStore(TestData.TempDir());
+        var def = FullDef();
+        def.AwaitingExport = true;
+        store.Save(def);
+
+        var loaded = store.Load("Blue Streak");
+
+        Assert.NotNull(loaded);
+        Assert.True(loaded!.AwaitingExport);
+        Assert.Contains("\"awaitingExport\": true", CustomPlaneStore.Serialize(def), StringComparison.Ordinal);
+        Assert.DoesNotContain("awaitingExport", CustomPlaneStore.Serialize(FullDef()), StringComparison.Ordinal);
+    }
+
+    /// <summary>The marker is optional and its absence means exported. A file written before the
+    /// field existed must keep reading that way, or every build already on a player's disk would
+    /// drop out of the Instant Action and Free Flight lists on an update.</summary>
+    [Fact]
+    public void Deserialize_WithoutTheMarker_ReadsAsExported()
+    {
+        const string preMarker = """
+            {
+              "version": 2,
+              "name": "Blue Streak",
+              "airframe": 3,
+              "engine": 4
+            }
+            """;
+
+        var def = CustomPlaneStore.Deserialize(preMarker);
+
+        Assert.NotNull(def);
+        Assert.False(def!.AwaitingExport);
+        Assert.Equal("Blue Streak", def.Name);
+    }
+
     [Fact]
     public void Constructor_RelativeDirectory_Throws()
     {

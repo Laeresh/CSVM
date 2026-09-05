@@ -107,6 +107,45 @@ public class CampaignPreviousMissionsPageTests
         Assert.Equal(449f, thumb.Y + thumb.Height); // flush against the lower arrow
     }
 
+    /// <summary>The list as the pointer's wheel and thumb see it, and what a scroll writes back:
+    /// the window moves and the cursor comes with it only where it would otherwise leave.</summary>
+    [Fact]
+    public void ThePointerWindowScrollsTheListAndDragsTheCursorInsideIt()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        for (int seq = 0; seq < 6; seq++)
+        {
+            CampaignProgression.Record(profile, Attempt(seq));
+        }
+
+        var flow = OpenedOnPreviousMissions(profile);
+        var page = (CampaignPreviousMissionsPage)flow.Page;
+        var window = page.PointerWindow;
+        Assert.NotNull(window);
+        Assert.Equal((6, 4, 0), (window!.Value.Count, window.Value.Rows, window.Value.Top));
+        Assert.True(window.Value.Contains(window.Value.X + 1f, window.Value.Y + 1f));
+        Assert.True(window.Value.OnThumb(window.Value.ThumbX + 1f, window.Value.ThumbY + 1f));
+
+        page.ScrollTo(window.Value.TopAfterWheel(1));
+        Assert.Equal(1, page.PointerWindow!.Value.Top);
+        Assert.Equal("Mission 2", flow.Page.Captions[2].Text); // seq 1 heads the window now
+        Assert.Equal(1, flow.Row); // row 0 left the window, so the cursor came with it
+
+        page.ScrollTo(500);
+        Assert.Equal(2, page.PointerWindow!.Value.Top); // the last window of four over six rows
+        Assert.Equal(2, flow.Row);
+    }
+
+    [Fact]
+    public void AListThatFitsItsWindowShowsThePointerNoScrollbar()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnPreviousMissions(profile);
+
+        Assert.Null(((CampaignPreviousMissionsPage)flow.Page).PointerWindow);
+    }
+
     /// <summary>A second confirm on the row already picked is REPLAY MISSION's own press, so a
     /// mission is replayed without walking down to the button.</summary>
     [Fact]

@@ -284,6 +284,7 @@ internal static class MenuCampaignSuites
 
         ctx.Check(page.State != null && page.NarrationWav.Length > 0, $"the mission's state and narration resolved ({page.NarrationWav})");
         int pictures = menu.ShownBoard?.Pictures.Count ?? 0;
+        int freshElements = page.Reveal.Elements.Count;
         for (int frame = 0; frame < 600; frame++)
         {
             menu._Process(1.0 / 60.0);
@@ -297,13 +298,25 @@ internal static class MenuCampaignSuites
         menu._Process(1.0 / 60.0);
         ctx.Check(page.Reveal.Clock < 1.0 && page.NarrationStarts == 2,
             $"REPLAY BRIEFING restarts the reveal and the narration ({page.Reveal.Clock:0.0}s, {page.NarrationStarts})");
+
+        // The reveal is driven on until the map is no longer blank, so the return below has
+        // something to start over from; the first beat's time is the mission's own.
+        int frames = 0;
+        while (frames++ < 3600 && page.Reveal.Elements.Count == freshElements && page.Reveal.RevealedObjectives.Count == 0)
+        {
+            menu._Process(1.0 / 60.0);
+        }
+
+        ctx.Check(page.Reveal.Elements.Count > freshElements || page.Reveal.RevealedObjectives.Count > 0,
+            $"a minute after REPLAY at most places more on the map than a fresh reveal or reveals an objective ({page.Reveal.Clock:0.0}s, {freshElements} to {page.Reveal.Elements.Count} elements, {page.Reveal.RevealedObjectives.Count} objectives)");
         menu.Drive(Down);
         Is(ctx, "the second plaque", "RETURN TO CABIN", menu.ShownRowText);
         menu.Drive(Accept);
         ctx.Check(flow.Screen == CampaignScreen.Cabin, $"RETURN TO CABIN lands on the cabin that opened the briefing ({flow.Screen})");
         menu.Drive(Accept);
-        ctx.Check(flow.Screen == CampaignScreen.Briefing && page.Reveal.Clock < 1.0 && page.NarrationStarts == 2,
-            $"Next Mission on the same mission reopens the briefing with the reveal where REPLAY left it ({page.Reveal.Clock:0.0}s)");
+        ctx.Check(flow.Screen == CampaignScreen.Briefing && page.Reveal.Clock < 1.0
+            && page.Reveal.Elements.Count == freshElements && page.Reveal.RevealedObjectives.Count == 0 && page.NarrationStarts == 3,
+            $"Next Mission on the same mission reopens the briefing from a blank map with the narration asked for again ({page.Reveal.Clock:0.0}s, {page.Reveal.Elements.Count} elements, {page.Reveal.RevealedObjectives.Count} objectives, {page.NarrationStarts})");
     }
 
     private static void FlightCheckAndAmmo(TestContext ctx, LaunchMenu menu, CampaignProfileStore store)

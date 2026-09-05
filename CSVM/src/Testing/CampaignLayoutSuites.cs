@@ -23,7 +23,7 @@ internal static class CampaignLayoutSuites
         ("campaign-empty", 0), ("campaign-roster", 0), ("campaign-entry", 0), ("campaign-cabin", 0),
         ("campaign-previous", 0), ("campaign-scrapbook", 0), ("campaign-briefing:24", 0),
         ("campaign-flightcheck", 0), ("campaign-guestcheck:2", 3), ("campaign-ammo", 0),
-        ("campaign-planeselection", 0),
+        ("campaign-planeselection", 0), ("campaign-planeselection:export", 0),
     };
 
     [Suite("campaign-layout-parity",

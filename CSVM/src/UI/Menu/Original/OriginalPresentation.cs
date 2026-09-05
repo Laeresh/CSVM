@@ -14,7 +14,8 @@ namespace CSVM.UI.Menu.Original;
 /// on the board layer, registered under <see cref="PresentationId.Original"/>. <see cref="Activate"/>
 /// builds the layer on the first call, refreshes the shared roster from the saved-plane store and
 /// stands the shell on the destination's screen on every call; <see cref="Tick"/> keeps the pad
-/// roster in step, scans the join gesture on the sortie screens, polls every seat, maps a
+/// roster in step, claims seat 0's pad while joining is closed, scans the join gesture on the
+/// screens the shell opens it on (<see cref="OriginalShell.JoiningOpen"/>), polls every seat, maps a
 /// pointer from window pixels into the authored space through <see cref="BoardFit"/>, steps the
 /// shell per seat, requests its cues and hands its exit to the host. The OS pointer is hidden
 /// while the presentation is on screen, since the shell draws the original's own.
@@ -27,13 +28,17 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Dogfight screen.</summary>
     public const string DogfightAid = "dogfight";
 
+    /// <summary>The Free Flight aid's argument that picks the first chapter and aircraft for
+    /// seat 0, so with <c>--debug-join</c> the per-seat aircraft screen shows.</summary>
+    public const string SeatPlaneAid = "seat-plane";
+
     /// <summary>The aid value that opens the Options screen.</summary>
     public const string OptionsAid = "options";
 
     /// <summary>The aid value that opens the Game Options page behind it.</summary>
     public const string GameOptionsAid = "game-options";
 
-    /// <summary>The Game Options aid's argument that leaves its Menu dropdown standing open.</summary>
+    /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
     /// <summary>The Game Options aid's argument that leaves its checkbox checked.</summary>
@@ -41,6 +46,12 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The aid value that opens the Instant Action screen.</summary>
     public const string InstantActionAid = "instant-action";
+
+    /// <summary>The Instant Action aid's argument that leaves its Pilot Plane list standing open.</summary>
+    public const string InstantActionPilotPlaneAid = "pilot-plane";
+
+    /// <summary>The Instant Action aid's argument that opens its Weapon Loadout for the pilot.</summary>
+    public const string InstantActionLoadoutAid = "weapon-loadout";
 
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
@@ -65,12 +76,13 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
     /// profile store: the empty profile screen, the two-player one, the cabin, the table of
     /// contents, the book on the last mission flown, the briefing (with its seconds argument),
-    /// the flight check, ammo selection and plane selection; plus Original's own
-    /// <see cref="CampaignDeleteAid"/>.</summary>
+    /// the flight check, ammo selection, plane selection and the hangar over the profile's wallet
+    /// (with a tab argument); plus Original's own <see cref="CampaignDeleteAid"/>.</summary>
     public static readonly IReadOnlyList<string> CampaignAids = new[]
     {
         "campaign-empty", "campaign-roster", "campaign-cabin", "campaign-previous", "campaign-scrapbook",
-        "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection", CampaignDeleteAid,
+        "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection", "campaign-hangar",
+        CampaignDeleteAid,
     };
 
     // The aids' scratch build carries this name, so the shots read the same on every machine; it
@@ -80,6 +92,19 @@ public sealed class OriginalPresentation : IMenuPresentation
     // The briefing aid's reveal is advanced in frame-sized slices, since the script blocks on
     // authored waits and cue points and one large step would stand at the first of them.
     private const double AidSlice = 1.0 / 60.0;
+
+    // The campaign-hangar aid's tab argument, each the hub screen it opens on over the wallet.
+    private static readonly IReadOnlyDictionary<string, OriginalScreen> CampaignHangarTabs =
+        new Dictionary<string, OriginalScreen>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["airframe"] = OriginalScreen.HangarAirframe,
+            ["engine"] = OriginalScreen.HangarEngine,
+            ["armor"] = OriginalScreen.HangarArmor,
+            ["guns"] = OriginalScreen.HangarGuns,
+            ["hardpoints"] = OriginalScreen.HangarHardpoints,
+            ["paint"] = OriginalScreen.HangarPaint,
+            ["purchase"] = OriginalScreen.HangarPurchase,
+        };
 
     private readonly Node _parent;
     private readonly string _dataRoot;
@@ -126,6 +151,9 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The shell while built, for the suites that read the screen back.</summary>
     public OriginalShell? Shell => _shell;
+
+    /// <summary>The pad bookkeeping while built, for the suites that read seat 0's claim back.</summary>
+    public MenuSeatDevices? Devices => _devices;
 
     /// <summary>The profile store the Campaign row and the two flight returns open the campaign
     /// over: <c>user://Profiles</c> unless a suite sets a scratch store here, so no driven journey
@@ -230,6 +258,8 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         _shell.ReturnToTopLevel();
         StopNarration();
+        // Seated before the aid opens its screen, so a pose that walks the seats finds them.
+        DebugJoin(setup);
         string aid = _aid;
         _aid = string.Empty;
         if (destination is CabinReturn cabin)
@@ -265,6 +295,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case FreeFlightAid:
                     _shell.Open(OriginalScreen.FreeFlight);
                     break;
+                case FreeFlightAid + ":" + SeatPlaneAid:
+                    _shell.Open(OriginalScreen.FreeFlight);
+                    _shell.PoseSortiePick();
+                    break;
                 case DogfightAid:
                     _shell.Open(OriginalScreen.Dogfight);
                     break;
@@ -278,6 +312,14 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case InstantActionAid:
                     _shell.OpenInstantAction();
+                    break;
+                case InstantActionAid + ":" + InstantActionPilotPlaneAid:
+                    _shell.OpenInstantAction();
+                    _shell.OpenInstantActionDropdown(OriginalShell.PlayerPlaneKey);
+                    break;
+                case InstantActionAid + ":" + InstantActionLoadoutAid:
+                    _shell.OpenInstantAction();
+                    _shell.OpenLoadout();
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
@@ -307,7 +349,6 @@ public sealed class OriginalPresentation : IMenuPresentation
             }
         }
 
-        DebugJoin(setup);
         foreach (var seat in host.Seats)
         {
             seat.Prime();
@@ -315,7 +356,12 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         _devices!.Sync();
         _devices.PrimeJoins();
-        _joiningOpen = JoiningOpen();
+        _joiningOpen = _shell.JoiningOpen;
+        if (!_joiningOpen)
+        {
+            _devices.ClaimP1Pad();
+        }
+
         _layer.Visible = true;
         _shown = true;
         Input.MouseMode = Input.MouseModeEnum.Hidden;
@@ -330,7 +376,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         bool changed = _devices.Sync();
-        bool joining = JoiningOpen();
+        bool joining = _shell.JoiningOpen;
         if (joining && !_joiningOpen)
         {
             _devices.PrimeJoins();
@@ -340,6 +386,12 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (joining)
         {
             changed |= _devices.ScanJoins();
+        }
+        else
+        {
+            // While joining is closed the pad steering seat 0 becomes seat 0's for good, so once a
+            // screen opens joining every other pad is unambiguously a joiner.
+            changed |= _devices.ClaimP1Pad();
         }
 
         var size = _view.GetViewportRect().Size;
@@ -430,8 +482,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
     // The Game Options aid's two posed states, each the keyboard walk that reaches it rather than a
-    // state the page can only be put in from outside: Accept on the opening focus stands the Menu
-    // dropdown's list open, and a step down then Accept checks the box.
+    // state the page can only be put in from outside: Accept on the opening focus stands the
+    // Difficulty dropdown's list open, and two steps down (past the Menu dropdown) then Accept
+    // checks the box.
     private void OpenGameOptionsAid(string aid)
     {
         _shell!.OpenGameOptions();
@@ -440,6 +493,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (pose == GameOptionsCheckedAid)
         {
             _shell.Step(new MenuCommands { MoveY = 1 });
+            _shell.Step(new MenuCommands { MoveY = 1 });
         }
 
         if (pose.Length > 0)
@@ -447,11 +501,6 @@ public sealed class OriginalPresentation : IMenuPresentation
             _shell.Step(new MenuCommands { Accept = true });
         }
     }
-
-    // Joining is open on the two sortie screens, where a seat has an aircraft column to pick from,
-    // and on the campaign's flight check, where a joined seat gets a check of its own.
-    private bool JoiningOpen() =>
-        _shell is { Screen: OriginalScreen.FreeFlight or OriginalScreen.Dogfight or OriginalScreen.CampaignFlightCheck };
 
     // The briefing's clock and its narration, the two things the shared feature leaves to the
     // presentation: the reveal moves on by the frame, playback begins whenever the script asks
@@ -502,13 +551,15 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         int colon = aid.IndexOf(':');
         string value = colon < 0 ? aid : aid[..colon];
+        string argument = colon < 0 ? string.Empty : aid[(colon + 1)..];
         if (!CampaignAids.Contains(value))
         {
             return false;
         }
 
         bool seeded = value != "campaign-empty";
-        _shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"));
+        _shell.OpenCampaignOver(
+            CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         switch (value)
         {
             case CampaignDeleteAid:
@@ -529,12 +580,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             case "campaign-briefing":
                 _shell.ShowCabin(CampaignAidProfiles.Pilot);
                 _shell.ShowMissionScreen(OriginalScreen.CampaignBriefing);
-                double seconds = 0;
-                if (colon >= 0)
-                {
-                    double.TryParse(aid[(colon + 1)..], System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out seconds);
-                }
+                double.TryParse(argument, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double seconds);
 
                 for (double t = 0; t < seconds; t += AidSlice)
                 {
@@ -553,6 +600,25 @@ public sealed class OriginalPresentation : IMenuPresentation
             case "campaign-planeselection":
                 _shell.ShowCabin(CampaignAidProfiles.Pilot);
                 _shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+                if (argument == CampaignAidProfiles.ExportArgument)
+                {
+                    _shell.PressExport();
+                }
+
+                break;
+            case "campaign-hangar":
+                // The cabin's own PLANE CONSTRUCTION press, so the shot carries the cash note: the
+                // name screen bare, or the named tab on the aid's build.
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                if (colon >= 0 && CampaignHangarTabs.TryGetValue(aid[(colon + 1)..], out var tab))
+                {
+                    _shell.OpenHangarTab(tab, AidPlaneName, _shell.CampaignWallet);
+                }
+                else
+                {
+                    _shell.OpenHangar(_shell.CampaignWallet);
+                }
+
                 break;
         }
 
@@ -590,10 +656,11 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // Paper pages write in authored black, the hub in its own inks, the Options screen and
-            // the Game Options page in the Preferences page's, a campaign screen in the palette its
-            // shared board component takes under Built-in, and the rest in the file-wide inks.
+            // Paper pages write in authored black, the loadout in the ammo form's palette, the hub
+            // in its own inks, the two options pages in the Preferences page's, a campaign screen
+            // in its shared board component's palette, and the rest in the file-wide inks.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
+                : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
                 : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)

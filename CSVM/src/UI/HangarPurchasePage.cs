@@ -108,6 +108,11 @@ public sealed class HangarPurchasePage : HangarPage
         };
     }
 
+    /// <summary>Every bill row prices the build as it stands; the Purchase Now row carries its own
+    /// flag through <see cref="BuildEnabled"/> and takes no second mark.</summary>
+    public override int? CostWith(int row) =>
+        Rows()[row].Kind == Kind.Build ? null : HangarEconomy.Price(Scratch).Total.Cost;
+
     /// <inheritdoc/>
     public override bool Accept(int row)
     {

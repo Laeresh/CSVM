@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Flight;
 using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
@@ -37,12 +38,17 @@ internal static class MenuOriginalCampaignSuites
         + "a scratch profile store: the Campaign row opens the profile screen, typed frames name a "
         + "player and Enter seats them on the cabin, the briefing runs its reveal on the presentation's "
         + "clock and starts its narration through the host's audio once, REPLAY BRIEFING starts it "
-        + "again, RETURN TO CABIN ends it and lifts the duck, the flight check walks two debug-joined "
+        + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
+        + "from a blank map with the narration starting over, the flight check walks two debug-joined "
         + "guests and FLY MISSION leaves as one CampaignMissionExit with three seats, the debrief "
         + "return lands on the book with RETURN TO CABIN focused and starts no narration, the cabin "
         + "return lands on the cabin, ammo selection and plane selection write their picks through "
-        + "the feature, PLANE CONSTRUCTION opens the hangar over the wallet and Back resumes the "
-        + "cabin, and Deactivate leaves no open campaign")]
+        + "the feature, a wheel step over the scrapbook's contents page and over Plane Construction's "
+        + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
+        + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
+        + "the wallet and Back resumes the cabin, a plane built over the campaign's wallet is absent "
+        + "from the sortie roster until one EXPORT press crosses it, and Deactivate leaves no open "
+        + "campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -94,7 +100,9 @@ internal static class MenuOriginalCampaignSuites
             FlightCheckAndLaunch(ctx, host, seat, shell, fit, campaign, store, exits, audio);
             Returns(ctx, host, shell, campaign, store, audio);
             AmmoAndPlanes(ctx, host, seat, shell, fit, campaign, store);
+            Scrolling(ctx, host, seat, shell, fit, store);
             HangarRoundTrip(ctx, host, seat, shell, fit);
+            ExportGate(ctx, host, seat, shell, fit, campaign, root);
         }
         finally
         {
@@ -170,6 +178,7 @@ internal static class MenuOriginalCampaignSuites
         }
 
         int pictures = shell.Compose().Pictures.Count;
+        int freshElements = briefing.Reveal.Elements.Count;
         for (int frame = 0; frame < 600; frame++)
         {
             host.Tick(Dt);
@@ -187,6 +196,17 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(briefing.Reveal.Clock < 1.0 && briefing.NarrationStarts == 2 && audio.Begins == 2,
             $"REPLAY BRIEFING restarts the reveal and the narration begins again ({briefing.Reveal.Clock:0.0}s, {briefing.NarrationStarts}, begins {audio.Begins})");
 
+        // The reveal is driven on until the map is no longer blank, so the return below has
+        // something to start over from; the first beat's time is the mission's own.
+        int frames = 0;
+        while (frames++ < 3600 && briefing.Reveal.Elements.Count == freshElements && briefing.Reveal.RevealedObjectives.Count == 0)
+        {
+            host.Tick(Dt);
+        }
+
+        ctx.Check(briefing.Reveal.Elements.Count > freshElements || briefing.Reveal.RevealedObjectives.Count > 0,
+            $"a minute after REPLAY at most places more on the map than a fresh reveal or reveals an objective ({briefing.Reveal.Clock:0.0}s, {freshElements} to {briefing.Reveal.Elements.Count} elements, {briefing.Reveal.RevealedObjectives.Count} objectives)");
+
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && audio.Ends == 1,
@@ -196,8 +216,10 @@ internal static class MenuOriginalCampaignSuites
 
         Press(host, seat, Accept);
         host.Tick(Dt);
-        ctx.Check(shell.Screen == OriginalScreen.CampaignBriefing && briefing.Reveal.Clock < 1.5 && audio.Begins == 3,
-            $"NEXT MISSION on the same mission reopens the briefing where REPLAY left it and the voice begins again ({briefing.Reveal.Clock:0.0}s, begins {audio.Begins})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignBriefing && briefing.Reveal.Clock < 1.0
+            && briefing.Reveal.Elements.Count == freshElements && briefing.Reveal.RevealedObjectives.Count == 0
+            && briefing.NarrationStarts == 3 && audio.Begins == 3,
+            $"NEXT MISSION on the same mission reopens the briefing from a blank map, the script asking for its narration again and the voice beginning again ({briefing.Reveal.Clock:0.0}s, {briefing.Reveal.Elements.Count} elements, {briefing.Reveal.RevealedObjectives.Count} objectives, {briefing.NarrationStarts}, begins {audio.Begins})");
     }
 
     // GO TO FLIGHT CHECK ends the narration; two device-less guests join, FLY MISSION walks their
@@ -383,7 +405,68 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"RETURN TO BRIEFING then RETURN TO CABIN land on the cabin ({shell.Screen})");
     }
 
-    // PLANE CONSTRUCTION opens the hangar over the profile's wallet; Back resumes the cabin.
+    // The pointer's wheel and thumb over the scrapbook's contents page: six flown missions in a
+    // four-row window, wheeled a row, dragged to the foot and left where it started.
+    private static void Scrolling(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        BoardFit fit, CampaignProfileStore store)
+    {
+        var profile = store.Load(Pilot)!;
+        for (int seq = 0; seq < 6; seq++)
+        {
+            CampaignProgression.Record(profile, new MissionAttempt(
+                seq, CampaignProgression.PrimaryObjectiveMask, 300_000 + (seq * 20_000), 200, 90,
+                profile.Planes[0].Airframe, profile.Planes[0].Name));
+        }
+
+        store.Save(profile);
+        host.Show(new CabinReturn(Pilot));
+        shell.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions,
+            $"PREVIOUS MISSIONS opens the contents page over six flown missions ({shell.Screen})");
+        WheelAndDrag(ctx, host, seat, shell, fit, "CONTENTS", "the scrapbook's contents page");
+        Press(host, seat, Back);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"Back leaves the contents page for the cabin ({shell.Screen})");
+    }
+
+    // One list under the pointer: a wheel step moves its window by exactly one row, a step past the
+    // head clamps there, and a thumb taken and dragged the length of its track lands the window on
+    // its last row without activating whatever the click stood over.
+    private static void WheelAndDrag(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        BoardFit fit, string key, string what)
+    {
+        var list = List(shell, key);
+        ctx.Check(list is { Window.Scrolls: true },
+            $"{what} is a scrolling list the pointer can see ({list?.Window.Count ?? -1} rows in a window of {list?.Window.Rows ?? -1})");
+        if (list is not { Window.Scrolls: true })
+        {
+            return;
+        }
+
+        var window = list.Window;
+        var screen = shell.Screen;
+        float x = window.X + (window.Width / 2f);
+        float y = window.Y + (window.Height / 2f);
+        Press(host, seat, Pointer(fit, x, y, wheel: 1));
+        ctx.Check(List(shell, key)?.Window.Top == window.Top + 1,
+            $"a wheel step over it moves the window one row ({window.Top} -> {List(shell, key)?.Window.Top})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -3));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and three steps back up clamp at the head ({List(shell, key)?.Window.Top})");
+
+        var head = List(shell, key)!.Window;
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f, pressed: true, clicked: true));
+        ctx.Check(shell.Dragging == key, $"a click on its thumb takes hold of it ({shell.Dragging ?? "nothing"})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f + head.TrackHeight - head.ThumbHeight, pressed: true));
+        ctx.Check(List(shell, key)?.Window.Top == head.LastTop,
+            $"and dragging it the length of its track lands the window on its last row ({List(shell, key)?.Window.Top} of {head.LastTop})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f));
+        ctx.Check(shell.Dragging == null && shell.Screen == screen,
+            $"letting the button go ends the drag, the click having opened nothing ({shell.Dragging ?? "nothing"}, {shell.Screen})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -head.Count));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and the wheel brings it home ({List(shell, key)?.Window.Top})");
+    }
+
+    // PLANE CONSTRUCTION opens the hangar over the profile's wallet, its decal list is windowed to
+    // the authored two rows and takes the wheel, and Back resumes the cabin.
     private static void HangarRoundTrip(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
         var door = Row(shell, "PlaneConstruction");
@@ -397,9 +480,89 @@ internal static class MenuOriginalCampaignSuites
         Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet != null,
             $"PLANE CONSTRUCTION opens the name screen over the profile's wallet ({shell.Screen}, wallet {hangar.Wallet != null})");
+
+        Press(host, seat, new MenuCommands { Typed = "Decalled" });
+        var ok = Row(shell, OriginalShell.NameOkKey)!;
+        Press(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
+        var paint = Row(shell, "PX_B_PAINT")!;
+        Press(host, seat, Pointer(fit, paint.X + 5f, paint.Y + 5f, pressed: true, clicked: true));
+        var decals = Row(shell, "PT_D_DECALS0");
+        ctx.Check(shell.Screen == OriginalScreen.HangarPaint && decals != null,
+            $"the Paint tab carries the first decal box ({shell.Screen})");
+        if (decals != null)
+        {
+            Press(host, seat, Pointer(fit, decals.X + 5f, decals.Y + 5f, pressed: true, clicked: true));
+            ctx.Check(shell.OpenHangarDropdown == "PT_D_DECALS0", $"a click opens its list ({shell.OpenHangarDropdown ?? "none"})");
+            WheelAndDrag(ctx, host, seat, shell, fit, "PT_D_DECALS0", "Plane Construction's decal list");
+            Press(host, seat, Back);
+        }
+
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen && shell.FocusedKey == "PlaneConstruction",
             $"Back cancels the build and resumes the cabin on the row that opened it ({shell.Screen}, {shell.FocusedKey})");
+    }
+
+    // The export crossing over a scratch profile store and a scratch build store of its own: a plane
+    // built with the campaign's wallet is not in the sortie roster, one EXPORT press puts it there.
+    private static void ExportGate(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
+        CampaignFeature campaign, string root)
+    {
+        const string Built = "Export Bird";
+        var profiles = new CampaignProfileStore(Path.Combine(root, "GateProfiles"));
+        var planes = new CustomPlaneStore(Path.Combine(root, "GatePlanes"));
+        shell.OpenCampaignOver(profiles, planes);
+        Press(host, seat, new MenuCommands { Typed = Pilot });
+        Press(host, seat, Accept);
+        var door = Row(shell, "PlaneConstruction");
+        if (campaign.Profile is not { } seated || shell.CampaignWallet is not { } seatedWallet || door == null)
+        {
+            ctx.Check(false, $"the gate walk seats a player over its own stores ({campaign.Profile?.Name})");
+            return;
+        }
+
+        ctx.Check(seated.Planes.Count == 2 && seatedWallet.OwnedBuilds().Count == 2,
+            $"the two profile-seeded starters resolve with nothing in the build store ({seated.Planes.Count}, {seatedWallet.OwnedBuilds().Count})");
+        seated.Funds = 500_000;
+        profiles.Save(seated);
+
+        var hangar = host.Features.Get<HangarFeature>();
+        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(ReferenceEquals(hangar.Store, planes) && hangar.Wallet != null,
+            $"PLANE CONSTRUCTION builds into the campaign's own store, never a second one (wallet {hangar.Wallet != null})");
+        Press(host, seat, Back);
+
+        // Back through the cabin re-reads the profile, so the wallet the build is funded by has to
+        // be taken after it or the purchase would land on an object nothing else is looking at.
+        if (campaign.Profile is not { } profile || shell.CampaignWallet is not { } wallet)
+        {
+            ctx.Check(false, $"the cabin resumes with the profile seated");
+            return;
+        }
+
+        hangar.Open(planes, wallet);
+        hangar.StartDefaultPlane();
+        hangar.Scratch.Name = Built;
+        bool committed = hangar.Commit();
+        hangar.Discard();
+        ctx.Check(committed && planes.Load(Built) is { AwaitingExport: true },
+            $"a build funded by the wallet is saved waiting for EXPORT ({committed}, {hangar.Message})");
+        int stock = OriginalRosters.Airframes.Count;
+        ctx.Check(OriginalRosters.Roster(planes.List()).Count == stock,
+            $"and the sortie roster still offers the stock airframes alone ({OriginalRosters.Roster(planes.List()).Count} of {stock})");
+
+        profile.SelectedPlane = profile.Planes.Count - 1;
+        profiles.Save(profile);
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignPlaneSelection && shell.Rows[0].Label.Contains(Built, StringComparison.Ordinal),
+            $"plane selection puts the pilot's combo on the built aeroplane ({shell.Screen}, {shell.Rows[0].Label})");
+        shell.PressExport();
+        ctx.Check(planes.Load(Built) is { AwaitingExport: false },
+            $"the FIRST EXPORT press clears the marker in the stored record ({planes.Load(Built)?.AwaitingExport})");
+        var roster = OriginalRosters.Roster(planes.List());
+        ctx.Check(roster.Count == stock + 1 && roster[stock].Name == Built,
+            $"which is what puts it in the sortie roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
+        ctx.Check(wallet.OwnedBuilds().Count == 3 && profile.Planes.Count == 3,
+            $"and the campaign still owns all three, the two starters included ({wallet.OwnedBuilds().Count})");
     }
 
     private static bool HasLine(ComposedBoard board, string text)
@@ -428,8 +591,23 @@ internal static class MenuOriginalCampaignSuites
         return null;
     }
 
-    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false) =>
-        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked) };
+    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false, int wheel = 0) =>
+        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked, wheel) };
+
+    // The screen's list under that key, or null. Read fresh after every frame, since a window that
+    // moved is a new record.
+    private static OriginalList? List(OriginalShell shell, string key)
+    {
+        foreach (var list in shell.Lists)
+        {
+            if (list.Key == key)
+            {
+                return list;
+            }
+        }
+
+        return null;
+    }
 
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)
     {

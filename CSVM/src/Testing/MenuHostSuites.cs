@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
+using Godot;
 
 namespace CSVM.Testing;
 
@@ -12,7 +13,8 @@ namespace CSVM.Testing;
 /// the host hands its sink. The host then hides the presentation and, as the launcher does after
 /// a flight, shows it again at the top level; the screens must re-enter with the state
 /// <c>menu-free-flight-journey</c> pins for a return. A presentation that only works on a cold
-/// start has not proved the seam.
+/// start has not proved the seam. The pointer suite drives the same rig with the mouse events
+/// Godot dispatches to a row control, injected through the control's own signals.
 /// </summary>
 internal static class MenuHostSuites
 {
@@ -21,6 +23,41 @@ internal static class MenuHostSuites
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
+
+    [Suite("menu-host-pointer",
+        "Built-in's launchscreen under the mouse, through the host's frame: a motion over a row "
+        + "moves the cursor onto it, a press and release on one row confirms it in one frame, a "
+        + "release after the pointer left the row confirms nothing, a wheel notch over the "
+        + "aircraft list steps the cursor either way and wraps, a pad step in the same frame as a "
+        + "hover keeps the pad's row, and a click off the locked airframe is refused")]
+    internal static void MenuHostPointer(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
+            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        host.AddSeat(seat);
+        try
+        {
+            host.Show(MenuReturnDestination.TopLevel);
+            if ((host.Active as BuiltInPresentation)?.Menu is not { } menu)
+            {
+                ctx.Check(false, $"the Built-in presentation stood its launchscreen up");
+                return;
+            }
+
+            HoverAndClick(ctx, host, menu);
+            Wheel(ctx, host, seat, menu, exits);
+        }
+        finally
+        {
+            host.Deactivate();
+        }
+    }
 
     [Suite("menu-host-tracer",
         "Built-in Free Flight through the presentation boundary: the Built-in presentation is "
@@ -158,6 +195,88 @@ internal static class MenuHostSuites
         seat.Enqueue(frame);
         host.Tick(Dt);
     }
+
+    // The Mode screen: a motion focuses, a click confirms, a drag off the row does not.
+    private static void HoverAndClick(TestContext ctx, MenuHost host, LaunchMenu menu)
+    {
+        ctx.Check(menu.RowControl(0) != null && menu.RowControl(2) != null,
+            $"the Mode screen's rows are individual controls a pointer can land on");
+        Emit(menu.RowControl(2), new InputEventMouseMotion());
+        host.Tick(Dt);
+        ctx.Check(menu.ShownRow == 2 && menu.ShownRowText == "Dogfight",
+            $"a motion over the third row moves the cursor onto it ({menu.ShownRow}, {menu.ShownRowText})");
+        Emit(menu.RowControl(2), new InputEventMouseMotion());
+        host.Tick(Dt);
+        ctx.Check(menu.ShownRow == 2, $"a motion over the row the cursor already sits on leaves it there ({menu.ShownRow})");
+
+        var row = menu.RowControl(0);
+        Emit(row, Button(MouseButton.Left, pressed: true));
+        row?.EmitSignal(Control.SignalName.MouseExited);
+        Emit(row, Button(MouseButton.Left, pressed: false));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRow == 2,
+            $"a release after the pointer left the pressed row confirms nothing ({menu.ShownScreen}, row {menu.ShownRow})");
+
+        row = menu.RowControl(0);
+        Emit(row, Button(MouseButton.Left, pressed: true));
+        Emit(row, Button(MouseButton.Left, pressed: false));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownScreen == "Chapter",
+            $"a press and release on the Free Flight row steps the cursor there and confirms it in one frame ({menu.ShownScreen})");
+    }
+
+    // The aircraft list: the wheel steps and wraps, the pad outranks a hover in the same frame,
+    // and a click selects, is refused off the locked row, and confirms on it.
+    private static void Wheel(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu, List<MenuExit> exits)
+    {
+        seat.Enqueue(Accept);
+        host.Tick(Dt);
+        ctx.Check(menu.ShownScreen == "Plane" && menu.ShownRow == 0,
+            $"Accept through the seat reaches the aircraft list on its first row ({menu.ShownScreen}, {menu.ShownRow})");
+        int rows = menu.ShownRowCount;
+        Emit(menu.RowControl(0), Button(MouseButton.WheelDown, pressed: true));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownRow == 1, $"a wheel notch down over the list steps the cursor down one ({menu.ShownRow})");
+        Emit(menu.RowControl(1), Button(MouseButton.WheelUp, pressed: true));
+        host.Tick(Dt);
+        Emit(menu.RowControl(0), Button(MouseButton.WheelUp, pressed: true));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownRow == rows - 1,
+            $"two notches up step back and wrap onto the last row, as the keys do ({menu.ShownRow} of {rows})");
+
+        seat.Enqueue(Down);
+        Emit(menu.RowControl(3), new InputEventMouseMotion());
+        host.Tick(Dt);
+        ctx.Check(menu.ShownRow == 0,
+            $"a pad step and a hover in one frame leave the cursor on the pad's row ({menu.ShownRow})");
+
+        Click(menu.RowControl(2));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownRow == 2 && menu.ShownHeading == "AIRCRAFT SELECTED",
+            $"a click on the third airframe selects it ({menu.ShownRow}, {menu.ShownHeading})");
+        Click(menu.RowControl(4));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownRow == 2 && exits.Count == 0 && menu.ShownHeading == "AIRCRAFT SELECTED",
+            $"a click on another row while one is selected is refused ({menu.ShownRow}, {exits.Count})");
+        Click(menu.RowControl(2));
+        host.Tick(Dt);
+        ctx.Check(exits.Count == 1 && exits[0] is LaunchExit,
+            $"a second click on the selected airframe leaves as one LaunchExit ({exits.Count})");
+    }
+
+    private static void Click(Control? row)
+    {
+        Emit(row, Button(MouseButton.Left, pressed: true));
+        Emit(row, Button(MouseButton.Left, pressed: false));
+    }
+
+    // Dispatched the way Godot's gui_input reaches a handler; a missing row is a failed check
+    // upstream, so nothing is emitted rather than throwing.
+    private static void Emit(Control? row, InputEvent ev) =>
+        row?.EmitSignal(Control.SignalName.GuiInput, ev);
+
+    private static InputEventMouseButton Button(MouseButton index, bool pressed) =>
+        new() { ButtonIndex = index, Pressed = pressed };
 
     // Seat 0 fed from a queue of frames; an empty queue reads idle. What the host's seam carries
     // is the frame, so the devices behind a seat are nobody's business here.

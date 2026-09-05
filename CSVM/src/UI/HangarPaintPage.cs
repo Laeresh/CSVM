@@ -96,6 +96,9 @@ public sealed class HangarPaintPage : HangarPage
     public static string SkinPrefix(int airframe) =>
         SkinPrefixes[Math.Clamp(airframe, 0, SkinPrefixes.Length - 1)];
 
+    /// <summary>Paint is free (langui 1158), so no row here takes the wallet mark.</summary>
+    public override int? CostWith(int row) => null;
+
     /// <inheritdoc/>
     public override string RowText(int row)
     {
