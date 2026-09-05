@@ -344,7 +344,7 @@ in any of the 8 chapters:
 | `rcochet1` | gun `IMPACT` | IMPACT | a ricochet spark effect |
 | `call_small_flash` | `FIRE` | FIRE | a small muzzle-flash variant |
 | `f18sparks2` | `IMPACT` | IMPACT | an impact-spark effect (dev-named) |
-| `flak_effectplayer` | flak `IMPACT` `player` | IMPACT | a player-surface flak variant (cf. `flak_effect`) |
+| `flak_effectplayer` | flak `IMPACT` `player` | IMPACT | a player-surface flak variant (cf. `flak_effect`); the original stores a null row pointer for it and draws nothing on a direct strike, while a flak's fused bursts read `default` ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads") |
 
 These are **leads for Wave D**, not confirmed content: each is a named binding whose asset was
 not found in this install's extraction. **D30 confirmed all five inert for impacts:** none names

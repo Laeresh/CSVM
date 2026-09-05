@@ -781,12 +781,7 @@ public partial class Launcher : Node3D
         // in — to a timestamped .glb under the repo's git-ignored Exports/ folder.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F10 })
         {
-            var projectDir = ProjectSettings.GlobalizePath("res://");
-            var dir = System.IO.Path.GetFullPath(System.IO.Path.Combine(projectDir, "..", "Exports"));
-            System.IO.Directory.CreateDirectory(dir);
-            var path = System.IO.Path.Combine(dir,
-                $"crimsonskies_{_spec.PlaneName}_{System.DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.glb");
-            Testing.GltfExporter.Export(_session?.Plane, path);
+            Testing.GltfExporter.ExportToExports(_session?.Plane, _spec.PlaneName);
             return;
         }
     }

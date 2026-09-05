@@ -1112,8 +1112,11 @@ internal static class ZeppelinSuites
                 zeps.SimStep(dt);
                 live.SimStep(dt);
             }
-            ctx.Same(5, zeps.BroadsideShotsOf("dantezep") - shotsBefore,
-                $"the destroyed Dante cannon drops out — the volley thins to 5 after {guard * dt:0.#} s");
+            // The burn the death called destroys the cannon's side-mate on the same gasbag
+            // (destroy_dtzep_lbroad12, a call the runtime routes through that cannon's pool), so
+            // the port volley loses two of its six, not one.
+            ctx.Same(4, zeps.BroadsideShotsOf("dantezep") - shotsBefore,
+                $"the destroyed Dante cannon and its burnt side-mate drop out — the volley thins to 4 after {guard * dt:0.#} s");
         }
         finally
         {
