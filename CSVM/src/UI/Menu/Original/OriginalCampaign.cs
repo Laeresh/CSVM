@@ -1050,6 +1050,11 @@ public sealed partial class OriginalShell
             lines.AddRange(board.Lines);
         }
 
+        if (CampaignSeatPanel() is { } strip)
+        {
+            overlays.Add(strip);
+        }
+
         if (_dialog != null)
         {
             overlays.Add(ComposeDialog(rows, focus));

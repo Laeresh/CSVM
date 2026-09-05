@@ -14,7 +14,8 @@ namespace CSVM.UI.Menu.Original;
 /// on the board layer, registered under <see cref="PresentationId.Original"/>. <see cref="Activate"/>
 /// builds the layer on the first call, refreshes the shared roster from the saved-plane store and
 /// stands the shell on the destination's screen on every call; <see cref="Tick"/> keeps the pad
-/// roster in step, scans the join gesture on the sortie screens, polls every seat, maps a
+/// roster in step, claims seat 0's pad while joining is closed, scans the join gesture on the
+/// screens the shell opens it on (<see cref="OriginalShell.JoiningOpen"/>), polls every seat, maps a
 /// pointer from window pixels into the authored space through <see cref="BoardFit"/>, steps the
 /// shell per seat, requests its cues and hands its exit to the host. The OS pointer is hidden
 /// while the presentation is on screen, since the shell draws the original's own.
@@ -143,6 +144,9 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The shell while built, for the suites that read the screen back.</summary>
     public OriginalShell? Shell => _shell;
+
+    /// <summary>The pad bookkeeping while built, for the suites that read seat 0's claim back.</summary>
+    public MenuSeatDevices? Devices => _devices;
 
     /// <summary>The profile store the Campaign row and the two flight returns open the campaign
     /// over: <c>user://Profiles</c> unless a suite sets a scratch store here, so no driven journey
@@ -336,7 +340,12 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         _devices!.Sync();
         _devices.PrimeJoins();
-        _joiningOpen = JoiningOpen();
+        _joiningOpen = _shell.JoiningOpen;
+        if (!_joiningOpen)
+        {
+            _devices.ClaimP1Pad();
+        }
+
         _layer.Visible = true;
         _shown = true;
         Input.MouseMode = Input.MouseModeEnum.Hidden;
@@ -351,7 +360,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         bool changed = _devices.Sync();
-        bool joining = JoiningOpen();
+        bool joining = _shell.JoiningOpen;
         if (joining && !_joiningOpen)
         {
             _devices.PrimeJoins();
@@ -361,6 +370,12 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (joining)
         {
             changed |= _devices.ScanJoins();
+        }
+        else
+        {
+            // While joining is closed the pad steering seat 0 becomes seat 0's for good, so once a
+            // screen opens joining every other pad is unambiguously a joiner.
+            changed |= _devices.ClaimP1Pad();
         }
 
         var size = _view.GetViewportRect().Size;
@@ -470,11 +485,6 @@ public sealed class OriginalPresentation : IMenuPresentation
             _shell.Step(new MenuCommands { Accept = true });
         }
     }
-
-    // Joining is open on the two sortie screens, where a seat has an aircraft column to pick from,
-    // and on the campaign's flight check, where a joined seat gets a check of its own.
-    private bool JoiningOpen() =>
-        _shell is { Screen: OriginalScreen.FreeFlight or OriginalScreen.Dogfight or OriginalScreen.CampaignFlightCheck };
 
     // The briefing's clock and its narration, the two things the shared feature leaves to the
     // presentation: the reveal moves on by the frame, playback begins whenever the script asks

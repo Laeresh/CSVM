@@ -11,7 +11,9 @@ namespace CSVM.UI.Menu.Original;
 /// chapter and FLY; a later seat (a joined pad) walks its own cursor on the aircraft column,
 /// selects with Accept, confirms with Accept again and leaves with Back from browsing. FLY is
 /// seat 0's confirmation and the launch in one press, so it stands only once every other seat
-/// has confirmed and, for Dogfight, a second seat has joined. Nothing here is decoded.
+/// has confirmed and, for Dogfight, a second seat has joined. Also the joining rule the
+/// presentation reads (<see cref="JoiningOpen"/>) and the same seat strip over the campaign
+/// boards once a second seat has joined. Nothing here is decoded.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -38,6 +40,14 @@ public sealed partial class OriginalShell
     private const float HintY = 546f;
     private const float MarkSize = 12f;
 
+    // The campaign boards' seat strip, in the desk margin above every board's clipboard. The top
+    // left is the one band no campaign screen puts a plaque in: the book's tab sits at x 558 and
+    // the briefing's buttons and every ACCEPT/FLY row sit at the bottom. Built-in's hint band
+    // already claims the same rows for remake chrome. Four seats end at y 62.
+    private const float CampaignStripX = 8f;
+    private const float CampaignStripY = 6f;
+    private const float CampaignStripPad = 3f;
+
     private int _pickedVersusChapter = -1;
     private int _airframeTop;
 
@@ -56,6 +66,13 @@ public sealed partial class OriginalShell
 
     /// <summary>The first roster row the aircraft column shows.</summary>
     public int AirframeTop => _airframeTop;
+
+    /// <summary>Whether Start on a free pad joins a seat on the standing screen: the four screens
+    /// that launch a flight. The two sortie screens give a joined seat an aircraft column, the
+    /// flight check a check of its own; Instant Action opens so a second pilot can join before
+    /// FLY MISSION rather than nowhere at all. Everywhere else a pad's Start does nothing.</summary>
+    public bool JoiningOpen =>
+        _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight or OriginalScreen.InstantAction or OriginalScreen.CampaignFlightCheck;
 
     private bool IsSortie => _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight;
 
@@ -147,6 +164,31 @@ public sealed partial class OriginalShell
     {
         string name = seat.Cursor < roster.Count ? roster[seat.Cursor].Name : string.Empty;
         return seat.Confirmed ? $"{name}  READY" : seat.Locked ? name : "choosing";
+    }
+
+    // The seat strip over a campaign board, drawn only once a second seat has joined so a solo
+    // campaign shows the authored screen alone. No pick status: the campaign's picks are the
+    // flight field's, so the strip says who is seated and, on the flight check, whose check shows.
+    private BoardPanel? CampaignSeatPanel()
+    {
+        var seats = _setup.Seats;
+        if (seats.Count < 2)
+        {
+            return null;
+        }
+
+        int current = _screen == OriginalScreen.CampaignFlightCheck && _campaign != null ? _campaign.Field.Current : -1;
+        var lines = new List<BoardLine>(seats.Count);
+        for (int i = 0; i < seats.Count; i++)
+        {
+            lines.Add(new BoardLine($"P{i + 1}  {seats[i].Source.DeviceLabel}", CampaignStripX,
+                CampaignStripY + (i * SeatStripPitch), SeatStripWidth, SeatFont,
+                i == current ? BoardInk.RowFocused : BoardInk.Detail));
+        }
+
+        var scrim = new BoardFill(CampaignStripX - CampaignStripPad, CampaignStripY - CampaignStripPad,
+            SeatStripWidth + (2f * CampaignStripPad), (seats.Count * SeatStripPitch) + (2f * CampaignStripPad), 0, 0, 0, 0.45f);
+        return new BoardPanel(new[] { scrim }, Array.Empty<BoardPicture>(), lines);
     }
 
     // The sortie screen's rows: the chapters and BACK in column 0, the aircraft window and FLY in

@@ -34,7 +34,10 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "three rows take every choice and whose CANCEL CHANGES drops them, a switch to Built-in "
+        + "three rows take every choice and whose CANCEL CHANGES drops them, seat 0 steering with a "
+        + "pad claims it so it can never join as another seat, joining is open on the Instant Action "
+        + "screen and a second seat joined there stays seated, the campaign flight check carries the "
+        + "seat strip with two seats and none with one, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty and both other choices, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
@@ -60,8 +63,9 @@ internal static class MenuOriginalSuites
         // ⚠ The debrief return below opens the campaign, so the presentation is pointed at a
         // scratch store: nothing here may read or write user://Profiles.
         string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer", "Profiles");
+        var player1 = new MenuInput { Keyboard = true };
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
         {
             CampaignProfiles = new CSVM.Session.CampaignProfileStore(profiles),
         });
@@ -79,6 +83,7 @@ internal static class MenuOriginalSuites
             Pointer(ctx, host, seat, shell, audio);
             Fly(ctx, host, seat, shell, exits);
             Return(ctx, host, shell, exits);
+            Seats(ctx, host, seat, shell, player1);
             OriginalOptionsRoute(ctx, host, seat, shell, exits);
             SwitchToBuiltIn(ctx, host, seat, shell);
             BuiltInOptionsRoute(ctx, host, seat, exits);
@@ -209,6 +214,67 @@ internal static class MenuOriginalSuites
         host.Show(MenuReturnDestination.TopLevel);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<CampaignFeature>().IsOpen,
             $"and a top-level show closes that campaign again ({shell.Screen})");
+    }
+
+    // Seats and joining. A scripted run has no pad, so the claim is driven through the poller's
+    // own record of the pad seat 0 last steered with, and the join through the feature, which is
+    // where a pad's Start lands; the per-screen rule itself is read off the shell.
+    private static void Seats(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, MenuInput player1)
+    {
+        var original = host.Active as OriginalPresentation;
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        ctx.Check(original?.Devices != null && !shell.JoiningOpen,
+            $"the top level keeps joining closed ({shell.Screen}, open={shell.JoiningOpen})");
+        if (original?.Devices is not { } devices)
+        {
+            return;
+        }
+
+        player1.LastActivePad = 2;
+        host.Tick(Dt);
+        ctx.Check(devices.P1Pad == 2 && devices.IsClaimed(2),
+            $"seat 0 steering with pad 2 claims it, so the join scan skips that pad ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
+        player1.LastActivePad = -1;
+
+        WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.JoiningOpen,
+            $"the Instant Action screen opens joining ({shell.Screen}, open={shell.JoiningOpen})");
+        var s2 = new ScriptedSeat();
+        ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2, $"a second seat joins there ({host.Seats.Count})");
+        Press(host, seat, Down);
+        ctx.Check(host.Seats.Count == 2 && shell.Screen == OriginalScreen.InstantAction,
+            $"and stays seated while seat 0 keeps steering the screen ({host.Seats.Count}, {shell.Screen})");
+
+        host.Show(MenuReturnDestination.TopLevel);
+        shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true), CampaignAidProfiles.Planes());
+        ctx.Check(shell.ShowCabin(CampaignAidProfiles.Pilot), $"the scratch campaign seats its pilot");
+        shell.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && shell.JoiningOpen,
+            $"the flight check opens joining too ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(StripSeats(shell) == 2, $"its board carries the seat strip naming both seats ({StripSeats(shell)} lines)");
+        Press(host, s2, Back);
+        ctx.Check(host.Seats.Count == 1, $"the second seat's Back unjoins it ({host.Seats.Count})");
+        ctx.Check(StripSeats(shell) == 0, $"and the strip goes with it, leaving the authored board alone ({StripSeats(shell)} lines)");
+        host.Show(MenuReturnDestination.TopLevel);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<CampaignFeature>().IsOpen,
+            $"a top-level show closes the scratch campaign again ({shell.Screen})");
+    }
+
+    // How many seat lines the composed board's overlays carry: the strip's lines are the only
+    // overlay text that begins with a player tag.
+    private static int StripSeats(OriginalShell shell)
+    {
+        int count = 0;
+        foreach (var panel in shell.Compose().Overlays)
+        {
+            foreach (var line in panel.Lines)
+            {
+                count += line.Text.StartsWith("P", System.StringComparison.Ordinal) && line.Text.Length > 1 && char.IsDigit(line.Text[1]) ? 1 : 0;
+            }
+        }
+
+        return count;
     }
 
     // The switch, as the launcher performs it after an Options exit: from mid-setup on the Free

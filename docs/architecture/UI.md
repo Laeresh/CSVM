@@ -653,14 +653,14 @@ a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only `Launche
 writes the store. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
-The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, the other
-half of the `partial`. Rows: the chapter column and BACK, then the aircraft column over the
-setup's roster and FLY. The aircraft column is an eleven-row window: every row keeps its place for
-the keyboard, rows outside the window are invisible and unhit, and the window slides to keep the
-focused row inside it. Seat 0 picks a chapter and an aircraft; a later seat walks its own cursor,
-selects, confirms, and on Back undoes a stage or unjoins. FLY is enabled once the mode's gate is
-met and leaves as the mode's own typed exit. Remake-only by design, the original shipping no
-splitscreen Dogfight and no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
+The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
+seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
+the setup's roster (an eleven-row window that slides to keep the focused row inside it) and FLY.
+Seat 0 picks a chapter and an aircraft; a later seat walks its own cursor, selects, confirms, and
+on Back undoes a stage or unjoins. FLY is enabled once the mode's gate is met and leaves as the
+mode's own typed exit. `JoiningOpen` is the per-screen joining rule the presentation reads, and
+the campaign boards take the same seat strip as an overlay once a second seat has joined.
+Remake-only by design, the original shipping no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
@@ -697,10 +697,10 @@ The Original presentation node, registered under `PresentationId.Original`: a `C
 board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do.
 `Activate` builds the shell and the device bookkeeping once, refreshes the roster from the
 saved-plane store on every call, stands the shell on the top level, maps the return destination
-onto it and applies the `--menu=` aid on the first show alone. `Tick` polls every seat, maps a
-window-pixel pointer into the authored space, steps the shell, requests its cues and drives the
-briefing's reveal and its narration. `Measure` is the strip size the layout does not carry, read
-off the file once per name; `PaletteFor` is each screen's own inks as a `BoardPalette`.
+onto it and applies the `--menu=` aid on the first show alone. `Tick` keeps the pads in step (seat
+0's claim while joining is closed, the join scan while the shell opens it), polls every seat, maps
+a window-pixel pointer into the authored space, steps the shell, requests its cues and drives the
+briefing's reveal. `Measure` reads a strip's size off its file once; `PaletteFor` is each screen's inks.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses

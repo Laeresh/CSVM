@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Seats and joining
 
-11. ☐ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
+11. ☑ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
 12. ☐ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
 
 ### Wave C — The campaign boards and Game Options
@@ -315,7 +315,7 @@ must read as exported, or every existing player's builds vanish from Instant Act
 
 # Wave B — Seats and joining
 
-## B11 ☐ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
+## B11 ☑ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
 
 **Goal.** Under Original a pad pressing START joins on the Instant Action screen as it does on Free
 Flight, Dogfight and the flight check; seat 0's own pad can never join as an extra seat; and once a
@@ -349,6 +349,28 @@ check, expecting the join to take in both and be visible where it happened.
 Accept (`OriginalSeats.StepSeat`, `:129`), and FLY going live only then is the design.
 `--debug-join=` seats device-less players who can never confirm (`OriginalPresentation.DebugJoin`,
 `:564`), so it can show the strip but cannot exercise a join. Do not lower `MinimumSeats`.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** All three findings held and each landed. (a) The joining rule moved onto the shell as
+`OriginalShell.JoiningOpen` (in `OriginalSeats.cs`), covering Instant Action beside Free Flight,
+Dogfight and the flight check; the presentation reads it for the prime and the scan alike. (c)
+`OriginalPresentation` calls `ClaimP1Pad` once on `Activate` and on every frame joining is closed,
+as Built-in does off its Plane screen, so the pad seat 0 steers with is claimed before any join
+screen opens. The `--run-tests` bundle disables pads, so the tracer drives the claim through
+`MenuInput.LastActivePad` and reads `OriginalPresentation.Devices` back; under `--det` the claim
+flaps once per frame between `Sync` (no connected pad) and the re-claim, which is why the suite
+resets the field after its assertion. (b) `CampaignSeatPanel` composes the strip as a `BoardPanel`
+overlay in `ComposeCampaign`, only with two or more seats, at authored (8, 6) with the sortie
+strip's 14-pixel pitch and a 0.45 black scrim: the top-left desk margin, the one band no campaign
+screen puts a plaque in (the book's tab sits at x 558, every other button on the bottom row); on
+the briefing it lies over the top-left photo scrap, a picture rather than a plaque. The strip
+carries no pick status, since the campaign's picks are the flight field's; on the flight check the
+seat whose check shows draws focused. Shots: `.scratch/bl703_strip.png`,
+`.scratch/bl703_nostrip.png` (byte-identical to the pre-change shot) and
+`.scratch/bl703_montage.png`. Left open for `A3` and `B12`: Original's Instant Action FLY MISSION
+still builds its exit for seat 0 alone (`OriginalInstantAction.cs`, the `FlyMissionKey` case), so a
+seat joined on that screen is seated and kept but not flown; `MinimumSeats` is untouched.
 
 ## B12 ☐ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
 

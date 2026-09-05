@@ -136,9 +136,15 @@ The seats themselves are the `PlayerSetupFeature`'s. Once that feature is regist
 anywhere shows up in every presentation's `Seats` read. The pad side (`MenuSeatDevices`,
 `CSVM/src/UI/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
 hotplug reconciliation, the Start-to-join scan (each presentation decides on which screens it is
-open), and `FlightPads`, the binding a launch carries per seat. A presentation with a pointer maps
-the window-pixel pointer into its own space; Original does it through the same `BoardFit` its board
-view draws with.
+open), and `FlightPads`, the binding a launch carries per seat. Both presentations call
+`ClaimP1Pad` every frame while joining is closed (Built-in off its Plane screen, Original wherever
+`OriginalShell.JoiningOpen` is false), so the pad seat 0 steers with is seat 0's for good and can
+never join as a further seat. Original opens joining on the four screens that launch a flight
+(Free Flight, Dogfight, Instant Action and the campaign flight check) and, once a second seat has
+joined, draws the sortie screens' seat strip over every campaign board as an overlay in the desk
+margin above the clipboard; a solo campaign shows the authored board alone. A presentation with a
+pointer maps the window-pixel pointer into its own space; Original does it through the same
+`BoardFit` its board view draws with.
 
 ## Options, selection and availability
 
