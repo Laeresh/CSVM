@@ -464,27 +464,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* the report is a question prompted by that voice line, not a memory of the original's
   hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
   voice line is flavour and this closes. *Cross-refs:*
-- `BL-570` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
-  live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
-  change it, so a player launching normally always flies the default Normal. The original puts it on
-  the game-options screen: `IDS_GO_DIFFICULTY_TITLE` "Difficulty" with
-  `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", over the three
-  `IDS_DIFFICULTY` rows Normal / Hard / Hardest (`rof/ui_strings.json` ids 109-111).
-  *Fix shape:* a row on each presentation's options screen writing the same 0/1/2 the flag parses,
-  persisted so it survives a launch, with the flag continuing to win for a scripted run. Original's
-  row belongs on its Game Options page: an entry in that page's option table (title, control kind,
-  description, store field) plus the store field itself, drawn as a dropdown over the three
-  `IDS_DIFFICULTY` words, which is the control the original's own row takes. The page's third
-  authored row stands empty for it, and putting it back at the original's own first position is a
-  reorder of the table. Either way the plate holds three rows and this fills the last free one, so
-  a fourth option after it owns the taller-plate or paged-rows choice.
-  *⚠ Traps:* it is a campaign-scope setting, not a per-mission one, and Instant Action does not read
-  it: an IA wave's own skill stands in for that spawn, which is a different control the wizard
-  already owns. Do not wire the menu row into the IA path or a wave will fly at two difficulties.
-  And it selects a hit-point tier only, so it must not be presented as changing how well the enemy
-  flies or shoots, which it does not.
-  *Cross-refs:* `Flight/Difficulty`, `docs/formats/instant-action.md`, `docs/cli.md`'s
-  `--difficulty`.
 
 - `BL-561` `[Research]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
   original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes
@@ -2385,40 +2364,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules), `BL-651` (the other
   half of the two modes over one store).
 
-- `BL-651` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Instant Action's build list shows every campaign plane, with no Export step to
-  put them there.** *Evidence:* the mirror image of the campaign listing fixed in
-  `git log --grep=BL-634`. Ownership now separates the campaign's roster from the shared
-  `user://Planes/` store, but Instant Action's own flow still lists that whole directory, which
-  includes every campaign build. The original gates the crossing behind an Export button on the
-  campaign side (langui 1139, 702 and 1256, refusal 1254), so a campaign aircraft reaches Instant
-  Action only when the player sends it there. ⚠ **The Export verb now exists and the round trip
-  works, but the first press does not take:** reported at the controls as "needed 2 exports but then
-  it worked" (`PT-96`(d)). Whether the picker is not re-read after a successful export, or the first
-  press never confirmed because the message box draws no visible OK (`BL-691`), is unsettled — check
-  `BL-691` first, since one cause would explain both. *Fix shape:* the campaign flow needs the
-  Export verb and Instant Action's list needs to show only what was exported, which means a marker
-  the store carries rather than a second directory, and the list must be re-read when that marker
-  changes. *⚠ Traps:* do not give either mode its own build
-  directory. The two profile-seeded starters are never hangar-built and have no entry there at all,
-  which is why the campaign roster resolves them from the ownership record; a per-mode store would
-  strand them. *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) ("The inventory screen's own
-  strings"), `BL-650`.
-
-- `BL-655` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` **The campaign hangar never shows the wallet while a plane is being built, so
-  the only way to learn a build is unaffordable is to finish it.** *Evidence:* reported at the
-  controls on the landed Plane Construction screen (`git log --grep=BL-634`). The wallet is drawn
-  once, as the detail line of the plane-selection screen's Buy row (langui 1149 `$$$ on Hand:`), and
-  every screen after it (airframe, engine, hardpoints, armour, guns) shows neither the money on hand
-  nor the running total against it, so a player picks parts blind and meets the refusal at the
-  commit. *Fix shape:* the running cost already exists, since `HangarEconomy.Price` is what the
-  totals row draws; the missing half is the wallet beside it and a mark on any row the remaining
-  funds cannot cover. Read what the original puts on those screens before choosing a layout, since
-  langui carries its own strings for the money line. *⚠ Traps:* do not block an unaffordable
-  selection outright: the decoded flow refuses at the purchase, not at the part, and a screen that
-  hides parts you cannot yet afford also hides what you are saving toward. *Cross-refs:*
-  [`docs/org/hangar.md`](docs/org/hangar.md) ("The campaign wallet"), `BL-650` (the unenforced slot
-  cap, the other half of the purchase gate).
-
 - `BL-637` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A targeted patrol boat shows no name line. The answer is per roster
   block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence
   (traced):* first reported in CM12 (C2/M01), where the boats target but carry no text, and again in
@@ -2446,22 +2391,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   rather than ruled out.
   *Cross-refs:* `BL-687` (the same boats, their guns), `BL-626`.
 
-- `BL-654` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The menus take no mouse input at all, where the original is mouse-first.**
-  *Evidence:* every `Control` the launchscreen builds is `MouseFilterEnum.Ignore`
-  (`CSVM/src/UI/LaunchMenu.cs:422`, `427`, `431`, `445`, `458`, `2514`, `2541`, `2579`), so a click
-  reaches nothing and the whole shell is keyboard/pad only. The original's screens are authored for
-  the pointer: `LAYOUT.CSV` gives every button a rollover colour column and a depressed one, the
-  campaign scripts' listboxes draw a bright red frame around the row under the pointer
-  (`docs/formats/campaign-screens.md`, the profile screen's sub-script `VB`), and its dropdowns open
-  on a click. *Fix shape:* hit-test the composed board, since the board already knows every plaque's
-  and row's authored rectangle (`CampaignBoards.For`, `ComposedBoard`): a pointer over a rectangle
-  focuses that row and lights the rollover frame, a press draws the depressed frame, a release on
-  the same rectangle is the confirm. A wheel over a list scrolls it. *⚠ Traps:* the cursor position
-  is authored 800x600 space, so the hit test has to run through the same fit transform the board is
-  drawn with (`BoardFit`), not against window pixels; and focus must stay one thing, so a pointer
-  move and a pad press cannot each own a different row. *Cross-refs:* the combo-box popups and the
-  modal dialog added for the plane selection screen are the newest widgets that would need it.
-
 - `BL-658` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The ammo screen shows one description pane where the original fills two.**
   *Evidence:* `[@OrdinanceLayout@]` authors `OL_S_AMMODESC` at 566,96 and `OL_S_ROCKETDESC` at
   566,332, each under its own heading, and `ORDINANCELAYOUT.SCRIPT` fills both at once, so the
@@ -2483,80 +2412,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* an argument form that spells a short input script rather than a step count, so a
   shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
   open lists are unpinned by any golden until this exists.
-
-- `BL-691` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **The export message box draws its OK button in ink the plaque behind it
-  hides.** *Evidence (traced):* reported at the controls as "OK button is missing in the dialog"
-  (`PT-96`(a)). The original draws it: `OriginalScreenshots/Campaign Flight Check Change Plane Export
-  dialog.png` shows OK as light text on a dark plaque inside a bordered strip, so the button belongs
-  there and the box is otherwise right. The box is composed as an overlay taking the palette of the
-  screen beneath it, and the plane-selection screen maps to `Paper`, whose `LabelActivate` is
-  `Color(0,0,0)` (`CSVM/src/UI/BoardPalette.cs:74-75`, `:23`) against `Panel`'s gold (`:57`) — which
-  is why the delete confirm over the profile screen reads and this one does not.
-  *Fix shape:* give the message box an ink that does not depend on the screen it covers.
-  *⚠ Traps:* **Check the strip frame against the original's shot before concluding the ink is the
-  whole cause.** `CSVM/src/UI/CampaignBoards.cs:341` chooses strip frame 2 and `BoardInk.LabelActivate`
-  on one line, so a wrong frame would present identically and the ink fix would leave it invisible.
-  The second half of the same report, "needed 2 exports but then it worked", is **not** this item:
-  `BL-651` already owns the export-to-Instant-Action crossing and the picker that is not re-read.
-  *Cross-refs:* `BL-651`, `PT-96`.
-
-- `BL-703` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Original never says
-  who has joined, and its Instant Action lets nobody join at all.** *Evidence:* reported at the
-  controls over `PLAN-menu-presentations` E44's sortie and pad rows. Three findings on one seam.
-  (a) **Instant Action under Original takes no joiners.** `OriginalPresentation.JoiningOpen`
-  (`CSVM/src/UI/Menu/Original/OriginalPresentation.cs:453`) opens the per-pad join scan on Free
-  Flight, Dogfight and the campaign flight check alone, so the decoded Instant Action setup screen
-  never scans, and a pad pressing START there does nothing. Built-in opens joining on its Plane and
-  Campaign screens (`CSVM/src/UI/LaunchMenu.cs:1023`), and every mode including Instant Action
-  passes through the Plane screen, which is why the same pad joins there.
-  (b) **Original's campaign screens show no seat state.** Built-in carries one strip on every screen
-  (the breadcrumb, the join strip and the controls line, `CSVM/src/UI/LaunchMenu.cs:2753`, with
-  `JoinHint` at `:3289`) so a joined player and the keys that do something are always named.
-  Original's sortie screens have their own seat strip and join hint
-  (`CSVM/src/UI/Menu/Original/OriginalSeats.cs`), but the decoded campaign boards carry neither, so
-  a second player who has joined is invisible.
-  (c) **Seat 0's own pad can join as an extra seat.** `MenuSeatDevices.ClaimP1Pad` is called from
-  Built-in every frame it is off its plane screen (`CSVM/src/UI/LaunchMenu.cs:1074`) and from
-  Original nowhere, so `P1Pad` stays −1, `IsClaimed` answers false for the pad seat 0 is steering
-  with, and `ScanJoins` lets that pad join, which `Sync` then takes off seat 0's poller
-  (`CSVM/src/UI/MenuSeatDevices.cs:55-125`, `:145`). The logs show the split and show it only under
-  Original: every Built-in run logs `P1 claimed pad 0` and no Original run logs a claim;
-  `.scratch/logs/menu-20260903-230250.godot.log` (Original, two pads) logs `P2 joined on pad 1` and
-  then `P3 joined on pad 0`, and `menu-20260903-231339.godot.log` (Original, one pad) logs
-  `P4 joined on pad 0`. So pressing START to add a second pilot hands away the controller seat 0 was
-  steering with.
-  *Fix shape:* open joining on Original's Instant Action screen; claim seat 0's pad as Built-in
-  does, before joining opens; and give Original a seat and controls indication on the campaign
-  screens, either always or behind an option, since the decoded boards have no room the original
-  authored for one and painting over them is a fidelity cost the user should choose.
-  *⚠ Traps:* **the Dogfight FLY gate is not a bug and must not be re-filed as one.** A later seat
-  reaches Confirmed on its *second* Accept, one press to select and one to confirm
-  (`OriginalSeats.StepSeat`, `:129`), and FLY going live only then is the design; a first report of
-  "FLY never activates" was a missed second press. **`--debug-join=` cannot reproduce or clear any
-  of this.** It seats `MenuIdleSource` players with no device to press Accept with, and
-  `OriginalPresentation.DebugJoin` (`:564`) only `Select`s the last one, so nothing joined that way
-  can ever confirm. Do not lower `MinimumSeats`; Dogfight is a versus mode and one seat is not a
-  match. *Playtest after fix:* `.\RunGame.ps1 --presentation=original --menu` with two pads, one
-  joining with START on the Instant Action screen and on a campaign flight check, expecting the join
-  to take in both and to be visible on the screen it happened on. *Cross-refs:* `BL-704`, the same
-  presentation's aircraft column; `PLAN-menu-presentations.md` E44 rows 1 and 6.
-
-- `BL-704` `[Feature]` `[L]` `[Next: decide]` `[Impact: high]` `[Evidence: feel]` **Original's sortie
-  screen puts every player's aircraft pick in one shared list, and it does not work with more than
-  one of them.** *Evidence:* reported at the controls beside `BL-703`, "plane selection for multiple
-  players in one list does not work good. should be more like the campaign screen". The sortie
-  screen draws one aircraft column that seat 0 and every joined seat walk together, with each seat's
-  stage carried as a tag on the seat strip rather than as its own space
-  (`CSVM/src/UI/Menu/Original/OriginalSeats.cs`, the aircraft window and `SeatStatus`). The campaign's
-  plane selection gives the pilot its own screen and combo, which is the shape the report asks for.
-  *Fix shape:* a design pass first, since this is a screen the original never drew (Dogfight is the
-  remake's own mode and nothing here is decoded), so there is no reference to match and the decision
-  is ours. Take the campaign plane-selection screen's shape as the starting point rather than
-  widening the shared list. *⚠ Traps:* the fix must not assume a pad per seat, and whatever replaces the
-  shared list is also the route by which a seat reaches Confirmed, so keep the two-press select-then
-  -confirm walk that FLY's gate reads. Nothing on this screen is decoded, so do not go looking for
-  an original layout to copy.
-  *Cross-refs:* `BL-703`; `PLAN-menu-presentations.md` E44 row 1.
 
 - `BL-705` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The scrapbook's Best to
   Date and Most Recent tabs cannot be clicked, because Original hit-tests only the page's scraps.**
@@ -2581,52 +2436,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   more likely means the board fit places a sub-screen pane wrong than that the data is wrong.**
   Centring it by hand would hide that, and would be a departure from the layout on a screen every
   other element of which is placed by it. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7.
-
-- `BL-707` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Nothing in Original
-  scrolls with the mouse wheel, and no scrollbar can be dragged; the arrows are the only way down a
-  list.** *Evidence:* reported at the controls over E44's pointer sweep against the scrapbook, the
-  decals in Plane Construction, and the aircraft column on Free Flight and Dogfight. No menu code
-  reads a wheel at all: `MouseButton.WheelUp`/`WheelDown` appear only in `Flight/SpectatorCamera.cs`
-  and `UI/OrbitCamera.cs`, nowhere under `UI/Menu/`. The thumb is drawn but is not a control: the
-  previous-missions page draws "the scrollbar's two arrows and its thumb"
-  (`CSVM/src/UI/CampaignPreviousMissionsPage.cs:376`) and hands out boxes for mission rows alone
-  (`RowBox`, `:448`, null for a button row). *Fix shape:* the pointer already carries what a drag
-  needs, a position with a held and a just-clicked flag (`PointerSeat.Poll`,
-  `CSVM/src/UI/Menu/Original/PointerSeat.cs`), so a thumb box plus a held-pointer delta is the whole
-  mechanism; the wheel is a separate frame field that no seat currently produces.
-  *⚠ Traps:* the wheel is a comfort the original never had, so it is an addition on top of the
-  decoded screens rather than a fidelity fix, and it must not change what the arrows do. Land it for
-  every list at once; a wheel that works on one screen and not the next reads as broken.
-  *Cross-refs:* `BL-705`.
-
-- `BL-708` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Original's Instant
-  Action screen draws Weapon Loadout and Build Custom Plane disabled, so neither can be opened.**
-  *Evidence:* reported at the controls over E44's pointer sweep. Both are deliberate placeholders
-  rather than a pointer failure: `AddStrip(..., BuildKey, ..., enabled: false, ...)`
-  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs:260`) and the same for `WeaponLoadoutKey`
-  (`:294`), which the file's own summary states as "Build and Weapon Loadout disabled" (`:21`).
-  Built-in offers both, so the features they need exist and only the wiring is missing.
-  *Fix shape:* point the two buttons at the shared features Built-in already drives, the loadout
-  list for the seat the radio pair names (`LoadoutTarget`, `:114`) and the Build Custom Plane flow.
-  The user's own reading is that Build should be the top level's Build Plane door reached from here,
-  and asks whether the door belongs on this screen at all rather than only above it, which is a
-  decision to take before wiring. *⚠ Traps:* the radio pair decides whose loadout the button edits,
-  so the wiring is per seat and not per screen. *Cross-refs:* `BL-709`, the same screen's plane list.
-
-- `BL-709` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Instant Action's Pilot
-  Plane list offers the eleven stock airframes only, so a custom plane cannot be flown from it.**
-  *Evidence:* reported at the controls over E44's pointer sweep, "Instant Action: 'Pilot Plane'
-  selection does not let me select the exported planes". The dropdown is built over
-  `InstantActionFeature.Airframes` directly
-  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs:356`, and the wingman list at `:360`), the
-  decoded stock table with nothing appended. The sortie screens do it the other way: `OriginalRosters
-  .Roster(customs)` appends the saved builds through `PlayerSetupFeature.BuildRoster`
-  (`CSVM/src/UI/Menu/Original/OriginalRosters.cs`), which is why the same planes appear on Free
-  Flight and not here. *Fix shape:* feed both dropdowns the same roster the sortie screens read.
-  *⚠ Traps:* a custom flies its airframe's stock node, so the list's node resolution has to go
-  through the roster rule rather than the name. Decide whether the wingman list takes customs too;
-  the two dropdowns are built by one call site and would otherwise drift.
-  *Cross-refs:* `BL-708`.
 
 - `BL-710` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Quitting flashes Godot's
   default sky before the window closes.** *Evidence:* reported at the controls over E44's pointer
@@ -2657,24 +2466,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   per key in a fixed-length parallel array, so the array and the table have to grow together.
   *Playtest after fix:* the profile name box, one accepted letter, one punctuation key, and one key
   past the cap, expecting `ENTERTEXT`, `ENTERTEXT_ERROR` and `ENTERTEXT_ERROR`.
-
-- `BL-712` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A briefing re-entered
-  after a trip to the cabin resumes its reveal mid-way instead of playing from the start.**
-  *Evidence:* reported at the controls over E44's sound sweep, "Going back into the cabin during a
-  briefing and then back to the briefing does not reset the animation". The briefing is cached on the
-  feature by mission (`CampaignFeature.Briefing`, `CSVM/src/UI/Menu/CampaignFeature.cs:143-151`):
-  the script is rebuilt only when `MissionSeq` changes, so leaving and returning to the *same*
-  mission hands back the same `CampaignBriefing` with its program counter, clock and revealed set
-  where they were. The presentation then just advances it (`OriginalCampaign.AdvanceBriefing`,
-  `CSVM/src/UI/Menu/Original/OriginalCampaign.cs:221`). The narration does restart on entry, so the
-  two halves of the same screen disagree, which is the sharpest evidence this is not intended.
-  *Fix shape:* `BriefingScript.Restart` (`CSVM/src/UI/Menu/BriefingScript.cs:417`) already returns
-  the script to a blank map with the narration starting over, and REPLAY BRIEFING drives it; entry to
-  the briefing screen should do the same. *⚠ Traps:* **the `--menu=campaign-briefing:<seconds>` aid
-  depends on a reveal that can be advanced from zero**, so it must still land on the same frame after
-  the fix or every briefing shot moves. Do not reset by clearing the cache on `MissionSeq`, which
-  would reload the briefing from disk on every entry; reset the script, not the load.
-  *Cross-refs:* `PLAN-menu-presentations.md` E44 row 8.
 
 - `BL-723` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **An armour step adds 4 lb where
   the original's dropdown step adds 20.** *Evidence:* reported at the controls: "we increment by 5
