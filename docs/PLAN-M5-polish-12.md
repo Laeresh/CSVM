@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The Instant Action screen and the export crossing
 
-1. ☐ `BL-691` The export message box draws its OK button in ink the plaque hides
+1. ☑ `BL-691` The export message box draws its OK button in ink the plaque hides
 2. ☐ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
 3. ☐ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
 4. ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
@@ -144,7 +144,7 @@ in parallel worktrees. `E41` is last and needs the author at the controls; it ca
 
 # Wave A — The Instant Action screen and the export crossing
 
-## A1 ☐ `BL-691` The export message box draws its OK button in ink the plaque hides
+## A1 ☑ `BL-691` The export message box draws its OK button in ink the plaque hides
 
 **Goal.** The one-button message box over the plane-selection screen shows its OK button as the
 original does: light text on a dark plaque inside a bordered strip.
@@ -175,6 +175,24 @@ for the walk. No goldens pin a menu shot today.
 whole cause.** `CampaignBoards.cs:341` chooses strip frame 2 and `BoardInk.LabelActivate` on one
 line, so a wrong frame would present identically and the ink fix would leave it invisible. The
 second half of the same report, "needed 2 exports but then it worked", is `A4`, not this item.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** Both halves of the trap were real. The ink was the reported cause in both
+presentations: Original's `ComposeDialog` took `PlaqueInk` through the plane-selection screen's
+`Paper` palette (dim blue on the black rollover frame), and Built-in's `Dialog(modal)` took
+`LabelActivate`, `Paper`'s black on black. The frame was wrong on the Built-in path as well: it
+chose the rollover frame 2 (pure black, `0,0,0`), where the original's shot shows OK on the normal
+frame 1 (charcoal, the strip's `35,35,35` reading `51,51,51` in the capture) with the pointer
+elsewhere. The messagebox's inks are the layout's own globals (`G2`/`G3` white on the two dark
+frames, `G4` black on the light depressed one), so `BoardInk` gained `DialogPressed` beside
+`Dialog`, `ComposedBoard.DialogInk(pressed)` names the rule, both composition sites use it, and
+Built-in's box draws frame 1. To shoot the box, `--menu=campaign-planeselection:export` presses
+the pilot's EXPORT in both presentations over a scratch build store (`CampaignAidProfiles.Planes`),
+which every scratch-store campaign aid now opens over, so no aid can write `user://Planes`. The
+`campaign-layout-parity` suite covers the new aid; three unit facts pin the frame, the ink and the
+scratch write. Left as found: the box's icon draws the `?` frame where the original's export
+notice shows `!`, not part of this item.
 
 ## A2 ☐ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
 

@@ -336,9 +336,18 @@ public static class CampaignBoards
     /// <c>[@MessageBox@]</c>'s own row (<c>MB_P_BACKGROUND</c>, <c>MB_P_ICON</c>,
     /// <c>MB_B_CENTER</c>, <c>MB_T_MESSAGE</c>), offset by where the 410x300 art lands; the
     /// reference (<c>OriginalScreenshots/Campaign Flight Check Change Plane Export dialog.png</c>)
-    /// puts its edges at the centred one.</summary>
+    /// puts its edges at the centred one and shows OK on its normal frame in the box's own white,
+    /// the pointer being elsewhere.</summary>
     public static BoardPanel Dialog(CampaignModal modal, CampaignLayout? layout = null) =>
-        Dialog(modal.Message, new[] { new DialogButton(DialogCenterKey, modal.Button, 2, BoardInk.LabelActivate) }, layout);
+        Dialog(
+            modal.Message,
+            new[]
+            {
+                new DialogButton(
+                    DialogCenterKey, modal.Button,
+                    ComposedBoard.PlaqueFrame(StripFrames, focused: false, pressed: false), ComposedBoard.DialogInk(pressed: false)),
+            },
+            layout);
 
     /// <summary>The messagebox over any of its button sets: the single centred OK (<c>MB_B_CENTER</c>,
     /// the <c>0x1</c> box) or the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the

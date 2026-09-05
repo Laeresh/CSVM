@@ -290,7 +290,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-flightcheck` | the flight check | `Campaign` |
 | `campaign-guestcheck[:player]` | a guest's own flight check | `Campaign` |
 | `campaign-ammo` | ammo selection | `Campaign` |
-| `campaign-planeselection` | plane selection | `Campaign` |
+| `campaign-planeselection[:export]` | plane selection, or its export messagebox | `Campaign` |
 | `campaign-hangar` | the hangar over the profile's wallet | `Campaign` → `Hangar` |
 | `campaign-fly` | walks a real profile to Fly Mission and launches | `Campaign` |
 | `loadboard` | the load screen's blackboard, over the menu | out of scope |

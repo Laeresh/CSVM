@@ -502,13 +502,15 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         int colon = aid.IndexOf(':');
         string value = colon < 0 ? aid : aid[..colon];
+        string argument = colon < 0 ? string.Empty : aid[(colon + 1)..];
         if (!CampaignAids.Contains(value))
         {
             return false;
         }
 
         bool seeded = value != "campaign-empty";
-        _shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"));
+        _shell.OpenCampaignOver(
+            CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         switch (value)
         {
             case CampaignDeleteAid:
@@ -529,12 +531,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             case "campaign-briefing":
                 _shell.ShowCabin(CampaignAidProfiles.Pilot);
                 _shell.ShowMissionScreen(OriginalScreen.CampaignBriefing);
-                double seconds = 0;
-                if (colon >= 0)
-                {
-                    double.TryParse(aid[(colon + 1)..], System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out seconds);
-                }
+                double.TryParse(argument, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double seconds);
 
                 for (double t = 0; t < seconds; t += AidSlice)
                 {
@@ -553,6 +551,11 @@ public sealed class OriginalPresentation : IMenuPresentation
             case "campaign-planeselection":
                 _shell.ShowCabin(CampaignAidProfiles.Pilot);
                 _shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+                if (argument == CampaignAidProfiles.ExportArgument)
+                {
+                    _shell.PressExport();
+                }
+
                 break;
         }
 

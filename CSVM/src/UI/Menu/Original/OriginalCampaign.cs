@@ -137,8 +137,10 @@ public sealed partial class OriginalShell
 
     /// <summary>Opens the campaign over <paramref name="store"/>, the aids' and the suites' door,
     /// and lands on the profile screen with the name box pre-filled with the last player seated,
-    /// the way <c>CAMPAIGN.SCRIPT</c> pre-fills it from the registry.</summary>
-    public void OpenCampaignOver(CampaignProfileStore store)
+    /// the way <c>CAMPAIGN.SCRIPT</c> pre-fills it from the registry. <paramref name="planes"/>
+    /// stands in for the shell's build store while this campaign is open, which is how an aid's
+    /// EXPORT writes into a scratch store.</summary>
+    public void OpenCampaignOver(CampaignProfileStore store, CSVM.Flight.CustomPlaneStore? planes = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         if (_campaign == null)
@@ -146,7 +148,7 @@ public sealed partial class OriginalShell
             return;
         }
 
-        _campaign.Open(store, _planes, _stock?.Invoke(), _dataRoot);
+        _campaign.Open(store, planes ?? _planes, _stock?.Invoke(), _dataRoot);
         _flow = new CampaignFlow(_campaign, _campaignLayout);
         _dialog = null;
         _briefingReturn = OriginalScreen.CampaignCabin;
@@ -213,6 +215,26 @@ public sealed partial class OriginalShell
         _campaign.SetPlaneSlot(0);
         _briefingReturn = OriginalScreen.CampaignCabin;
         ShowCampaign(screen);
+    }
+
+    /// <summary>Presses the pilot's EXPORT on the plane-selection screen showing, so the one-button
+    /// messagebox stands over it: the screenshot aid's door. Nothing happens off that screen or
+    /// while a dialog already stands.</summary>
+    public void PressExport()
+    {
+        if (_screen != OriginalScreen.CampaignPlaneSelection || _dialog != null)
+        {
+            return;
+        }
+
+        int row = RowIndexOf(BoardButton.ExportPlane.ToString());
+        if (row < 0)
+        {
+            return;
+        }
+
+        _focus[(int)_screen] = row;
+        Step(new MenuCommands { Accept = true });
     }
 
     /// <summary>Moves the briefing's reveal on by a frame's worth of seconds while the briefing
@@ -329,7 +351,8 @@ public sealed partial class OriginalShell
     }
 
     // The standing dialog as the shared board component's messagebox panel, each answer in the
-    // frame and ink of its state under the cursor and the pointer.
+    // frame of its state under the cursor and the pointer, and in the box's own ink rather than
+    // the screen's, which on a paper screen would hide the label on the dark strip.
     private BoardPanel ComposeDialog(IReadOnlyList<OriginalRow> rows, int focus)
     {
         var dialog = _dialog!;
@@ -340,7 +363,7 @@ public sealed partial class OriginalShell
             bool held = i == _pressed;
             buttons.Add(new CampaignBoards.DialogButton(
                 dialog.Answers[i].LayoutKey, dialog.Answers[i].Label,
-                ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.PlaqueInk(focused, held)));
+                ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.DialogInk(held)));
         }
 
         return CampaignBoards.Dialog(dialog.Message, buttons, _campaignLayout);

@@ -396,6 +396,42 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
     }
 
+    [Fact]
+    public void TheExportPressRaisesTheOneButtonBoxInItsOwnInkOverThePaperScreenAndWritesTheGivenStore()
+    {
+        _store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        var scratchPlanes = new CustomPlaneStore(Path.Combine(_dir, "AidPlanes"));
+        var shell = Shell(out var campaign, out _);
+        shell.OpenCampaignOver(_store, scratchPlanes);
+        Assert.True(shell.ShowCabin("Zachary"));
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        Assert.Equal(OriginalScreen.CampaignPlaneSelection, shell.Screen);
+
+        shell.PressExport();
+
+        Assert.NotNull(shell.Dialog);
+        var ok = Assert.Single(shell.Rows);
+        Assert.Equal(OriginalShell.DialogOkKey, ok.Key);
+        Assert.NotNull(scratchPlanes.Load(campaign.Profile!.Planes[0].Name));
+        Assert.Null(_planes.Load(campaign.Profile.Planes[0].Name));
+
+        // The focused OK on its rollover frame, in the box's white rather than the paper palette.
+        var panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
+        var label = Assert.Single(panel.Lines, l => l.Text == ok.Label);
+        Assert.Equal(BoardInk.Dialog, label.Ink);
+        Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 2);
+
+        // Held under the pointer it takes the depressed frame and the black that reads on it.
+        shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true));
+        panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
+        Assert.Equal(BoardInk.DialogPressed, Assert.Single(panel.Lines, l => l.Text == ok.Label).Ink);
+        Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 3);
+
+        // A second press off the screen does nothing: the dialog stands and the rows are still its own.
+        shell.PressExport();
+        Assert.NotNull(shell.Dialog);
+    }
+
     private static void OpenCampaign(OriginalShell shell)
     {
         var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);

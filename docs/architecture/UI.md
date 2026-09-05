@@ -628,8 +628,9 @@ writes that move the funds, the ownership record and the build together. Off-eng
 The scratch profile store the campaign screenshot aids read, in the shared namespace so both
 presentations' aids seat one player: `%TEMP%\CSVM\menu-aid-profiles`, emptied on every open,
 seeded with two players when asked, the first progressed through the campaign's first three
-missions with every objective bit set. `LaunchMenu`'s `campaign-*` aids and
-`OriginalPresentation`'s read it; nothing here can reach `user://Profiles`.
+missions with every objective bit set, plus the scratch build store the export aid writes into.
+`LaunchMenu`'s `campaign-*` aids and `OriginalPresentation`'s read it; nothing here can reach
+`user://Profiles` or `user://Planes`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout`

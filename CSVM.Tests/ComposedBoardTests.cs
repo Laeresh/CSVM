@@ -61,6 +61,11 @@ public class ComposedBoardTests
         Assert.Equal(BoardInk.LabelNormal, ComposedBoard.PlaqueInk(focused: false, pressed: false));
         Assert.Equal(BoardInk.LabelRollover, ComposedBoard.PlaqueInk(focused: true, pressed: false));
         Assert.Equal(BoardInk.LabelActivate, ComposedBoard.PlaqueInk(focused: true, pressed: true));
+
+        // The messagebox's buttons never take the screen's palette: white on the two dark frames,
+        // black on the light depressed one.
+        Assert.Equal(BoardInk.Dialog, ComposedBoard.DialogInk(pressed: false));
+        Assert.Equal(BoardInk.DialogPressed, ComposedBoard.DialogInk(pressed: true));
     }
 
     /// <summary>Every cabin row is one of the screen's four authored buttons, at the layout's own

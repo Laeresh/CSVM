@@ -181,6 +181,15 @@ On a pad, focus is the rollover frame and a held confirm is the depressed one. T
 what changed about focus: the cursor was a highlighted text row and is now a plaque in the state
 the original's own art already carried.
 
+The messagebox's buttons take no screen palette. `MB_B_Buttons.Png`'s four frames are grey,
+charcoal, black and light grey, and `[GLOBALVARS]` gives their labels `0xFFFFFFFF` on the normal
+and rollover frames and `0xFF000000` on the depressed one (`G2` to `G4`), so `BoardInk.Dialog` and
+`BoardInk.DialogPressed` are fixed white and black whatever screen the box covers. A palette ink
+would put the paper screens' black `LabelActivate` on the black rollover frame. The reference shot
+shows the one-button box's OK on its normal frame, the pointer being elsewhere, which is what the
+cursor-driven board draws; Original draws the focused answer on its rollover frame as it does every
+other plaque.
+
 ## Which player the profile screen opens on
 
 The screen opens with the cursor on the profile last played, already ticked, so continuing a

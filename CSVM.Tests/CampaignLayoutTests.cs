@@ -212,6 +212,12 @@ public class CampaignLayoutTests
         Assert.Equal((369f, 404f), (kept.Pictures[2].X, kept.Pictures[2].Y));
         Assert.Equal((285f, 222f, 280f), (moved.Lines[0].X, moved.Lines[0].Y, moved.Lines[0].Width));
         Assert.Equal((289f, 220f, 282f), (kept.Lines[0].X, kept.Lines[0].Y, kept.Lines[0].Width));
+
+        // The one-button box draws OK on the strip's normal frame in the box's own white, as the
+        // reference shows it with the pointer elsewhere; a palette ink would vanish on a paper screen.
+        Assert.Equal(1, kept.Pictures[2].Frame);
+        var ok = Assert.Single(kept.Lines, l => l.Text == "OK");
+        Assert.Equal(BoardInk.Dialog, ok.Ink);
     }
 
     /// <summary>The table of contents reads its list row once when built: the window, the row

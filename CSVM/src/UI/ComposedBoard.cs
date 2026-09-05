@@ -45,9 +45,15 @@ public enum BoardInk
     /// <summary>A button label being pressed (<c>BtnLabelActivate</c>).</summary>
     LabelActivate,
 
-    /// <summary>A dialog's own words. White whatever screen it stands over, which is what
-    /// <c>MB_T_MESSAGE</c>'s authored <c>0xFFFFFFFF</c> says, so it takes no palette.</summary>
+    /// <summary>A dialog's own words, and a dialog button's label on its two dark frames. White
+    /// whatever screen it stands over, which is what <c>MB_T_MESSAGE</c>'s authored
+    /// <c>0xFFFFFFFF</c> and <c>[GLOBALVARS]</c>' <c>ACTIVE</c>/<c>ROLLOVER</c> say, so it takes
+    /// no palette.</summary>
     Dialog,
+
+    /// <summary>A dialog button's label while it is held: black on the depressed frame's light
+    /// plaque, <c>[GLOBALVARS]</c>' <c>DEPRESSED</c>, and no palette either.</summary>
+    DialogPressed,
 }
 
 /// <summary>Which edge of its <see cref="BoardLine.Width"/> a text widget's words sit against,
@@ -327,4 +333,9 @@ public sealed class ComposedBoard
     /// state.</summary>
     public static BoardInk PlaqueInk(bool focused, bool pressed) =>
         pressed ? BoardInk.LabelActivate : focused ? BoardInk.LabelRollover : BoardInk.LabelNormal;
+
+    /// <summary>The ink a messagebox button's label takes, which never reads the screen's palette:
+    /// the box's own strip is dark on its normal and rollover frames and light on the depressed
+    /// one, so a palette ink chosen for a paper form hides the label on it.</summary>
+    public static BoardInk DialogInk(bool pressed) => pressed ? BoardInk.DialogPressed : BoardInk.Dialog;
 }

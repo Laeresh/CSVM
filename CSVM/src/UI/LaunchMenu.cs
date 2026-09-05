@@ -1700,9 +1700,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // table for everything else (the two profile-seeded starters and the reward aircraft, neither
     // of which is hangar-built). Without them the flight check and ammo screens read every plane
     // as fit-less.
-    private CampaignFlow NewCampaignFlow(CampaignProfileStore store)
+    private CampaignFlow NewCampaignFlow(CampaignProfileStore store, CustomPlaneStore? planes = null)
     {
-        _campaignFeature.Open(store, CustomPlaneStore.UserPlanes(), Fits, _dataRoot);
+        _campaignFeature.Open(store, planes ?? CustomPlaneStore.UserPlanes(), Fits, _dataRoot);
         return new CampaignFlow(_campaignFeature, CampaignLayoutOverride);
     }
 
@@ -1743,7 +1743,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Two of the aids need a roster to pick from and five need a profile part-way through the
         // campaign; the seeded store carries both, since a second profile changes no later screen.
         bool seeded = value != "campaign-empty" && value != "campaign-entry";
-        _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"));
+        _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         _screen = Screen.Campaign;
         _error = "";
         PrimeJoins(); // this entry point needs the same held-Start guard as OpenCampaign
@@ -1759,14 +1759,15 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        float argument = 0f;
-        if (colon >= 0)
-        {
-            float.TryParse(startScreen[(colon + 1)..], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out argument);
-        }
+        string word = colon < 0 ? string.Empty : startScreen[(colon + 1)..];
+        float.TryParse(word, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float argument);
 
         WalkCampaignAid(flow, value, argument);
+        if (value == "campaign-planeselection" && word == CampaignAidProfiles.ExportArgument)
+        {
+            PressExport(flow);
+        }
 
         // On every screen but the briefing the argument is a cursor step count instead, so a shot
         // can show focus on a plaque other than the opening one. Each step is one pad press.
@@ -1774,6 +1775,21 @@ public sealed partial class LaunchMenu : CanvasLayer
         for (int i = 0; value is not ("campaign-briefing" or "campaign-guestcheck") && i < (int)argument; i++)
         {
             flow.Move(1);
+        }
+    }
+
+    // The pilot's EXPORT press on plane selection, so the shot is the one-button messagebox
+    // standing over the screen; the aid's flow writes into the scratch build store.
+    private void PressExport(CampaignFlow flow)
+    {
+        for (int row = 0; row < flow.Page.RowCount; row++)
+        {
+            if (flow.Page.Button(row).Button == BoardButton.ExportPlane)
+            {
+                flow.FocusRow(row);
+                flow.Accept();
+                return;
+            }
         }
     }
 
