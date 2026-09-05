@@ -3,17 +3,22 @@
 # comment caps, doc entries.
 #
 # THE ROOT IS THE WHOLE POINT. A hook runs as its own process in whatever directory the session
-# happens to be in, which is not necessarily the tree the commit will write to. Deriving the root
-# from the hook's own directory therefore checked one tree and cleared a commit into another, and
-# a corrupted character reached main that way. Two shapes move the target tree away from the
-# process directory: the command naming another tree (git -C, --work-tree, --git-dir), and a
-# directory change inside the same command (Set-Location <path>; git commit), which the hook
-# cannot see because it runs before the command does.
+# happens to be in, which is not necessarily the tree the commit will write to. Taking the hook's
+# own directory and stopping there checked one tree and cleared a commit into another, and a
+# corrupted character reached main that way. Two shapes move the target tree away from the process
+# directory, and each is read off the command rather than guessed: the command naming another tree
+# (git -C, --work-tree, --git-dir), and a directory change inside the same command
+# (Set-Location <path>; git commit), which the hook cannot observe because it runs first but which
+# is written in the command string it is handed.
 #
-# So: when the command names a tree, check that tree. Otherwise check EVERY worktree, which costs
-# a second and needs no guess about which one the commit will land in. Sweeping is also what
-# catches content that arrived by merge or pull, since a pre-tool hook on a merge would inspect
-# the tree before the content got there.
+# So the target is the tree that command will write to: the named tree, else the directory it
+# changes to first, else the tree the hook stands in. ONE tree, never a sweep of all of them.
+#
+# ⚠ Do not widen this back to every worktree. A sweep blocks a commit on a file in a tree the
+# session cannot fix, which with a dozen live worktrees means another session's UNCOMMITTED work
+# stops yours, and the only way past is the escape hatch, so the gate ends up teaching people to
+# skip it. Content arriving by merge or pull is still caught: it lands in the tree that merged it,
+# which is the tree that tree's next commit checks.
 #
 # The payload's cwd is deliberately not consulted: the harness sets this process's directory to
 # exactly that value, so it is the same answer as git rev-parse here and adds nothing. That was
@@ -26,7 +31,7 @@
 #   <hook payload on stdin> | ./CheckCommitContent.ps1
 #   ./CheckCommitContent.ps1 -Command 'git -C ../wt commit -m x'
 #   ./CheckCommitContent.ps1 -Root <path>      check one tree, no derivation
-#   ./CheckCommitContent.ps1 -ShowRoots -Command '...'   which trees that command would check
+#   ./CheckCommitContent.ps1 -ShowRoots -Command '...'   which tree that command would check
 #   ./CheckCommitContent.ps1 -SelfTest         exercise the whole gate against fixtures
 [CmdletBinding()]
 param(
@@ -95,30 +100,46 @@ function Resolve-Toplevel {
     return (ConvertTo-NormalPath -Path ([string]$top))
 }
 
-function Get-AllWorktrees {
-    param([string]$From)
-    $out = @()
-    foreach ($line in @(git -C $From worktree list --porcelain 2>$null)) {
-        if ($line -match '^worktree\s+(.+)$') { $out += (ConvertTo-NormalPath -Path $Matches[1]) }
+# Which directory does this command move to before it commits? Empty when it does not move. Only
+# a change standing BEFORE the commit counts, since one after it cannot affect where it lands, and
+# the last such change wins because that is the directory the commit runs in.
+function Get-ChangedDirectory {
+    param([string]$CommandLine)
+    $commit = [regex]::Match($CommandLine, '(?:^|[\s;|&])git(?:\s+\S+)*?\s+commit(?:\s|$)')
+    $upTo = if ($commit.Success) { $CommandLine.Substring(0, $commit.Index) } else { $CommandLine }
+    $q = [char]39
+    $pathGroup = '("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s;|&]+)'
+    # Anchored on a statement boundary so a bare "cd" inside a word or a flag value never matches,
+    # and the optional -Path/-LiteralPath is how Set-Location is spelled when it is spelled out.
+    $pattern = '(?:^|[;|&]|^\s*)\s*(?:Set-Location|chdir|sl|cd)\s+(?:-(?:Literal)?Path\s+)?' + $pathGroup
+    $found = ''
+    foreach ($m in [regex]::Matches($upTo, $pattern)) {
+        $candidate = Get-UnquotedPath -Raw $m.Groups[1].Value
+        if ($candidate -and -not $candidate.StartsWith('-')) { $found = $candidate }
     }
-    if ($out.Count -eq 0) {
-        $top = Resolve-Toplevel -Path $From
-        if ($top) { $out = @($top) }
-    }
-    return $out
+    return $found
 }
 
 function Get-TargetRoots {
     param([string]$CommandLine, [string]$From)
     if (-not $From) { $From = $scriptRoot }
+    # In precedence order, each read off the command itself. A candidate that does not resolve to
+    # a tree is not a reason to wave the commit through, so the next one is tried and the hook's
+    # own tree is the floor.
     $named = Get-NamedTree -CommandLine $CommandLine
     if ($named) {
         $top = Resolve-Toplevel -Path $named
-        # A named tree that does not resolve is not a reason to wave the commit through: fall
-        # through to the sweep rather than returning nothing to check.
         if ($top) { return @($top) }
     }
-    return @(Get-AllWorktrees -From $From)
+    $moved = Get-ChangedDirectory -CommandLine $CommandLine
+    if ($moved) {
+        if (-not [IO.Path]::IsPathRooted($moved)) { $moved = Join-Path $From $moved }
+        $top = Resolve-Toplevel -Path $moved
+        if ($top) { return @($top) }
+    }
+    $own = Resolve-Toplevel -Path $From
+    if ($own) { return @($own) }
+    return @()
 }
 
 # Runs every check against every root. Returns the failure report, empty when all clean.
@@ -150,9 +171,9 @@ function Write-Failures {
         foreach ($line in $f.Output) { [Console]::Error.WriteLine('  ' + $line) }
     }
     [Console]::Error.WriteLine('')
-    [Console]::Error.WriteLine('These checks run against every worktree, not just the one you are in,')
-    [Console]::Error.WriteLine('because the tree a commit writes to is not always the directory the hook')
-    [Console]::Error.WriteLine('sits in. Fix the file named above - it is in the worktree named above.')
+    [Console]::Error.WriteLine('These checks run against the tree this commit writes to, named above:')
+    [Console]::Error.WriteLine('the one the command names, else the one it changes to, else the one the')
+    [Console]::Error.WriteLine('hook stands in. The file named above is in that tree, so it is yours to fix.')
     [Console]::Error.WriteLine('To land something first, set CSVM_SKIP_CONTENT_CHECKS=1 for that command.')
 }
 
@@ -225,23 +246,35 @@ function Invoke-SelfTest {
             $r2.Count -eq 1 -and $r2[0] -ieq $wtNormal)
         Assert-Row 'row 2  and the fault there blocks' (@(Invoke-Checks -Roots $r2).Count -ge 1)
 
-        # The sweep is what covers a directory change the hook cannot see, so it has to reach the
-        # worktree while the command names only the main checkout.
+        # Row 3: a directory change inside the same command is read off the command string, since
+        # the hook runs before it and would otherwise check the tree being left.
         $r3 = @(Get-TargetRoots -CommandLine ('Set-Location ' + $wt + '; git commit -m x') -From $main)
-        Assert-Row 'row 3  same-call Set-Location sweeps every worktree' ($r3.Count -eq 2)
+        Assert-Row 'row 3  same-call Set-Location names the tree moved to' (
+            $r3.Count -eq 1 -and $r3[0] -ieq $wtNormal)
         Assert-Row 'row 3  and the fault the hook cannot see blocks' (
             @(Invoke-Checks -Roots $r3).Count -ge 1)
+        $r3b = @(Get-TargetRoots -CommandLine ('cd "' + $wt + '"; git commit -m x') -From $main)
+        Assert-Row 'row 3  a quoted cd is the same move' (
+            $r3b.Count -eq 1 -and $r3b[0] -ieq $wtNormal)
+        $r3c = @(Get-TargetRoots -CommandLine ('git commit -m x; Set-Location ' + $wt) -From $main)
+        Assert-Row 'row 3  a move AFTER the commit is not the commit tree' (
+            $r3c.Count -eq 1 -and $r3c[0] -ieq (ConvertTo-NormalPath -Path $main))
 
+        # Row 4: no tree named and no move means the tree the hook stands in, and ONLY that one.
+        # A fault in a sibling worktree is not this commit's to fix and must not block it.
         $r4 = @(Get-TargetRoots -CommandLine 'git commit -m x' -From $main)
-        Assert-Row 'row 4  a bare commit sweeps every worktree' ($r4.Count -eq 2)
-        Assert-Row 'row 4  and an unrelated tree fault blocks' (
-            @(Invoke-Checks -Roots $r4).Count -ge 1)
+        Assert-Row 'row 4  a bare commit checks the hook own tree alone' (
+            $r4.Count -eq 1 -and $r4[0] -ieq (ConvertTo-NormalPath -Path $main))
+        Assert-Row 'row 4  and a sibling worktree fault does not block it' (
+            @(Invoke-Checks -Roots $r4).Count -eq 0)
 
         $quoted = Get-NamedTree -CommandLine ('git -C "' + $wt + '" commit -m x')
         Assert-Row 'row 2  a quoted -C path is unquoted' ($quoted -ieq $wt)
 
-        Assert-Row 'row 7  merged-in content blocks at the next commit' (
-            @(Invoke-Checks -Roots @($wt)).Count -ge 1)
+        # Row 7: content that arrived by merge rather than by an edit is simply present in the
+        # tree that merged it, so that tree's own next commit is where it blocks.
+        Assert-Row 'row 7  merged-in content blocks at the next commit in its own tree' (
+            @(Invoke-Checks -Roots $r2).Count -ge 1)
 
         # Row 10: the other three checks still fire after extraction.
         $fx = Join-Path $base 'fx'

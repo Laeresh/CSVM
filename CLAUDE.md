@@ -46,15 +46,19 @@ landing gate for any change under `CSVM/`.
   `docs/cli.md`'s 600-character flag bullet cap). A comment block over cap has outgrown its
   subject, so reflowing it is the wrong fix: move the decode into `docs/` and leave the
   prohibition on the member it binds.
-  ⚠ **The gate checks every worktree, not the one you are in.** A hook runs in whatever directory
-  the session sits in, which is not always the tree the commit writes to, so a commit was cleared
-  against one tree and written to another. When the command names a tree (`git -C`, `--work-tree`,
-  `--git-dir`) the gate checks that one; otherwise it checks them all. That is also what catches
-  content arriving by merge or pull, since a `PreToolUse` hook on a merge would inspect the tree
-  before the content got there. So a file in a worktree you are not touching can block your
-  commit, and the message names which worktree. Set `CSVM_SKIP_CONTENT_CHECKS=1` to land something
-  first. `.\CheckCommitContent.ps1 -SelfTest` exercises the whole gate; `-ShowRoots -Command '…'`
-  says which trees a given command would check.
+  ⚠ **The gate checks the one tree the commit writes to, which is not always the one the hook
+  stands in.** Taking the hook's own directory and stopping there cleared a commit against one tree
+  and wrote it into another, and a corrupted character reached main that way. So the target is read
+  off the command in three steps: the tree it names (`git -C`, `--work-tree`, `--git-dir`), else the
+  directory it changes to first (`Set-Location <path>; git commit`, which the hook cannot observe
+  because it runs first but can read in the command string), else the tree the hook stands in.
+  Content arriving by merge or pull is caught the same way: it is present in the tree that merged
+  it, so that tree's own next commit is where it blocks. ⚠ **Do not widen this back to a sweep of
+  every worktree.** A sweep blocks your commit on a file in a tree you cannot fix (with a dozen live
+  worktrees that means another session's *uncommitted* work stops yours), and the only way past is
+  the escape hatch, which is how a gate teaches people to skip it. Set
+  `CSVM_SKIP_CONTENT_CHECKS=1` to land something first. `.\CheckCommitContent.ps1 -SelfTest`
+  exercises the whole gate; `-ShowRoots -Command '…'` says which tree a given command would check.
 - **The same gate serves Codex and pi.** `.codex/hooks/pre-tool-use.ps1` and
   `.pi/extensions/hooks.ts` call `CheckCommitContent.ps1` rather than reimplementing the checks;
   three hand-maintained copies had already drifted apart. Add a check to the repo scripts, never

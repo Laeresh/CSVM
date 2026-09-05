@@ -48,7 +48,7 @@
             "shell": "powershell",
             "command": "$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; $c = [string]$j.tool_input.command; if ($c -notmatch 'git\\s+commit') { exit 0 }; $here = git rev-parse --show-toplevel 2>$null; if (-not $here) { exit 0 }; $s = Join-Path $here 'CheckCommitContent.ps1'; if (-not (Test-Path -LiteralPath $s)) { exit 0 }; & $s -Command $c; exit $LASTEXITCODE",
             "timeout": 300,
-            "statusMessage": "content checks (every worktree)..."
+            "statusMessage": "content checks (the commit's tree)..."
           }
         ]
       }
