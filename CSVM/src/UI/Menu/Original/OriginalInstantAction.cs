@@ -15,12 +15,12 @@ public sealed record OriginalInstantActionInks(
 /// the shared <see cref="InstantActionFeature"/>: the Table of Contents window with its scroll
 /// arrows, the dropdowns at their authored lines, the enemy rows paged by the up and down buttons,
 /// the radio pair and the five buttons. Decoded rules bound here: a contents row applies its
-/// preset, View Story writes the preset's name as the story title, the ace duel hides every enemy
-/// control, the wingman plane hides at zero wingmen, a changed militia resets its aircraft, stunt
-/// flying bars the clouds. The Pilot Plane list is the sortie screens' roster (stock, then the
-/// saved builds) with rows named <c>Stock Fury</c> and <c>&lt;build name&gt; Fury</c>; the wingman
-/// list stays stock. Remake-only until the screen is filmed: the open list drawn under its box, a
-/// sideways step changing a value, both halves shown together, Build and Weapon Loadout disabled.
+/// preset, View Story writes the preset's name, the ace duel hides every enemy control, the
+/// wingman plane hides at zero wingmen, a changed militia resets its aircraft, stunt flying bars
+/// the clouds. The Pilot Plane list is the sortie screens' roster, rows named <c>Stock Fury</c> and
+/// <c>&lt;build name&gt; Fury</c>; the wingman list stays stock. Build opens the hangar wallet-free
+/// and returns here with the list re-read; Weapon Loadout opens the loadout screen for the seat
+/// the radio names. Remake-only readings: docs/org/menu-inventory.md.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -96,6 +96,7 @@ public sealed partial class OriginalShell
     private readonly InstantActionFeature _instantAction;
     private IReadOnlyList<MenuAircraft> _iaPilotRoster = OriginalRosters.Roster(Array.Empty<CustomPlaneDef>());
     private string? _iaPilotBuild;
+    private LoadoutChoice? _iaSpareFit;
     private int _iaPage;
     private string? _iaOpen;
     private int _iaContentsTop;
@@ -152,8 +153,14 @@ public sealed partial class OriginalShell
     /// <summary>Whose loadout the Weapon Loadout button targets: 0 the pilot, 1 the wingmen.</summary>
     public int LoadoutTarget => _iaRadio;
 
+    /// <summary>The pilot's fit, seat 0's own so the sortie screens and this one edit one choice; a
+    /// shell with no seat joined keeps a spare so the screen still works.</summary>
+    public LoadoutChoice PilotFit => Seat0?.Fit ?? (_iaSpareFit ??= new LoadoutChoice());
+
     /// <summary>The story title View Story last wrote, or "".</summary>
     public string StoryTitle => _iaStoryTitle;
+
+    private bool IsInstantActionFamily => _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout;
 
     /// <summary>Opens the Instant Action screen: the environment is confirmed so the launch's base
     /// def is the environment's own, and no list is open.</summary>
@@ -290,19 +297,29 @@ public sealed partial class OriginalShell
             return;
         }
 
-        if (_iaOpen != null && screen.Widget(_iaOpen) is { } open && DropdownFor(_iaOpen) is { } list)
+        if (!AddOpenListRows(screen, rows))
         {
-            var box = DropBox(open);
-            for (int i = 0; i < list.Items.Count; i++)
-            {
-                rows.Add(new OriginalRow($"{_iaOpen}:{i}", list.Items[i], OriginalRowKind.ListRow,
-                    box.X, box.Y + (box.Height * (i + 1)), box.Width, box.Height, list.Allowed(i), 0, null));
-            }
+            BuildInstantActionWidgets(screen, rows);
+        }
+    }
 
-            return;
+    // The open list's items as the only rows, keyed <key>:<index> under the box; false when no
+    // list of this screen is open.
+    private bool AddOpenListRows(MenuLayoutScreen screen, List<OriginalRow> rows)
+    {
+        if (_iaOpen == null || screen.Widget(_iaOpen) is not { } open || DropdownFor(_iaOpen) is not { } list)
+        {
+            return false;
         }
 
-        BuildInstantActionWidgets(screen, rows);
+        var box = DropBox(open);
+        for (int i = 0; i < list.Items.Count; i++)
+        {
+            rows.Add(new OriginalRow($"{_iaOpen}:{i}", list.Items[i], OriginalRowKind.ListRow,
+                box.X, box.Y + (box.Height * (i + 1)), box.Width, box.Height, list.Allowed(i), 0, null));
+        }
+
+        return true;
     }
 
     // The screen's widgets in focus order: the left page (the contents window, its arrows, View
@@ -340,7 +357,7 @@ public sealed partial class OriginalShell
         }
 
         AddStrip(screen, rows, ViewStoryKey, OriginalRowKind.TextButton, true, 0);
-        AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, false, 0);
+        AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, _hangar != null && _planes != null, 0);
 
         bool ace = _instantAction.IsAceDuel;
         if (_iaPage == 0)
@@ -374,7 +391,7 @@ public sealed partial class OriginalShell
 
         AddStrip(screen, rows, PlayerRadioKey, OriginalRowKind.Radio, true, 1);
         AddStrip(screen, rows, WingmanRadioKey, OriginalRowKind.Radio, true, 1);
-        AddStrip(screen, rows, WeaponLoadoutKey, OriginalRowKind.TextButton, false, 1);
+        AddStrip(screen, rows, WeaponLoadoutKey, OriginalRowKind.TextButton, true, 1);
         AddStrip(screen, rows, FlyMissionKey, OriginalRowKind.TextButton, true, 1);
         AddStrip(screen, rows, ExitKey, OriginalRowKind.Button, true, 1);
     }
@@ -387,7 +404,7 @@ public sealed partial class OriginalShell
         }
     }
 
-    private void AddDropdown(MenuLayoutScreen screen, List<OriginalRow> rows, string key)
+    private void AddDropdown(MenuLayoutScreen screen, List<OriginalRow> rows, string key, int column = 1)
     {
         if (screen.Widget(key) is not { } widget || DropdownFor(key) is not { } list)
         {
@@ -397,7 +414,7 @@ public sealed partial class OriginalShell
         var box = DropBox(widget);
         string value = list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
         rows.Add(new OriginalRow(key, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
-            true, 1, StripArt(widget.Art, 4)));
+            true, column, StripArt(widget.Art, 4)));
     }
 
     private void AddStrip(MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled, int column)
@@ -449,6 +466,7 @@ public sealed partial class OriginalShell
 
         var pick = _iaPilotRoster[row];
         var airframes = InstantActionFeature.Airframes;
+        string before = _instantAction.PlayerPlane.Node;
         for (int i = 0; i < airframes.Count; i++)
         {
             if (airframes[i].Node == pick.Node)
@@ -459,6 +477,17 @@ public sealed partial class OriginalShell
         }
 
         _iaPilotBuild = pick.IsCustom ? pick.Name : null;
+        DropPilotFitIfMoved(before);
+    }
+
+    // A changed airframe drops the pilot's fit, the wingman rule applied to the pilot: gun slots
+    // and pylons are per airframe, so a fit for one has nowhere to live on another.
+    private void DropPilotFitIfMoved(string before)
+    {
+        if (before != _instantAction.PlayerPlane.Node)
+        {
+            PilotFit.ResetToStock();
+        }
     }
 
     // The picked pilot row, or the feature's stock airframe when the roster has lost it.
@@ -534,7 +563,7 @@ public sealed partial class OriginalShell
             }
         }
 
-        return null;
+        return LoadoutDropdownFor(key);
     }
 
     // A sideways step on the focused dropdown picks the next allowed value with wrap; on a radio
@@ -626,10 +655,12 @@ public sealed partial class OriginalShell
                         // Selecting a contents row applies its preset over every other control,
                         // the list's own select callback; the environment is re-confirmed so the
                         // launch's base def follows the preset's chapter.
+                        string before = _instantAction.PlayerPlane.Node;
                         _instantAction.ApplyPreset(int.Parse(suffix, CultureInfo.InvariantCulture));
                         _instantAction.ConfirmEnvironment();
                         _iaPilotBuild = null;
                         _iaPage = 0;
+                        DropPilotFitIfMoved(before);
                         break;
                 }
 
@@ -672,13 +703,20 @@ public sealed partial class OriginalShell
             case WingmanRadioKey:
                 _iaRadio = 1;
                 return null;
+            case BuildKey:
+                OpenHangar();
+                return null;
+            case WeaponLoadoutKey:
+                OpenLoadout();
+                return null;
             case FlyMissionKey:
                 // A build flies its airframe's stock node with the def riding along; the def's
-                // own player plane stays the airframe's stock name.
+                // own player plane stays the airframe's stock name. An edited fit rides the seat.
                 var pilot = PilotPick();
+                var fit = PilotFit;
                 return _instantAction.BuildExit(new[]
                 {
-                    new MenuSeatChoice(pilot.Node, Array.Empty<int>(), Custom: pilot.Custom),
+                    new MenuSeatChoice(pilot.Node, Array.Empty<int>(), fit.IsStock ? null : fit, pilot.Custom),
                 });
             case ExitKey:
                 Open(OriginalScreen.TopLevel);
@@ -770,34 +808,47 @@ public sealed partial class OriginalShell
             ComposeInstantActionRow(widgets[i], i == widgetFocus, i == widgetPressed, i, fills, lines, plaques, pictures);
         }
 
-        if (_iaOpen != null && rows.Count > 0)
+        if (_iaOpen != null)
         {
-            var panelFills = new List<BoardFill>();
-            var panelLines = new List<BoardLine>();
-            var first = rows[0];
-            var last = rows[rows.Count - 1];
-            float height = last.Y + last.Height - first.Y;
-            panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 255, 255, 255, 0.94f));
-            panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 0, 0, 0, 1f, Border: true));
-            for (int i = 0; i < rows.Count; i++)
-            {
-                var item = rows[i];
-                if (i == focus)
-                {
-                    panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f));
-                }
+            ComposeOpenDropdown(rows, focus, overlays, ItemFont);
+        }
+    }
 
-                panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, ItemFont,
-                    item.Enabled ? (i == focus ? BoardInk.RowFocused : BoardInk.Row) : BoardInk.Detail, i));
+    // An open list as the overlay over the finished page: a pale panel under its items, the
+    // focused item shaded, a barred item in the detail ink.
+    private void ComposeOpenDropdown(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays, float itemFont)
+    {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        var panelFills = new List<BoardFill>();
+        var panelLines = new List<BoardLine>();
+        var first = rows[0];
+        var last = rows[rows.Count - 1];
+        float height = last.Y + last.Height - first.Y;
+        panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 255, 255, 255, 0.94f));
+        panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 0, 0, 0, 1f, Border: true));
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var item = rows[i];
+            if (i == focus)
+            {
+                panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f));
             }
 
-            overlays.Add(new BoardPanel(panelFills, Array.Empty<BoardPicture>(), panelLines));
+            panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, itemFont,
+                item.Enabled ? (i == focus ? BoardInk.RowFocused : BoardInk.Row) : BoardInk.Detail, i));
         }
+
+        overlays.Add(new BoardPanel(panelFills, Array.Empty<BoardPicture>(), panelLines));
     }
 
     private void ComposeInstantActionRow(
         OriginalRow row, bool focused, bool pressed, int index,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures,
+        float itemFont = ItemFont)
     {
         switch (row.Kind)
         {
@@ -833,7 +884,7 @@ public sealed partial class OriginalShell
                     pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
                 }
 
-                lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), ItemFont,
+                lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
                     focused ? BoardInk.RowFocused : BoardInk.Row, index));
                 break;
             case OriginalRowKind.Radio when row.Art != null:

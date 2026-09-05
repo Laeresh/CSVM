@@ -17,10 +17,11 @@ namespace CSVM.Testing;
 /// with the airframe-defaults ask, a commit under a scratch name, the edit and the delete of that
 /// plane, the residue-free cancel, the aids and the campaign wallet door over the aid's scratch
 /// profile; every check pins what the screens do today. Then Original's hangar through a real
-/// <see cref="MenuHost"/> over the install's layout: the door, the name screen, the hub's tabs,
-/// the totals page committing the same scratch plane into the shared roster, the inventory
-/// selling it back, and the switch discarding an open build. The scratch plane is written into
-/// the user's store under a name no player would type and removed before the suite ends.
+/// <see cref="MenuHost"/> over the install's layout: the Instant Action screen's Build Custom
+/// Plane, the name screen, the hub's tabs, the totals page committing the same scratch plane into
+/// the shared roster and back onto the Instant Action screen, the inventory selling it back, and
+/// the switch discarding an open build. The scratch plane is written into the user's store under
+/// a name no player would type and removed before the suite ends.
 /// </summary>
 internal static class MenuHangarSuites
 {
@@ -76,15 +77,16 @@ internal static class MenuHangarSuites
 
     [Suite("menu-original-hangar",
         "Original's hangar through the presentation boundary over the install's decoded layout: the "
-        + "top level's BUILD PLANE door opens the decoded name screen, typed frames name the "
-        + "plane and OK opens the Plane Construction hub on the default configuration, the tabs are "
-        + "siblings a click and the keyboard reach out of order, a dropdown steps and picks through "
-        + "the shared feature with the running total following, READY TO PURCHASE and Purchase Now "
-        + "commit the scratch plane into the user's store and the shared roster, SELL PLANES opens "
-        + "the inventory whose Sell asks and then removes it again, CANCEL and Back leave no residue, the "
-        + "cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals page with an "
-        + "over-priced row marked yet pickable while the wallet-free door draws neither, and a switch "
-        + "discards an open build")]
+        + "Instant Action screen's Build Custom Plane opens the decoded name screen wallet-free, typed "
+        + "frames name the plane and OK opens the Plane Construction hub on the default configuration, "
+        + "the tabs are siblings a click and the keyboard reach out of order, a dropdown steps and picks "
+        + "through the shared feature with the running total following, READY TO PURCHASE and Purchase "
+        + "Now commit the scratch plane into the user's store and the shared roster and return to the "
+        + "Instant Action screen with it in the Pilot Plane list, SELL PLANES opens the inventory whose "
+        + "Sell asks and then removes it again, CANCEL and Back return to the Instant Action screen with "
+        + "no residue, the cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals "
+        + "page with an over-priced row marked yet pickable while the wallet-free door draws neither, "
+        + "and a switch discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -483,8 +485,10 @@ internal static class MenuHangarSuites
 
     private static void OriginalNameScreen(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, string scratch)
     {
-        var door = Row(shell, OriginalShell.HangarKey);
-        ctx.Check(door is { Enabled: true }, $"the top level's BUILD PLANE door is live");
+        ctx.Check(Row(shell, "HANGAR") == null, $"the top level carries no hangar door of its own");
+        var door = BuildDoor(host, seat, shell, fit);
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && door is { Enabled: true },
+            $"the Instant Action screen's Build Custom Plane is live over the hangar and the store ({shell.Screen})");
         if (door == null)
         {
             return;
@@ -573,15 +577,17 @@ internal static class MenuHangarSuites
         var purchase = Row(shell, OriginalShell.PurchaseNowKey)!;
         ctx.Check(store.Load(scratch) == null, $"nothing is in the store before the press");
         Press(host, seat, Pointer(fit, purchase.X + 5f, purchase.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.TopLevel && shell.LastBuiltPlane == scratch && !hangar.IsOpen,
-            $"Purchase Now saves, drops the build and returns to the top level ({shell.Screen}, {shell.LastBuiltPlane})");
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.LastBuiltPlane == scratch && !hangar.IsOpen,
+            $"Purchase Now saves, drops the build and returns to the Instant Action screen ({shell.Screen}, {shell.LastBuiltPlane})");
+        ctx.Check(shell.FocusedKey == OriginalShell.BuildKey, $"with the focus back on Build Custom Plane ({shell.FocusedKey})");
         ctx.Check(store.Load(scratch) is { Airframe: HangarFeature.DefaultAirframe, Engine: 1 }, $"the store holds the plane as built");
         ctx.Check(setup.Roster is var roster && Contains(roster, scratch), $"and the shared roster lists it without a return to the top level");
+        ctx.Check(Contains(shell.PilotRoster, scratch), $"and the Pilot Plane list offers it, re-read on the way back");
     }
 
     private static void OriginalInventory(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, PlayerSetupFeature setup, CustomPlaneStore store, string scratch)
     {
-        var door = Row(shell, OriginalShell.HangarKey)!;
+        var door = BuildDoor(host, seat, shell, fit)!;
         Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = "Other" });
         var ok = Row(shell, OriginalShell.NameOkKey)!;
@@ -646,8 +652,9 @@ internal static class MenuHangarSuites
         ctx.Check(shell.Screen == OriginalScreen.HangarAirframe, $"Done returns to the tab ({shell.Screen})");
         var cancel = Row(shell, OriginalShell.CancelBuildKey)!;
         Press(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.TopLevel && !hangar.IsOpen && store.Load("Other") == null,
-            $"CANCEL drops the build and leaves no residue ({shell.Screen})");
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && store.Load("Other") == null,
+            $"CANCEL drops the build, returns to the Instant Action screen and leaves no residue ({shell.Screen})");
+        ctx.Check(!Contains(shell.PilotRoster, scratch), $"whose Pilot Plane list no longer offers the sold plane");
     }
 
     // The cabin's PLANE CONSTRUCTION over the aid profile's wallet: the cash note on a tab and on
@@ -720,7 +727,7 @@ internal static class MenuHangarSuites
 
     private static void OriginalSwitch(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, CustomPlaneStore store)
     {
-        var door = Row(shell, OriginalShell.HangarKey)!;
+        var door = BuildDoor(host, seat, shell, fit)!;
         Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = "Dropped" });
         var ok = Row(shell, OriginalShell.NameOkKey)!;
@@ -778,6 +785,18 @@ internal static class MenuHangarSuites
     {
         seat.Enqueue(frame);
         host.Tick(1f / 60f);
+    }
+
+    // The way into the wallet-free hangar: the Instant Action screen's Build Custom Plane, the
+    // screen entered through the top level's Instant Action row when it is not already showing.
+    private static OriginalRow? BuildDoor(MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
+    {
+        if (shell.Screen == OriginalScreen.TopLevel && Row(shell, "MM_B_INSTANTACTION") is { } instantAction)
+        {
+            Press(host, seat, Pointer(fit, instantAction.X + 5f, instantAction.Y + 5f, pressed: true, clicked: true));
+        }
+
+        return Row(shell, OriginalShell.BuildKey);
     }
 
     // Walks the cursor onto the row carrying a text, at most one lap; the cursor stays put when no

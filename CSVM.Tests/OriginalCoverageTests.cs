@@ -50,7 +50,11 @@ public class OriginalCoverageTests : IDisposable
     };
 
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
-    private static readonly string[] Hub = { OriginalShell.HangarKey, TypeStep + BuildName, OriginalShell.NameOkKey };
+    private static readonly string[] Build = { "MM_B_INSTANTACTION", OriginalShell.BuildKey };
+    private static readonly string[] Hub = { "MM_B_INSTANTACTION", OriginalShell.BuildKey, TypeStep + BuildName, OriginalShell.NameOkKey };
+
+    // Out of the wallet-free hangar: CANCEL lands on the Instant Action screen, whose Exit leaves.
+    private static readonly string[] CancelBuild = { OriginalShell.CancelBuildKey, OriginalShell.ExitKey };
 
     private static readonly Journey[] Journeys =
     {
@@ -60,6 +64,12 @@ public class OriginalCoverageTests : IDisposable
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
             new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
         new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
+        new("instant-action-exit", OriginalScreen.TopLevel, new[] { "MM_B_INSTANTACTION", OriginalShell.ExitKey }, Array.Empty<string>()),
+        new("instant-action-loadout", OriginalScreen.InstantActionLoadout, new[] { "MM_B_INSTANTACTION", OriginalShell.WeaponLoadoutKey },
+            new[] { OriginalShell.LoadoutCancelKey, OriginalShell.ExitKey }),
+        new("instant-action-loadout-accept", OriginalScreen.InstantAction,
+            new[] { "MM_B_INSTANTACTION", OriginalShell.WingmanRadioKey, OriginalShell.WeaponLoadoutKey, OriginalShell.LoadoutAcceptKey },
+            new[] { OriginalShell.ExitKey }),
         new("campaign-roster", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey }, new[] { "CancelProfile" }),
         new("campaign-cabin", OriginalScreen.CampaignCabin, Cabin, new[] { "ReturnToMainMenu" }),
         new("campaign-previous", OriginalScreen.CampaignPreviousMissions, Then(Cabin, "PreviousMissions"), new[] { "ReturnToCabin", "ReturnToMainMenu" }),
@@ -73,23 +83,25 @@ public class OriginalCoverageTests : IDisposable
         new("campaign-scrapbook", OriginalScreen.CampaignScrapbook, Then(Cabin, "PreviousMissions", "ROW:0", "ViewMission"), new[] { "ReturnToCabin", "ReturnToMainMenu" }),
         new("campaign-scrapbook-zoom", OriginalScreen.CampaignScrapbookZoom, Then(Cabin, "PreviousMissions", "ROW:0", "ViewMission", ScrapStep), new[] { "CloseZoom", "ReturnToCabin", "ReturnToMainMenu" }, InstallOnly: true),
         new("campaign-hangar-door", OriginalScreen.PlaneName, Then(Cabin, "PlaneConstruction"), new[] { OriginalShell.NameCancelKey, "ReturnToMainMenu" }),
-        new("plane-name", OriginalScreen.PlaneName, new[] { OriginalShell.HangarKey }, new[] { OriginalShell.NameCancelKey }),
-        new("plane-airframe", OriginalScreen.HangarAirframe, Hub, new[] { OriginalShell.CancelBuildKey }),
-        new("plane-engine", OriginalScreen.HangarEngine, Then(Hub, "PX_B_ENGINE"), new[] { OriginalShell.CancelBuildKey }),
-        new("plane-armor", OriginalScreen.HangarArmor, Then(Hub, "PX_B_ARMOR"), new[] { OriginalShell.CancelBuildKey }),
-        new("plane-guns", OriginalScreen.HangarGuns, Then(Hub, "PX_B_GUNS"), new[] { OriginalShell.CancelBuildKey }),
-        new("plane-hardpoints", OriginalScreen.HangarHardpoints, Then(Hub, "PX_B_HARDPOINTS"), new[] { OriginalShell.CancelBuildKey }),
-        new("plane-paint", OriginalScreen.HangarPaint, Then(Hub, "PX_B_PAINT"), new[] { OriginalShell.CancelBuildKey }),
-        new("plane-paint-then-airframe", OriginalScreen.HangarAirframe, Then(Hub, "PX_B_PAINT", "PX_B_AIRFRAME"), new[] { OriginalShell.CancelBuildKey }),
-        new("plane-purchase", OriginalScreen.HangarPurchase, Then(Hub, OriginalShell.ReadyKey), new[] { OriginalShell.CancelBuildKey }),
-        new("plane-inventory", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey), new[] { OriginalShell.InventoryDoneKey, OriginalShell.CancelBuildKey }),
+        new("plane-name", OriginalScreen.PlaneName, Build, new[] { OriginalShell.NameCancelKey, OriginalShell.ExitKey }),
+        new("plane-airframe", OriginalScreen.HangarAirframe, Hub, CancelBuild),
+        new("plane-engine", OriginalScreen.HangarEngine, Then(Hub, "PX_B_ENGINE"), CancelBuild),
+        new("plane-armor", OriginalScreen.HangarArmor, Then(Hub, "PX_B_ARMOR"), CancelBuild),
+        new("plane-guns", OriginalScreen.HangarGuns, Then(Hub, "PX_B_GUNS"), CancelBuild),
+        new("plane-hardpoints", OriginalScreen.HangarHardpoints, Then(Hub, "PX_B_HARDPOINTS"), CancelBuild),
+        new("plane-paint", OriginalScreen.HangarPaint, Then(Hub, "PX_B_PAINT"), CancelBuild),
+        new("plane-paint-then-airframe", OriginalScreen.HangarAirframe, Then(Hub, "PX_B_PAINT", "PX_B_AIRFRAME"), CancelBuild),
+        new("plane-purchase", OriginalScreen.HangarPurchase, Then(Hub, OriginalShell.ReadyKey), CancelBuild),
+        new("plane-inventory", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey), Then(new[] { OriginalShell.InventoryDoneKey }, CancelBuild)),
         new("delete-player-confirm", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey, "DeletePlayer" }, new[] { OriginalShell.DialogNoKey, "CancelProfile" },
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }),
         new("empty-name-refusal", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey, EraseStep, "Continue" }, new[] { OriginalShell.DialogOkKey, "CancelProfile" },
             Expect: new[] { OriginalShell.DialogOkKey }),
-        new("sell-confirm", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey, OriginalShell.InventorySellKey), new[] { OriginalShell.DialogNoKey, OriginalShell.InventoryDoneKey, OriginalShell.CancelBuildKey },
+        new("sell-confirm", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey, OriginalShell.InventorySellKey),
+            Then(new[] { OriginalShell.DialogNoKey, OriginalShell.InventoryDoneKey }, CancelBuild),
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }),
-        new("defaults-ask", OriginalScreen.HangarAirframe, Then(Hub, OriginalShell.AirframeDropKey, OriginalShell.AirframeDropKey + ":1"), new[] { OriginalShell.AskCancelKey, OriginalShell.CancelBuildKey },
+        new("defaults-ask", OriginalScreen.HangarAirframe, Then(Hub, OriginalShell.AirframeDropKey, OriginalShell.AirframeDropKey + ":1"),
+            Then(new[] { OriginalShell.AskCancelKey }, CancelBuild),
             Expect: new[] { OriginalShell.AskOkKey, OriginalShell.AskCancelKey }),
         new("quit", null, new[] { "MM_B_QUIT" }, Array.Empty<string>(), Exit: typeof(QuitExit)),
         new("apply-options", null,
@@ -102,7 +114,7 @@ public class OriginalCoverageTests : IDisposable
         new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, "C1", OriginalShell.AirframeKey(0), OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalShell.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("campaign-launch", null, Then(Cabin, "NextMission", "GoToFlightCheck", "FlyMission"), Array.Empty<string>(), Exit: typeof(CampaignMissionExit)),
-        new("purchase", OriginalScreen.TopLevel, Then(Hub, OriginalShell.ReadyKey, OriginalShell.PurchaseNowKey), Array.Empty<string>()),
+        new("purchase", OriginalScreen.InstantAction, Then(Hub, OriginalShell.ReadyKey, OriginalShell.PurchaseNowKey), new[] { OriginalShell.ExitKey }),
     };
 
     // Every ScriptToExe edge of an in-scope section, by "Section.Widget": the journey whose route

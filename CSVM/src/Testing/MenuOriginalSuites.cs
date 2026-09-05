@@ -112,7 +112,7 @@ internal static class MenuOriginalSuites
             $"a cold start opens on the top level ({shell?.Screen})");
         ctx.Check(shell?.FocusedKey == OriginalShell.FreeFlightKey,
             $"with the Free Flight door focused ({shell?.FocusedKey})");
-        ctx.Check(shell?.Rows.Count == 9, $"the top level is the six decoded rows plus the three doors ({shell?.Rows.Count})");
+        ctx.Check(shell?.Rows.Count == 8, $"the top level is the six decoded rows plus the two doors ({shell?.Rows.Count})");
         ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
             $"the OS pointer is hidden while Original draws its own ({Godot.Input.MouseMode})");
         return shell;

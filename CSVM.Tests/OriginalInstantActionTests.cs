@@ -1,4 +1,6 @@
+using System.IO;
 using System.Linq;
+using CSVM.Flight;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -11,8 +13,9 @@ namespace CSVM.Tests;
 /// opening it, the rows it composes on its opening state, a contents row applying its preset and
 /// View Story writing the title, the contents window scrolling by its arrows, a dropdown opening
 /// as its list and picking by click or by a sideways step (a barred environment skipped), the enemy
-/// pages, the ace duel hiding every enemy control, the radio pair, Back and Exit, and Fly Mission
-/// leaving as the feature's exit. Every rectangle is the fixture's invented geometry.
+/// pages, the ace duel hiding every enemy control, the radio pair, Weapon Loadout opening the
+/// loadout screen for the seat the radio names, Back and Exit, and Fly Mission leaving as the
+/// feature's exit with the pilot's fit on the seat. Every rectangle is the fixture's invented geometry.
 /// </summary>
 public class OriginalInstantActionTests
 {
@@ -63,8 +66,10 @@ public class OriginalInstantActionTests
         Assert.False(Row(shell, OriginalShell.ContentsUpKey).Enabled);
         Assert.True(Row(shell, OriginalShell.ContentsDownKey).Enabled);
         Assert.Equal((350f, 359f, 16f, 11f), Rect(Row(shell, OriginalShell.ContentsDownKey)));
+        // Build stands only over a hangar and a store, which this shell has neither of; Weapon
+        // Loadout needs nothing beyond the feature.
         Assert.False(Row(shell, OriginalShell.BuildKey).Enabled);
-        Assert.False(Row(shell, OriginalShell.WeaponLoadoutKey).Enabled);
+        Assert.True(Row(shell, OriginalShell.WeaponLoadoutKey).Enabled);
         Assert.Equal((540f, 540f, 200f, 32f), Rect(Row(shell, OriginalShell.ExitKey)));
         Assert.Equal((150f, 440f, 132f, 28f), Rect(Row(shell, OriginalShell.ViewStoryKey)));
         Assert.Equal("View", Row(shell, OriginalShell.ViewStoryKey).Label);
@@ -333,6 +338,111 @@ public class OriginalInstantActionTests
     }
 
     [Fact]
+    public void WeaponLoadoutWithTheRadioOnWingmanEditsTheWingmenFitAndCancelRestoresIt()
+    {
+        var shell = Open(out var ia, stock: true);
+        shell.Step(Click(Row(shell, OriginalShell.WingmanRadioKey)));
+        Assert.Equal(1, shell.LoadoutTarget);
+
+        var step = shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
+
+        Assert.Contains(OriginalCues.Click, step.Cues);
+        Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
+        Assert.Same(ia.WingmanFit, shell.LoadoutFit);
+        Assert.Equal(ia.WingmanPlane.Node, shell.LoadoutNode);
+        // The fixture's section authors the first ammunition field alone, which the Autogyro's
+        // one gun slot takes; the buttons are the section's own strips.
+        Assert.Equal(
+            new[] { OriginalShell.LoadoutAmmoPrefix + "0", OriginalShell.LoadoutAcceptKey, OriginalShell.LoadoutCancelKey },
+            shell.Rows.Select(r => r.Key));
+        var field = Row(shell, OriginalShell.LoadoutAmmoPrefix + "0");
+        Assert.Equal(OriginalRowKind.Dropdown, field.Kind);
+        Assert.Equal((130f, 125f, 150f, 16f), Rect(field));
+        Assert.Equal("Slug", field.Label);
+        Assert.Contains(shell.Compose().Plaques, p => p.Art.Name == "PM_B_AcceptLoadout.png");
+
+        shell.Step(Hover(field));
+        shell.Step(Right);
+        Assert.Equal("dumdum", ia.WingmanFit.GunAmmoFor(1));
+        Assert.Equal("Dum-dum", Row(shell, OriginalShell.LoadoutAmmoPrefix + "0").Label);
+
+        shell.Step(Click(Row(shell, OriginalShell.LoadoutCancelKey)));
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        Assert.Equal(OriginalShell.WeaponLoadoutKey, shell.FocusedKey);
+        Assert.Null(shell.LoadoutFit);
+        Assert.True(ia.WingmanFit.IsStock);
+
+        shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
+        shell.Step(Click(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
+        Assert.Equal(OriginalShell.LoadoutAmmoPrefix + "0", shell.OpenDropdown);
+        Assert.Equal(5, shell.Rows.Count);
+        Assert.Equal("Armor-piercing", shell.Rows[2].Label);
+        step = shell.Step(Back);
+        Assert.Null(shell.OpenDropdown);
+        Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
+        shell.Step(Click(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
+        shell.Step(Click(shell.Rows[2]));
+        Assert.Equal("ap", ia.WingmanFit.GunAmmoFor(1));
+        shell.Step(Click(Row(shell, OriginalShell.LoadoutAcceptKey)));
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        Assert.Equal("ap", ia.WingmanFit.GunAmmoFor(1));
+
+        // The def carries the wingman fit only where wingmen fly: a squadron with one.
+        ia.SelectMissionType(1);
+        ia.SetWingmen(1);
+        step = shell.Step(Click(Row(shell, OriginalShell.FlyMissionKey)));
+        var launch = Assert.IsType<LaunchExit>(step.Exit);
+        Assert.Same(ia.WingmanFit, launch.InstantAction!.WingmanLoadout);
+        Assert.Null(Assert.Single(launch.Seats).Fit);
+    }
+
+    [Fact]
+    public void WeaponLoadoutOnThePilotEditsSeatZerosFitWhichRidesTheLaunchAndDropsWithTheAirframe()
+    {
+        var shell = Open(out var ia, stock: true, seated: out var setup);
+        var seat = setup.Seats[0];
+
+        shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
+
+        Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
+        Assert.Same(seat.Fit, shell.LoadoutFit);
+        Assert.Equal("player_autogyro", shell.LoadoutNode);
+        shell.Step(Hover(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
+        shell.Step(Left);
+        Assert.Equal("none", seat.Fit.GunAmmoFor(1));
+        shell.Step(Click(Row(shell, OriginalShell.LoadoutAcceptKey)));
+
+        var step = shell.Step(Click(Row(shell, OriginalShell.FlyMissionKey)));
+        var launch = Assert.IsType<LaunchExit>(step.Exit);
+        Assert.Same(seat.Fit, Assert.Single(launch.Seats).Fit);
+        Assert.True(ia.WingmanFit.IsStock);
+
+        // A different airframe has no slot for the pick, so the fit goes back to stock.
+        shell.Step(Hover(Row(shell, OriginalShell.PlayerPlaneKey)));
+        shell.Step(Right);
+        Assert.Equal("Hellhound", ia.PlayerPlane.Name);
+        Assert.True(seat.Fit.IsStock);
+    }
+
+    [Fact]
+    public void BackOnTheLoadoutScreenRestoresThePicksAndBuildIsDisabledWithoutAStore()
+    {
+        var shell = Open(out var ia, stock: true);
+        shell.Step(Click(Row(shell, OriginalShell.WingmanRadioKey)));
+        shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
+        shell.Step(Hover(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
+        shell.Step(Right);
+        Assert.False(ia.WingmanFit.IsStock);
+
+        var step = shell.Step(Back);
+
+        Assert.Null(step.Exit);
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        Assert.True(ia.WingmanFit.IsStock);
+        Assert.False(Row(shell, OriginalShell.BuildKey).Enabled);
+    }
+
+    [Fact]
     public void TheInksReadOffTheScreensOwnRows()
     {
         var shell = Shell(out _);
@@ -360,15 +470,31 @@ public class OriginalInstantActionTests
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
     }
 
-    private static OriginalShell Shell(out InstantActionFeature ia)
+    private static OriginalShell Shell(out InstantActionFeature ia) => Shell(out ia, false, out _);
+
+    // A shell over the fixture; with the committed stock table when the loadout screen is under
+    // test, and with seat 0 joined when its fit is.
+    private static OriginalShell Shell(out InstantActionFeature ia, bool stock, out PlayerSetupFeature setup)
     {
         ia = new InstantActionFeature(_ => InstantActionFeatureTests.InstantActionDefFor("Test Ace"));
-        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), new PlayerSetupFeature(), Measure, instantAction: ia);
+        setup = new PlayerSetupFeature();
+        var table = stock ? StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json")) : null;
+        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
+            instantAction: ia, stock: table != null ? () => table : null);
     }
 
-    private static OriginalShell Open(out InstantActionFeature ia)
+    private static OriginalShell Open(out InstantActionFeature ia, bool stock = false)
     {
-        var shell = Shell(out ia);
+        var shell = Shell(out ia, stock, out _);
+        shell.OpenInstantAction();
+        return shell;
+    }
+
+    private static OriginalShell Open(out InstantActionFeature ia, bool stock, out PlayerSetupFeature seated)
+    {
+        var shell = Shell(out ia, stock, out seated);
+        seated.SetRoster(OriginalRosters.Roster(System.Array.Empty<CustomPlaneDef>()));
+        seated.Join(new ScriptedMenuSeat());
         shell.OpenInstantAction();
         return shell;
     }

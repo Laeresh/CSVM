@@ -46,6 +46,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Instant Action aid's argument that leaves its Pilot Plane list standing open.</summary>
     public const string InstantActionPilotPlaneAid = "pilot-plane";
 
+    /// <summary>The Instant Action aid's argument that opens its Weapon Loadout for the pilot.</summary>
+    public const string InstantActionLoadoutAid = "weapon-loadout";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -303,6 +306,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case InstantActionAid + ":" + InstantActionPilotPlaneAid:
                     _shell.OpenInstantAction();
                     _shell.OpenInstantActionDropdown(OriginalShell.PlayerPlaneKey);
+                    break;
+                case InstantActionAid + ":" + InstantActionLoadoutAid:
+                    _shell.OpenInstantAction();
+                    _shell.OpenLoadout();
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
@@ -640,10 +647,11 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // Paper pages write in authored black, the hub in its own inks, the Options screen and
-            // the Game Options page in the Preferences page's, a campaign screen in the palette its
-            // shared board component takes under Built-in, and the rest in the file-wide inks.
+            // Paper pages write in authored black, the loadout in the ammo form's palette, the hub
+            // in its own inks, the two options pages in the Preferences page's, a campaign screen
+            // in its shared board component's palette, and the rest in the file-wide inks.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
+                : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
                 : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)

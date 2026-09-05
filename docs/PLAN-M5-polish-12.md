@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-691` The export message box draws its OK button in ink the plaque hides
 2. ☑ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
-3. ☐ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
+3. ☑ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
 4. ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
 
 ### Wave B — Seats and joining
@@ -242,7 +242,7 @@ the author's eight builds the open list is nineteen rows and runs past the page'
 button row, since the remake's open list has no window although the layout's dropdown authors
 `TotalDisplayed 20`.
 
-## A3 ☐ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
+## A3 ☑ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
 
 **Goal.** Both buttons open: Weapon Loadout edits the loadout of the seat the Player/Wingman radio
 names, Build Custom Plane opens the shared wallet-free hangar and Back returns to the Instant
@@ -275,6 +275,27 @@ level under `--presentation=original --menu` to see the door gone.
 Removing the door changes the top level's row count and every focus index after it; the
 `OriginalShell` focus table is per screen, so re-check the `TopLevelButtons` walk in
 `MenuOriginalSuites`.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** Landed as designed, with one screen more than the approach named. Original had no
+loadout screen of its own (the sortie screens launch stock fits and the campaign's ammo page runs
+over `OwnedPlane`, not `LoadoutChoice`), so Weapon Loadout got one: `OriginalLoadout.cs` composes
+the decoded `[@OrdinanceLayout@]` chrome over the fit the radio names, seat 0's `PlayerSeat.Fit`
+for the pilot (which now rides the Instant Action exit, and drops on an airframe change as the
+wingman fit does) and `InstantActionFeature.WingmanFit` for the wingmen; the section's four
+ammunition and eight rocket fields map onto the airframe's firable gun slots and pylons over the
+stock table's option lists, CANCEL and Back restore a snapshot of the picks, ACCEPT keeps them.
+Build Custom Plane calls `OpenHangar()` with the Instant Action screen as the return, and
+`ReturnFromHangar` re-runs `RefreshInstantActionRoster()` on the way back. The top-level `HangarKey`
+row and constant are gone (eight rows now); `OriginalScreen.InstantActionLoadout` sits after
+`InstantAction`. `--menu=instant-action:weapon-loadout` shoots the new screen. Suites: the three
+`menu-original-hangar` walks enter through Build, `menu-original-instant-action` gained the loadout
+and build walks, `menu-original-tracer` counts eight rows; the coverage test walks the loadout
+screen by every input family and reaches the top level through Exit. Fixed on the way: A2 had left
+`OriginalInstantActionTests` expecting `Autogyro` where the row now reads `Stock Autogyro`. Not
+filmed: which sound plays and how the original's own loadout screen behaves under Instant Action
+stay `CAP-50`'s.
 
 ## A4 ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
 

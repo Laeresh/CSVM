@@ -48,7 +48,9 @@ public class OriginalHangarTests : IDisposable
     public void TheDoorOpensTheNameScreenWhoseOkWaitsForAName()
     {
         var shell = Shell(out var hangar, out _);
-        var door = shell.Rows.Single(r => r.Key == OriginalShell.HangarKey);
+        Assert.DoesNotContain(shell.Rows, r => r.Key == "HANGAR");
+        Click(shell, "MM_B_INSTANTACTION");
+        var door = shell.Rows.Single(r => r.Key == OriginalShell.BuildKey);
         Assert.True(door.Enabled);
 
         shell.Step(new MenuCommands { Pointer = new MenuPointer(door.X + 2f, door.Y + 2f, true, true) });
@@ -250,11 +252,15 @@ public class OriginalHangarTests : IDisposable
         Click(shell, OriginalShell.ReadyKey);
         Click(shell, OriginalShell.PurchaseNowKey);
 
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        // The commit returns to the screen the door was pressed on, the Instant Action screen,
+        // with its Pilot Plane list re-read so the build is offered at once.
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        Assert.Equal(OriginalShell.BuildKey, shell.FocusedKey);
         Assert.Equal("Ace", shell.LastBuiltPlane);
         Assert.False(hangar.IsOpen);
         Assert.Equal(HangarFeature.DefaultAirframe, _store.Load("Ace")!.Airframe);
         Assert.Contains(setup.Roster, a => a.Name == "Ace" && a.IsCustom);
+        Assert.Contains(shell.PilotRoster, a => a.Name == "Ace" && a.IsCustom);
     }
 
     [Fact]
@@ -277,13 +283,13 @@ public class OriginalHangarTests : IDisposable
         Click(shell, "PX_B_GUNS");
         Click(shell, OriginalShell.CancelBuildKey);
 
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
         Assert.False(hangar.IsOpen);
         Assert.Empty(_store.List());
 
         OpenName(shell, "Ace");
         shell.Step(Back);
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
         Assert.False(hangar.IsOpen);
         Assert.Empty(_store.List());
     }
@@ -370,10 +376,12 @@ public class OriginalHangarTests : IDisposable
         shell.Step(new MenuCommands { Pointer = new MenuPointer(row.X + 2f, row.Y + 2f, true, true) });
     }
 
+    // The way in: the top level's Instant Action row, then the screen's Build Custom Plane.
     private static void OpenName(OriginalShell shell, string name)
     {
         shell.Open(OriginalScreen.TopLevel);
-        Click(shell, OriginalShell.HangarKey);
+        Click(shell, "MM_B_INSTANTACTION");
+        Click(shell, OriginalShell.BuildKey);
         shell.Step(new MenuCommands { Typed = name });
     }
 

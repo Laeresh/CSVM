@@ -638,7 +638,7 @@ and the shared Free Flight, player-setup, Instant Action, hangar and campaign fe
 art measurer and the flight-devices answer injected. It owns the top level composed from
 `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
 Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the Game
-Options, Instant Action, campaign and hangar screens are its four partials, below. `Step` applies
+Options, Instant Action, loadout, campaign and hangar screens are its five partials, below. `Step` applies
 one seat's frame (pointer, typed text, cursor walk, accept and back) and `Compose` is the screen
 as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -668,19 +668,28 @@ section and the shared `InstantActionFeature`. Its rows are the section's own wi
 their layout keys: the contents list in its authored window with its arrows and thumb, the
 dropdowns at their authored boxes, the enemy rows on two pages, the radio pair and the buttons.
 The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named
-`Stock <airframe>` and `<build name> <airframe>`), re-read by `RefreshInstantActionRoster` on
-every entry; a picked build flies its airframe's stock node with its def on the seat, and the
-wingman list stays stock. Option sets: [../formats/instant-action.md](../formats/instant-action.md).
+`Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's
+return; a picked build flies its airframe's stock node with its def on the seat. Build opens the
+wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
+
+## src/UI/Menu/Original/OriginalLoadout.cs
+The Instant Action Weapon Loadout, the shell's partial over the decoded `[@OrdinanceLayout@]`
+section (the campaign's ammo chrome) and one shared `LoadoutChoice`: seat 0's for the pilot, the
+`InstantActionFeature`'s wingman fit for the wingmen, picked by the radio pair. It owns the
+mapping of the section's four ammunition and eight rocket fields onto the airframe's gun slots and
+pylons over the stock table's option lists, the snapshot CANCEL and Back restore, the airframe's
+diagram frames and the description pane. Rows and open lists reuse the Instant Action partial's
+dropdown machinery. What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
 ## src/UI/Menu/Original/OriginalHangar.cs
 The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
-right page, the totals page and the INVENTORY, each composed from its own layout section. It owns
-the plane picture over the four blueprint panes (the airframe's blueprint, else the picked
-pattern's region masks tinted under its plate), the running total, the cash note over a wallet with
-the mark on a dropdown row the funds cannot cover, the tab bar read off the layout's own edges, every
-dropdown's list under its box, and the airframe-switch ask as a dialog over the page; every pick
-binds straight to the feature. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
+the cabin. It owns the plane picture over the four blueprint panes (the airframe's blueprint, else
+the picked pattern's region masks tinted under its plate), the running total, the cash note over a
+wallet with the mark on a dropdown row the funds cannot cover, the tab bar read off the layout's
+own edges, every dropdown's list under its box, and the airframe-switch ask as a dialog over the
+page; every pick binds straight to the feature. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

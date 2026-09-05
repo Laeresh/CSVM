@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// from <see cref="PlaneName"/> on, which is what the shell reads its two branches off.</summary>
 public enum OriginalScreen
 {
-    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight, Dogfight and hangar doors.</summary>
+    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight and Dogfight doors.</summary>
     TopLevel,
 
     /// <summary>The remake-only Free Flight screen: a chapter list, the aircraft list, the seats, BACK and FLY.</summary>
@@ -30,6 +30,10 @@ public enum OriginalScreen
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
     InstantAction,
+
+    /// <summary>The Instant Action screen's Weapon Loadout, the decoded <c>[@OrdinanceLayout@]</c>
+    /// chrome over the fit of the seat the radio pair names.</summary>
+    InstantActionLoadout,
 
     /// <summary>The decoded <c>[@Campaign@]</c> player profile screen: the name box, the roster,
     /// CONTINUE, DELETE PLAYER and CANCEL.</summary>
@@ -139,10 +143,10 @@ public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutCol
 
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
-/// remake-only Free Flight, Dogfight and hangar doors, the sortie screens, the Options screen over
-/// the decoded Preferences chrome with the Game Options page behind its live door, and the decoded
-/// Instant Action, campaign and hangar screens over their shared features (each family its own
-/// partial file), driven by each seat's semantic commands and composed into a
+/// remake-only Free Flight and Dogfight doors, the sortie screens, the Options screen over the
+/// decoded Preferences chrome with the Game Options page behind its live door, and the decoded
+/// Instant Action, loadout, campaign and hangar screens over their shared features (each family
+/// its own partial file), driven by each seat's semantic commands and composed into a
 /// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat
 /// 0's pointer arrives already mapped into that space; hovering a live row moves the focus onto
 /// it, so keyboard, pad and pointer share one cursor. A dialog (the original's messagebox) may
@@ -241,9 +245,9 @@ public sealed partial class OriginalShell
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
     /// <paramref name="flightDevices"/> a seat with its launch's devices; the chapters default to
-    /// <see cref="OriginalRosters"/>, a missing Instant Action feature to a private one. The hangar
-    /// door stands only over <paramref name="hangar"/> and <paramref name="planes"/> together, the
-    /// Campaign row only over <paramref name="campaign"/> and <paramref name="profiles"/> together.</summary>
+    /// <see cref="OriginalRosters"/>, a missing Instant Action feature to a private one. Instant
+    /// Action's Build Custom Plane stands only over <paramref name="hangar"/> and <paramref name="planes"/>
+    /// together, the Campaign row only over <paramref name="campaign"/> and <paramref name="profiles"/> together.</summary>
     public OriginalShell(
         MenuLayout layout,
         FreeFlightFeature free,
@@ -441,9 +445,9 @@ public sealed partial class OriginalShell
         if (commands.MoveX != 0)
         {
             // A sideways step changes a value where a screen has one under the cursor (an Instant
-            // Action dropdown or radio, a Game Options row, a hangar dropdown or tab, a closed
-            // campaign field); anywhere else it crosses columns.
-            if (_screen == OriginalScreen.InstantAction && StepInstantActionValue(rows, focus, commands.MoveX))
+            // Action or loadout dropdown, a radio, a Game Options row, a hangar dropdown or tab, a
+            // closed campaign field); anywhere else it crosses columns.
+            if (IsInstantActionFamily && StepInstantActionValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -505,7 +509,8 @@ public sealed partial class OriginalShell
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
-        bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.Options or OriginalScreen.GameOptions
+        bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
+            or OriginalScreen.Options or OriginalScreen.GameOptions
             || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
@@ -521,6 +526,9 @@ public sealed partial class OriginalShell
         {
             case OriginalScreen.InstantAction:
                 ComposeInstantAction(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
+                break;
+            case OriginalScreen.InstantActionLoadout:
+                ComposeLoadout(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case var _ when IsCampaignScreen:
                 ComposeCampaign(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
@@ -828,9 +836,6 @@ public sealed partial class OriginalShell
                     case DogfightKey:
                         Open(OriginalScreen.Dogfight);
                         break;
-                    case HangarKey:
-                        OpenHangar();
-                        break;
                     case CampaignKey:
                         OpenCampaign();
                         break;
@@ -850,6 +855,8 @@ public sealed partial class OriginalShell
                 return ActivateSortie(row);
             case OriginalScreen.InstantAction:
                 return ActivateInstantAction(row);
+            case OriginalScreen.InstantActionLoadout:
+                return ActivateLoadout(row);
             case var _ when IsCampaignScreen:
                 return ActivateCampaign(row);
             case var _ when IsHangarScreen:
@@ -876,10 +883,10 @@ public sealed partial class OriginalShell
 
     // Back with a dialog standing takes its declining answer, the messagebox script's own Escape.
     // On a sortie screen it first undoes seat 0's own pick, a stage at a time; browsing, it leaves
-    // the screen. On the Instant Action screen and the Game Options page the first Back closes an
-    // open list and the next one leaves, the page's leaving being CANCEL CHANGES. The campaign and
-    // the hangar walk their own graphs back. The top level quits outright, as MAINMENU.SCRIPT's
-    // Quit terminates with no confirm.
+    // the screen. On the Instant Action screen, its loadout and the Game Options page the first
+    // Back closes an open list and the next one leaves, the loadout's leaving being CANCEL LOADOUT
+    // and the page's CANCEL CHANGES. The campaign and the hangar walk their own graphs back. The
+    // top level quits outright, as MAINMENU.SCRIPT's Quit terminates with no confirm.
     private MenuExit? Back()
     {
         if (_dialog is { } dialog)
@@ -898,8 +905,14 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        if (_screen == OriginalScreen.InstantAction && CloseInstantActionDropdown())
+        if (IsInstantActionFamily && CloseInstantActionDropdown())
         {
+            return null;
+        }
+
+        if (_screen == OriginalScreen.InstantActionLoadout)
+        {
+            CloseLoadout(keep: false);
             return null;
         }
 
@@ -932,7 +945,6 @@ public sealed partial class OriginalShell
             case OriginalScreen.TopLevel:
                 rows.Add(TextButton(FreeFlightKey, "FREE FLIGHT", DoorX, DoorY, true, 0));
                 rows.Add(TextButton(DogfightKey, "DOGFIGHT", DoorX, DogfightDoorY, true, 0));
-                rows.Add(TextButton(HangarKey, "BUILD PLANE", DoorX, HangarDoorY, _hangar != null && _planes != null, 0));
                 var main = _layout.Screen(OriginalAvailability.MainMenuSection);
                 foreach (string key in TopLevelButtons)
                 {
@@ -947,6 +959,9 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.InstantAction:
                 BuildInstantActionRows(rows);
+                break;
+            case OriginalScreen.InstantActionLoadout:
+                BuildLoadoutRows(rows);
                 break;
             case var _ when IsCampaignScreen:
                 BuildCampaignRows(rows);

@@ -21,15 +21,12 @@ public sealed record OriginalHangarInks(
 /// seven <c>0x1100</c> edges: every tab is a sibling reachable from every other, READY TO PURCHASE
 /// opens the totals, CANCEL drops the scratch plane and SELL PLANES opens the inventory. Each tab's
 /// dropdowns bind to the feature's operations; a pick that changes the airframe raises the
-/// defaults ask as a dialog over the page. Remake-only until the tab bar is filmed: the top-level
-/// door, the export wording on the wallet-free door, the standing tab drawn in its disabled state,
-/// the open list under its box, keyboard and pad focus, and where the running total shows.
+/// defaults ask as a dialog. Entered wallet-free from Instant Action's Build Custom Plane and over
+/// the wallet from the cabin's PLANE CONSTRUCTION. Remake-only until the tab bar is filmed: the
+/// export wording, the standing tab drawn disabled, the open list, keyboard and pad focus.
 /// </summary>
 public sealed partial class OriginalShell
 {
-    /// <summary>The hangar door's key on the top level.</summary>
-    public const string HangarKey = "HANGAR";
-
     /// <summary>The layout section the name screen is composed from.</summary>
     public const string PlaneNameSection = "PlaneName";
 
@@ -92,9 +89,6 @@ public sealed partial class OriginalShell
 
     /// <summary>The paint tab's pattern dropdown.</summary>
     public const string PatternDropKey = "PT_D_PATTERN";
-
-    // The hub door under the Dogfight door, one plaque plus air below it.
-    private const float HangarDoorY = DoorY + 72f;
 
     // The plane picture's authored corner, the four PX_P_PLANE panes' own.
     private const float PlaneX = 16f;
@@ -183,10 +177,10 @@ public sealed partial class OriginalShell
     private bool IsHub => IsHangarTab || _screen == OriginalScreen.HangarPurchase;
 
     /// <summary>Opens the hangar from the screen showing: a build over the saved-plane store,
-    /// wallet-free from the top level's door and over <paramref name="wallet"/> from the cabin's
-    /// PLANE CONSTRUCTION, entered through the name screen as the original's own chain does. The
-    /// screen the door was pressed on is where CANCEL and a commit return to. Nothing happens when
-    /// the shell has no feature or no store.</summary>
+    /// wallet-free from Instant Action's Build Custom Plane and over <paramref name="wallet"/> from
+    /// the cabin's PLANE CONSTRUCTION, entered through the name screen as the original's own chain
+    /// does. The screen the door was pressed on is where CANCEL and a commit return to. Nothing
+    /// happens when the shell has no feature or no store.</summary>
     public void OpenHangar(IHangarWallet? wallet = null)
     {
         if (_hangar == null || _planes == null)
@@ -525,13 +519,19 @@ public sealed partial class OriginalShell
     }
 
     // Back onto the entry screen. The cabin re-reads its profile on the way, so a purchase or a
-    // sale through the wallet shows on it.
+    // sale through the wallet shows on it; the Instant Action screen re-reads its Pilot Plane
+    // list, so a build saved here is offered without leaving it.
     private void ReturnFromHangar()
     {
         if (_hangarReturn == OriginalScreen.CampaignCabin)
         {
             ResumeCampaign();
             return;
+        }
+
+        if (_hangarReturn == OriginalScreen.InstantAction)
+        {
+            RefreshInstantActionRoster();
         }
 
         Open(_hangarReturn);

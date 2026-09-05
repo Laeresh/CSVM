@@ -311,8 +311,9 @@ scan automatically; anything it adds to the shared namespace falls under the fir
 `--menu=<value>` opens the cold start on one screen for a `--screenshot`, and its values belong to
 the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in's unless
 `--presentation=original` is set, in which case the same flag carries Original's own values
-(`free-flight`, `dogfight`, `instant-action` and `instant-action:pilot-plane` with its Pilot Plane
-list open, `options`, the `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
+(`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
+list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`, the
+`plane-*` hangar poses, `campaign` and the shared scratch-store campaign
 poses, `campaign-delete`), and any other value opens that
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 
@@ -335,8 +336,9 @@ the contract above, not from Original's code. In particular it does not inherit:
 - **The 4:3 board fit.** `BoardFit`'s uniform fit, centring and letterboxing, and the nearest
   sampling of extracted art, are the rule for screens composed in the original's coordinate space.
   A presentation that lays out for the window's own aspect owes `BoardFit` nothing.
-- **The remake-only screens and rules.** Original's Free Flight, Dogfight and BUILD PLANE doors and
-  screens, the words and control kinds its Game Options rows take, its three disabled Preferences
+- **The remake-only screens and rules.** Original's Free Flight and Dogfight doors and screens, its
+  wallet-free hangar entry and Weapon Loadout screen behind the Instant Action screen's two buttons,
+  the words and control kinds its Game Options rows take, its three disabled Preferences
   page doors, its keyboard and pad focus over a pointer-driven original, and its pointer hotspot are
   readings recorded in the inventory as remake-only. A new
   presentation makes its own choices for the same operations and records them the same way.
