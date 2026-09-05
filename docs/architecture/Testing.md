@@ -147,11 +147,10 @@ repo root, git-ignored), returning the file it wrote so a caller names where a s
 than re-deriving the path. Read `GoldenShot.cs` for what the save site prints.
 
 ## src/Testing/GltfExporter.cs
-Exports the viewer plane's `Node3D` subtree to a glTF file: mesh plus the currently painted livery
-texture, current damage state baked in, no animation and no emitters. `Export(plane, path)` works
-on a throwaway `plane.Duplicate()`, frees the hidden `Node3D`s (the panel/flare `Visible` toggles
-are how damage is baked) and the point-sprite `"lights"` instances, converts each surface's custom
-`ShaderMaterial` skin to a `StandardMaterial3D` mirroring `PlaneBuilder.FlareMaterial`, then
+Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.
+`Export(node, path)` works on a throwaway `node.Duplicate()`, frees hidden `Node3D`s (the panel/flare `Visible` toggles
+are how damage is baked) and the point-sprite `"lights"` instances, converts every surface to a
+double-sided glTF-serializable material, then
 `GltfDocument.AppendFromScene` + `WriteToFilesystem`. Format is extension-driven (`.glb` default).
-Two triggers: the `--export-gltf=` one-shot via the frame-stepped `Tick()`, and F10 in the
-Launcher.
+`ExportToExports` supplies a safe timestamped `Exports/` GLB name. The viewer's `--export-gltf=`
+one-shot and F10, plus NodeLab's selected-subtree action, share that writer.

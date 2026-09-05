@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Testing;
 using CSVM.Utils;
 using Godot;
 
@@ -10,8 +11,8 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The node lab (N) in <c>--freecam</c>/<c>--anim-lab</c>: a dockable panel holding the world's
-/// node tree by <c>cs_name</c>, a search box, per-node actions (frame the camera, hide/show the
-/// subtree) and a dependency readout for whatever <see cref="SelectionService"/> currently has. A
+/// node tree by <c>cs_name</c>, a search box, per-node actions (frame the camera, hide/show and
+/// export the subtree) and a dependency readout for whatever <see cref="SelectionService"/> currently has. A
 /// second view lists the chapter's destructibles with coverage columns. The tree is lazy: a
 /// branch populates only when expanded. Full behaviour: this module's entry in
 /// docs/architecture.md.
@@ -261,6 +262,19 @@ public sealed partial class NodeLab : Node
         Log.Info("ui", $"nodelab {(node.Visible ? "show" : "hide")} node={SelectionService.NameOf(node)} visible={node.Visible} in_tree={node.IsVisibleInTree()}");
         UpdateStatus();
         RefreshDeps();
+    }
+
+    /// <summary>Writes the selected subtree as a timestamped GLB in <c>Exports/</c>.</summary>
+    public void ExportSelection()
+    {
+        if (_selection.Current is not { } node || !IsInstanceValid(node))
+        {
+            Log.Info("ui", $"nodelab export — nothing is selected");
+            return;
+        }
+        string nodeName = SelectionService.NameOf(node);
+        Log.Info("ui", $"nodelab export node={nodeName}");
+        GltfExporter.ExportToExports(node, nodeName);
     }
 
     /// <summary>The dependency readout for one node as plain lines — the same text the panel shows
@@ -536,6 +550,7 @@ public sealed partial class NodeLab : Node
         actions.AddChild(Btn("Frame", FrameSelection));
         _hideBtn = Btn("Hide", ToggleHide);
         actions.AddChild(_hideBtn);
+        actions.AddChild(Btn("Export glTF", ExportSelection));
         actions.AddChild(Btn("Deps ⟳", RefreshDeps));
         _destBtn = new CheckButton { Text = "Destructibles", FocusMode = Control.FocusModeEnum.None };
         _destBtn.Toggled += on =>
@@ -578,7 +593,7 @@ public sealed partial class NodeLab : Node
         _deps.AddThemeFontSizeOverride("normal_font_size", 11);
         box.AddChild(_deps);
 
-        box.AddChild(Small("click a row to select · double-click frames · N hides this panel"));
+        box.AddChild(Small("click a row to select · double-click frames · Export glTF writes the selection · N hides"));
 
         margin.AddChild(box);
         panel.AddChild(margin);

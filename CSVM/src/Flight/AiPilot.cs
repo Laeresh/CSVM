@@ -227,8 +227,8 @@ public sealed class AiPilot
     /// inside <see cref="MergeRangeM"/> and the two are flying AT each other — each party's own
     /// velocity lies within <see cref="MergeClosureFraction"/> of its speed along the line of
     /// sight, which is about 37° of it. The original also tests that the victim is a
-    /// <c>jet</c>/<c>wingman</c> and never arms this against a ground target; every quarry that
-    /// reaches <see cref="FlyPursuit"/> is an aircraft, so that arm has nothing to port.</summary>
+    /// <c>jet</c>/<c>wingman</c> and never arms this against a ground target;
+    /// <see cref="FlyPursuit"/> keeps that gate on <see cref="PursuitQuarry.IsAircraft"/>.</summary>
     public static bool IsMerging(Vector3 toQuarry, Vector3 ownVelocity, Vector3 quarryVelocity)
     {
         float range = toQuarry.Length();
@@ -279,11 +279,12 @@ public sealed class AiPilot
     }
 
     /// <summary>One sim step's stick and throttle for the current orders. Pure over the model's
-    /// state and this instance's fields (no clocks, no node reads, and the only randomness is
-    /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic.</summary>
+    /// state and this instance's fields (no clocks, and the only randomness is
+    /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic. The
+    /// one node read is a turret or structure quarry's position, which lives on its node alone.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        var quarry = Gunner is { Target: { InPlay: true } t } ? t : null;
+        var quarry = PursuitQuarry.Of(Gunner?.Target);
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
         RailPose = null;          // set again below only while the rail writes the pose
 
@@ -292,8 +293,8 @@ public sealed class AiPilot
         if (Machine is { } machine)
         {
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
-                quarry?.WorldPosition, quarry?.Pilot?.Machine?.Mode, dt,
-                quarry?.WorldVelocity, quarry?.IsHumanPiloted ?? false,
+                quarry?.Position, quarry?.Mode, dt,
+                quarry?.Velocity, quarry?.IsHumanPiloted ?? false,
                 nose: -model.Attitude.Z);
             // The two states the escort law itself short-circuits on come first, then the escort,
             // which is the whole dispatch for a wingman, a maneuver included, since the original
@@ -326,11 +327,11 @@ public sealed class AiPilot
                     TargetAltitude = machine.EvadeAltitude;
                     return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
 
-                case AiMode.Pursue when quarry != null:
-                    return FlyPursuit(model, dt, quarry);
+                case AiMode.Pursue when quarry is { } prey:
+                    return FlyPursuit(model, dt, prey);
 
-                case AiMode.LayOff when quarry != null:
-                    return FlyLayOff(model, dt, machine, quarry);
+                case AiMode.LayOff when quarry is { } pursuer:
+                    return FlyLayOff(model, dt, machine, pursuer);
 
                 default: // patrol, and any mode whose quarry went away
                     var input = FlyPatrol(model, dt);
@@ -350,7 +351,7 @@ public sealed class AiPilot
         if (Escort is { Leader.InPlay: true } escort)
             return FlyEscort(model, dt, escort, quarry);
 
-        return quarry != null ? FlyPursuit(model, dt, quarry) : FlyPatrol(model, dt);
+        return quarry is { } bare ? FlyPursuit(model, dt, bare) : FlyPatrol(model, dt);
     }
 
     // The stun mask: stick and rudder neutral, the throttle lever left where it was. The
@@ -375,23 +376,26 @@ public sealed class AiPilot
 
     // Pursuit: aim at the decoded lead offset ahead of the victim's facing, flown on the engaged
     // table; on the victim's own axis (IsOnGunAxis) aim at it directly and let the law solve the
-    // firing problem. A merge (IsMerging) replaces the aim velocity with a flat MergeSpeedMps
-    // along the line of sight (docs/org/aiPilot.md) — the original's whole answer to a head-on.
-    private FlightInput FlyPursuit(FlightModel model, float dt, FlightController quarry)
+    // firing problem. A turret or structure has no axis, so the original takes that arm for it
+    // every frame: the aim point is the part itself, with the gun lead on, and the merge rule
+    // never arms (FUN_0041d9f0's TargetVehicle cast). A merge (IsMerging) replaces the aim
+    // velocity with a flat MergeSpeedMps along the line of sight (docs/org/aiPilot.md).
+    private FlightInput FlyPursuit(FlightModel model, float dt, in PursuitQuarry quarry)
     {
-        var toQuarry = quarry.WorldPosition - model.Position;
+        var toQuarry = quarry.Position - model.Position;
         if (new Vector2(toQuarry.X, toQuarry.Z).LengthSquared() > 1f)
             TargetHeadingDeg = HeadingDegOf(toQuarry);
-        TargetAltitude = quarry.WorldPosition.Y;
+        TargetAltitude = quarry.Position.Y;
 
-        var nose = quarry.NoseDirection;
-        var vel = quarry.WorldVelocity;
-        bool onAxis = Gunner is { } g && IsOnGunAxis(toQuarry, nose, g.QuickDrawAngleDeg);
+        var nose = quarry.Nose;
+        var vel = quarry.Velocity;
+        bool onAxis = !quarry.IsAircraft
+            || (Gunner is { } g && IsOnGunAxis(toQuarry, nose, g.QuickDrawAngleDeg));
         var aim = onAxis
-            ? quarry.WorldPosition
-            : quarry.WorldPosition + (nose * AiControlLaw.LeadOffsetFor(vel.Length()));
+            ? quarry.Position
+            : quarry.Position + (nose * AiControlLaw.LeadOffsetFor(vel.Length()));
         var aimVelocity = vel;
-        if (IsMerging(toQuarry, model.VelocityDir * model.Speed, vel))
+        if (quarry.IsAircraft && IsMerging(toQuarry, model.VelocityDir * model.Speed, vel))
         {
             var u = toQuarry.Normalized();
             aimVelocity = u * MergeSpeedMps;
@@ -425,7 +429,7 @@ public sealed class AiPilot
     // cruising above 250 mph is faster than anything the decoded ceiling lets an escort ask for,
     // so under it the escort throttles back while behind and the station is never regained.
     private FlightInput FlyEscort(FlightModel model, float dt, AiEscort escort,
-        FlightController? quarry)
+        PursuitQuarry? quarry)
     {
         var leader = escort.Leader!;
         var station = escort.Next(
@@ -438,13 +442,13 @@ public sealed class AiPilot
                 Velocity = leader.WorldVelocity,
                 IsPlayer = leader.IsHumanPiloted,
             },
-            quarry is null
+            quarry is not { } prey
                 ? null
                 : new EscortQuarry
                 {
-                    Position = quarry.WorldPosition,
-                    Backward = -quarry.NoseDirection,
-                    Velocity = quarry.WorldVelocity,
+                    Position = prey.Position,
+                    Backward = -prey.Nose,
+                    Velocity = prey.Velocity,
                 },
             out var aimVelocity);
 
@@ -460,12 +464,12 @@ public sealed class AiPilot
     // speed. ⚠ That override is a remake-only assist, not the original's lay-off, which flies the
     // same table with a flat 0.8 lever floor and no speed match — keep it, landed and playtested.
     private FlightInput FlyLayOff(FlightModel model, float dt, AiModeMachine machine,
-        FlightController pursuer)
+        in PursuitQuarry pursuer)
     {
         TargetHeadingDeg = machine.LayOffHeadingDeg;
         TargetAltitude = machine.LayOffAltitude;
         var input = Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
-        float desired = machine.SixthSenseFactor * pursuer.WorldVelocity.Length();
+        float desired = machine.SixthSenseFactor * pursuer.Velocity.Length();
         float step = LayOffThrottleRatePerS * dt;
         Throttle = model.Speed > desired
             ? Mathf.Max(LayOffMinThrottle, Throttle - step)

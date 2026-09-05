@@ -12,12 +12,23 @@ public struct RankedTargetCandidate
     /// <summary>World position.</summary>
     public Vector3 Position;
 
-    /// <summary>The candidate's nose axis (the target-facing term). Zero = no facing
-    /// information, which reads as the unfavourable (closing) arm.</summary>
-    public Vector3 Forward;
+    /// <summary>The candidate's world velocity, m/s: the facing term dots it against the offset
+    /// from the scorer, so a candidate flying AT the scorer is the unfavourable arm and a
+    /// stationary one (a turret, a parked structure) the favourable one. Decoded as the
+    /// candidate object's velocity virtual, not its nose (<c>FUN_00421ad0</c>).</summary>
+    public Vector3 Velocity;
 
     /// <summary>Whether this candidate is a human-piloted aircraft — the 0.7 weight case.</summary>
     public bool IsPlayer;
+
+    /// <summary>Whether this candidate is an aircraft flying in <c>wingman</c> mode (a netless
+    /// formation escort), the +0.4 case: the engine de-prioritises enemy wingmen.</summary>
+    public bool IsWingman;
+
+    /// <summary>Whether this candidate is a zeppelin gasbag, the −0.5 case. ⚠ The caller admits
+    /// a gasbag only to a pilot with live gasbag ordnance (docs/org/aiPilot.md "The gasbag gate is
+    /// ordnance, checked at admission"); the scorer never sees one otherwise.</summary>
+    public bool IsGasbag;
 
     /// <summary>The objectiveBias term, already in rank units
     /// (<see cref="AiTargetRanking.ObjectiveBiasFor"/>).</summary>
@@ -56,12 +67,14 @@ public readonly struct TargetScore
     public float Rank { get; }
 }
 
-/// <summary>The decoded target-ranking formula (docs/architecture.md, docs/formats/ai-rosters.md):
-/// <c>rank = weight × 1200 + distance + objectiveBias</c>, MINIMISED, player base weight 0.7,
-/// others 1.0, ±0.2 terms for bearing/altitude sign/facing, <c>1e21</c> beyond the activation
-/// radius. <see cref="SelectBest"/> prefers a candidate no ally already holds
-/// (<see cref="RankedTargetCandidate.AlliedAttackers"/>), falling back to the overall best when
-/// the pool is exhausted — the design's deconfliction, a minimum reading.</summary>
+/// <summary>The decoded target-ranking formula (<c>FUN_00421ad0</c>, docs/org/aiPilot.md "Target
+/// acquisition"): <c>rank = weight × 1200 + distance + objectiveBias</c>, MINIMISED, player base
+/// weight 0.7, others 1.0, +0.4 on a wingman, ±0.2 terms for ahead/behind, altitude sign and
+/// closing, −0.5 on a gasbag, <c>1e21</c> beyond the activation radius. <see cref="SelectBest"/>
+/// prefers a candidate no ally already holds (<see cref="RankedTargetCandidate.AlliedAttackers"/>),
+/// falling back to the overall best when the pool is exhausted — the design's deconfliction, a
+/// minimum reading. ⚠ Unported: the activation volume is the engine's cylinder (horizontal radius
+/// and an altitude band); this scores a sphere.</summary>
 public static class AiTargetRanking
 {
     /// <summary>The decoded weight scale: one weight unit is worth 1200 m of distance.</summary>
@@ -76,8 +89,20 @@ public static class AiTargetRanking
     /// <summary>Every other target's base weight.</summary>
     public const float BaseWeight = 1f;
 
-    /// <summary>Magnitude of the bearing / altitude-sign / target-facing weight terms.</summary>
+    /// <summary>Magnitude of the ahead-behind / altitude-sign / closing weight terms.</summary>
     public const float TermWeight = 0.2f;
+
+    /// <summary>The ahead/behind term's deadband, in METRES of the un-normalised offset dotted
+    /// with the scorer's forward: past +0.5 ahead adds the term, past −0.5 behind subtracts it,
+    /// and the half-metre between adds nothing. Not a cone.</summary>
+    public const float AheadDeadbandM = 0.5f;
+
+    /// <summary>The weight added against a candidate in <c>wingman</c> mode, 480 m under
+    /// minimisation.</summary>
+    public const float WingmanWeight = 0.4f;
+
+    /// <summary>The weight taken off a zeppelin gasbag, 600 m in its favour.</summary>
+    public const float GasbagWeight = 0.5f;
 
     /// <summary>The engine's own out-of-activation score: never picked.</summary>
     public const float NotRanked = 1e21f;
@@ -87,11 +112,6 @@ public static class AiTargetRanking
     /// called this and the human rigs are <c>player1</c>/<c>player2</c>, so matching the node name
     /// alone would leave 157 of the install's 697 authored bias entries dead.</summary>
     public const string PlayerRole = "player";
-
-    /// <summary>cos 60° — the design's 120° front arc, the favourable bearing (the three-way
-    /// front/rear/beam split the design describes is collapsed to the readout's binary ± term;
-    /// the arc width is the design's, the collapse is an assumption).</summary>
-    public const float FrontArcCos = 0.5f;
 
     /// <summary>An authored <c>rating_biases</c> weight resolves to rank units directly and
     /// NEGATED, so a positive bias attracts under minimisation (docs/formats/ai-rosters.md).
@@ -106,8 +126,10 @@ public static class AiTargetRanking
     /// <c>rating_biases</c>: it applies whether or not the roster names the turret at all.</summary>
     public const float TurretBiasFlat = 37.5f;
 
-    /// <summary>One candidate's rank and its inputs. <paramref name="ownForward"/> must be
-    /// unit-length (a basis column).</summary>
+    /// <summary>One candidate's rank and its inputs, the decoded arithmetic term for term.
+    /// <paramref name="ownForward"/> must be unit-length (a basis column). ⚠ Ahead is the
+    /// UNFAVOURABLE arm and so is being above the scorer: the engine prefers the target on its
+    /// tail and below it. Do not "fix" either sign to the design document's front-arc reading.</summary>
     public static TargetScore Score(Vector3 ownPos, Vector3 ownForward, float activationRange,
         in RankedTargetCandidate c)
     {
@@ -116,15 +138,21 @@ public static class AiTargetRanking
         if (dist > activationRange)
             return new TargetScore(0f, dist, c.ObjectiveBias, NotRanked);
         float weight = c.IsPlayer ? PlayerWeight : BaseWeight;
-        var toDir = dist > 1e-3f ? to / dist : ownForward;
-        // Bearing: inside the front arc is the favourable arm (design: front arc highest).
-        weight += ownForward.Dot(toDir) >= FrontArcCos ? -TermWeight : TermWeight;
-        // Altitude sign: below is the favourable arm (design: targets below above targets above).
-        weight += c.Position.Y < ownPos.Y ? -TermWeight : TermWeight;
-        // Target facing: facing away is the favourable arm (design: moving away above closing).
-        weight += c.Forward.LengthSquared() > 1e-6f && c.Forward.Dot(to) > 0f
-            ? -TermWeight
-            : TermWeight;
+        if (c.IsWingman)
+            weight += WingmanWeight;
+        // Ahead/behind on the raw offset: a half-metre deadband, then ±0.2 either side.
+        float ahead = to.Dot(ownForward);
+        if (ahead > AheadDeadbandM)
+            weight += TermWeight;
+        else if (ahead < -AheadDeadbandM)
+            weight -= TermWeight;
+        // Altitude sign: strictly above the scorer is the unfavourable arm, level counts as below.
+        weight += to.Y > 0f ? TermWeight : -TermWeight;
+        // Closing: a candidate whose velocity points back at the scorer is the unfavourable arm;
+        // a stationary one, or one flying away, the favourable.
+        weight += c.Velocity.Dot(to) < 0f ? TermWeight : -TermWeight;
+        if (c.IsGasbag)
+            weight -= GasbagWeight;
         return new TargetScore(weight, dist, c.ObjectiveBias,
             weight * WeightScale + dist + c.ObjectiveBias);
     }

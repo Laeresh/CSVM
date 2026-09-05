@@ -1180,7 +1180,7 @@ internal static class CampaignRosterSuites
             var candidate = new RankedTargetCandidate
             {
                 Position = origin + (fwd * ring),
-                Forward = fwd,
+                Velocity = fwd * 60f,
                 IsPlayer = rig.IsHumanPiloted,
                 ObjectiveBias = 0f,
             };

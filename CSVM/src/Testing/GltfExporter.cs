@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Utils;
@@ -5,14 +6,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>Exports the viewer plane's <c>Node3D</c> subtree to a glTF file — mesh + the currently
-/// painted livery texture, with the current damage state baked in. Static geometry only: no
-/// animation, and the live particle emitters (smoke/fire/trails) are not part of the tree it reads.
+/// <summary>Exports a <c>Node3D</c> subtree to a glTF file. Static geometry only: no animation,
+/// and live particle emitters (smoke/fire/trails) are not part of the tree it reads.
 ///
-/// <para>Two triggers share <see cref="Export"/>: the <c>--export-gltf=</c> CLI one-shot, driven by
-/// the frame-stepped <see cref="Tick"/> state machine (waits for the plane to build, writes, quits),
-/// and the interactive F10 key. The work happens on a throwaway <c>Duplicate()</c> so the live scene
-/// is never mutated — the golden screenshots must be identical after an export.</para></summary>
+/// The viewer plane goes through the <c>--export-gltf=</c> CLI one-shot and F10; NodeLab can
+/// export its current selection. The work happens on a throwaway <c>Duplicate()</c>, so the live
+/// scene is never mutated.</summary>
 public sealed class GltfExporter
 {
     // The export still owed from the launch spec, cleared once written; null when no --export-gltf=.
@@ -31,7 +30,7 @@ public sealed class GltfExporter
     {
         if (plane == null || string.IsNullOrEmpty(path))
         {
-            GD.PrintErr("gltf export failed: no plane or no path");
+            GD.PrintErr("gltf export failed: no node or no path");
             return Error.InvalidParameter;
         }
         // Duplicate so material overrides and node pruning below never touch the live tree. The
@@ -58,6 +57,23 @@ public sealed class GltfExporter
         return err;
     }
 
+    /// <summary>Exports <paramref name="node"/> to a timestamped GLB in the git-ignored
+    /// <c>Exports/</c> directory beside the Godot project. <paramref name="nodeName"/> becomes a
+    /// filesystem-safe portion of the filename.</summary>
+    public static Error ExportToExports(Node3D? node, string nodeName)
+    {
+        if (node == null)
+        {
+            return Export(null, "");
+        }
+        string projectDir = ProjectSettings.GlobalizePath("res://");
+        string directory = Path.GetFullPath(Path.Combine(projectDir, "..", "Exports"));
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory,
+            $"crimsonskies_{SafeFileName(nodeName)}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.glb");
+        return Export(node, path);
+    }
+
     /// <summary>The CLI one-shot, ticked from the tail of <c>_Process</c>: wait for the session to
     /// land a plane, export it once, then quit with the write's success as the exit code (so a
     /// scripted run fails loudly). No-op once fired or when no <c>--export-gltf=</c> was given.</summary>
@@ -75,7 +91,7 @@ public sealed class GltfExporter
     // Bake the current damage/flare state and drop non-geometry: free every hidden
     // `Node3D` (torn/healthy panel twins and off wing-flares are toggled purely by
     // `Visible`) and every point-sprite `"lights"` instance, then convert each surviving
-    // mesh's shader skins to a `StandardMaterial3D` glTF can serialize.
+    // mesh's shader skins to a double-sided `StandardMaterial3D` glTF can serialize.
     private static void BakeAndConvert(Node copy)
     {
         var toFree = new List<Node>();
@@ -110,31 +126,37 @@ public sealed class GltfExporter
         }
     }
 
-    // Replace each surface's custom `ShaderMaterial` skin with a
-    // `StandardMaterial3D` that glTF understands: the painted `albedo_tex` as the albedo
-    // map, the shader's `albedo_color` tint when present, and vertex color as albedo so the
-    // baked per-vertex shading survives into glTF's `COLOR_0`. `StandardMaterial3D`
-    // skins (flares, magenta-missing fallbacks) already serialize and pass through untouched.
+    // Replace each surface's custom `ShaderMaterial` skin with a double-sided
+    // `StandardMaterial3D` glTF understands. Duplicate an existing base material before changing
+    // its culling, because resources are shared with the live tree.
     private static void ConvertMaterials(MeshInstance3D mesh)
     {
         int surfaces = mesh.GetSurfaceOverrideMaterialCount();
         for (int i = 0; i < surfaces; i++)
         {
-            if (mesh.GetActiveMaterial(i) is not ShaderMaterial shader)
+            if (mesh.GetActiveMaterial(i) is ShaderMaterial shader)
+            {
+                var std = new StandardMaterial3D
+                {
+                    AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
+                    VertexColorUseAsAlbedo = true,
+                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                };
+                var tint = shader.GetShaderParameter("albedo_color");
+                if (tint.VariantType == Variant.Type.Color)
+                {
+                    std.AlbedoColor = tint.As<Color>();
+                }
+                mesh.SetSurfaceOverrideMaterial(i, std);
+                continue;
+            }
+            if (mesh.GetActiveMaterial(i) is not BaseMaterial3D source)
             {
                 continue;
             }
-            var std = new StandardMaterial3D
-            {
-                AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
-                VertexColorUseAsAlbedo = true,
-            };
-            var tint = shader.GetShaderParameter("albedo_color");
-            if (tint.VariantType == Variant.Type.Color)
-            {
-                std.AlbedoColor = tint.As<Color>();
-            }
-            mesh.SetSurfaceOverrideMaterial(i, std);
+            var copy = (BaseMaterial3D)source.Duplicate();
+            copy.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+            mesh.SetSurfaceOverrideMaterial(i, copy);
         }
     }
 
@@ -160,5 +182,19 @@ public sealed class GltfExporter
             return path;
         }
         return Path.GetFullPath(path);
+    }
+
+    private static string SafeFileName(string nodeName)
+    {
+        if (string.IsNullOrWhiteSpace(nodeName))
+        {
+            return "node";
+        }
+        var safe = new System.Text.StringBuilder(nodeName.Length);
+        foreach (char character in nodeName)
+        {
+            safe.Append(Array.IndexOf(Path.GetInvalidFileNameChars(), character) >= 0 ? '_' : character);
+        }
+        return safe.Length == 0 ? "node" : safe.ToString();
     }
 }

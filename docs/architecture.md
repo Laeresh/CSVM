@@ -128,6 +128,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the per-pylon gates, an aim cosine tighter than the gun's, the lockout, the per-pylon lead solve.
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch: the talker roll, the bearing halving, the broadcast election, the damage tiers.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula, minimised over weight, distance and objective bias, plus the deconfliction pick.
+- `src/Flight/PursuitQuarry.cs` — the flight law's one-step snapshot of the standing target of any class: an aircraft, a turret or a zeppelin part.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints, nose-picked edges and along-leg arrival; shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/DangerZoneRibbon.cs` — one `dzpathN` route as a metre-parameterised spline with lanes, a pilot's cursor on it, and the rail integrator.
 - `src/Flight/DangerZoneRibbons.cs` — a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.
@@ -353,7 +354,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
 - `src/UI/DebugKillTarget.cs` — the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
 - `src/UI/SelectionService.cs` — the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
-- `src/UI/NodeLab.cs` — the node lab (N): a lazy `cs_name` tree, search, frame and hide, a dependency readout and a destructibles view.
+- `src/UI/NodeLab.cs` — the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/WorldDamageLab.cs` — the world damage lab (F5): an HP slider with kill and reset on the selection's own destructible pool.
 - `src/UI/OrbitCamera.cs` — the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.

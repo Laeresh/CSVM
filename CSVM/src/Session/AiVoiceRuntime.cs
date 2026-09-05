@@ -122,7 +122,7 @@ public sealed partial class AiVoiceRuntime : Node
         // attack on a human — the attacker's WA-Attack, and the flight's computed bearing
         // call-out in the warned player's own frame.
         if (to == AiMode.Pursue && from == AiMode.Patrol
-            && ai.Pilot?.Gunner?.Target is { IsHumanPiloted: true } quarry)
+            && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: true } quarry)
         {
             Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.WaAttack, _now));
             int bearing = AiVoiceDispatcher.BearingTriggerFor(
@@ -132,7 +132,7 @@ public sealed partial class AiVoiceRuntime : Node
 
         // A pursuer's failed sixth-sense (tail) check stuns it; its AI target taunts.
         if (to == AiMode.Stunned && from is AiMode.Pursue or AiMode.LayOff
-            && ai.Pilot?.Gunner?.Target is { IsHumanPiloted: false } evader
+            && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: false } evader
             && _dispatcher.Find(evader.PlayerIndex) != null)
         {
             Play(_dispatcher.Dispatch(evader.PlayerIndex, AiVoiceDispatcher.TaFailTail, _now));

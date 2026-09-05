@@ -428,7 +428,7 @@ what happens when you touch it, and neither answers "what is this object".
 
 ## src/UI/NodeLab.cs
 The node lab (key N) in `--freecam` and `--anim-lab`: the world's `cs_name` tree, a search box,
-per-node frame and hide, a dependency readout for the current selection (anim defs, destructible
+per-node frame, hide and glTF export into `Exports/`, a dependency readout for the current selection (anim defs, destructible
 pools, geometry and textures, colliders) and a destructibles view with coverage columns, plus
 top-level branches for props parked beside the world content. `--debug-nodelab` is the scripted
 twin. A row's text and colour follow live visibility, re-read on the panel's own status cadence.

@@ -26,10 +26,9 @@ internal static class WorldAndToolSuites
         ("cblock1", false), ("bldg1", false), ("wtr00000", false),
     };
 
-    // Exports a built plane to a temp .glb and asserts the file lands and re-imports with at least one
-    // textured mesh: the round trip the viewer's --export-gltf=/F10 path relies on, including that the
-    // shader skins convert to a glTF-serializable material.
-    [Suite("gltf-export", "the viewer plane exports to glTF and re-imports with a textured mesh")]
+    // Exports a built plane to a temp .glb and asserts the file lands and re-imports with textured,
+    // double-sided meshes: the round trip the viewer's export paths rely on.
+    [Suite("gltf-export", "the viewer plane exports to glTF with textured, double-sided meshes")]
     internal static void GltfExport(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -63,6 +62,8 @@ internal static class WorldAndToolSuites
                 ctx.Check(scene != null, $"re-imported scene has a Node3D root");
                 int textured = scene == null ? 0 : CountTexturedMeshes(scene);
                 ctx.Check(textured >= 1, $"re-imported textured meshes count={textured}");
+                int doubleSided = scene == null ? 0 : CountMeshesWithCullMode(scene, BaseMaterial3D.CullModeEnum.Disabled);
+                ctx.Check(doubleSided >= 1, $"re-imported double-sided meshes count={doubleSided}");
                 scene?.Free();
             }
         }
@@ -642,6 +643,28 @@ internal static class WorldAndToolSuites
         foreach (var child in node.GetChildren())
         {
             count += CountTexturedMeshes(child);
+        }
+        return count;
+    }
+
+    internal static int CountMeshesWithCullMode(Node node, BaseMaterial3D.CullModeEnum cullMode)
+    {
+        int count = 0;
+        if (node is MeshInstance3D mesh)
+        {
+            for (int surface = 0; surface < mesh.GetSurfaceOverrideMaterialCount(); surface++)
+            {
+                if (mesh.GetActiveMaterial(surface) is not BaseMaterial3D { CullMode: var actual } || actual != cullMode)
+                {
+                    continue;
+                }
+                count++;
+                break;
+            }
+        }
+        foreach (var child in node.GetChildren())
+        {
+            count += CountMeshesWithCullMode(child, cullMode);
         }
         return count;
     }
