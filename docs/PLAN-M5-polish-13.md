@@ -1017,13 +1017,56 @@ rather than to formalise.
 
 ## E41 ☐ Closing sortie: every landed item judged at the controls, and `BL-706` and `BL-696` answered
 
-**Goal.** The author flies and clicks the run's ten landed items, and answers the two this run
-dropped because they need eyes or a decision.
+**Goal.** The author clicks the run's twelve landed items, and answers the two this run dropped
+because they need eyes or a decision.
 
 **Evidence (confidence: n/a, since this item is the judgement rather than a claim).**
 
-**Approach.** One sitting over the menu, in the order the waves landed. Per item, the acceptance is
-its own **Verify** line's at-the-controls half. Then the two dropped items:
+**Approach.** One sitting over the menu. Ten of the twelve want eyes; the list below is the whole
+of it, each item's own **Verify** line reduced to what only a human can do.
+
+**Two need nothing here.** `B11`'s aid script is proven by the two Original shots it produced and
+by the suites that run its strings, and `F52`'s refusal is an exit code and a log line a probe
+already reads. Neither is worth a minute at the controls.
+
+*The hangar (`A1`, `A2`, `A3`, `F51`), all on one screen pair:*
+
+1. `A1` **ARMOR, and it is a number rather than a look.** One press on a zone should add 5 units,
+   $20 and 20 lb. Read the dollars and pounds against the original's own ARMOR screen, never
+   against what the remake now says, since both would agree with each other and still be wrong.
+2. `A2` **ARMOR's two wings.** Stepping either wing moves both. Then load a plane saved with
+   unequal wings and confirm it stays unequal until a wing is stepped, rather than being levelled
+   on load.
+3. `A3` **The slot cap.** With twenty bought planes, the purchase is refused in the original's own
+   words. Sell one back and exactly one more can be bought. Awards should not count against it.
+4. `F51` **The same cap, one step earlier.** Purchase Now is drawn greyed with the limit as its
+   reason before it is pressed, and goes live again when a plane is sold.
+
+*The campaign boards (`B12`, `C21`, `C22`):*
+
+5. `B12` **AMMO SELECTION fills both panes.** A gun row and a rocket row each fill their own half
+   under AMMO DESCRIPTION and ROCKET DESCRIPTION, and an open rocket list does not cover the lower
+   pane. On ACCEPT or CANCEL both panes keep their subject and the hint goes to the band.
+6. `C21` **Message-box icons.** The export notice draws `!`; the DELETE PLAYER confirm and the
+   hangar's sell confirm draw `?`. The frame comes off the button mask, so a wrong icon here means
+   a call site took the wrong one, not that the rule is wrong.
+7. `C22` **Both scrapbook tabs take a click**, including the one the card is not showing, which was
+   the dead row. Every other row on that page should answer too.
+
+*The chrome (`D31`, `D32`, `D33`):*
+
+8. `D31` **The profile name box, by ear.** One accepted letter gives `ENTERTEXT`; one punctuation
+   key gives `ENTERTEXT_ERROR`; one key past the length cap gives `ENTERTEXT_ERROR` again.
+9. `D32` **A second pad on Options, Controls**, which is a raw device read no headless run can
+   make. Start on an unclaimed pad raises player 2 on the stepper; rebinding on player 2 must
+   capture from the joining pad and not player 1's; holding Start while entering the screen must
+   join nobody; unplugging the joined pad must drop its row rather than strand a seat with nothing
+   to press. Then relaunch and confirm player 2 flies the rebound control.
+10. `D33` **The quit fade, in both presentations.** Watch the last instant before the window goes:
+    black, never the grey-blue-over-brown gradient. Nothing headless can photograph that frame,
+    because the engine draws it after the last managed callback.
+
+Then the two dropped items:
 
 - **`BL-706`** (the PLANE NAME dialog sits off-centre). Compare the drawn pane against the
   original's own PLANE NAME screen **before moving anything**. The authored coordinates are
