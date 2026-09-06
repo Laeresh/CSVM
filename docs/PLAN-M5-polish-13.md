@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — The hangar record
 
 1. ☑ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
-2. ☐ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
+2. ☑ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
 3. ☐ `BL-650` The campaign hangar's decoded slot cap is not enforced
 
 ### Wave B — The campaign boards' panes, and the shots that pin them
@@ -226,7 +226,43 @@ economy table alone: it is one of the two readings in dispute, not the arbiter. 
 240 units versus 48 rows is the same aeroplane under two scales, so a "correct-looking" total
 proves nothing on its own.
 
-## A2 ☐ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
+## A2 ☑ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
+
+**Landed.** The four rows stay and the two wing rows are coupled, so a press on either wing writes
+both zone dwords and both boxes redraw. The rule is one method, `HangarFeature.SetZoneUnits`, which
+takes a plane, a zone 0-3 and a press count, writes nose and tail alone and writes both wings for
+either wing zone. Built-in's `HangarArmourPage.SetUnits` and Original's `HangarFeature.SetArmour`
+(the setter behind the tab's four `AR_D_POINT` combo boxes) both go through it, so the two
+presentations cannot drift apart. `SetArmour` now reports whether any zone moved rather than
+whether the picked zone moved, which is what redraws the second box when a pick only levels a pair
+that disagreed, and `CostWithArmour` prices a wing row as the pair it buys, two presses to a row
+rather than one.
+
+**The coupling could not sit on the page.** `MenuNamespaceDependencyTests` enforces that no type in
+the shared `CSVM.UI.Menu` namespace names a presentation, and Original's ARMOR tab sets armour
+through the shared `HangarFeature`, so a rule owned by `HangarArmourPage` made the shared feature
+reach into Built-in's presentation; the test caught it on the first run. `HangarFeature` is the
+seam both screens already meet at and is not the model, so the coupling still lands where the item
+put it: out of `CustomPlaneDef`, which keeps its four independent fields and still clamps them one
+at a time.
+
+**The record keeps two wing dwords and nothing repairs them.** A saved plane with unequal wings
+loads as it was stored, each row shows its own figure, and only a press on a wing row levels them.
+`HangarArmourPageTests.AnUnequalSavedPlaneKeepsItsWingsUntilOneIsStepped` stores a plane at 2 and 9
+presses, loads it through `StartFromSaved`, reads "Left Wing: 10 units" beside "Right Wing: 45
+units", then steps the left row and finds both at 3 with the file on disk untouched. The PURCHASE
+rows needed nothing: they read the same store, price each armoured zone from it and list only the
+non-zero ones, so a coupled press reaches them as both wing rows moving.
+
+Callback 2247's SET arm was read while `A1` was in the binary. It dispatches on the zone and writes
+exactly one dword per box (`0x0040acc2`, `0x0040acd6`, `0x0040acea`, `0x0040acfe`), so the pairing
+the author reports sits above the callback, in the ARMOR tab's own wiring, and no row-count decode
+was owed. `docs/org/hangar.md` records that under the list protocol, beside the four `AR_D_POINT`
+boxes the layout draws; `A1`'s Armour paragraph is untouched.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Stepping the wing armour on the ARMOR screen moves both wings, as the original's screen
 does, and the PURCHASE rows agree with it.

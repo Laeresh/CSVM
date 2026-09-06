@@ -38,6 +38,15 @@ back". Fixed counts: gun dropdown 11 (`0x0040be24`), hardpoint dropdown 5 (`0x00
 armour dropdown 13. The PURCHASE list's row counts are dynamic (equipped-gun count from
 `FUN_0040fdf0`, non-zero armour zones, non-empty wings).
 
+**The ARMOR tab draws four boxes over three independent values.** The layout gives the tab one
+combo box per zone (`AR_D_POINT0` to `AR_D_POINT3`: nose, tail, left wing, right wing), and the
+two wing boxes move together, so changing either changes the other. That pairing is not in
+callback 2247, whose SET arm writes exactly one zone dword per box (`0x0040acc2`, `0x0040acd6`,
+`0x0040acea`, `0x0040acfe`), so it lives above the callback in the tab's own wiring. The remake
+holds it in `HangarFeature.SetZoneUnits`, which both presentations set armour through. The record
+still keeps four dwords, which is what lets the mission side damage one wing at a time, and a
+saved plane whose wings disagree keeps them until a wing box is set.
+
 ## Callback map
 
 All four screens, id → handler (widget dispatcher unless noted):

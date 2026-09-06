@@ -1,4 +1,5 @@
 using CSVM.Flight;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -8,7 +9,9 @@ namespace CSVM.UI;
 /// focused zone the way the original's 13-row dropdown does, 0 to 60 in fives: what the screen
 /// shows is the press count times five, and row 0 of that dropdown is langui 1165 "None" rather
 /// than a count (callback 2246 at <c>0x0040b7bd</c> pushes 1165 for index 0 and format 1170 with
-/// <c>index*5</c> for the rest). One press therefore buys five units, at $20 and 20 lb.
+/// <c>index*5</c> for the rest). One press therefore buys five units, at $20 and 20 lb. The two
+/// wing rows are held equal by <see cref="HangarFeature.SetZoneUnits"/>, the shared rule Original's
+/// pair of combo boxes obeys too, which is why four rows show where three values move.
 /// </summary>
 public sealed class HangarArmourPage : HangarPage
 {
@@ -72,14 +75,5 @@ public sealed class HangarArmourPage : HangarPage
         _ => Scratch.ArmourRightWing,
     };
 
-    private void SetUnits(int row, int units)
-    {
-        switch (row)
-        {
-            case 0: Scratch.ArmourNose = units; break;
-            case 1: Scratch.ArmourTail = units; break;
-            case 2: Scratch.ArmourLeftWing = units; break;
-            default: Scratch.ArmourRightWing = units; break;
-        }
-    }
+    private void SetUnits(int row, int units) => HangarFeature.SetZoneUnits(Scratch, row, units);
 }
