@@ -729,7 +729,11 @@ fields (build version, what happened, what you did, the log file, your machine, 
 two required checkboxes (searched the existing issues; owns a retail copy and extracted their own
 data), and one optional field for screenshots and `BUILD-INFO.txt`. Both YAML files parse under
 `yaml.safe_load`, and the `required` flags read back as set on every one of those fields, which is
-the half of the Verify step a rendered page shows only by refusing to submit.
+the half of the Verify step a rendered page shows only by refusing to submit. The other half is the
+rendered check, and the form was then exercised in the GitHub UI on the still-private repository
+with Issues on and Discussions off: the required fields cannot be skipped, the two pre-filled boxes
+carry their templates, the security link sits on the chooser beside the form, and the issue the form
+produces reads correctly.
 
 Each field the form requires traces to the item that made it answerable. The version field names
 the two surfaces B11 built, the log's first line (`csvm version=...`) and the menu's bottom-right
@@ -782,12 +786,10 @@ that instruction is unaffected by outside pull requests. Encoding gate clean (`C
 no mojibake); nothing under `CSVM/` was touched, so the complete `RunTests.ps1` is not this change's
 gate.
 
-**Owed in the GitHub UI.** Before the flip: turn Issues on, leave Discussions off, open a test issue
-against the form on the still-private repository, confirm the required fields cannot be skipped and
-the result reads well, and close it. At the flip, not before: **private vulnerability reporting is
-offered on public repositories only** (Settings, "Security and quality", Advanced Security), so the
-channel `SECURITY.md` and the chooser's security link both point at cannot be turned on while the
-repository is private. E42 carries that step. `SECURITY.md` therefore states the fallback in its own
+**Owed at the flip, not before.** **Private vulnerability reporting is offered on public
+repositories only** (Settings, "Security and quality", Advanced Security), so the channel
+`SECURITY.md` and the chooser's security link both point at cannot be turned on while the repository
+is private. E42's Approach carries that step. `SECURITY.md` therefore states the fallback in its own
 text rather than relying on the button existing, since a security page whose only route is a dead
 link is worse than one that names a second one. The labels `needs-triage`, `needs-info`,
 `ready-for-agent`, `ready-for-human` and `wontfix` do not exist in the repository yet; the form
@@ -799,17 +801,17 @@ applies only `bug`, which every repository has by default.
 name, the checksum and the notes all come from one run.
 
 **Evidence (confidence: traced).** `ExportRelease.ps1` builds, exports, stages the payload and
-writes `.scratch\CSVM.zip`, and stops there. `gh` is not installed on this machine (`where.exe gh`
-finds nothing). `.gitignore` ignores `*.zip` as a class, which does not affect release assets, since
-they are uploaded rather than committed.
+writes `.scratch\CSVM.zip`, and stops there. `gh` is installed (`winget install GitHub.cli`), but a
+shell started before that install does not have it on `PATH`, so open a fresh one and check
+`gh auth status` before assuming it is authenticated. `.gitignore` ignores `*.zip` as a class, which
+does not affect release assets, since they are uploaded rather than committed.
 
 **Approach.** `PublishRelease.ps1` at the repo root: read the version from B11's single source, run
 `ExportRelease.ps1`, confirm the produced zip's name matches, compute its SHA-256, create the
 annotated tag on the commit that was built, and call
 `gh release create <tag> <zip> --title ... --notes-file <notes>`, with no pre-release flag
 (Decision 4). It refuses to run on a dirty tree, and refuses if `tools/mech3ax`'s `cs-anim` is dirty
-or ahead of its origin, so both recorded provenance facts are true. Install and authenticate `gh`
-first (`winget install GitHub.cli`).
+or ahead of its origin, so both recorded provenance facts are true. Authenticate `gh` first.
 
 **Model recommendation.** medium. Ordinary scripting with one sharp edge: it creates a public,
 hard-to-retract artifact.
