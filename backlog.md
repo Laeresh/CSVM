@@ -1636,8 +1636,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   so the decoded ramp assertions still read what the decode describes. *Cross-refs:*
   `docs/org/music.md` for the fade rates the level does not affect.
 
-- `BL-079` `[Feature]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
-  the original's IA traffic is clearly audible in the reference video.
+- `BL-079` `[Feature]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **Positional 3D audio for another aircraft's WEAPONS; its engine already has one.**
+  The original's IA traffic is clearly audible in the reference video.
+  ⚠ **The entry's original claim, that all sound is own-plane and non-positional, is false and was
+  corrected by `PLAN-public-release` A1's re-verification.** Every AI aircraft carries a positional
+  engine and damaged-engine loop with its own distance cull (`AiEngineAudio`, wired at
+  `CSVM/src/Flight/AiFlightAssembler.cs:210`), and world emitters are positional through
+  `WorldSounds`. What has no positional voice is another aircraft's weapons: `StartGunLoop` and the
+  one-shots sit on `FlightAudio`, the own-ship path
+  (`CSVM/src/Flight/FlightAudio.cs:59,143-166`), and `AiEngineAudio`'s own contract says it carries
+  the two engine slots and deliberately nothing else. That is what is left of this item.
   ⚠ **The "with Doppler" half of that claim is now suspect and must not be built against.** This
   entry originally read "clearly audible with Doppler"; that was an impression off a listen, never a
   measurement. `CAP-09` measured the original's *world* emitters and found **no Doppler at all**
@@ -1733,6 +1741,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reaches the audio through the decoded mask test and needs no second path.
   *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
   (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
+
+- `BL-770` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **An exported build
+  launched by double-clicking `CSVM.exe` is silent, and nothing on screen says why.**
+  *Evidence (traced, found by `PLAN-public-release` A1):* `Launcher.MasterVolumeDefault` is `0`
+  (`CSVM/src/Session/Launcher.cs:57`) so that a scripted or agent run never sounds by accident, and
+  `ApplyMasterVolume` (`:1568-1585`) resolves the master gain from `--volume=` first, then the
+  `audio.volume` config key, then that default. `RunGame.ps1` and `RunDev.ps1` pass `--volume=1.0`,
+  which is why the silence has never been seen in development, and `ExportRelease.ps1`'s
+  `$ReleaseFiles` carries no `config.json` and no launch wrapper, so a recipient following
+  `packaging/README.md`'s "double-click `CSVM.exe`" gets a full session with no sound at all.
+  `Config.Load` reads `res://config.json` through `File.Exists` on the globalized path, so a file
+  packed into the `.pck` would not answer either. *Fix shape:* one switch on the same seam that
+  tells an exported run from a repo run, so the export defaults to audible while a repo run keeps
+  its silent default; the flag and the config key still beat it. *⚠ Traps:* do not raise
+  `MasterVolumeDefault` itself, which is what keeps agent and golden runs quiet, and do not ship a
+  `config.json` as the fix, since it is git-ignored and would make the payload depend on an
+  untracked file. *Playtest after fix:* run the exported build from a bare folder with no
+  arguments and listen. *Cross-refs:* `BL-455` (there is no in-game level control either),
+  `BL-391`; `PLAN-public-release` C21, which owns the first run on someone else's machine.
 
 ## Cameras & views
 
@@ -2792,12 +2819,16 @@ usual.
   item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
   by installing nitro on every wingman, which would contradict the roster data.
 
-- `BL-545` `[Bug]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The landing animation plays with no hook, the aeroplane too
-  high, and unfolded wings.** Seen at the controls on CM02's auto-land: the landing hook was not
-  deployed, the aeroplane sat too high on the trapeze, and a Balmoral folds its wings in the
-  original's landing cutscenes. *Fix shape:* three separate reads of the hookup definition and the
-  airframe's own nodes (the hook and the wing-fold are per-airframe animated parts, the height is
-  the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `PLAN-M5-polish-2` C10 and C12.
+- `BL-545` `[Bug]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The fixed landing pose is owed a look at the controls.**
+  *Evidence:* the report was CM02's auto-land seen with no hook deployed, the aeroplane too high on
+  the trapeze, and a Balmoral's wings unfolded where the original folds them. **The fix landed**
+  (`git log --grep=BL-545`): the hookup definition now reaches the flown airframe's own subtree, so
+  its per-airframe hook extend and wing fold run instead of every `IF NODE_ACTIVE` arm reading
+  false, and the presence flag moved off the airframe node whose visibility is the ACTIVE bit those
+  arms test. What is owed is the same auto-land watched again. *Playtest after fix:* CM02's
+  auto-land, from outside: the hook extends, the aeroplane sits on the trapeze rather than above
+  it, and a Balmoral folds its wings. *Cross-refs:* `BL-544`; the closing commit carries the
+  three-fault diagnosis.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen

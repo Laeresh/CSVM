@@ -13,11 +13,10 @@ not require a terminal, a stated renderer floor, a public repository whose front
 own tree, the GitHub surface that receives strangers, a repeatable publish path, and the
 clean-machine test that proves all of it before visibility flips.
 
-Scope is release engineering plus exactly one game fix. `backlog.md` holds 132 open items, 34 of
-them tagged `[Impact: high]`; only bugs meeting the bar in Decision 3 block the release, and A1's
-triage is what applies that bar. **No backlog item was re-verified still-open in this session**, so
-A1 carries that re-verification for every item it lists, `BL-694` included. Code signing is out,
-see the boundary line. The plan assumes the repository is still private until E42, and that the
+Scope is release engineering plus exactly one game fix. Only bugs meeting the bar in Decision 3
+block the release, and A1's triage is what applies that bar; A1 found one, `BL-694`, which is A2,
+and everything else it looked at is in the Known Issues appendix at the foot of this file. Code
+signing is out, see the boundary line. The plan assumes the repository is still private until E42, and that the
 author writes or approves every word that faces the public, since outward communication is theirs.
 
 ## Milestone goal
@@ -83,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — What must be true before strangers play
 
-1. ☐ Triage `backlog.md` against the release bar
+1. ☑ Triage `backlog.md` against the release bar
 2. ☐ `BL-694` CM14 becomes unwinnable when the Gemini dies before its cannon bays
 
 ### Wave B — What the package says about itself
@@ -131,7 +130,7 @@ worktrees.
 
 # Wave A — What must be true before strangers play
 
-## A1 ☐ Triage `backlog.md` against the release bar
+## A1 ☑ Triage `backlog.md` against the release bar
 
 **Goal.** A written split of the open backlog into two lists: what blocks `v0.1.0` by Decision 3's
 bar, and what goes into the release notes as a Known Issue. Every item on either list has been
@@ -158,6 +157,53 @@ is what the sentence says it is.
 **⚠ Traps.** ⚠ A fixed bug in the release notes is worse than an unlisted one, so re-verification is
 the work here and the filtering is the easy part. Resist widening the bar item by item, which is how
 this becomes a polish plan; the bar is Decision 3 and it is written down for that reason.
+
+**Verified.** `backlog.md` holds 155 open `BL-` bullets, not the 132 this plan's scope paragraph
+claimed, 38 of them tagged `[Impact: high]`, 9 `[Blocked: …]` and 19 `[Owed-playtest]`. Every
+`[Impact: high]` entry was read, plus every entry scoped to a mission, plus every entry a keyword
+sweep for unfinishable, corrupt, profile, save, launch and crash reached. That produced twenty
+candidates for Decision 3's bar, and each was re-verified against both `git log --all --grep=<ID>`
+and the code before any list took it.
+
+**No new blocker survived the bar. `BL-694`, which is A2, is the only open entry that meets it**,
+so this item adds no A-wave item and moves no entry out of `backlog.md`. `BL-694` itself is
+confirmed still open: its `git log --grep` returns the filing commit `3af41b84`, `PT-103`'s
+retirement and this plan's own opening commit, with no landing among them, and its entry is already
+out of `backlog.md`, which now carries only cross-references to it from `BL-698` and `BL-695`.
+
+The four candidates that came closest, and why each failed the bar rather than being talked past
+it. `BL-717`, the Pandora's own turrets firing on the Balmoral CM02 wants captured, reads like it
+could destroy the only route to primary 3 (`OBJECTIVE18`, `ANIM_STATE wingwalk EXECUTED`), but the
+sitting that filed it walked CM02 through to CM24 (`git log --grep=BL-717`, commit `5b71d0ad`), so
+the mission was finished with the defect present. `BL-733`, a killed installation revived to full
+health by the pool sync, is real in the code (`AnimRuntime.cs:3717-3723` takes the revival branch
+because `dbaseRole` implies `destroyedRole`), but the revert lands after the death has played and
+its credit taken, and no objective completion reads `DestructibleRegistry.State`. `BL-689`, CM13's
+flight check, withholds a plane grant and offers a button the original bars, which leaves the
+mission flyable in the aeroplane the profile already owns. `BL-565` plus `BL-523` can leave a
+survivor an objective is waiting on kilometres outside the mission area, which is a long flight
+rather than an impossible one. Each of the four is in the Known Issues appendix instead.
+
+Three entries failed re-verification, which is the part of this item that earned its keep.
+`BL-079`'s opening claim, that all sound is own-plane and non-positional, is false: every AI
+aircraft carries `AiEngineAudio` on `AudioStreamPlayer3D` with its own distance cull, wired at
+`AiFlightAssembler.cs:210`, and `WorldSounds` positions world emitters the same way. Its
+`git log --grep` shows no landing because the work landed under a plan item that never named the
+id, which is why a code read is required alongside the log and not instead of it. `BL-545`'s body
+still describes CM02's hookless landing as present behaviour, where `d5caa7cc` says "Closes
+BL-545"; what the entry actually holds is an owed look, which its `[Owed-playtest]` tag already
+says and its prose contradicts. `BL-435` claims the chase view has no look-around at all, where
+`CameraController.PadLook` gives it the right stick; the decoded head-look controller and the
+numpad scheme are what is missing, so the entry overstates and `BL-150` rides the same claim. The
+first two are corrected in `backlog.md` by this item; `BL-435` and `BL-150` are left alone, because
+narrowing them wants the camera read they are about and neither belongs in the release notes.
+
+One new defect was found and filed as `BL-770`: an exported build launched by double-clicking
+`CSVM.exe` is silent, because `Launcher.MasterVolumeDefault` is `0` and nothing in the payload
+supplies `--volume=` or an `audio.volume` config key. It does not meet Decision 3's bar, so it is
+not an A-wave item, and it belongs to the first run on someone else's machine, so C21 names it.
+
+The Known Issues draft E42 uses is the appendix at the foot of this file.
 
 ## A2 ☐ `BL-694` CM14 becomes unwinnable when the Gemini dies before its cannon bays
 
@@ -343,6 +389,12 @@ back to a folder picker so the path is never typed; added to `packaging/MANIFEST
 `Extract.cmd` and staying up rather than proceeding into a world it cannot build. All extraction
 logic stays in `ExtractAssets.ps1` and `ExtractRof.ps1`. <TODO: the retail installer's default path
 and its plausible variants need the author's own install plus any others they know of.>
+
+Third piece, from A1: `BL-770`, the silent first run. `Launcher.MasterVolumeDefault` is `0` so that
+a scripted or agent run never sounds by accident, the run scripts pass `--volume=1.0`, and the
+export payload carries neither a flag nor a `config.json`, so a recipient who double-clicks
+`CSVM.exe` hears nothing and has no reason to suspect a flag exists. Give the exported build an
+audible default without changing what a repo run gets, the way B13 separates the two log paths.
 
 **Model recommendation.** medium. Mechanical, with the failure modes belonging to a stranger, so the
 error text matters more than the code.
@@ -566,3 +618,119 @@ one.
 public for an hour can have been cloned and cached, so everything in this plan lands before the
 flip, not after it. A release tag is equally permanent, see D34. Nothing is announced until the
 logged-out read has happened.
+
+# Appendix: the Known Issues draft, A1's output for E42
+
+What this is: the list E42 turns into the release notes' Known Issues section. Each entry is one
+sentence a player would recognise, one sentence of workaround where there is one, and the evidence
+that the entry is still open, which is a `git log --all --grep=<ID>` that returns no landing plus
+the code or data path that still carries the defect. **The parenthetical evidence is for the
+author, not for the notes**: E42 strips it and keeps the two sentences.
+
+Two rules this list is written to. Nothing here meets Decision 3's bar, because A1 found nothing
+that does except `BL-694`, which A2 fixes and which therefore never reaches the notes. And nothing
+here is an internal decode: the sentence says what happens on screen, not which function is wrong.
+
+Before E42 uses it: `BL-694` is fixed by then, so re-read the CM14 entries against the landed fix,
+and check `BL-770` against whatever C21 does about it. Anything A2 or a later wave closes comes off
+this list.
+
+## Campaign missions
+
+- **In the CM14 attack on the Gemini, the cannon-hatch objectives can tick over from engine kills
+  rather than from hatch hits, so the third primary sometimes completes without a hatch destroyed.**
+  No workaround is needed, since the mission still reaches its end. (`BL-695`; the only commit
+  naming it is its filing, and the counting it describes is unchanged.)
+- **The Gemini's gasbags burn without ever finishing, so fire alone never brings the zeppelin
+  down.** Shoot the gasbags directly instead of waiting for the fire, since three of the five kill
+  it. (`BL-639`; no landing commit, and it is blocked on unfilmed reference footage, `CAP-47`.)
+- **In CM10 the attack balloons dive from their entrance altitude down to the sea and climb back
+  out, and the objective marker follows them down.** Wait for the climb, which runs at the
+  authored rate and needs no input. (`BL-674`; no landing commit, the motion is the entrance
+  script's handoff in the animation runtime.)
+- **In CM02 the player's own Pandora fires its turrets at the Balmoral the mission wants
+  captured.** Close on the last Balmoral and finish the wing-walk promptly rather than circling.
+  (`BL-717`; the only commit naming it is its filing, and turret acquisition still treats an
+  enemy-team aircraft as any other hostile.)
+- **In CM13 the flight check offers the change-plane button to the wingman and never grants the
+  mission's own aeroplane.** Fly the aeroplane the profile already owns, which completes the
+  mission. (`BL-689`; no landing commit, `CampaignFlightCheckPage` still hands one slot-less
+  answer to both crew slots.)
+- **In CM15 the Balmoral staged in the cutscene wears the stock skins instead of the livery the
+  flyable aeroplane wears.** No workaround, and nothing about the mission changes. (`BL-690`; no
+  landing commit, and `AircraftStage` still builds its subtree with no painter of any kind.)
+- **A mission that ends inside a docking film cuts back to the pilot's own view for the last hold,
+  so the fade to black runs over the cockpit instead of over the film.** No workaround, and the
+  mission still ends normally. (`BL-739`; no landing commit, the presentation still ends when the
+  definition does.)
+- **The cutscene movies do not play at all.** No workaround; the campaign reaches the cabin and
+  every mission without them. (`BL-446`; no landing commit, and the tree contains no
+  `VideoStreamPlayer` and no transcode step.)
+
+## Enemies and combat
+
+- **Some enemy patrols never turn to engage, and enemies that do engage can leave the mission area
+  by tens of kilometres.** Target a straggler and fly out to it, since an objective waiting on one
+  will not complete on its own. (`BL-523` and `BL-565`; no landing commit for either, and
+  `AiModeMachine.ActivationRange` still rests at the 2,000 m floor while `DedgMet` only counts.)
+- **Aircraft under fire rarely break off to evade.** No workaround; it makes them easier to shoot
+  down than they should be. (`BL-728`; no landing commit, and it is unsettled against `BL-558`,
+  which reads the same machine from the other side.)
+- **Patrol boats and other surface craft never fire, whatever their own definition arms them
+  with.** No workaround; those missions are easier than intended. (`BL-687`; the decode landed but
+  the gun did not, and `SurfaceVehicle` still reaches no projectile spawner.)
+- **A zeppelin's turrets can shoot the player through the hull they are mounted on.** Break away
+  from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
+  (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed
+  open for the moving-hull case it was reported on.)
+- **A destroyed ground installation can come back to full health after its death animation has
+  played.** Shoot it again, which replays the death. (`BL-733`; no landing commit, and
+  `AnimRuntime.SyncDestructiblePool` still classifies the death sequence's own step as a revival.)
+
+## What the world looks and sounds like
+
+- **The game starts silent when `CSVM.exe` is launched by double-clicking it.** Run
+  `.\CSVM.exe --volume=1.0` from a terminal in the same folder, which is audible at full volume.
+  (`BL-770`, filed by A1; `Launcher.MasterVolumeDefault` is `0` and the payload supplies neither
+  the flag nor an `audio.volume` config key. C21 is expected to remove this entry before release.)
+- **There is no in-game audio menu, and the player's own engine loop reads too loud against
+  everything else.** The `--volume=` launch flag is the only level control there is. (`BL-455` and
+  `BL-391`; no landing commit for either, and the master gain is reachable only from the command
+  line or a config key.)
+- **Aircraft cast no shadow on the ground in the faithful presentation.** Set Enhanced Graphics in
+  Game Options and restart, which lights the world and casts shadow maps, though those are not the
+  shadow the original drew. (`BL-331`;
+  the decode landed and the build did not, and the faithful path's world light still carries no
+  shadow, which an engine suite asserts.)
+- **In the New York chapter the lit building faces read darker than the original, with a distinct
+  dark band at middle distance.** No workaround; it is a matter of how the shipped textures are
+  sampled and nothing is missing from the world. (`BL-322` and `BL-538`; both have had their
+  premises narrowed by decodes and neither has a landing commit.)
+- **The death camera and the flyby camera are not implemented, so a kill or an F7 press does not
+  reach them.** No workaround; the crash and look-behind cameras that shipped are unaffected.
+  (`BL-260`; partially closed, with `CamParams` still the only code that reads `death_x` and the
+  flyby fields.)
+- **Every wave of AI aircraft arriving in a mission costs a visible hitch.** No workaround; it
+  passes in a frame or two. (`BL-699`; no landing commit, and the model build and controller bind
+  still sit on the launch frame.)
+
+## Menus, and playing with more than one person
+
+- **In the built-in menus the mouse moves forward through screens but cannot go back.** Press Esc
+  or the pad's B button, both of which go back from anywhere. (`BL-752`; the only commit naming it
+  is its filing, and `LaunchMenu.PointerEvent` still handles motion, the wheel and the left button
+  only.)
+- **A second pilot can pick an aeroplane but never a weapon loadout, Back on that screen removes
+  them from the game instead of returning, and the first pad drives their screen as well as their
+  own.** Press Start to rejoin after an accidental Back, and let the first player make the loadout
+  choice, which every seat then flies with. (`BL-746`, `BL-747` and `BL-748`; none has a landing
+  commit, and the cited `OriginalSeatPlane` arms are unchanged.)
+- **A two-pilot Free Flight ends its plane-selection walk back on the Free Flight screen instead of
+  launching.** Press FLY again on the first player's screen, which launches. (`BL-749`; no landing
+  commit, and `FinishSeatWalk` still launches only on the Instant Action return.)
+- **Dogfight spawn points are fixed per player, so a spawn can be camped.** Agree not to, since
+  nothing in the mode prevents it. (`BL-301`; no landing commit, and there is no spawn rotation in
+  the tree.)
+- **A splitscreen stunt race starts its clock the moment the world appears, so whoever finishes
+  loading first flies first.** Start the run together by agreement rather than trusting the clock.
+  (`BL-314`; no landing commit, and there is no countdown of any kind in the tree.)
