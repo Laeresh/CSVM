@@ -697,8 +697,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   numbers does not change that, and must not be used to try to.
   *Cross-refs:* `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
-- `BL-696` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Original presentation has no way into the rebinding screen, so the
-  keymap is editable in Built-in alone.** *Evidence (traced):* `PF_B_CONTROLS` draws disabled
+- `BL-696` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Original presentation has no way into the rebinding screen, so the
+  keymap is editable in Built-in alone.** *Decided:* the door is built, and it is a fidelity fix
+  rather than a divergence. The author settled it at the controls over `PLAN-M5-polish-13`'s closing
+  sortie: "The original has a binding screen in the Prefences: 'Controls' with multiple sub screens.
+  We even have a greyed out button in our Prefences screen". *Evidence (traced):* `PF_B_CONTROLS` draws disabled
   (`CSVM/src/UI/Menu/Original/OriginalShell.cs:178`), and the two pages behind it are decoded and
   unbuilt: `ControlsPrefs` (12 rows, layout only) and `Keys` behind `CP_B_KEYS` (17 rows, the
   composition of all seven category tabs, with `KB_B_ACCEPTCHANGES` / `KB_B_CANCELCHANGES` returning
@@ -2298,16 +2301,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   rather than ruled out.
   *Cross-refs:* `BL-687` (the same boats, their guns), `BL-626`.
 
-- `BL-706` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The PLANE NAME dialog
-  sits off-centre.** *Evidence:* reported at the controls over E44's pointer sweep, "Plane
-  Construction: The PLANE NAME Dialog should be centered". The screen draws its panes at the decoded
-  `PlaneName` section's authored positions (`ComposePlaneName`,
-  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:1164`), so the placement is data rather than a
-  constant of ours. *Fix shape:* compare the drawn pane against the original's own PLANE NAME screen
-  before moving anything. *⚠ Traps:* **the authored coordinates are decoded, so an off-centre dialog
-  more likely means the board fit places a sub-screen pane wrong than that the data is wrong.**
-  Centring it by hand would hide that, and would be a departure from the layout on a screen every
-  other element of which is placed by it. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7.
+- `BL-706` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The PLANE NAME dialog
+  sits off-centre because its pane is drawn at a raw 0,0 and its rows are drawn as though their
+  authored coordinates were the screen's.** *Evidence:* reported at the controls over E44's pointer
+  sweep, "Plane Construction: The PLANE NAME Dialog should be centered", and settled over
+  `PLAN-M5-polish-13`'s closing sortie against `OriginalScreenshots/CustomPlane Name Dialog.png`,
+  which puts the panel in the middle of the board. The data is right and the fit is wrong:
+  `PN_P_BACKGROUND` is authored at 0,0 over `PX_PlaneNameBackground.Png`, whose extracted art is
+  264x177 and so centres on the 800x600 board at 268,211, and every other row in the section carries
+  a small coordinate that lands on that centred pane and nowhere else (`PN_E_NAME` 23,40,
+  `PN_B_DEFAULT` 27,83, `PN_B_OK` 74,130, `PN_B_CANCEL` 161,130, `extracted/rof/menu_layout.json`).
+  Ours draws the pane at the raw authored corner (`AddPane`,
+  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:443-449`) and each row at its own, so the whole dialog
+  sits against the screen's top-left. *Fix shape:* the section's pane is placed centred when its art
+  is smaller than the board, and the section's rows are drawn relative to it. *⚠ Traps:* **do not
+  centre the rows by hand-tuned constants**, which would hide the same fault on every other
+  sub-screen pane. The centring rule is proved on one case here: `PX_P_BACKGROUND` is 800x600 and
+  centres to 0,0 either way, so it agrees with the rule without testing it; check the other sections'
+  small panes before generalising. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7, `BL-769`
+  (the same screen's refusal), `BL-759` (the name box on the hub behind it).
 
 - `BL-746` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Back on the per-seat
   plane-selection screen unjoins the second pilot instead of returning to the screen they came
@@ -2432,6 +2444,228 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   literal colour; use the mark the cash figure uses so the two agree. The pending case before an
   airframe is chosen has no weight and must stay plain. *Cross-refs:* `BL-655`'s landing
   (`git log --grep=BL-655`), which added the cash note.
+
+- `BL-755` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ammo screen's two
+  description panes trade the cursor's words instead of each holding its own subject.** *Evidence:*
+  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "the description can be
+  displayed on both parts. Currently it switches depending on what is selected". Both authored panes
+  are filled on every repaint (`CSVM/src/UI/CampaignBoards.cs:343-359`), but the half the cursor is
+  not in falls back to the first armed gun group or the first fitted pylon (`CampaignAmmoPage`
+  `DetailRow`, `CSVM/src/UI/CampaignAmmoPage.cs:314-327`), so moving the cursor between the halves
+  moves which pane answers it and leaves the other on a default that is empty when nothing is armed
+  or fitted. *Fix shape:* settle what the idle pane holds against
+  `OriginalScreenshots/Campaign Ammo Selection.png`, which carries Slugs over High-Explosive Rockets
+  with the pointer in neither half, then make the rule match. *⚠ Traps:* the two panes are authored
+  and their y is pinned four pixels over the shipped row, so do not move them while changing what
+  they say. An empty pane is the fallback finding nothing armed, not a missing pane.
+  *Cross-refs:* `BL-658`'s landing (`git log --grep=BL-658`), which filled the lower pane.
+
+- `BL-756` `[Research]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The
+  scrapbook's Best to Date tab always reads Mission Failed, which is the original's own defect
+  reproduced on purpose.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing
+  sortie, "The Best to Date shows Failed instead of Completed". The original's `0x0040a7e6` does not
+  read the selected half's completed-objective mask for that tab: it reads `+0x24` inside the half,
+  a slot the completion merge (`FUN_00405ce0`) never writes, so it is always 0 and the tab always
+  says failed. `CampaignPreviousMissionsPage.Won`
+  (`CSVM/src/UI/CampaignPreviousMissionsPage.cs:74-81`) reproduces that verbatim and says so.
+  *Fix shape:* a decision, not code. Keeping it is fidelity; reading the merged record's real mask
+  is a deliberate divergence of the kind Built-in already carries. Whichever way it goes, the losing
+  reading leaves the summary so the member states one rule. *⚠ Traps:* **the Most Recent tab is
+  correct and has to stay correct**; it reads the real mask, so a fix that gives both tabs one path
+  must not take that away. This is not a save-file defect: the merged half's mask is written and
+  readable. *Cross-refs:* `docs/formats/saved-games.md` ("The mission-result array"), `BL-705`'s
+  landing (`git log --grep=BL-705`), which made the tab clickable.
+
+- `BL-757` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Switching the menu
+  presentation shows Godot's procedural sky between the old menu and the new one.** *Evidence:*
+  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "On switching from built-in to
+  Original and vice versa i can see the godot skybox too. Can we replace the skybox with black?".
+  `ApplyOptions` deactivates the running presentation, re-selects and shows the new one over three
+  statements (`CSVM/src/Session/Launcher.cs:1326-1330`), and the persistent `WorldEnvironment`
+  behind the menu is still on `BGMode.Sky` with its `ProceduralSkyMaterial` (`:1093-1098`), so any
+  frame with no opaque menu backdrop over it draws that sky. *Fix shape:* the environment is blacked
+  while the menu owns the screen, the way `BlankAndQuit` blacks it on the way out
+  (`CSVM/src/Session/Launcher.cs:1529-1538`), and the mission sky is put back when a session starts.
+  *⚠ Traps:* the environment is process-lifetime and feeds the glossy water's specular
+  (`UseMissionSky`, `:1129-1134`), so a blank has to be undone on a launch rather than left standing.
+  ⚠ **No headless run may pay for it**, the rule `BlankAndQuit` already carries.
+  *Cross-refs:* `BL-710`'s landing (`git log --grep=BL-710`), the same sky at the quit exits.
+
+- `BL-758` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A name box draws a
+  trailing underscore in the text ink where the layout authors a red cursor.** *Evidence:* reported
+  at the controls over `PLAN-M5-polish-13`'s closing sortie, "Plane Construction: Text Input cursor
+  is a red blinking line in the original". Both edit rows carry `CursorColor=0xFFEF0010` as their own
+  field: `PN_E_NAME` on the PLANE NAME screen and `PX_E_NAME` on the construction hub
+  (`extracted/rof/menu_layout.json`), and the editbox type's field table names that column, so the
+  colour is decoded rather than guessed. Ours draws the label plus `"_"` while focused, in
+  `BoardInk.Row` and without a blink (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1663-1667`).
+  *Fix shape:* a caret drawn from the row's own `CursorColor` as a filled bar at the text's end, on a
+  fixed blink period. *⚠ Traps:* one draw arm serves every `E` row, so read the colour off the widget
+  instead of writing a literal; the same arm already takes its border from `FrameColor`. A caret is
+  not part of the text, so it must not shift the string or count against `MaxChars`, which is 16 on
+  both rows. *Cross-refs:* `BL-711`'s landing (`git log --grep=BL-711`), the same box's refusal.
+
+- `BL-759` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Plane
+  Construction hub draws the plane's name as a static line where the layout authors an edit box.**
+  *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "The PLANE NAME is
+  still editable in the original. Textbox where the name is". The hub section authors `PX_E_NAME`, an
+  editbox with its own frame and cursor colours and `MaxChars=16`
+  (`extracted/rof/menu_layout.json`), and ours writes the scratch plane's name as a plain `BoardLine`
+  at constants of ours instead (`HubNameX`/`HubNameY`,
+  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:97-99`, `:1301-1302`), so the only place a name can be
+  typed is the PLANE NAME screen the build opens with. *Fix shape:* the hub's name becomes a text
+  field row over `PX_E_NAME`, writing `HangarFeature`'s scratch name. *⚠ Traps:* the authored row
+  carries no width, which is why ours is a constant; take the width from the box art or the name
+  title's row rather than inventing one. A rename must not create a second plane or re-raise the
+  defaults ask. *Cross-refs:* `BL-758` (the caret the field would draw), `BL-706` (the screen that
+  takes the name first).
+
+- `BL-760` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **PLANE COST and CURRENT
+  WEIGHT do not follow the row the cursor is on in an open list.** *Evidence:* reported at the
+  controls over `PLAN-M5-polish-13`'s closing sortie, "Weight and Plane Cost is previewed on hover of
+  combo box rows (updates on hover)". The right page already previews: the description box and the
+  name line read the focused list row (`FocusedItem` and `FocusedAirframe`,
+  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:1386-1398`, `:1505-1513`), and so does the blueprint.
+  The hub's two figures do not, both reading `hangar.Bill`, the committed scratch's price
+  (`:1303-1306`, `:1333-1339`). *Fix shape:* the chrome prices the build as it would stand with the
+  focused row taken, which every list already has as a `CostWith…` delegate the unaffordable mark
+  uses (`:332-346`). *⚠ Traps:* a preview must not commit, and leaving the list without a pick has to
+  put both figures back. The cash note takes the problems ink off the same bill, so a previewed
+  figure moves that colour too; decide whether the mark previews with it.
+  *Cross-refs:* `BL-754` (the same weight line's ink).
+
+- `BL-761` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The tab pages'
+  description box carries the figures alone where the original follows them with a DESCRIPTION
+  paragraph.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie,
+  "Description text missing", and `OriginalScreenshots/CustomPlane Engine.png` and
+  `CustomPlane Guns.png` both show COST, WEIGHT and the rest, then a DESCRIPTION heading over the
+  component's own prose. Ours builds the box from the figures and stops
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1431-1488`). The prose is in the shipped table: the
+  engines run 3270 to 3305, six ids per family in engine order, with 3307 as No Information
+  Available, and the guns run 3330 to 3335 in gun order, 3335 being No Gun
+  (`extracted/rof/ui_strings.json`). *Fix shape:* the description list gains the heading and the
+  component's own string, wrapped inside the box the way the figures already are. *⚠ Traps:* the id
+  blocks are ordered per component and are not one contiguous run across kinds, so index them rather
+  than deriving a single base. The box is the authored `S` widget with its own back and border, so a
+  longer body scrolls or wraps inside it and never grows it. Armour, hardpoints and paint show no
+  such prose in the stills; do not invent it. *Cross-refs:* `BL-653` (the same screen's TOP SPEED and
+  OFFENSE ratings).
+
+- `BL-762` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A decal list opens as
+  a one-wide column where the original opens a five-across, two-row grid of tiles.** *Evidence:*
+  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "Decal select has two rows with
+  5 decals each", and `OriginalScreenshots/CustomPlane Decal Select.png` shows exactly that under the
+  three preview boxes, with a scrollbar down its right edge. `PT_D_DECALS0` to `2` author
+  `ItemHeight=73`, `TotalDisplayed=2` and `Width=87` (`extracted/rof/menu_layout.json`, the `Paint`
+  section), which is two rows of the closed box's own width, and the fifty tiles come off the
+  section's `PT_P_DECALS` strip. Our open list stacks one tile and its name per row inside that width
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1788-1794`, the rows built at `:818-838`).
+  *Fix shape:* the decal lists lay their visible window out across five columns and two rows over the
+  page, keeping the tile art already drawn. *⚠ Traps:* the grid is wider than the closed box it hangs
+  from, so the hit rectangles and the arrows move with it, and `ComposeOpenList` derives its panel
+  from the rows' own extents. The other paint lists are colour swatches in a single column, so the
+  change belongs to the decal case alone. *Cross-refs:* `BL-659`'s landing
+  (`git log --grep=BL-659`), the aid that can open these lists.
+
+- `BL-763` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The wallet-free
+  totals page commits with Purchase Now where the original's reads Export.** *Evidence:* reported at
+  the controls over `PLAN-M5-polish-13`'s closing sortie, "Ready to Export shows Export instead of
+  Buy button in instant action", and `OriginalScreenshots/CustomPlane Export.png` is that page on the
+  wallet-free path (its tab bar reads READY TO EXPORT and CANCEL EXPORT) with Export on the commit
+  button. Ours draws the button from `PUR_B_PURCHASE`'s own resource, `IDS_PUR_B_PURCHASE`,
+  "Purchase Now", on both paths (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:743-748`).
+  *Fix shape:* the wallet-free path swaps the commit's label the way it already swaps the two tab-bar
+  strips (`ExportVariant`, `:777-795`). *⚠ Traps:* the shipped table has no export label for this
+  button, only `IDS_PS_B_EXPORT`, "Export", authored for the inventory's own; reuse that id rather
+  than writing a literal. The campaign path keeps Purchase Now. *Cross-refs:* `BL-764` (the same
+  path's inventory buttons), `BL-651`'s landing (`git log --grep=BL-651`), which drew the export
+  boundary.
+
+- `BL-764` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wallet-free
+  inventory keeps a dead Export button and calls the removal a sale.** *Evidence:* reported at the
+  controls over `PLAN-M5-polish-13`'s closing sortie, "Should not have a export option (its already
+  deactivated) coming from instant action and should be delete instead of sell for instant action".
+  The inventory builds both buttons on both paths and disables Export
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:813-815`), where Instant Action has nothing to export
+  to and a plane that cost nothing is not worth a sale. *Fix shape:* on the wallet-free path the
+  Export row is not built at all and Sell is labelled Delete. *⚠ Traps:* the campaign path keeps both
+  buttons and both words. There is no shipped delete label for this button (the table has
+  `IDS_PS_B_SELL`, "Sell", and `IDS_PS_B_EXPORT`, "Export"), so the word is remake-only, as the tab
+  bar's export variants are. Dropping a row moves the focus order the pad and the aid both walk.
+  *Cross-refs:* `BL-766` (the confirm the same button raises), `BL-763`.
+
+- `BL-765` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The inventory writes
+  the plane's name and its airframe as one line at the airframe's row, leaving the name's own row
+  unused.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "The
+  Plane name is not aligned correctly". The section authors two text rows a couple of pixels apart,
+  `HA_T_PLANE` at 138,108 with no width and `HA_T_PILOTPLANE` at 236,110 across 400
+  (`extracted/rof/ASSETS/LAYOUT.CSV`, `[@Hangar@]`); ours concatenates both texts into
+  `HA_T_PILOTPLANE` with three spaces between them
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1612`) and never draws `HA_T_PLANE`, whose key
+  appears nowhere in the tree. *Fix shape:* one text per authored row. *⚠ Traps:* **which row takes
+  which text is not settled by the keys' names**, and there is no capture of the INVENTORY screen
+  under `OriginalScreenshots/`, so the first step is a shot of it; `HA_T_PLANE` is the left row and
+  the one with no width, which is the shape of a short label rather than a name. *Cross-refs:*
+  `BL-764` (the same screen's buttons).
+
+- `BL-766` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wallet-free
+  inventory asks the campaign's sale question, which prices a plane that cost nothing.** *Evidence:*
+  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "Confirm dialog should ask 'Are
+  you sure you want to delete it?'". `AskToSell` formats langui 700, "Your %1!s! is worth
+  <B>$%2!d!<b>.  Are you sure you want to sell it?", on both paths
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1058-1071`). *Fix shape:* the wallet-free path asks
+  its own question in the same two-button query box. *⚠ Traps:* the shipped table carries no delete
+  question for a plane (201 is the player and 210 the saved game), so the wording is remake-only.
+  Keep the box's shape: the sell confirm is the `0x4` two-button query with the `?` icon, which
+  `BL-744` settled. *Cross-refs:* `BL-764` (the button that raises it), `BL-744`'s landing
+  (`git log --grep=BL-744`), the icon rule.
+
+- `BL-767` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **A message box's rollover
+  frame is drawn for the pad focus, so a button never returns to its normal frame and the pointer's
+  own hover barely reads.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing
+  sortie, "Hover for buttons not really visible (removes the border), does not return to default if
+  not hovered". The dialog draws each answer at `PlaqueFrame(4, focused, held)` with `focused` being
+  the row index the pad and keyboard carry (`CSVM/src/UI/Menu/Original/OriginalCampaign.cs:396-409`),
+  and a dialog always has one focused answer, so frame 2 stands whatever the pointer does. The
+  reference the shared drawing cites shows OK on its normal frame with the pointer elsewhere
+  (`CSVM/src/UI/CampaignBoards.cs:370-375`). *Fix shape:* the strip frame follows the pointer while
+  one is present, and the pad focus is shown some other way, so an unhovered default answer sits on
+  frame 1. *⚠ Traps:* a pad-only player still has to see which answer is armed, so the pad focus
+  cannot simply stop drawing. Whether frame 2 of `MB_B_Buttons.Png` is the rollover at all is worth
+  reading off the strip before its look is called wrong. *Cross-refs:* `BL-744`'s landing
+  (`git log --grep=BL-744`), the same box's icon.
+
+- `BL-768` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Preferences'
+  VIDEO page is decoded and unbuilt, and Enhanced Graphics stands on Game Options instead of on
+  it.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "Move
+  Enhanced Graphics into the not yet existing video screen under Prefrences". `PF_B_VIDEO` draws
+  disabled beside the other two unbuilt doors
+  (`CSVM/src/UI/Menu/Original/OriginalShell.cs:192-195`), while the `Video` section carries seven
+  dropdowns, the Clutter and Shadows checkboxes and a description per row
+  (`extracted/rof/menu_layout.json`); the graphics choice is the third row of our Game Options page
+  instead (`CSVM/src/UI/Menu/Original/OriginalGameOptions.cs:79-82`), a remake-only row on an
+  authored page. *Fix shape:* the page over its own artwork, with Enhanced Graphics moved on to it
+  and the rows this port has no setting behind left out. *⚠ Traps:* **the decision wanted first is
+  which of the authored rows this port can honour at all**; device, display mode and texture detail
+  have no counterpart here, and a row that changes nothing is worse than an absent one. Whatever
+  moves keeps leaving through `OptionsApplyExit`, the options file's one writer, and the graphics
+  word still resolves once at launch. *Cross-refs:* `BL-696` (the same shape behind
+  `PF_B_CONTROLS`), `OriginalScreenshots/Preferences Video.png`.
+
+- `BL-769` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The PLANE NAME
+  screen's empty-name refusal stands as a line under the buttons instead of being raised as a
+  message box when OK is pressed.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s
+  closing sortie, "no name should not be text below but a dialog on ok", with
+  `OriginalScreenshots/CustomPlane Name Dialog No Name.png` showing the original's own message box,
+  its warning icon and a single OK, raised over the screen. Ours writes langui 203 as a `BoardLine`
+  under the panel's buttons whenever the field is empty, before OK is pressed at all
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1276-1283`), and draws OK disabled while it is empty
+  (`:734`), so the press the refusal answers cannot happen. *Fix shape:* OK stays live on an empty
+  field and raises the one-button box carrying string 203; the standing line goes. *⚠ Traps:* the
+  icon is the message box rule's, not a choice made here, so take the frame the way `BL-744`'s
+  landing settled it. The screen is itself a panel, so the raised box is a second overlay over the
+  first and has to be drawn after it. *Cross-refs:* `BL-706` (the same dialog's placement),
+  `BL-744`'s landing (`git log --grep=BL-744`).
 
 ## Splitscreen
 
