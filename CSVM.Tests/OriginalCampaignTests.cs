@@ -94,6 +94,22 @@ public class OriginalCampaignTests : IDisposable
         Assert.Contains(OriginalCues.Click, step.Cues);
     }
 
+    // The box's second route to the same reject cue, which the character-set route never reached:
+    // a character the rule accepts, arriving at a box already at its cap.
+    [Fact]
+    public void AnAcceptedCharacterAtTheCapRefusesWithTheSameRejectCue()
+    {
+        var shell = Shell(out _, out _);
+        OpenCampaign(shell);
+
+        var step = shell.Step(new MenuCommands { Typed = new string('A', CampaignFeature.MaxNameLength + 1) });
+
+        Assert.Equal(CampaignFeature.MaxNameLength, shell.RosterName.Length);
+        Assert.Equal(CampaignFeature.MaxNameLength + 1, step.Cues.Count);
+        Assert.Equal(OriginalCues.TextError, step.Cues[step.Cues.Count - 1]);
+        Assert.DoesNotContain(OriginalCues.TextError, step.Cues.Take(step.Cues.Count - 1));
+    }
+
     [Fact]
     public void ContinueWithNoNameRaisesTheRefusalAsADialogWhoseOkIsTheOnlyRow()
     {

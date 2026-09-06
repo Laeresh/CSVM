@@ -99,8 +99,9 @@ public sealed class MenuInput
     // the same number from their own bindings (DefaultBindings), which is where it is tunable.
     private const float StickDeadzone = 0.5f;
 
-    // The keys a text field takes a character from: the letters, the digit row and the space bar.
-    // Nothing else is typeable, because nothing else is a character a profile name may carry.
+    // The keys a text field takes a character from. Deliberately wider than any box's accept rule:
+    // a character the box refuses has to reach the box for the box to cue its reject sound, and a
+    // key that types nothing at all is silent instead.
     private static readonly Key[] TextKeys = BuildTextKeys();
 
     // One timing rule for both cursor axes, shared with TapHoldButton's hold instead of a pair of
@@ -151,6 +152,11 @@ public sealed class MenuInput
         _padOnly = new PlayerActions(map, false);
         _live = _keys;
     }
+
+    /// <summary>The keys a text field takes a character from, in the order <see cref="Typed"/>
+    /// reports them. Wider than either name box's accept rule on purpose, so a refused character
+    /// still arrives and the box can cue its reject sound.</summary>
+    public static IReadOnlyList<Key> TypeableKeys => TextKeys;
 
     /// <summary>This seat's live menu keymap, the object a rebinding screen edits. Editing it moves
     /// the bindings this poller reads on its next frame, since the readers hold the map itself; call
@@ -217,6 +223,30 @@ public sealed class MenuInput
     {
         ArgumentNullException.ThrowIfNull(actions);
         return actions.Held(negative) ? -1 : actions.Held(positive) ? 1 : 0;
+    }
+
+    /// <summary>The characters the typeable keys produce this frame: each key whose state rose
+    /// since <paramref name="prev"/>, in table order, Shift deciding a letter's case.
+    /// <paramref name="prev"/> is the caller's edge state, updated in place and sized from
+    /// <see cref="TypeableKeys"/> so it cannot fall out of step with the table. Public so text
+    /// entry unit-tests; it reads no device itself.</summary>
+    public static string TypedFrom(Func<Key, bool> down, bool shift, bool[] prev)
+    {
+        ArgumentNullException.ThrowIfNull(down);
+        ArgumentNullException.ThrowIfNull(prev);
+        if (prev.Length != TextKeys.Length)
+            throw new ArgumentException($"edge state must be {TextKeys.Length} long", nameof(prev));
+
+        var typed = new StringBuilder();
+        for (int i = 0; i < TextKeys.Length; i++)
+        {
+            bool held = down(TextKeys[i]);
+            if (held && !prev[i])
+                typed.Append(CharFor(TextKeys[i], shift));
+            prev[i] = held;
+        }
+
+        return typed.Length > 0 ? typed.ToString() : string.Empty;
     }
 
     /// <summary>The menu keymap with every binding on a typeable key dropped, which is what
@@ -322,7 +352,9 @@ public sealed class MenuInput
         Accept = Back = PadBack = Start = Loadout = Presets = false;
     }
 
-    // The Key enum's letter and digit values ARE their ASCII codes, so the character is the key.
+    // The Key enum's letter, digit and punctuation values ARE their ASCII codes, so the character
+    // is the key. Shift cases a letter and leaves punctuation at its unshifted symbol, which is
+    // enough: no name box accepts either form, so both reach the same refusal.
     private static char CharFor(Key key, bool shift)
     {
         if (key == Key.Space)
@@ -331,7 +363,9 @@ public sealed class MenuInput
         return key is >= Key.A and <= Key.Z && !shift ? char.ToLowerInvariant(c) : c;
     }
 
-    // The letters, the digit row and the space bar, in that order.
+    // The letters, the digit row, the space bar and then the punctuation, in that order. The
+    // punctuation is every printable non-alphanumeric key a US layout reports unshifted; it is
+    // polled so a name box has a character to refuse rather than the press vanishing in here.
     private static Key[] BuildTextKeys()
     {
         var keys = new List<Key>();
@@ -340,6 +374,11 @@ public sealed class MenuInput
         for (Key k = Key.Key0; k <= Key.Key9; k++)
             keys.Add(k);
         keys.Add(Key.Space);
+        keys.AddRange(new[]
+        {
+            Key.Apostrophe, Key.Comma, Key.Minus, Key.Period, Key.Slash, Key.Semicolon,
+            Key.Equal, Key.Bracketleft, Key.Backslash, Key.Bracketright, Key.Quoteleft,
+        });
         return keys.ToArray();
     }
 
@@ -369,21 +408,11 @@ public sealed class MenuInput
         Erase = false;
     }
 
-    // The letters, digits and space pressed this frame, plus Backspace. Shift decides case, which
-    // is what lets a profile name read as the original's own mixed-case roster does.
+    // Every typeable key pressed this frame, plus Backspace. Shift decides case, which is what lets
+    // a profile name read as the original's own mixed-case roster does.
     private void PollText()
     {
-        var typed = new StringBuilder();
-        bool shift = KeyDown(Key.Shift);
-        for (int i = 0; i < TextKeys.Length; i++)
-        {
-            bool down = KeyDown(TextKeys[i]);
-            if (down && !_textPrev[i])
-                typed.Append(CharFor(TextKeys[i], shift));
-            _textPrev[i] = down;
-        }
-
-        Typed = typed.Length > 0 ? typed.ToString() : string.Empty;
+        Typed = TypedFrom(KeyDown, KeyDown(Key.Shift), _textPrev);
         bool erase = KeyDown(Key.Backspace);
         Erase = erase && !_erasePrev;
         _erasePrev = erase;

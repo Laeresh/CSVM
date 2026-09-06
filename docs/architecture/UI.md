@@ -250,12 +250,12 @@ back button alone, Escape and Start reaching the pause toggle through `FlightCon
 ## src/UI/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
 state, with `Poll(dt)` filling the cursor axes, accept, back and start out of the `Menu` binding
-context (`src/Bindings/`) from three readings of one seat, keyboard live, keyboard minus the
+context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboard minus the
 typeable keys, and the pad alone. Its pad rows sit on the seat-local `SeatPads` identity, since a
 seat reads a set of pads and no binding may hold a connection index. `Typed` and `Erase` serve a
-screen with a text field, and `PadMove`/`PadMoveX` are the axes such a screen reads instead, since
-W, A, S and D are letters there. In the menu it is the device half of a seat, wrapped by
-`Menu/BuiltIn/BuiltInSeat.cs` and bound by `MenuSeatDevices`; it also serves the in-flight boards.
+text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
+are letters there. `TypeableKeys` is deliberately wider than any box's accept rule. Wrapped by
+`Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards.
 
 ## src/UI/HudLayers.cs
 The canvas-layer ordering for everything drawn over the 3D view, in one place, so "does the collider

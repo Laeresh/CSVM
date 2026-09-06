@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Text entry, seats, and the way out
 
-31. ☐ `BL-711` A refused character in a name box makes no sound
+31. ☑ `BL-711` A refused character in a name box makes no sound
 32. ☐ `BL-697` Only player 1's keymap can be reached
 33. ☑ `BL-710` Quitting flashes Godot's default sky before the window closes
 
@@ -421,7 +421,39 @@ two in parallel worktrees.
 
 # Wave D — Text entry, seats, and the way out
 
-## D31 ☐ `BL-711` A refused character in a name box makes no sound
+## D31 ☑ `BL-711` A refused character in a name box makes no sound
+
+**Landed.** `MenuInput.BuildTextKeys` polls the punctuation row alongside the letters, the digit
+row and the space bar: apostrophe, comma, minus, period, slash, semicolon, equals, the two square
+brackets, backslash and backquote, which are the printable non-alphanumeric keys a US layout
+reports unshifted. `CharFor` already turned a Godot `Key` into its ASCII character, so no mapping
+was owed and Shift leaves punctuation at its unshifted symbol, which the box refuses just the
+same. The edge state was never a hand-sized array: `_textPrev` is `new bool[TextKeys.Length]`, so
+it grows with the table on its own. The loop that walks the two together is now
+`MenuInput.TypedFrom`, a public static over an injected key-down predicate (the `StepAxis`
+precedent), and it throws on an edge array of the wrong length rather than reading the wrong key;
+`TypeableKeys` exposes the table so a test can size one.
+
+**The cap overrun already beeped, so this item was only about the character set.** Both boxes
+refuse on a single condition that folds the cap in. The campaign roster's
+`CampaignTextEntry.Type` returns whether the text changed, which is false when an accepted
+character meets a full box, so `TypeRosterName` takes its else branch and cues
+`OriginalCues.TextError` (`OriginalCampaign.cs:493-501`); the hangar's branch tests `AcceptsNameChar(c) && _hangarName.Length < MaxNameLength`
+(`OriginalHangar.cs:575`) and falls to the same cue. Neither refusing branch was edited.
+
+Coverage: four `MenuInputTests` units (a punctuation key types its character and types it once per
+press, every typeable key owns an edge slot and a distinct character, the typeable set covers the
+accepted name characters and reaches past them, a wrong-length edge array throws), an
+`OriginalCampaignTests` unit that an accepted character at the cap cues the reject and nothing
+before it does, and a `menu-original-campaign` cue-log block that walks both routes on the empty
+profile box and leaves it as it found it.
+
+**Verified.** <pending orchestrator run>
+
+**Playtest after fix:** the profile name box, one accepted letter, one punctuation key, one key
+past the cap, expecting `ENTERTEXT`, `ENTERTEXT_ERROR`, `ENTERTEXT_ERROR`.
+
+**Original approach (kept for reference).**
 
 **Goal.** Typing a character a name box does not accept produces `ENTERTEXT_ERROR`, because the
 box is given the character and refuses it.

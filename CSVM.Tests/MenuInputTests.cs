@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using CSVM.UI;
 using CSVM.Utils;
+using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -8,8 +11,10 @@ namespace CSVM.Tests;
 /// The d-pad shape driving every menu cursor, via <see cref="MenuInput.StepAxis"/> over a real
 /// <see cref="HoldToRepeat"/>: a fresh press fires immediately, a held direction repeats after the
 /// initial delay at the repeat interval, a direction flip fires immediately with a fresh delay,
-/// releasing resets the delay, and idle input produces nothing. The device reads themselves are
-/// unreachable here; this is the timing rule alone.
+/// releasing resets the delay, and idle input produces nothing. Then the typed-text half over
+/// <see cref="MenuInput.TypedFrom"/>: the typeable set reaches past what a name box accepts, so a
+/// refused character arrives at the box and the box cues its reject sound. The device reads
+/// themselves are unreachable here; these are the two rules alone.
 /// </summary>
 public class MenuInputTests
 {
@@ -77,4 +82,53 @@ public class MenuInputTests
         Assert.Equal(0, MenuInput.StepAxis(0, ref prev, repeat, 1f));
         Assert.Equal(0, prev);
     }
+
+    [Fact]
+    public void APunctuationKeyTypesItsCharacterSoTheBoxHasSomethingToRefuse()
+    {
+        bool[] prev = FreshEdges();
+
+        Assert.Equal("/", MenuInput.TypedFrom(k => k == Key.Slash, shift: false, prev));
+        Assert.False(CampaignTextEntry.Accepts('/'));
+        // Still held on the next frame, so it types once per press like every other key.
+        Assert.Equal(string.Empty, MenuInput.TypedFrom(k => k == Key.Slash, shift: false, prev));
+    }
+
+    [Fact]
+    public void EveryTypeableKeyHasItsOwnEdgeSlotAndItsOwnCharacter()
+    {
+        var seen = new HashSet<char>();
+        foreach (var key in MenuInput.TypeableKeys)
+        {
+            string typed = MenuInput.TypedFrom(k => k == key, shift: false, FreshEdges());
+            Assert.Single(typed);
+            Assert.True(seen.Add(typed[0]), $"{key} typed a character another key already typed");
+        }
+
+        Assert.Equal(MenuInput.TypeableKeys.Count, seen.Count);
+    }
+
+    [Fact]
+    public void TheTypeableSetCoversTheAcceptedNameCharactersAndReachesPastThem()
+    {
+        var typed = new HashSet<char>();
+        foreach (var key in MenuInput.TypeableKeys)
+            typed.Add(MenuInput.TypedFrom(k => k == key, shift: true, FreshEdges())[0]);
+
+        foreach (char c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '`,-./;=[\\]")
+            Assert.Contains(c, typed);
+
+        Assert.Contains(typed, c => !CampaignTextEntry.Accepts(c));
+    }
+
+    [Fact]
+    public void EdgeStateOfTheWrongLengthIsRefusedRatherThanReadingTheWrongKey()
+    {
+        bool[] tooShort = new bool[MenuInput.TypeableKeys.Count - 1];
+
+        Assert.Throws<ArgumentException>(() => MenuInput.TypedFrom(_ => false, shift: false, tooShort));
+    }
+
+    // Nothing held, sized off the table so the parallel array cannot drift from it.
+    private static bool[] FreshEdges() => new bool[MenuInput.TypeableKeys.Count];
 }

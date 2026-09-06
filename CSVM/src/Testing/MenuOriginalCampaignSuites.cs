@@ -35,7 +35,9 @@ internal static class MenuOriginalCampaignSuites
 
     [Suite("menu-original-campaign",
         "Original's campaign through the presentation boundary over the install's decoded layout and "
-        + "a scratch profile store: the Campaign row opens the profile screen, typed frames name a "
+        + "a scratch profile store: the Campaign row opens the profile screen, a character outside "
+        + "the name rule and one inside it at the cap both type nothing and cue the box's reject "
+        + "sound, typed frames name a "
         + "player and Enter seats them on the cabin, the briefing runs its reveal on the presentation's "
         + "clock and starts its narration through the host's audio once, REPLAY BRIEFING starts it "
         + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
@@ -136,6 +138,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Rows.Count == 4 && shell.FocusedKey == "ROW:0" && campaign.Roster.Count == 0,
             $"an empty roster is the name box and three plaques, focus on the box ({shell.Rows.Count}, {shell.FocusedKey})");
         ctx.Check(host.Seats[0].CapturingText, $"the seat captures text on the profile screen");
+        RefusedCharacters(ctx, host, seat, shell, audio);
         audio.Cues.Clear();
         Press(host, seat, new MenuCommands { Typed = Pilot });
         ctx.Check(shell.RosterName == Pilot && audio.Cues.Count == Pilot.Length && audio.Cues[0] == OriginalCues.Text,
@@ -154,6 +157,32 @@ internal static class MenuOriginalCampaignSuites
             $"PREVIOUS MISSIONS opens the contents, four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"Back returns to the cabin ({shell.Screen})");
+    }
+
+    // Both routes to the box's reject cue, on the empty box so the screen is left as it was found:
+    // a character outside the campaign's name rule, and one inside it arriving at a box at its cap.
+    // The punctuation route needs the poller to type the character at all (MenuInput.TypeableKeys),
+    // which is what a key that produced neither a letter nor a sound used to be missing.
+    private static void RefusedCharacters(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, RecordingAudio audio)
+    {
+        audio.Cues.Clear();
+        Press(host, seat, new MenuCommands { Typed = "/" });
+        ctx.Check(shell.RosterName.Length == 0 && audio.Cues.Count == 1 && audio.Cues[0] == OriginalCues.TextError,
+            $"a character the name rule refuses types nothing and cues the reject sound ({shell.RosterName}, {string.Join(",", audio.Cues)})");
+
+        audio.Cues.Clear();
+        Press(host, seat, new MenuCommands { Typed = new string('A', CampaignFeature.MaxNameLength + 1) });
+        ctx.Check(shell.RosterName.Length == CampaignFeature.MaxNameLength
+            && audio.Cues.Count == CampaignFeature.MaxNameLength + 1
+            && audio.Cues[audio.Cues.Count - 1] == OriginalCues.TextError,
+            $"an accepted character at the cap cues the same reject ({shell.RosterName.Length}, {audio.Cues.Count})");
+
+        for (int i = 0; i < CampaignFeature.MaxNameLength; i++)
+        {
+            Press(host, seat, new MenuCommands { Erase = true });
+        }
+
+        ctx.Check(shell.RosterName.Length == 0, $"and Backspace empties the box again ({shell.RosterName})");
     }
 
     // The briefing: the reveal on the presentation's clock, the narration through the host's audio.
