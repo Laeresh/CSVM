@@ -265,6 +265,17 @@ writing nothing when a single file is locked.
 The payload is `packaging/MANIFEST.md`'s table, copied from its repo sources on every export, which
 keeps it byte-identical.
 
+**`packaging/README.md` is the whole of what a downloader is told**, written for someone who found
+the zip on the releases page and knows nothing else about the project: where the download comes
+from and how to check its SHA-256 against the release page, the requirements including the renderer
+floor below, the `Extract.cmd` first run, the `logs\` and `user://` locations, what the other files
+at the zip root are, and where a report goes. Four things in it restate facts that live in code or
+in this file, and go stale silently when one of them moves: the renderer floor and the
+`[perf] gpu=` line a below-floor machine writes, the log directory and the version on the log's
+first line, the extraction command spelling, and the payload list. ⚠ **The author reviews it before
+any release**, since outward communication is theirs; it is the one payload file that is not
+finished when it is correct.
+
 **Two of the zip's files are about the build rather than part of it.**
 `LICENSE-thirdparty.txt` carries the notices the payload's own contents oblige it to carry, which
 `LICENSE` (CSVM, GPL-3) and `LICENSE-unzbd` (mech3ax, EUPL-1.2) do not cover: the Godot engine

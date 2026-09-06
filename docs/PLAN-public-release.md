@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — What the public reads
 
 31. ☑ Pre-flip audit: the method claim, and the tracked files a stranger reads
-32. ☐ `packaging/README.md` rewritten for a reader nobody knows
+32. ☑ `packaging/README.md` rewritten for a reader nobody knows
 33. ☐ `.github/`: the bug form and the policies
 34. ☐ `PublishRelease.ps1`: tag, versioned zip, checksum, release
 
@@ -617,7 +617,7 @@ section had already been moved to `backlog.md`; it exposes nothing private, and 
 it carries is the Ghidra MCP server, which the corrected sentence now accounts for rather than
 contradicts.
 
-## D32 ☐ `packaging/README.md` rewritten for a reader nobody knows
+## D32 ☑ `packaging/README.md` rewritten for a reader nobody knows
 
 **Goal.** The README in the zip reads correctly for someone who found the download on GitHub, and
 answers the questions that would otherwise arrive as issues.
@@ -643,6 +643,62 @@ matched. Any step where the tester had to guess is a defect in this item.
 
 **⚠ Traps.** Write it after B13, C21 and C22 have settled what it documents. Its sign-off is the
 author's rather than a test's.
+
+**Verified.** The rewrite lands as a draft awaiting the author's sign-off, which is recorded in
+`packaging/MANIFEST.md`'s row for the file and in `docs/tooling.md` rather than in the shipped text,
+so nothing in the zip announces its own provisional status. Every file the README names is at the
+zip root of a real export, spelled the same way: `.scratch\export\` holds `CSVM.exe`,
+`data_CSVM_windows_x86_64\`, `Extract.cmd`, `Extract.ps1`, `ExtractAssets.ps1`, `ExtractRof.ps1`,
+`ExtractRof.MenuLayout.cs`, `tools\unzbd.exe`, `LICENSE`, `LICENSE-unzbd`,
+`LICENSE-thirdparty.txt`, `BUILD-INFO.txt` and `README.md`. Both commands it prints were run:
+`Get-FileHash <file> -Algorithm SHA256` prints the algorithm and hash, and
+`powershell -ExecutionPolicy Bypass -File Extract.ps1 "<path>"` against a non-existent folder bound
+its argument and failed on the intended check with exit 1, which is the same spelling
+`Extract.ps1`'s own `.EXAMPLE` carries and the same switches `Extract.cmd` applies.
+
+The claims restated from the four items they belong to are each traced back to their source rather
+than to the previous README. The renderer floor and its symptom are C22's: a GPU with a working
+Vulkan or Direct3D 12 driver, and below it menus that work followed by a mission that vanishes with
+no window and no message. The identification the README gives for that case is the build's own
+`[perf] gpu=` line (`Launcher.cs:452`, which logs the adapter, driver and method), naming
+`Microsoft Basic Render Driver` as the software device to look for, since that line is written by
+CSVM's own sink and survives into `logs\`. Godot's `Your video card drivers seem not to support
+Vulkan, switching to Direct3D 12` is quoted as **not** a fault on its own, because a machine with a
+real Direct3D 12 driver prints it and is above the floor; C22 also settled that no flag reaches the
+fallback, so the README prints no rendering flag. The log location, the per-run filename and
+`%APPDATA%\Godot\app_userdata\CSVM` are B13's, and the version on the log's first line reads
+`INFO  [core] csvm version=0.1.0` in a current log, with `BuildStamp` putting the same number in the
+menu's bottom-right corner. The extraction path is C21's: `Extract.cmd` probes, offers the picker,
+takes a dropped folder and holds its window open, and the no-data screen names it. The notice file
+and `BUILD-INFO.txt` are B12's. The disk figure was re-measured rather than carried over: the
+recipient-shaped subset of the dev tree's `extracted/` (the per-chapter archives, `rof/`, the
+unpacked `rimage/` and the root archives, excluding the `-Unzip` mirrors a recipient never
+produces) is 0.54 GB in about 1550 files, so "about 0.6 GB, leave 1 GB free" holds. The extraction
+**time** is the one figure carried forward unmeasured, and is E41's to confirm with the rest of the
+literal walk-through.
+
+Three things the rewrite decided rather than inherited. The SmartScreen paragraph no longer says
+the reader knows the sender; it says the zip is unsigned, that the warning is Windows not
+recognising a publisher, and that the SHA-256 against the releases page is the check that carries
+meaning, which is the same argument the milestone goal uses to decline code signing. The
+extraction-stamp warning names `ExtractAssets.ps1` and `ExtractRof.ps1`, which are not what a
+recipient runs, so the README bridges that in words rather than changing the engine string, which
+would be a `CSVM/` change in a documentation item. The support sentence says what happens to a
+report and not how fast, which is D33's trap arriving early because the README points at D33's
+form.
+
+The other three files that had to agree were corrected in the same edit. `README.md`'s export
+paragraph listed a payload that had been missing `Extract.cmd`, `LICENSE-thirdparty.txt` and
+`BUILD-INFO.txt` since B12 and C21 landed. `packaging/MANIFEST.md` addressed a friend rather than a
+downloader. `docs/tooling.md` gains what the packaging README is for, the four facts in it that
+restate code or that file and go stale silently, and the author-review rule. D31's method wording is
+untouched and uncontradicted: the packaging README makes no claim about method at all, and its
+Legal section is the one D31 left in place. Content gate clean (`CheckCommitContent.ps1` exit 0);
+nothing under `CSVM/` was touched, so the complete `RunTests.ps1` is not this change's gate.
+
+**Open for the author.** The text is a draft: the tone of the support sentence, the amount of
+troubleshooting a front-page README should carry, and whether the unsigned-download paragraph says
+enough are all judgements that belong to whoever signs the release.
 
 ## D33 ☐ `.github/`: the bug form and the policies
 

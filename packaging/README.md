@@ -1,65 +1,133 @@
 # CSVM — Crimson Skies open-source remake
 
 CSVM is a fan-made remake engine for **Crimson Skies** (2000, Zipper Interactive /
-Microsoft): a modern engine that plays the original game using your own legally-owned game
-files.
+Microsoft): a modern engine that plays the original game using your own legally-owned
+game files.
 
-**You must own Crimson Skies.** This zip contains no game data of any kind — only the
+**You must own Crimson Skies.** This zip contains no game data of any kind, only the
 engine and an extraction tool. Everything you see and hear in the game is read from your
 own retail install.
 
+## Where this download comes from
+
+CSVM is published in one place, the releases page of its repository:
+
+<https://github.com/Laeresh/CSVM/releases>
+
+Every release lists the SHA-256 of its zip. To check the file you downloaded, open a
+terminal in the folder holding the zip and run this, with the name replaced by the zip you
+actually have:
+
+```
+Get-FileHash CSVM-v0.1.0-win64.zip -Algorithm SHA256
+```
+
+The printed hash must match the one on the release page (upper and lower case do not
+matter). If it does not, delete the file and download it again from the link above.
+Nothing in this zip is code-signed, so that hash is what tells you this is the build the
+project published, rather than something a third party rebuilt or altered.
+
 ## Requirements
 
-- Windows 10 or 11
-- A retail Crimson Skies install (the original 2000 PC game)
-- Nothing else — no runtimes or frameworks to install
+- **Windows 10 or 11**, 64-bit.
+- **A graphics card with a working Vulkan or Direct3D 12 driver.** Either one is enough;
+  the build picks whichever is available. Below that line the menu still works and a
+  mission does not; "The game disappears when a mission starts" below says how to
+  recognise that case.
+- **A retail Crimson Skies install** (the original 2000 PC game) on this machine.
+- **About 1 GB of free disk space** for the game data you extract.
+- Nothing else. The .NET runtime this engine needs is inside the download, so there is no
+  runtime or framework to install.
 
-## Setup: two commands
+## Setup: extract, then fly
 
-**1. Extract your game's assets** (once). Open a terminal in this folder (in Explorer:
-right-click in the folder → "Open in Terminal"), then run — with the path replaced by
-your own Crimson Skies install folder:
+**1. Extract your game's assets.** This is done once. Double-click **`Extract.cmd`** in
+this folder. It looks for your Crimson Skies install where the game is normally installed,
+offers you a folder picker either way, and holds its window open at the end so you can
+read what it did. Dragging your Crimson Skies install folder onto `Extract.cmd` uses that
+folder directly.
+
+The folder it wants is the one containing the `ZBD` and `GOSDATA` subfolders. Open your
+install until you see those two side by side, and use that folder. Your install is only
+read, never modified. The extracted data lands in an `extracted` folder next to
+`CSVM.exe`.
+
+To do the same from a terminal, with the path given directly:
 
 ```
 powershell -ExecutionPolicy Bypass -File Extract.ps1 "C:\Program Files (x86)\Microsoft Games\Crimson Skies"
 ```
 
-The folder to pass is the one that contains the `ZBD` and `GOSDATA` subfolders — open
-your install until you see those two side by side. Your install is only read, never
-modified. The extracted data lands in an `extracted` folder next to `CSVM.exe`.
-
-Use exactly the command spelling above: Windows' default script policy blocks a plain
+Use exactly that command spelling: Windows' default script policy blocks a plain
 `.\Extract.ps1`, and the `-ExecutionPolicy Bypass -File` form is the supported way around
-that for this one script.
+it for this one script.
 
-**2. Fly:**
+**2. Fly.** Double-click **`CSVM.exe`** and pick a mode, chapter and plane in the menu.
 
-```
-.\CSVM.exe
-```
-
-(or double-click `CSVM.exe` in Explorer) — pick a mode, chapter, and plane in the menu.
+Starting `CSVM.exe` before the extraction is not a silent failure: it puts a screen up
+naming the step that produces the data, instead of loading a world it has nothing to build
+it from.
 
 ## Disk space and time
 
 Extraction produces about **0.6 GB** in the `extracted` folder (leave 1 GB free to be
-safe) and takes **well under a minute** on an SSD — around 15 seconds on a fast machine.
+safe) and takes **well under a minute** on an SSD, around 15 seconds on a fast machine.
 
 ## Windows SmartScreen
 
-The first time you start `CSVM.exe`, Windows will likely show a blue **"Windows protected
-your PC"** screen. That is expected: the exe is not code-signed (signing is for a later
-public release). Click **"More info"**, then **"Run anyway"**. You got this zip from us
-personally, and we are telling you to expect exactly this warning — if you got it from
-anywhere else, don't run it.
+**Nothing in this zip is code-signed.** The first time you run something out of this
+folder, Windows will likely show a blue **"Windows protected your PC"** screen. Click
+**"More info"**, then **"Run anyway"**.
+
+That screen means Windows does not recognise the publisher, which is true of every
+unsigned download and says nothing about what the file does. The check that does mean
+something is the SHA-256 above, taken against the release page. If this zip reached you
+from anywhere other than <https://github.com/Laeresh/CSVM/releases>, do that check before
+you run any of it.
+
+Windows also marks files that came from the internet. If something refuses to run at all,
+right-click the zip file, choose **Properties**, tick **Unblock**, click OK, and unzip it
+again.
 
 ## If something goes wrong
 
-Logs are written to `logs\` next to `CSVM.exe`. When you report a problem, send
-the newest log file from there along with what you did — that is usually all we need.
+Logs are written to `logs\` next to `CSVM.exe`, one file per run, named for the mode and
+the time it started. The newest file there is the run you just did, and its first line
+states the build version. That same version is in the bottom-right corner of the menu.
 
-If extraction fails, copy the message it printed; if the game starts but warns about the
-extraction at boot, re-run the extraction command from step 1.
+Report a problem at <https://github.com/Laeresh/CSVM/issues>, through the bug report form.
+Attach the newest log file from `logs\` and say what you did; that is usually all it takes
+to identify the fault. CSVM is written by one person, so a report is read and worked on in
+its issue rather than answered to a schedule.
+
+Three failures answer themselves:
+
+- **Extraction stopped with an error.** The extraction window prints which step failed and
+  on which folder. That text is the useful part of a report about extraction.
+- **The game warns about the extraction when it starts.** Re-run `Extract.cmd`. The warning
+  names `ExtractAssets.ps1` and `ExtractRof.ps1`, which are the two scripts `Extract.cmd`
+  runs for you.
+- **The game disappears when a mission starts.** Read on.
+
+### The game disappears when a mission starts
+
+The menu works, you pick a mission, the world loads, and the program vanishes with no
+window and no message. That is what this build does on a machine below the requirement
+above, and there is no setting inside the game that changes it.
+
+To tell that case apart from a genuine crash, open the newest file in `logs\` and find the
+line beginning `[perf] gpu=`. It names your graphics adapter and the renderer in use. A
+`gpu=Microsoft Basic Render Driver` there means Windows is rendering in software, with no
+graphics card driving it, and this build cannot fly a mission that way.
+
+The engine's own startup output may also say `Your video card drivers seem not to support
+Vulkan, switching to Direct3D 12`. On its own that line is not a fault, because Direct3D 12
+is one of the two drivers this build runs on. It matters only when the `[perf] gpu=` line
+then names a software device.
+
+The usual cause is a machine with no graphics driver installed, or a virtual machine
+without graphics passthrough. Installing your graphics card's current driver is the fix
+where there is one.
 
 ## Where your files live
 
@@ -74,20 +142,36 @@ and custom planes are kept outside it, in:
 (paste that into Explorer's address bar). Deleting those two folders removes everything
 CSVM has written; your Crimson Skies install is never modified.
 
+## What else is in this folder
+
+- `CSVM.exe` and the `data_CSVM_windows_x86_64` folder beside it are the engine. They
+  belong together; moving one without the other breaks the build.
+- `Extract.cmd`, `Extract.ps1`, `ExtractAssets.ps1`, `ExtractRof.ps1`,
+  `ExtractRof.MenuLayout.cs` and `tools\unzbd.exe` are the extraction step. It needs all
+  six.
+- `LICENSE` is the GNU GPL v3 the engine is under, and `LICENSE-unzbd` the EUPL-1.2 the
+  bundled extraction tool is under.
+- `LICENSE-thirdparty.txt` carries the copyright notices for the software built into those
+  two binaries: the Godot engine and its own third-party components, the bundled .NET
+  runtime, and the Rust libraries inside `tools\unzbd.exe`.
+- `BUILD-INFO.txt` records which commit each of the two shipped binaries was built from.
+  Quote it in a bug report when you are not sure which build you have.
+
 ## Legal
 
 This is an unofficial fan project, **not affiliated with, endorsed by, or sponsored by
 Microsoft or Zipper Interactive**. "Crimson Skies" and all related names, marks and
 artwork are the property of their respective owners.
 
-No game content is distributed in this zip. The engine requires — and reads at runtime —
+No game content is distributed in this zip. The engine requires, and reads at runtime,
 game files from your own legally-obtained copy of Crimson Skies. Nothing in this zip will
 run without it.
 
 ## License
 
 The CSVM engine is licensed under the **GNU General Public License, version 3 or later**
-(see `LICENSE` in this folder). Source code: <https://github.com/Laeresh/CSVM>.
+(see `LICENSE` in this folder). Source code: <https://github.com/Laeresh/CSVM>, at the
+commit `BUILD-INFO.txt` names.
 
     Copyright (C) 2026 Gabriel Unmüßig
 

@@ -59,10 +59,11 @@ Godot export templates are user-global, not part of the repo. One-time setup: ex
 
 `ExportRelease.ps1` builds, imports, and exports the release preset to `.scratch\export\CSVM.exe`,
 checking the export templates are installed and clearing `.scratch\export\` before it starts. This produces a self-contained `CSVM.exe` (the .NET runtime is bundled, so a recipient installs
-nothing) plus its data folder. It then copies the rest of the friend-facing release in beside it,
-`packaging/Extract.ps1` (the dispatcher a recipient runs against their own game install), the
-unmodified `ExtractAssets.ps1` / `ExtractRof.ps1`, the built `unzbd.exe`, and
-`packaging/README.md` / `LICENSE` / `LICENSE-unzbd`, and zips the folder to
+nothing) plus its data folder. It then copies the rest of the release in beside it,
+`packaging/Extract.cmd` and `packaging/Extract.ps1` (what a recipient double-clicks, and the
+dispatcher it runs against their own game install), the unmodified `ExtractAssets.ps1` /
+`ExtractRof.ps1`, the built `unzbd.exe`, and `packaging/README.md` / `LICENSE` /
+`LICENSE-unzbd` / `LICENSE-thirdparty.txt`, generates `BUILD-INFO.txt`, and zips the folder to
 `.scratch\CSVM-v<version>-win64.zip`, the archive to hand over. The version is
 `application/config/version` in `CSVM/project.godot`, which the exe's file properties and the first
 line of every log state as well. See [`packaging/MANIFEST.md`](packaging/MANIFEST.md) for the layout and
