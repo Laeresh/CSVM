@@ -483,6 +483,35 @@ public class OriginalCampaignTests : IDisposable
         Assert.NotNull(shell.Dialog);
     }
 
+    [Fact]
+    public void AnAidScriptSpellsTheSamePressesUnderOriginalAsItDoesUnderBuiltIn()
+    {
+        _store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        var shell = Shell(out _, out _);
+        shell.OpenCampaignOver(_store, _planes);
+        Assert.True(shell.ShowCabin("Zachary"));
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+
+        // A confirm on the opening row stands the pilot's list open, the entries joining the rows.
+        int closed = shell.Rows.Count;
+        shell.RunAidScript("a");
+        Assert.Equal("FIELD:0", shell.Rows[shell.Focus].Key);
+        Assert.Contains(shell.Rows, r => r.Key.StartsWith("ENTRY:", StringComparison.Ordinal));
+
+        shell.RunAidScript("b");
+        Assert.Equal(closed, shell.Rows.Count);
+
+        // A count with no verb is that many rows down, and the button word is that plaque's press.
+        shell.RunAidScript("2");
+        Assert.Equal("AcceptSelections", shell.Rows[shell.Focus].Key);
+        shell.RunAidScript(CampaignAidProfiles.ExportArgument);
+        Assert.NotNull(shell.Dialog);
+
+        // A word spelling no press at all leaves the screen where it stood.
+        shell.RunAidScript("qqq");
+        Assert.NotNull(shell.Dialog);
+    }
+
     private static void OpenCampaign(OriginalShell shell)
     {
         var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);

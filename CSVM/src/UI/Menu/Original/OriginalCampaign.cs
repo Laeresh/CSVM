@@ -241,21 +241,22 @@ public sealed partial class OriginalShell
     /// <summary>Presses the pilot's EXPORT on the plane-selection screen showing, so the one-button
     /// messagebox stands over it: the screenshot aid's door. Nothing happens off that screen or
     /// while a dialog already stands.</summary>
-    public void PressExport()
+    public void PressExport() => PressBoardButton(BoardButton.ExportPlane);
+
+    /// <summary>Replays a screenshot aid's colon argument on the campaign screen showing, the words
+    /// <see cref="CampaignAidScript"/> reads for Built-in, so one string poses both presentations.
+    /// The flow here is never walked, so a cursor verb is one command frame through this graph and
+    /// a button word is that button's row taking the focus and the confirm. The secondary verb x
+    /// reaches nothing: Original binds no secondary press, its lists selecting by click.</summary>
+    public void RunAidScript(string script)
     {
-        if (_screen != OriginalScreen.CampaignPlaneSelection || _dialog != null)
+        foreach (CampaignAidScript.Step press in CampaignAidScript.Parse(script))
         {
-            return;
+            for (int i = 0; i < press.Count; i++)
+            {
+                PressAidStep(press);
+            }
         }
-
-        int row = RowIndexOf(BoardButton.ExportPlane.ToString());
-        if (row < 0)
-        {
-            return;
-        }
-
-        _focus[(int)_screen] = row;
-        Step(new MenuCommands { Accept = true });
     }
 
     /// <summary>Moves the briefing's reveal on by a frame's worth of seconds while the briefing
@@ -789,6 +790,60 @@ public sealed partial class OriginalShell
         _flow.FocusRow(pageRow);
         _flow.Page.Accept(pageRow);
         SyncAfterPage(before);
+    }
+
+    // One script step as this graph's own presses. A cursor verb is a command frame, so the focus,
+    // the cues and every door out are the ones a player's press takes; x reaches no command.
+    private void PressAidStep(CampaignAidScript.Step press)
+    {
+        if (press.Button != BoardButton.None)
+        {
+            PressBoardButton(press.Button);
+            return;
+        }
+
+        switch (press.Verb)
+        {
+            case 'd':
+                Step(new MenuCommands { MoveY = 1 });
+                break;
+            case 'u':
+                Step(new MenuCommands { MoveY = -1 });
+                break;
+            case 'l':
+                Step(new MenuCommands { MoveX = -1 });
+                break;
+            case 'r':
+                Step(new MenuCommands { MoveX = 1 });
+                break;
+            case 'a':
+                Step(new MenuCommands { Accept = true });
+                break;
+            case 'b':
+                Step(new MenuCommands { Back = true });
+                break;
+        }
+    }
+
+    // A named button's own press: the row carrying it takes the focus and the confirm, which is
+    // what clicking that plaque does. A screen without the button is left alone, and so is one with
+    // a dialog standing, since the box's answers are the rows then.
+    private void PressBoardButton(BoardButton button)
+    {
+        if (_flow == null || _dialog != null || !IsCampaignScreen)
+        {
+            return;
+        }
+
+        for (int row = 0; row < _flow.Page.RowCount; row++)
+        {
+            if (_flow.Page.Button(row).Button == button)
+            {
+                _focus[(int)_screen] = row;
+                Step(new MenuCommands { Accept = true });
+                return;
+            }
+        }
     }
 
     private void SyncAfterPage(CampaignScreen before)

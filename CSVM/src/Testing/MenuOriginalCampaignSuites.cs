@@ -52,7 +52,9 @@ internal static class MenuOriginalCampaignSuites
         + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
         + "the wallet and Back resumes the cabin, a plane built over the campaign's wallet is absent "
         + "from the sortie roster until one EXPORT press crosses it, a purchase over a profile at the "
-        + "decoded slot cap is refused in the original's own words until a plane is sold back, and "
+        + "decoded slot cap is refused in the original's own words until a plane is sold back, the "
+        + "screenshot aids' input script stands the pilot's plane list and the ammo screen's rocket "
+        + "list open and draws them through idle frames while export is still the EXPORT press, and "
         + "Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
@@ -109,6 +111,7 @@ internal static class MenuOriginalCampaignSuites
             HangarRoundTrip(ctx, host, seat, shell, fit);
             ExportGate(ctx, host, seat, shell, fit, campaign, root);
             SlotCap(ctx, host, seat, shell, campaign, root);
+            AidScript(ctx, shell);
         }
         finally
         {
@@ -692,6 +695,41 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(hangar.Commit() && planes.Load(OneMore) != null,
             $"and one plane sold back makes room for exactly one more ({hangar.Message})");
         hangar.Discard();
+    }
+
+    // The screenshot aids' input script under Original: the same words Built-in's aids take, spelt
+    // on the ammo and plane-selection screens over the aid's own scratch store.
+    private static void AidScript(TestContext ctx, OriginalShell shell)
+    {
+        shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+        shell.ShowCabin(CampaignAidProfiles.Pilot);
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        int closed = shell.Rows.Count;
+        var shut = shell.Compose();
+        shell.RunAidScript("a");
+        var open = shell.Compose();
+        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:0",
+            $"a stands the pilot's plane list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+        ctx.Check(open.Overlays.Count > shut.Overlays.Count,
+            $"and the board draws it as an overlay, which is what a shot of it shows ({shut.Overlays.Count} -> {open.Overlays.Count})");
+
+        // The shot lands frames after the aid ran, so an idle frame and a pointer resting on no row
+        // must leave the list where the script put it.
+        shell.Step(MenuCommands.None);
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(400f, 300f, false, false) });
+        ctx.Check(shell.Compose().Overlays.Count > shut.Overlays.Count,
+            $"and idle frames keep it standing ({shell.Compose().Overlays.Count} overlays, focus {shell.FocusedKey})");
+
+        shell.ShowMissionScreen(OriginalScreen.CampaignAmmo);
+        closed = shell.Rows.Count;
+        shell.RunAidScript("4da");
+        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:4",
+            $"4da steps four rows down the ammo screen and stands that rocket list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        shell.RunAidScript(CampaignAidProfiles.ExportArgument);
+        ctx.Check(shell.Dialog != null, $"and export is still the EXPORT press, its box standing ({shell.Dialog?.Message})");
+        shell.CloseCampaign();
     }
 
     private static bool HasLine(ComposedBoard board, string text)

@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — The campaign boards' panes, and the shots that pin them
 
-11. ◐ `BL-659` No screenshot aid can open a campaign combo box
+11. ☑ `BL-659` No screenshot aid can open a campaign combo box
 12. ☐ `BL-658` The ammo screen shows one description pane where the original fills two
 
 ### Wave C — Original's dialogs and rows
@@ -369,18 +369,24 @@ landed; read what it does before adding a second count of the same directory.
 
 # Wave B — The campaign boards' panes, and the shots that pin them
 
-## B11 ◐ `BL-659` No screenshot aid can open a campaign combo box
+## B11 ☑ `BL-659` No screenshot aid can open a campaign combo box
 
-**Still owed: the same script under Original.** Built-in's aid replays the language below, but
-Original parses its own colon in `OriginalPresentation.ApplyCampaignAid` and reads `export` alone,
-so under the presentation this machine boots into no list opens yet. Since the item exists to let
-the open lists be pinned by a golden, and a golden of a menu screen is shot under Original, the
-item is not done until that parser routes through `CampaignAidScript` too. The route is known:
-give the shell a method beside its existing `PressExport` that calls `CampaignAidScript.Replay`,
-which the namespace seam allows because only `CSVM.UI.Menu` exactly is barred from referencing
-`CSVM.UI`.
+**Original speaks the same language.** `OriginalShell.RunAidScript` reads a colon argument through
+`CampaignAidScript.Parse` and spells each step as this graph's own press: a cursor verb is one
+`MenuCommands` frame through `OriginalShell.Step`, and a button word is that button's row taking
+the focus and the confirm, which is what `PressExport` is now written as. Replaying on the flow
+directly would not have shown, because Original hosts a `CampaignFlow` it never walks and mirrors
+that flow's cursor from its own `_focus` before every page press, so a walked row is overwritten by
+the next press. `OriginalPresentation.OpenCampaignAid` hands every aid's colon argument to the
+script bar `campaign-briefing`, whose colon is the reveal's seconds, and `campaign-hangar`, whose
+colon names a tab; `export` still raises the EXPORT box, now as a button word rather than a case of
+its own. The namespace claim held: `MenuNamespaceDependencyTests` scans the namespace `CSVM.UI.Menu`
+exactly, and `OriginalShell` is in `CSVM.UI.Menu.Original`. One verb differs between the two
+presentations: Original binds no secondary press, its lists selecting by click, so `x` reaches
+nothing there. Every other string is the same under both, `--menu=campaign-ammo:4da` and
+`--menu=campaign-planeselection:a` included.
 
-**Landed so far.** A campaign `--menu=` value's colon argument is a short input script the aid replays
+**Landed for Built-in.** A campaign `--menu=` value's colon argument is a short input script the aid replays
 where the walk left it, so a shot can show a drop-down standing open without a patched `Accept`.
 The grammar is `CSVM/src/UI/CampaignAidScript.cs`: a segment is either a run of verbs, each with an
 optional repeat count (`d` down, `u` up, `l` and `r` the horizontal stepper, `a` confirm, `b` back,
@@ -390,9 +396,7 @@ always was, and `export` is a button word rather than a case beside the language
 `LaunchMenu.PressExport` is gone. `campaign-briefing` still spends its colon on the reveal's
 seconds and `campaign-guestcheck` on a player number, both excluded from the replay exactly as the
 step loop excluded them. `--menu=campaign-ammo:4da` photographs the first pylon's open rocket list
-and `--menu=campaign-planeselection:a` the pilot's open plane list, both under
-`--presentation=builtin`. The Original presentation parses its own colon in `OriginalPresentation.cs`
-and reads only `export`; wiring it to the same script was outside this item's fence.
+and `--menu=campaign-planeselection:a` the pilot's open plane list.
 
 **Verified.** <pending orchestrator run>
 
