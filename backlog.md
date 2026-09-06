@@ -718,23 +718,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-296`, `BL-398`, `docs/org/menu-inventory.md`, `docs/org/input.md`,
   `docs/menu-presentations.md`.
 
-- `BL-697` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Only player 1's keymap can be reached, because the rebinding screen registers
-  the seats that have joined and seats join at aircraft select.** *Evidence (traced):* `OpenControls`
-  registers one seat per entry of `_slots` (`CSVM/src/UI/LaunchMenu.cs:2338-2350`), and `_slots`
-  mirrors `PlayerSetupFeature`'s joined seats, which are claimed with the pad Start gesture on the
-  aircraft pick. The screen is reached from Options, off the main menu, where seat 0 is the only
-  seat, so the Player stepper offers player 1 alone and no other player's file can be edited. Player
-  2's keymap is written by `BindingStore` and read at launch by `LaunchBindings`, so the data path is
-  whole and only the way in is missing.
-  *Fix shape:* let the screen take the join gesture itself, so a pad pressing Start there claims the
-  next free player for editing, or reach the screen from where seats already exist.
-  *⚠ Traps:* **A seat with no pad is not the same as a seat with a pad that has not joined.** Capture
-  needs a pad to press and reads the seat's own pad list, so registering four seats up front would
-  offer three players nothing to capture with. **Which pad a press came from is a raw device read,
-  not an action** (`B12`'s nine deliberately raw sites, and why `MenuJoin` is unbound), so the join
-  here cannot be resolved through the seat's own bindings.
-  *Cross-refs:* `BL-296`, `BL-398`, `BL-375`.
-
 - `BL-399` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
   undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
   original's `Views 1 → Track Target` binds `L` (free in our flight keymap; our `L` is the
@@ -2301,21 +2284,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
   *Cross-refs:* `PLAN-M5-polish-2` C10.
 
-- `BL-650` `[Feature]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The campaign hangar's decoded slot cap is not enforced, so a profile can
-  buy without limit.** *Evidence:* found while landing the campaign Plane Construction screen
-  (`git log --grep=BL-634`). The original's profile holds 25 plane records and its free-slot finder
-  reserves six of them (`FUN_004111f0`), refusing a purchase past that with langui 204
-  `IDS_PN_TOOMANYPLANES`. Nothing in the remake caps a campaign purchase: `CampaignWallet.Purchase`
-  debits and records with no count check, so a wealthy profile grows its inventory past anything the
-  original would accept. *Fix shape:* the refusal belongs beside the two that already exist, the
-  reward-aircraft one and the two-plane floor, so the shape is a third gate reading
-  `Profile.Planes.Count` against the decoded cap and composing 204. *⚠ Traps:* the cap is on
-  RECORDS, not on the build directory, which the two modes share; counting files would let an
-  Instant Action build refuse a campaign purchase. Read what the reserved six are for before
-  choosing the number, since a cap of 25 and a cap of 19 are different readings of the same decode.
-  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules). The other half of the
-  two modes over one store is the export gate, `CustomPlaneDef.AwaitingExport`.
-
 - `BL-637` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A targeted patrol boat shows no name line. The answer is per roster
   block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence
   (traced):* first reported in CM12 (C2/M01), where the boats target but carry no text, and again in
@@ -2343,42 +2311,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   rather than ruled out.
   *Cross-refs:* `BL-687` (the same boats, their guns), `BL-626`.
 
-- `BL-658` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The ammo screen shows one description pane where the original fills two.**
-  *Evidence:* `[@OrdinanceLayout@]` authors `OL_S_AMMODESC` at 566,96 and `OL_S_ROCKETDESC` at
-  566,332, each under its own heading, and `ORDINANCELAYOUT.SCRIPT` fills both at once, so the
-  screen reads a gun's ammunition and a pylon's ordnance side by side. Our board draws a single
-  `CampaignBoards.DetailSlot` at 566,92 carrying whichever row the cursor is on, so a rocket
-  description appears in the ammunition pane's position and the lower pane is empty.
-  *Fix shape:* the detail slot is keyed by screen, so the composer cannot tell which pane a row
-  belongs to; `ICampaignPage` needs a member naming the pane, after which the ammo page answers
-  with both texts and the two headings can be drawn. *⚠ Traps:* the plane selection screen and the
-  roster share `DetailSlot` and must keep one pane; and the open rocket list draws over the lower
-  pane in the original, so the overlay order is part of the change.
-
-- `BL-659` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **No screenshot aid can open a campaign combo box.**
-  *Evidence:* `LaunchMenu.OpenCampaignAid`'s `:<n>` argument spends itself on `flow.Move(1)`, and
-  `campaign-guestcheck` spends its colon on the player number, so no `--menu=` value can press a
-  row. The reference images that matter most for the new widget are the open ones
-  (`Campaign Flight Check Change Ammo ComboBox.png`, `Campaign Flight Check Change Plane Combo
-  Box.png`), and both were photographed by temporarily patching a `flow.Accept()` into the walk.
-  *Fix shape:* an argument form that spells a short input script rather than a step count, so a
-  shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
-  open lists are unpinned by any golden until this exists.
-
-- `BL-705` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The scrapbook's Best to
-  Date and Most Recent tabs cannot be clicked, because Original hit-tests only the page's scraps.**
-  *Evidence:* reported at the controls over `PLAN-menu-presentations` E44's pointer sweep. The tabs
-  are real rows (`RowKind.BestTab`/`MostTab`, `CSVM/src/UI/CampaignScrapbookPage.cs:64-65`) and the
-  keyboard reaches them, but `OriginalCampaign`'s hit-box switch answers for the scrapbook only
-  through `book.ScrapOf(row)` (`CSVM/src/UI/Menu/Original/OriginalCampaign.cs:567`), so any row that
-  is not a scrap gets no rectangle and the pointer passes over it.
-  *Fix shape:* give the scrapbook's non-scrap rows a box, the tabs first. The tab's drawn rectangle
-  is already known to the page, which centres the unselected tab's label in `TabWidth`
-  (`CampaignScrapbookPage.cs:34`). *⚠ Traps:* the same switch is what leaves every other non-scrap
-  row on that page unreachable, so fix the class of row rather than special-casing the two tabs.
-  *Cross-refs:* the pointer's wheel and thumb reach the campaign lists through `OriginalShell.Lists`,
-  which is a window rather than a row box and so does not answer for these tabs.
-
 - `BL-706` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The PLANE NAME dialog
   sits off-centre.** *Evidence:* reported at the controls over E44's pointer sweep, "Plane
   Construction: The PLANE NAME Dialog should be centered". The screen draws its panes at the decoded
@@ -2389,73 +2321,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   more likely means the board fit places a sub-screen pane wrong than that the data is wrong.**
   Centring it by hand would hide that, and would be a departure from the layout on a screen every
   other element of which is placed by it. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7.
-
-- `BL-710` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Quitting flashes Godot's
-  default sky before the window closes.** *Evidence:* reported at the controls over E44's pointer
-  sweep, "Exiting the game shortly shows the godot skybox before closing the window". *Fix shape:*
-  `GetTree().Quit()` ends the frame rather than the process, so anything freed on the way out leaves
-  the engine's own environment drawing for the frames that remain; paint over the exit, or free
-  nothing until the window is gone. *⚠ Traps:* confirm which teardown uncovers it before reordering
-  anything, since `Quit()` is called from a dozen places
-  (`CSVM/src/Session/Launcher.cs`, `CSVM/src/Session/GameSession.cs`) and most of them are probes
-  that never draw. A fix that hides the flash by delaying the quit would slow every headless probe
-  and every suite that ends in one.
-
-- `BL-711` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A refused character in a
-  name box makes no sound, because the keyboard cannot deliver one to refuse.** *Evidence:* reported
-  at the controls over `PLAN-menu-presentations` E44's sound sweep, which expects `ENTERTEXT` per
-  accepted character and `ENTERTEXT_ERROR` per refused one. Both cues are wired
-  (`OriginalCues.TextError` → `ENTERTEXT_ERROR.WAV`, `CSVM/src/Session/MenuCueTable.cs:20`) and both
-  edit boxes cue them on the refusing branch (`CSVM/src/UI/Menu/Original/OriginalCampaign.cs:435`,
-  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:562`), and the WAV is present in the extraction. What
-  never happens is the refusal: `MenuInput.BuildTextKeys` (`CSVM/src/UI/MenuInput.cs:335`) polls
-  A-Z, 0-9 and Space alone, so a character outside the box's set never reaches `Typed` and the box is
-  never asked to refuse it. Pressing an unaccepted key produces neither a letter nor a beep.
-  *Fix shape:* let the typed set be wider than the accepted set, so the box does the refusing and the
-  cue has something to fire on. *⚠ Traps:* **the cap overrun is a second, untested route to the same
-  cue** — a valid character typed into a full box should already refuse and beep, so check that
-  before concluding the cue is dead; if it beeps, this item is only about the character set.
-  Widening the polled keys touches text entry on both presentations, and the keys are edge-detected
-  per key in a fixed-length parallel array, so the array and the table have to grow together.
-  *Playtest after fix:* the profile name box, one accepted letter, one punctuation key, and one key
-  past the cap, expecting `ENTERTEXT`, `ENTERTEXT_ERROR` and `ENTERTEXT_ERROR`.
-
-- `BL-723` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **An armour step adds 4 lb where
-  the original's dropdown step adds 20.** *Evidence:* reported at the controls: "we increment by 5
-  units so it should add 20 not 4". `docs/org/hangar.md` carries two readings of the same handler:
-  "units 0-12 per zone ... displayed as units×5 ... weighed at units×4" and, in the economy table,
-  "the zone dword is the displayed unit count, so it reduces to $4 per unit" with a fully armoured
-  airframe at 240 units, $960 and 960 lb. Under the second reading a dropdown row of 5 units costs
-  $20 and 20 lb; CSVM stores rows (`HangarArmourPage.Step`), displays row×5 and charges row×4
-  (`HangarEconomy.ArmourUnitWeight`, `CSVM/src/Flight/HangarEconomy.cs:81-83`), so a full airframe
-  is 48 rows, $192 and 192 lb. *Fix shape:* settle which scale the record dword holds by reading
-  `FUN_00405680` and the dropdown callback at `0x0040b7bd` together, then correct the constant or
-  the store, and the doc's losing paragraph. *⚠ Traps:* the mission-side armour per zone
-  (`docs/formats/vehicle.md`'s 240-unit reasoning) reads the same dword, so a change here can move
-  hull points; re-run the vehicle tests. *Cross-refs:* `docs/org/hangar.md` ("Into the mission",
-  "The economy"), `BL-724` (the same screen).
-
-- `BL-724` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The ARMOR screen sets each wing on
-  its own where the original moves both wings together.** *Evidence:* reported at the controls as
-  the original's behaviour. `CustomPlaneDef` carries `ArmourLeftWing` and `ArmourRightWing` as
-  independent fields (`CSVM/src/Flight/CustomPlaneDef.cs:95-98`) and `HangarArmourPage` steps rows
-  2 and 3 separately (`CSVM/src/UI/HangarArmourPage.cs:58-81`); the record has four zone dwords
-  (`docs/org/hangar.md`, "Armour"). *Fix shape:* decode the ARMOR screen's row handlers: whether
-  the screen offers three rows and writes the wing value to both dwords, or four rows with one
-  stepping the other. Then couple the page and the PURCHASE rows the same way. *⚠ Traps:* the
-  record keeps two dwords either way, so mission-side damage still reads per wing; couple the UI,
-  not the model. A saved profile with unequal wings must still load. *Cross-refs:* `BL-723`,
-  `docs/org/hangar.md`.
-
-- `BL-744` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **The export notice
-  draws the message box's `?` icon where the original draws `!`.** *Evidence:*
-  `OriginalScreenshots/Campaign Flight Check Change Plane Export dialog.png` shows the `!` frame of
-  `MB_B_Icon.Png`; the remake's one-button message box over the plane-selection screen
-  (`CSVM/src/UI/CampaignBoards.cs`, `Dialog(modal.Message, ...)`, and Original's `ComposeDialog` in
-  `CSVM/src/UI/Menu/Original/OriginalCampaign.cs`) always draws the `?` frame. *Fix shape:* decode
-  which icon frame each message-box call site selects (the delete confirm keeps `?`, the export
-  notice takes `!`) and carry the frame on the modal. *⚠ Traps:* do not key the icon on the button
-  count; the original's two-button confirms and one-button notices may each use either frame.
 
 ## Splitscreen
 
