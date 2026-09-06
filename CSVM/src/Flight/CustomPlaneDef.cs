@@ -33,8 +33,10 @@ public sealed class CustomPlaneDef
     /// <summary>Engine ids run 0-6; 6 is the explicit no-engine pick the purchase gate rejects.</summary>
     public const int EngineNone = 6;
 
-    /// <summary>Armour is bought in units 0-12 per zone; the original record stores them
-    /// premultiplied by 5, our JSON stores the units themselves.</summary>
+    /// <summary>Armour is bought by the press, 0-12 per zone, one press being
+    /// <see cref="HangarEconomy.ArmourUnitsPerStep"/> units. ⚠ The zone fields below count
+    /// presses, so the record's own 0-60 unit count is five times any of them and the field is
+    /// priced through <see cref="HangarEconomy.ArmourStepCost"/>, never the per-unit one.</summary>
     public const int MaxArmourUnits = 12;
 
     /// <summary>Every airframe has exactly four gun slots; slot titles vary, the count does not.</summary>
@@ -85,16 +87,16 @@ public sealed class CustomPlaneDef
     /// engine to fly on).</summary>
     public int Engine { get; set; } = EngineNone;
 
-    /// <summary>Nose armour units, 0-12 (record +0x74, stored there x5).</summary>
+    /// <summary>Nose armour presses, 0-12 (record +0x74, holding the units, so x5).</summary>
     public int ArmourNose { get; set; }
 
-    /// <summary>Tail armour units, 0-12 (record +0x78).</summary>
+    /// <summary>Tail armour presses, 0-12 (record +0x78).</summary>
     public int ArmourTail { get; set; }
 
-    /// <summary>Left wing armour units, 0-12 (record +0x7c).</summary>
+    /// <summary>Left wing armour presses, 0-12 (record +0x7c).</summary>
     public int ArmourLeftWing { get; set; }
 
-    /// <summary>Right wing armour units, 0-12 (record +0x80).</summary>
+    /// <summary>Right wing armour presses, 0-12 (record +0x80).</summary>
     public int ArmourRightWing { get; set; }
 
     /// <summary>The four gun slots (record +0x84 twin bits, +0x88-0x94 ids). Fixed length

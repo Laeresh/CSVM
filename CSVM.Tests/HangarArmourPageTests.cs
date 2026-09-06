@@ -112,9 +112,9 @@ public class HangarArmourPageTests : IDisposable
         Assert.Equal(0, flow.Scratch.ArmourNose);
     }
 
-    /// <summary>The detail names the pick and what it costs: 3 units shows as 15 and buys $12 of
-    /// weight-12 armour (x4, the priced pair). Nothing is called pounds: the x5 figure is the
-    /// displayed unit count, not a weight.</summary>
+    /// <summary>The detail names the pick and what it costs: 3 presses show as 15 units and buy
+    /// $60 of 60 lb armour, the decoded $4 and 4 lb a unit. The unit count and the pounds are
+    /// different numbers here, so a readout printing one for the other cannot pass.</summary>
     [Fact]
     public void DetailNamesThePickAndItsPrice()
     {
@@ -123,13 +123,14 @@ public class HangarArmourPageTests : IDisposable
 
         string detail = flow.Page.Detail(0);
         Assert.StartsWith("15 units", detail, StringComparison.Ordinal);
-        Assert.Contains("$12", detail, StringComparison.Ordinal);
-        Assert.Contains("12 lbs.", detail, StringComparison.Ordinal);
+        Assert.Contains("$60", detail, StringComparison.Ordinal);
+        Assert.Contains("60 lbs.", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("lb shown", detail, StringComparison.Ordinal);
     }
 
-    /// <summary>The pick renders through the dropdown's own strings: format 1170 with units x5,
-    /// and langui 1165 "None" for the zero row rather than a count of nothing.</summary>
+    /// <summary>The pick renders through the dropdown's own strings: format 1170 with the presses
+    /// times five, and langui 1165 "None" for the zero row rather than a count of nothing. A full
+    /// zone is 60 units, $240 and 240 lb, a quarter of the full airframe's 240 units.</summary>
     [Fact]
     public void DetailUsesFormat1170_AndString1165ForNone()
     {
@@ -141,8 +142,8 @@ public class HangarArmourPageTests : IDisposable
 
         string detail = flow.Page.Detail(3);
         Assert.StartsWith("60 units", detail, StringComparison.Ordinal);
-        Assert.Contains("$48", detail, StringComparison.Ordinal);
-        Assert.Contains("48 lbs.", detail, StringComparison.Ordinal);
+        Assert.Contains("$240", detail, StringComparison.Ordinal);
+        Assert.Contains("240 lbs.", detail, StringComparison.Ordinal);
         Assert.StartsWith("None   $0", flow.Page.Detail(0), StringComparison.Ordinal);
     }
 

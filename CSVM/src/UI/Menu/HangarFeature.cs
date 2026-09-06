@@ -810,7 +810,7 @@ public sealed class HangarFeature : IMenuFeature
 
     /// <summary>The build's total cost were zone <paramref name="zone"/> at <paramref name="units"/>.</summary>
     public int CostWithArmour(int zone, int units) =>
-        Bill.Total.Cost + ((Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits) - ArmourUnits(zone)) * HangarEconomy.ArmourUnitCost);
+        Bill.Total.Cost + ((Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits) - ArmourUnits(zone)) * HangarEconomy.ArmourStepCost);
 
     /// <summary>The build's total cost were slot <paramref name="slot"/> on cycle row <paramref name="cycleRow"/>.</summary>
     public int CostWithGun(int slot, int cycleRow)

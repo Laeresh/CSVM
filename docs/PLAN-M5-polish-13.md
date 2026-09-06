@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The hangar record
 
-1. ☐ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
+1. ☑ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
 2. ☐ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
 3. ☐ `BL-650` The campaign hangar's decoded slot cap is not enforced
 
@@ -146,7 +146,46 @@ first and rebase `B12`.
 
 # Wave A — The hangar record
 
-## A1 ☐ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
+## A1 ☑ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
+
+**Landed.** The decode settles the scale in favour of the economy table's reading: the record's
+four zone dwords hold a **unit count 0 to 60 in steps of five**, not the dropdown's row number.
+Callback 2247 (`0x0040ac3d`) is what maps the two. Its SET arm multiplies the picked row by five
+(`LEA EAX,[EAX + EAX*0x4]` at `0x0040acaf`) and its GET arm divides the dword back down by five
+(the `0x66666667` reciprocal at `0x0040ac84`). Every reader then takes the dword at face value,
+which is why `FUN_00405680` charges the dword sum `x 20 / 5`, `FUN_00405550` weighs it `x 4`, and
+the star formula (`FUN_0040faf0` case 2) adds the dwords with no factor of its own. One press
+therefore buys five units, $20 and 20 lb, and the report is right.
+
+`CustomPlaneDef`'s four zone fields count presses rather than units, and every site crossing that
+boundary already multiplied by five except the pricing. `HangarEconomy` now names both scales:
+`ArmourUnitCost` and `ArmourUnitWeight` stay at the decoded 4 a unit, `ArmourUnitsPerStep` is 5,
+and `ArmourStepCost` and `ArmourStepWeight` carry the $20 and 20 lb a press that the five call
+sites holding a press count use (the ARMOR readout, the PURCHASE rows, the built-in feature's
+would-be cost and Original's two armour panels). The star formula reads `ArmourUnitsPerStep`
+where it read a bare 5. Our own ABOUT ARMOR panel already printed "COST: $20/5 units" while the
+bill charged $4, so the contradiction was visible inside one screen. `MaxArmourUnits` keeps its
+value of 12, which is the press cap and is right under this reading; its name is the last place
+the word "unit" means a press, and renaming it would reach three files outside this item's fence.
+
+`docs/org/hangar.md`'s Armour paragraph under "The economy" carried the losing reading, "units
+0-12 per zone at record +0x74 ... priced and weighed at units x4", which holds only if the dword
+is the row. It is replaced by the winning reading with the callback 2247 addresses that prove it.
+The economy table's paragraph, which already said the zone dword is the displayed unit count and
+a full airframe is 240 units, $960 and 960 lb, stands unchanged. `docs/formats/vehicle.md` needed
+no edit: it already reasons from 4 x 60 x 4 = 960 lb, and `CAP-19` measured the 60-unit cap at
+the controls, which is a third witness for the same reading.
+
+**The mission side did not move.** `CustomPlaneBuild.ArmouredParts` scales presses to units
+before writing the armour pools, so hull points are unchanged, and `campaign-airframe-swap` and
+`campaign-hangar-handover` (which asserts the Blue Streak's "20 armour a zone") both pass
+untouched. Four unit expectations took the intended correction: a maxed Balmoral's armour line
+becomes $960 and 960 lb, exactly the full-airframe figure both documents predict, and its verdict
+stays Overweight.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** One press on an ARMOR row moves the displayed units, the dollars and the pounds by the
 amounts the original's own dropdown moves them, and `docs/org/hangar.md` carries one reading of

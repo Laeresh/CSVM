@@ -72,8 +72,8 @@ public sealed class HangarPurchasePage : HangarPage
             Kind.Airframe => Flow.AirframeName(Scratch.Airframe),
             Kind.Engine => Flow.EngineName(Scratch.Airframe, Scratch.Engine),
             Kind.Gun => GunRowText(index),
-            // The armour lines carry the record's own stored scale, units x5, as the ARMOR screen
-            // does; only cost and weight run on the units themselves.
+            // The armour lines carry the record's own stored scale, presses x5, as the ARMOR
+            // screen does.
             Kind.Armour => Line(
                 1191 + index,
                 ZoneFallbacks[index] + ": {0} units",
@@ -98,8 +98,8 @@ public sealed class HangarPurchasePage : HangarPage
             Kind.Engine => Priced(bill.Engine),
             Kind.Gun => Priced(bill.Guns[index]),
             Kind.Armour => Priced(new CostWeight(
-                ZoneUnits(index) * HangarEconomy.ArmourUnitCost,
-                ZoneUnits(index) * HangarEconomy.ArmourUnitWeight)),
+                ZoneUnits(index) * HangarEconomy.ArmourStepCost,
+                ZoneUnits(index) * HangarEconomy.ArmourStepWeight)),
             Kind.Hardpoint => Priced(new CostWeight(
                 WingCount(index) * HangarEconomy.HardpointCost,
                 WingCount(index) * HangarEconomy.HardpointWeight)),

@@ -86,9 +86,9 @@ public class HangarEconomyTests
     [Fact]
     public void MaxedBalmoral_GoesOverweight()
     {
-        // Balmoral 1870/5460 + engine id 5 (3405/4000) + four twin .70s per turret mask 0x0c
-        // (cost 2*(580+580+780+780) = 5440, weight 2*(680+680+920+920) = 6400) + 48 armour
-        // units (192/192) + 8 hardpoints (3280/3840) = 14187 / 19892 > capacity 15760.
+        // Balmoral 1870/5460 + engine 5 (3405/4000) + four twin .70s per turret mask 0x0c (cost
+        // 2*(580+580+780+780) = 5440, weight 2*(680+680+920+920) = 6400) + 48 armour presses at
+        // 240 units (960/960) + 8 hardpoints (3280/3840) = 14955 / 20660, over capacity 15760.
         var def = new CustomPlaneDef
         {
             Airframe = 2,
@@ -111,9 +111,9 @@ public class HangarEconomyTests
         Assert.Equal(new CostWeight(1160, 1360), bill.Guns[1]);
         Assert.Equal(new CostWeight(1560, 1840), bill.Guns[2]);
         Assert.Equal(new CostWeight(1560, 1840), bill.Guns[3]);
-        Assert.Equal(new CostWeight(192, 192), bill.Armour);
+        Assert.Equal(new CostWeight(960, 960), bill.Armour);
         Assert.Equal(new CostWeight(3280, 3840), bill.Hardpoints);
-        Assert.Equal(new CostWeight(14187, 19892), bill.Total);
+        Assert.Equal(new CostWeight(14955, 20660), bill.Total);
         Assert.Equal(PurchaseVerdict.Overweight, bill.Verdict);
     }
 
@@ -121,8 +121,8 @@ public class HangarEconomyTests
     public void EnginelessWarhawk_IsRejectedForItsEngine()
     {
         // Warhawk 2423/5005, no engine (0/0), slot 0 single .30 on a wing (mask 0x00):
-        // 240/280. Nose armour 2 units: 8/8. One left hardpoint: 410/480.
-        // Totals 3081 / 5773, under capacity 14675, so only the engine blocks it.
+        // 240/280. Nose armour 2 presses, so 10 units: 40/40. One left hardpoint: 410/480.
+        // Totals 3113 / 5805, under capacity 14675, so only the engine blocks it.
         var def = new CustomPlaneDef { Airframe = 10, ArmourNose = 2, LeftHardpoints = 1 };
         def.Guns[0] = new GunChoice(0, false);
 
@@ -130,7 +130,7 @@ public class HangarEconomyTests
 
         Assert.Equal(default(CostWeight), bill.Engine);
         Assert.Equal(new CostWeight(240, 280), bill.Guns[0]);
-        Assert.Equal(new CostWeight(3081, 5773), bill.Total);
+        Assert.Equal(new CostWeight(3113, 5805), bill.Total);
         Assert.Equal(PurchaseVerdict.NoEngine, bill.Verdict);
     }
 
@@ -142,8 +142,8 @@ public class HangarEconomyTests
         Assert.Equal(4, hoplite.AgilityStars);
         Assert.Equal(0, hoplite.ArmourStars);
 
-        // Balmoral maxed: agility (-2-1)/4 truncates to 0; armour reads the record's stored
-        // units x5, so 48 units give (125 + 240 - 1)/73 = 4.
+        // Balmoral maxed: agility (-2-1)/4 truncates to 0; armour reads the record's own unit
+        // count, so 48 presses are 240 units and give (125 + 240 - 1)/73 = 4.
         var balmoral = HangarEconomy.Price(new CustomPlaneDef
         {
             Airframe = 2,
@@ -156,7 +156,7 @@ public class HangarEconomyTests
         Assert.Equal(0, balmoral.AgilityStars);
         Assert.Equal(4, balmoral.ArmourStars);
 
-        // Warhawk, 2 nose units: agility (2-1)/4 = 0; armour (120 + 10 - 1)/73 = 1.
+        // Warhawk, 2 nose presses: agility (2-1)/4 = 0; armour (120 + 10 - 1)/73 = 1.
         var warhawk = HangarEconomy.Price(new CustomPlaneDef { Airframe = 10, Engine = 1, ArmourNose = 2 });
         Assert.Equal(0, warhawk.AgilityStars);
         Assert.Equal(1, warhawk.ArmourStars);

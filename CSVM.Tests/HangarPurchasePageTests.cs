@@ -81,9 +81,9 @@ public class HangarPurchasePageTests : IDisposable
         Assert.Equal("$440   520 lbs.", flow.Page.Detail(2)); // the turret column
     }
 
-    /// <summary>Armour zones with units row through their own langui formats (1191-1194) on the
-    /// record's stored units x5 display scale, priced at the decoded units x4 for cost and
-    /// weight; empty zones get no row.</summary>
+    /// <summary>Armoured zones row through their own langui formats (1191-1194) showing the units
+    /// the presses bought, priced at the decoded $4 and 4 lb a unit, so $20 and 20 lb a press;
+    /// empty zones get no row.</summary>
     [Fact]
     public void ArmouredZonesRowThroughTheirLanguiFormats()
     {
@@ -96,9 +96,9 @@ public class HangarPurchasePageTests : IDisposable
 
         Assert.Equal(5, flow.Page.RowCount);
         Assert.Equal("Nose: 25 units", flow.Page.RowText(1));
-        Assert.Equal("$20   20 lbs.", flow.Page.Detail(1));
+        Assert.Equal("$100   100 lbs.", flow.Page.Detail(1));
         Assert.Equal("Left Wing: 10 units", flow.Page.RowText(2));
-        Assert.Equal("$8   8 lbs.", flow.Page.Detail(2));
+        Assert.Equal("$40   40 lbs.", flow.Page.Detail(2));
     }
 
     /// <summary>Each wing with hardpoints rows through 1176/1177 at the decoded $410 / 480 lb

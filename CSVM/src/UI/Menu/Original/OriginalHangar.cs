@@ -1456,8 +1456,8 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.HangarArmor:
                 name = "ABOUT ARMOR";
-                description.Add($"COST: ${HangarEconomy.ArmourUnitCost * 5}/5 units");
-                description.Add($"WEIGHT: {HangarEconomy.ArmourUnitWeight * 5} lbs./5 units");
+                description.Add($"COST: ${HangarEconomy.ArmourStepCost}/{HangarEconomy.ArmourUnitsPerStep} units");
+                description.Add($"WEIGHT: {HangarEconomy.ArmourStepWeight} lbs./{HangarEconomy.ArmourUnitsPerStep} units");
                 description.Add($"TOTAL: ${bill.Armour.Cost}   {bill.Armour.Weight} lbs.");
                 break;
             case OriginalScreen.HangarGuns:
@@ -1542,9 +1542,10 @@ public sealed partial class OriginalShell
             int units = hangar.ArmourUnits(zone);
             if (units > 0)
             {
-                string label = hangar.Strings.Format(1191 + zone, units * 5);
-                armour.Add((label.Length > 0 ? label : $"Zone {zone + 1}: {units * 5} units",
-                    new CostWeight(units * HangarEconomy.ArmourUnitCost, units * HangarEconomy.ArmourUnitWeight)));
+                int shown = units * HangarEconomy.ArmourUnitsPerStep;
+                string label = hangar.Strings.Format(1191 + zone, shown);
+                armour.Add((label.Length > 0 ? label : $"Zone {zone + 1}: {shown} units",
+                    new CostWeight(units * HangarEconomy.ArmourStepCost, units * HangarEconomy.ArmourStepWeight)));
             }
         }
 

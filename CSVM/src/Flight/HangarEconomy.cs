@@ -77,10 +77,21 @@ public static class HangarEconomy
     public const int HardpointCost = 410;
     public const int HardpointWeight = 480;
 
-    /// <summary>Cost and weight per armour unit. The ARMOR screen's lb readout multiplies units
-    /// by five instead; that factor is display-only and must not leak in here.</summary>
+    /// <summary>Units one press of the ARMOR stepper buys. The dropdown's 13 rows are labelled
+    /// row x 5 units, and callback 2247 (<c>0x0040ac3d</c>) writes row x 5 into the record's zone
+    /// dword and reads that dword back divided by 5, so the dword counts units while
+    /// <see cref="CustomPlaneDef"/>'s four zone fields count presses.</summary>
+    public const int ArmourUnitsPerStep = 5;
+
+    /// <summary>Cost and weight per armour unit, the scale the record's zone dwords carry:
+    /// <c>FUN_00405680</c> charges the dword sum x 20 / 5, <c>FUN_00405550</c> weighs it x 4.</summary>
     public const int ArmourUnitCost = 4;
     public const int ArmourUnitWeight = 4;
+
+    /// <summary>Cost and weight per press, which is the scale the zone fields are on. ⚠ Pricing a
+    /// zone field through <see cref="ArmourUnitCost"/> charges a fifth of the original's price.</summary>
+    public const int ArmourStepCost = ArmourUnitCost * ArmourUnitsPerStep;
+    public const int ArmourStepWeight = ArmourUnitWeight * ArmourUnitsPerStep;
 
     /// <summary>The 11-airframe stat table, ids 0-10.</summary>
     public static readonly AirframeStats[] Airframes =
@@ -147,8 +158,8 @@ public static class HangarEconomy
             guns[slot] = GunLine(stats, def.Guns[slot], slot);
         }
 
-        int armourUnits = def.ArmourNose + def.ArmourTail + def.ArmourLeftWing + def.ArmourRightWing;
-        var armour = new CostWeight(armourUnits * ArmourUnitCost, armourUnits * ArmourUnitWeight);
+        int armourSteps = def.ArmourNose + def.ArmourTail + def.ArmourLeftWing + def.ArmourRightWing;
+        var armour = new CostWeight(armourSteps * ArmourStepCost, armourSteps * ArmourStepWeight);
         int hardpoints = def.LeftHardpoints + def.RightHardpoints;
         var hp = new CostWeight(hardpoints * HardpointCost, hardpoints * HardpointWeight);
 
@@ -171,9 +182,9 @@ public static class HangarEconomy
                 : def.Engine == CustomPlaneDef.EngineNone ? PurchaseVerdict.NoEngine
                 : PurchaseVerdict.Ok,
             AgilityStars = Math.Min((stats.Agility - 1) / 4, 4),
-            // The star formula reads the record's stored armour, which is units x5; the only
-            // place that factor enters arithmetic rather than display.
-            ArmourStars = Math.Min((stats.Armour + (armourUnits * 5) - 1) / 0x49, 4),
+            // FUN_0040faf0 case 2 sums the record's zone dwords with no factor of its own, so the
+            // presses have to be converted to the units those dwords hold.
+            ArmourStars = Math.Min((stats.Armour + (armourSteps * ArmourUnitsPerStep) - 1) / 0x49, 4),
         };
     }
 
@@ -234,8 +245,8 @@ public sealed class HangarBill
     /// twinned, zero when empty. Fixed length <see cref="CustomPlaneDef.GunSlots"/>.</summary>
     public CostWeight[] Guns { get; init; } = new CostWeight[CustomPlaneDef.GunSlots];
 
-    /// <summary>The armour line: total units across the four zones, x4 for cost AND weight.
-    /// The x5 lb figure the ARMOR screen shows is display-only and not priced here.</summary>
+    /// <summary>The armour line: the four zones' presses at $20 and 20 lb each, which is the
+    /// decoded $4 and 4 lb a unit over the five units one press buys.</summary>
     public CostWeight Armour { get; init; }
 
     /// <summary>The hardpoint line: both wings' counts at $410 / 480 lb each.</summary>

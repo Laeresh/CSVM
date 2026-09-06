@@ -135,9 +135,9 @@ gun id (5) in some slots.
 ## The economy
 
 Total cost (`FUN_00405680`, written to record +0x28) =
-airframe cost + engine cost + gun cost + armourUnits×4 + (hpLeft + hpRight)×410.
+airframe cost + engine cost + gun cost + (Σ zone dwords)×4 + (hpLeft + hpRight)×410.
 Total weight (`FUN_00405550`, written to +0x3c) =
-airframe weight + engine weight + gun weight + armourUnits×4 + hardpoints×480.
+airframe weight + engine weight + gun weight + (Σ zone dwords)×4 + hardpoints×480.
 
 **Guns: table at `0x00619e68`**, stride 0x1c, indexed by gun id 0–4 (`langui` 3310–3314:
 .30 Zephyr, .40 Carver, .50 Barret, .60 Cheyenne, .70 Goliath). Per record: +0x00 cost wing,
@@ -163,11 +163,16 @@ airframes 0–10: (850, 1000, 200), (1700, 2000, 261), (2550, 3000, 126), (850, 
 "no engine" (cost and weight 0) and blocks purchase. Engine names are `langui`
 3100 + airframe×6 + engineId.
 
-**Armour**: units 0–12 per zone at record +0x74 Nose, +0x78 Tail, +0x7c Left Wing, +0x80
-Right Wing. Displayed as units×5 (the record's own stored scale, labelled "units", never
-pounds); priced and weighed at units×4 (handler `0x0040b0e4`,
-cost `LEA EDX,[ECX*4]` at `0x0040b1a6`, weight `units*20/5` at `0x0040b188`). Zone names
-`langui` 1191–1194.
+**Armour**: the four zone dwords at record +0x74 Nose, +0x78 Tail, +0x7c Left Wing, +0x80 Right
+Wing each hold a **unit count, 0–60 in steps of five**. That count is what the screen labels
+"units", never pounds. The dropdown's 13 rows are mapped onto it by callback 2247
+(`0x0040ac3d`), whose SET arm multiplies the row by five (`LEA EAX,[EAX + EAX*0x4]` at
+`0x0040acaf`) and whose GET arm divides the dword by five (the `0x66666667` reciprocal at
+`0x0040ac84`). Every reader then takes the dword at face value, so armour is priced and weighed
+at units×4 (handler `0x0040b0e4`, cost `LEA EDX,[ECX*4]` at `0x0040b1a6`, weight `units*20/5` at
+`0x0040b188`), and the armour star formula adds the dwords unscaled (`FUN_0040faf0` case 2).
+**One row of the dropdown is therefore five units, $20 and 20 lb.** Zone names `langui`
+1191–1194.
 
 **Hardpoints**: $410 and 480 lb each (handler `0x0040b2b4`; the constants resolve at
 `0x0040b31d`, 0x19a and 0x1e0, and reappear in both totals functions).
