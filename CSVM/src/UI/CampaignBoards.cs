@@ -291,7 +291,11 @@ public static class CampaignBoards
         var overlays = new List<BoardPanel>();
         var slots = Buttons.TryGetValue(page.Screen, out var found) ? found : Array.Empty<BoardSlot>();
         int listIndex = 0;
-        for (int row = 0; row < page.RowCount; row++)
+
+        // Read once, not per step: a page computes its row list to answer this, and the loop below
+        // cannot change how many rows there are.
+        int rowCount = page.RowCount;
+        for (int row = 0; row < rowCount; row++)
         {
             if (page.Combo(row) is { } combo)
             {

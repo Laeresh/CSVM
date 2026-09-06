@@ -33,6 +33,17 @@ internal readonly record struct FlightRow(
     string Text, string Detail, FlightRowKind Kind, int Slot = 0, int? Silhouette = null,
     string Guns = "", string Rockets = "");
 
+/// <summary>Everything the flight check's rows are composed from that a press can change. It is
+/// what says whether a redraw may reuse the rows it drew last time, so it holds identities and not
+/// contents: a loadout edit hands the record fresh <see cref="OwnedPlane.Ammo"/> and
+/// <see cref="OwnedPlane.Ordnance"/> arrays (<c>CampaignFeature.CommitLoadout</c>) and a hangar
+/// visit hands the flow a freshly read profile (<c>CampaignFeature.Resume</c>), so both show up
+/// here as a different object.</summary>
+internal readonly record struct FlightCheckState(
+    object? Profile, int MissionSeq, int Player, bool Wingman, bool ChangePlane,
+    OwnedPlane? Pilot, object? PilotAmmo, object? PilotOrdnance,
+    OwnedPlane? Wing, object? WingAmmo, object? WingOrdnance);
+
 /// <summary>
 /// The flight check screen (<c>Campaign Flight Check.png</c>, <c>FLIGHTCHECK.SCRIPT</c>,
 /// <c>docs/formats/campaign-screens.md</c>): the mission title, a PILOT row and, when the mission's
@@ -126,7 +137,19 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private static readonly CampaignProfileDef EmptyProfile = new() { Name = string.Empty };
 
     private readonly Dictionary<int, HangarArt?> _silhouettes = new();
+
+    // The hangar build behind each aircraft name, and the profile it was read for (see BuildFor).
+    private readonly Dictionary<string, CustomPlaneDef?> _builds = new();
     private readonly bool? _wingmanOverride;
+
+    private CampaignProfileDef? _buildsFor;
+
+    // The last composition and the state it was composed from (see Rows). Null rows mean nothing
+    // has been composed yet, which no state matches.
+    private List<FlightRow>? _rows;
+    private FlightCheckState _rowsState;
+    private IReadOnlyList<BoardLine>? _captions;
+    private IReadOnlyList<BoardPicture>? _pictures;
 
     private CustomPlaneStore? _planes;
     private StockLoadouts? _stock;
@@ -166,24 +189,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     /// at <c>FC_P_PILOTPLANE</c> and <c>FC_P_WINGPLANE</c>.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
-        get
-        {
-            var layout = Flow.Layout;
-            var fallback = new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames);
-            var pictures = new List<BoardPicture>(2);
-            var rows = Rows();
-            foreach (var row in rows)
-            {
-                if (row.Silhouette is { } airframe)
-                {
-                    string key = row.Slot == 0 ? "FC_P_PILOTPLANE" : "FC_P_WINGPLANE";
-                    var (x, y) = layout.At(Section, key, SilhouetteX, row.Slot == 0 ? PilotSilhouetteY : WingmanSilhouetteY);
-                    pictures.Add(new BoardPicture(layout.Art(Section, key, fallback), x, y, airframe));
-                }
-            }
-
-            return pictures;
-        }
+        // Rows() first: it drops this cache when the state behind the board has moved.
+        get => _pictures ??= ComposePictures(Rows());
     }
 
     /// <summary>The title and mission-name widgets, the objectives note down the right of the
@@ -191,51 +198,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     /// its own pair, which is what those two tables are. Each is at its own <c>FC_T_*</c> row.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
-        get
-        {
-            var layout = Flow.Layout;
-            var rows = Rows();
-            var (_, titleY, titleWidth) = layout.Box(Section, "FC_T_TITLE", TitleX, TitleY, TitleWidth);
-            var (missionX, missionY, missionWidth) = layout.Box(Section, "FC_T_MISSION", MissionX, MissionY, MissionWidth);
-            var lines = new List<BoardLine>
-            {
-                new(Heading, TitleX, titleY, titleWidth, TitleFont, BoardInk.Heading),
-                new(Title, missionX, missionY, missionWidth, 15, BoardInk.Detail),
-            };
-
-            if (ObjectivesNote() is { Length: > 0 } note)
-            {
-                var (objTitleX, objTitleY, objTitleWidth) = layout.Box(
-                    Section, "FC_T_OBJTITLE", ObjectivesTitleX, ObjectivesTitleY, ObjectivesTitleWidth);
-                var (objX, objY, objWidth) = layout.Box(
-                    Section, "FC_T_OBJECTIVES", ObjectivesX, ObjectivesY, ObjectivesWidth);
-                lines.Add(new BoardLine(
-                    Flow.Strings.Text(1014, "Objectives").Trim(),
-                    objTitleX, objTitleY, objTitleWidth, ObjectivesTitleFont,
-                    BoardInk.Detail, Italic: true));
-                lines.Add(new BoardLine(
-                    note, objX, objY, objWidth, ObjectivesFont, BoardInk.Detail, Italic: true));
-            }
-
-            foreach (var row in rows)
-            {
-                if (row.Kind != FlightRowKind.Info)
-                {
-                    continue;
-                }
-
-                string crew = row.Slot == 0 ? "P" : "W";
-                float fallbackY = row.Slot == 0 ? PilotTableY : WingmanTableY;
-                var (gunX, gunY, gunWidth) = layout.Box(Section, "FC_T_GUNTITLE" + crew, GunColumnX, fallbackY, TableWidth);
-                var (rocketX, rocketY, rocketWidth) = layout.Box(Section, "FC_T_ROCKETTITLE" + crew, RocketColumnX, fallbackY, TableWidth);
-                lines.Add(new BoardLine("GUNS", gunX, gunY, gunWidth, 12, BoardInk.Heading));
-                lines.Add(new BoardLine("ROCKETS", rocketX, rocketY, rocketWidth, 12, BoardInk.Heading));
-                lines.Add(new BoardLine(row.Guns, gunX, gunY + TableGap, gunWidth, TableFont, BoardInk.Row));
-                lines.Add(new BoardLine(row.Rockets, rocketX, rocketY + TableGap, rocketWidth, TableFont, BoardInk.Row));
-            }
-
-            return lines;
-        }
+        get => _captions ??= ComposeCaptions(Rows());
     }
 
     /// <summary>The screen's own heading, which names the player on a guest's check: the sequence
@@ -365,11 +328,104 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return false;
     }
 
-    // Every row this screen draws, computed fresh each call from the profile and the mission's
-    // wingman flag: the PILOT block, its two action rows, the WINGMAN block and its own two action
-    // rows when the mission carries a wingman, then RETURN TO BRIEFING and FLY MISSION. A guest's
-    // own check draws one PILOT block and no wingman: the wingman is the seated profile's.
+    private IReadOnlyList<BoardPicture> ComposePictures(List<FlightRow> rows)
+    {
+        var layout = Flow.Layout;
+        var fallback = new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames);
+        var pictures = new List<BoardPicture>(2);
+        foreach (var row in rows)
+        {
+            if (row.Silhouette is { } airframe)
+            {
+                string key = row.Slot == 0 ? "FC_P_PILOTPLANE" : "FC_P_WINGPLANE";
+                var (x, y) = layout.At(Section, key, SilhouetteX, row.Slot == 0 ? PilotSilhouetteY : WingmanSilhouetteY);
+                pictures.Add(new BoardPicture(layout.Art(Section, key, fallback), x, y, airframe));
+            }
+        }
+
+        return pictures;
+    }
+
+    private IReadOnlyList<BoardLine> ComposeCaptions(List<FlightRow> rows)
+    {
+        var layout = Flow.Layout;
+        var (_, titleY, titleWidth) = layout.Box(Section, "FC_T_TITLE", TitleX, TitleY, TitleWidth);
+        var (missionX, missionY, missionWidth) = layout.Box(Section, "FC_T_MISSION", MissionX, MissionY, MissionWidth);
+        var lines = new List<BoardLine>
+        {
+            new(Heading, TitleX, titleY, titleWidth, TitleFont, BoardInk.Heading),
+            new(Title, missionX, missionY, missionWidth, 15, BoardInk.Detail),
+        };
+
+        if (ObjectivesNote() is { Length: > 0 } note)
+        {
+            var (objTitleX, objTitleY, objTitleWidth) = layout.Box(
+                Section, "FC_T_OBJTITLE", ObjectivesTitleX, ObjectivesTitleY, ObjectivesTitleWidth);
+            var (objX, objY, objWidth) = layout.Box(
+                Section, "FC_T_OBJECTIVES", ObjectivesX, ObjectivesY, ObjectivesWidth);
+            lines.Add(new BoardLine(
+                Flow.Strings.Text(1014, "Objectives").Trim(),
+                objTitleX, objTitleY, objTitleWidth, ObjectivesTitleFont,
+                BoardInk.Detail, Italic: true));
+            lines.Add(new BoardLine(
+                note, objX, objY, objWidth, ObjectivesFont, BoardInk.Detail, Italic: true));
+        }
+
+        foreach (var row in rows)
+        {
+            if (row.Kind != FlightRowKind.Info)
+            {
+                continue;
+            }
+
+            string crew = row.Slot == 0 ? "P" : "W";
+            float fallbackY = row.Slot == 0 ? PilotTableY : WingmanTableY;
+            var (gunX, gunY, gunWidth) = layout.Box(Section, "FC_T_GUNTITLE" + crew, GunColumnX, fallbackY, TableWidth);
+            var (rocketX, rocketY, rocketWidth) = layout.Box(Section, "FC_T_ROCKETTITLE" + crew, RocketColumnX, fallbackY, TableWidth);
+            lines.Add(new BoardLine("GUNS", gunX, gunY, gunWidth, 12, BoardInk.Heading));
+            lines.Add(new BoardLine("ROCKETS", rocketX, rocketY, rocketWidth, 12, BoardInk.Heading));
+            lines.Add(new BoardLine(row.Guns, gunX, gunY + TableGap, gunWidth, TableFont, BoardInk.Row));
+            lines.Add(new BoardLine(row.Rockets, rocketX, rocketY + TableGap, rocketWidth, TableFont, BoardInk.Row));
+        }
+
+        return lines;
+    }
+
+    // ⚠ Do not compose the rows per call. The board recomposes every frame and asks for them a
+    // dozen times over, so anything built here is built at frame rate; the screen spent most of a
+    // frame on it. FlightCheckState is what a press can change, so an untouched board reuses the
+    // rows, the captions and the pictures it drew last time.
     private List<FlightRow> Rows()
+    {
+        var state = CurrentState();
+        if (_rows is { } cached && state == _rowsState)
+        {
+            return cached;
+        }
+
+        _rowsState = state;
+        _captions = null;
+        _pictures = null;
+        _rows = BuildRows();
+        return _rows;
+    }
+
+    private FlightCheckState CurrentState()
+    {
+        var profile = Flow.Profile ?? EmptyProfile;
+        var pilot = Player > 0 ? Flow.Field.Plane(Player) : PlaneAt(profile, profile.SelectedPlane);
+        var wing = Player == 0 && HasWingman ? PlaneAt(profile, profile.WingmanPlane) : null;
+        return new FlightCheckState(
+            Flow.Profile, Flow.MissionSeq, Player, HasWingman, Flow.Feature.ChangePlaneAllowed,
+            pilot, pilot?.Ammo, pilot?.Ordnance,
+            wing, wing?.Ammo, wing?.Ordnance);
+    }
+
+    // Every row this screen draws, composed from the profile and the mission's wingman flag: the
+    // PILOT block, its two action rows, the WINGMAN block and its own two action rows when the
+    // mission carries a wingman, then RETURN TO BRIEFING and FLY MISSION. A guest's own check draws
+    // one PILOT block and no wingman: the wingman is the seated profile's.
+    private List<FlightRow> BuildRows()
     {
         var profile = Flow.Profile ?? EmptyProfile;
         var rows = new List<FlightRow>();
@@ -571,8 +627,31 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // The hangar build a record flies with, if any. ⚠ A guest's stock record is named for its
     // airframe, so it must never be looked up by name: a hangar plane called "Devastator" would
     // otherwise fit that guest with somebody else's build.
-    private CustomPlaneDef? BuildFor(OwnedPlane plane) =>
-        Flow.Field.IsStock(plane) ? null : Planes?.Load(plane.Name);
+    // ⚠ Do not drop the cache: CustomPlaneStore.Load re-reads and re-parses the file on every
+    // call, and the board asks for these rows dozens of times per repaint. The seated profile is
+    // the key because the one thing that rewrites a build, a hangar visit, replaces the profile
+    // instance on the way back (CampaignFeature.Resume).
+    private CustomPlaneDef? BuildFor(OwnedPlane plane)
+    {
+        if (Flow.Field.IsStock(plane))
+        {
+            return null;
+        }
+
+        if (!ReferenceEquals(_buildsFor, Flow.Profile))
+        {
+            _builds.Clear();
+            _buildsFor = Flow.Profile;
+        }
+
+        if (!_builds.TryGetValue(plane.Name, out var build))
+        {
+            build = Planes?.Load(plane.Name);
+            _builds[plane.Name] = build;
+        }
+
+        return build;
+    }
 
     private LoadoutDef? StockFor(int airframe) =>
         Stock?.For(AirframeDefKeys[Math.Clamp(airframe, 0, AirframeDefKeys.Length - 1)]);
