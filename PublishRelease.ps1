@@ -263,8 +263,14 @@ if ((Get-Item $ZipPath).LastWriteTime -lt $exportStarted) {
 
 # Re-read the tree after a build that takes minutes: an edit or a commit landing while it ran
 # would otherwise tag a commit that is not the one the zip was built from.
-if (@(& git -C $RepoRoot status --porcelain).Count -gt 0) {
-    throw "The worktree became dirty during the export. Nothing was tagged or uploaded."
+$dirtyNow = @(& git -C $RepoRoot status --porcelain)
+if ($dirtyNow.Count -gt 0) {
+    # The paths are named because on a machine where more than one session works this tree, the
+    # edit that lands during a five-minute export is usually somebody else's and in a file the
+    # build never reads. It still ends the run: the release says the zip was built from a
+    # commit, and this tree is no longer that commit.
+    throw "The worktree became dirty during the export. Nothing was tagged or uploaded. " +
+        "Changed: $($dirtyNow -join '; ')"
 }
 if ((& git -C $RepoRoot rev-parse HEAD) -ne $CsvmCommit) {
     throw "HEAD moved during the export. Nothing was tagged or uploaded; re-run."
