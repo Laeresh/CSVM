@@ -1498,11 +1498,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-231` (closed; the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `BL-535` (the per-burst re-reset cost measured under the same instrument), `BL-296`/`BL-299` (the other splitscreen-scoped items).
-- `BL-538` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[C5]` **At what distance C5's city is meant to reach the dark level of its facade mip chain.** The dark band reported at the controls in C5 is not the clutter fade: it is the shipped hand-authored mip chain of the `cblock*` facade textures, whose level 1 is a non-monotone dip. `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) → 4.41 (L1) → 6.77 (L2) and `cblock2` at 9.60 → 0.83 → 1.84, so a facade near enough for L0 reads bright, one in the L1 band three to eleven times darker, and one far enough for L2 brighter again. `--mips=generated` removes the band completely; `graphics.clutterFarFade=false` does not touch it. The chain installs correctly (every `installed` line in the dump reads `== authored`), and the levels are the original's own art that must not be regenerated, so what is left is a judgement about *selection*: the artists tuned these levels against a 640×480 DX7 pipeline, and nothing yet says the remake reaches L1 at the distance they drew it for.
-  *Where to look:* the sampler and any LOD bias on the world shader (`SceneBuilder.GetBiasShader` emits `filter_linear_mipmap_anisotropic`), and whether the original point-selected a level where the remake trilinearly blends L0 into L1 across a range. Instrument: `--dump-mips` for the installed chain, `--mips=generated` for the A/B. The judgement itself is the user's at the controls, over the pose in the entry below.
+- `BL-538` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` `[C5]` **C5's city draws a dark band across its facades that the original never draws.** The dark band reported at the controls in C5 is not the clutter fade: it is the shipped hand-authored mip chain of the `cblock*` facade textures, whose level 1 is a non-monotone dip. `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) → 4.41 (L1) → 6.77 (L2) and `cblock2` at 9.60 → 0.83 → 1.84, so a facade near enough for L0 reads bright, one in the L1 band three to eleven times darker, and one far enough for L2 brighter again. `--mips=generated` removes the band completely; `graphics.clutterFarFade=false` does not touch it. The chain installs correctly (every `installed` line in the dump reads `== authored`), and the levels are the original's own art that must not be regenerated, so what is wrong is *selection*. Flown against the original at the controls (`PT-85`, closed), the original shows no band at any distance and under any of its video settings: "The original does not have the dark band at all. Tried different video settings. But the building view distance in the original is only inside the ring so perhaps the darkened building are just never visible." The artists tuned these levels against a 640×480 DX7 pipeline, and the reading the flight leaves is that the original stops drawing a facade before it ever reaches the distance L1 takes over, while the remake draws the same building out past that distance and shows an L1 the original's own camera never reached.
+  *Where to look:* the original's building draw distance first, since that is what the flight points at: find the cull range the original applies to ordinary gamez scene nodes (the clutter fade is ruled out below, and is a different path) and compare it against the camera distance at which our sampler reaches L1. Then the sampler and any LOD bias on the world shader (`SceneBuilder.GetBiasShader` emits `filter_linear_mipmap_anisotropic`), and whether the original point-selected a level where the remake trilinearly blends L0 into L1 across a range. Instrument: `--dump-mips` for the installed chain, `--mips=generated` for the A/B.
   *Reproduce:* `.\RunProbe.ps1 --freecam --chapter=C5 "--pos=-9491,140,-3479" "--direction=-0.588,-0.03,-0.809" --det --mute "--screenshot=.scratch\band.png"`, then the same with `--mips=generated`.
   *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); a per-texture lighting term (the original's hardware draw has none, and the band is a function of camera distance that lifts under a mip-policy switch, which changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
-  *Cross-refs:* `PT-85` (the flight that judges it, with the pose and the A/B), `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
+  *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
 
 - `BL-555` `[Feature]` `[Divergence]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A held key fast-forwards a mid-mission cutscene instead of
   skipping it: the definition plays at a raised rate that spools up while the key is held and
@@ -3130,7 +3130,9 @@ usual.
   hitch on every wave spawn in every mission, not only CM18's generator launches. The measured
   case is `BL-641`'s remainder (`PLAN-M5-polish-8` B14): with the crash rig
   deferred behind the launch, a CM18 generator launch still costs 68 to 141 ms against a 40 ms
-  threshold, paired A/B under `--det` at 1P and 4P. What is left on the launch frame is the model
+  threshold, paired A/B under `--det` at 1P and 4P. Flown since inside the docking film itself
+  (`PT-118` (d), closed), the five credited launches read with no stall at all, so five spawns
+  4 s apart behind a film camera do not show what ten from load do. What is left on the launch frame is the model
   build and `FlightController.Bind`, 50 to 90 ms together, and neither moves behind the frame that
   puts the aeroplane in the world without the aeroplane arriving late. The deferred frames carry one
   `AnimRuntime.PrewarmEmitters` call over about 194 emitters at 15 to 103 ms, whose
@@ -3204,6 +3206,31 @@ usual.
   episode. *⚠ Traps:* a loss inside a film and a win in free flight are separate paths; the fade
   case in `CampaignSuites` should assert all three. *Playtest after fix:* CM14, dock with the
   objectives complete. *Cross-refs:* `BL-727`'s closing commit.
+
+- `BL-771` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` `[CM18]` **A generator
+  credited long after load fires its first launch on the same step its hangar door starts opening,
+  so that aircraft flies out through a door that is still closed.** *Evidence:* reported at the
+  controls on CM18's docking film (`PT-118` (b), closed; the row's four other checks passed).
+  Five allied Furies drop from `cargozep1` about 4 s apart, but "the first one
+  starts a little early and flies through the still closed door". `GeneratorCycle.Step` is where it
+  comes from: an uncredited cycle is `Blocked`, and a blocked step advances `_timer` without ever
+  opening the door, so by the time cutscene callback 800 grants capacity minutes into the mission
+  the timer is far past `_nextEvent`. On that first unblocked step the door-lead branch sets
+  `DoorOpen` and the spawn branch fires inside the same call, spending the whole
+  `DoorLeadSeconds` at once, and `AiGeneratorRuntime` only starts the open anim on that same step
+  (`PlayDoor`, `CSVM/src/Session/AiGeneratorRuntime.cs:263-267`), so the panels have not moved yet.
+  Launches two to five are clean because the spawn resets `_timer` to 0 and leaves the door open.
+  *Fix shape:* on a step that opens a door from closed, hold the spawn until the lead has actually
+  run (clamp `_timer` to `_nextEvent - DoorLeadSeconds` as `DoorOpen` flips) instead of letting one
+  step satisfy both thresholds. *⚠ Traps:* whether the original does the same is not decoded, and
+  `FUN_00452850`'s loop order is what settles it: the remake mirrors the decoded order, so this may
+  be authentic and the fix a deliberate deviation. Read it before touching the cycle. The
+  `generator-callback-credit` suite pins five launches one every 4 s but does not look at the door
+  at the first spawn; extend that suite rather than adding one. *Playtest after fix:* CM18
+  (`./RunGame.ps1 --campaign=<profile>:17`), the docking beauty shot, the first Fury only.
+  *Cross-refs:* `BL-657`'s closing commit (the credit rule and the callback host), `BL-699` (the
+  per-launch hitch, which is a separate item and was not seen on these five),
+  `docs/formats/mission-entities/enemy-generators.md`.
 
 ## Tooling, platform & docs
 
