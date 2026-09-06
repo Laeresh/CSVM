@@ -134,6 +134,14 @@ keyboard and stepped through one alphabet from a pad, so the field needs no keyb
 accepts is the shared feature's own name rule, so a stepped or typed name is always one the feature
 would seat.
 
+## src/UI/CampaignAidScript.cs
+The input script a campaign screenshot aid's `--menu=` colon argument spells, replayed on the flow
+where the walk left it: counted cursor verbs, a confirm, a back and a secondary press, joined by
+`-`, plus a word naming a `BoardButton` to focus and confirm. A confirm is what lets an aid leave a
+drop-down standing open, which a step count could not reach. A count with no verb after it is a run
+of downs, so a bare number is the step count it always was, and `export` is a button word rather
+than a case beside the language. `docs/cli.md` states the grammar for the command line.
+
 ## src/UI/ScrapbookComposition.cs
 The scrapbook's per-spread scrap layout, read from the shipped `SCRAPBOOK.CSV` rather than invented:
 `Items` walks a spread from item 1 and stops at the first missing key, the way the original's reader

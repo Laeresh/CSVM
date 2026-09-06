@@ -1803,9 +1803,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The campaign's screens sit behind a flow rather than behind the screen enum, so --menu=
     // reaches them the way it reaches the hangar's. The player's door and campaign-fly run over
     // the presentation's store; every other value runs over the shared scratch directory, so the
-    // shot is the same on every machine and no aid can write into a real campaign. The briefing
-    // takes a seconds argument ("campaign-briefing:20") because its screen is a two-minute reveal
-    // and every stage of it is a different picture.
+    // shot is the same on every machine and no aid can write into a real campaign. The briefing's
+    // colon argument is a seconds count, because its screen is a two-minute reveal and every stage
+    // of it is a different picture; on the other screens it is a CampaignAidScript.
     private void OpenCampaignAid(string startScreen)
     {
         int colon = startScreen.IndexOf(':');
@@ -1858,32 +1858,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             System.Globalization.CultureInfo.InvariantCulture, out float argument);
 
         WalkCampaignAid(flow, value, argument);
-        if (value == "campaign-planeselection" && word == CampaignAidProfiles.ExportArgument)
-        {
-            PressExport(flow);
-        }
 
-        // On every screen but the briefing the argument is a cursor step count instead, so a shot
-        // can show focus on a plaque other than the opening one. Each step is one pad press.
-        // campaign-guestcheck reads it as a player number instead, which WalkCampaignAid took.
-        for (int i = 0; value is not ("campaign-briefing" or "campaign-guestcheck") && i < (int)argument; i++)
+        // The briefing spends its colon on a reveal's seconds and campaign-guestcheck on a player
+        // number, both of which WalkCampaignAid took; every other screen's is the input script
+        // CampaignAidScript replays, a bare number still meaning that many steps down.
+        if (value is not ("campaign-briefing" or "campaign-guestcheck"))
         {
-            flow.Move(1);
-        }
-    }
-
-    // The pilot's EXPORT press on plane selection, so the shot is the one-button messagebox
-    // standing over the screen; the aid's flow writes into the scratch build store.
-    private void PressExport(CampaignFlow flow)
-    {
-        for (int row = 0; row < flow.Page.RowCount; row++)
-        {
-            if (flow.Page.Button(row).Button == BoardButton.ExportPlane)
-            {
-                flow.FocusRow(row);
-                flow.Accept();
-                return;
-            }
+            CampaignAidScript.Replay(flow, word);
         }
     }
 

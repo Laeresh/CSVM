@@ -32,7 +32,8 @@ public static class CampaignAidProfiles
     public const int MissionsFlown = 3;
 
     /// <summary>The <c>campaign-planeselection</c> aid's argument that presses the pilot's EXPORT,
-    /// so the shot is the one-button messagebox standing over the screen.</summary>
+    /// so the shot is the one-button messagebox standing over the screen. A word of the campaign
+    /// aids' input script, and the one Original's own aid reads by itself.</summary>
     public const string ExportArgument = "export";
 
     // The completed-objective mask those runs record. Bit 0 alone would leave every scrapbook page

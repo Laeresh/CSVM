@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — The campaign boards' panes, and the shots that pin them
 
-11. ☐ `BL-659` No screenshot aid can open a campaign combo box
+11. ◐ `BL-659` No screenshot aid can open a campaign combo box
 12. ☐ `BL-658` The ammo screen shows one description pane where the original fills two
 
 ### Wave C — Original's dialogs and rows
@@ -296,7 +296,34 @@ landed; read what it does before adding a second count of the same directory.
 
 # Wave B — The campaign boards' panes, and the shots that pin them
 
-## B11 ☐ `BL-659` No screenshot aid can open a campaign combo box
+## B11 ◐ `BL-659` No screenshot aid can open a campaign combo box
+
+**Still owed: the same script under Original.** Built-in's aid replays the language below, but
+Original parses its own colon in `OriginalPresentation.ApplyCampaignAid` and reads `export` alone,
+so under the presentation this machine boots into no list opens yet. Since the item exists to let
+the open lists be pinned by a golden, and a golden of a menu screen is shot under Original, the
+item is not done until that parser routes through `CampaignAidScript` too. The route is known:
+give the shell a method beside its existing `PressExport` that calls `CampaignAidScript.Replay`,
+which the namespace seam allows because only `CSVM.UI.Menu` exactly is barred from referencing
+`CSVM.UI`.
+
+**Landed so far.** A campaign `--menu=` value's colon argument is a short input script the aid replays
+where the walk left it, so a shot can show a drop-down standing open without a patched `Accept`.
+The grammar is `CSVM/src/UI/CampaignAidScript.cs`: a segment is either a run of verbs, each with an
+optional repeat count (`d` down, `u` up, `l` and `r` the horizontal stepper, `a` confirm, `b` back,
+`x` the secondary press), or a word naming a `BoardButton` to focus and confirm, with `-` joining
+segments. A count with no verb after it is a run of downs, so a bare number is the step count it
+always was, and `export` is a button word rather than a case beside the language, which is why
+`LaunchMenu.PressExport` is gone. `campaign-briefing` still spends its colon on the reveal's
+seconds and `campaign-guestcheck` on a player number, both excluded from the replay exactly as the
+step loop excluded them. `--menu=campaign-ammo:4da` photographs the first pylon's open rocket list
+and `--menu=campaign-planeselection:a` the pilot's open plane list, both under
+`--presentation=builtin`. The Original presentation parses its own colon in `OriginalPresentation.cs`
+and reads only `export`; wiring it to the same script was outside this item's fence.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A `--menu=` value can move to a row and confirm on it, so the open plane and ammo lists
 can be photographed and pinned by a golden without patching a `flow.Accept()` into the walk.
