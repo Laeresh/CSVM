@@ -80,6 +80,54 @@ public class CampaignAidScriptTests
     }
 
     [Fact]
+    public void TheSecondaryVerbParsesWhicheverPresentationIsRunning()
+    {
+        var presses = CampaignAidScript.Parse("2d-x");
+
+        Assert.Equal(2, presses.Count);
+        Assert.Equal('d', presses[0].Verb);
+        Assert.Equal('x', presses[1].Verb);
+    }
+
+    [Fact]
+    public void APresentationWithoutTheSecondaryPressRefusesTheWholeScript()
+    {
+        Assert.Null(CampaignAidScript.Presses("2d-x", CampaignAidScript.VerbsWithoutSecondary, "Original's controls"));
+    }
+
+    [Fact]
+    public void EveryOtherVerbStillReplaysWithoutASecondaryPress()
+    {
+        const string script = "3d1u-2l-r-a-b-export";
+
+        Assert.Equal(
+            CampaignAidScript.Parse(script),
+            CampaignAidScript.Presses(script, CampaignAidScript.VerbsWithoutSecondary, "Original's controls"));
+    }
+
+    [Fact]
+    public void APadWithASecondaryPressSpellsEveryVerbTheGrammarHas()
+    {
+        Assert.Equal(
+            CampaignAidScript.Parse("2d-x"),
+            CampaignAidScript.Presses("2d-x", CampaignAidScript.Verbs, "Built-in's pad"));
+    }
+
+    [Fact]
+    public void TheSecondaryVerbPressesBuiltInsOwnShortcut()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Flown(0));
+        CampaignProgression.Record(profile, Flown(1));
+        var flow = PreviousMissions(profile);
+
+        Assert.True(CampaignAidScript.Replay(flow, "1d-x"));
+
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.Equal(1, flow.MissionSeq); // the row the cursor stood on, viewed without walking to the button
+    }
+
+    [Fact]
     public void ReplayStepsTheCursorTheWayTheStepCountDid()
     {
         var flow = Cabin();
@@ -179,6 +227,21 @@ public class CampaignAidScriptTests
         flow.SelectProfile(profile);
         flow.SetAmmoSlot(0);
         flow.GoTo(CampaignScreen.Ammo);
+        return flow;
+    }
+
+    private static MissionAttempt Flown(int seq) =>
+        new(seq, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5, Airframe: 5, PlaneName: "Gypsy Magic");
+
+    // The contents screen over a profile with flights in it, the one campaign screen whose secondary
+    // press does something: it views the mission the cursor stands on.
+    private static CampaignFlow PreviousMissions(CampaignProfileDef profile)
+    {
+        string dir = Path.Combine(TestData.TempDir(), "Profiles");
+        Directory.CreateDirectory(dir);
+        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty);
+        flow.SelectProfile(profile);
+        flow.GoTo(CampaignScreen.PreviousMissions);
         return flow;
     }
 

@@ -246,17 +246,26 @@ public sealed partial class OriginalShell
     /// <summary>Replays a screenshot aid's colon argument on the campaign screen showing, the words
     /// <see cref="CampaignAidScript"/> reads for Built-in, so one string poses both presentations.
     /// The flow here is never walked, so a cursor verb is one command frame through this graph and
-    /// a button word is that button's row taking the focus and the confirm. The secondary verb x
-    /// reaches nothing: Original binds no secondary press, its lists selecting by click.</summary>
-    public void RunAidScript(string script)
+    /// a button word is that button's row taking the focus and the confirm. False for a script
+    /// spelling the secondary verb x, which is refused whole because Original binds no such press,
+    /// its lists selecting by click; its caller ends the run.</summary>
+    public bool RunAidScript(string script)
     {
-        foreach (CampaignAidScript.Step press in CampaignAidScript.Parse(script))
+        if (CampaignAidScript.Presses(script, CampaignAidScript.VerbsWithoutSecondary, "the Original presentation")
+            is not { } presses)
+        {
+            return false;
+        }
+
+        foreach (CampaignAidScript.Step press in presses)
         {
             for (int i = 0; i < press.Count; i++)
             {
                 PressAidStep(press);
             }
         }
+
+        return true;
     }
 
     /// <summary>Moves the briefing's reveal on by a frame's worth of seconds while the briefing
@@ -793,7 +802,8 @@ public sealed partial class OriginalShell
     }
 
     // One script step as this graph's own presses. A cursor verb is a command frame, so the focus,
-    // the cues and every door out are the ones a player's press takes; x reaches no command.
+    // the cues and every door out are the ones a player's press takes. x never arrives here, the
+    // script carrying one having been refused whole.
     private void PressAidStep(CampaignAidScript.Step press)
     {
         if (press.Button != BoardButton.None)

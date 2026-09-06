@@ -620,9 +620,11 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The briefing spends its colon on the reveal's seconds and the hangar's names a tab, both
         // taken above; every other screen's is the script CampaignAidScript reads, the same words
         // Built-in's aids take, with export still that button's own press.
-        if (value is not ("campaign-briefing" or "campaign-hangar"))
+        if (value is not ("campaign-briefing" or "campaign-hangar") && !_shell.RunAidScript(argument))
         {
-            _shell.RunAidScript(argument);
+            // A script this presentation cannot press leaves nothing worth shooting, so the run
+            // ends before the capture takes a screen that looks like it simply did not respond.
+            _parent.GetTree()?.Quit(1);
         }
 
         return true;

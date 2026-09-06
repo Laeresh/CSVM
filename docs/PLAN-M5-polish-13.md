@@ -124,7 +124,7 @@ along with everything else. Both items are consequences of items in this run rat
 entries, so neither carries a `BL-` id: they are fixed here instead of being filed and rescheduled.
 
 51. ☑ Built-in's Purchase Now row stays live at the slot cap and refuses on the press
-52. ☐ The aid script's `x` verb is silently inert under Original
+52. ☑ The aid script's `x` verb is silently inert under Original
 
 ### Wave E — At the controls
 
@@ -945,7 +945,35 @@ drift apart. **The count is on records, never on the shared build directory**, w
 weaken the press-time refusal: greying the row is an addition to it, since a row can be enabled
 and the profile change underneath it.
 
-## F52 ☐ The aid script's `x` verb is silently inert under Original
+## F52 ☑ The aid script's `x` verb is silently inert under Original
+
+**Landed.** The grammar still carries `x` and both presentations still read one language. What
+changed is that a replay refuses a script it cannot press instead of dropping the verb and
+carrying on. `CampaignAidScript.Presses(argument, verbs, controls)` is the one gate both replays
+go through: it parses as before and returns null as soon as a step names a verb outside the set
+the running presentation binds, logging `ERROR [ui] --menu= aid refused: the Original presentation
+has no 'x' press, so '2d-x' spells nothing it can replay and the run ends without a shot (verbs it
+takes: dulrab)`. `Verbs` stays `dulrabx`, which is what Built-in's pad passes;
+`VerbsWithoutSecondary` is `dulrab`, which is what `OriginalCampaign.RunAidScript` passes because
+Original selects a row by clicking it.
+
+Both aid entry points end the run on a refusal rather than shooting the screen: `LaunchMenu`'s
+`OpenCampaignAid` and `OriginalPresentation`'s each call `GetTree()?.Quit(1)`, the same shape the
+startup guard against `--headless` with `--screenshot` uses. The quit lands inside `_Ready`,
+before `CaptureDirector` has counted its frames down, so no PNG is written and the probe's exit
+code is the whole diagnosis. A probe proves it: `--presentation=original
+--menu=campaign-previous:2d-x --screenshot=…` exits 1 and writes no file, while the same command
+without the `x` exits 0 and writes the shot.
+
+Original was not given a secondary press, so no aid reaches a state its controls cannot. The
+refusal is whole rather than partial, so the two downs in `2d-x` do not move the cursor either; a
+half-replayed script would still hand back a picture that reads as an answer. No `--menu=` call
+site in `CSVM/src/Testing/**`, `CSVM.Tests/**` or `analysis/goldens/manifest.json` spells `x`, so
+nothing else moved.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** An aid string that cannot do what it says under the presentation it is aimed at fails
 loudly rather than returning a shot of the wrong thing.
