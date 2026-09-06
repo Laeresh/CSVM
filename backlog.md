@@ -3064,57 +3064,6 @@ usual.
   which is the better-founded half of the same item.
   *Cross-refs:* `BL-632`, `PT-112`.
 
-- `BL-694` `[Bug]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 becomes unwinnable when the Gemini is killed before its cannon bays are,
-  because the wreck comes to rest low enough to put the surviving bays under the sea.** *Evidence
-  (traced, and reproduced twice at the controls with the two outcomes side by side):* the mission's
-  third primary is the only route to a win. `OBJECTIVE13` is
-  `IDENTITY [PRIMARY, 3, MSG_BRF_HWM4_OBJ3]` gated on `ANIM_STATE COMPLETION_COUNT 5` over the six
-  `deploy_gmzep_lbroad11..32` in `INVALID`
-  (`extracted/C2B/M04/zrdr/objectives.zrd.json:755`); completing it naps `OBJECTIVE33`, which wakes
-  `OBJECTIVE14`, which naps `OBJECTIVE32` `INSTANTWIN`. Nothing else wakes any of the three. Failing
-  it loses nothing either — `OBJECTIVE22` `INSTANTLOSS` is woken only by `OBJECTIVE21`, three of the
-  *player's own* `piratezep` gasbags gone — so the mission simply never ends.
-  Only `destroy_gmzep_lbroadNN-gunback` (activation `WeaponHit`, health 60) writes those `INVALID`
-  states, and `killgmzep` invalidates only `gmzep_rocksleft`/`gmzep_rocksright`, so no zeppelin death
-  credits the objective. The gasbag kill is reachable independently: `geminizep` authors five healthy
-  zones with `num_healthy_required 3`, so three torpedoes kill it with every cannon untouched.
-  The two logged runs are the proof, and they differ only in order.
-  **Won:** `lbroad21` destroyed then `objective 11 completed` one line later, `lbroad31` destroyed
-  then `objective 12 completed`, the Gemini killed, and the last bay then shot on a floating wreck
-  the author put "a meter above the water level".
-  **Blocked:** no cannon destroyed at all, gasbags 2, 3 and 1 killed, `geminizep DESTROYED —
-  survivors 2 < required 3`, `objective 11` woken at 72.1 s and never completed, and no mission end
-  of any kind in the rest of the log.
-  The author's own account of the difference: "the wreck sank under water blocking the mission
-  because only the cannons count", and asked whether rounds reach a submerged gun, "stops at
-  surface" — which `Projectile.SurfaceIsWater` confirms, water being a real collider.
-  The reachability half is confirmed at the controls on the breakup itself (the retired `PT-103`,
-  `git log --grep=PT-103`): the wreck's three middle sections rest on the sea at different depths,
-  and at least one bay sits under the water where no round reaches it.
-  *Fix shape (author's decision):* the bays stay where they are on the hull and are DESTROYED when
-  the gasbags explode; they do not ride along with the falling bags. That puts the `INVALID` state
-  on the `deploy_gmzep_lbroadNN` defs the same way a `WeaponHit` on `destroy_gmzep_lbroadNN-gunback`
-  does, so the credit for primary 3 arrives through the bays' own destruction. Raising the wreck's
-  rest height is not the fix: the rest is the contact tier parking the body's ORIGIN on what it
-  lands on, which is decoded behaviour ([`docs/org/objectMotion.md`](org/objectMotion.md):40,
-  `FUN_004cf200` hands the column query the flying node's origin, with no bounding-box term).
-  ⚠ **Do not credit primary 3 from the gasbag count itself.** `MSG_BRF_HWM4_OBJ3` reads "Destroy
-  the GEMINI by shooting the open cannon hatches", and `killgmzep` invalidates only the rocks, so a
-  direct gasbag-to-objective credit would invent a win condition. The credit goes through the bays
-  being destroyed, which is a destructible-state change and not an objective edit; `CAP-55` (d) and
-  (e) are what show whether the original's own breakup takes the bays with it.
-  *⚠ Traps:* **`killgmzep` has never run under test.** `CSVM/src/Testing/ZeppelinBreakupSuites.cs:11,22`
-  pins C1/M04 and `piratezep` only, asserts six bags where the Gemini has five, and would fail its
-  12-of-12 engine check on a 14-engine hull, so a green suite is no evidence about this ship. There
-  is also no recovery for a player already in this state: `--debug-objective=N` drives `INACTIVEn`
-  conditions only and cannot satisfy an `ANIM_STATE` objective, and the campaign's four-attempt skip
-  offer needs four RECORDED failures, which an unwinnable-and-unlosable mission never produces.
-  *Open question for whoever takes this:* in the winning run `objective 13` completed with only TWO
-  bays destroyed. Two destroys invalidate four `deploy_*` defs and the objective is authored to need
-  five, so something else supplied the fifth; find it before changing any counting.
-  *Cross-refs:* `BL-695` (the same ladder crediting with no cannon touched at all), `BL-698` (the
-  Gemini's end gasbags sinking through the same sea), `BL-639`, `BL-640`, `BL-668`, `CAP-55`.
-
 - `BL-695` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
   all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
   without a single `[anim] damage:` line on any `lbroadNN` node anywhere in the mission window, and
