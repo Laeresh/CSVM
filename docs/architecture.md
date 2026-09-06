@@ -353,6 +353,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
 - `src/UI/BuildStamp.cs` — the build's version in the menu's bottom-right corner, once for the window and over every presentation; hidden in flight.
+- `src/UI/NoGameDataScreen.cs` — the screen shown instead of the menu when the data root holds no extraction: what is missing, and the extraction step that fills it.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
 - `src/UI/DebugKillTarget.cs` — the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
 - `src/UI/SelectionService.cs` — the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.

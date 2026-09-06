@@ -55,6 +55,7 @@ $BuildInfo    = Join-Path $ExportDir "BUILD-INFO.txt"
 # The zip payload beside the export output, from packaging/MANIFEST.md. Sources are the
 # files' one home in the repo, so a copy is byte-identical to what the manifest names.
 $ReleaseFiles = @(
+    @{ Source = Join-Path $RepoRoot "packaging\Extract.cmd";    Dest = "Extract.cmd" },
     @{ Source = Join-Path $RepoRoot "packaging\Extract.ps1";    Dest = "Extract.ps1" },
     @{ Source = Join-Path $RepoRoot "ExtractAssets.ps1";        Dest = "ExtractAssets.ps1" },
     @{ Source = Join-Path $RepoRoot "ExtractRof.ps1";           Dest = "ExtractRof.ps1" },

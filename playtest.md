@@ -731,6 +731,25 @@ is a judgement on our own remake.
   state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
 
 
+### The exported package · a recipient's first run, no arguments
+
+```powershell
+./ExportRelease.ps1   # then unzip .scratch\CSVM-v<version>-win64.zip into a bare folder
+```
+
+- `PT-131` `[Own]` **An exported build started by double-clicking `CSVM.exe` sounds, and the
+  folder with no `extracted\` says so on screen.** The repo's silent master default is what keeps
+  scripted runs quiet, so the export carries its own audible one; nothing in the payload passes a
+  flag. Run the unzipped `CSVM.exe` from Explorer, with the extraction done and again with the
+  `extracted\` folder renamed away. ⚠ Clear `CSVM_DATA_ROOT` from the environment first, or the
+  exported build reads the development tree and neither case is what a recipient sees. *Look for:*
+  - (a) with game data present, the menu comes up with its music and the menu cues audible at a
+    sensible level, without a `--volume=` argument anywhere;
+  - (b) with no `extracted\`, the no-game-data screen names `Extract.cmd` and stays up until Esc,
+    rather than a menu over a world that cannot build.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The level itself is untunable
+  in game (`BL-455`).
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own

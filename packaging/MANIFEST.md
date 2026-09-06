@@ -1,7 +1,7 @@
 # Release zip manifest (for the B13 assembler, not the recipient)
 
 The friend-release zip holds these pieces. Everything sits at the zip root except
-`tools\unzbd.exe`; the friend unzips, runs `Extract.ps1`, then `CSVM.exe`.
+`tools\unzbd.exe`; the friend unzips, double-clicks `Extract.cmd`, then `CSVM.exe`.
 
 `ExportRelease.ps1` assembles it: it exports into `.scratch\export\`, copies the rows below in
 beside the export output, and zips that folder to `.scratch\CSVM-v<version>-win64.zip`, the version
@@ -15,7 +15,8 @@ every run and therefore has no repo home to be copied from.
 | Zip path | Source | Notes |
 |---|---|---|
 | `CSVM.exe` + export payload (`.pck`/`.dll`s etc.) | the Godot release export output | Whatever the export produces at its root, copied verbatim; the exe's file properties carry the version |
-| `Extract.ps1` | `packaging/Extract.ps1` | The thin dispatcher; contains no extraction logic |
+| `Extract.cmd` | `packaging/Extract.cmd` | The double-clickable wrapper: runs `Extract.ps1` beside it with the execution-policy switch applied, forwards a dropped folder, and holds the window open on both outcomes |
+| `Extract.ps1` | `packaging/Extract.ps1` | The thin dispatcher; contains no extraction logic. Passed no path it probes the usual install locations and offers a folder picker |
 | `ExtractAssets.ps1` | repo root `ExtractAssets.ps1` | UNMODIFIED repo script — do not fork a package variant |
 | `ExtractRof.ps1` | repo root `ExtractRof.ps1` | UNMODIFIED repo script — do not fork a package variant |
 | `ExtractRof.MenuLayout.cs` | repo root `ExtractRof.MenuLayout.cs` | The menu-layout decoder `ExtractRof.ps1` `Add-Type`s from beside itself; without it the extraction fails on the friend's machine |
