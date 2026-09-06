@@ -384,6 +384,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **SHELL-19** — **Quote a launched argument that carries a space, or the process re-splits it
   before the callee sees it.** `-ArgumentList` quotes nothing itself, so a data-root or Godot
   path with a space arrives split unless the launch scripts quote it.
+- **SHELL-20** — **Under `$ErrorActionPreference = 'Stop'`, redirecting a native command's stderr
+  makes its failure terminating, so a probe whose failure is the answer must lift the preference and
+  read the exit code instead.** `gh release view v0.1.0 2>$null` ended the run on "release not
+  found", which is the expected answer when the tag has not been published yet; an unredirected
+  call is unaffected, which is why the idiom survives everywhere the command happens not to write
+  to stderr.
 
 ## INSTR — building instruments
 

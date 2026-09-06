@@ -2655,6 +2655,42 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first and has to be drawn after it. *Cross-refs:* `BL-706` (the same dialog's placement),
   `BL-744`'s landing (`git log --grep=BL-744`).
 
+- `BL-775` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **CREDITS draws
+  disabled on Original's top level, and the original's credits screen behind it is unbuilt.**
+  *Evidence:* the top level enables four of its six decoded rows and `MM_B_CREDITS` is not among
+  them (`CSVM/src/UI/Menu/Original/OriginalShell.cs:1127-1129`), so the button takes the disabled
+  ink and no press reaches the activate switch (`:997-1017`);
+  `CSVM.Tests/OriginalCoverageTests.cs:132` records the edge as
+  `Edge.Disabled("MM_B_CREDITS", "Credits is out of this plan's scope")` and
+  `docs/org/menu-inventory.md` states that scope call in its tally and again in its in-scope list.
+  What stands behind the button is small and complete: the `Credits` section is three widgets, the
+  full-screen `CR_BackGround.jpg` pane, `CR_B_About` at 490,550 and `CR_B_Exit` at 650,550 whose
+  `ScriptToExe` is `MainMenu` (`extracted/rof/menu_layout.json`), and every art file ships
+  (`extracted/rof/ASSETS/GRAPHICS/CR_BACKGROUND.JPG`, `CR_B_ABOUT.PNG`, `CR_ABOUTMESSAGEBOX.PNG`).
+  The credit names are painted into the background image, so the screen lays out no roster of its
+  own. *Fix shape:* a `Credits` member on `OriginalScreen` opened from the top-level press,
+  the pane and its two buttons, ESC and `CR_B_Exit` both returning to the top level the way
+  `CREDITS.SCRIPT`'s `gui_char` and that button's edge do, the enabled set widened, a `credits`
+  name in `LaunchMenu.cs` so `--menu=credits --screenshot=` can shoot it, and the coverage entry
+  moved from `Edge.Disabled` to a driven edge with `CR_B_Exit` taken out of the out-of-scope list.
+  *⚠ Traps:* **the ABOUT button is the part that is not decoded, and it is not the same screen.**
+  `CREDITS.SCRIPT` answers its press by setting `@globals@OR.UR = 0x1`, `XR = 1` and `WR = 0` and
+  running `messagebox.script`, so ABOUT raises the one box in the game that asks for the skull
+  icon (`CSVM/src/UI/CampaignModal.cs:19-21`), and its text comes from `uiData` callback 2108,
+  which nothing here decodes. Build the screen without ABOUT rather than inventing that string.
+  The screen also carries a right-button easter egg: `rbutton_update` activates a text widget at
+  288,308 while the right button is held inside 287..353 by 313..333, and its line is built by
+  shifting each character of an obfuscated literal down by three
+  (`extracted/rof/ASSETS/SCRIPTS/CREDITS.SCRIPT:63-72`). Decode it at runtime as the script does;
+  a plain-text copy in our source is the same string with the joke removed. Do not go hunting for
+  a missing `CR_B_Exit.png` either, that button wears MomentoSelection's `MS_B_Done.png`.
+  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu`, press CREDITS on the top
+  level, and check the background fills the frame, that ESC and the DONE plaque both come back,
+  and that the right-button hold reveals its line. *Cross-refs:* `docs/org/menu-inventory.md` (the
+  scope call, the edge tally and the screen census all move together), `BL-446` and `BL-463` (the
+  other screens Decision-era scope left out), `BL-744`'s landing (`git log --grep=BL-744`, the
+  message box icon rule ABOUT would need).
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored

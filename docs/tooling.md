@@ -311,6 +311,50 @@ makes the pck copies reachable. ⚠ `exclude_filter="config.json"` keeps the dev
 tuning override out of every build. Smoke-test an export from a **bare folder** with a **foreign
 CWD** and no `CSVM_DATA_ROOT`; either can mask a broken default root.
 
+## Publishing a release
+
+**`PublishRelease.ps1` (repo root)** is the publish, from one run: it reads the version from
+`CSVM/project.godot`, runs `ExportRelease.ps1`, checks the zip that came out, computes its SHA-256,
+creates the annotated tag on the commit that was built, pushes it, and creates the GitHub release
+with the zip as its only asset. The pre-release flag stays off, because a build that is hidden from
+the repository's Latest badge is not the one a visitor lands on. Because the tag, the exe's stamped
+version, the zip's name, the published checksum and the notes all come out of that single run, none
+of them can disagree with another.
+
+`-NotesFile` supplies the prose that goes above the generated sections; the script writes the
+verification and provenance sections itself, so the file never states a checksum or a commit of its
+own, and it refuses a notes file that does. The generated text restates `BUILD-INFO.txt`'s two
+commits as links, so the release page and the archive give the same account of what was built.
+`-DryRun` runs every check and the export and stops before the tag. `-TagSuffix rehearsal`
+publishes under `v<version>-rehearsal` instead: a real tag, upload and release to exercise the whole
+path, deleted afterwards with the `gh release delete ... --cleanup-tag` command the run prints, so
+the release version's own tag is still minted exactly once. `-Yes` skips the confirmation prompt,
+which is otherwise the last point at which the tag and the upload can be called off.
+
+**What it refuses.** A dirty CSVM worktree, since the release says the zip was built from a commit.
+A dirty `tools/mech3ax` `cs-anim`, or one that is not on its origin: `unzbd.exe`'s source commit is
+published as a fact about a binary in the zip, and a commit that exists only on this workstation is
+not a source anyone can read. The CSVM commit needs no pushed-check of its own because pushing the
+tag publishes it, though the script says so when `HEAD` is on no remote branch, since a reader who
+opens the branch expects to find the release's commit in its history. It also refuses a `BUILD-INFO.txt`
+that records a dirty or unpushed source, an existing release, and a tag that already exists either
+locally or on the remote. ⚠ **A tag is never re-pointed**, which is why there is no `-Force`: it is
+the source correspondence for binaries that may already be downloaded, and nothing on the
+downloader's machine says it moved. The way to correct a bad release is another version, not another
+meaning for this one. The tree and `HEAD` are re-read after the export for the same reason, since a
+build takes minutes and an edit landing during one would tag a commit that is not what was built.
+
+**`gh` must be installed and authenticated** (`winget install GitHub.cli`, then `gh auth login` with
+the `repo` scope). ⚠ A shell started before the install does not have `gh` on `PATH`, so open a
+fresh one; the script looks in winget's install locations before giving up, which is what keeps a
+long-lived agent shell working. Every `gh` call passes `--repo` explicitly rather than letting it
+infer the repository from the working directory, and the upload passes `--verify-tag` so `gh` cannot
+invent a tag of its own when the push has not happened. ⚠ A `gh` or `git` call whose failure is a
+normal answer, such as asking for a release that does not exist yet, goes through the script's
+`Invoke-Probe`: PowerShell 5.1 turns a native command's *redirected* stderr into a terminating
+`NativeCommandError` under `$ErrorActionPreference = 'Stop'`, so `2>$null` around one of those ends
+the run instead of answering the question.
+
 ## Clean-machine runs in Windows Sandbox
 
 **`RunSandbox.ps1` (repo root)** runs a release zip on a machine that has never seen this project.

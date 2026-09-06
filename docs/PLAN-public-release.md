@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ Pre-flip audit: the method claim, and the tracked files a stranger reads
 32. ☑ `packaging/README.md` rewritten for a reader nobody knows
 33. ☑ `.github/`: the bug form and the policies
-34. ☐ `PublishRelease.ps1`: tag, versioned zip, checksum, release
+34. ☑ `PublishRelease.ps1`: tag, versioned zip, checksum, release
 
 ### Wave E — The flip
 
@@ -795,7 +795,7 @@ link is worse than one that names a second one. The labels `needs-triage`, `need
 `ready-for-agent`, `ready-for-human` and `wontfix` do not exist in the repository yet; the form
 applies only `bug`, which every repository has by default.
 
-## D34 ☐ `PublishRelease.ps1`: tag, versioned zip, checksum, release
+## D34 ☑ `PublishRelease.ps1`: tag, versioned zip, checksum, release
 
 **Goal.** Publishing is one command whose outputs cannot disagree: the tag, the exe version, the zip
 name, the checksum and the notes all come from one run.
