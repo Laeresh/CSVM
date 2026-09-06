@@ -83,6 +83,20 @@ this engine matches. Those pages describe behaviour and constants, and name the 
 addresses so any claim can be re-checked at source. **No game code and no game assets are
 reproduced or redistributed here**; the engine is an independent implementation.
 
+## Reporting a problem, and contributing
+
+Bugs go in an [issue](https://github.com/Laeresh/CSVM/issues/new?template=bug_report.yml).
+The form asks for the build version and the newest log file from the `logs\` folder beside
+`CSVM.exe`, which between them usually identify a fault without a round trip. A report is
+worked on in its own issue; this repository's `backlog.md` is the author's internal list and
+is not mirrored, so the issue is the thread to follow.
+
+Small self-contained pull requests are welcome for `packaging/`, the extraction scripts,
+the documentation and typo fixes. A change under `CSVM/src` needs an issue first, because
+engine changes land through a golden-image tier a contributor cannot run.
+[`CONTRIBUTING.md`](.github/CONTRIBUTING.md) has the detail. Security problems go through
+[`SECURITY.md`](.github/SECURITY.md) rather than an issue.
+
 ## Legal
 
 This is an unofficial fan project, **not affiliated with, endorsed by, or sponsored by

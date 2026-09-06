@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Pre-flip audit: the method claim, and the tracked files a stranger reads
 32. ☑ `packaging/README.md` rewritten for a reader nobody knows
-33. ☐ `.github/`: the bug form and the policies
+33. ☑ `.github/`: the bug form and the policies
 34. ☐ `PublishRelease.ps1`: tag, versioned zip, checksum, release
 
 ### Wave E — The flip
@@ -700,7 +700,7 @@ nothing under `CSVM/` was touched, so the complete `RunTests.ps1` is not this ch
 troubleshooting a front-page README should carry, and whether the unsigned-download paragraph says
 enough are all judgements that belong to whoever signs the release.
 
-## D33 ☐ `.github/`: the bug form and the policies
+## D33 ☑ `.github/`: the bug form and the policies
 
 **Goal.** A stranger's first report arrives with the version, the log and the steps already in it,
 and the repository states what it accepts before someone spends an evening on a pull request.
@@ -723,6 +723,75 @@ cannot be skipped and the rendered result is readable. Close it before the flip.
 
 **⚠ Traps.** Promising more responsiveness than one person can deliver is the standing risk in this
 file; say what happens to a report, not how fast.
+
+**Verified.** `.github/` lands as four files. `ISSUE_TEMPLATE/bug_report.yml` carries six required
+fields (build version, what happened, what you did, the log file, your machine, extraction state),
+two required checkboxes (searched the existing issues; owns a retail copy and extracted their own
+data), and one optional field for screenshots and `BUILD-INFO.txt`. Both YAML files parse under
+`yaml.safe_load`, and the `required` flags read back as set on every one of those fields, which is
+the half of the Verify step a rendered page shows only by refusing to submit.
+
+Each field the form requires traces to the item that made it answerable. The version field names
+the two surfaces B11 built, the log's first line (`csvm version=...`) and the menu's bottom-right
+corner, and offers `BUILD-INFO.txt` for a reporter who has neither. The log field names `logs\`
+beside `CSVM.exe`, one file per run, newest is the run, which is B13's exported layout rather than
+the development tree's `.scratch\logs\`. The machine field asks for the `[perf] gpu=` line by name,
+so a below-floor report is recognisable as one from the issue body without opening the attachment,
+which is what C22 established that line does. The extraction dropdown is the one required answer the
+log cannot supply, and it separates "never ran `Extract.cmd`" from a real fault.
+
+The form and `packaging/README.md` ask for the same things. The README's support paragraph named the
+log and what you did, while the form requires four items, so the README now names the version, what
+you did, the graphics card and the log, and says that attaching the log answers most of the form by
+itself. D32's support sentence, what happens to a report rather than how fast, is unchanged and is
+the same sentence the form's own preamble uses.
+
+`CONTRIBUTING.md` states Decision 7 with the reason the reporter needs (the issue is the thread to
+follow, `backlog.md` is the author's internal list in a private `BL-`/`PT-`/`CAP-` scheme, a report
+is not mirrored into it, and its absence there does not mean it was dropped) and Decision 8 with
+the reason a contributor needs (the accepted areas are `packaging/`, the extraction scripts, the
+documentation and typo fixes; a change under `CSVM/src` needs an issue first because it lands
+through a golden-image tier rendered by the pinned editor against an extracted retail install,
+which nobody outside this machine has). It also states what is never accepted, since a public repo
+that takes pull requests can be handed the one thing this project's legal position forbids: assets,
+extracted data, reproduced game code or decompiler output. The AI-assistance disclosure is the root
+README's wording, extended with what a contributor should do about their own. `SECURITY.md` states
+the surface (the file parsers, the `user://` state files, the extraction scripts, and a zip
+disagreeing with its published SHA-256), the private advisory channel rather than an issue, that
+only the newest release gets fixes, and that the unsigned SmartScreen warning is out of scope by
+design. Its "no network code" claim is grepped rather than assumed: `System.Net`, `HttpClient`,
+`WebSocket`, `UdpClient`, `TcpClient`, `HTTPRequest`, `ENetMultiplayerPeer` and `MultiplayerApi`
+have no hit anywhere under `CSVM/`, scenes included.
+
+`ISSUE_TEMPLATE/config.yml` keeps blank issues on deliberately, with the reason in the file:
+Discussions stay off so there is one surface, which leaves a question or a suggestion nowhere to go
+unless the blank route stays open. It also puts the security advisory link on the chooser, so the
+one report that must not be public has a button next to the one that should be.
+
+The documents this makes false are corrected in the same change.
+`docs/agents/issue-tracker.md` loses "GitHub Issues unused" and gains the public surface as a
+second table plus the rule that a public report gets no internal id and is never copied into
+`backlog.md`; its "PRs as a request surface: **Off**" becomes on and narrow, with the author's own
+commits still going straight to `main`. `docs/agents/triage-labels.md` said there was nothing to
+apply a label to, which held while the tracker was only markdown. `PROJECT_CONTEXT.md`'s "No GitHub
+Issues yet" becomes the two-surface sentence, and the front `README.md` gains a reporting and
+contributing section, since a stranger arriving at the repository rather than the zip had no
+pointer to either. "No PR workflow" in `PROJECT_CONTEXT.md` and `AGENTS.override.md` is narrowed to
+"no internal PR workflow", because those two sentences exist to stop an agent opening a branch and
+that instruction is unaffected by outside pull requests. Encoding gate clean (`CheckEncoding.ps1`,
+no mojibake); nothing under `CSVM/` was touched, so the complete `RunTests.ps1` is not this change's
+gate.
+
+**Owed in the GitHub UI.** Before the flip: turn Issues on, leave Discussions off, open a test issue
+against the form on the still-private repository, confirm the required fields cannot be skipped and
+the result reads well, and close it. At the flip, not before: **private vulnerability reporting is
+offered on public repositories only** (Settings, "Security and quality", Advanced Security), so the
+channel `SECURITY.md` and the chooser's security link both point at cannot be turned on while the
+repository is private. E42 carries that step. `SECURITY.md` therefore states the fallback in its own
+text rather than relying on the button existing, since a security page whose only route is a dead
+link is worse than one that names a second one. The labels `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human` and `wontfix` do not exist in the repository yet; the form
+applies only `bug`, which every repository has by default.
 
 ## D34 ☐ `PublishRelease.ps1`: tag, versioned zip, checksum, release
 
@@ -802,8 +871,10 @@ re-verified there.
 known broken with a workaround where one exists, the SHA-256, the CSVM commit and the mech3ax
 `cs-anim` commit the binaries were built from, and the AI-assistance disclosure. Draft the
 announcement post to the same facts, short, for the author to place. Then, in one sitting: flip the
-repository to public with Issues on and Discussions off, run `PublishRelease.ps1`, and read the
-result from a logged-out browser before anything is posted anywhere.
+repository to public with Issues on and Discussions off, enable private vulnerability reporting,
+which D33's `SECURITY.md` points at and which GitHub offers on public repositories only, run
+`PublishRelease.ps1`, and read the result from a logged-out browser before anything is posted
+anywhere.
 
 **Model recommendation.** high. Irreversible in practice, and the notes are the project's first
 impression.

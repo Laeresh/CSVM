@@ -7,8 +7,8 @@
 
 ## Non-negotiables (in effect every session — no reading required)
 
-- **Commit to `main`, never a branch.** Single-developer repo, no PR workflow. Push only when
-  explicitly asked.
+- **Commit to `main`, never a branch.** Single-developer repo, no internal PR workflow. Push only
+  when explicitly asked.
 - **Every landed commit carries a `Co-Authored-By:` trailer naming the acting agent + model**
   (e.g. `Co-Authored-By: DeepSeek V4 Flash <noreply@deepseek.com>`, taken from `PI_MODEL`).
   Body = what landed, how it was verified, the outcome — brief; not a narrative.

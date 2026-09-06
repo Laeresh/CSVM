@@ -1,0 +1,50 @@
+# Security policy
+
+CSVM is an offline desktop application. Its code opens no network sockets and contacts no
+server: multiplayer is splitscreen on one machine, and there is no update check, telemetry
+or account. What the build does do is parse a lot of binary and JSON that came off disk,
+which is where its realistic security surface is.
+
+## Supported versions
+
+The most recent release on the [releases
+page](https://github.com/Laeresh/CSVM/releases). Older releases get no fixes; a fix goes
+into the next release.
+
+## Reporting a vulnerability
+
+Use GitHub's private reporting: **[Report a
+vulnerability](https://github.com/Laeresh/CSVM/security/advisories/new)** on the Security
+tab. Please do not open a public issue for a security problem.
+
+Include the build version, what an attacker gets, and the smallest input or steps that
+reproduce it. If a file triggers it, attach the file rather than describing it.
+
+If that page does not open for you, open an ordinary issue saying only that you have a
+security report and asking where to send it. Do not put the details in it; a private
+channel will be opened for you.
+
+A report is read and answered in the advisory thread, and the advisory is where the fix and
+any credit are recorded. There is no bounty, and no schedule to promise: this is one
+person's project. If you would like to be named in the advisory, say so.
+
+## In scope
+
+- The file parsers in the engine: the readers for extracted archives, meshes, textures,
+  animation and mission data, reached by pointing a build at a prepared `extracted` folder.
+- The per-user state files under `%APPDATA%\Godot\app_userdata\CSVM` (settings, bindings,
+  campaign profiles, scores, custom planes), and the optional `config.json`.
+- The extraction scripts (`Extract.cmd`, `Extract.ps1`, `ExtractAssets.ps1`,
+  `ExtractRof.ps1`) and how they handle the path they are given.
+- The release zip's contents differing from what the release page's SHA-256 says they are.
+
+## Out of scope
+
+- **The Windows SmartScreen warning.** Releases are deliberately not code-signed; the
+  release page's SHA-256 is the check that carries meaning, and the zip's `README.md`
+  says so.
+- **The retail Crimson Skies game**, its files and its installer. Not this project's code.
+- Anything that needs an attacker to already be running code as you on your own machine.
+- Vulnerabilities in the upstream projects this build carries, [Godot](https://godotengine.org/)
+  and [mech3ax](https://github.com/TerranMechworks/mech3ax). Report those to them; tell us
+  as well if a CSVM release ships an affected build, and the release will be rebuilt.

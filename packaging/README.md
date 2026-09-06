@@ -96,9 +96,10 @@ the time it started. The newest file there is the run you just did, and its firs
 states the build version. That same version is in the bottom-right corner of the menu.
 
 Report a problem at <https://github.com/Laeresh/CSVM/issues>, through the bug report form.
-Attach the newest log file from `logs\` and say what you did; that is usually all it takes
-to identify the fault. CSVM is written by one person, so a report is read and worked on in
-its issue rather than answered to a schedule.
+It asks for the build version, what you did, your graphics card and the newest log file
+from `logs\`, which is usually all it takes to identify the fault; attaching that log
+answers most of the form by itself. CSVM is written by one person, so a report is read and
+worked on in its issue rather than answered to a schedule.
 
 Three failures answer themselves:
 

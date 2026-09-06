@@ -1,0 +1,116 @@
+name: Bug report
+description: Something in CSVM does not work, or does not match the original game.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this.
+
+        CSVM is written by one person. A report is read and worked on in its own issue,
+        rather than answered to a schedule, and the issue is where whatever happens to it
+        is recorded.
+
+        The fields below are the ones that decide whether a fault can be identified at all.
+        The log file is the most useful of them: it states the build, the machine, and what
+        the run actually did.
+
+        If this is not a bug (a question, a suggestion, or something about the format
+        documentation), open a blank issue instead. Discussions are off, so issues are the
+        one place.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: >-
+            I searched the open and closed issues, and the "Known issues" section of the
+            release notes, for this problem.
+          required: true
+        - label: >-
+            I own a retail copy of Crimson Skies and extracted my own game data. CSVM ships
+            no game data, and no build of it can run without an install to read.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Build version
+      description: >-
+        The first line of the newest file in the `logs\` folder next to `CSVM.exe` states
+        it (`csvm version=...`), and the same number is in the bottom-right corner of the
+        menu. If you are not sure which build you have, paste the contents of
+        `BUILD-INFO.txt` into "Anything else" below.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: >-
+        Enough for someone else to reach the same point. Which mode, chapter and plane you
+        picked, and what you were doing when it went wrong.
+      value: |
+        Mode (free flight / stunt run / dogfight / campaign):
+        Chapter:
+        Plane:
+
+        Steps:
+        1.
+        2.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: The log file
+      description: >-
+        Drag the newest file from the `logs\` folder next to `CSVM.exe` into this box to
+        attach it. One file is written per run, named for the mode and the time it started,
+        so the newest one is the run you are reporting. If the build never got far enough
+        to write a log, say so here.
+      placeholder: Drop the .log file here.
+    validations:
+      required: true
+  - type: textarea
+    id: machine
+    attributes:
+      label: Your machine
+      description: >-
+        The `[perf] gpu=` line is in the log you just attached; copying it out here says at
+        a glance which graphics driver ran the build, which is the first thing most reports
+        turn on.
+      value: |
+        Windows version (10 or 11):
+        The `[perf] gpu=` line from the log:
+        Graphics card and driver version:
+    validations:
+      required: true
+  - type: dropdown
+    id: extraction
+    attributes:
+      label: Extraction
+      description: The state of the `extracted` folder this build reads its content from.
+      options:
+        - Extract.cmd finished and reported no errors
+        - Extract.cmd stopped with an error
+        - I have not run Extract.cmd
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: >-
+        Screenshots or a clip if the fault is something you can see, `BUILD-INFO.txt` if
+        you are unsure of the version, and anything you already ruled out.
+    validations:
+      required: false

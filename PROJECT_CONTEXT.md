@@ -57,7 +57,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 - **Format reverse engineering:** happens in a fork of [mech3ax](https://github.com/TerranMechworks/mech3ax) (Rust) at `tools/mech3ax/`. Their byte-identical round-trip test harness (extract→repack) is the correctness standard. **The CS work stays in the fork, not upstream** (upstream dropped CS for maintenance reasons and is dormant) — remotes, branch roles and the sync procedure are in `docs/tooling.md`.
 - **Flight model:** parameterized by plane stats from extracted zrdr reader files, over the model decoded from the retail executable in [`docs/org/flightModel.md`](docs/org/flightModel.md), which is the authority for every flight quantity.
 - **Division of labor:** the AI agent writes the Rust parsers, Godot code, and docs; the user reviews, playtests flight feel, and owns upstream/community communication.
-- **Git: commit to `main`.** This is a single-developer repo with no PR workflow, so **do not create a branch** when asked to commit — commit straight to `main`. The user will say so explicitly if a particular change should go on its own branch. Pushing is still never automatic: commit when asked, push only when asked.
+- **Git: commit to `main`.** This is a single-developer repo with no internal PR workflow, so **do not create a branch** when asked to commit — commit straight to `main`. The user will say so explicitly if a particular change should go on its own branch. Pushing is still never automatic: commit when asked, push only when asked.
 
 ## Coding conventions
 - Comments state what and why, briefly — never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
@@ -230,7 +230,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 ## Agent skills
 
-- Issue tracker: this repo's own markdown — `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. No GitHub Issues yet. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+- Issue tracker: this repo's own markdown — `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. Public GitHub Issues are a separate surface, worked in the issue and never mirrored into these files; the form and the policies are in `.github/`. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
 - Triage labels: the five canonical roles, unrenamed. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
 - Domain docs: single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT.md`/`docs/adr/`. See [`docs/agents/domain.md`](docs/agents/domain.md).
 
@@ -240,7 +240,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1 through 5 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** [`docs/PLAN-public-release.md`](docs/PLAN-public-release.md), the public release, Wave D open, its `D33` next; A1's Known Issues draft is that file's appendix.
+**Active plan:** [`docs/PLAN-public-release.md`](docs/PLAN-public-release.md), the public release, Wave D open, its `D34` next; A1's Known Issues draft is that file's appendix.
 Next: `BL-755` to `BL-769` carry run 13's sortie, Plane Construction first; `BL-746` to `BL-754` carry run 12's, the second pilot's screen first; `BL-714` on a moving hull, `BL-739`; `BL-700` and `BL-702` carry run 10's sortie; `BL-693` and `BL-696` carry what input rebinding left open; `BL-699` carries the wave-spawn hitch; `BL-535`, CM13's race pace, `PT-119`'s two CM14 sorties and the enhanced mode's pass against `PLAN-enhanced-graphics`'s Open judgements are owed at the controls.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
