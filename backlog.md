@@ -829,27 +829,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   at all, so the mismatch is the AI's alone; [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md),
   "Who aims ordnance, and who does not"); `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
-- `BL-559` `[Research]` `[S]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]` **Do the original's gun rounds carry the launcher's velocity?** *Evidence:*
-  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) ("Launch velocity is inherited, and decays
-  over `LOCK_ON`") decodes `FUN_005aef40` as copying the launcher's velocity into a round only when
-  the weapon carries `LOCK_ON`, and writing a zero vector otherwise. No gun authors `LOCK_ON`.
-  `ProjectilePool.InheritedAtLaunch` deliberately holds guns outside that rule, and the comment above
-  it says so and states the question was never settled. Two decoded facts pull the other way and are
-  the reason this is worth reading rather than assuming: the aim assist solves its intercept on the
-  RELATIVE velocity, which is the correct solve only for an inheriting round, and the decoded pipper
-  places itself at `muzzle + 0.5 × (VELOCITY × nose + planeVelocity)`
-  ([`docs/org/aim-assist.md`](docs/org/aim-assist.md)), which is where an inheriting round would be.
-  Either guns take a spawn path other than `FUN_005aef40`, or the `LOCK_ON` gate is narrower than the
-  ordnance page states, or the original's sight and its rounds genuinely disagree.
-  *What to settle:* which spawn function the `CANNON` branch of `FUN_004b6820` calls, and whether the
-  `+0x30`..`+0x38` launch-velocity copy is reached on that path.
-  *⚠ Traps:* not a TTK item. If CSVM is wrong here it is wrong in the player's FAVOUR, since an
-  inheriting round lands where the relative-frame lead predicts and a non-inheriting one falls short
-  of it. Do not "fix" it as part of a lethality pass, and do not change the pipper formula or the
-  assist's relative-velocity solve to match a change here without re-reading both: the three are one
-  system and the decode page records the sight and the assist as deliberately disagreeing already.
-  *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
-
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
   carries the def's `collision` list as rays from the previous pose, six points on the `p*` player
@@ -881,7 +860,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-667`'s closing record in `PLAN-M5-polish-10` `A2`, `BL-517` and
   `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
 
-- `BL-687` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **A `mode ship` vehicle takes no gun at all, so a patrol boat never fires the
+- `BL-687` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A `mode ship` vehicle takes no gun at all, so a patrol boat never fires the
   weapon its own def authors.** *Evidence (traced):* reported at the controls on three missions in
   one sortie: CM08 "the guns are not firing at me" (`PT-87`), CM12 "boats dont fire" (`PT-101`), and
   CM10 "patrol boats and lifeboats dont shoot and dont track" (`PT-100`), whose A/B is
@@ -889,8 +868,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the start. A `mode ship` roster block or generator launch becomes a `SurfaceVehicle`: a hull on a
   `PathFollower` with a destructible pool and nothing else — no `FlightController`, no `AiPilot`, no
   `AiGunner`, no weapon. The roster loop takes the surface branch and `continue`s
-  (`CSVM/src/Session/CampaignDirector.cs:428-432`) before the `AiPilot` every aircraft block reaches
-  at `:434`; `AiGeneratorRuntime` returns straight after `vessel.Launch` (`:408-419`);
+  (`CSVM/src/Session/CampaignDirector.cs:443-447`) before the `AiPilot` every aircraft block reaches
+  at `:449`; `AiGeneratorRuntime` returns straight after `vessel.Launch` (`:408-419`);
   `SurfaceVehicle.Step` is the injure ladder and the follower alone
   (`CSVM/src/Session/SurfaceVehicle.cs:147-167`). The only production callers of
   `ProjectilePool.Spawn` are `FlightController`, `TurretController`, `ZeppelinRuntime.Cannons` and
@@ -902,19 +881,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   themselves, and the target scorer is selected on the vehicle's own `mode` word — `FUN_00421950`
   for everything that is not `jet` or `wingman` ([`docs/org/aiPilot.md`](docs/org/aiPilot.md):68-87,
   :119-124).
-  *Fix shape:* give a `mode ship` hull the target selection and fire decision its def already
-  authors, reading the `weapons` tuple and the dwell fields rather than inventing a rate or a range.
-  *⚠ Traps:* **Settle the `t_truck` question before building anything.** `t_truck` carries the
-  identical `mode ship`, the identical `weapons` tuple and the identical dwell fields, *and* ships
-  its own `ai.zrd` standalone-turret entry. If a hull's gun is driven by the standalone-turret object
-  in the original, a boat with no `ai.zrd` entry is authored silent and the correct port is nothing;
-  unanswered, this fix is unbounded. **The lifeboat's gun is not this item and not a defect.**
+  *Decoded, and the `t_truck` question is settled:* `FUN_0041c270` has a branch for `mode` 3
+  (`ship`), 5 (`plane`) and 1 (`heli`) that never promotes to pursue and instead runs the per-mount
+  lead solver `FUN_0041afe0` and, on a solution, calls the fire decision `FUN_0041f420(1, 1)` itself
+  (`0x0041c348`), so a boat shoots while flying its net. Its list is the def's own `weapons` block
+  through `FUN_004b59b0`, and `FUN_00476250` gives every vehicle a gun mount, unclamped on both axes
+  for a def authoring no `gun_pitch`/`gun_yaw`. The truck's `ai.zrd` emplacement is a second gun on
+  top of that same vehicle gun, so a boat with no `ai.zrd` entry is not authored silent. The dwell
+  fields are pursuit timers (`attack_dwell` to `+0x304`, `not_pursuit_dwell` to `+0x308`) and are
+  inert on a hull; the target hold is a hardcoded 20 s in `FUN_004b0f20`.
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) ("What a `mode ship` vehicle runs") and
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) carry the full reading.
+  *Fix shape:* give a `mode ship` hull the target selection (the non-`jet` scorer `FUN_00421950`),
+  the 20 s hold, the aim solve against its one free-aiming mount, and the fire decision reading the
+  `weapons` tuple. No pursuit and no dwell handling. Invent no rate and no range.
+  *⚠ Traps:* **The lifeboat's gun is not this item and not a defect.**
   `lifesaverNM > lifesaver > lifeboat > healthy > turret > gun > firepoint` is a complete rig, but
   `TurretController.BuildEmplacements` instantiates only what an `ai.zrd` `NODES` pattern matches,
   and no shipped pattern matches `lifeboat`, `patrolboat` or `ptboat*`; the original reads the same
-  file, so it is authored silent and `PT-100`(a) asked for something the original never does.
-  [`docs/architecture.md`](docs/architecture.md):6593-6595 already records "no `ai.zrd` entry names a
-  patrol boat" and misattributes the silent gun to `BL-523` — correct that line in the same change.
+  file, so it is authored silent and `PT-100`(a) asked for something the original never does. The
+  `docs/architecture.md` line that misattributed the silent gun to `BL-523` no longer exists, so
+  there is nothing left to correct there.
   **"Turrets shoot at player" on CM10 is correct behaviour**, not an inverted team: `bbtur**` authors
   no `TEAM`, takes `TurretDef.DefaultTeamId = 2` (`CSVM/src/Flight/TurretDefs.cs:20`), and minimises
   distance over one running best, so the nearer player is what it locks. **The structure-team decode

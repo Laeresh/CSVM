@@ -79,12 +79,54 @@ this order:
 5. Otherwise the AI task `+0x2f0` selects the steering (`0x0041c2e6`): `1` is pursue
    (`FUN_0041d9f0`), `0` and `2` are both the patrol-net follower (`FUN_0041d1f0`), and any other
    value returns without steering.
-6. After the net follower, a live selected target promotes the task to pursue (`FUN_0041f040` sets
-   `+0x2f0 = 1`).
+6. After the net follower, a live selected target is handled on the vehicle's own `mode`
+   (`0x0041c37c`). A `jet` or a `tank` promotes the task to pursue (`FUN_0041f040` sets
+   `+0x2f0 = 1`) and its shot comes later, from inside the pursue behaviour. **`ship`, `plane` and
+   `heli` are not promoted at all**: the per-mount lead solver `FUN_0041afe0` runs, and when it
+   reports a firing solution on at least one mount the update calls the fire decision
+   `FUN_0041f420(1, 1)` itself (`0x0041c348`). Those three classes never pursue. They shoot while
+   still flying their net.
 
-Firing is not one of those branches. All three behaviours call the fire decision `FUN_0041f420`
-themselves, each with both weapon classes enabled, and it is decoded in
+Firing is otherwise not one of the steering branches. All three behaviours call the fire decision
+`FUN_0041f420` themselves, each with both weapon classes enabled, and it is decoded in
 [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md).
+
+### What a `mode ship` vehicle runs
+
+A patrol boat and a turret truck are ordinary members of the vehicle list `DAT_0071dabc`, and
+nothing on the path from the world tick to the trigger tests for a surface hull:
+
+- their weapon list is built from the def's own `weapons` block by `FUN_004b59b0`, the builder the
+  def parser calls for every vehicle ([`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md)), so
+  `patrolboat` and `t_truck` each carry one `wep_29` at 9000 rounds, a 0.3 s refire and a 1 to 500 m
+  window;
+- `FUN_00476250` gives every vehicle a gun mount whether or not the def authors gun limits, and
+  neither def authors any, so a boat's mount is unclamped on both axes and spends no aim residual;
+- `FUN_004897c0` calls the AI update for every awake vehicle, with no mode test at the call;
+- the target scorer is the non-`jet` one, `FUN_00421950`, selected on `+0x67c` at `0x0041fe75`;
+- the fire decision's quick-draw gate applies only when the *shooter's* mode is `jet` or `wingman`,
+  so it cannot suppress a boat.
+
+⚠ **`t_truck`'s standalone-turret entry in `ai.zrd` is a second gun, not the truck's only one.**
+The truck carries the vehicle gun above like the boat, and its `t_truck**` emplacement is an
+addition on top. So a patrol boat, which no `ai.zrd` `NODES` pattern matches, is **not** authored
+silent, and the emplacement file settles nothing about a hull's own weapon.
+
+### `attack_dwell` and `not_pursuit_dwell` are pursuit timers
+
+`attack_dwell` parses to def `+0x5c` and `not_pursuit_dwell` to def `+0x60` (`0x00479da1`,
+`0x00479dbc`), and `FUN_00475820` copies them to vehicle `+0x304` and `+0x308`. Both feed the one
+timestamp `+0x300`, which is the earliest time a pursuit may start:
+
+- `FUN_0041f040` refuses to promote while `DAT_0071c470 <= +0x300`, unless the offered target
+  differs from the one at `+0x2fc`, the target the last promotion took;
+- on promoting it sets `+0x300` to now plus `+0x304`, except that a `jet` or `wingman` promoting
+  onto a target that is not a `TargetVehicle` gets a hardcoded 20 s instead;
+- losing a pursued target sets `+0x300` to now plus `+0x308` (step 3 above).
+
+⚠ **Neither field does anything on a `ship`, a `plane` or a `heli`**, since those classes never
+reach `FUN_0041f040`. The boat's authored `attack_dwell 60` and `not_pursuit_dwell 5` are inert.
+What paces a boat's target churn is the sticky-target hold below.
 
 The AI mode enum lives at `+0x358` and is a different thing from the task: 1 evasive maneuver,
 2 approaching danger zone, 3 avoid crash, 4 stunned, 5 navigating danger zone, 0 otherwise.
@@ -188,8 +230,10 @@ engines, turrets and cannons, which are ordinary members of the turret and struc
    for a `wingman` that field is a formation leader, not a target.
 2. **An assigned `primary_target` wins outright** whenever it scores under `1e20`, without the pool
    being swept.
-3. **A standing target is sticky.** It is re-scored only once `+0x94c` exceeds `DAT_0071c470`, and
-   while it still scores under `1e20` it is kept and the pool is not swept at all.
+3. **A standing target is sticky for 20 seconds.** It is re-scored only once `+0x94c` exceeds
+   `DAT_0071c470`, and while it still scores under `1e20` it is kept and the pool is not swept at
+   all. `FUN_004b0f20` sets `+0x94c` to now plus a hardcoded **20.0** every time a target is taken,
+   so the hold is an engine constant and no def authors it.
 
 ⚠ **Deconfliction is a count, not a pool drop.** `FUN_0041fe10` decrements `target+0x8` and
 `target->object+0x4` before scoring and restores them after (`0x0041fece`, `0x0041ff0b`), so
