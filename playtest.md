@@ -184,6 +184,21 @@ draws its authored 800x600 space one-to-one.
   stale numbers, a missing stamp or scrap, a scrap that will not open, an arrow or the bookmark
   appearing where it should not (or not appearing where it should), or landing straight on the cabin
   means the debrief screen is broken.
+- `PT-120` `[Own]` **The rebinding screen's three axis-capture constants, judged with a real pad in
+  hand (`BL-693`).** `ControlCapture.RestBand` 0.25, `MoveThreshold` 0.6 and `CapturedDeadzone` 0.5
+  decide whether a stick or a trigger a player pushes becomes a binding, and none of them has a
+  decode behind it: the original cannot bind an axis to a command at all, so there is nothing to
+  match. Reach the screen through Options, bind a flight action to a stick direction and to a
+  trigger, then fly the result. *Look for:*
+  - (a) 0.6 (`MoveThreshold`) reads as a decisive push rather than a nudge: a deliberate deflection
+    captures, a brush past does not;
+  - (b) 0.25 (`RestBand`) forgives the stick your pad actually rests at, so a drifting centre never
+    latches a binding on its own;
+  - (c) in flight, the bound half of the stick at 0.5 (`CapturedDeadzone`) feels like a button, on
+    and off, with no dead patch that reads as a broken binding.
+  *Blocks:* `BL-693`. ⚠ Capturing the right trigger takes it from both Camera Boost and Camera
+  Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
+  purpose): that is not a fault of these three numbers and must not be tuned against.
 
 ### C1 · Bloodhawk — the overcast sky, ground to above the deck
 
@@ -244,6 +259,29 @@ draws its authored 800x600 space one-to-one.
   item already: it feeds `BL-327`. (f) feeds `BL-329`.
   *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0 — its
   deck must look exactly as it did, and its cards must still be *there* above the band.
+
+- `PT-121` `[A/B: HUD.png]` **The compass tape's overscan, rim and nearest-tick look
+  (`BL-113`).** `TileOverscan`, `RimGain` and the nearest-tick treatment are all still TUNE. North
+  = −Z is confirmed against the original and is not in question here. *Look for:*
+  - (a) the tick spacing, and how much of the tape shows at once, read like
+    `OriginalScreenshots/HUD.png` rather than a wider or narrower window;
+  - (b) the rim's brightness against the tape body at the same gauge size;
+  - (c) the nearest tick under the pointer: picked and drawn the way the original's is, holding
+    steady through a slow turn instead of stepping or flickering between neighbours.
+  *Blocks:* `BL-113`.
+
+- `PT-122` `[Own]` **Photo mode hands the aeroplane back to the view it borrowed the camera from
+  (`BL-649`).** Three callers took the camera without restoring the airframe's visibility, leaving
+  a pilot in cockpit view with the interior drawn over an outside vantage. All three now call
+  `FlightController.SetViewedFromOutside` at both edges; what is owed is the flight. *Look for:*
+  - (a) from `--view=cockpit`, pause and enter photo mode: the aeroplane is in the shot, not hidden
+    behind its own panel;
+  - (b) leaving photo mode returns the cockpit over a world that is still halted, with no frame of
+    the exterior model showing through the panel on the way back;
+  - (c) the same both ways from an outside view, where nothing should change at all.
+  *Blocks:* `BL-649`. The two debug callers (`--debug-spectate` and the weapon lab's free camera)
+  share the seam and are worth a glance in the same sitting: no automated check reaches them.
+  *Variations:* `--view=cockpit` is the case the item is about.
 
 ### C1 · Bloodhawk vs AI — the kill sequence, sound on
 
@@ -324,6 +362,88 @@ reasons that have nothing to do with any of these checks.
   A/B'd our dive whine against the original and reported it "close, but could be a bit louder",
   which read as a mix problem. The original has no whine at all, so what the ear was matching in
   that dive was the engine slot's own movement, and these terms are what produces it.
+
+- `PT-123` `[A/B: OriginalScreenshots/Videos/CAP-14 Graze and CAP 15 wing to red.mp4]` **Breakup
+  scatter magnitude in flight (`BL-121`).** The contact constants this item used to carry are
+  retired against the decoded response, and the staged panel burn landed with `BL-259`. One feel
+  judgement is left: how far the pieces throw when an airframe comes apart. *Look for:*
+  - (a) the scatter reads as the original's, pieces leaving the airframe at a believable spread
+    rather than pluming out or dropping straight down;
+  - (b) the panel flip stays a skin swap at chase distance (charred outer wing, no large flapping
+    geometry), which is what the original's own footage shows;
+  - (c) the trail off a damaged panel stages fire, then black smoke, then a sputter, rather than one
+    continuous flame.
+  *Blocks:* `BL-121`.
+
+- `PT-124` `[A/B: OriginalScreenshots/Videos/CAP-16.mp4 + CAP-14 Building crash Balmoral.mp4]`
+  **The data-driven crash, judged whole against the original (`BL-122`).** The arc decode is
+  settled and no scalar is left to fit, so what is owed is the look of the whole crash on both
+  surfaces, plus its sound. ⚠ The two surfaces are deliberately different and must not be tuned to
+  one look. *Look for:*
+  - (a) a dirt crash reads as one big fireball at the original's intensity, its smokeball dark
+    red-brown rather than black;
+  - (b) the dirt burst reads as a separate, lower, ground-coloured cluster under it;
+  - (c) the pieces hold their orientation and stay where they blew rather than scattering along
+    travel, which is what the decode says and what an additive stack can easily disguise;
+  - (d) a building strike against `CAP-14 Building crash Balmoral.mp4`: a spread of small discrete
+    orange puffs, no large fireball, no dark halo;
+  - (e) the sound, `snd_exp_ground_a`'s level and whether layering it over `plane_destroy_sg` reads
+    as one impact or two.
+  *Blocks:* `BL-122`.
+
+- `PT-125` `[Own]` **How close a round has to pass before the near-miss cue sounds (`BL-230`).**
+  `WarningShotCue.PassRadius` is 15 m, chosen rather than read: the shipped `warning_shot_*` block
+  rates the cue but says nothing about distance, and the sound def's `RANGE [20,200]` is a 3D
+  falloff window, not a trigger radius. *Look for:*
+  - (a) at 15 m the cue fires for rounds that read as near misses and stays quiet for the rest;
+  - (b) walking the radius in and out, where it starts to feel late or trigger-happy;
+  - (c) the failure mode while raising it: a round crossing the sky nowhere near you sounding at all.
+  *Blocks:* `BL-230`. ⚠ `CANNON_SPREAD` scatters each round several metres over any real firing
+  range, so the achieved distance is a distribution: judge over a burst, never off one pass.
+  *Variations:* `--incoming=<metres>` walks a burst past at a chosen distance;
+  `weapons.warningShotRadius` in `config.json` moves the threshold without a rebuild, so it is
+  **not** available under `--det`.
+
+- `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **What plays
+  past the plane's own top speed, and how loud (`BL-252`).** The gating is settled and needs no
+  change: something starts exactly at `1.0× fd_speed`, the plane's own maximum level speed. Two
+  things are not. There is no whine (no shipped def names `prop_sound`), so the open candidate is
+  the RATTLE, `snd_planeshake`, whose curve runs 0 to 1 over `1.0` to `1.2× fd_speed`. ⚠ Settle
+  what the sound is before judging any level: this item has already tuned the wrong slot once.
+  *Look for:*
+  - (a) hold straight and level at 100% throttle to settle at max speed, then dive: name what our
+    build plays, and whether it is the same sound the original plays at that foot;
+  - (b) the level, matched by ear against the original rather than measured, in the same view;
+  - (c) the cockpit case separately, since the original's cockpit engine is damped where ours is
+    not, so the ratio cannot be read across from the outside view.
+  *Blocks:* `BL-252`. ⚠ Do not read the threshold off the airspeed dial: the gauge art, its red arc
+  and its `300` mark are the same for every plane and cannot express a per-plane limit.
+
+- `PT-127` `[A/B: OriginalScreenshots/Videos/CAP-21 0 to 100 Full.mp4 + CAP-21 100 to 0 Full.mp4]`
+  **The engine start ramp, the wind-down, and the throttle-slam smoke gate (`BL-285`).** Two
+  constants pending one cockpit sitting. `EngineStartRamp` is now `startprops`'s authored 2.0 s and
+  the crash wind-down plays `snd_propstop`; `ThrottleSlamSmoke.SlamThreshold` is 0.25, the smallest
+  value consistent with footage whose 2/8 to 4/8 band is unobserved. *Look for:*
+  - (a) the start ramp and the wind-down by ear against the two clips above;
+  - (b) the slam gate walked by hand: a single 1/8 step must not fire, idle to 5/8 must, and where
+    in between it starts is the judgement;
+  - (c) whether the smoke reads as a slam response at all, rather than a puff on any throttle move.
+  *Blocks:* `BL-285`. ⚠ Judge against the current unscaled own-ship mix, not the old ×0.2 one
+  `BL-268` removed. In splitscreen `snd_propstop` carries `MixGain` and `snd_propstart` does not, so
+  judge each at the pane count being tested.
+
+- `PT-128` `[A/B: OriginalScreenshots/Dirt Splash.png + Videos/30 Slu building.mp4]` **The building
+  ricochet spark burst (`BL-289`).** The dirt-chip constants left this item with `BL-313`: dirt now
+  takes the single spark, and the water column width is settled. What remains is the building
+  ricochet, whose five constants are stand-ins because both authored assets are missing from the
+  install: `RicochetSparks` 8, `RicochetSparkSize` 0.55 m, `RicochetSparkLife` 0.55 s,
+  `RicochetSparkSpeed` 22 m/s, `RicochetSpreadDeg` 90°. *Look for:*
+  - (a) strafe a building: the burst's count and spark size against the original's own impact spray;
+  - (b) how long a spark lives and how far it travels before it goes;
+  - (c) the spread, where 90° is a stand-in: whether the burst reads as coming off the surface or as
+    a sphere around the hit.
+  *Blocks:* `BL-289`. The splash height and timing curves are authored data rather than TUNE and are
+  not on trial here.
 
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
@@ -493,6 +613,18 @@ against `BL-389` rather than against the wash routing.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
 
+- `PT-129` `[Own]` **Effect pools with four pilots all firing (`BL-537`).** The single-player half
+  reads right at the controls: four fireballs burn out in place, and the seven-death wrap is not
+  visible under the debris. Owed is the four-player case, where the default root wants more slots
+  than it gets. *Look for:*
+  - (a) anything that reads as shared between panes: an effect cut short in one pane as another
+    starts, or a burst that appears in the wrong one;
+  - (b) simultaneous deaths across panes, which is where `flame_ball_01` wraps;
+  - (c) the instrument alongside the flight: the `anim: effect pool for '<name>' recycled slot`
+    DEBUG line in the log file sink names any root that actually wrapped.
+  *Blocks:* `BL-537`. ⚠ Raise only a root that logs a recycle, never the default; the three gun
+  roots stay at 1, and a root sized 0 clamps to 1.
+
 ### CM01 (C3/M01) · two to four pilots — join, flight check, death and skip
 
 ```powershell
@@ -564,6 +696,17 @@ is a judgement on our own remake.
     own airframe alone — the same behaviour, the other human.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
+
+- `PT-130` `[A/B: OriginalScreenshots/Videos/CM02.mkv]` **The fixed landing pose, watched again
+  (`BL-545`).** The report was CM02's auto-land seen with no hook deployed, the aeroplane too high
+  on the trapeze, and a Balmoral's wings unfolded where the original folds them. The fix landed:
+  the hookup definition now reaches the flown airframe's own subtree, so its per-airframe hook
+  extend and wing fold run instead of every `IF NODE_ACTIVE` arm reading false. Watch the auto-land
+  from outside. *Look for:*
+  - (a) the hook extends before the catch;
+  - (b) the aeroplane sits on the trapeze rather than above it;
+  - (c) a Balmoral folds its wings, which is the airframe the original's own footage shows.
+  *Blocks:* `BL-545`.
 
 ### CM14 (C2B/M04) · the Gemini, both kill orders
 
