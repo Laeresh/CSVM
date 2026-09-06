@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☐ A clean-machine run of the downloaded zip, above and below the floor
 42. ☐ Release notes, the first tag, the flip, and an announcement draft
-43. ☐ `README.md`: the play path, the status, and the developer split
+43. ☑ `README.md`: the play path, the status, and the developer split
 
 ## Dependency and parallelism notes
 
@@ -929,7 +929,7 @@ public for an hour can have been cloned and cached, so everything in this plan l
 flip, not after it. A release tag is equally permanent, see D34. Nothing is announced until the
 logged-out read has happened.
 
-## E43 ☐ `README.md`: the play path, the status, and the developer split
+## E43 ☑ `README.md`: the play path, the status, and the developer split
 
 **Goal.** The first text a stranger reads describes the build that exists, and someone who only wants
 to play has a way in with no developer instruction between them and the download.
@@ -975,6 +975,59 @@ instruction set drifting from the first is the failure this item can cause, and 
 already records which facts in that file go stale silently. ⚠ No screenshot. The repository has never
 tracked an image, E42's publishable-history evidence rests on that, and a rendering of the game world
 is the original's art whatever the file is called.
+
+**Verified.** Every capability the new Status names was counted or read in the tree rather than
+carried over from `PROJECT_CONTEXT.md`. The 11 aircraft are `InstantActionFeature.AirframeRows`, the
+one roster both the launchscreen (`LaunchMenu.BuildPlanes`) and `PlanePickerRoster` read, so the
+count is of stock airframes and not of picker rows, which also carry a profile's hangar builds. The 8
+chapter worlds are `MenuChapters.Rows`. The four Instant Action mission types are
+`InstantActionFeature.MissionTypeRows`, and the page uses their on-screen labels from
+`Mech3/InstantAction.cs`: dogfighting an ace, dogfighting a squadron, attacking a zeppelin, and stunt
+flying, which `StuntRace` clocks and ranks. Splitscreen is 2 to 4 (`SplitScreen.MaxPlayers`, clamped
+at both ends). The campaign's cabin, briefing and flight-check screens are
+`CampaignFlow.CampaignScreen` members. Patrol, pursue
+and evade are three of the nine `AiMode` states. Turrets take no flag at all, and zeppelins reach a
+player without one: `GameSession.ResolveCampaignZeppelins` turns them on for a campaign mission that
+ships the data, and the Instant Action zeppelin run enables them itself.
+
+**The old Status was wrong in a way the rewrite had to avoid repeating, not only out of date.** "Any
+of 11 aircraft over any of 8 chapter worlds, free flight, timed stunt runs, or splitscreen Dogfight"
+promised all eight worlds to each of the three modes it named, while `MenuChapters.For` gives stunt
+flying only the six chapters that carry Danger Zones, and Instant Action's environment list is seven.
+Status is now a six-bullet list, one line per thing the build plays, which counts what the build
+contains and leaves the per-mode list to the menu.
+
+"Download and play" carries no fact `packaging/README.md` does not. Windows 10 or 11 64-bit, the
+Vulkan or Direct3D 12 driver, the retail install, the 1 GB and the bundled runtime are its
+Requirements section; the four steps are its "Setup: extract, then fly" and the same sequence
+`packaging/MANIFEST.md` states in one line, with the `ZBD`/`GOSDATA` folder, the once-only extraction
+and the read-only install taken from it. The renderer floor is C22's as observed, a GPU with a
+working Vulkan or Direct3D 12 driver, and the below-floor symptom is left to the file that documents
+it rather than restated. The closing pointer names the topics `packaging/README.md` covers, the
+SHA-256, SmartScreen, the log and save locations and the vanishing mission, without repeating any of
+their content, which is the only shape that cannot drift.
+
+The rest of the page was read cold and corrected where it was untrue rather than rewritten. `GODOT`
+in the build command is an internal placeholder no visitor can resolve, and is now `godot`, the
+spelling `CSVM/README.md` beside it already uses. The export payload list was missing
+`ExtractRof.MenuLayout.cs`, which `$ReleaseFiles` copies and `packaging/README.md` counts among the
+six extraction files. The packaging section gains `PublishRelease.ps1`, its refusals and `-DryRun`,
+read off the script's own parameter block and `docs/tooling.md`'s "Publishing a release"; its heading
+stays "Package a release build" because `ExportRelease.ps1` quotes that heading by name in its
+missing-templates error, and this item edits no file under the repo root but `README.md`. "Reporting
+a problem, and contributing" moved above "Building from source", so that the signpost is true of
+everything below it and a player with a bug does not have to read past a line telling them the rest
+is not for them.
+
+The countable claims hold: the 49 tracked `.md` files under `docs/formats/` are its README plus the
+48 pages the page claims, and the 34 `docs/org/` pages are not counted on the front page. Every
+relative link resolves to a tracked file (`packaging/README.md`, `packaging/MANIFEST.md`,
+`CSVM/README.md`, `docs/tooling.md`, `docs/formats/`, `docs/org/`, `LICENSE`,
+`docs/formats/LICENSE`, `.github/CONTRIBUTING.md`, `.github/SECURITY.md`), and nothing in the tree
+links a heading this item renamed. The `releases/latest` link cannot resolve while the repository is
+private and no release exists, and E42's logged-out read is where it is checked and approved. No
+image was added. Content gate clean (`CheckCommitContent.ps1` exit 0); nothing under `CSVM/` was
+touched, so the complete `RunTests.ps1` is not this change's gate.
 
 # Appendix: the Known Issues draft, A1's output for E42
 
