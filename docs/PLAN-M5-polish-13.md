@@ -183,7 +183,10 @@ untouched. Four unit expectations took the intended correction: a maxed Balmoral
 becomes $960 and 960 lb, exactly the full-airframe figure both documents predict, and its verdict
 stays Overweight.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -260,7 +263,10 @@ the author reports sits above the callback, in the ARMOR tab's own wiring, and n
 was owed. `docs/org/hangar.md` records that under the list protocol, beside the four `AR_D_POINT`
 boxes the layout draws; `A1`'s Armour paragraph is untouched.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -334,7 +340,10 @@ own floor" was wrong (that finder holds no floor at all) and the wording it seed
 still know only the two campaign reasons, so Built-in's Purchase Now row stays live at the cap and
 refuses on the press rather than greying before it. Both are outside this item's fence.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -398,7 +407,10 @@ seconds and `campaign-guestcheck` on a player number, both excluded from the rep
 step loop excluded them. `--menu=campaign-ammo:4da` photographs the first pylon's open rocket list
 and `--menu=campaign-planeselection:a` the pilot's open plane list.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -472,7 +484,10 @@ the composed lines; `CampaignLayoutTests` pins both slots over a fixture whose `
 sits elsewhere; `menu-campaign-journey` checks on a real board that the two panes differ and that
 walking to ACCEPT leaves them alone.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -540,7 +555,10 @@ through to the picture; the frame each site picks is asserted at its own existin
 `CampaignPlaneSelectionPageTests`, `OriginalCampaignTests` and `OriginalHangarTests`. No golden
 photographs a dialog, so none needs re-pinning.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -610,7 +628,10 @@ hands; and the `menu-original-campaign` engine suite clicks both tabs in turn ov
 decoded layout and leaves the book as the debrief return left it. No golden photographs the
 scrapbook, so none needs re-pinning.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -671,7 +692,10 @@ accepted name characters and reaches past them, a wrong-length edge array throws
 before it does, and a `menu-original-campaign` cue-log block that walks both routes on the empty
 profile box and leaves it as it found it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Playtest after fix:** the profile name box, one accepted letter, one punctuation key, one key
 past the cap, expecting `ENTERTEXT`, `ENTERTEXT_ERROR`, `ENTERTEXT_ERROR`.
@@ -745,7 +769,10 @@ profile through the save the launcher injects,
 untouched: Original registers no seats with this feature and still reaches no rebinding screen of
 its own.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -844,7 +871,10 @@ nothing visible and is invisible in tests. **A fix that hides the flash by delay
 slow every headless probe and every suite that ends in one**, which is a real cost measured in the
 verification budgets, not a theoretical one.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 # Wave E — At the controls
 
