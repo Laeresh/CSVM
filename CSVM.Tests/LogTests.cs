@@ -6,9 +6,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The pure half of the logging facility: the <c>--log=</c> filter grammar, the line grammar, and
-/// the invariant-culture rendering. None of it touches a Godot API, so it runs in a plain test
-/// host. The tests share <see cref="Log"/>'s process-global filter state, so each one re-baselines
+/// The pure half of the logging facility: the <c>--log=</c> filter grammar, the line grammar, the
+/// invariant-culture rendering and the sink directory. None of it touches a Godot API, so it runs
+/// in a plain test host. The tests share <see cref="Log"/>'s process-global filter state, so each one re-baselines
 /// with a <c>*</c> spec first (which clears every per-category override).
 /// </summary>
 public class LogTests
@@ -84,6 +84,15 @@ public class LogTests
         Assert.True(Log.ConsoleShows("typo", Log.Level.Debug));
         Assert.DoesNotContain("typo", Log.Categories);
         Log.Configure("*:info");
+    }
+
+    /// <summary>The literal paths matter both ways: the toolchain reads <c>.scratch/logs/</c> by
+    /// name, and a top-level <c>logs/</c> in a development tree would be committed.</summary>
+    [Fact]
+    public void AnExportedBuildLogsBesideItsExeAndARepoRunStaysUnderScratch()
+    {
+        Assert.Equal(@"C:\Games\CSVM\logs", Log.DirectoryFor(@"C:\Games\CSVM", exported: true));
+        Assert.Equal(@"Z:\CSVM\.scratch\logs", Log.DirectoryFor(@"Z:\CSVM", exported: false));
     }
 
     [Fact]

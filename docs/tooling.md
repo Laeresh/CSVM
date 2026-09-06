@@ -222,8 +222,11 @@ the `SDL_JOYSTICK_DIRECTINPUT=0` workaround".
 
 `CSVM/export_presets.cfg` (committed) holds one preset, **"Windows Desktop"**: release export,
 x86_64, `embed_pck=true`, so a single `CSVM.exe` with the pck inside, plus the **self-contained**
-.NET publish output beside it as `data_CSVM_windows_x86_64/`. The exported build reads `extracted/`
-and writes `.scratch/logs/` beside the exe, resolving every root to the exe's own folder.
+.NET publish output beside it as `data_CSVM_windows_x86_64/`. The exported build resolves every root
+to the exe's own folder: it reads `extracted/` from there and writes its logs to a plain `logs\`
+beside the exe rather than to the `.scratch\logs\` a repo run uses (`Log.DirectoryFor` is the one
+switch). Per-user state is not in that folder at all: options, bindings, campaign profiles, scores
+and custom planes are written through `user://`, which is `%APPDATA%\Godot\app_userdata\CSVM`.
 
 **One-time template install.** The Godot export templates are user-global, not part of the repo's
 pinned editor: extract the inner `templates/` FILES of `tools/godot-4.7-mono-export-templates.tpz`
@@ -251,7 +254,36 @@ The zip is built through `System.IO.Compression`, since `Compress-Archive` repor
 writing nothing when a single file is locked.
 
 The payload is `packaging/MANIFEST.md`'s table, copied from its repo sources on every export, which
-keeps it byte-identical. Two filters in the preset are required.
+keeps it byte-identical.
+
+**Two of the zip's files are about the build rather than part of it.**
+`LICENSE-thirdparty.txt` carries the notices the payload's own contents oblige it to carry, which
+`LICENSE` (CSVM, GPL-3) and `LICENSE-unzbd` (mech3ax, EUPL-1.2) do not cover: the Godot engine
+linked into `CSVM.exe`, the engine's own third-party components, the self-contained .NET runtime in
+`data_CSVM_windows_x86_64\`, and the Rust crates linked into `unzbd.exe`.
+`packaging/BuildThirdPartyNotices.ps1` assembles it, reading every text out of the shipped artefact
+rather than off a website: ⚠ the Godot Windows distribution and the export-template archive ship no
+`LICENSE.txt` or `COPYRIGHT.txt` on disk at all, so the script runs the pinned editor headless over
+a throwaway project in `TEMP` and reads them back through `Engine.get_license_text()`,
+`get_copyright_info()` and `get_license_info()`; the .NET half is `LICENSE.TXT` and
+`THIRD-PARTY-NOTICES.TXT` from the `Microsoft.NETCore.App.Runtime.win-x64` NuGet pack the publish
+draws from, not the machine-wide `dotnet` install, which is usually a newer build; and the crate
+half is `cargo metadata --offline --filter-platform x86_64-pc-windows-msvc` over the fork, with each
+crate's licence text taken from the registry checkout it was built from and deduplicated by content.
+The file's header states the Godot build, the .NET runtime version and the `cs-anim` commit it was
+assembled for, and `ExportRelease.ps1` re-checks all three against what it is packaging, so a stale
+notice is a build failure rather than a wrong claim inside a shipped zip. Regenerate when one of
+them throws; ⚠ a moved `cs-anim` counts even when the fork's own code did not change, because the
+crate list enumerates that commit's dependency tree.
+
+`BUILD-INFO.txt` is the one payload file generated rather than copied, because what it states is
+different on every run: the CSVM commit and the mech3ax `cs-anim` commit the two shipped binaries
+were built from, each with whether its worktree was clean, plus whether `cs-anim` is pushed. The
+export records those qualifiers instead of refusing on them, since building off a dirty tree is the
+normal development case and only a published binary makes a false source-correspondence claim to
+anybody; `PublishRelease.ps1` is where a qualifier becomes a refusal.
+
+Two filters in the preset are required.
 `include_filter="data/*.json"` keeps `stock_loadouts.json`/`effect_pools.json`, non-imported
 resources the default export silently drops, without which every plane flies unarmed; their loaders
 read them through `Godot.FileAccess` rather than `GlobalizePath` plus System.IO, which is what

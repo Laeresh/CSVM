@@ -88,8 +88,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — What the package says about itself
 
 11. ☑ A version the build states in its exe, its log and its filename
-12. ☐ The third-party notices the binary is obliged to carry
-13. ☐ An exported build writes `logs\`, and the README says where saves live
+12. ☑ The third-party notices the binary is obliged to carry
+13. ☑ An exported build writes `logs\`, and the README says where saves live
 
 ### Wave C — The first run on someone else's machine
 
@@ -368,7 +368,7 @@ from the exported build states it. Bump the version once, re-export, confirm all
 export, because a real editor rewrites it without its comments. Do not add a second writer to that
 file, and do not stamp the version by editing the preset during an export run.
 
-## B12 ☐ The third-party notices the binary is obliged to carry
+## B12 ☑ The third-party notices the binary is obliged to carry
 
 **Goal.** The zip carries a notice for everything inside it, and the release can say which source
 each shipped binary was built from.
@@ -381,12 +381,25 @@ neither has a notice in the payload. The extractor's source is available: `Laere
 public repository, and the local `cs-anim` is level with `origin/cs-anim` at `afc9a7f`, with a clean
 tree.
 
-**Approach.** Add `packaging/LICENSE-thirdparty.txt`, assembled from Godot's own `LICENSE.txt` and
-`COPYRIGHT.txt` plus the .NET runtime notice, with its row in `packaging/MANIFEST.md` and its entry
-in `$ReleaseFiles`. Record the two provenance facts the release needs: the CSVM commit and the
-mech3ax `cs-anim` commit the bundled `unzbd.exe` was built from, written where D34's script can read
-them. <TODO: confirm what the Godot 4.7 mono distribution ships as its copyright file and what the
-.NET self-contained publish requires as a notice; both are checkable and were not checked.>
+**Approach.** `packaging/LICENSE-thirdparty.txt`, assembled by `packaging/BuildThirdPartyNotices.ps1`
+from the shipped artefacts themselves, with its row in `packaging/MANIFEST.md` and its entry in
+`$ReleaseFiles`. The two provenance facts go in a generated `BUILD-INFO.txt` at the zip root, which
+D34 reads.
+
+The item's open TODO is settled, and it settled against what the plan assumed. The Godot 4.7 mono
+Windows distribution ships **no** copyright file: neither `LICENSE.txt` nor `COPYRIGHT.txt` is on
+disk in `tools/godot/`, and `godot-4.7-mono-export-templates.tpz` holds only templates and a
+`version.txt`. The engine keeps both texts inside the binary, so the script runs the pinned editor
+headless over a throwaway `TEMP` project and reads them back through `Engine.get_license_text()`,
+`get_copyright_info()` and `get_license_info()`, which is the same binary the templates were cut
+from. The .NET self-contained publish requires the `LICENSE.TXT` and `THIRD-PARTY-NOTICES.TXT` that
+ship in the `Microsoft.NETCore.App.Runtime.win-x64` runtime pack it copies into the payload; the
+pack is read from the NuGet cache at the version `CSVM.runtimeconfig.json` names, not from the
+machine-wide `dotnet` install, which is a different build.
+
+A third obligation the plan's Evidence did not name is discharged in the same file: EUPL-1.2 covers
+mech3ax's own code, not the Rust crates statically linked into `unzbd.exe`, whose MIT and Apache
+terms want their own copyright notices carried.
 
 **Model recommendation.** medium, low effort. Assembly and a manifest row, once the sources are
 identified.
@@ -400,7 +413,7 @@ and `$ReleaseFiles` agree, and that the recorded fork commit matches
 fork commit breaks the source correspondence, which is why the commit is recorded and checked rather
 than assumed.
 
-## B13 ☐ An exported build writes `logs\`, and the README says where saves live
+## B13 ☑ An exported build writes `logs\`, and the README says where saves live
 
 **Goal.** A recipient finds their log without being told about a hidden developer folder, and can
 answer "where are my settings and profiles" from the README.
