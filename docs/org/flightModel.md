@@ -1246,7 +1246,7 @@ arithmetic, recorded for M4.
 (which the original applies downstream, above) but **not** the remake's `*Tune`, since those
 calibrate stick authority against video and are ours. Measured on the Bloodhawk: every
 wings-level scenario is unmoved to the last printed digit across all eleven airframes
-(`level-top-speed`, `terminal-dive`, `roll-360`, `pitch-rate`, `yaw-360`, `altitude-cap`,
+(`level-top-speed`, `terminal-dive`, `roll-360`, `pitch-rate`, `yaw-360`, `altitude-ceiling`,
 `accel`/`decel`, `eighth-throttle`) — the coupling cannot reach them, which is the cleanest
 possible confirmation of the "vanishes at zero bank" property.
 ⚠ **It does NOT close the sustained-turn-rate difference, and it moves it the wrong way**: 32.35 →
@@ -2405,35 +2405,84 @@ pull is therefore the executable's own and the filmed figure is discarded; the s
 read above remains a port-fidelity difference on its own merit. The climb residual of "The sustained climb" is the same α question from
 the other side and moves with whatever settles this one.
 
-## The resting altitude cap — measured, and traced to ONE mission
+## The resting altitude cap is the atmosphere band edge
 
 The original's flight has a ceiling: the sustained climb above leaves its plateau at ≈6,600 ft
-(`CAP-03`). The remake carries it as a hard clamp at **2003 m**. That number is a **footage
-measurement** (C1B IA1, Bloodhawk); nothing in `crimson.exe` has been traced to it, so this section
-is measurement, not decode. It is the plant's only non-decoded constant that binds in the stock
-envelope, and it is kept as a named product exception rather than as parity behaviour.
+(`CAP-03`). That ceiling is the atmosphere's own band boundary at 2000 m, not a clamp. There is no
+altitude clamp of any kind on an aeroplane in `crimson.exe`, and the thin band's force collapse is
+sufficient on its own to stop a climb at the boundary.
 
-**It is a clamp on ALTITUDE, not an energy limit**, and the footage is what says so: the level
-full-throttle equilibrium is flat to ±0.3 mph right up to 15 m under the line, and holding a 22°
-nose-up pull against it gains no altitude at all (sub-foot over the clip's last 5 s) while airspeed
-bleeds instead. The mechanism therefore deletes the frame's climbing velocity outright rather than
-fading thrust, lift or drag toward the ceiling. Whatever that bleed then runs into — the stall
-thresholds above — is a consequence of the clamp, not a second mechanism built beside it.
+**No clamp exists.** The integrator `FUN_0048e580` writes the position triple at `0x0048ea81` as
+three unconditional adds of velocity times `dt` into `[obj+0x204]`, `[obj+0x208]` and `[obj+0x20c]`,
+with no comparison of any component against anything; the one velocity clamp in that function is the
+`AiNoseSpeedFloor` block (`0x608128`, `0x48e95e`-`0x48e998`), a non-player along-nose floor unrelated
+to height. Every access to the altitude field `[obj+0x208]` on a vehicle is accounted for elsewhere
+in this document: the atmosphere read at `0x48fc51`, the measurement harness's save, zero and restore
+at `0x491250`, `0x491270` and `0x491284`, the respawn store of `900.0` at `0x496b6d`/`0x496b75`, the
+terrain push at `0x470515`/`0x470530`, and the terrain-follow write in `FUN_0048bc40`. None of them
+compares the altitude against a ceiling. The constants agree: the float `2003.0` (`0x44fa6000`) is
+absent from the image entirely, the five occurrences of `2000.0` (`0x44fa0000`, at `0x453303`,
+`0x488dda`, `0x49dcd7`, `0x4c23e5` and `0x4c2456`) all sit outside the flight and vehicle-integrate
+paths, and `6561.6796875` (`0x45cd0d70`) occurs exactly once, the band threshold's store at
+`0x46368b`. A clamp needs both a constant and a comparison, and the executable has neither.
 
-**There is no separate overshoot constant, because the clamp bounds its own overshoot.** Deleting
-the climbing velocity at the line leaves an aircraft at most one frame of climb above it, and flown
-on all eleven airframes from a 89° entry the greatest height reached above 2003 m is **1.46 m**
-(Brigand), against a one-frame ceiling of 2.30 to 3.94 m. A `42.8 m` (~140 ft) `Position.Y` backstop
-used to sit above the cap, sized to the footage's **6712 ft** zoom apex; that apex is a ballistic
-coast past the ceiling, a shape a velocity deletion cannot produce, so the constant described
-behaviour this model does not have and never engaged. Removing it leaves the eleven-airframe flight
-dump byte-identical, while shrinking it to 0.05 m moves 22 of the dump's lines, which is the control
-that says the instrument can see the clamp at all. `FlightConstantInventoryTests` measures the
-overshoot per airframe, so a mechanism that ever does coast past the line fails rather than passing
-under a constant nobody re-measured.
+**The band ceilings the climb by itself.** Above 2000 m `FUN_0041aca0` returns the thin band (see
+"Atmosphere"), and both of the forces that carry an aircraft upward read it. Dynamic pressure is
+`0.5 · ρ · V²` (`FUN_0041ac80`), so the lift force `q · S · C_L` scales with ρ, and `FUN_0041abd0`
+ceilings `C_L` at `min(±1.8, 0.5 · (0.75 − 0.15 M))`, so the deliverable load factor scales with ρ
+too and cannot be bought back by demanding more G. Thrust available (`FUN_0041acf0`) evaluates
+`FUN_0041ac80` at `(0.84 M + 0.112) · a`, so it scales as `ρ · a²`. Crossing the boundary therefore
+divides lift by **16.73** (ρ 2.2688e-3 to 1.3560e-4) and thrust available by **22.0**
+(`0.0597687 × (968.02 / 1109.54)² = 0.04549`), and the Mach terms take more still, since the thin
+band's lower sound speed raises Mach at a fixed true airspeed by 1.146 and thrust falls with Mach.
+Holding altitude needs a load factor of 1, so the airspeed required scales as one over the square
+root of the density ratio, a factor of **4.09**: against the Bloodhawk's level equilibrium of
+300.4 mph measured and 300.5 solved, level flight in the thin band would take about **1,229 mph**.
+No stock airframe is within a factor of four of that. It is the same 4.09 that moves the fallback
+airframe's stall from 75.5 to 309 mph. An aircraft under power reaches 2000 m and stops there
+because lift and thrust collapse together, with nothing holding it down.
 
-⚠ **Traced to ONE mission.** Do not assume the cap is global, per-chapter/zone, or per-aircraft
-until another mission's footage says otherwise.
+**Above the line the aircraft coasts, and how far is bought with the climb, not set by a constant.**
+Drag falls by the same 16.73, so a crossing continues very nearly ballistically, reaching
+`v_y² / 2g` above the edge. **The original does this at the controls, which is what distinguishes the
+band from any clamp**: a sustained ~160 mph climb tops out around **7,000 ft** (133 m above the
+edge), while a Bloodhawk built for the strongest engine and least weight, on nitro and crossing over
+300 mph, reaches nearly **9,000 ft** (743 m above it). A clamp gives one ceiling however you arrive.
+The filmed **6712 ft** figure is a third such apex, from a take that crossed slower still, and the
+`42.8 m` (~140 ft) `Position.Y` backstop once sized to it never engaged: removing it left the
+eleven-airframe flight dump byte-identical, while shrinking it to 0.05 m moved 22 of the dump's
+lines, which is the control that says the instrument can see the ceiling at all.
+
+**What the plant reaches.** The dense band is bit-identical to the single band the plant carried
+before, so nothing below 2000 m moves: `level-top-speed` 300.46 mph, `terminal-dive` 356.00 mph and
+`zoom-climb` 949 ft are unchanged, and the level equilibrium 12 m under the edge still solves to
+300.46 mph. A 22° full-throttle hold now apexes at **6,878 ft** on the Bloodhawk, and across the
+eleven airframes at 2009 to 2105 m, each one the coast its own crossing rate buys (17.8 to 45.4 m/s).
+`FlightConstantInventoryTests` measures the apex against the frictionless `v_y² / 2g` per airframe,
+so a clamp returning would collapse it toward nothing and a band that stopped biting would leave it
+unbounded.
+
+⚠ **The autogyro's ceiling sits well above the others, and that is the decode, not a defect.** Its
+wing loading is low enough to keep flying in the thin band (an 18.5 mph dense-band stall becomes
+75.7 mph up there, against a 228 mph `fd_speed`), so a shallow hold climbs a long way past the edge,
+to 5,872 m over a 240 s probe, before it stalls. The original does the same at the controls. Do not
+add a clamp to bound it.
+
+⚠ **CSVM crosses the edge faster than the original does, so its apex runs high.** The plant's
+sustained climb plateaus at 204 mph against the filmed 163, a residual recorded under "The sustained
+climb" and open on the same α question as the pitch rate. The ceiling therefore inherits that error,
+and it corrects itself when the climb does. Do not close the gap by putting a constant back.
+
+### ⚠ The ceiling is a measurement with no counterpart in the executable — RETIRED (2026-09-06)
+
+This section recorded the ≈6,600 ft ceiling as a footage measurement that nothing in `crimson.exe`
+had been traced to, and read its mechanism as a deletion of climbing velocity, on the strength of a
+filmed 22° pull that gains no height while airspeed bleeds. A sweep of the aeroplane path disproves
+the premise: no altitude clamp exists, and the thin band above 2000 m cuts lift by 16.73 and thrust
+by 22.0, which stops a climb at the boundary on the forces alone. A collapse of lift and thrust
+produces the same filmed bleed, so that clip never discriminated the two readings. The ≈6,600 ft
+figure is where the powered climb ends, not where the aircraft stops: flown at the controls, the
+original coasts hundreds of feet past it, further the faster it arrives.
 
 ⚠ **The dive-speed cap is the same kind of object and must not bind.** `MaxDiveSpeedFrac`
 (1.75 × `fd_speed`) is a numerical backstop against a loop energy pump or a `dt` spike, not a
@@ -3368,13 +3417,13 @@ without a provenance. Five classes are used:
 | `AttitudeThrustUp` | 0.13 | decoded | `0x6080d8`, the one-sided branch at `0x48fd00` |
 | `LiftGMin` / `LiftGMax` | −5 / 9 | decoded | the lift clamp in `FUN_0041abd0` |
 | `ClMaxStatic` / `ClMaxMach` | 0.75 / 0.15 | decoded | the aerodynamic ceiling in `FUN_0041abd0` |
-| `AirDensitySlugPerFt3` | 2.2688e-3 | decoded | `FUN_0041aca0`, dense band |
-| `SpeedOfSoundFps` | 1109.5 | decoded | `FUN_0041aca0`, dense band |
+| `BandThresholdFt` | 6561.6796875 | decoded | `0x0071bb3c`, stored at `0x46368b`; 2000 m in feet |
+| `DenseDensitySlugPerFt3` / `DenseSoundFps` | 2.2688e-3 / 1109.5 | decoded | `FUN_0041aca0`, dense band |
+| `ThinDensitySlugPerFt3` / `ThinSoundFps` | 1.3560e-4 / 968.0 | decoded | `FUN_0041aca0`, thin band |
 | `FeetPerMetre` / `MetresPerFoot` | 3.28084 / 0.3048 | unit | the altitude and Mach conversions the aero path runs in |
 | `StandardG` | 9.82 | decoded | the force-to-acceleration multiply at `0x491290` |
 | `StallWarnFrac` | 0.30 | exception | the STALL lamp's threshold, measured at 0.2989–0.2996 over four clips. A cue, not a force term |
 | `MaxDiveSpeedFrac` | 1.75 | exception | a numerical backstop against a loop energy pump or a `dt` spike, measured non-binding on all eleven (above) |
-| `AltitudeCapM` | 2003 | exception | the resting ceiling, measured off `CAP-03` / C1B IA1. It binds, deliberately |
 | `GroundBlowIntoFactor` | 0.05 | decoded | the immediate in the player branch of `FUN_0048c220` |
 | `GroundBlowVelocitySteer` | 2.0 | decoded | a global whose only writer is the `gbc` debug console command |
 | `NoseChaseFactor` | 0 | decoded | decoded-absent: no instruction in `FUN_0048c470`/`FUN_0048fc40`/`FUN_0048e580` rotates the velocity direction onto the nose; see "`lift_accel_rate` is a lag toward a target velocity" |
@@ -3410,8 +3459,8 @@ without a provenance. Five classes are used:
 | `AircraftContactResolver.EmbedPushOut` | 0.3 | exception | m per un-embed attempt; the loop itself has no counterpart, the original's placement cannot leave an airframe overlapping |
 | `AircraftContactResolver.EmbedTries` | 3 | exception | attempts before the airframe is destroyed instead of left inside the world; bound by `AircraftContactResolverTests` |
 
-The `flightModel.*` config block overrides nine of these: `pitchTune`, `yawTune`, `rollTune`,
-`stallWarnFrac`, `liftGMin`, `liftGMax`, `altitudeCapM`, `noseChaseFactor` and `aoaLimiterFactor`.
+The `flightModel.*` config block overrides eight of these: `pitchTune`, `yawTune`, `rollTune`,
+`stallWarnFrac`, `liftGMin`, `liftGMax`, `noseChaseFactor` and `aoaLimiterFactor`.
 A key is a development seam for an A/B at the controls and says nothing about provenance; the three
 `*Tune` keys exist so a decoded 1 can be compared against a fitted value by hand, `noseChaseFactor`
 so the decoded 0 can be compared against the retired kinematic chase (1), and `aoaLimiterFactor` so
@@ -3515,14 +3564,14 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   ⚠ Its own able-to-fail control is that the fastest manoeuvre still exceeds `fd_speed`; a scenario
   gone gentle would pass the dive-cap disproof while measuring nothing (`METHOD-9`).
 - **`FlightEnvelopeTests`** — the Bloodhawk's flown envelope against its DECODED targets. The count
-  of asserted scenarios is **pinned at 5** so that silently demoting one to informational cannot
-  read as a green run. Two of the five targets are solved in the test itself from the thrust curve,
+  of asserted scenarios is **pinned at 4** so that silently demoting one to informational cannot
+  read as a green run. Two of the four targets are solved in the test itself from the thrust curve,
   the Mach polar and gravity — the level equilibrium at lever 1, and the 70.7° dive's along-path
   balance — so a target that drifted toward the plant it judges, or back toward the footage figure
   it replaced, fails there rather than passing as a row that agrees with itself; its own able-to-fail
-  control drops the attitude-thrust term and must miss the dive target (`METHOD-9`). The third
-  asserted target, `altitude-cap`, is the `AltitudeCapM` product exception's own value. The other
-  eleven rows report the decoded plant's number with nothing independent to compare it to.
+  control drops the attitude-thrust term and must miss the dive target (`METHOD-9`). The other twelve
+  rows report the decoded plant's number with nothing independent to compare it to; `altitude-ceiling`
+  is one of them, because the height above the band edge is the coast the climb rate buys.
   ⚠ A demotion to informational is never the quiet way to make a run green.
 - **`ParityLedgerTests`** — the ledger below, as a census: a plant constant with no class or no
   source fails, a probe row with no ledger class fails, and no class may go empty. It is also what
@@ -3601,7 +3650,6 @@ which are findings rather than code.
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
 | a wreck flies the near-field plant | exception | the crashed-flag far arm at `0x48c4ba` is not ported; its writers are undecoded |
 | the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
-| the thin atmosphere band above 2000 m | unsupported | `FUN_0041aca0`'s second arm; unreachable under the 2003 m cap |
 | the `level_off_rate` auto-level torque | unsupported | `0x48cedc` / `0x48cf76`; decoded, and no shipped data authors the rate |
 | the AI's `medium_aishake` on a nitro engage | unsupported | `FUN_00473430(1)` |
 | the AI's positional `snd_nitro` blip | unsupported | the 0.1 s blip plus one second after |
@@ -3622,8 +3670,8 @@ annotation the probe prints in the row's own text; none of it gates anything.
 | `roll-360` | decoded | roll torque against `ang_momentum_damp` | 2.05 s off the ADI |
 | `pitch-rate` | decoded | the AOA window and the lift-demand lag | 33.00 °/s |
 | `yaw-360` | decoded | yaw torque times the authored authority curve | 28.60 s |
-| `altitude-cap` | exception | the 2003 m `AltitudeCapM` clamp | 173.7 mph at settle |
-| `level-speed-near-cap` | decoded | thrust = drag, with the clamp 15 m above | 300.40 mph |
+| `altitude-ceiling` | decoded | the 2000 m band edge, coasted past | ~6,600 ft plateau |
+| `level-speed-near-cap` | decoded | thrust = drag, with the band edge 12 m above | 300.40 mph |
 | `sustained-turn-speed` | decoded | the AOA window and the `C_L` ceiling | 222.94 mph, 449.8° |
 | `sustained-turn-sink` | decoded | delivered lift against `nom_gravity` | 1.85 ft/s |
 | `sustained-turn-rate` | decoded | the AOA window and the bank coupling | 18.95 °/s |
@@ -3661,7 +3709,7 @@ rest. An unreached branch here is a statement about this scenario set, not an un
 | Branch | Airframes reaching it | Instrument that drives it |
 |---|---:|---|
 | `dense-band` | 11/11 | `AtmosphereBandTests` |
-| `thin-band` | 11/11 | `AtmosphereBandTests` (the band step function; unreachable in flight) |
+| `thin-band` | 11/11 | `AtmosphereBandTests`, `FlightConstantInventoryTests.TheBandEdgeCeilingsTheClimb` |
 | `low-speed-ramp` | 1/11 | `ControlAuthorityRampTests` |
 | `pitch-fade` | 0/11 | `LatentControlAuthorityTests`, on a synthetic airframe |
 | `aoa-window` | 11/11 | `LatentControlAuthorityTests`, `ControlLimiterTests` |
@@ -3669,7 +3717,6 @@ rest. An unreached branch here is a statement about this scenario set, not an un
 | `g-clamp` | 0/11 | `ControlLimiterTests`; no stock manoeuvre demands ±9 G |
 | `cl-ceiling` | 11/11 | `StallNoseDropTests`, `PartThrottleEquilibriumTests`' level-flight floor |
 | `stall` | 0/11 | `StallNoseDropTests`, `AutogyroStallNoseDownTests` |
-| `alt-cap` | 11/11 | `FlightConstantInventoryTests.TheAltitudeCapBinds` |
 | `dive-cap` | 0/11 | `FlightConstantInventoryTests.TheDiveSpeedCapNeverBinds` |
 | `weathervane` | 11/11 | `WeathervaneTests` |
 | `bank-coupling` | 11/11 | `BankCouplingTests` |

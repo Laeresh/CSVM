@@ -23,15 +23,14 @@ public sealed class EnvelopeMargins
     public static readonly string[] Branches =
     {
         "dense-band", "thin-band", "low-speed-ramp", "pitch-fade", "aoa-window", "g-ramp",
-        "g-clamp", "cl-ceiling", "stall", "alt-cap", "dive-cap", "weathervane", "bank-coupling",
+        "g-clamp", "cl-ceiling", "stall", "dive-cap", "weathervane", "bank-coupling",
         "far-field", "boost", "ground-blow",
     };
 
-    // The band boundary A4 read live out of the retail process (2000 m, held at 0x0071bb3c in
-    // feet) and the resting cap the plant clamps at. Both are report thresholds here, not plant
-    // terms: the plant carries its own copies.
+    // The band boundary read live out of the retail process (2000 m, held at 0x0071bb3c in feet),
+    // which is the plant's ceiling as well as its atmosphere switch. A report threshold here, not a
+    // plant term: the plant carries its own copy.
     private const float BandBoundaryM = 2000f;
-    private const float AltitudeCapM = 2003f;
     private const float LiftGMax = 9f;
     private const float MaxDiveSpeedFrac = 1.75f;
 
@@ -79,7 +78,6 @@ public sealed class EnvelopeMargins
         Hit("g-clamp", m.LoadFactorDemand > LiftGMax);
         Hit("cl-ceiling", loadCap > 1e-6f && demand >= loadCap);
         Hit("stall", m.StallFlag > 0f);
-        Hit("alt-cap", m.Position.Y >= AltitudeCapM);
         Hit("dive-cap", s.FdSpeed > 1e-3f && speed >= (MaxDiveSpeedFrac * s.FdSpeed) - 1e-3f);
         Hit("weathervane", m.Alpha > 0.01f);
         Hit("bank-coupling", bank > 1f);

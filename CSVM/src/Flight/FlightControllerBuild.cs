@@ -19,6 +19,12 @@ internal sealed class FlightControllerBuild
     /// forever, and a respawn restarts the sequence (deterministic runs). Such runs are
     /// unattended, so a crash auto-respawns after a short pause.</summary>
     public (FlightInput Input, float Duration)[]? HoldSegments;
+
+    /// <summary>A stick of the caller's own, taking precedence over every other arm. It exists for
+    /// a scripted profile that has to close a loop on the aircraft's own state, which a timed
+    /// segment list cannot: the plant has no auto-level, so "push for N seconds" flies a different
+    /// trajectory on every airframe while "push until level" flies the same one.</summary>
+    public IFlightInputSource? InputSource;
     public Node3D PlaneModel = null!;
     public PropAnimator? Props;
     public WingLightBlinker? WingLights;
@@ -76,6 +82,7 @@ public partial class FlightController
         IsHumanPiloted = build.IsHumanPiloted;
         Pilot = build.Pilot;
         _holdSegments = build.HoldSegments;
+        _suppliedInputSource = build.InputSource;
         PlaneModel = build.PlaneModel;
         Props = build.Props;
         WingLights = build.WingLights;

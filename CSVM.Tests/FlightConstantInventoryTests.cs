@@ -58,8 +58,11 @@ public class FlightConstantInventoryTests
         ("FlightModel", "LiftGMax", 9.0, Decoded, "the lift clamp in FUN_0041abd0"),
         ("FlightModel", "ClMaxStatic", 0.75, Decoded, "the ceiling in FUN_0041abd0"),
         ("FlightModel", "ClMaxMach", 0.15, Decoded, "the ceiling in FUN_0041abd0"),
-        ("FlightModel", "AirDensitySlugPerFt3", 2.2688e-3, Decoded, "FUN_0041aca0, dense band"),
-        ("FlightModel", "SpeedOfSoundFps", 1109.5, Decoded, "FUN_0041aca0, dense band"),
+        ("FlightModel", "BandThresholdFt", 6561.6796875, Decoded, "0x0071bb3c, stored at 0x46368b"),
+        ("FlightModel", "DenseDensitySlugPerFt3", 2.2688e-3, Decoded, "FUN_0041aca0, dense band"),
+        ("FlightModel", "DenseSoundFps", 1109.5, Decoded, "FUN_0041aca0, dense band"),
+        ("FlightModel", "ThinDensitySlugPerFt3", 1.3560e-4, Decoded, "FUN_0041aca0, thin band"),
+        ("FlightModel", "ThinSoundFps", 968.0, Decoded, "FUN_0041aca0, thin band"),
         ("FlightModel", "FeetPerMetre", 3.28084, Unit, "the aero path's imperial intermediates"),
         ("FlightModel", "MetresPerFoot", 0.3048, Unit, "the aero path's imperial intermediates"),
         ("FlightModel", "StandardG", 9.82, Decoded, "the force-to-acceleration multiply at 0x491290"),
@@ -67,8 +70,6 @@ public class FlightConstantInventoryTests
             "0x00608338/0x00608334, the lamp driver at 0x0049f7e6; a cue no force term reads"),
         ("FlightModel", "MaxDiveSpeedFrac", 1.75, ProductException,
             "a CSVM numerical backstop with no counterpart; measured non-binding on all eleven"),
-        ("FlightModel", "AltitudeCapM", 2003.0, ProductException,
-            "the resting ceiling off CAP-03 / C1B IA1; it binds, deliberately"),
         ("FlightModel", "GroundBlowIntoFactor", 0.05, Decoded, "the player branch of FUN_0048c220"),
         ("FlightModel", "GroundBlowVelocitySteer", 2.0, Decoded, "the gbc console command's global"),
         ("FlightModel", "NoseChaseFactor", 0.0, Decoded,
@@ -115,11 +116,15 @@ public class FlightConstantInventoryTests
 
     private const float Dt = 1f / 60f;
 
+    // The atmosphere band edge in metres, the plant's threshold as a scenario reads altitude. It is
+    // the ceiling, so a climb test measures against it and never against a constant of its own.
+    private const float BandEdgeM = 2000f;
+
     // The plant's whole config surface. Each key read-throughs one inventory row above, so a key
     // added without a constant (or a constant exposed without a doc row) fails the census below.
     private static readonly string[] ConfigKeys =
     {
-        "altitudeCapM", "aoaLimiterFactor", "liftGMax", "liftGMin", "noseChaseFactor", "pitchTune",
+        "aoaLimiterFactor", "liftGMax", "liftGMin", "noseChaseFactor", "pitchTune",
         "rollTune", "stallWarnLoadFactor", "yawTune",
     };
 
@@ -234,35 +239,40 @@ public class FlightConstantInventoryTests
             + "it has gone too gentle to approach any cap, so the dive-cap disproof measures nothing");
     }
 
-    /// <summary>The altitude cap is a product exception that DOES bind, which is why it is kept: a
-    /// sustained climb settles against it rather than climbing on. If a climb stops reaching it the
-    /// clamp has become dead code and the exception is no longer earning its place.</summary>
+    /// <summary>The band edge is the ceiling, with no clamp anywhere: a sustained full-throttle climb
+    /// crosses 2000 m, loses the lift and thrust to continue, and falls back. A climb that ran on past
+    /// the edge would mean the thin band had stopped biting.</summary>
     [ExtractedDataFact]
-    public void TheAltitudeCapBinds()
+    public void TheBandEdgeCeilingsTheClimb()
     {
         var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
-        var m = Climb(stats, 1900f, 22f, 240f, out float overshoot);
-        Assert.True(m.Position.Y >= 2003f - 1f && overshoot < 5f,
-            $"player_bhawk: a 22° full-throttle climb settles at {m.Position.Y:0.0} m against the "
-            + $"2003 m cap, overshooting {overshoot:0.00} m — the cap is meant to bind here "
-            + "(docs/org/flightModel.md, \"The resting altitude cap\")");
+        var m = Climb(stats, 1900f, 22f, 240f, out float apexM, out float crossingVy);
+        Assert.True(crossingVy > 0f,
+            "player_bhawk: a 22° full-throttle climb from 1900 m never crossed the 2000 m band edge, "
+            + "so this measures nothing");
+        Assert.True(m.Position.Y < apexM - 50f,
+            $"player_bhawk: the climb apexed at {apexM:0.0} m and is still at {m.Position.Y:0.0} m — "
+            + "the thin band above 2000 m must stop the climb and let it fall back "
+            + "(docs/org/flightModel.md, \"The resting altitude cap is the atmosphere band edge\")");
     }
 
-    /// <summary>Overshoot above the cap is bounded by one frame's climbing velocity, because the
-    /// clamp deletes that velocity instead of fading it. Measured on every airframe from the
-    /// steepest entry, which is why no separate overshoot constant is carried.</summary>
+    /// <summary>What an aircraft reaches above the band edge is the coast its crossing rate buys, not
+    /// a constant, so the apex tracks the frictionless v²/2g on every airframe. A clamp returning
+    /// would collapse this toward nothing; a band that stopped biting would leave it unbounded.</summary>
     [ExtractedDataFact]
-    public void OvershootAboveTheAltitudeCapIsOneFrameOfClimb()
+    public void TheApexAboveTheBandEdgeIsTheCoastTheClimbRateBuys()
     {
         foreach (string plane in AllPlanes)
         {
             var stats = PlaneStats.Load(ZrdrPath, plane);
-            Climb(stats, 1950f, 89f, 60f, out float overshoot);
-            float perFrame = 1.75f * stats.FdSpeed * Dt;
-            Assert.True(overshoot <= perFrame,
-                $"{plane}: the aircraft reached {overshoot:0.00} m above the 2003 m cap, more than "
-                + $"the {perFrame:0.00} m one frame of climb can carry it — something now coasts "
-                + "past the clamp and the overshoot needs a mechanism, not a constant");
+            Climb(stats, 1950f, 89f, 60f, out float apexM, out float crossingVy);
+            Assert.True(crossingVy > 0f, $"{plane}: never crossed the band edge, so this measures nothing");
+            float ballistic = crossingVy * crossingVy / (2f * 9.82f);
+            float above = apexM - BandEdgeM;
+            Assert.True(above > 0.3f * ballistic && above < 1.5f * ballistic,
+                $"{plane}: crossed the edge at {crossingVy:0.0} m/s and apexed {above:0.0} m above it, "
+                + $"against the {ballistic:0.0} m a frictionless coast buys — the height above the edge "
+                + "must come from the climb, not from a constant");
         }
     }
 
@@ -296,17 +306,17 @@ public class FlightConstantInventoryTests
         string? outPath = System.Environment.GetEnvironmentVariable("CSVM_SAFEGUARD_OUT");
         var sb = new StringBuilder();
         sb.AppendLine($"{"airframe",-19} {"fd mph",8} {"peak/fd",8} {"cap 1.75",9} {"margin",8} "
-                      + $"{"settle m",9} {"over m",8} {"frame m",8}  fastest manoeuvre");
+                      + $"{"apex m",9} {"cross m/s",10} {"steep m",8}  fastest manoeuvre");
         int rows = 0;
         foreach (string plane in AllPlanes)
         {
             var stats = PlaneStats.Load(ZrdrPath, plane);
             var (peak, where) = FastestFlight(stats);
-            var m = Climb(stats, 1900f, 22f, 240f, out float settleOver);
-            Climb(stats, 1950f, 89f, 60f, out float steepOver);
+            Climb(stats, 1900f, 22f, 240f, out float apexM, out float crossingVy);
+            Climb(stats, 1950f, 89f, 60f, out float steepApexM, out _);
             sb.AppendLine($"{plane,-19} {stats.FdSpeed / 0.44704f,8:0.0} {peak,8:0.000} {1.75f,9:0.00} "
-                          + $"{1.75f - peak,8:0.000} {m.Position.Y,9:0.0} "
-                          + $"{Mathf.Max(settleOver, steepOver),8:0.00} {1.75f * stats.FdSpeed * Dt,8:0.00}  {where}");
+                          + $"{1.75f - peak,8:0.000} {apexM,9:0.0} {crossingVy,10:0.0} "
+                          + $"{steepApexM - BandEdgeM,8:0.0}  {where}");
             rows++;
         }
 
@@ -368,18 +378,26 @@ public class FlightConstantInventoryTests
         return (peak, where);
     }
 
-    // A held-attitude climb from below the cap, reporting the greatest height reached above it.
+    // A held-attitude climb from below the band edge, reporting the apex it reaches and the vertical
+    // speed it crossed the edge with — the two quantities a ballistic coast relates.
     private static FlightModel Climb(PlaneStats stats, float startM, float pitchDeg, float seconds,
-        out float overshoot)
+        out float apexM, out float crossingVyMps)
     {
         var m = new FlightModel(stats);
         m.Reset(new Vector3(0f, startM, 0f), Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(pitchDeg)),
             stats.FdSpeed, 1f);
-        overshoot = 0f;
+        apexM = m.Position.Y;
+        crossingVyMps = 0f;
         for (float t = 0f; t < seconds; t += Dt)
         {
+            float before = m.Position.Y;
             m.Step(new FlightInput { Throttle = 1f }, Dt);
-            overshoot = Mathf.Max(overshoot, m.Position.Y - 2003f);
+            if (crossingVyMps <= 0f && before <= BandEdgeM && m.Position.Y > BandEdgeM)
+            {
+                crossingVyMps = m.VelocityDir.Y * m.Speed;
+            }
+
+            apexM = Mathf.Max(apexM, m.Position.Y);
         }
 
         return m;

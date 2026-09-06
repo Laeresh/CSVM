@@ -500,6 +500,10 @@ public partial class FlightController : Node3D
     /// (<see cref="ScriptedInputSource.Reset"/>). Such runs are unattended, so a crash
     /// auto-respawns after a short pause.</summary>
     private (FlightInput Input, float Duration)[]? _holdSegments;
+
+    // A stick the caller supplied outright (FlightControllerBuild.InputSource), ahead of every
+    // other arm.
+    private IFlightInputSource? _suppliedInputSource;
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
@@ -858,9 +862,10 @@ public partial class FlightController : Node3D
     internal FlightInput LastCommand => _lastInput;
 
     private IFlightInputSource ResolveInputSource() =>
-        _holdSegments != null ? new ScriptedInputSource(_holdSegments)
+        _suppliedInputSource
+        ?? (_holdSegments != null ? new ScriptedInputSource(_holdSegments)
         : Pilot != null ? new PilotInputSource(this)
-        : new KeyboardInputSource(this);
+        : new KeyboardInputSource(this));
 
     /// <summary>The direction an ordnance round leaves along, which the player and the AI decide
     /// differently in the original (docs/org/ordnanceTypes.md, "Who aims ordnance, and who does

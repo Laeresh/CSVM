@@ -75,6 +75,12 @@ internal static class WingmanSuites
     private const float TurnPullS = 4f;
     private const float ClimbPullS = 3f;
 
+    // The push after each turn's roll-out, held until the flight path is level rather than for a
+    // fixed time, with this as its safety cap. ⚠ A timed push cannot level two airframes: the same
+    // deflection loses more height at 135 m/s than at 113. The plant has no auto-level, so a profile
+    // that ends nose-high phugoids through the band edge and into the ground afterwards.
+    private const float TurnLevelCapS = 6f;
+
     // The altitude both aircraft must stay above for the leg to mean anything. ⚠ Below
     // FlightController's under-map backstop an aircraft is teleported to its spawn with no crash
     // and no log, and the teleport lands in the separation statistic as a several-kilometre reading
@@ -615,20 +621,23 @@ internal static class WingmanSuites
     // throughout, a right turn, a climb, a level-off and a left turn, which is the speed and
     // altitude range a flown mission covers. Holding a straight cruise lever is not station-keeping
     // on a player, so the scripted legs cannot fail on it.
-    private static (FlightInput Input, float Duration)[] FlownLeaderProfile() => new[]
+    // ⚠ Each turn ends on a push flown to the HORIZON, not to a clock (see TurnLevelCapS).
+    private static (FlightInput Input, float Duration, bool UntilLevel)[] FlownLeaderProfile() => new[]
     {
-        (new FlightInput { Throttle = 1f }, 20f),
-        (new FlightInput { Throttle = 1f, Roll = 0.6f }, RollInS),
-        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, TurnPullS),
-        (new FlightInput { Throttle = 1f, Roll = -0.6f }, RollInS),
-        (new FlightInput { Throttle = 1f }, 5f),
-        (new FlightInput { Throttle = 1f, Pitch = 0.15f }, ClimbPullS),
-        (new FlightInput { Throttle = 1f, Pitch = -0.15f }, ClimbPullS),
-        (new FlightInput { Throttle = 1f }, 5f),
-        (new FlightInput { Throttle = 1f, Roll = -0.6f }, RollInS),
-        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, TurnPullS),
-        (new FlightInput { Throttle = 1f, Roll = 0.6f }, RollInS),
-        (new FlightInput { Throttle = 1f }, 0f),
+        (new FlightInput { Throttle = 1f }, 20f, false),
+        (new FlightInput { Throttle = 1f, Roll = 0.6f }, RollInS, false),
+        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, TurnPullS, false),
+        (new FlightInput { Throttle = 1f, Roll = -0.6f }, RollInS, false),
+        (new FlightInput { Throttle = 1f, Pitch = -0.35f }, TurnLevelCapS, true),
+        (new FlightInput { Throttle = 1f }, 5f, false),
+        (new FlightInput { Throttle = 1f, Pitch = 0.15f }, ClimbPullS, false),
+        (new FlightInput { Throttle = 1f, Pitch = -0.15f }, ClimbPullS, false),
+        (new FlightInput { Throttle = 1f }, 5f, false),
+        (new FlightInput { Throttle = 1f, Roll = -0.6f }, RollInS, false),
+        (new FlightInput { Throttle = 1f, Pitch = 0.35f }, TurnPullS, false),
+        (new FlightInput { Throttle = 1f, Roll = 0.6f }, RollInS, false),
+        (new FlightInput { Throttle = 1f, Pitch = -0.35f }, TurnLevelCapS, true),
+        (new FlightInput { Throttle = 1f }, 0f, false),
     };
 
     // The leg the scripted one cannot fail on: a leader flown the way a player flies, on a human
@@ -652,8 +661,12 @@ internal static class WingmanSuites
             ctx.Host.AddChild(live);
 
             var leaderPos = new Vector3(0f, FlownLeaderAltitudeM, 0f);
+            FlightController? flying = null;
+            var stick = new LevellingLeaderStick(FlownLeaderProfile(),
+                () => flying?.WorldVelocity.Y ?? 0f);
             leader = Rig(ctx, planesGamez, textures, stats, live, leaderPos, true, null,
-                FlightRoster.ShooterIdBase, FlownLeaderProfile(), null, out _, planeNode);
+                FlightRoster.ShooterIdBase, null, null, out _, planeNode, stick);
+            flying = leader;
 
             // Spawned on its own decoded station, which is where the campaign's aiv puts it: this
             // leg is about holding the station, not about reaching it.
@@ -876,7 +889,7 @@ internal static class WingmanSuites
         PlaneStats stats, ProjectilePool live, Vector3 pos, bool human, AiPilot? pilot, int shooterId,
         (FlightInput Input, float Duration)[]? holdSegments,
         System.Func<System.Collections.Generic.IReadOnlyList<Vector3>>? humanPositions,
-        out FlightModel plant, string? planeNode = null)
+        out FlightModel plant, string? planeNode = null, IFlightInputSource? stick = null)
     {
         var model = new PlaneBuilder(planesGamez, textures).Build(planeNode ?? ctx.PlaneName);
         var rig = new FlightController();
@@ -889,6 +902,7 @@ internal static class WingmanSuites
             IsHumanPiloted = human,
             Pilot = pilot,
             HoldSegments = holdSegments,
+            InputSource = stick,
             HumanPositions = humanPositions,
             Projectiles = live,
             UseKeyboard = false,
@@ -900,5 +914,40 @@ internal static class WingmanSuites
             LeaderThrottle, LeaderSpeedMps);
         ctx.Host.AddChild(rig);
         return rig;
+    }
+    // Plays the profile above, ending each turn on the horizon rather than on a stopwatch: the push
+    // is held until the flight path stops climbing, capped so an unusual attitude cannot hang the
+    // leg. The last segment holds forever, as a timed script's does.
+    private sealed class LevellingLeaderStick : IFlightInputSource
+    {
+        private readonly (FlightInput Input, float Duration, bool UntilLevel)[] _segments;
+        private readonly System.Func<float> _climbRateMps;
+        private int _index;
+        private float _held;
+
+        public LevellingLeaderStick((FlightInput Input, float Duration, bool UntilLevel)[] segments,
+            System.Func<float> climbRateMps)
+        {
+            _segments = segments;
+            _climbRateMps = climbRateMps;
+        }
+
+        public FlightInput Read(float dt)
+        {
+            var seg = _segments[_index];
+            if (_index == _segments.Length - 1)
+                return seg.Input;
+            _held += dt;
+            bool done = seg.UntilLevel
+                ? _climbRateMps() <= 0f || _held >= seg.Duration
+                : _held >= seg.Duration;
+            if (done)
+            {
+                _index++;
+                _held = 0f;
+            }
+
+            return seg.Input;
+        }
     }
 }

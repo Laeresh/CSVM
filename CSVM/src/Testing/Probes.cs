@@ -32,6 +32,7 @@ public static class Probes
 
     private const float Mph = 0.44704f;         // m/s per mph
     private const float Ft = 0.3048f;           // m per foot
+    private const float BandEdgeM = 2000f;      // the atmosphere band edge, the plant's ceiling
     private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
 
     // The Bloodhawk's two decoded envelope targets. Kept as constants so a row states the number it
@@ -1226,25 +1227,27 @@ public static class Probes
             + $"α {m.Alpha:0.0}° at finish — decoded torque path; footage read 28.6 s, discarded",
             info: true);
 
-        // --- altitude cap: fixed 22° nose-up hold (attitude set once, not continuous elevator,
-        // which would loop instead of climb). Without the clamp this never stops climbing (the
-        // model's accepted "steep-climb equilibrium" artifact); with it, altitude settles at the cap.
+        // --- the altitude ceiling: fixed 22° nose-up hold (attitude set once, not continuous
+        // elevator, which would loop instead of climb). The thin band above 2000 m is what stops the
+        // climb, and the height reached above the edge is the coast the crossing rate buys.
         m = Fresh(stats, Pitched(22f), fd, 1f);
-        Run(m, 1f, 240f, pitch: 0f, watch: watch);
-        Row("altitude-cap", "22° nose-up hold at full throttle, altitude settled against the clamp", "ft",
-            m.Position.Y / Ft, 6571.6, 100.0,
-            $"{m.Speed / Mph:0.0} mph at settle, α {m.Alpha:0.0}° — target is the AltitudeCapM "
-            + "product exception (2003 m) itself, the one asserted row that is not decoded; the "
-            + "filmed 173.7 mph settle speed is discarded");
+        double apexFt = 0;
+        RunUntil(m, 1f, 240f, () => m.VelocityDir.Y <= 0f && m.Position.Y > BandEdgeM,
+                 pitch: 0f, onStep: () => apexFt = Math.Max(apexFt, m.Position.Y / Ft), watch: watch);
+        Row("altitude-ceiling", "22° nose-up hold at full throttle, apex reached", "ft",
+            apexFt, null, 0.0,
+            $"{m.Speed / Mph:0.0} mph at apex, α {m.Alpha:0.0}° — the ceiling is the 6561.7 ft band "
+            + "edge and the height above it is bought with the climb rate, so no constant sets it",
+            info: true);
 
-        // --- level speed 15 m under the cap: the clamp must be a no-op this close to
-        // the line — the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
+        // --- level speed 15 m under the band edge: the atmosphere must not leak the thin band down
+        // here — the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
         m = Fresh(stats, Level(), 0.5f * fd, 1f);
         m.Position = new Vector3(0f, 1988f, 0f);
         Run(m, 1f, 180f, pitch: 0f, watch: watch);
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
             m.Speed / Mph, LevelTopSpeedMph, 0.5,
-            $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}° — same decoded lever-1 "
+            $"the band edge must not leak below 2000 m, α {m.Alpha:0.0}° — same decoded lever-1 "
             + "solve as level-top-speed");
 
         // --- sustained turn: full throttle, stick full back from a 100° banked entry, settled 10 s
@@ -1512,8 +1515,8 @@ public static class Probes
         double Nose() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
         double Path() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
 
-        // ⚠ 18 s, not longer: the fastest climbers reach the altitude clamp at ≈21 s, and sampling
-        // against the clamp reports its speed, not the climb's. The footage plateaus by +12 s.
+        // ⚠ 18 s, not longer: the fastest climbers reach the 2000 m band edge at ≈21 s, and sampling
+        // above it reports a coast in thin air, not the climb. The footage plateaus by +12 s.
         var want = new[] { 0f, 1f, 2f, 3f, 4f, 6f, 8f, 12f, 15f, 18f };
         int next = 0;
         float elapsed = 0f;
@@ -1550,9 +1553,9 @@ public static class Probes
                 r.MinSpeedT = elapsed;
             }
 
-            if (r.ClampedAt < 0 && m.Position.Y >= Config.GetFloat("flightModel.altitudeCapM", 2003f) - 1f)
+            if (r.BandEdgeAt < 0 && m.Position.Y >= BandEdgeM)
             {
-                r.ClampedAt = elapsed;
+                r.BandEdgeAt = elapsed;
             }
 
             // The plateau is read over the same last-third window the footage's own is quoted over,
@@ -1579,9 +1582,9 @@ public static class Probes
         sb.AppendLine($"plateau (12–18 s) {r.PlateauMph:0.00} mph at path {r.PlateauPathDeg:0.0}° "
                       + $"— original 163.05 mph at 55.5°; minimum {r.MinSpeedMph:0.00} mph at "
                       + $"+{r.MinSpeedT:0.0} s — original 152.40 at +6.5 s"
-                      + (r.ClampedAt >= 0
-                         ? $"  ⚠ ALTITUDE CLAMP bound at +{r.ClampedAt:0.0} s — every sample after "
-                           + "that reads the clamp, not the climb"
+                      + (r.BandEdgeAt >= 0
+                         ? $"  ⚠ BAND EDGE crossed at +{r.BandEdgeAt:0.0} s — every sample after "
+                           + "that reads a coast in thin air, not the climb"
                          : ""));
         sb.AppendLine($"  {"t",4} {"speed",8} {"orig",8} {"path",8} {"nose",8} {"climb",10} "
                       + $"{"alt",9} {"α",7} {"thr×",6}");
@@ -2325,11 +2328,11 @@ public static class Probes
         public double PlateauMph;
         public double PlateauPathDeg;
 
-        /// <summary>Sim seconds at which the altitude clamp first bound, or −1 if it never did.
-        /// ⚠ A run that reaches the clamp stops being a climb measurement at that instant — the
-        /// clamp deletes climbing velocity outright — so a finite value here invalidates every
-        /// sample after it rather than merely qualifying them.</summary>
-        public double ClampedAt = -1;
+        /// <summary>Sim seconds at which the climb crossed the 2000 m band edge, or −1 if it never
+        /// did. ⚠ A run that crosses stops being a climb measurement at that instant — above the edge
+        /// the thin band leaves neither the lift nor the thrust to climb on, so every sample after it
+        /// reads a ballistic coast rather than merely qualifying the climb.</summary>
+        public double BandEdgeAt = -1;
 
         public string Text = "";
         public string Summary = "";
