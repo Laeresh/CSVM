@@ -10,6 +10,10 @@
     in CSVM/export_presets.cfg, then copies the non-export pieces of the release listed
     in packaging/MANIFEST.md next to it, so .scratch\export\ is the zip's contents.
 
+    The zip is CSVM-v<version>-win64.zip, named from CSVM/project.godot's
+    application/config/version -- the same key the exported exe's file properties and the
+    first line of every log state, so all three agree by construction.
+
     Copying is what keeps MANIFEST.md's "byte-identical to the repo source" rule true by
     construction: the extractor scripts and licences are taken from their one home in the
     repo on every export, never forked into a package variant that can drift.
@@ -35,8 +39,8 @@ $GodotExe   = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godo
 $TemplateDir = Join-Path $env:APPDATA "Godot\export_templates\4.7.stable.mono"
 $ExportDir   = Join-Path $RepoRoot ".scratch\export"
 $ExportExe   = Join-Path $ExportDir "CSVM.exe"
-$ZipPath     = Join-Path $RepoRoot ".scratch\CSVM.zip"
 $UnzbdExe    = Join-Path $RepoRoot "tools\mech3ax\target\release\unzbd.exe"
+$ProjectGodot = Join-Path $ProjectDir "project.godot"
 
 # The zip payload beside the export output, from packaging/MANIFEST.md. Sources are the
 # files' one home in the repo, so a copy is byte-identical to what the manifest names.
@@ -82,6 +86,20 @@ foreach ($file in $ReleaseFiles) {
         throw "Release payload file not found at $($file.Source) -- see packaging\MANIFEST.md."
     }
 }
+
+# The version has one home: project.godot's application/config/version, which the engine reads at
+# startup for the log's first line and the launchscreen's corner, and which the export stamps into
+# the exe. Read back here so the zip's name cannot disagree with what is inside it. -Encoding utf8
+# because 5.1 decodes a BOM-less file as ANSI (CLAUDE.md); the key itself is ASCII, the file is not
+# necessarily. Exactly one match, so a second definition is an error rather than a coin toss.
+$versionMatch = @(Get-Content $ProjectGodot -Encoding utf8 | Select-String -Pattern '^config/version="([^"]+)"')
+if ($versionMatch.Count -ne 1) {
+    throw "Expected exactly one config/version in $ProjectGodot, found $($versionMatch.Count) -- " +
+        "the release's version number lives there and nowhere else (docs/tooling.md)."
+}
+$Version = $versionMatch[0].Matches[0].Groups[1].Value
+$ZipPath = Join-Path $RepoRoot ".scratch\CSVM-v$Version-win64.zip"
+Write-Host "Version $Version (CSVM\project.godot)" -ForegroundColor Cyan
 
 # The staging folder is rebuilt from nothing each run, because everything in it is copied into
 # the zip: a file left by an earlier export or a hand assembly would otherwise ship forever.
@@ -132,8 +150,8 @@ Write-Host "Exporting release build to $ExportExe..." -ForegroundColor Cyan
 # A real editor rewrites project.godot on startup: same values, but its own key order and NONE
 # of the comments, so an export would silently strip every decode the file carries. Snapshot and
 # restore it byte-for-byte around the run. Copy-Item both ways rather than a text round-trip,
-# which is what keeps PowerShell 5.1's ANSI default away from the file (see CLAUDE.md).
-$ProjectGodot = Join-Path $ProjectDir "project.godot"
+# which is what keeps PowerShell 5.1's ANSI default away from the file (see CLAUDE.md). This is
+# the file's only writer: the version above is READ from it, never stamped into it.
 $ProjectGodotBackup = Join-Path $env:TEMP "csvm-project-godot-$PID.bak"
 Copy-Item $ProjectGodot $ProjectGodotBackup -Force
 
@@ -160,6 +178,16 @@ if (-not (Select-String -Path $ExportLog -Pattern "baking_shaders" -Quiet)) {
         "CSVM\export_presets.cfg and that this export ran with a real rendering device."
 }
 Remove-Item $ExportLog -Force
+
+# Whether the version reached the exe is not something the exit code can say: with the preset's
+# application/modify_resources off, the export succeeds and ships an exe whose properties still
+# name Godot's own export template. Read the stamp back instead of trusting the flag.
+$exeInfo = (Get-Item $ExportExe).VersionInfo
+if ($exeInfo.FileVersion -notlike "$Version*" -or $exeInfo.ProductVersion -notlike "$Version*") {
+    throw "Exported exe states file version '$($exeInfo.FileVersion)' and product version " +
+        "'$($exeInfo.ProductVersion)', neither of them $Version -- check application/modify_resources " +
+        "and the application/*_version keys in CSVM\export_presets.cfg."
+}
 
 Write-Host "Staging release files..." -ForegroundColor Cyan
 foreach ($file in $ReleaseFiles) {

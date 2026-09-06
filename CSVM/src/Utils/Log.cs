@@ -127,7 +127,9 @@ public static class Log
     /// One sink per process; a second call is a no-op.</summary>
     /// <param name="repoRoot">Repo root — the log lands in its <c>.scratch/logs/</c>.</param>
     /// <param name="mode">The session shape (<c>fly</c>, <c>freecam</c>, …), used in the filename.</param>
-    public static void Open(string repoRoot, string mode)
+    /// <param name="version">The build's version (<see cref="BuildVersion.Current"/>), written as
+    /// the file's first line. Passed in, not read here, so this stays callable without an engine.</param>
+    public static void Open(string repoRoot, string mode, string version)
     {
         if (_sink != null)
         {
@@ -159,6 +161,10 @@ public static class Log
             {
                 _sink = writer;
                 SinkPath = path;
+                // The FIRST line in the file, ahead of the prelude: a report arrives as an
+                // attached log, and which build wrote it has to be readable from the top. Written
+                // straight to the writer, since Emit would queue it after the prelude.
+                writer.WriteLine(FileLine(Level.Info, "core", $"csvm version={version}"));
                 foreach (string line in Prelude)
                 {
                     writer.WriteLine(line);

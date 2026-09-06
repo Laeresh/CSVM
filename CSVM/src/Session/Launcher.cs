@@ -271,6 +271,9 @@ public partial class Launcher : Node3D
     // The F14 / --debug-fps frame-cost readout, ticked every frame like
     // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
     private UI.PerfHud _perfHud = null!;
+    // The version stamp drawn in the menu's corner, shown and hidden off the host's own "the menu
+    // is up" so no presentation has to carry one and no flight capture ever sees it.
+    private UI.BuildStamp _buildStamp = null!;
     private Rid _viewportRid;
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
@@ -474,7 +477,7 @@ public partial class Launcher : Node3D
         // Opened under the session shape's name (it names the file) and before anything else can
         // log. The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
-        Log.Open(_repoRoot, _spec.ModeName);
+        Log.Open(_repoRoot, _spec.ModeName, BuildVersion.Current);
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
         Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
@@ -708,6 +711,11 @@ public partial class Launcher : Node3D
         };
         AddChild(_perfHud);
 
+        // The version stamp on the menu, process-wide for the same reason and built beside it: the
+        // build a capture came from is a fact about the binary, not about a presentation.
+        _buildStamp = new UI.BuildStamp();
+        AddChild(_buildStamp);
+
         // The music channel, once per process and after every early-quit probe: one player that
         // outlives every session, over a sound archive of its own for the same reason (D37's
         // wiring contract, step 1).
@@ -855,6 +863,7 @@ public partial class Launcher : Node3D
         ReportRate(frameMs);
         // Early-quit probes do not construct the readout, but Godot may process one shutdown frame.
         _perfHud?.Tick(frameMs, counters);
+        _buildStamp?.Tick(_menuHost is { Shown: true });
         if (_spec.Perf)
             ReportPerf(delta, counters);
 

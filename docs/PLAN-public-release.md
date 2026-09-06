@@ -87,7 +87,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — What the package says about itself
 
-11. ☐ A version the build states in its exe, its log and its filename
+11. ☑ A version the build states in its exe, its log and its filename
 12. ☐ The third-party notices the binary is obliged to carry
 13. ☐ An exported build writes `logs\`, and the README says where saves live
 
@@ -332,7 +332,7 @@ definition's call writes no `[anim] damage:` line at all.
 
 # Wave B — What the package says about itself
 
-## B11 ☐ A version the build states in its exe, its log and its filename
+## B11 ☑ A version the build states in its exe, its log and its filename
 
 **Goal.** A recipient can say which build they are running without being asked how they got it. The
 version appears in the exe's Windows file properties, in the first line of every log file, and in
@@ -345,13 +345,17 @@ template metadata. `git tag` lists only `analysis-archive` and `docs-archive`. `
 writes a fixed `.scratch\CSVM.zip`.
 
 **Approach.** `v0.1.0` per Decision 4. Add `config/version` to `project.godot` as the single source,
-read it at startup and emit it as the log's first line through `Log`, mirror it into the preset's
-application version keys, and have `ExportRelease.ps1` read it back to name the zip
-`CSVM-v<version>-win64.zip`. The preset is committed, so the values live in the repo rather than in
-an editor session. <TODO: confirm the exact Godot 4.7 preset key spellings for product and file
-version against the editor's export dialog rather than assuming them.> <TODO: author's call on
-whether the version is also drawn on the launchscreen, which is a UI change this item otherwise does
-not make.>
+read it at startup and emit it as the log's first line through `Log`, and have `ExportRelease.ps1`
+read it back to name the zip `CSVM-v<version>-win64.zip`.
+
+The preset needs no second copy of the number, which is what the two open questions settled into.
+The Windows export options are `application/modify_resources`, `application/file_version`,
+`application/product_version`, `application/product_name` and `application/file_description` (read
+off the 4.7 editor binary's own option table); the two version keys are documented "leave empty to
+use project version" and do exactly that, padding `0.1.0` to `0.1.0.0` in both PE fields, so only
+`modify_resources` has to be turned on and the number stays in `project.godot` alone. The author's
+call on the launchscreen was yes, and it is drawn over every presentation rather than inside one:
+`UI/BuildStamp.cs`, a launcher-owned corner label shown while the menu host is up.
 
 **Model recommendation.** medium. Mechanical once the key names are confirmed, but it touches the
 export path, where a silent mistake ships.
