@@ -150,6 +150,7 @@ public class CampaignPlaneSelectionPageTests
         Assert.True(page.Step(0, 1)); // onto plane 1, which the wingman flies
 
         Assert.Equal("Pilot and Wingman must fly different planes.", flow.Modal?.Message);
+        Assert.Equal(DialogIcon.Warning, flow.Modal!.Icon); // langui 710's 0x1 mask
         Assert.Equal(0, page.Combo(0)!.Selected);
         Assert.Equal(1, page.Combo(2)!.Selected);
     }
@@ -244,6 +245,10 @@ public class CampaignPlaneSelectionPageTests
         Assert.Contains("Airframe 5", flow.Modal!.Message, System.StringComparison.Ordinal);
         Assert.DoesNotContain("Gypsy Magic", flow.Modal!.Message, System.StringComparison.Ordinal);
         Assert.Contains("exported", flow.Modal!.Message, System.StringComparison.Ordinal);
+        // The export notice is PLANESELECTION.SCRIPT's 0x1 mask, so it draws the warning and not
+        // the query the reference shot rules out.
+        Assert.Equal(DialogIcon.Warning, flow.Modal!.Icon);
+        Assert.Equal((int)DialogIcon.Warning, DialogIconTests.IconFrame(CampaignBoards.Dialog(flow.Modal)));
     }
 
     /// <summary>A starter or a granted aircraft has no record at all, so exporting creates one on

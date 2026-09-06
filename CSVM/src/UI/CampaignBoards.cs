@@ -72,8 +72,9 @@ public static class CampaignBoards
     private const float DialogButtonWidth = 62f;
     private const float DialogLabelDrop = 3f;
 
-    // MB_B_Icon.Png stacks three icons rather than a button's four states: the warning, and the two
-    // the other message classes use.
+    // MB_B_Icon.Png stacks three icons rather than a button's four states, in DialogIcon's order:
+    // the query the confirms draw, the warning the notices draw, and the skull credits alone asks
+    // for.
     private const int DialogIconFrames = 3;
 
     // The scrollbar thumb's own art height, and where a field's words sit inside its box.
@@ -351,14 +352,17 @@ public static class CampaignBoards
                     DialogCenterKey, modal.Button,
                     ComposedBoard.PlaqueFrame(StripFrames, focused: false, pressed: false), ComposedBoard.DialogInk(pressed: false)),
             },
+            modal.Icon,
             layout);
 
     /// <summary>The messagebox over any of its button sets: the single centred OK (<c>MB_B_CENTER</c>,
     /// the <c>0x1</c> box) or the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the
     /// <c>0x4</c> box the delete confirm asks for), each button drawn in the strip frame and label
     /// ink its caller names, which is how a pointer-driven presentation shows which one is under
-    /// the pointer.</summary>
-    public static BoardPanel Dialog(string message, IReadOnlyList<DialogButton> buttons, CampaignLayout? layout = null)
+    /// the pointer. The icon is its caller's too, since the script reads it off the message class
+    /// and not off the button set drawn here.</summary>
+    public static BoardPanel Dialog(
+        string message, IReadOnlyList<DialogButton> buttons, DialogIcon icon, CampaignLayout? layout = null)
     {
         layout ??= CampaignLayout.Fallback;
         const string section = CampaignLayout.DialogSection;
@@ -367,7 +371,7 @@ public static class CampaignBoards
         var pictures = new List<BoardPicture>
         {
             new(layout.Art(section, "MB_P_BACKGROUND", Ui("MB_Background.png")), DialogX, DialogY),
-            new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), DialogX + iconX, DialogY + iconY),
+            new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), DialogX + iconX, DialogY + iconY, (int)icon),
         };
         var lines = new List<BoardLine>
         {

@@ -112,6 +112,9 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal((365f, 400f, 240f, 50f), (ok.X, ok.Y, ok.Width, ok.Height));
         var panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
         Assert.Contains(panel.Lines, l => l.Text == shell.Dialog.Message);
+        // CAMPAIGN.SCRIPT raises langui 200 on the 0x1 mask, which is the warning icon.
+        Assert.Equal(DialogIcon.Warning, shell.Dialog.Icon);
+        Assert.Equal((int)DialogIcon.Warning, DialogIconTests.IconFrame(panel));
         Assert.Null(_store.Load(string.Empty));
 
         shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
@@ -164,6 +167,11 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
         Assert.Equal((195f + 70f, 150f + 250f), (shell.Rows[0].X, shell.Rows[0].Y));
+        // Langui 201 comes up on the 0x4 mask, the one set of masks that keeps the query icon.
+        Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
+        Assert.Equal(
+            (int)DialogIcon.Query,
+            DialogIconTests.IconFrame(shell.Compose().Overlays.First(o => o.Lines.Count > 0)));
 
         shell.Step(Back);
         Assert.Null(shell.Dialog);

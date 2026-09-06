@@ -426,8 +426,12 @@ use the text already in `TH`; `WR` picks the widget prefix, `mp_` when it is set
 or, when `XR` is set, `ma_`, and the plane screen clears `WR` before every box so it gets `mb_`; the
 low nibble of `UR` picks the button set, `0x1` being the single centred OK that the refusal and the
 export message both ask for and `0x4` a two-button box; and `VR` carries the answer back, 1 from the
-OK button and 3 or 4 from the two-button pair. The icon frame follows the same nibble, frame 1 for
-the `0x1` box, which is the exclamation mark both reference dialogs draw.
+OK button and 3 or 4 from the two-button pair. The icon frame follows the same nibble, and follows
+it rather than the button count: `MESSAGEBOX.SCRIPT`'s `gui_create` switches on `UR & 0x0f` and
+gives `0x4` and `0x8` frame 0, the question mark the confirms draw, and every other mask frame 1,
+the exclamation mark both reference dialogs draw. `0x2` is the case that rules the count out, a
+two-button box that still takes frame 1. Inside the default arm alone, a set `XR` takes frame 2
+instead, the skull, which only the credits box asks for.
 
 **The sell path is decoded but unreachable.** Behind the deactivated buttons, `10003` asks `uiData`
 2018 for the plane count and refuses below three with langui 701 (`IDS_PS_CANTSELLPLANE`); otherwise

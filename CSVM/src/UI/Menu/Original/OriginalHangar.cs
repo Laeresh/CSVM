@@ -1056,8 +1056,9 @@ public sealed partial class OriginalShell
     }
 
     // Sell asks first, the sell path's own two-button messagebox (langui 700 over the plane's
-    // short airframe name and its value, Yes and No), and a refused sale (a reward aircraft, the
-    // two-plane floor) comes back as the one-button box in the feature's words.
+    // short airframe name and its value, Yes and No, HANGAR.SCRIPT's 0x4 mask and so the query
+    // icon), and a refused sale (a reward aircraft, the two-plane floor) comes back as the
+    // one-button 0x1 box in the feature's words, under the warning.
     private void AskToSell()
     {
         if (_hangar == null || _inventoryIndex < 0 || _inventoryIndex >= _hangar.Saved.Count)
@@ -1072,18 +1073,22 @@ public sealed partial class OriginalShell
             question = $"Your {_hangar.AirframeShortName(plane.Airframe)} is worth ${HangarEconomy.Price(plane).Total.Cost}. Are you sure you want to sell it?";
         }
 
-        RaiseDialog(Fill(question.Replace("<B>", string.Empty).Replace("<b>", string.Empty)), Yes(() =>
-        {
-            if (_hangar.DeleteSaved(plane.Name))
+        RaiseDialog(
+            Fill(question.Replace("<B>", string.Empty).Replace("<b>", string.Empty)),
+            DialogIcon.Query,
+            Yes(() =>
             {
-                RefreshRosterFromStore();
-                return;
-            }
+                if (_hangar.DeleteSaved(plane.Name))
+                {
+                    RefreshRosterFromStore();
+                    return;
+                }
 
-            string refusal = _hangar.Message;
-            _hangar.ClearMessage();
-            RaiseDialog(refusal, Ok());
-        }), No());
+                string refusal = _hangar.Message;
+                _hangar.ClearMessage();
+                RaiseDialog(refusal, DialogIcon.Warning, Ok());
+            }),
+            No());
     }
 
     private MenuExit? ActivateHangar(OriginalRow row)

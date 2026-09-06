@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Original's dialogs and rows
 
-21. ☐ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
+21. ☑ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
 22. ☐ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
 
 ### Wave D — Text entry, seats, and the way out
@@ -328,7 +328,38 @@ second pane needs the same correction before assuming its authored 332 is right.
 
 # Wave C — Original's dialogs and rows
 
-## C21 ☐ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
+## C21 ☑ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
+
+**Landed.** `MESSAGEBOX.SCRIPT`'s `gui_create` (lines 35-50 of
+`extracted/rof/ASSETS/SCRIPTS/MESSAGEBOX.SCRIPT`) picks the `mb_p_icon` frame off the raising
+screen's button mask in `@globals@OR.UR` and nothing else: `UR & 0x0f` of `0x4` or `0x8` sets frame
+0, every other mask sets frame 1, and a set `XR` overrides both with frame 2. `MB_B_ICON.PNG` is
+43x126, three 43x42 frames stacked as `?`, `!`, skull, so frame 0 is the query, frame 1 the warning
+and frame 2 the skull. The mask and not the button count decides: the `0x2` mask is a two-button
+box that draws the warning and `0x8` is a three-button box that draws the query, which is why the
+frame arithmetic is nothing like `PlaqueFrame`'s.
+
+A `DialogIcon` enum (`Query`, `Warning`, `Death`, numbered as the sheet stacks them) now rides on
+`CampaignModal` and on `OriginalDialog`, and both `CampaignBoards.Dialog` overloads pass it into the
+`MB_P_ICON` `BoardPicture`. `CampaignModal`'s parameter defaults to `Warning` because both boxes
+`CampaignFlow.RaiseModal` raises are the plane screen's `0x1` masks (langui 710's refusal and langui
+702's export notice), so the export notice takes the `!` its reference shot shows without any change
+to `CampaignFlow.cs`. `OriginalCampaign.RaiseDialog` takes the icon as a required argument, so each
+of the presentation's raises states its frame rather than inheriting a default: the DELETE PLAYER
+question (langui 201, `CAMPAIGN.SCRIPT`'s `0x4`) and the sell question (langui 700,
+`HANGAR.SCRIPT`'s `0x4`) take `Query`; the flow's refusal band, the ContinuePlayer refusals (langui
+200 and 2106's text, both `0x1`), the missing-player line and the refused sale (langui 701, `0x1`)
+take `Warning`. Nothing we compose raises the skull, which only `CREDITS.SCRIPT` asks for.
+
+`CSVM.Tests/DialogIconTests.cs` pins the sheet's stacking order, pins that the composer takes its
+frame from the caller rather than from the button set it was handed, and walks a modal's icon
+through to the picture; the frame each site picks is asserted at its own existing test, in
+`CampaignPlaneSelectionPageTests`, `OriginalCampaignTests` and `OriginalHangarTests`. No golden
+photographs a dialog, so none needs re-pinning.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The export notice over the plane-selection screen draws the `!` frame its own reference
 shot shows, and each other message-box call site draws the frame the original gives it.

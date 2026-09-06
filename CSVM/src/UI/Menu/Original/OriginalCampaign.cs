@@ -10,9 +10,9 @@ namespace CSVM.UI.Menu.Original;
 public sealed record OriginalDialogAnswer(string Key, string LayoutKey, string Label, Action? Run);
 
 /// <summary>A dialog standing over a campaign screen, the original's <c>messagebox.script</c>
-/// over whatever screen was showing: its words and its one or two answers. While one stands the
-/// rows are its answers alone.</summary>
-public sealed record OriginalDialog(string Message, IReadOnlyList<OriginalDialogAnswer> Answers);
+/// over whatever screen was showing: its words, the icon its message class draws and its one or
+/// two answers. While one stands the rows are its answers alone.</summary>
+public sealed record OriginalDialog(string Message, DialogIcon Icon, IReadOnlyList<OriginalDialogAnswer> Answers);
 
 /// <summary>
 /// The Original campaign, the shell's partial over the shared <see cref="CampaignFeature"/>: the
@@ -396,7 +396,7 @@ public sealed partial class OriginalShell
                 ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.DialogInk(held)));
         }
 
-        return CampaignBoards.Dialog(dialog.Message, buttons, _campaignLayout);
+        return CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout);
     }
 
     private bool RosterHas(string name)
@@ -509,10 +509,13 @@ public sealed partial class OriginalShell
         return changed;
     }
 
-    private void RaiseDialog(string message, params OriginalDialogAnswer[] answers)
+    // Every raise names its icon, because MESSAGEBOX.SCRIPT reads the frame off the raising
+    // screen's button mask rather than off anything the box itself can see. A default here would
+    // be a rule of "one button means the warning", which the original's 0x2 boxes break.
+    private void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
     {
         _focusBeforeDialog = _focus[(int)_screen];
-        _dialog = new OriginalDialog(message, answers);
+        _dialog = new OriginalDialog(message, icon, answers);
         _hover = -1;
         _pressed = -1;
         // A box opens on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain
@@ -776,11 +779,13 @@ public sealed partial class OriginalShell
 
         if (_flow.TakeModal() is { } modal)
         {
-            RaiseDialog(modal.Message, Ok(modal.Confirm));
+            RaiseDialog(modal.Message, modal.Icon, Ok(modal.Confirm));
         }
         else if (_flow.TakeMessage() is { Length: > 0 } message)
         {
-            RaiseDialog(message, Ok());
+            // A refusal band raised as a box is the plane screen's langui 710 and the sell path's
+            // 701, both of them 0x1 masks, so it takes the warning.
+            RaiseDialog(message, DialogIcon.Warning, Ok());
         }
 
         if (_flow.Screen != before)
@@ -917,7 +922,8 @@ public sealed partial class OriginalShell
 
         if (_campaign.ContinuePlayer(entry.Text) is { } refusal)
         {
-            RaiseDialog(refusal, Ok());
+            // CAMPAIGN.SCRIPT raises the missing-name and unknown-name refusals on the 0x1 mask.
+            RaiseDialog(refusal, DialogIcon.Warning, Ok());
             return;
         }
 
@@ -925,8 +931,9 @@ public sealed partial class OriginalShell
         ShowCampaign(OriginalScreen.CampaignCabin);
     }
 
-    // DELETE PLAYER: the original's question (langui 201) as the two-answer box, the deletion
-    // taking the profile's own directory alone and clearing the box.
+    // DELETE PLAYER: the original's question (langui 201) as the two-answer box, on CAMPAIGN.SCRIPT's
+    // 0x4 mask and so under the query icon, the deletion taking the profile's own directory alone
+    // and clearing the box.
     private void BeginDelete()
     {
         if (_campaign == null || RosterEntry is not { } entry)
@@ -937,12 +944,13 @@ public sealed partial class OriginalShell
         string name = entry.Text.Trim();
         if (name.Length == 0 || !_campaign.HasPlayer(name))
         {
-            RaiseDialog($"There is no player named \"{name}\".", Ok());
+            RaiseDialog($"There is no player named \"{name}\".", DialogIcon.Warning, Ok());
             return;
         }
 
         RaiseDialog(
             _campaign.Strings.Text(201, "Are you sure you want to delete this player and all associated saved games?"),
+            DialogIcon.Query,
             Yes(() =>
             {
                 _campaign.DeletePlayer(name);
