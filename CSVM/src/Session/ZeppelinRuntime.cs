@@ -34,20 +34,12 @@ public sealed partial class ZeppelinRuntime : Node
     private float _sinceLog;
     private int _gateLogged;
 
-    /// <param name="trailerTarget">Where an anchored net's trailer target is, per net; null flies
-    /// every route at its authored coordinates. ⚠ Wired because it is the decoded behaviour;
-    /// unobservable in this install's shipped data (this module's docs/architecture.md entry).</param>
+    /// <param name="trailerTarget">An anchored net's trailer target, per net; null flies every
+    /// route at its authored coordinates.</param>
     /// <param name="transformDriven">Whether an animation motion owns a node's transform channel
-    /// right now (<c>MotionSet.DrivesTransform</c>). Null until <see cref="WireDamage"/> adopts
-    /// the runtime's own, which is one bootstrap late for a start anim's SI script.</param>
-    /// <param name="teamOverride">--zep='s side for the grafted record, or null to read the
-    /// record's own. Applied where <see cref="AuthoredTeam"/>'s answer lands, so the override fans
-    /// onto the zones and guns through the one path they already read; never stamped on the part
-    /// pools, which would suppress the flagged-<c>panels</c> rule in <see cref="WireZones"/>.</param>
-    /// <param name="seatOverride">--zep='s stage seat for the grafted record, or null to start
-    /// from the record's authored position. Applied through <see cref="ZeppelinMotion.ResumeAt"/>
-    /// so the law itself is re-seated: placing the node alone would be undone by the next step,
-    /// which writes the motion's own position back onto it.</param>
+    /// (<c>MotionSet.DrivesTransform</c>); null until <see cref="WireDamage"/> adopts it.</param>
+    /// <param name="teamOverride">--zep='s side. ⚠ Never stamp it on the part pools instead.</param>
+    /// <param name="seatOverride">--zep='s seat. ⚠ Never place the node instead.</param>
     public ZeppelinRuntime(IReadOnlyList<ZeppelinDef> defs, Func<string, Node3D?> resolveNode,
         IReadOnlyList<AiNet> chapterNets, Func<AiNet, Func<Vector3?>?>? trailerTarget = null,
         Func<Node3D, bool>? transformDriven = null, int? teamOverride = null,

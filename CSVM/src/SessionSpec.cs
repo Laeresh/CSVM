@@ -1718,9 +1718,8 @@ public sealed record SessionSpec
             }
         }
         // --zep= reads its record's gamez, textures, nets and zeppelins.zrd off the chapter and
-        // mission it names, so it takes both with it rather than threading a second pair through
-        // the build. ⚠ The empty stage only: a chapter world places its own airships through
-        // --zeppelins, and grafting one of them on again would be two hulls under one node name.
+        // mission it names, so it takes both rather than threading a second pair through the build.
+        // ⚠ Empty stage only: a chapter world already places that hull through --zeppelins.
         if (Zep is { } zep)
         {
             if (!EmptyStage)

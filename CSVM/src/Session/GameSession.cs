@@ -2516,10 +2516,9 @@ public partial class GameSession : Node3D
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
-            // Without a net: ahead of P1 on its own spawn heading, fanned right/left, holding
-            // that course. With one: on the net's first node, patrolling the graph.
-            // ⚠ The empty stage anchors each side to the grid origin instead of to the player, so
-            // a plane-count sweep repeats one geometry run to run; a chapter world keeps the fan.
+            // Without a net: ahead of P1 on its own spawn heading, fanned right/left, holding that
+            // course. With one: on the net's first node, patrolling the graph. ⚠ The empty stage
+            // anchors each side to the grid origin instead, so a count sweep repeats one geometry.
             var basis = lead.GlobalTransform.Basis;
             var fwd = -basis.Z;
             var right = basis.X;
