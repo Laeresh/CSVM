@@ -183,6 +183,55 @@ public sealed class VehicleDefs
         return Array.Empty<(float, string)>();
     }
 
+    /// <summary>The def's <c>weapons</c> block, the nearest authored list up the <c>kind_of</c>
+    /// chain, as the 5-tuples <c>[weapon_id, rounds, refire_s, min_range_m, max_range_m]</c>
+    /// (docs/org/aiPilot/aiWeapons.md, "The weapon list, and who builds it"). ⚠ That builder runs
+    /// for EVERY vehicle the def parser sees, a hull as much as an aeroplane, which is why this
+    /// lives here and not on the aircraft path. Empty when nothing up the chain authors one.</summary>
+    public IReadOnlyList<Flight.AiWeaponSlot> WeaponsOf(string def)
+    {
+        foreach (var d in Chain(def))
+        {
+            if (d.List("weapons") is not { } list)
+                continue;
+            var slots = new List<Flight.AiWeaponSlot>();
+            foreach (var entry in list)
+            {
+                if (entry is List<object?> { Count: >= 5 } w && w[0] is string id
+                    && w[1] is float rounds && w[2] is float refire
+                    && w[3] is float minRange && w[4] is float maxRange)
+                {
+                    slots.Add(new Flight.AiWeaponSlot
+                    {
+                        WeaponId = id,
+                        Rounds = (int)rounds,
+                        RefireSeconds = refire,
+                        MinRangeM = minRange,
+                        MaxRangeM = maxRange,
+                    });
+                }
+            }
+            return slots;
+        }
+        return Array.Empty<Flight.AiWeaponSlot>();
+    }
+
+    /// <summary>The def's <c>activation</c>, the nearest authored one up the <c>kind_of</c> chain:
+    /// the radius its own target acquisition ranks candidates inside, metres (2500 on both surface
+    /// defs). Null when nothing up the chain authors one, leaving the caller's own floor to stand.
+    /// ⚠ The engine also floors this at spawn against a global (<c>FUN_00476250</c>), which is
+    /// unread; every authored value sits above the floor CSVM applies, so nothing turns on it
+    /// today.</summary>
+    public float? ActivationOf(string def)
+    {
+        foreach (var d in Chain(def))
+        {
+            if (d.TryFloat("activation", out float activation))
+                return activation;
+        }
+        return null;
+    }
+
     private string? PlayerNodeOf(string playerDef) =>
         _defs.TryGetValue(playerDef, out var d) && d.Str("nodename") is { Length: > 0 } node ? node : null;
 

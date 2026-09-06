@@ -265,20 +265,30 @@ Builds and steps a mission's surface vehicles, the `mode ship` blocks (`patrolbo
 that have no player airframe: each is a copy of the chapter's library-root model, parented under
 the world root at its authored spot with its height read off the water, and indexed on the world
 runtime so the chapter's own definitions anchor on it and register its destructible pool.
-`GameSession` builds one lazily for the roster phase and the generator block, and
-`SessionSimulation` steps it after the generators that may launch another hull. `CollectVehicles`
-offers every hull to the aim assist's vehicle list ([../org/aim-assist.md](../org/aim-assist.md)).
-Read `SurfaceVehicle.cs` for what one hull then does.
+`GameSession` builds one lazily for the roster phase and the generator block, and `SessionSimulation`
+steps it after the generators that may launch another hull. `CollectVehicles` offers every hull to
+the aim assist's vehicle list ([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles` and
+`Weapons` are the seams a hull's gun needs, either null arming none. Read `SurfaceVehicle.cs` next.
 
 ## src/Session/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path
 follower's law (`Flight/PathFollower.cs`, [../org/flightModel.md](../org/flightModel.md)) over an
-unbounded route, the generator's take-off run and then a lazy walk of the patrol net's edges, with
-the hull's height pinned to the water it was placed on. `Patrol` is the roster and `SET_AI_NET`
-assignment, `Launch` the generator's, and `Wake` the `WAKEUP_ENEMIES` arm a block's `deactivated`
-waits on. Damage is the pool the chapter's definition registered on the root: a rung of the injure
-ladder plays as the pool falls through its fraction, and the death leaves the parts to the death
-sequence. Read `SurfaceVehicleRuntime.cs` for how one is built.
+unbounded route, the generator's take-off run then a lazy walk of the patrol net's edges, height
+pinned to the water. `Patrol` is the roster and `SET_AI_NET` assignment, `Launch` the generator's,
+`Wake` the `WAKEUP_ENEMIES` arm a block's `deactivated` waits on. Damage is the pool the chapter's
+definition registered on the root: a rung of the injure ladder plays as the pool falls through its
+fraction, the death leaving the parts to the death sequence. Its gun is `SurfaceGunner.cs`, stepped
+from here for a woken, undestroyed hull; `SurfaceVehicleRuntime.cs` is how one is built.
+
+## src/Session/SurfaceGunner.cs
+One hull's gun ([../org/aiPilot.md](../org/aiPilot.md) "What a `mode ship` vehicle runs"): the
+acquisition, mount and fire decision a patrol boat runs, built from the def's own `weapons` tuple
+and the model's `turret` > `gun` > `firepoint` chain, or not built when any input is missing. It
+sweeps the pool's three candidate lists under the team gate, ranks with the non-`jet` scorer, holds
+a target for a hardcoded 20 s, aims through `Flight/SurfaceGunMount` and fires on the authored
+window, interval and magazine. No pursue gate and no quick draw, neither reaching a hull; the def's
+dwell fields are pursuit timers and unread. Rounds leave as a world emplacement's do, and
+non-aircraft candidates are dropped, so a boat does not shoot a boat. Suite: `surface-vehicle-guns`.
 
 ## src/Session/CutsceneController.cs
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the

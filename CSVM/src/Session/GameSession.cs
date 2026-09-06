@@ -2182,6 +2182,14 @@ public partial class GameSession : Node3D
         // The same reasoning for the third pool: a gun standing beside a hostile mission structure
         // has nothing else to see it through.
         projectiles.Structures = state.WorldRuntime?.Destructibles;
+        if (surfaceVehicleRuntime != null)
+        {
+            // The other direction: a hull's own gun scans through the pool and fires through it,
+            // and resolves the weapon id its def authors against the same catalogue everything
+            // else uses. Without both, hulls build unarmed (docs/org/aiPilot.md).
+            surfaceVehicleRuntime.Projectiles = projectiles;
+            surfaceVehicleRuntime.Weapons = weaponDefs;
+        }
         var worldBindings = new FlightWorldBindings
         {
             Ambience = _ambience,
