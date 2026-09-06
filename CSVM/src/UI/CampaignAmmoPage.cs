@@ -71,6 +71,15 @@ public sealed class CampaignAmmoPage : CampaignPage
     private const int AmmoCaptionLabel = 1026;
     private const int RocketCaptionLabel = 1027;
 
+    // IDS_OL_AMMODESC_TITLE and IDS_OL_ROCKETDESC_TITLE, the heading over each description pane, at
+    // OL_T_AMMODESCTITLE and OL_T_ROCKETDESCTITLE in the column the panes themselves stand in.
+    private const int AmmoDescTitleLabel = 1024;
+    private const int RocketDescTitleLabel = 1025;
+    private const float DescColumnX = 566f;
+    private const float AmmoDescTitleY = 76f;
+    private const float RocketDescTitleY = 312f;
+    private const float DescTitleWidth = 200f;
+
     // IDS_GUNSHORTNAME, the calibre words the captions carry.
     private const int CalibreLabel = 3320;
 
@@ -181,10 +190,10 @@ public sealed class CampaignAmmoPage : CampaignPage
         }
     }
 
-    /// <summary>The screen's own title, the two panel headings with their parenthesised notes, and
-    /// one caption per gun group: the calibre the group mounts, or the greyed marker an empty group
-    /// carries in its place. All at their own <c>OL_T_*</c> rows, the captions at
-    /// <c>OL_T_GunName0..3</c>.</summary>
+    /// <summary>The screen's own title, the two list headings with their parenthesised notes, a
+    /// heading over each description pane, and one caption per gun group: the calibre the group
+    /// mounts, or the greyed marker an empty group carries in its place. All at their own
+    /// <c>OL_T_*</c> rows, the captions at <c>OL_T_GunName0..3</c>.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
         get
@@ -196,6 +205,10 @@ public sealed class CampaignAmmoPage : CampaignPage
             var (ammoNoteX, ammoNoteY, ammoNoteWidth) = layout.Box(Section, "OL_T_AMMOCAPTION", 246f, 75f, 200f);
             var (rocketX, rocketY, rocketWidth) = layout.Box(Section, "OL_T_ROCKETTITLE", LeftColumnX, 290f, 200f);
             var (rocketNoteX, rocketNoteY, rocketNoteWidth) = layout.Box(Section, "OL_T_ROCKETCAPTION", 214f, 291f, 200f);
+            var (ammoDescX, ammoDescY, ammoDescWidth) =
+                layout.Box(Section, "OL_T_AMMODESCTITLE", DescColumnX, AmmoDescTitleY, DescTitleWidth);
+            var (rocketDescX, rocketDescY, rocketDescWidth) =
+                layout.Box(Section, "OL_T_ROCKETDESCTITLE", DescColumnX, RocketDescTitleY, DescTitleWidth);
             var lines = new List<BoardLine>
             {
                 new("AMMO SELECTION", TitleX, titleY, titleWidth, TitleFont, BoardInk.Heading),
@@ -205,6 +218,10 @@ public sealed class CampaignAmmoPage : CampaignPage
                 new("ROCKETS", rocketX, rocketY, rocketWidth, HeadingFont, BoardInk.Heading),
                 new(Flow.Strings.Text(RocketCaptionLabel, " (underwing hardpoints):"),
                     rocketNoteX, rocketNoteY, rocketNoteWidth, CaptionFont, BoardInk.Detail),
+                new(Flow.Strings.Text(AmmoDescTitleLabel, "AMMO DESCRIPTION"),
+                    ammoDescX, ammoDescY, ammoDescWidth, HeadingFont, BoardInk.Heading),
+                new(Flow.Strings.Text(RocketDescTitleLabel, "ROCKET DESCRIPTION"),
+                    rocketDescX, rocketDescY, rocketDescWidth, HeadingFont, BoardInk.Heading),
             };
             if (_plane == null)
             {
@@ -292,6 +309,21 @@ public sealed class CampaignAmmoPage : CampaignPage
         return row == AcceptRow
             ? "Writes these picks into the plane's saved fit"
             : "Leaves the plane's saved fit unchanged";
+    }
+
+    /// <summary>Both panes are filled at once: the upper one describes the gun group the cursor is
+    /// on and the lower the pylon, and the half the cursor is not in keeps the first armed group's
+    /// or first fitted pylon's words, which is what <c>gui_init</c> writes into them on entry.
+    /// ACCEPT and CANCEL are in neither half, so their own hint reaches the shell's band.</summary>
+    public override int DetailRow(BoardDetailPane pane, int row)
+    {
+        EnsureLoaded();
+        if (pane == BoardDetailPane.Upper)
+        {
+            return row >= 0 && row < GroupRows ? row : FirstArmedGroup();
+        }
+
+        return row >= GroupRows && row < AcceptRow ? row : GroupRows + FirstFittedPylon();
     }
 
     /// <summary>The closed field's own stepper, which takes the same door a picked list row does:
@@ -587,6 +619,35 @@ public sealed class CampaignAmmoPage : CampaignPage
     // stored field shares.
     private int OrdnanceTableIndex(int cell) =>
         CampaignLoadout.PylonRow(cell < _ordnance.Length ? _ordnance[cell] : 0);
+
+    // Which group and which pylon a pane falls back on, gui_init's own WKA and XKA: the first that
+    // carries anything, and group 0 or cell 0 when the plane carries none, whose description then
+    // says the slot is empty where the original would describe its "None" pick.
+    private int FirstArmedGroup()
+    {
+        for (int group = 0; _plane != null && group < GroupRows; group++)
+        {
+            if (_build.GunPresent[group])
+            {
+                return group;
+            }
+        }
+
+        return 0;
+    }
+
+    private int FirstFittedPylon()
+    {
+        for (int cell = 0; _plane != null && cell < PylonRows; cell++)
+        {
+            if (PylonActive(cell))
+            {
+                return cell;
+            }
+        }
+
+        return 0;
+    }
 
     private bool PylonActive(int cell) =>
         cell < 4 ? cell < _build.LeftHardpoints : (cell - 4) < _build.RightHardpoints;

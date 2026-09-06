@@ -35,20 +35,27 @@ internal static class MenuOriginalCampaignSuites
 
     [Suite("menu-original-campaign",
         "Original's campaign through the presentation boundary over the install's decoded layout and "
-        + "a scratch profile store: the Campaign row opens the profile screen, typed frames name a "
+        + "a scratch profile store: the Campaign row opens the profile screen, a character outside "
+        + "the name rule and one inside it at the cap both type nothing and cue the box's reject "
+        + "sound, typed frames name a "
         + "player and Enter seats them on the cabin, the briefing runs its reveal on the presentation's "
         + "clock and starts its narration through the host's audio once, REPLAY BRIEFING starts it "
         + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
         + "from a blank map with the narration starting over, the flight check walks two debug-joined "
         + "guests and FLY MISSION leaves as one CampaignMissionExit with three seats, the debrief "
-        + "return lands on the book with RETURN TO CABIN focused and starts no narration, the cabin "
+        + "return lands on the book with RETURN TO CABIN focused and starts no narration, a pointer "
+        + "press on the book's unselected results tab switches the half the card reads and a press "
+        + "on the one it swapped with reads Most Recent again, the cabin "
         + "return lands on the cabin, ammo selection and plane selection write their picks through "
         + "the feature, a wheel step over the scrapbook's contents page and over Plane Construction's "
         + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
         + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
         + "the wallet and Back resumes the cabin, a plane built over the campaign's wallet is absent "
-        + "from the sortie roster until one EXPORT press crosses it, and Deactivate leaves no open "
-        + "campaign")]
+        + "from the sortie roster until one EXPORT press crosses it, a purchase over a profile at the "
+        + "decoded slot cap is refused in the original's own words until a plane is sold back, the "
+        + "screenshot aids' input script stands the pilot's plane list and the ammo screen's rocket "
+        + "list open and draws them through idle frames while export is still the EXPORT press, and "
+        + "Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -98,11 +105,13 @@ internal static class MenuOriginalCampaignSuites
             Roster(ctx, host, seat, shell, fit, campaign, store, audio);
             Briefing(ctx, host, seat, shell, fit, campaign, audio);
             FlightCheckAndLaunch(ctx, host, seat, shell, fit, campaign, store, exits, audio);
-            Returns(ctx, host, shell, campaign, store, audio);
+            Returns(ctx, host, shell, fit, campaign, store, audio);
             AmmoAndPlanes(ctx, host, seat, shell, fit, campaign, store);
             Scrolling(ctx, host, seat, shell, fit, store);
             HangarRoundTrip(ctx, host, seat, shell, fit);
             ExportGate(ctx, host, seat, shell, fit, campaign, root);
+            SlotCap(ctx, host, seat, shell, campaign, root);
+            AidScript(ctx, shell);
         }
         finally
         {
@@ -136,6 +145,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Rows.Count == 4 && shell.FocusedKey == "ROW:0" && campaign.Roster.Count == 0,
             $"an empty roster is the name box and three plaques, focus on the box ({shell.Rows.Count}, {shell.FocusedKey})");
         ctx.Check(host.Seats[0].CapturingText, $"the seat captures text on the profile screen");
+        RefusedCharacters(ctx, host, seat, shell, audio);
         audio.Cues.Clear();
         Press(host, seat, new MenuCommands { Typed = Pilot });
         ctx.Check(shell.RosterName == Pilot && audio.Cues.Count == Pilot.Length && audio.Cues[0] == OriginalCues.Text,
@@ -154,6 +164,32 @@ internal static class MenuOriginalCampaignSuites
             $"PREVIOUS MISSIONS opens the contents, four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"Back returns to the cabin ({shell.Screen})");
+    }
+
+    // Both routes to the box's reject cue, on the empty box so the screen is left as it was found:
+    // a character outside the campaign's name rule, and one inside it arriving at a box at its cap.
+    // The punctuation route needs the poller to type the character at all (MenuInput.TypeableKeys),
+    // which is what a key that produced neither a letter nor a sound used to be missing.
+    private static void RefusedCharacters(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, RecordingAudio audio)
+    {
+        audio.Cues.Clear();
+        Press(host, seat, new MenuCommands { Typed = "/" });
+        ctx.Check(shell.RosterName.Length == 0 && audio.Cues.Count == 1 && audio.Cues[0] == OriginalCues.TextError,
+            $"a character the name rule refuses types nothing and cues the reject sound ({shell.RosterName}, {string.Join(",", audio.Cues)})");
+
+        audio.Cues.Clear();
+        Press(host, seat, new MenuCommands { Typed = new string('A', CampaignFeature.MaxNameLength + 1) });
+        ctx.Check(shell.RosterName.Length == CampaignFeature.MaxNameLength
+            && audio.Cues.Count == CampaignFeature.MaxNameLength + 1
+            && audio.Cues[audio.Cues.Count - 1] == OriginalCues.TextError,
+            $"an accepted character at the cap cues the same reject ({shell.RosterName.Length}, {audio.Cues.Count})");
+
+        for (int i = 0; i < CampaignFeature.MaxNameLength; i++)
+        {
+            Press(host, seat, new MenuCommands { Erase = true });
+        }
+
+        ctx.Check(shell.RosterName.Length == 0, $"and Backspace empties the box again ({shell.RosterName})");
     }
 
     // The briefing: the reveal on the presentation's clock, the narration through the host's audio.
@@ -293,7 +329,7 @@ internal static class MenuOriginalCampaignSuites
     }
 
     // The session's director records the flown mission; the two returns map onto the book and the cabin.
-    private static void Returns(TestContext ctx, MenuHost host, OriginalShell shell, CampaignFeature campaign,
+    private static void Returns(TestContext ctx, MenuHost host, OriginalShell shell, BoardFit fit, CampaignFeature campaign,
         CampaignProfileStore store, RecordingAudio audio)
     {
         var profile = store.Load(Pilot)!;
@@ -312,6 +348,7 @@ internal static class MenuOriginalCampaignSuites
         var back = Row(shell, "ReturnToCabin");
         ctx.Check(back != null, $"the page carries RETURN TO CABIN");
         var seat0 = (ScriptedSeat)host.Seats[0];
+        Tabs(ctx, host, seat0, shell, fit, back);
         Press(host, seat0, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"RETURN TO CABIN lands on the cabin ({shell.Screen})");
         Press(host, seat0, Back);
@@ -322,6 +359,54 @@ internal static class MenuOriginalCampaignSuites
         host.Show(new CabinReturn(Pilot));
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && campaign.Profile?.Name == Pilot,
             $"the cabin return lands on the cabin with the profile seated ({shell.Screen}, {campaign.Profile?.Name})");
+    }
+
+    // The results card's two tabs under the pointer: the tab the card is not showing draws as a
+    // picture rather than a plaque, so its rectangle is the page's own art. Pressing it switches
+    // the half the card reads, pressing the one it swapped with puts the book back as the debrief
+    // return left it, and the pointer over RETURN TO CABIN hands the focus back to the way out.
+    private static void Tabs(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, OriginalRow? back)
+    {
+        var tab = UnselectedTab(shell);
+        ctx.Check(tab != null && tab.Kind == OriginalRowKind.ListRow && tab.Width > 0f && tab.Height > 0f,
+            $"the book's unselected tab carries a rectangle ({tab?.Key}, {tab?.Width}x{tab?.Height})");
+        if (tab == null || back == null)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, tab.X + 4f, tab.Y + 4f, pressed: true, clicked: true));
+        ctx.Check(Row(shell, "BestTab") != null && Row(shell, "MostTab") == null,
+            $"a press on it puts Best to Date on the card ({shell.FocusedKey})");
+        if (UnselectedTab(shell) is { } other)
+        {
+            Press(host, seat, Pointer(fit, other.X + 4f, other.Y + 4f, pressed: true, clicked: true));
+            ctx.Check(Row(shell, "MostTab") != null, $"and a press on the other reads Most Recent again");
+        }
+
+        Press(host, seat, Pointer(fit, back.X + 4f, back.Y + 4f));
+        ctx.Check(shell.FocusedKey == "ReturnToCabin", $"the pointer over the way out takes the focus back ({shell.FocusedKey})");
+    }
+
+    // Whichever results tab the card is not showing: the two are offered next to each other, Best
+    // to Date first, and only the shown one presses an authored button.
+    private static OriginalRow? UnselectedTab(OriginalShell shell)
+    {
+        var rows = shell.Rows;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Key == "BestTab")
+            {
+                return i + 1 < rows.Count ? rows[i + 1] : null;
+            }
+
+            if (rows[i].Key == "MostTab")
+            {
+                return i > 0 ? rows[i - 1] : null;
+            }
+        }
+
+        return null;
     }
 
     // Ammo selection's stepper and ACCEPT write the pick into the profile; a third plane makes
@@ -563,6 +648,88 @@ internal static class MenuOriginalCampaignSuites
             $"which is what puts it in the sortie roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
         ctx.Check(wallet.OwnedBuilds().Count == 3 && profile.Planes.Count == 3,
             $"and the campaign still owns all three, the two starters included ({wallet.OwnedBuilds().Count})");
+    }
+
+    // The decoded slot cap over its own scratch stores: a profile holding its 20 bought planes is
+    // refused the next purchase in the original's own words, and selling one back makes room for
+    // exactly one more.
+    private static void SlotCap(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        CampaignFeature campaign, string root)
+    {
+        const string OneMore = "One Too Many";
+        var profiles = new CampaignProfileStore(Path.Combine(root, "CapProfiles"));
+        var planes = new CustomPlaneStore(Path.Combine(root, "CapPlanes"));
+        shell.OpenCampaignOver(profiles, planes);
+        Press(host, seat, new MenuCommands { Typed = Pilot });
+        Press(host, seat, Accept);
+        if (campaign.Profile is not { } profile || shell.CampaignWallet is not { } wallet)
+        {
+            ctx.Check(false, $"the slot-cap walk seats a player over its own stores ({campaign.Profile?.Name})");
+            return;
+        }
+
+        profile.Funds = 500_000;
+        for (int i = profile.Planes.Count; i < CampaignWallet.PurchasedPlaneCap; i++)
+        {
+            profile.Planes.Add(new OwnedPlane { Name = "Filler " + i, Airframe = 10 });
+        }
+
+        profiles.Save(profile);
+
+        var hangar = host.Features.Get<HangarFeature>();
+        hangar.Open(planes, wallet);
+        hangar.StartDefaultPlane();
+        hangar.Scratch.Name = OneMore;
+        int funds = profile.Funds;
+        bool committed = hangar.Commit();
+        string limit = hangar.Strings.Text(
+            204,
+            "You have reached your hangar limit of planes.  Click Sell Planes, and sell one or more planes.");
+        ctx.Check(!committed && hangar.Message == limit,
+            $"a purchase at the slot cap is refused in the original's own words ({committed}, {hangar.Message})");
+        ctx.Check(profile.Funds == funds && profile.Planes.Count == CampaignWallet.PurchasedPlaneCap
+            && planes.Load(OneMore) == null,
+            $"with the wallet, the ownership list and the build store untouched ({profile.Funds}, {profile.Planes.Count})");
+
+        hangar.DeleteSaved("Filler 5");
+        ctx.Check(hangar.Commit() && planes.Load(OneMore) != null,
+            $"and one plane sold back makes room for exactly one more ({hangar.Message})");
+        hangar.Discard();
+    }
+
+    // The screenshot aids' input script under Original: the same words Built-in's aids take, spelt
+    // on the ammo and plane-selection screens over the aid's own scratch store.
+    private static void AidScript(TestContext ctx, OriginalShell shell)
+    {
+        shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+        shell.ShowCabin(CampaignAidProfiles.Pilot);
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        int closed = shell.Rows.Count;
+        var shut = shell.Compose();
+        shell.RunAidScript("a");
+        var open = shell.Compose();
+        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:0",
+            $"a stands the pilot's plane list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+        ctx.Check(open.Overlays.Count > shut.Overlays.Count,
+            $"and the board draws it as an overlay, which is what a shot of it shows ({shut.Overlays.Count} -> {open.Overlays.Count})");
+
+        // The shot lands frames after the aid ran, so an idle frame and a pointer resting on no row
+        // must leave the list where the script put it.
+        shell.Step(MenuCommands.None);
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(400f, 300f, false, false) });
+        ctx.Check(shell.Compose().Overlays.Count > shut.Overlays.Count,
+            $"and idle frames keep it standing ({shell.Compose().Overlays.Count} overlays, focus {shell.FocusedKey})");
+
+        shell.ShowMissionScreen(OriginalScreen.CampaignAmmo);
+        closed = shell.Rows.Count;
+        shell.RunAidScript("4da");
+        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:4",
+            $"4da steps four rows down the ammo screen and stands that rocket list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        shell.RunAidScript(CampaignAidProfiles.ExportArgument);
+        ctx.Check(shell.Dialog != null, $"and export is still the EXPORT press, its box standing ({shell.Dialog?.Message})");
+        shell.CloseCampaign();
     }
 
     private static bool HasLine(ComposedBoard board, string text)

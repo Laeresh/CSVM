@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
@@ -15,11 +17,18 @@ namespace CSVM.Testing;
 internal static class MenuSuiteHost
 {
     /// <summary>A bare host with no presentation registered, exits landing in <paramref name="exits"/>,
-    /// the Instant Action feature reading environment defs under <paramref name="dataRoot"/>.</summary>
-    internal static MenuHost Bare(List<MenuExit> exits, string dataRoot, out BuiltInSeat seat)
+    /// the Instant Action feature reading environment defs under <paramref name="dataRoot"/>.
+    /// <paramref name="saveBindings"/> is where an accepted rebind goes, and must stay null unless
+    /// the suite has pointed <see cref="CSVM.Bindings.BindingStore.DirectoryOverride"/> at scratch.
+    /// </summary>
+    internal static MenuHost Bare(
+        List<MenuExit> exits,
+        string dataRoot,
+        out BuiltInSeat seat,
+        Action<int, BindingProfile>? saveBindings = null)
     {
         var host = new MenuHost(new PresentationRegistry(), new SilentMenuAudio(), exits.Add);
-        AddFeatures(host, dataRoot);
+        AddFeatures(host, dataRoot, saveBindings);
         seat = new BuiltInSeat(new MenuInput { Keyboard = true });
         host.AddSeat(seat);
         return host;
@@ -28,7 +37,8 @@ internal static class MenuSuiteHost
     /// <summary>Registers the shared features a launchscreen needs, as the launcher does. Before
     /// the seat: the host lends the setup feature's seat list once the feature is in, so seat 0
     /// has to be joined through it.</summary>
-    internal static void AddFeatures(MenuHost host, string dataRoot)
+    internal static void AddFeatures(
+        MenuHost host, string dataRoot, Action<int, BindingProfile>? saveBindings = null)
     {
         host.Features.Add(new FreeFlightFeature());
         host.Features.Add(InstantActionFeature.ForDataRoot(dataRoot));
@@ -39,8 +49,9 @@ internal static class MenuSuiteHost
         var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), zrdr));
         host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode));
-        // No save: a suite must never write over the keymap saved at this machine's controls.
-        host.Features.Add(new ControlsFeature());
+        // No save by default: a suite must never write over the keymap saved at this machine's
+        // controls, and only a suite holding the store's directory override may pass one.
+        host.Features.Add(new ControlsFeature(saveBindings));
     }
 
     /// <summary>A launchscreen over a bare host, for a suite that drives the screens and reads

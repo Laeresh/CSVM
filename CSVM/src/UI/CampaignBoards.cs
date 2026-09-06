@@ -3,6 +3,20 @@ using System.Collections.Generic;
 
 namespace CSVM.UI;
 
+/// <summary>Which of a screen's authored description panes a row's text is written into. The ammo
+/// screen authors two, one per half of the screen, and <c>ORDINANCELAYOUT.SCRIPT</c> keeps both
+/// filled at once; every other screen authors at most the upper one.</summary>
+public enum BoardDetailPane
+{
+    /// <summary>The pane a screen's single description column is, the ammo screen's
+    /// <c>OL_S_AMMODESC</c> beside the gun groups.</summary>
+    Upper,
+
+    /// <summary>The ammo screen's second column, <c>OL_S_ROCKETDESC</c> beside the pylons and under
+    /// its own heading.</summary>
+    Lower,
+}
+
 /// <summary>Which authored button a page row presses, and which of its repeats: the flight check
 /// carries one CHANGE AMMO per crew slot, 0 the pilot and 1 the wingman.</summary>
 public readonly record struct BoardButtonRef(BoardButton Button, int Slot = 0)
@@ -72,14 +86,18 @@ public static class CampaignBoards
     private const float DialogButtonWidth = 62f;
     private const float DialogLabelDrop = 3f;
 
-    // MB_B_Icon.Png stacks three icons rather than a button's four states: the warning, and the two
-    // the other message classes use.
+    // MB_B_Icon.Png stacks three icons rather than a button's four states, in DialogIcon's order:
+    // the query the confirms draw, the warning the notices draw, and the skull credits alone asks
+    // for.
     private const int DialogIconFrames = 3;
 
     // The scrollbar thumb's own art height, and where a field's words sit inside its box.
     private const float ScrollThumbHeight = 12f;
     private const float ComboTextInset = 4f;
     private const float ComboTextDrop = 1f;
+
+    // The panes in draw order, which is also the order a screen authors them in.
+    private static readonly BoardDetailPane[] DetailPanes = { BoardDetailPane.Upper, BoardDetailPane.Lower };
 
     // A drop-down's own colours, measured off OriginalScreenshots/Campaign Flight Check Change
     // Plane Combo Box.png rather than decoded: LAYOUT.CSV's D rows carry art and item height but no
@@ -322,9 +340,22 @@ public static class CampaignBoards
                 row == focusedRow ? BoardInk.RowFocused : BoardInk.Row, row));
         }
 
-        if (detail.Length > 0 && DetailSlot(page.Screen, layout) is { } note)
+        // Every authored pane is filled, not only the one the cursor is in: the ammo screen reads a
+        // gun's ammunition and a pylon's ordnance side by side. The caller's own string stands in
+        // for the focused row's description, which is where a refusal reaches the board.
+        foreach (var pane in DetailPanes)
         {
-            lines.Add(new BoardLine(detail, note.X, note.Y, note.Width, ListFont, BoardInk.Detail));
+            if (DetailSlot(page.Screen, pane, layout) is not { } note)
+            {
+                continue;
+            }
+
+            int source = page.DetailRow(pane, focusedRow);
+            string text = source == focusedRow ? detail : source >= 0 ? page.Detail(source) : string.Empty;
+            if (text.Length > 0)
+            {
+                lines.Add(new BoardLine(text, note.X, note.Y, note.Width, ListFont, BoardInk.Detail));
+            }
         }
 
         if (modal != null)
@@ -351,14 +382,17 @@ public static class CampaignBoards
                     DialogCenterKey, modal.Button,
                     ComposedBoard.PlaqueFrame(StripFrames, focused: false, pressed: false), ComposedBoard.DialogInk(pressed: false)),
             },
+            modal.Icon,
             layout);
 
     /// <summary>The messagebox over any of its button sets: the single centred OK (<c>MB_B_CENTER</c>,
     /// the <c>0x1</c> box) or the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the
     /// <c>0x4</c> box the delete confirm asks for), each button drawn in the strip frame and label
     /// ink its caller names, which is how a pointer-driven presentation shows which one is under
-    /// the pointer.</summary>
-    public static BoardPanel Dialog(string message, IReadOnlyList<DialogButton> buttons, CampaignLayout? layout = null)
+    /// the pointer. The icon is its caller's too, since the script reads it off the message class
+    /// and not off the button set drawn here.</summary>
+    public static BoardPanel Dialog(
+        string message, IReadOnlyList<DialogButton> buttons, DialogIcon icon, CampaignLayout? layout = null)
     {
         layout ??= CampaignLayout.Fallback;
         const string section = CampaignLayout.DialogSection;
@@ -367,7 +401,7 @@ public static class CampaignBoards
         var pictures = new List<BoardPicture>
         {
             new(layout.Art(section, "MB_P_BACKGROUND", Ui("MB_Background.png")), DialogX, DialogY),
-            new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), DialogX + iconX, DialogY + iconY),
+            new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), DialogX + iconX, DialogY + iconY, (int)icon),
         };
         var lines = new List<BoardLine>
         {
@@ -425,20 +459,42 @@ public static class CampaignBoards
     public static BoardNote ObjectivesNote(IReadOnlyList<string> entries) =>
         new(entries, 35f, 335f, 185f, 240f, 5f, NoteFont, BoardInk.Row);
 
-    /// <summary>The authored panel a screen writes the focused row's description into, or null
-    /// where the screen has none and the shell's own hint line has to carry it. The ammo screen has
-    /// one, <c>OL_S_AMMODESC</c>. ⚠ Its y is pinned at the measured 92 where the row says 96, so
-    /// the row supplies the column's x and width alone.</summary>
-    public static (float X, float Y, float Width)? DetailSlot(CampaignScreen screen, CampaignLayout? layout = null)
+    /// <summary>One authored panel a screen writes a description into, or null where the screen
+    /// does not author that pane and the shell's own hint line has to carry the words. The ammo
+    /// screen authors both. ⚠ Each y is pinned at its measurement, four pixels over the row the
+    /// shipped layout carries, so a row supplies the column's x and width alone.</summary>
+    public static (float X, float Y, float Width)? DetailSlot(
+        CampaignScreen screen, BoardDetailPane pane, CampaignLayout? layout = null)
     {
         if (screen != CampaignScreen.Ammo)
         {
             return null;
         }
 
+        var (key, rowY, pinnedY) = pane == BoardDetailPane.Upper
+            ? ("OL_S_AMMODESC", 96f, 92f)
+            : ("OL_S_ROCKETDESC", 332f, 328f);
         var (x, _, width) = (layout ?? CampaignLayout.Fallback).Box(
-            CampaignLayout.AmmoSection, "OL_S_AMMODESC", 566f, 96f, 172f);
-        return (x, 92f, width);
+            CampaignLayout.AmmoSection, key, 566f, rowY, 172f);
+        return (x, pinnedY, width);
+    }
+
+    /// <summary>Whether row <paramref name="row"/>'s own description reaches a pane, which is what
+    /// the shell asks before putting it in the hint band instead. The ammo screen's ACCEPT and
+    /// CANCEL answer false: both of its panes stay on the gun and the pylon they describe, as the
+    /// original's do, so those two rows' hints have nowhere on the board to go.</summary>
+    public static bool DetailPaned(ICampaignPage page, int row, CampaignLayout? layout = null)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        foreach (var pane in DetailPanes)
+        {
+            if (DetailSlot(page.Screen, pane, layout) != null && page.DetailRow(pane, row) == row)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>An open drop-down's list as a pointer sees it: the window under the field, the

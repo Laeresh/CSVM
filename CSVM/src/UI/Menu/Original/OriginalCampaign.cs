@@ -10,9 +10,9 @@ namespace CSVM.UI.Menu.Original;
 public sealed record OriginalDialogAnswer(string Key, string LayoutKey, string Label, Action? Run);
 
 /// <summary>A dialog standing over a campaign screen, the original's <c>messagebox.script</c>
-/// over whatever screen was showing: its words and its one or two answers. While one stands the
-/// rows are its answers alone.</summary>
-public sealed record OriginalDialog(string Message, IReadOnlyList<OriginalDialogAnswer> Answers);
+/// over whatever screen was showing: its words, the icon its message class draws and its one or
+/// two answers. While one stands the rows are its answers alone.</summary>
+public sealed record OriginalDialog(string Message, DialogIcon Icon, IReadOnlyList<OriginalDialogAnswer> Answers);
 
 /// <summary>
 /// The Original campaign, the shell's partial over the shared <see cref="CampaignFeature"/>: the
@@ -241,21 +241,22 @@ public sealed partial class OriginalShell
     /// <summary>Presses the pilot's EXPORT on the plane-selection screen showing, so the one-button
     /// messagebox stands over it: the screenshot aid's door. Nothing happens off that screen or
     /// while a dialog already stands.</summary>
-    public void PressExport()
+    public void PressExport() => PressBoardButton(BoardButton.ExportPlane);
+
+    /// <summary>Replays a screenshot aid's colon argument on the campaign screen showing, the words
+    /// <see cref="CampaignAidScript"/> reads for Built-in, so one string poses both presentations.
+    /// The flow here is never walked, so a cursor verb is one command frame through this graph and
+    /// a button word is that button's row taking the focus and the confirm. The secondary verb x
+    /// reaches nothing: Original binds no secondary press, its lists selecting by click.</summary>
+    public void RunAidScript(string script)
     {
-        if (_screen != OriginalScreen.CampaignPlaneSelection || _dialog != null)
+        foreach (CampaignAidScript.Step press in CampaignAidScript.Parse(script))
         {
-            return;
+            for (int i = 0; i < press.Count; i++)
+            {
+                PressAidStep(press);
+            }
         }
-
-        int row = RowIndexOf(BoardButton.ExportPlane.ToString());
-        if (row < 0)
-        {
-            return;
-        }
-
-        _focus[(int)_screen] = row;
-        Step(new MenuCommands { Accept = true });
     }
 
     /// <summary>Moves the briefing's reveal on by a frame's worth of seconds while the briefing
@@ -396,7 +397,7 @@ public sealed partial class OriginalShell
                 ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.DialogInk(held)));
         }
 
-        return CampaignBoards.Dialog(dialog.Message, buttons, _campaignLayout);
+        return CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout);
     }
 
     private bool RosterHas(string name)
@@ -509,10 +510,13 @@ public sealed partial class OriginalShell
         return changed;
     }
 
-    private void RaiseDialog(string message, params OriginalDialogAnswer[] answers)
+    // Every raise names its icon, because MESSAGEBOX.SCRIPT reads the frame off the raising
+    // screen's button mask rather than off anything the box itself can see. A default here would
+    // be a rule of "one button means the warning", which the original's 0x2 boxes break.
+    private void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
     {
         _focusBeforeDialog = _focus[(int)_screen];
-        _dialog = new OriginalDialog(message, answers);
+        _dialog = new OriginalDialog(message, icon, answers);
         _hover = -1;
         _pressed = -1;
         // A box opens on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain
@@ -614,8 +618,10 @@ public sealed partial class OriginalShell
         !(page.Screen == CampaignScreen.Cabin && page.Button(row).Button == BoardButton.NextMission && _campaign?.CampaignComplete == true);
 
     // Where a list or text row sits: the roster's box and its list rows at the layout's own item
-    // height, a mission row inside the table of contents' window, a scrap at its authored region
-    // (or its picture's bounds where the row authors none), and nothing for anything else.
+    // height, a mission row inside the table of contents' window, and on the book a scrap at its
+    // authored region (or its picture's bounds where the row authors none), else whatever art the
+    // row draws itself with, at that strip's frame. The book's answer is per row and not per scrap
+    // because a row the page offers and the pointer cannot reach is a control the player has lost.
     private (float X, float Y, float Width, float Height)? ListRowBox(ICampaignPage page, int row, int listIndex)
     {
         switch (page)
@@ -631,26 +637,45 @@ public sealed partial class OriginalShell
 
             case CampaignPreviousMissionsPage contents:
                 return contents.RowBox(row);
-            case CampaignScrapbookPage book when book.ScrapOf(row) is { } scrap:
-                if (scrap.Region is { } region)
+            case CampaignScrapbookPage book:
+                if (book.ScrapOf(row) is { } scrap)
                 {
-                    return region;
+                    return ScrapBox(scrap);
                 }
 
-                if (scrap.IsCapture)
+                if (book.ArtOf(row) is not { } drawn)
                 {
-                    return (scrap.X, scrap.Y, CaptureRegionWidth, CaptureRegionHeight);
+                    return null;
                 }
 
-                if (Measure($"SCRAPBOOK/{scrap.FileName}") is { } size)
-                {
-                    return (scrap.X, scrap.Y, size.Width, size.Height);
-                }
-
-                return null;
+                var frame = PlaqueSizeOf(drawn.Art);
+                return (drawn.X, drawn.Y, frame.Width, frame.Height);
             default:
                 return null;
         }
+    }
+
+    // A scrap's clickable region: the one SCRAPBOOK.CSV authors, else the fixed region a capture
+    // stands in, else the shipped image's own bounds. Null where the file is not there to measure,
+    // which leaves the row keyboard-only rather than hit at a guessed size.
+    private (float X, float Y, float Width, float Height)? ScrapBox(ScrapbookScrap scrap)
+    {
+        if (scrap.Region is { } region)
+        {
+            return region;
+        }
+
+        if (scrap.IsCapture)
+        {
+            return (scrap.X, scrap.Y, CaptureRegionWidth, CaptureRegionHeight);
+        }
+
+        if (Measure($"SCRAPBOOK/{scrap.FileName}") is { } size)
+        {
+            return (scrap.X, scrap.Y, size.Width, size.Height);
+        }
+
+        return null;
     }
 
     // A plaque's one-frame size: the strip measured where the file is a rof bitmap, the shipped
@@ -767,6 +792,60 @@ public sealed partial class OriginalShell
         SyncAfterPage(before);
     }
 
+    // One script step as this graph's own presses. A cursor verb is a command frame, so the focus,
+    // the cues and every door out are the ones a player's press takes; x reaches no command.
+    private void PressAidStep(CampaignAidScript.Step press)
+    {
+        if (press.Button != BoardButton.None)
+        {
+            PressBoardButton(press.Button);
+            return;
+        }
+
+        switch (press.Verb)
+        {
+            case 'd':
+                Step(new MenuCommands { MoveY = 1 });
+                break;
+            case 'u':
+                Step(new MenuCommands { MoveY = -1 });
+                break;
+            case 'l':
+                Step(new MenuCommands { MoveX = -1 });
+                break;
+            case 'r':
+                Step(new MenuCommands { MoveX = 1 });
+                break;
+            case 'a':
+                Step(new MenuCommands { Accept = true });
+                break;
+            case 'b':
+                Step(new MenuCommands { Back = true });
+                break;
+        }
+    }
+
+    // A named button's own press: the row carrying it takes the focus and the confirm, which is
+    // what clicking that plaque does. A screen without the button is left alone, and so is one with
+    // a dialog standing, since the box's answers are the rows then.
+    private void PressBoardButton(BoardButton button)
+    {
+        if (_flow == null || _dialog != null || !IsCampaignScreen)
+        {
+            return;
+        }
+
+        for (int row = 0; row < _flow.Page.RowCount; row++)
+        {
+            if (_flow.Page.Button(row).Button == button)
+            {
+                _focus[(int)_screen] = row;
+                Step(new MenuCommands { Accept = true });
+                return;
+            }
+        }
+    }
+
     private void SyncAfterPage(CampaignScreen before)
     {
         if (_flow == null)
@@ -776,11 +855,13 @@ public sealed partial class OriginalShell
 
         if (_flow.TakeModal() is { } modal)
         {
-            RaiseDialog(modal.Message, Ok(modal.Confirm));
+            RaiseDialog(modal.Message, modal.Icon, Ok(modal.Confirm));
         }
         else if (_flow.TakeMessage() is { Length: > 0 } message)
         {
-            RaiseDialog(message, Ok());
+            // A refusal band raised as a box is the plane screen's langui 710 and the sell path's
+            // 701, both of them 0x1 masks, so it takes the warning.
+            RaiseDialog(message, DialogIcon.Warning, Ok());
         }
 
         if (_flow.Screen != before)
@@ -917,7 +998,8 @@ public sealed partial class OriginalShell
 
         if (_campaign.ContinuePlayer(entry.Text) is { } refusal)
         {
-            RaiseDialog(refusal, Ok());
+            // CAMPAIGN.SCRIPT raises the missing-name and unknown-name refusals on the 0x1 mask.
+            RaiseDialog(refusal, DialogIcon.Warning, Ok());
             return;
         }
 
@@ -925,8 +1007,9 @@ public sealed partial class OriginalShell
         ShowCampaign(OriginalScreen.CampaignCabin);
     }
 
-    // DELETE PLAYER: the original's question (langui 201) as the two-answer box, the deletion
-    // taking the profile's own directory alone and clearing the box.
+    // DELETE PLAYER: the original's question (langui 201) as the two-answer box, on CAMPAIGN.SCRIPT's
+    // 0x4 mask and so under the query icon, the deletion taking the profile's own directory alone
+    // and clearing the box.
     private void BeginDelete()
     {
         if (_campaign == null || RosterEntry is not { } entry)
@@ -937,12 +1020,13 @@ public sealed partial class OriginalShell
         string name = entry.Text.Trim();
         if (name.Length == 0 || !_campaign.HasPlayer(name))
         {
-            RaiseDialog($"There is no player named \"{name}\".", Ok());
+            RaiseDialog($"There is no player named \"{name}\".", DialogIcon.Warning, Ok());
             return;
         }
 
         RaiseDialog(
             _campaign.Strings.Text(201, "Are you sure you want to delete this player and all associated saved games?"),
+            DialogIcon.Query,
             Yes(() =>
             {
                 _campaign.DeletePlayer(name);

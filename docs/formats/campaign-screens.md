@@ -426,8 +426,12 @@ use the text already in `TH`; `WR` picks the widget prefix, `mp_` when it is set
 or, when `XR` is set, `ma_`, and the plane screen clears `WR` before every box so it gets `mb_`; the
 low nibble of `UR` picks the button set, `0x1` being the single centred OK that the refusal and the
 export message both ask for and `0x4` a two-button box; and `VR` carries the answer back, 1 from the
-OK button and 3 or 4 from the two-button pair. The icon frame follows the same nibble, frame 1 for
-the `0x1` box, which is the exclamation mark both reference dialogs draw.
+OK button and 3 or 4 from the two-button pair. The icon frame follows the same nibble, and follows
+it rather than the button count: `MESSAGEBOX.SCRIPT`'s `gui_create` switches on `UR & 0x0f` and
+gives `0x4` and `0x8` frame 0, the question mark the confirms draw, and every other mask frame 1,
+the exclamation mark both reference dialogs draw. `0x2` is the case that rules the count out, a
+two-button box that still takes frame 1. Inside the default arm alone, a set `XR` takes frame 2
+instead, the skull, which only the credits box asks for.
 
 **The sell path is decoded but unreachable.** Behind the deactivated buttons, `10003` asks `uiData`
 2018 for the plane count and refuses below three with langui 701 (`IDS_PS_CANTSELLPLANE`); otherwise
@@ -452,7 +456,8 @@ profile out.
 **Widgets.** `ol_background`, `ol_p_planetopicon` and `ol_p_planefrticon` (both taking the
 airframe index from `uiData` 2010 as their frame), four `ol_t_gunname<N>` labels, four
 `ol_d_ammo<N>` dropdowns (5 rows), eight `ol_d_rockets<N>` dropdowns (12 rows), two scrolling text
-panes `ol_s_ammodesc` and `ol_s_rocketdesc`, `ol_t_planeinfo` (`uiData` 2011), ACCEPT and CANCEL.
+panes `ol_s_ammodesc` and `ol_s_rocketdesc` under the headings `ol_t_ammodesctitle` and
+`ol_t_rocketdesctitle`, `ol_t_planeinfo` (`uiData` 2011), ACCEPT and CANCEL.
 
 **Ammunition is per gun group, not per barrel.** `uiData` 2030 returns group `N`'s gun-slot id and
 writes the group's calibre label and its current ammunition index. A group whose id is 5 has no gun:
@@ -513,6 +518,14 @@ never the dropdown row. `IDS_AMMOABBRNAME` at 3365 is a third ammunition spellin
 not use. The description panes update on `10015` (a pick), on `10013` (the pointer moving over a
 row of an open dropdown) and on `10001` (the pointer leaving, which restores the current pick), so
 the panel previews what the pointer is over.
+
+**Both panes are filled at once, and each follows only its own half.** `gui_init` writes the first
+armed gun group's ammunition into `ol_s_ammodesc` through `uiData` 2032 and the first fitted pylon's
+ordnance into `ol_s_rocketdesc` through 2033, taking index 4 when the plane carries no gun or no
+hardpoint. Every later update is dispatched on the sender's `2027` class: an ammunition dropdown
+writes the upper pane and a rocket dropdown the lower, neither ever touching the other. So the
+screen reads a gun's ammunition and a pylon's ordnance side by side, and the half the pointer is
+not in keeps the last pick it described.
 
 ## The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`
 

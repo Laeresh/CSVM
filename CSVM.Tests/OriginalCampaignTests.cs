@@ -94,6 +94,22 @@ public class OriginalCampaignTests : IDisposable
         Assert.Contains(OriginalCues.Click, step.Cues);
     }
 
+    // The box's second route to the same reject cue, which the character-set route never reached:
+    // a character the rule accepts, arriving at a box already at its cap.
+    [Fact]
+    public void AnAcceptedCharacterAtTheCapRefusesWithTheSameRejectCue()
+    {
+        var shell = Shell(out _, out _);
+        OpenCampaign(shell);
+
+        var step = shell.Step(new MenuCommands { Typed = new string('A', CampaignFeature.MaxNameLength + 1) });
+
+        Assert.Equal(CampaignFeature.MaxNameLength, shell.RosterName.Length);
+        Assert.Equal(CampaignFeature.MaxNameLength + 1, step.Cues.Count);
+        Assert.Equal(OriginalCues.TextError, step.Cues[step.Cues.Count - 1]);
+        Assert.DoesNotContain(OriginalCues.TextError, step.Cues.Take(step.Cues.Count - 1));
+    }
+
     [Fact]
     public void ContinueWithNoNameRaisesTheRefusalAsADialogWhoseOkIsTheOnlyRow()
     {
@@ -112,6 +128,9 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal((365f, 400f, 240f, 50f), (ok.X, ok.Y, ok.Width, ok.Height));
         var panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
         Assert.Contains(panel.Lines, l => l.Text == shell.Dialog.Message);
+        // CAMPAIGN.SCRIPT raises langui 200 on the 0x1 mask, which is the warning icon.
+        Assert.Equal(DialogIcon.Warning, shell.Dialog.Icon);
+        Assert.Equal((int)DialogIcon.Warning, DialogIconTests.IconFrame(panel));
         Assert.Null(_store.Load(string.Empty));
 
         shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
@@ -164,6 +183,11 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
         Assert.Equal((195f + 70f, 150f + 250f), (shell.Rows[0].X, shell.Rows[0].Y));
+        // Langui 201 comes up on the 0x4 mask, the one set of masks that keeps the query icon.
+        Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
+        Assert.Equal(
+            (int)DialogIcon.Query,
+            DialogIconTests.IconFrame(shell.Compose().Overlays.First(o => o.Lines.Count > 0)));
 
         shell.Step(Back);
         Assert.Null(shell.Dialog);
@@ -396,6 +420,33 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
     }
 
+    /// <summary>The book's unselected results tab presses no authored button, so it is the page's
+    /// own art that gives it a rectangle: without one the pointer passed over a row the keyboard
+    /// could reach. The scrap rows keep answering at their own regions beside it.</summary>
+    [Fact]
+    public void TheBooksUnselectedTabIsHitAtItsArtAndSwitchesTheHalfTheCardReads()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, new MissionAttempt(0, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120, 5, "Gypsy Magic"));
+        _store.Save(profile);
+        var shell = Shell(out _, out _);
+
+        shell.OpenCampaignOver(_store);
+        Assert.True(shell.ShowScrapbook("Zachary", 0));
+
+        // Most Recent is the plaque the card shows, Best to Date the picture beside it, at the
+        // slot's authored 432,283 and the fixture's unmeasured-strip fallback size.
+        Assert.Contains(shell.Rows, r => r.Key == nameof(BoardButton.MostTab));
+        var best = Assert.Single(shell.Rows, r => r.X == 432f && r.Y == 283f);
+        Assert.Equal((113f, 34f, true), (best.Width, best.Height, best.Visible));
+
+        shell.Step(Pointer(best.X + 2f, best.Y + 2f, pressed: true, clicked: true));
+
+        Assert.Contains(shell.Rows, r => r.Key == nameof(BoardButton.BestTab));
+        Assert.DoesNotContain(shell.Rows, r => r.Key == nameof(BoardButton.MostTab));
+        Assert.Contains(shell.Rows, r => r.X == 594f && r.Y == 283f && r.Width == 113f);
+    }
+
     [Fact]
     public void TheExportPressRaisesTheOneButtonBoxInItsOwnInkOverThePaperScreenAndWritesTheGivenStore()
     {
@@ -429,6 +480,35 @@ public class OriginalCampaignTests : IDisposable
 
         // A second press off the screen does nothing: the dialog stands and the rows are still its own.
         shell.PressExport();
+        Assert.NotNull(shell.Dialog);
+    }
+
+    [Fact]
+    public void AnAidScriptSpellsTheSamePressesUnderOriginalAsItDoesUnderBuiltIn()
+    {
+        _store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        var shell = Shell(out _, out _);
+        shell.OpenCampaignOver(_store, _planes);
+        Assert.True(shell.ShowCabin("Zachary"));
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+
+        // A confirm on the opening row stands the pilot's list open, the entries joining the rows.
+        int closed = shell.Rows.Count;
+        shell.RunAidScript("a");
+        Assert.Equal("FIELD:0", shell.Rows[shell.Focus].Key);
+        Assert.Contains(shell.Rows, r => r.Key.StartsWith("ENTRY:", StringComparison.Ordinal));
+
+        shell.RunAidScript("b");
+        Assert.Equal(closed, shell.Rows.Count);
+
+        // A count with no verb is that many rows down, and the button word is that plaque's press.
+        shell.RunAidScript("2");
+        Assert.Equal("AcceptSelections", shell.Rows[shell.Focus].Key);
+        shell.RunAidScript(CampaignAidProfiles.ExportArgument);
+        Assert.NotNull(shell.Dialog);
+
+        // A word spelling no press at all leaves the screen where it stood.
+        shell.RunAidScript("qqq");
         Assert.NotNull(shell.Dialog);
     }
 

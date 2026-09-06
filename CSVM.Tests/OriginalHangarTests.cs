@@ -321,6 +321,11 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
         Assert.Contains(shell.Compose().Overlays, o => o.Lines.Any(l => l.Text == shell.Dialog!.Message));
+        // The sell question is HANGAR.SCRIPT's 0x4 mask, so it keeps the query icon.
+        Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
+        Assert.Equal(
+            (int)DialogIcon.Query,
+            DialogIconTests.IconFrame(shell.Compose().Overlays.First(o => o.Lines.Count > 0)));
         shell.Step(Back);
         Assert.Null(shell.Dialog);
         Assert.NotNull(_store.Load("Spare"));

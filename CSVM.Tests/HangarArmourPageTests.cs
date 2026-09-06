@@ -13,7 +13,9 @@ namespace CSVM.Tests;
 /// named through their own langui formats (1191-1194, which carry the number themselves) at the
 /// record's stored units x5, the stepper walking that 0-60-in-fives roster into the scratch def,
 /// and the detail line naming the pick the way the original's dropdown does (1165 "None" on zero,
-/// 1170 "%d units" of units x5) beside the cost and weight the units themselves buy at x4.
+/// 1170 "%d units" of units x5) beside the cost and weight the units themselves buy at x4. The two
+/// wing rows are coupled the way the original's pair of combo boxes is, and a saved plane whose
+/// wings disagree is not levelled on load.
 /// </summary>
 public class HangarArmourPageTests : IDisposable
 {
@@ -82,21 +84,65 @@ public class HangarArmourPageTests : IDisposable
         Assert.Equal(0, flow.Scratch.ArmourNose); // and back to the start
     }
 
-    /// <summary>Stepping a row edits that zone alone, in the 1191-1194 order the record stores
-    /// them: nose, tail, left wing, right wing.</summary>
+    /// <summary>The nose and tail rows step alone, in the 1191-1194 order the record stores the
+    /// zones: nose, tail, left wing, right wing.</summary>
     [Fact]
-    public void EachRowEditsItsOwnZone()
+    public void TheNoseAndTailRowsEditTheirOwnZone()
     {
         var flow = OpenOnArmour(UiStrings.Empty);
-        for (int row = 0; row < 4; row++)
-        {
-            Assert.True(flow.Page.Step(row, 1));
-        }
+
+        Assert.True(flow.Page.Step(0, 1));
+        Assert.True(flow.Page.Step(1, 1));
 
         Assert.Equal(1, flow.Scratch.ArmourNose);
         Assert.Equal(1, flow.Scratch.ArmourTail);
+        Assert.Equal(0, flow.Scratch.ArmourLeftWing);
+        Assert.Equal(0, flow.Scratch.ArmourRightWing);
+    }
+
+    /// <summary>The two wing rows move together, as the original's pair of combo boxes does:
+    /// stepping either writes both dwords and both rows read the same afterwards, while the nose
+    /// and tail stay where they were.</summary>
+    [Fact]
+    public void SteppingEitherWingRowMovesBothWings()
+    {
+        var flow = OpenOnArmour(UiStrings.Empty);
+        flow.Scratch.ArmourNose = 2;
+
+        Assert.True(flow.Page.Step(2, 1));
         Assert.Equal(1, flow.Scratch.ArmourLeftWing);
         Assert.Equal(1, flow.Scratch.ArmourRightWing);
+        Assert.Equal("Left Wing: 5 units", flow.Page.RowText(2));
+        Assert.Equal("Right Wing: 5 units", flow.Page.RowText(3));
+
+        Assert.True(flow.Page.Step(3, 1));
+        Assert.Equal(2, flow.Scratch.ArmourLeftWing);
+        Assert.Equal(2, flow.Scratch.ArmourRightWing);
+        Assert.Equal(2, flow.Scratch.ArmourNose);
+        Assert.Equal(0, flow.Scratch.ArmourTail);
+    }
+
+    /// <summary>A saved plane whose wings disagree loads as it was stored: the record keeps two
+    /// dwords so the mission side can damage a wing at a time, and levelling on load would rewrite
+    /// a plane nobody edited. The two rows show their own figures until a wing row is stepped, and
+    /// that press is what levels them.</summary>
+    [Fact]
+    public void AnUnequalSavedPlaneKeepsItsWingsUntilOneIsStepped()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Lopsided", ArmourLeftWing = 2, ArmourRightWing = 9 });
+        var flow = OpenOnArmour(UiStrings.Empty);
+
+        flow.StartFromSaved(_store.Load("Lopsided")!);
+
+        Assert.Equal(2, flow.Scratch.ArmourLeftWing);
+        Assert.Equal(9, flow.Scratch.ArmourRightWing);
+        Assert.Equal("Left Wing: 10 units", flow.Page.RowText(2));
+        Assert.Equal("Right Wing: 45 units", flow.Page.RowText(3));
+
+        Assert.True(flow.Page.Step(2, 1));
+        Assert.Equal(3, flow.Scratch.ArmourLeftWing);
+        Assert.Equal(3, flow.Scratch.ArmourRightWing);
+        Assert.Equal(9, _store.Load("Lopsided")!.ArmourRightWing);
     }
 
     /// <summary>The stepper walks the 13-unit roster as a cycle: below zero lands on 12, past
@@ -112,9 +158,9 @@ public class HangarArmourPageTests : IDisposable
         Assert.Equal(0, flow.Scratch.ArmourNose);
     }
 
-    /// <summary>The detail names the pick and what it costs: 3 units shows as 15 and buys $12 of
-    /// weight-12 armour (x4, the priced pair). Nothing is called pounds: the x5 figure is the
-    /// displayed unit count, not a weight.</summary>
+    /// <summary>The detail names the pick and what it costs: 3 presses show as 15 units and buy
+    /// $60 of 60 lb armour, the decoded $4 and 4 lb a unit. The unit count and the pounds are
+    /// different numbers here, so a readout printing one for the other cannot pass.</summary>
     [Fact]
     public void DetailNamesThePickAndItsPrice()
     {
@@ -123,13 +169,14 @@ public class HangarArmourPageTests : IDisposable
 
         string detail = flow.Page.Detail(0);
         Assert.StartsWith("15 units", detail, StringComparison.Ordinal);
-        Assert.Contains("$12", detail, StringComparison.Ordinal);
-        Assert.Contains("12 lbs.", detail, StringComparison.Ordinal);
+        Assert.Contains("$60", detail, StringComparison.Ordinal);
+        Assert.Contains("60 lbs.", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("lb shown", detail, StringComparison.Ordinal);
     }
 
-    /// <summary>The pick renders through the dropdown's own strings: format 1170 with units x5,
-    /// and langui 1165 "None" for the zero row rather than a count of nothing.</summary>
+    /// <summary>The pick renders through the dropdown's own strings: format 1170 with the presses
+    /// times five, and langui 1165 "None" for the zero row rather than a count of nothing. A full
+    /// zone is 60 units, $240 and 240 lb, a quarter of the full airframe's 240 units.</summary>
     [Fact]
     public void DetailUsesFormat1170_AndString1165ForNone()
     {
@@ -141,8 +188,8 @@ public class HangarArmourPageTests : IDisposable
 
         string detail = flow.Page.Detail(3);
         Assert.StartsWith("60 units", detail, StringComparison.Ordinal);
-        Assert.Contains("$48", detail, StringComparison.Ordinal);
-        Assert.Contains("48 lbs.", detail, StringComparison.Ordinal);
+        Assert.Contains("$240", detail, StringComparison.Ordinal);
+        Assert.Contains("240 lbs.", detail, StringComparison.Ordinal);
         Assert.StartsWith("None   $0", flow.Page.Detail(0), StringComparison.Ordinal);
     }
 

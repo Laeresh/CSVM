@@ -18,6 +18,9 @@ public interface IHangarWallet
     /// <summary>The wallet balance in dollars.</summary>
     int Funds { get; }
 
+    /// <summary>Whether the profile has a slot for another bought plane.</summary>
+    bool HasFreeSlot { get; }
+
     /// <summary>Whether a build's total cost is affordable right now.</summary>
     bool CanAfford(int cost);
 
@@ -251,6 +254,25 @@ public sealed class HangarFeature : IMenuFeature
         _ => new GunChoice(row - 5, Twin: true),
     };
 
+    /// <summary>Writes one zone's armour press count, holding the two wings together: the ARMOR
+    /// screen keeps a combo box per wing and changing either changes the other, so a press on either
+    /// wing lands on both dwords. ⚠ The rule is the screen's, not the record's, which keeps the
+    /// wings apart so the mission side can damage one at a time. A saved plane whose wings disagree
+    /// keeps them until a wing is set.</summary>
+    public static void SetZoneUnits(CustomPlaneDef plane, int zone, int units)
+    {
+        ArgumentNullException.ThrowIfNull(plane);
+        switch (zone)
+        {
+            case 0: plane.ArmourNose = units; break;
+            case 1: plane.ArmourTail = units; break;
+            default:
+                plane.ArmourLeftWing = units;
+                plane.ArmourRightWing = units;
+                break;
+        }
+    }
+
     /// <summary>Opens a build over <paramref name="store"/>, funded by <paramref name="wallet"/> or
     /// wallet-free when null, with the roster read once and a bare scratch plane. Opening again
     /// drops whatever build was open, as leaving a presentation for another door does.</summary>
@@ -383,24 +405,15 @@ public sealed class HangarFeature : IMenuFeature
     }
 
     /// <summary>Sets one zone's armour in units, zone 0-3 in the record's order (nose, tail, left
-    /// wing, right wing), clamped to 0-12. Returns whether it changed.</summary>
+    /// wing, right wing), clamped to 0-12. A wing zone sets both wings through
+    /// <see cref="SetZoneUnits"/>. Returns whether anything moved, so a wing pick that only levels
+    /// a pair which disagreed still redraws.</summary>
     public bool SetArmour(int zone, int units)
     {
         int next = Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits);
-        if (ArmourUnits(zone) == next)
-        {
-            return false;
-        }
-
-        switch (zone)
-        {
-            case 0: Scratch.ArmourNose = next; break;
-            case 1: Scratch.ArmourTail = next; break;
-            case 2: Scratch.ArmourLeftWing = next; break;
-            default: Scratch.ArmourRightWing = next; break;
-        }
-
-        return true;
+        var before = (Scratch.ArmourNose, Scratch.ArmourTail, Scratch.ArmourLeftWing, Scratch.ArmourRightWing);
+        SetZoneUnits(Scratch, zone, next);
+        return before != (Scratch.ArmourNose, Scratch.ArmourTail, Scratch.ArmourLeftWing, Scratch.ArmourRightWing);
     }
 
     /// <summary>One zone's armour in units, zone 0-3 in the record's order.</summary>
@@ -542,8 +555,8 @@ public sealed class HangarFeature : IMenuFeature
 
     /// <summary>Why a commit would be refused right now, in the original's own words, or null when
     /// it would save: a name (langui 203), then the economy's verdict (1182 with 1227 OVERWEIGHT or
-    /// 1171 No Engine Selected), then over a wallet an unavailable airframe or an unaffordable total
-    /// (1226). Funds are never checked on a wallet-free door.</summary>
+    /// 1171 No Engine Selected), then over a wallet a full hangar (204), an unavailable airframe or
+    /// an unaffordable total (1226). Neither slots nor funds are checked on a wallet-free door.</summary>
     public string? Refusal()
     {
         if (string.IsNullOrWhiteSpace(Scratch.Name))
@@ -561,6 +574,15 @@ public sealed class HangarFeature : IMenuFeature
 
         if (Wallet is { } wallet)
         {
+            // Ahead of the funds line because a full hangar is the refusal that names its own
+            // remedy, and selling a plane back at full price answers both at once.
+            if (!wallet.HasFreeSlot)
+            {
+                return Strings.Text(
+                    204,
+                    "You have reached your hangar limit of planes.  Click Sell Planes, and sell one or more planes.");
+            }
+
             if (!wallet.IsAirframeAvailable(Scratch.Airframe))
             {
                 return Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " That airframe is not available yet.";
@@ -808,9 +830,16 @@ public sealed class HangarFeature : IMenuFeature
         return cost;
     }
 
-    /// <summary>The build's total cost were zone <paramref name="zone"/> at <paramref name="units"/>.</summary>
-    public int CostWithArmour(int zone, int units) =>
-        Bill.Total.Cost + ((Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits) - ArmourUnits(zone)) * HangarEconomy.ArmourUnitCost);
+    /// <summary>The build's total cost were zone <paramref name="zone"/> at <paramref name="units"/>.
+    /// A wing row prices both wings, since picking on either moves the other.</summary>
+    public int CostWithArmour(int zone, int units)
+    {
+        int next = Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits);
+        int steps = zone is 0 or 1
+            ? next - ArmourUnits(zone)
+            : (next - Scratch.ArmourLeftWing) + (next - Scratch.ArmourRightWing);
+        return Bill.Total.Cost + (steps * HangarEconomy.ArmourStepCost);
+    }
 
     /// <summary>The build's total cost were slot <paramref name="slot"/> on cycle row <paramref name="cycleRow"/>.</summary>
     public int CostWithGun(int slot, int cycleRow)

@@ -273,6 +273,18 @@ public sealed class CampaignScrapbookPage : CampaignPage
     /// region and picture are what a pointer-driven presentation hit-tests.</summary>
     public ScrapbookScrap? ScrapOf(int row) => ScrapAt(row);
 
+    /// <summary>The art a row draws itself with where it presses no authored button, so a pointer
+    /// has a rectangle to hit on a row <see cref="Button"/> answers None for. The unselected tab is
+    /// the one such row here, drawn as a picture because the card would cover a plaque. A scrap
+    /// answers null and goes through <see cref="ScrapOf"/> instead, its rectangle being the shipped
+    /// image's rather than a strip frame's.</summary>
+    public (BoardArt Art, float X, float Y)? ArtOf(int row) => KindAt(row) switch
+    {
+        RowKind.BestTab when !_bestToDate => UnselectedTab(),
+        RowKind.MostTab when _bestToDate => UnselectedTab(),
+        _ => null,
+    };
+
     // The hint band's line for a scrap: the words on the scrap itself where its row names a string,
     // read off the first line of the title the zoom view heads with. Never the image name, which is
     // an asset path and not something to show a player, and never the raw IDS_ symbol either: most

@@ -1056,8 +1056,9 @@ public sealed partial class OriginalShell
     }
 
     // Sell asks first, the sell path's own two-button messagebox (langui 700 over the plane's
-    // short airframe name and its value, Yes and No), and a refused sale (a reward aircraft, the
-    // two-plane floor) comes back as the one-button box in the feature's words.
+    // short airframe name and its value, Yes and No, HANGAR.SCRIPT's 0x4 mask and so the query
+    // icon), and a refused sale (a reward aircraft, the two-plane floor) comes back as the
+    // one-button 0x1 box in the feature's words, under the warning.
     private void AskToSell()
     {
         if (_hangar == null || _inventoryIndex < 0 || _inventoryIndex >= _hangar.Saved.Count)
@@ -1072,18 +1073,22 @@ public sealed partial class OriginalShell
             question = $"Your {_hangar.AirframeShortName(plane.Airframe)} is worth ${HangarEconomy.Price(plane).Total.Cost}. Are you sure you want to sell it?";
         }
 
-        RaiseDialog(Fill(question.Replace("<B>", string.Empty).Replace("<b>", string.Empty)), Yes(() =>
-        {
-            if (_hangar.DeleteSaved(plane.Name))
+        RaiseDialog(
+            Fill(question.Replace("<B>", string.Empty).Replace("<b>", string.Empty)),
+            DialogIcon.Query,
+            Yes(() =>
             {
-                RefreshRosterFromStore();
-                return;
-            }
+                if (_hangar.DeleteSaved(plane.Name))
+                {
+                    RefreshRosterFromStore();
+                    return;
+                }
 
-            string refusal = _hangar.Message;
-            _hangar.ClearMessage();
-            RaiseDialog(refusal, Ok());
-        }), No());
+                string refusal = _hangar.Message;
+                _hangar.ClearMessage();
+                RaiseDialog(refusal, DialogIcon.Warning, Ok());
+            }),
+            No());
     }
 
     private MenuExit? ActivateHangar(OriginalRow row)
@@ -1451,8 +1456,8 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.HangarArmor:
                 name = "ABOUT ARMOR";
-                description.Add($"COST: ${HangarEconomy.ArmourUnitCost * 5}/5 units");
-                description.Add($"WEIGHT: {HangarEconomy.ArmourUnitWeight * 5} lbs./5 units");
+                description.Add($"COST: ${HangarEconomy.ArmourStepCost}/{HangarEconomy.ArmourUnitsPerStep} units");
+                description.Add($"WEIGHT: {HangarEconomy.ArmourStepWeight} lbs./{HangarEconomy.ArmourUnitsPerStep} units");
                 description.Add($"TOTAL: ${bill.Armour.Cost}   {bill.Armour.Weight} lbs.");
                 break;
             case OriginalScreen.HangarGuns:
@@ -1537,9 +1542,10 @@ public sealed partial class OriginalShell
             int units = hangar.ArmourUnits(zone);
             if (units > 0)
             {
-                string label = hangar.Strings.Format(1191 + zone, units * 5);
-                armour.Add((label.Length > 0 ? label : $"Zone {zone + 1}: {units * 5} units",
-                    new CostWeight(units * HangarEconomy.ArmourUnitCost, units * HangarEconomy.ArmourUnitWeight)));
+                int shown = units * HangarEconomy.ArmourUnitsPerStep;
+                string label = hangar.Strings.Format(1191 + zone, shown);
+                armour.Add((label.Length > 0 ? label : $"Zone {zone + 1}: {shown} units",
+                    new CostWeight(units * HangarEconomy.ArmourStepCost, units * HangarEconomy.ArmourStepWeight)));
             }
         }
 

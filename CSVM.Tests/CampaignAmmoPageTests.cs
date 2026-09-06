@@ -286,6 +286,42 @@ public class CampaignAmmoPageTests
         Directory.Delete(profileDir, true);
     }
 
+    // [@OrdinanceLayout@] authors a description pane per half of the screen, each under its own
+    // heading, and ORDINANCELAYOUT.SCRIPT's gui_init fills both at once: the half the cursor is not
+    // in describes the first armed group or the first fitted pylon, and ACCEPT is in neither half.
+    [Fact]
+    public void BothDescriptionPanesFillAtOnce()
+    {
+        var (flow, page, _) = NewFlow(out string profileDir);
+        flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary")); // Devastator: three guns, two hardpoints a wing
+        flow.SetAmmoSlot(0);
+
+        Assert.Equal(0, page.DetailRow(BoardDetailPane.Upper, 0));
+        Assert.Equal(4, page.DetailRow(BoardDetailPane.Lower, 0));
+        Assert.Equal(0, page.DetailRow(BoardDetailPane.Upper, 5));
+        Assert.Equal(5, page.DetailRow(BoardDetailPane.Lower, 5));
+        Assert.Equal(0, page.DetailRow(BoardDetailPane.Upper, AcceptRow));
+        Assert.Equal(4, page.DetailRow(BoardDetailPane.Lower, AcceptRow));
+
+        // A pick row's own words reach a pane on either half; ACCEPT's hint reaches none, which is
+        // what leaves it to the shell's hint band.
+        Assert.True(CampaignBoards.DetailPaned(page, 0));
+        Assert.True(CampaignBoards.DetailPaned(page, 5));
+        Assert.False(CampaignBoards.DetailPaned(page, AcceptRow));
+
+        var board = CampaignBoards.For(page, focusedRow: 5, detail: page.Detail(5));
+        var panes = board.Lines.Where(l => l.X == 566f && (l.Y == 92f || l.Y == 328f)).OrderBy(l => l.Y).ToList();
+        Assert.Equal(2, panes.Count);
+        Assert.Equal(page.Detail(0), panes[0].Text);
+        Assert.Equal(page.Detail(5), panes[1].Text);
+        Assert.NotEqual(panes[0].Text, panes[1].Text);
+
+        var headings = page.Captions.Where(c => c.Text.Contains("DESCRIPTION")).ToList();
+        Assert.Equal(new[] { (566f, 76f), (566f, 312f) }, headings.Select(h => (h.X, h.Y)));
+
+        Directory.Delete(profileDir, true);
+    }
+
     // The lines the page draws itself, matched on their words.
     private static List<BoardLine> CaptionsSaying(CampaignAmmoPage page, string words)
     {

@@ -600,11 +600,6 @@ public sealed class OriginalPresentation : IMenuPresentation
             case "campaign-planeselection":
                 _shell.ShowCabin(CampaignAidProfiles.Pilot);
                 _shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
-                if (argument == CampaignAidProfiles.ExportArgument)
-                {
-                    _shell.PressExport();
-                }
-
                 break;
             case "campaign-hangar":
                 // The cabin's own PLANE CONSTRUCTION press, so the shot carries the cash note: the
@@ -620,6 +615,14 @@ public sealed class OriginalPresentation : IMenuPresentation
                 }
 
                 break;
+        }
+
+        // The briefing spends its colon on the reveal's seconds and the hangar's names a tab, both
+        // taken above; every other screen's is the script CampaignAidScript reads, the same words
+        // Built-in's aids take, with export still that button's own press.
+        if (value is not ("campaign-briefing" or "campaign-hangar"))
+        {
+            _shell.RunAidScript(argument);
         }
 
         return true;

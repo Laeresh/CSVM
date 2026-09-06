@@ -97,25 +97,25 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The hangar record
 
-1. ☐ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
-2. ☐ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
-3. ☐ `BL-650` The campaign hangar's decoded slot cap is not enforced
+1. ☑ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
+2. ☑ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
+3. ☑ `BL-650` The campaign hangar's decoded slot cap is not enforced
 
 ### Wave B — The campaign boards' panes, and the shots that pin them
 
-11. ☐ `BL-659` No screenshot aid can open a campaign combo box
-12. ☐ `BL-658` The ammo screen shows one description pane where the original fills two
+11. ☑ `BL-659` No screenshot aid can open a campaign combo box
+12. ☑ `BL-658` The ammo screen shows one description pane where the original fills two
 
 ### Wave C — Original's dialogs and rows
 
-21. ☐ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
-22. ☐ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
+21. ☑ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
+22. ☑ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
 
 ### Wave D — Text entry, seats, and the way out
 
-31. ☐ `BL-711` A refused character in a name box makes no sound
-32. ☐ `BL-697` Only player 1's keymap can be reached
-33. ☐ `BL-710` Quitting flashes Godot's default sky before the window closes
+31. ☑ `BL-711` A refused character in a name box makes no sound
+32. ☑ `BL-697` Only player 1's keymap can be reached
+33. ☑ `BL-710` Quitting flashes Godot's default sky before the window closes
 
 ### Wave E — At the controls
 
@@ -146,7 +146,49 @@ first and rebase `B12`.
 
 # Wave A — The hangar record
 
-## A1 ☐ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
+## A1 ☑ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
+
+**Landed.** The decode settles the scale in favour of the economy table's reading: the record's
+four zone dwords hold a **unit count 0 to 60 in steps of five**, not the dropdown's row number.
+Callback 2247 (`0x0040ac3d`) is what maps the two. Its SET arm multiplies the picked row by five
+(`LEA EAX,[EAX + EAX*0x4]` at `0x0040acaf`) and its GET arm divides the dword back down by five
+(the `0x66666667` reciprocal at `0x0040ac84`). Every reader then takes the dword at face value,
+which is why `FUN_00405680` charges the dword sum `x 20 / 5`, `FUN_00405550` weighs it `x 4`, and
+the star formula (`FUN_0040faf0` case 2) adds the dwords with no factor of its own. One press
+therefore buys five units, $20 and 20 lb, and the report is right.
+
+`CustomPlaneDef`'s four zone fields count presses rather than units, and every site crossing that
+boundary already multiplied by five except the pricing. `HangarEconomy` now names both scales:
+`ArmourUnitCost` and `ArmourUnitWeight` stay at the decoded 4 a unit, `ArmourUnitsPerStep` is 5,
+and `ArmourStepCost` and `ArmourStepWeight` carry the $20 and 20 lb a press that the five call
+sites holding a press count use (the ARMOR readout, the PURCHASE rows, the built-in feature's
+would-be cost and Original's two armour panels). The star formula reads `ArmourUnitsPerStep`
+where it read a bare 5. Our own ABOUT ARMOR panel already printed "COST: $20/5 units" while the
+bill charged $4, so the contradiction was visible inside one screen. `MaxArmourUnits` keeps its
+value of 12, which is the press cap and is right under this reading; its name is the last place
+the word "unit" means a press, and renaming it would reach three files outside this item's fence.
+
+`docs/org/hangar.md`'s Armour paragraph under "The economy" carried the losing reading, "units
+0-12 per zone at record +0x74 ... priced and weighed at units x4", which holds only if the dword
+is the row. It is replaced by the winning reading with the callback 2247 addresses that prove it.
+The economy table's paragraph, which already said the zone dword is the displayed unit count and
+a full airframe is 240 units, $960 and 960 lb, stands unchanged. `docs/formats/vehicle.md` needed
+no edit: it already reasons from 4 x 60 x 4 = 960 lb, and `CAP-19` measured the 60-unit cap at
+the controls, which is a third witness for the same reading.
+
+**The mission side did not move.** `CustomPlaneBuild.ArmouredParts` scales presses to units
+before writing the armour pools, so hull points are unchanged, and `campaign-airframe-swap` and
+`campaign-hangar-handover` (which asserts the Blue Streak's "20 armour a zone") both pass
+untouched. Four unit expectations took the intended correction: a maxed Balmoral's armour line
+becomes $960 and 960 lb, exactly the full-airframe figure both documents predict, and its verdict
+stays Overweight.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** One press on an ARMOR row moves the displayed units, the dollars and the pounds by the
 amounts the original's own dropdown moves them, and `docs/org/hangar.md` carries one reading of
@@ -187,7 +229,46 @@ economy table alone: it is one of the two readings in dispute, not the arbiter. 
 240 units versus 48 rows is the same aeroplane under two scales, so a "correct-looking" total
 proves nothing on its own.
 
-## A2 ☐ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
+## A2 ☑ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
+
+**Landed.** The four rows stay and the two wing rows are coupled, so a press on either wing writes
+both zone dwords and both boxes redraw. The rule is one method, `HangarFeature.SetZoneUnits`, which
+takes a plane, a zone 0-3 and a press count, writes nose and tail alone and writes both wings for
+either wing zone. Built-in's `HangarArmourPage.SetUnits` and Original's `HangarFeature.SetArmour`
+(the setter behind the tab's four `AR_D_POINT` combo boxes) both go through it, so the two
+presentations cannot drift apart. `SetArmour` now reports whether any zone moved rather than
+whether the picked zone moved, which is what redraws the second box when a pick only levels a pair
+that disagreed, and `CostWithArmour` prices a wing row as the pair it buys, two presses to a row
+rather than one.
+
+**The coupling could not sit on the page.** `MenuNamespaceDependencyTests` enforces that no type in
+the shared `CSVM.UI.Menu` namespace names a presentation, and Original's ARMOR tab sets armour
+through the shared `HangarFeature`, so a rule owned by `HangarArmourPage` made the shared feature
+reach into Built-in's presentation; the test caught it on the first run. `HangarFeature` is the
+seam both screens already meet at and is not the model, so the coupling still lands where the item
+put it: out of `CustomPlaneDef`, which keeps its four independent fields and still clamps them one
+at a time.
+
+**The record keeps two wing dwords and nothing repairs them.** A saved plane with unequal wings
+loads as it was stored, each row shows its own figure, and only a press on a wing row levels them.
+`HangarArmourPageTests.AnUnequalSavedPlaneKeepsItsWingsUntilOneIsStepped` stores a plane at 2 and 9
+presses, loads it through `StartFromSaved`, reads "Left Wing: 10 units" beside "Right Wing: 45
+units", then steps the left row and finds both at 3 with the file on disk untouched. The PURCHASE
+rows needed nothing: they read the same store, price each armoured zone from it and list only the
+non-zero ones, so a coupled press reaches them as both wing rows moving.
+
+Callback 2247's SET arm was read while `A1` was in the binary. It dispatches on the zone and writes
+exactly one dword per box (`0x0040acc2`, `0x0040acd6`, `0x0040acea`, `0x0040acfe`), so the pairing
+the author reports sits above the callback, in the ARMOR tab's own wiring, and no row-count decode
+was owed. `docs/org/hangar.md` records that under the list protocol, beside the four `AR_D_POINT`
+boxes the layout draws; `A1`'s Armour paragraph is untouched.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** Stepping the wing armour on the ARMOR screen moves both wings, as the original's screen
 does, and the PURCHASE rows agree with it.
@@ -224,7 +305,47 @@ the UI, not the model.** A saved profile with unequal wings must still load and 
 stepped. Whichever way `A1` settled the scale is the value this row now writes twice, so run `A1`
 first or this lands on a number that then moves.
 
-## A3 ☐ `BL-650` The campaign hangar's decoded slot cap is not enforced
+## A3 ☑ `BL-650` The campaign hangar's decoded slot cap is not enforced
+
+**Landed.** The cap is **20 bought planes**, which is neither of the two readings the item offered.
+The profile's array is 25 records (`0x0064b78c` to `0x0064cb77`, stride 204), and two finders share
+it. The award half `FUN_00406060` takes the first record whose class dword is `0`, scanning all 25
+with nothing held back. The purchase half `FUN_004111f0` walks the same 25 with a counter seeded at
+`-5` that rises once per record that is empty or special (class `2`), and returns `-1` unless that
+counter reaches 1. A purchase therefore needs six of the 25 to be empty or special: one for the
+plane being bought, five for the mission awards. An already granted award keeps counting towards
+the six, its own record being the reservation it was holding, so the specials cancel out of the
+arithmetic and what the finder enforces is a cap on bought planes alone, 25 less the five awards,
+whatever the profile has been awarded. A profile holding 19 bought planes and all five awards may
+still buy its twentieth and fill the array exactly; one holding 20 bought planes and no award at
+all is refused with five records still empty, held for awards that have not arrived. A cap of 25
+would let a profile crowd out an award it has not received yet, and a cap of 19 would refuse a
+purchase the original accepts.
+
+`CampaignWallet.PurchasedPlaneCap` is that 20, and `HasFreeSlot` counts the profile's records that
+are not `Special` against it. That is a count of ownership records and never of the build directory
+the two modes share; `CustomPlaneDef.AwaitingExport` is what separates them there and is untouched
+by this item. `IHangarWallet` carries the predicate and `HangarFeature.Refusal` composes `langui`
+204 from it, ahead of the funds line because a full hangar is the refusal that names its own remedy
+and one sale at full build cost answers both at once. Both presentations reach it through that one
+seam, and a wallet-free door still checks neither slots nor funds.
+
+`docs/org/hangar.md` gains "The slot cap reserves the five awards", which carries the two finders,
+the arithmetic and the addresses, so the paragraph under the sell price now points there instead of
+naming a bare six. The same file's claim that the two-plane sell floor is "the free-slot finder's
+own floor" was wrong (that finder holds no floor at all) and the wording it seeded in
+`CampaignWallet.CanSell` is corrected to the sell handler.
+
+**Left for the orchestrator.** `HangarPurchasePage`'s `BuildEnabled` and `CampaignProblemsText`
+still know only the two campaign reasons, so Built-in's Purchase Now row stays live at the cap and
+refuses on the press rather than greying before it. Both are outside this item's fence.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** A campaign purchase past the profile's slot cap is refused with the original's own
 message rather than silently completing, so a wealthy profile cannot grow its inventory past
@@ -257,7 +378,41 @@ landed; read what it does before adding a second count of the same directory.
 
 # Wave B — The campaign boards' panes, and the shots that pin them
 
-## B11 ☐ `BL-659` No screenshot aid can open a campaign combo box
+## B11 ☑ `BL-659` No screenshot aid can open a campaign combo box
+
+**Original speaks the same language.** `OriginalShell.RunAidScript` reads a colon argument through
+`CampaignAidScript.Parse` and spells each step as this graph's own press: a cursor verb is one
+`MenuCommands` frame through `OriginalShell.Step`, and a button word is that button's row taking
+the focus and the confirm, which is what `PressExport` is now written as. Replaying on the flow
+directly would not have shown, because Original hosts a `CampaignFlow` it never walks and mirrors
+that flow's cursor from its own `_focus` before every page press, so a walked row is overwritten by
+the next press. `OriginalPresentation.OpenCampaignAid` hands every aid's colon argument to the
+script bar `campaign-briefing`, whose colon is the reveal's seconds, and `campaign-hangar`, whose
+colon names a tab; `export` still raises the EXPORT box, now as a button word rather than a case of
+its own. The namespace claim held: `MenuNamespaceDependencyTests` scans the namespace `CSVM.UI.Menu`
+exactly, and `OriginalShell` is in `CSVM.UI.Menu.Original`. One verb differs between the two
+presentations: Original binds no secondary press, its lists selecting by click, so `x` reaches
+nothing there. Every other string is the same under both, `--menu=campaign-ammo:4da` and
+`--menu=campaign-planeselection:a` included.
+
+**Landed for Built-in.** A campaign `--menu=` value's colon argument is a short input script the aid replays
+where the walk left it, so a shot can show a drop-down standing open without a patched `Accept`.
+The grammar is `CSVM/src/UI/CampaignAidScript.cs`: a segment is either a run of verbs, each with an
+optional repeat count (`d` down, `u` up, `l` and `r` the horizontal stepper, `a` confirm, `b` back,
+`x` the secondary press), or a word naming a `BoardButton` to focus and confirm, with `-` joining
+segments. A count with no verb after it is a run of downs, so a bare number is the step count it
+always was, and `export` is a button word rather than a case beside the language, which is why
+`LaunchMenu.PressExport` is gone. `campaign-briefing` still spends its colon on the reveal's
+seconds and `campaign-guestcheck` on a player number, both excluded from the replay exactly as the
+step loop excluded them. `--menu=campaign-ammo:4da` photographs the first pylon's open rocket list
+and `--menu=campaign-planeselection:a` the pilot's open plane list.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** A `--menu=` value can move to a row and confirm on it, so the open plane and ammo lists
 can be photographed and pinned by a golden without patching a `flow.Accept()` into the walk.
@@ -291,7 +446,50 @@ up. The plane selection and ammo screens' open lists are **unpinned by any golde
 exists, so a golden added here is new coverage, and a new golden's hash is never evidence on its
 first run: look at the image.
 
-## B12 ☐ `BL-658` The ammo screen shows one description pane where the original fills two
+## B12 ☑ `BL-658` The ammo screen shows one description pane where the original fills two
+
+**Landed.** `ORDINANCELAYOUT.SCRIPT` keeps both panes filled and lets neither touch the other.
+`gui_init` (lines 142-153) writes the first armed gun group's ammunition into `ol_s_ammodesc`
+through `uiData` 2032 and the first fitted pylon's ordnance into `ol_s_rocketdesc` through 2033,
+taking index 4 when the plane carries neither, and every later update is dispatched on the sender's
+`2027` class, so an ammunition dropdown writes the upper pane alone and a rocket dropdown the lower.
+`gui_create` also initializes two headings we drew nowhere, `ol_t_ammodesctitle` and
+`ol_t_rocketdesctitle` (langui 1024 and 1025, "AMMO DESCRIPTION" and "ROCKET DESCRIPTION"), which
+`Campaign Ammo Selection.png` shows over each pane.
+
+A `BoardDetailPane` enum (`Upper`, `Lower`) names the pane, `ICampaignPage.DetailRow(pane, row)`
+answers which row's `Detail` each pane reads, and `CampaignBoards.For` walks both panes rather than
+the focused row's one. The base answers the focused row for `Upper` and -1 for `Lower`, so no other
+screen changes; `CampaignAmmoPage` answers the cursor's own row in its half and the first armed
+group or first fitted pylon in the other, which is `gui_init`'s rule. `DetailSlot` takes the pane
+and reads `OL_S_ROCKETDESC` for the lower one. ACCEPT and CANCEL are in neither half, so
+`CampaignBoards.DetailPaned` (the shell's new banding test) sends their hint to the hint band and
+leaves both panes on the gun and the pylon they describe, as the original's stay.
+
+**The second pane needed the same four-pixel lift as the first, measured rather than assumed.** In
+`Campaign Ammo Selection.png` the two headings sit 236 pixels apart and the two panes' first body
+lines sit 236 pixels apart, which is exactly the rows' own 76-to-312 and 96-to-332 separation, so
+the lower pane is pinned at 328 the way the upper one is pinned at 92. `CampaignLayoutSuites`'
+canary now reads both rows, and the pin table in `docs/org/campaign-board.md` carries both.
+
+**The overlay order was already right and is unchanged.** A pane's words are a board line and an
+open drop-down is an overlay, and `ComposedBoardView._Draw` draws every overlay after every line,
+so a list that reached a pane would cover it. Neither can: the lists stand at x 136-284 and 410-558
+and the panes at 566. The 4da shot shows the open left list covering the pylon field under it, and
+the 8da shot shows the right list opening flush against the ROCKET DESCRIPTION column without
+touching it.
+
+`CampaignAmmoPageTests.BothDescriptionPanesFillAtOnce` pins the pane routing, the two headings and
+the composed lines; `CampaignLayoutTests` pins both slots over a fixture whose `OL_S_ROCKETDESC` row
+sits elsewhere; `menu-campaign-journey` checks on a real board that the two panes differ and that
+walking to ACCEPT leaves them alone.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** The ammo screen reads a gun's ammunition and a pylon's ordnance side by side, each under
 its own heading, as `ORDINANCELAYOUT.SCRIPT` fills them.
@@ -328,7 +526,41 @@ second pane needs the same correction before assuming its authored 332 is right.
 
 # Wave C — Original's dialogs and rows
 
-## C21 ☐ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
+## C21 ☑ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
+
+**Landed.** `MESSAGEBOX.SCRIPT`'s `gui_create` (lines 35-50 of
+`extracted/rof/ASSETS/SCRIPTS/MESSAGEBOX.SCRIPT`) picks the `mb_p_icon` frame off the raising
+screen's button mask in `@globals@OR.UR` and nothing else: `UR & 0x0f` of `0x4` or `0x8` sets frame
+0, every other mask sets frame 1, and a set `XR` overrides both with frame 2. `MB_B_ICON.PNG` is
+43x126, three 43x42 frames stacked as `?`, `!`, skull, so frame 0 is the query, frame 1 the warning
+and frame 2 the skull. The mask and not the button count decides: the `0x2` mask is a two-button
+box that draws the warning and `0x8` is a three-button box that draws the query, which is why the
+frame arithmetic is nothing like `PlaqueFrame`'s.
+
+A `DialogIcon` enum (`Query`, `Warning`, `Death`, numbered as the sheet stacks them) now rides on
+`CampaignModal` and on `OriginalDialog`, and both `CampaignBoards.Dialog` overloads pass it into the
+`MB_P_ICON` `BoardPicture`. `CampaignModal`'s parameter defaults to `Warning` because both boxes
+`CampaignFlow.RaiseModal` raises are the plane screen's `0x1` masks (langui 710's refusal and langui
+702's export notice), so the export notice takes the `!` its reference shot shows without any change
+to `CampaignFlow.cs`. `OriginalCampaign.RaiseDialog` takes the icon as a required argument, so each
+of the presentation's raises states its frame rather than inheriting a default: the DELETE PLAYER
+question (langui 201, `CAMPAIGN.SCRIPT`'s `0x4`) and the sell question (langui 700,
+`HANGAR.SCRIPT`'s `0x4`) take `Query`; the flow's refusal band, the ContinuePlayer refusals (langui
+200 and 2106's text, both `0x1`), the missing-player line and the refused sale (langui 701, `0x1`)
+take `Warning`. Nothing we compose raises the skull, which only `CREDITS.SCRIPT` asks for.
+
+`CSVM.Tests/DialogIconTests.cs` pins the sheet's stacking order, pins that the composer takes its
+frame from the caller rather than from the button set it was handed, and walks a modal's icon
+through to the picture; the frame each site picks is asserted at its own existing test, in
+`CampaignPlaneSelectionPageTests`, `OriginalCampaignTests` and `OriginalHangarTests`. No golden
+photographs a dialog, so none needs re-pinning.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** The export notice over the plane-selection screen draws the `!` frame its own reference
 shot shows, and each other message-box call site draws the frame the original gives it.
@@ -358,7 +590,50 @@ one-button notices may each use either frame, so a rule of "one button means `!`
 twice by accident and wrong later. The sheet stacks three icons, not four button states, so the
 frame arithmetic is not `PlaqueFrame`'s.
 
-## C22 ☐ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
+## C22 ☑ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
+
+**Landed.** The dead row was never the pair of tabs as such, it was whichever tab the results card
+is not showing. `CampaignScrapbookPage.Button` hands the presentation an authored button for the
+selected tab alone (`BestTab when _bestToDate`, `MostTab when !_bestToDate`), because the tab in
+front is a plaque over the card while the other draws as a picture under it. A row that presses no
+button fell through to `OriginalCampaign.ListRowBox`, whose book arm asked `book.ScrapOf(row)` and
+answered null for everything that was not a scrap, so the picture had no rectangle and the pointer
+crossed it without a hit.
+
+The page now answers for the class rather than for the two tabs. `CampaignScrapbookPage.ArtOf(row)`
+returns the art a row draws itself with where it presses no authored button, which is the
+unselected tab's own `SB_B_Statcardtab.png` slot and null for every other row. `ListRowBox`'s arm
+lost its `when` clause and is now `case CampaignScrapbookPage book:`, taking a scrap's region where
+the row is a scrap (that chain moved unchanged into a `ScrapBox` helper) and otherwise the
+rectangle of whatever `ArtOf` names. The size comes from `PlaqueSizeOf`, the same strip measurement
+the selected tab gets through the plaque path, rather than from the page's `TabWidth` constant, so
+both tabs answer at one size and an unmeasurable file falls back once for both.
+
+Every `RowKind` the page produces and what a pointer press now finds on it: `Replay`, `PrevPage`,
+`NextPage`, `CurrentMission`, `ViewAllMissions` and `ReturnToCabin` press authored buttons and were
+already hit at their plaque slots; the tab the card shows is a plaque at its own slot; the tab it
+does not show is hit at its picture's rectangle, which is the fix; a `Scrap` is hit at its authored
+region, at the fixed region a capture stands in, or at the shipped image's measured bounds, and
+answers null only where the file cannot be measured, which leaves that scrap keyboard-only rather
+than clickable at a guessed size. No row the page offers is now unreachable by pointer.
+
+The wheel and thumb path was left alone. `OriginalShell.Lists` still carries the contents window
+and the open drop-down alone, and the tabs are row boxes rather than list entries.
+
+Coverage: a `CampaignScrapbookPageTests` unit walks every row of a spread with a scrap on it and
+asserts each names exactly one of a button, an art or a scrap, then presses the unselected tab and
+asserts the two swap which kind they are; an `OriginalCampaignTests` unit reads the unselected tab's
+rectangle off the shell at the slot's authored position and clicks it, asserting the card changes
+hands; and the `menu-original-campaign` engine suite clicks both tabs in turn over the install's own
+decoded layout and leaves the book as the debrief return left it. No golden photographs the
+scrapbook, so none needs re-pinning.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every non-scrap row on the scrapbook page answers the pointer, the two tabs first, as the
 keyboard already reaches them.
@@ -390,7 +665,42 @@ two in parallel worktrees.
 
 # Wave D — Text entry, seats, and the way out
 
-## D31 ☐ `BL-711` A refused character in a name box makes no sound
+## D31 ☑ `BL-711` A refused character in a name box makes no sound
+
+**Landed.** `MenuInput.BuildTextKeys` polls the punctuation row alongside the letters, the digit
+row and the space bar: apostrophe, comma, minus, period, slash, semicolon, equals, the two square
+brackets, backslash and backquote, which are the printable non-alphanumeric keys a US layout
+reports unshifted. `CharFor` already turned a Godot `Key` into its ASCII character, so no mapping
+was owed and Shift leaves punctuation at its unshifted symbol, which the box refuses just the
+same. The edge state was never a hand-sized array: `_textPrev` is `new bool[TextKeys.Length]`, so
+it grows with the table on its own. The loop that walks the two together is now
+`MenuInput.TypedFrom`, a public static over an injected key-down predicate (the `StepAxis`
+precedent), and it throws on an edge array of the wrong length rather than reading the wrong key;
+`TypeableKeys` exposes the table so a test can size one.
+
+**The cap overrun already beeped, so this item was only about the character set.** Both boxes
+refuse on a single condition that folds the cap in. The campaign roster's
+`CampaignTextEntry.Type` returns whether the text changed, which is false when an accepted
+character meets a full box, so `TypeRosterName` takes its else branch and cues
+`OriginalCues.TextError` (`OriginalCampaign.cs:493-501`); the hangar's branch tests `AcceptsNameChar(c) && _hangarName.Length < MaxNameLength`
+(`OriginalHangar.cs:575`) and falls to the same cue. Neither refusing branch was edited.
+
+Coverage: four `MenuInputTests` units (a punctuation key types its character and types it once per
+press, every typeable key owns an edge slot and a distinct character, the typeable set covers the
+accepted name characters and reaches past them, a wrong-length edge array throws), an
+`OriginalCampaignTests` unit that an accepted character at the cap cues the reject and nothing
+before it does, and a `menu-original-campaign` cue-log block that walks both routes on the empty
+profile box and leaves it as it found it.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Playtest after fix:** the profile name box, one accepted letter, one punctuation key, one key
+past the cap, expecting `ENTERTEXT`, `ENTERTEXT_ERROR`, `ENTERTEXT_ERROR`.
+
+**Original approach (kept for reference).**
 
 **Goal.** Typing a character a name box does not accept produces `ENTERTEXT_ERROR`, because the
 box is given the character and refuses it.
@@ -424,7 +734,47 @@ casualty). Widening the polled keys **touches text entry on both presentations**
 edge-detected per key in a fixed-length parallel array, so the array and the table have to grow
 together or the detection silently reads the wrong key.
 
-## D32 ☐ `BL-697` Only player 1's keymap can be reached
+## D32 ☑ `BL-697` Only player 1's keymap can be reached
+
+**Landed.** The rebinding screen takes the join gesture itself. `LaunchMenu.ScanJoins` opens
+joining on the Plane, the Campaign and now the Controls screen, so Start on a pad no seat owns
+seats that pad through `MenuSeatDevices.ScanJoins`, exactly as it does at the aircraft pick, and
+`OpenControls` primes the per-pad edges on the way in so a Start held on entry does not fire.
+Nothing new reads a device. The press is `MenuInput.JoinPressed(pad)`, the static raw
+`Input.IsJoyButtonPressed(pad, JoyButton.Start)` whose own comment forbids moving it to an action,
+edge-detected per device in `MenuSeatDevices._joinPrev`; `MenuJoin` stays unbound.
+
+**Registration follows the seats, not the screen's opening.** The one-shot loop `OpenControls` held
+is now `LaunchMenu.SyncControlsSeats`, called there and at the top of `HandleControlsInput`, so it
+runs on every frame the screen is up. It keeps a registration while the poller behind a player
+number is the same object, which is what lets a staged rebind survive; a number that changed hands
+is registered again, since the number is what picks the `BindingStore` file.
+`ControlsFeature.RemoveSeat` is the other half: a seat that leaves takes its row, its staged edits
+and its dirty flag with it, and the screen falls back to the first remaining player. `AddSeat`
+clears the dirty flag on a re-registration for the same reason, so Accept never writes a working
+copy the seat on screen never edited.
+
+**A seat with no device gets no row.** `SyncControlsSeats` registers a slot only when its poller
+reads the keyboard or holds at least one pad. `--debug-join`'s `MenuIdleSource` seats fail that
+test, because `InputBehind` gives them a bare `MenuInput` with no keyboard and an empty pad array,
+and they stay off the Player stepper while remaining ordinary seats everywhere else. Registering
+four seats up front would have offered three players a screen with nothing to press. The join
+strip says what the press is for here, "press START on a free pad to edit its own keymap", rather
+than sending the pad to aircraft select.
+
+**The data path needed nothing.** `ControlsProfile` reads a seat's Flight and Camera maps through
+`LaunchBindings` and its Menu map from the live poller, and `Accept` writes each dirty seat's
+profile through the save the launcher injects,
+`BindingStore.UserBindings().Save(player, profile)`. `BL-696`, the missing door from Original, is
+untouched: Original registers no seats with this feature and still reaches no rebinding screen of
+its own.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
 
 **Goal.** More than player 1's keymap can be edited on the rebinding screen, with each editable
 seat having a device to capture with.
@@ -456,7 +806,44 @@ unbound), so the join here cannot be resolved through the seat's own bindings. `
 missing door from Original, is deliberately not in this run, so do not solve it on the way past;
 `E41` answers it.
 
-## D33 ☐ `BL-710` Quitting flashes Godot's default sky before the window closes
+## D33 ☑ `BL-710` Quitting flashes Godot's default sky before the window closes
+
+**Landed.** One `Launcher.BlankAndQuit` now serves the three quits reached from a frame that is
+still drawing: Esc in the viewer (`Launcher.cs:783`), the menu's `QuitExit` sink (`:1374`) and the
+boards' `ExitSession` (`:1520`). It sets the process-lifetime `WorldEnvironment`'s background to
+flat black and then ends the frame, so the image held on screen through shutdown is black rather
+than the engine's sky. Every other exit keeps its bare `GetTree().Quit()`.
+
+**Which teardown uncovers it.** `MenuHost.Exit` (`CSVM/src/UI/Menu/MenuHost.cs:150-156`) sets
+`Shown = false`, calls `Active?.Hide()` and only then hands the exit to the launcher's sink, so the
+active presentation's opaque layer is already invisible when `case QuitExit` runs. Both
+presentations hide a full-screen opaque layer: Built-in's `LaunchMenu` is a `CanvasLayer` whose
+backdrop `ColorRect` carries the comment "Fully opaque backdrop so the empty 3D scene (procedural
+sky) never shows through" (`CSVM/src/UI/LaunchMenu.cs:457`), and Original's `ComposedBoardView`
+fills its rect with black (`:83`). Behind them, `Launcher.SetupLighting` (`:1094-1120`) keeps a
+`WorldEnvironment` whose sky is a `ProceduralSkyMaterial`, and at the menu no session is in the
+tree, so what the hidden layer uncovers is that sky and nothing else. A probe screenshot of the
+persistent scene is the artefact itself: grey-blue above a hard horizon, brown below.
+
+**Why the other exits are not it.** The two remaining drawing exits cannot produce the report:
+`ExitSession` quits with the live session still in the tree, so the world and its own sky dome
+draw, and Esc in the viewer quits on a frame that was already showing the procedural sky, so
+nothing appears that was not there. The sixteen probe exits render nothing a player sees, which
+`GameSession.cs:592` states for the seven inside the session build. `Launcher.cs` and
+`GameSession.cs` hold nineteen `GetTree().Quit()` calls between them rather than the twenty the
+entry counted, and nothing else in either file calls it.
+
+**Cost to headless runs.** None. The three changed sites are unreachable from any probe or suite,
+`BlankAndQuit` waits for nothing, and the nine probe exits in `Launcher.cs` plus all seven in
+`GameSession.cs` are untouched, so no wall-time comparison against
+`analysis/verification-budgets.json` is owed.
+
+**What still needs eyes.** No headless capture can photograph the frame after `Quit()`, since it
+is drawn by the engine after the last managed callback has run. At the controls, quit from the
+menu in both presentations and watch the last instant before the window goes: it should be black,
+and never the grey-blue-over-brown gradient above.
+
+**Original approach (kept for reference).**
 
 **Goal.** Quitting the game shows the game until the window is gone.
 
@@ -483,6 +870,11 @@ time against `analysis/verification-budgets.json` before and after. Then the com
 nothing visible and is invisible in tests. **A fix that hides the flash by delaying the quit would
 slow every headless probe and every suite that ends in one**, which is a real cost measured in the
 verification budgets, not a theoretical one.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree, every item landed and main
+merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 # Wave E — At the controls
 

@@ -30,6 +30,7 @@ internal static class MenuHangarSuites
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
+    private static readonly MenuCommands Left = new() { MoveX = -1 };
 
     [Suite("menu-hangar-journey",
         "Built-in's hangar journey pinned end to end: a real LaunchMenu opens the flow from the Mode "
@@ -241,6 +242,18 @@ internal static class MenuHangarSuites
         ctx.Check(flow.Scratch.ArmourNose == 1 && menu.ShownRowText.Contains("5", StringComparison.Ordinal),
             $"Right buys one unit of nose armour, shown x5 ({flow.Scratch.ArmourNose}, {menu.ShownRowText})");
         Has(ctx, "the footer names the stepper", "←→  Change", menu.ShownFooter);
+        menu.Drive(Down);
+        menu.Drive(Down);
+        menu.Drive(Right);
+        ctx.Check(flow.Scratch.ArmourLeftWing == 1 && flow.Scratch.ArmourRightWing == 1,
+            $"Right on the left wing buys both wings, the way the original's paired boxes move ({flow.Scratch.ArmourLeftWing}/{flow.Scratch.ArmourRightWing})");
+        menu.Drive(Down);
+        menu.Drive(Left);
+        ctx.Check(flow.Scratch.ArmourLeftWing == 0 && flow.Scratch.ArmourRightWing == 0 && flow.Scratch.ArmourNose == 1,
+            $"and Left on the right wing clears both, the nose untouched ({flow.Scratch.ArmourLeftWing}/{flow.Scratch.ArmourRightWing})");
+        menu.Drive(Up);
+        menu.Drive(Up);
+        menu.Drive(Up);
         menu.Drive(Accept);
         ctx.Check(flow.Screen == HangarScreen.Guns && menu.ShownRowCount == 4, $"guns: four slots ({flow.Screen}, {menu.ShownRowCount})");
         menu.Drive(Right);
@@ -554,6 +567,42 @@ internal static class MenuHangarSuites
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.HangarArmor && Row(shell, "AR_D_POINT0") is { X: 490f, Y: 133f, Width: 225f },
             $"Accept on a tab opens it with its dropdowns at their authored boxes ({shell.Screen})");
+        OriginalArmourWings(ctx, host, seat, shell, fit, hangar);
+    }
+
+    // The ARMOR tab's two wing boxes, which move together: the screen draws one per wing and a
+    // pick on either writes both zone dwords, so the second box redraws with the first.
+    private static void OriginalArmourWings(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
+    {
+        var wing = Row(shell, "AR_D_POINT2");
+        if (wing == null)
+        {
+            ctx.Check(false, $"the left wing box stands on the armor tab");
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, wing.X + 5f, wing.Y + 5f, pressed: true, clicked: true));
+        var third = Row(shell, "AR_D_POINT2:3");
+        ctx.Check(third != null, $"a click on the left wing box opens its 13-row list ({shell.Rows.Count})");
+        if (third == null)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, third.X + 2f, third.Y + 2f, pressed: true, clicked: true));
+        ctx.Check(hangar.Scratch.ArmourLeftWing == 3 && hangar.Scratch.ArmourRightWing == 3
+            && Row(shell, "AR_D_POINT3")?.Label == Row(shell, "AR_D_POINT2")?.Label,
+            $"picking 15 units on the left wing arms both wings and both boxes read it ({hangar.Scratch.ArmourLeftWing}/{hangar.Scratch.ArmourRightWing}, {Row(shell, "AR_D_POINT3")?.Label})");
+        var other = Row(shell, "AR_D_POINT3")!;
+        Press(host, seat, Pointer(fit, other.X + 5f, other.Y + 5f, pressed: true, clicked: true));
+        var none = Row(shell, "AR_D_POINT3:0");
+        if (none != null)
+        {
+            Press(host, seat, Pointer(fit, none.X + 2f, none.Y + 2f, pressed: true, clicked: true));
+        }
+
+        ctx.Check(hangar.Scratch.ArmourLeftWing == 0 && hangar.Scratch.ArmourRightWing == 0,
+            $"and None on the right wing clears both, leaving the build as the tab found it ({hangar.Scratch.ArmourLeftWing}/{hangar.Scratch.ArmourRightWing})");
     }
 
     private static void OriginalPurchase(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, PlayerSetupFeature setup, CustomPlaneStore store, string scratch)

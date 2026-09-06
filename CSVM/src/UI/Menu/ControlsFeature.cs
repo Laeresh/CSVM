@@ -122,8 +122,27 @@ public sealed class ControlsFeature : IMenuFeature
         if (!_seats.ContainsKey(player))
             _players.Add(player);
         _seats[player] = new SeatState(profile, devices, readsKeyboard);
+        // A registration stages from the live maps, so nothing is owed to whoever held the number
+        // before it: a dirty flag left behind would have Accept write a copy this seat never edited.
+        _dirty.Remove(player);
         if (_players.Count == 1)
             _player = player;
+    }
+
+    /// <summary>Drops a seat this screen can no longer edit, with its staged edits, because its
+    /// device is gone or its player number changed hands. Edits already accepted are in the maps
+    /// the polling sites hold and stay there. Unknown players are ignored.
+    /// ⚠ A host that registers seats must drop them too. A player row kept after its pad left has
+    /// nothing to press, and the stepper would offer a seat that cannot capture.</summary>
+    public void RemoveSeat(int player)
+    {
+        if (!_seats.Remove(player))
+            return;
+
+        _players.Remove(player);
+        _dirty.Remove(player);
+        if (_player == player && _players.Count > 0)
+            Player = _players[0];
     }
 
     /// <summary>That action's bindings on the seat being edited.</summary>

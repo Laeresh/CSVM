@@ -159,6 +159,31 @@ public class HangarFeatureTests : IDisposable
         Assert.Contains("OVERWEIGHT", feature.TotalsLine(feature.Scratch));
     }
 
+    /// <summary>The armour setter behind Original's four combo boxes couples the wings: a pick on
+    /// either wing writes both, its cost preview prices the pair, and a pick that only levels a
+    /// loaded plane's disagreeing wings still reports a change so the other box redraws.</summary>
+    [Fact]
+    public void AWingPickSetsBothWingsAndIsPricedAsAPair()
+    {
+        var feature = Feature();
+        feature.Open(_store);
+        feature.StartDefaultPlane();
+        feature.SetArmour(0, 0);
+        feature.SetArmour(1, 0);
+
+        Assert.True(feature.SetArmour(2, 3));
+        Assert.Equal(3, feature.ArmourUnits(2));
+        Assert.Equal(3, feature.ArmourUnits(3));
+        Assert.Equal(feature.Bill.Total.Cost + (2 * HangarEconomy.ArmourStepCost), feature.CostWithArmour(3, 4));
+        Assert.Equal(feature.Bill.Total.Cost + HangarEconomy.ArmourStepCost, feature.CostWithArmour(0, 1));
+
+        feature.Scratch.ArmourLeftWing = 2;
+        feature.Scratch.ArmourRightWing = 9;
+        Assert.True(feature.SetArmour(2, 2));
+        Assert.Equal(2, feature.ArmourUnits(3));
+        Assert.False(feature.SetArmour(2, 2));
+    }
+
     [Fact]
     public void AWalletGatesAvailabilityAndFundsAndIsPaidOnCommit()
     {
@@ -292,6 +317,8 @@ public class HangarFeatureTests : IDisposable
 
         public bool Sellable { get; set; }
 
+        public bool RoomForOneMore { get; set; } = true;
+
         public List<CustomPlaneDef> Owned { get; } = new();
 
         public HashSet<string> Special { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -301,6 +328,8 @@ public class HangarFeatureTests : IDisposable
         public (string Name, int Airframe, int Cost)? Purchased { get; private set; }
 
         public int Funds => FundsValue;
+
+        public bool HasFreeSlot => RoomForOneMore;
 
         public bool CanAfford(int cost) => FundsValue >= cost;
 

@@ -327,6 +327,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignCombo.cs` — a campaign screen's drop-down field: its authored box, its scrolling window, and a candidate it never commits itself.
 - `src/UI/CampaignModal.cs` — the one-button dialog a campaign screen raises over the board, held by the flow because two screens reach the same box.
 - `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.
+- `src/UI/CampaignAidScript.cs` — the input script a `--menu=` colon argument spells: counted moves, confirms and button words a campaign aid replays.
 - `src/UI/ListWindow.cs` — a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
 - `src/UI/BoardFit.cs` — how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
 - `src/UI/ComposedBoard.cs` — what a composed campaign screen is made of: backdrop, fills, pictures, strokes, lines, plaques and flowed lists in draw order.

@@ -1,4 +1,5 @@
 using CSVM.Flight;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -6,15 +7,18 @@ namespace CSVM.UI;
 /// The ARMOR screen: the four zones as rows, named through their own langui formats (1191-1194,
 /// "Nose: %1!d! units" and kin, which carry the number themselves). The ←→ stepper walks the
 /// focused zone the way the original's 13-row dropdown does, 0 to 60 in fives: what the screen
-/// shows is the stored figure, units x5, and row 0 of that dropdown is langui 1165 "None" rather
+/// shows is the press count times five, and row 0 of that dropdown is langui 1165 "None" rather
 /// than a count (callback 2246 at <c>0x0040b7bd</c> pushes 1165 for index 0 and format 1170 with
-/// <c>index*5</c> for the rest). Cost and weight stay on the units themselves, at x4.
+/// <c>index*5</c> for the rest). One press therefore buys five units, at $20 and 20 lb. The two
+/// wing rows are held equal by <see cref="HangarFeature.SetZoneUnits"/>, the shared rule Original's
+/// pair of combo boxes obeys too, which is why four rows show where three values move.
 /// </summary>
 public sealed class HangarArmourPage : HangarPage
 {
-    /// <summary>The scale the record stores armour on, and the one the screen displays: the
-    /// dropdown's row n shows n x 5. It is not a weight, and nothing is priced through it.</summary>
-    public const int DisplayScale = 5;
+    /// <summary>The units one press buys, which is also the factor between the stored press count
+    /// and the figure the screen shows. Named here for the screens; the decode is on the
+    /// economy's own constant.</summary>
+    public const int DisplayScale = HangarEconomy.ArmourUnitsPerStep;
 
     private static readonly string[] ZoneFallbacks = { "Nose", "Tail", "Left Wing", "Right Wing" };
 
@@ -50,8 +54,8 @@ public sealed class HangarArmourPage : HangarPage
             bought = $"{units * DisplayScale} units";
         }
 
-        return $"{bought}   ${units * HangarEconomy.ArmourUnitCost}   " +
-               $"{units * HangarEconomy.ArmourUnitWeight} lbs.";
+        return $"{bought}   ${units * HangarEconomy.ArmourStepCost}   " +
+               $"{units * HangarEconomy.ArmourStepWeight} lbs.";
     }
 
     /// <inheritdoc/>
@@ -71,14 +75,5 @@ public sealed class HangarArmourPage : HangarPage
         _ => Scratch.ArmourRightWing,
     };
 
-    private void SetUnits(int row, int units)
-    {
-        switch (row)
-        {
-            case 0: Scratch.ArmourNose = units; break;
-            case 1: Scratch.ArmourTail = units; break;
-            case 2: Scratch.ArmourLeftWing = units; break;
-            default: Scratch.ArmourRightWing = units; break;
-        }
-    }
+    private void SetUnits(int row, int units) => HangarFeature.SetZoneUnits(Scratch, row, units);
 }

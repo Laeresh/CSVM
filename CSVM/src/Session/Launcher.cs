@@ -780,7 +780,7 @@ public partial class Launcher : Node3D
             // FlightController polls it as a pause toggle, so nothing is done here.
             if (_session is { InSession: true })
                 return;
-            GetTree().Quit();
+            BlankAndQuit();
             return;
         }
         // F12 anywhere (orbit view or free flight): grab the current frame to a file.
@@ -1371,7 +1371,7 @@ public partial class Launcher : Node3D
                 StartCampaignFromMenu(mission);
                 break;
             case QuitExit:
-                GetTree().Quit();
+                BlankAndQuit();
                 break;
             case OptionsApplyExit applied:
                 _pendingApply = applied;
@@ -1517,6 +1517,23 @@ public partial class Launcher : Node3D
             ReturnToMenu(MenuReturnDestination.TopLevel);
             return;
         }
+        BlankAndQuit();
+    }
+
+    /// <summary>The three quits reached from a frame that is still drawing: blanks the persistent
+    /// <c>WorldEnvironment</c>'s background, then ends the frame. <c>Quit()</c> ends the frame
+    /// rather than the process, so one more frame is drawn and that image is held on screen for
+    /// the whole shutdown, and the menu host hides its opaque backdrop one call before the exit
+    /// reaches here. The held frame would otherwise be the procedural sky.
+    /// ⚠ Every probe exit keeps the bare <c>Quit()</c>: no headless run may pay for this.</summary>
+    private void BlankAndQuit()
+    {
+        if (_env is { } env)
+        {
+            env.BackgroundMode = Godot.Environment.BGMode.Color;
+            env.BackgroundColor = Colors.Black;
+        }
+
         GetTree().Quit();
     }
 

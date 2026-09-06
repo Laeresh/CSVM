@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using CSVM.Bindings;
 using CSVM.UI;
 using CSVM.UI.Menu;
+using CSVM.UI.Menu.BuiltIn;
 
 namespace CSVM.Testing;
 
@@ -10,7 +12,9 @@ namespace CSVM.Testing;
 /// extra ones through <see cref="LaunchMenu.DebugJoin"/>, which adds device-less seats), and the
 /// read-outs pin the two-stage pick, Back at every stage, the launch gate under Free Flight and
 /// Dogfight, the join hint at each seat count, and what a return from flight keeps. The second
-/// joins scripted seats through the feature and drives them in Built-in and in Original.
+/// joins scripted seats through the feature and drives them in Built-in and in Original. The third
+/// takes the same join to the rebinding screen, where it is the only door to another player's
+/// keymap, and pins which seats that screen will and will not offer a row to.
 /// </summary>
 internal static class MenuPlayerSetupSuites
 {
@@ -68,6 +72,106 @@ internal static class MenuPlayerSetupSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         BuiltInSeats(ctx);
         OriginalSeats(ctx);
+    }
+
+    [Suite("menu-controls-seats",
+        "The rebinding screen's own join, which is the only door to a second player's keymap: "
+        + "Options reaches the screen on player 1 alone with a hint inviting a free pad, a pad seat "
+        + "joining there becomes player 2 on the Player stepper, an accepted rebind on that seat "
+        + "writes player 2's keymap file and nobody else's, a device-less seat gets no player row "
+        + "at all because it would have nothing to capture with, and a seat that leaves takes its "
+        + "row and its staged edits with it")]
+    internal static void MenuControlsSeats(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string dir = System.IO.Path.Combine(ctx.ScratchDir, "menu-controls-seats");
+        System.IO.Directory.CreateDirectory(dir);
+        // ⚠ Before the host: the save below writes through the store, and without the override it
+        // would land on the keymap saved at this machine's controls.
+        string? previous = BindingStore.DirectoryOverride;
+        BindingStore.DirectoryOverride = dir;
+        var written = new List<int>();
+        var host = MenuSuiteHost.Bare(new List<MenuExit>(), ctx.DataRoot, out var seat, (player, profile) =>
+        {
+            written.Add(player);
+            BindingStore.UserBindings().Save(player, profile);
+        });
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
+        ctx.Host.AddChild(menu);
+        try
+        {
+            ControlsJoin(ctx, menu, host, dir, written);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+            BindingStore.DirectoryOverride = previous;
+        }
+    }
+
+    // The rebinding screen's seats: who it offers, whose file an accepted rebind reaches, and which
+    // seat it refuses a row to. The Start press itself is a raw device read, so the join is made the
+    // way ScanJoins makes it, by seating a poller bound to one pad.
+    private static void ControlsJoin(
+        TestContext ctx, LaunchMenu menu, MenuHost host, string dir, List<int> written)
+    {
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        var controls = host.Features.Get<ControlsFeature>();
+        menu.ShowMenu("controls");
+        Is(ctx, "Options reaches the rebinding screen", "Controls", menu.ShownScreen);
+        Has(ctx, "on player 1", "Player 1", menu.ShownBreadcrumb);
+        ctx.Check(controls.Players.Count == 1, $"with one seat registered ({controls.Players.Count})");
+        Has(ctx, "joining is open here", "START", menu.ShownJoinHint);
+        Has(ctx, "and the hint says what the press is for", "keymap", menu.ShownJoinHint);
+        menu.Drive(Right);
+        Has(ctx, "the stepper has nobody else to offer", "Player 1", menu.ShownBreadcrumb);
+
+        var padInput = new MenuInput { Pads = new[] { 0 } };
+        padInput.Prime();
+        setup.Join(new BuiltInSeat(padInput));
+        menu.Drive(MenuCommands.None);
+        ctx.Check(controls.Players.Count == 2 && controls.Players[1] == 2,
+            $"a joined pad raises player 2 on the stepper ({controls.Players.Count} seats)");
+        menu.Drive(Right);
+        Has(ctx, "which the stepper steps onto", "Player 2", menu.ShownBreadcrumb);
+
+        controls.Context = InputContext.Flight;
+        controls.Focus(RowOf(controls, InputAction.Nitro));
+        controls.MoveSlot(9); // past the end: the empty slot that adds a control rather than stealing
+        controls.Offer(new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.M)));
+        ctx.Check(controls.Pending == null, $"a free control binds without an ask ({controls.Status})");
+        controls.Accept();
+        ctx.Check(written.Count == 1 && written[0] == 2,
+            $"an accepted rebind there saves player 2 and nobody else ([{string.Join(", ", written)}])");
+        ctx.Check(System.IO.File.Exists(System.IO.Path.Combine(dir, BindingStore.FileNameFor(2))),
+            $"player 2's keymap file is the one written");
+        ctx.Check(!System.IO.File.Exists(System.IO.Path.Combine(dir, BindingStore.FileNameFor(1))),
+            $"and player 1's file is not touched");
+
+        menu.DebugJoin(1);
+        menu.Drive(MenuCommands.None);
+        ctx.Check(setup.Seats.Count == 3 && controls.Players.Count == 2,
+            $"a device-less seat joins the game and still gets no player row ({setup.Seats.Count} seats, {controls.Players.Count} rows)");
+
+        setup.Unjoin(setup.Seats[1]);
+        menu.Drive(MenuCommands.None);
+        ctx.Check(controls.Players.Count == 1 && controls.Player == 1,
+            $"the pad leaving takes its row with it and the screen falls back to player 1 ({controls.Players.Count} rows, player {controls.Player})");
+    }
+
+    // Which row of the context on screen names that action, found rather than counted: the shipped
+    // set may grow another row above it.
+    private static int RowOf(ControlsFeature controls, InputAction action)
+    {
+        var actions = controls.Actions;
+        for (int i = 0; i < actions.Count; i++)
+        {
+            if (actions[i] == action)
+                return i;
+        }
+
+        return 0;
     }
 
     // One seat: select, weapons, Back at each stage, then the launch, and the return that keeps

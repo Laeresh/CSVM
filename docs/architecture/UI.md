@@ -134,6 +134,14 @@ keyboard and stepped through one alphabet from a pad, so the field needs no keyb
 accepts is the shared feature's own name rule, so a stepped or typed name is always one the feature
 would seat.
 
+## src/UI/CampaignAidScript.cs
+The input script a campaign screenshot aid's `--menu=` colon argument spells, replayed on the flow
+where the walk left it: counted cursor verbs, a confirm, a back and a secondary press, joined by
+`-`, plus a word naming a `BoardButton` to focus and confirm. A confirm is what lets an aid leave a
+drop-down standing open, which a step count could not reach. A count with no verb after it is a run
+of downs, so a bare number is the step count it always was, and `export` is a button word rather
+than a case beside the language. `docs/cli.md` states the grammar for the command line.
+
 ## src/UI/ScrapbookComposition.cs
 The scrapbook's per-spread scrap layout, read from the shipped `SCRAPBOOK.CSV` rather than invented:
 `Items` walks a spread from item 1 and stops at the first missing key, the way the original's reader
@@ -177,10 +185,10 @@ The fixed chrome of all eight campaign screens, plus the composer that turns a p
 into a `ComposedBoard`. Every button slot, background pane and text slot names its `LAYOUT.CSV`
 section and row and reads through `CampaignLayout` with the value the board drew before the layout
 existed as its fallback, so a screen composes the same whether the file is present, absent or
-unreadable; the briefing is the exception, its chrome being `Briefing.zrd`'s own. A slot marked
-pinned keeps a value measured off the reference screenshot where the row differs from it.
-`SlotOf` and `DialogSlot` answer a plaque's board rectangle, which is how a pointer presentation
-hit-tests. The pinned values, row by row: [../org/campaign-board.md](../org/campaign-board.md).
+unreadable; the briefing is the exception, its chrome being `Briefing.zrd`'s own, and a slot marked
+pinned keeps a measured value instead. `SlotOf` and `DialogSlot` answer a plaque's rectangle for a
+pointer to hit-test, `DetailSlot` and `DetailPaned` the description panes, the ammo screen's two
+filled at once. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/CampaignLayout.cs
 The decoded menu layout as the campaign boards read it: one widget row's authored geometry and art
@@ -250,12 +258,12 @@ back button alone, Escape and Start reaching the pause toggle through `FlightCon
 ## src/UI/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
 state, with `Poll(dt)` filling the cursor axes, accept, back and start out of the `Menu` binding
-context (`src/Bindings/`) from three readings of one seat, keyboard live, keyboard minus the
+context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboard minus the
 typeable keys, and the pad alone. Its pad rows sit on the seat-local `SeatPads` identity, since a
 seat reads a set of pads and no binding may hold a connection index. `Typed` and `Erase` serve a
-screen with a text field, and `PadMove`/`PadMoveX` are the axes such a screen reads instead, since
-W, A, S and D are letters there. In the menu it is the device half of a seat, wrapped by
-`Menu/BuiltIn/BuiltInSeat.cs` and bound by `MenuSeatDevices`; it also serves the in-flight boards.
+text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
+are letters there. `TypeableKeys` is deliberately wider than any box's accept rule. Wrapped by
+`Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards.
 
 ## src/UI/HudLayers.cs
 The canvas-layer ordering for everything drawn over the 3D view, in one place, so "does the collider

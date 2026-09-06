@@ -12,9 +12,10 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The wallet gate B13 wires at the hangar's existing Purchase/Sell seam: a campaign flow refuses
-/// an unaffordable build and an unavailable airframe, credits the wallet at the decoded full sell
-/// price with the special-plane and two-plane floor refusals, and the two wallet-free doors (a
-/// null <see cref="HangarFlow.Campaign"/>) never consult any of it.
+/// an unaffordable build, an unavailable airframe and a purchase past the decoded slot cap, credits
+/// the wallet at the decoded full sell price with the special-plane and two-plane floor refusals,
+/// and the two wallet-free doors (a null <see cref="HangarFlow.Campaign"/>) never consult any of
+/// it.
 /// </summary>
 public class CampaignWalletTests : IDisposable
 {
@@ -86,6 +87,55 @@ public class CampaignWalletTests : IDisposable
         Assert.Contains("not available yet", flow.Message, StringComparison.Ordinal);
         Assert.Empty(_planes.List());
         Assert.Equal(1_000_000, profile.Funds);
+    }
+
+    /// <summary>The decoded slot cap: a profile already holding its 20 bought planes is refused the
+    /// next purchase in the original's own words (langui 204), with the wallet, the ownership list
+    /// and the build store all untouched.</summary>
+    [Fact]
+    public void BuyIsRefusedAtTheSlotCap()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Funds = 1_000_000;
+        profile.MissionsCompleted = 20;
+        FillBought(profile, CampaignWallet.PurchasedPlaneCap);
+
+        var flow = CampaignFlow(profile);
+        flow.Accept(); // the buy row
+        flow.Scratch.Airframe = 10;
+        flow.Scratch.Engine = 0;
+        flow.Scratch.Name = "One Too Many";
+        Walk(flow, HangarScreen.Purchase);
+
+        Assert.False(flow.Commit());
+        Assert.Contains("hangar limit", flow.Message, StringComparison.Ordinal);
+        Assert.Equal(1_000_000, profile.Funds);
+        Assert.Equal(CampaignWallet.PurchasedPlaneCap, profile.Planes.Count);
+        Assert.Null(_planes.Load("One Too Many"));
+    }
+
+    /// <summary>The five reward aircraft sit outside the cap, as the original's own arithmetic has
+    /// them: 19 bought planes plus all five awards still leaves the slot for a twentieth purchase,
+    /// which fills the 25-record array exactly and is the last one the profile can make.</summary>
+    [Fact]
+    public void RewardAircraftDoNotCountAgainstTheSlotCap()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Funds = 1_000_000;
+        FillBought(profile, CampaignWallet.PurchasedPlaneCap - 1);
+        for (int i = 0; i < 5; i++)
+        {
+            profile.Planes.Add(new OwnedPlane { Name = "Award " + i, Airframe = 2, Special = true });
+        }
+
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
+        Assert.Equal(24, profile.Planes.Count);
+        Assert.True(campaign.HasFreeSlot);
+
+        campaign.Purchase("Last One", 10, 500);
+
+        Assert.Equal(25, profile.Planes.Count);
+        Assert.False(campaign.HasFreeSlot);
     }
 
     /// <summary>Enough funds and progress: the build lands, the wallet is debited the exact total
@@ -364,6 +414,15 @@ public class CampaignWalletTests : IDisposable
 
         Assert.Equal("New Plane", flow.Page.RowText(0));
         Assert.Equal("Delete a saved plane", flow.Page.RowText(2));
+    }
+
+    // Ownership records up to a wanted total, the two seeded starters counting towards it.
+    private static void FillBought(CampaignProfileDef profile, int total)
+    {
+        for (int i = profile.Planes.Count; i < total; i++)
+        {
+            profile.Planes.Add(new OwnedPlane { Name = "Bought " + i, Airframe = 10 });
+        }
     }
 
     private static void Walk(HangarFlow flow, HangarScreen target)
