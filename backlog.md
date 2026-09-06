@@ -860,7 +860,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-667`'s closing record in `PLAN-M5-polish-10` `A2`, `BL-517` and
   `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
 
-- `BL-687` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **A `mode ship` vehicle takes no gun at all, so a patrol boat never fires the
+- `BL-687` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A `mode ship` vehicle takes no gun at all, so a patrol boat never fires the
   weapon its own def authors.** *Evidence (traced):* reported at the controls on three missions in
   one sortie: CM08 "the guns are not firing at me" (`PT-87`), CM12 "boats dont fire" (`PT-101`), and
   CM10 "patrol boats and lifeboats dont shoot and dont track" (`PT-100`), whose A/B is
@@ -868,8 +868,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the start. A `mode ship` roster block or generator launch becomes a `SurfaceVehicle`: a hull on a
   `PathFollower` with a destructible pool and nothing else — no `FlightController`, no `AiPilot`, no
   `AiGunner`, no weapon. The roster loop takes the surface branch and `continue`s
-  (`CSVM/src/Session/CampaignDirector.cs:428-432`) before the `AiPilot` every aircraft block reaches
-  at `:434`; `AiGeneratorRuntime` returns straight after `vessel.Launch` (`:408-419`);
+  (`CSVM/src/Session/CampaignDirector.cs:443-447`) before the `AiPilot` every aircraft block reaches
+  at `:449`; `AiGeneratorRuntime` returns straight after `vessel.Launch` (`:408-419`);
   `SurfaceVehicle.Step` is the injure ladder and the follower alone
   (`CSVM/src/Session/SurfaceVehicle.cs:147-167`). The only production callers of
   `ProjectilePool.Spawn` are `FlightController`, `TurretController`, `ZeppelinRuntime.Cannons` and
@@ -881,19 +881,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   themselves, and the target scorer is selected on the vehicle's own `mode` word — `FUN_00421950`
   for everything that is not `jet` or `wingman` ([`docs/org/aiPilot.md`](docs/org/aiPilot.md):68-87,
   :119-124).
-  *Fix shape:* give a `mode ship` hull the target selection and fire decision its def already
-  authors, reading the `weapons` tuple and the dwell fields rather than inventing a rate or a range.
-  *⚠ Traps:* **Settle the `t_truck` question before building anything.** `t_truck` carries the
-  identical `mode ship`, the identical `weapons` tuple and the identical dwell fields, *and* ships
-  its own `ai.zrd` standalone-turret entry. If a hull's gun is driven by the standalone-turret object
-  in the original, a boat with no `ai.zrd` entry is authored silent and the correct port is nothing;
-  unanswered, this fix is unbounded. **The lifeboat's gun is not this item and not a defect.**
+  *Decoded, and the `t_truck` question is settled:* `FUN_0041c270` has a branch for `mode` 3
+  (`ship`), 5 (`plane`) and 1 (`heli`) that never promotes to pursue and instead runs the per-mount
+  lead solver `FUN_0041afe0` and, on a solution, calls the fire decision `FUN_0041f420(1, 1)` itself
+  (`0x0041c348`), so a boat shoots while flying its net. Its list is the def's own `weapons` block
+  through `FUN_004b59b0`, and `FUN_00476250` gives every vehicle a gun mount, unclamped on both axes
+  for a def authoring no `gun_pitch`/`gun_yaw`. The truck's `ai.zrd` emplacement is a second gun on
+  top of that same vehicle gun, so a boat with no `ai.zrd` entry is not authored silent. The dwell
+  fields are pursuit timers (`attack_dwell` to `+0x304`, `not_pursuit_dwell` to `+0x308`) and are
+  inert on a hull; the target hold is a hardcoded 20 s in `FUN_004b0f20`.
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) ("What a `mode ship` vehicle runs") and
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) carry the full reading.
+  *Fix shape:* give a `mode ship` hull the target selection (the non-`jet` scorer `FUN_00421950`),
+  the 20 s hold, the aim solve against its one free-aiming mount, and the fire decision reading the
+  `weapons` tuple. No pursuit and no dwell handling. Invent no rate and no range.
+  *⚠ Traps:* **The lifeboat's gun is not this item and not a defect.**
   `lifesaverNM > lifesaver > lifeboat > healthy > turret > gun > firepoint` is a complete rig, but
   `TurretController.BuildEmplacements` instantiates only what an `ai.zrd` `NODES` pattern matches,
   and no shipped pattern matches `lifeboat`, `patrolboat` or `ptboat*`; the original reads the same
-  file, so it is authored silent and `PT-100`(a) asked for something the original never does.
-  [`docs/architecture.md`](docs/architecture.md):6593-6595 already records "no `ai.zrd` entry names a
-  patrol boat" and misattributes the silent gun to `BL-523` — correct that line in the same change.
+  file, so it is authored silent and `PT-100`(a) asked for something the original never does. The
+  `docs/architecture.md` line that misattributed the silent gun to `BL-523` no longer exists, so
+  there is nothing left to correct there.
   **"Turrets shoot at player" on CM10 is correct behaviour**, not an inverted team: `bbtur**` authors
   no `TEAM`, takes `TurretDef.DefaultTeamId = 2` (`CSVM/src/Flight/TurretDefs.cs:20`), and minimises
   distance over one running best, so the nearer player is what it locks. **The structure-team decode

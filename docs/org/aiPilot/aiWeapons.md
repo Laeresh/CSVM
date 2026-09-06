@@ -208,6 +208,15 @@ each multiplied by the degrees-to-radians double at `0x006040e8` and stored to v
 `+0x24` (pitch) and `+0x28`, `+0x2c` (yaw). `FUN_00476250` copies the four values onto the gun
 mount's `+0x94`, `+0x98`, `+0x9c`, `+0xa0` at spawn. Nothing else reads them.
 
+**Every vehicle gets that mount, authored limits or not.** `FUN_00476250` first pushes one mount per
+entry in the def's turret list (`def+0x144` to `def+0x148`), then pushes the main gun mount
+unconditionally, locating its firepoint down the model nodes `turret` > `gun` > `firepoint` and
+falling back to the vehicle-forward direction when the model has no `gun` node. A def that authors
+no `gun_pitch` and no `gun_yaw` therefore still has a mount, and since `FUN_004b7670` clamps only an
+axis whose min differs from its max, **that mount is unclamped on both axes and its `+0xa4` residual
+is never spent**. This is the patrol boat's and the turret truck's case: they aim freely, where an
+aeroplane pays for every degree outside its `[-11, 11]`.
+
 `FUN_004b7670` rotates the desired lead direction into the vehicle frame and then, **for each axis
 whose min differs from its max**, decomposes to pitch `atan2(y, sqrt(x^2 + z^2))` and yaw
 `atan2(-x, -z)`, clamps the angle into its band and rebuilds a direction from the clamped pair. That
