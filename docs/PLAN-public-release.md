@@ -107,6 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☐ A clean-machine run of the downloaded zip, above and below the floor
 42. ☐ Release notes, the first tag, the flip, and an announcement draft
+43. ☐ `README.md`: the play path, the status, and the developer split
 
 ## Dependency and parallelism notes
 
@@ -125,6 +126,11 @@ File contention: B11 and B12 both edit `ExportRelease.ps1` and `packaging/MANIFE
 both add or edit files under `packaging/`; D31 and D32 both edit README prose in different files but
 must agree on one wording of the method paragraph. Do not run any of those pairs in parallel
 worktrees.
+
+E43 blocks E42 the way D31 does, by policy: the flip may not happen while the front page misdescribes
+the build a visitor is about to download. It also lands before E41, which "everything landed" already
+implies, because E41's tester starts at the front page. It shares `README.md` with D31 and D32's
+method wording, so it inherits their sentence rather than writing a second one.
 
 ---
 
@@ -824,6 +830,37 @@ delete the test release and its tag.
 correspondence for an already-downloaded binary false. A dirty tree is the same failure in another
 form, which is why the script refuses one.
 
+**Verified.** A full rehearsal ran end to end against the private repository under
+`v0.1.0-rehearsal`, the tag name `-TagSuffix` exists to make available, so that the release
+version's own tag is minted once rather than created, deleted and created again. The export
+produced 198 files; the annotated tag pointed at the built commit and carries the zip's checksum in
+the tag object, so that correspondence survives without the release page; and the release was
+created with the pre-release flag off and draft off, with the API's `releases/latest` returning it.
+The asset was then downloaded from the release page: its SHA-256 matched the published notes, and
+its 198 entries matched `.scratch\export\` with nothing missing on either side and no content
+differing. The exe in the downloaded copy stamps `0.1.0.0`, and its `BUILD-INFO.txt` names the
+tagged commit as clean with `cs-anim` pushed, which is what the notes restate. The release and its
+tag were then deleted, remote and local, leaving the repository with the two archive tags it had
+before.
+
+Every refusal was exercised against real state rather than reasoned about: the dirty tree twice,
+once on this item's own uncommitted work and once after a complete successful export, when another
+session working this tree edited `backlog.md` during the five minutes of the build, which is why
+the post-export message names the paths it found; the tag existing locally; the same tag existing
+on `origin` once the local one was deleted; a notes file stating a checksum of its own; and a notes
+file that is not there. `-DryRun` then ran with a notes file and stopped before the tag having
+created nothing, which is the path E42 uses to read its own notes back before spending the tag.
+
+Two exports of the same commit produce zips with different SHA-256 values, since the archive
+carries timestamps and neither the .NET publish nor the shader bake is byte-reproducible. That is
+what makes computing the checksum inside the publishing run, rather than in advance, a correctness
+requirement instead of a convenience.
+
+The first run also produced `docs/verification.md`'s SHELL-20. `gh release view <tag> 2>$null`
+ended that run, because under `$ErrorActionPreference = 'Stop'` a native command's redirected
+stderr becomes a terminating `NativeCommandError`, and "release not found" is the expected answer
+when the tag has not been published yet.
+
 # Wave E — The flip
 
 ## E41 ☐ A clean-machine run of the downloaded zip, above and below the floor
@@ -843,8 +880,9 @@ package failure, so those runs need a timeout and a check of the log's final `pi
 **Approach.** Rebuild that harness from the pattern, with two changes. The zip arrives with a real
 mark of the web, downloaded through a browser from D34's test release rather than copied through a
 mapped folder. And the rig runs two configurations: the normal one, and C22's `<vGpu>Disable</vGpu>`
-below-floor one. Follow D32's README literally, including C21's double-click path, and record what a
-first-time reader sees at each step. <TODO: the earlier harness lived in a session scratchpad and is
+below-floor one. The run begins where a stranger begins, at E43's front page, and follows its
+download link to the release rather than being handed a URL. Follow D32's README literally from
+there, including C21's double-click path, and record what a first-time reader sees at each step. <TODO: the earlier harness lived in a session scratchpad and is
 gone; it is rebuilt from the described pattern, not recovered.>
 
 **Model recommendation.** medium. Careful execution of a known procedure, where the observations
@@ -853,7 +891,7 @@ matter more than the code.
 **Verify.** From the sandbox output alone: extraction completed, the game launched, a flight ran, the
 log carries the version, and the log and save locations are where the README says. The below-floor
 run produced the behaviour the README predicts. Any step where the tester had to guess is a D32
-defect.
+defect, or an E43 one where the step was on the front page.
 
 **⚠ Traps.** ⚠ Never force-kill the sandbox processes; close the window. Do not read the flight-mode
 exit hang as a package failure. A hand-copied zip does not test the mark-of-the-web path, which is
@@ -890,6 +928,53 @@ one.
 public for an hour can have been cloned and cached, so everything in this plan lands before the
 flip, not after it. A release tag is equally permanent, see D34. Nothing is announced until the
 logged-out read has happened.
+
+## E43 ☐ `README.md`: the play path, the status, and the developer split
+
+**Goal.** The first text a stranger reads describes the build that exists, and someone who only wants
+to play has a way in with no developer instruction between them and the download.
+
+**Evidence (confidence: traced).** `README.md` offers no download path at all: "Getting started"
+opens with `git clone` and asks for Godot 4.7 (.NET) and the .NET 8 SDK, so the heading a visitor's
+eye lands on first is the one that sends a player away. Its Status is two milestones behind the tree,
+naming free flight, timed stunt runs, splitscreen Dogfight and destructible world objects while
+omitting M4's combat AI and its four Instant Action mission types and M5's single-player campaign,
+all of which `PROJECT_CONTEXT.md` records as delivered. `packaging/README.md` already carries the
+whole player path in 147 lines, written by D32 for exactly this reader. The page's countable claims
+are current: 48 format pages behind the 49 tracked `.md` files under `docs/formats/`. Its "Package a
+release build" section describes `ExportRelease.ps1` and predates D34's `PublishRelease.ps1`. No
+image has ever been tracked on any ref, which is the property E42's Evidence rests on.
+
+**Approach.** Five edits to `README.md` and no other file. The opening line takes
+`packaging/README.md`'s wording, so the two front doors speak in one voice and no visitor has to know
+what XWVM is. Status becomes what this build lets a player do: the single-player campaign with its
+briefing and flight-check screens, the four Instant Action mission types, 2 to 4-player splitscreen
+Dogfight, free flight and timed stunt runs, 11 aircraft over 8 animated worlds, against AI that
+patrols, engages and evades, plus the extraction claim, with one honest sentence that it is an early
+build and known issues left to the release page rather than restated. A "Download and play" section
+follows it: the requirements in two lines, including C22's renderer floor, then four numbered steps
+(download from `releases/latest`, unzip, double-click `Extract.cmd` and point it at your retail
+install, run `CSVM.exe`), then a link to `packaging/README.md` as the full version that also ships
+inside the zip. "Getting started" becomes "Building from source", under a one-line signpost that the
+rest of the page is for building the engine rather than playing it. Then the remainder is read once
+as a stranger would and made true, which is where the packaging paragraph gains
+`PublishRelease.ps1`.
+
+**Model recommendation.** high. It is the document that has to be right at the moment nobody can
+help, which is why D32 is high as well, and the failure mode is a page nobody re-read.
+
+**Verify.** Every link resolves, and the four steps agree with `packaging/README.md`, with C21's
+`Extract.cmd` spelling and with C22's floor as observed rather than as assumed. Every capability
+Status names exists in the build. Read cold, the page puts nothing between a visitor and the download
+except the requirements. The `releases/latest` link cannot resolve until E42 creates the release, so
+E42's logged-out read is where that is checked, and that read is also the author's approval of this
+wording, which is the gate rather than a marker in the file.
+
+**⚠ Traps.** ⚠ The front page carries no fact `packaging/README.md` does not. A second player-facing
+instruction set drifting from the first is the failure this item can cause, and `docs/tooling.md`
+already records which facts in that file go stale silently. ⚠ No screenshot. The repository has never
+tracked an image, E42's publishable-history evidence rests on that, and a rendering of the game world
+is the original's art whatever the file is called.
 
 # Appendix: the Known Issues draft, A1's output for E42
 
