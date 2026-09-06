@@ -214,7 +214,7 @@ The day-to-day subset; `docs/cli.md` is the description of record. **[`docs/cli.
 | `--collision[=show]` | build the world's colliders in a mode that builds none (freecam/anim-lab/viewer); `=show` opens the **C** wireframe overlay — but only in freecam/anim-lab, since C in `--viewer` is the mesh lab's cull cycler |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio — a **load-time** switch, so nothing plays *and nothing is counted or logged*; a muted baseline is blind to sound errors |
-| `--volume=N` | master gain 0–1 (default 0 — `RunGame.ps1`/`RunDev.ps1` pass `--volume=1.0` so interactive play sounds). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
+| `--volume=N` | master gain 0–1 (default 0 in a repo run and 1 in an exported build — `RunGame.ps1`/`RunDev.ps1` pass `--volume=1.0` so interactive play sounds). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
 
 the player controls during development are in `docs/controls.md`. **change them if the player input changes**
 
@@ -238,8 +238,8 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1 through 5 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** [`docs/PLAN-public-release.md`](docs/PLAN-public-release.md), the public release, Wave C open, its `C21` next; A1's Known Issues draft is that file's appendix.
-Next: `BL-770`'s silent export rides `C21`; `BL-755` to `BL-769` carry run 13's sortie, Plane Construction first; `BL-746` to `BL-754` carry run 12's, the second pilot's screen first; `BL-714` on a moving hull, `BL-739`; `BL-700` and `BL-702` carry run 10's sortie; `BL-693` and `BL-696` carry what input rebinding left open; `BL-699` carries the wave-spawn hitch; `BL-535`, CM13's race pace, `PT-119`'s two CM14 sorties and the enhanced mode's pass against `PLAN-enhanced-graphics`'s Open judgements are owed at the controls.
+**Active plan:** [`docs/PLAN-public-release.md`](docs/PLAN-public-release.md), the public release, Wave C open, its `C22` next; A1's Known Issues draft is that file's appendix.
+Next: `BL-755` to `BL-769` carry run 13's sortie, Plane Construction first; `BL-746` to `BL-754` carry run 12's, the second pilot's screen first; `BL-714` on a moving hull, `BL-739`; `BL-700` and `BL-702` carry run 10's sortie; `BL-693` and `BL-696` carry what input rebinding left open; `BL-699` carries the wave-spawn hitch; `BL-535`, CM13's race pace, `PT-119`'s two CM14 sorties and the enhanced mode's pass against `PLAN-enhanced-graphics`'s Open judgements are owed at the controls.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.

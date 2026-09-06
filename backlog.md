@@ -1753,25 +1753,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
   (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
-- `BL-770` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **An exported build
-  launched by double-clicking `CSVM.exe` is silent, and nothing on screen says why.**
-  *Evidence (traced, found by `PLAN-public-release` A1):* `Launcher.MasterVolumeDefault` is `0`
-  (`CSVM/src/Session/Launcher.cs:57`) so that a scripted or agent run never sounds by accident, and
-  `ApplyMasterVolume` (`:1568-1585`) resolves the master gain from `--volume=` first, then the
-  `audio.volume` config key, then that default. `RunGame.ps1` and `RunDev.ps1` pass `--volume=1.0`,
-  which is why the silence has never been seen in development, and `ExportRelease.ps1`'s
-  `$ReleaseFiles` carries no `config.json` and no launch wrapper, so a recipient following
-  `packaging/README.md`'s "double-click `CSVM.exe`" gets a full session with no sound at all.
-  `Config.Load` reads `res://config.json` through `File.Exists` on the globalized path, so a file
-  packed into the `.pck` would not answer either. *Fix shape:* one switch on the same seam that
-  tells an exported run from a repo run, so the export defaults to audible while a repo run keeps
-  its silent default; the flag and the config key still beat it. *⚠ Traps:* do not raise
-  `MasterVolumeDefault` itself, which is what keeps agent and golden runs quiet, and do not ship a
-  `config.json` as the fix, since it is git-ignored and would make the payload depend on an
-  untracked file. *Playtest after fix:* run the exported build from a bare folder with no
-  arguments and listen. *Cross-refs:* `BL-455` (there is no in-game level control either),
-  `BL-391`; `PLAN-public-release` C21, which owns the first run on someone else's machine.
-
 ## Cameras & views
 
 - `BL-150` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **plan-sized — not a TUNE. Numpad camera views — the whole scheme needs a rebuild, not a
