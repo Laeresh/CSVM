@@ -869,58 +869,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-667`'s closing record in `PLAN-M5-polish-10` `A2`, `BL-517` and
   `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
 
-- `BL-687` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A `mode ship` vehicle takes no gun at all, so a patrol boat never fires the
-  weapon its own def authors.** *Evidence (traced):* reported at the controls on three missions in
-  one sortie: CM08 "the guns are not firing at me" (`PT-87`), CM12 "boats dont fire" (`PT-101`), and
-  CM10 "patrol boats and lifeboats dont shoot and dont track" (`PT-100`), whose A/B is
-  `OriginalScreenshots/Videos/CM10.mkv` showing the boats firing on the hospital ship shortly after
-  the start. A `mode ship` roster block or generator launch becomes a `SurfaceVehicle`: a hull on a
-  `PathFollower` with a destructible pool and nothing else — no `FlightController`, no `AiPilot`, no
-  `AiGunner`, no weapon. The roster loop takes the surface branch and `continue`s
-  (`CSVM/src/Session/CampaignDirector.cs:443-447`) before the `AiPilot` every aircraft block reaches
-  at `:449`; `AiGeneratorRuntime` returns straight after `vessel.Launch` (`:408-419`);
-  `SurfaceVehicle.Step` is the injure ladder and the follower alone
-  (`CSVM/src/Session/SurfaceVehicle.cs:147-167`). The only production callers of
-  `ProjectilePool.Spawn` are `FlightController`, `TurretController`, `ZeppelinRuntime.Cannons` and
-  `IncomingFire`, and a hull reaches none of them. So there is no gun object, no target selection and
-  no fire decision for a hull — this is not a mode the AI machine fails to set. `vehicle.zrd`'s
-  `patrolboat` authors `weapons [wep_29, 9000, 0.3, 1.0, 500.0]` with `activation 2500`,
-  `attack_dwell 60` and `not_pursuit_dwell 5`, and the original runs them: the world tick walks every
-  awake vehicle into `FUN_0041c270`, all three behaviours call the fire decision `FUN_0041f420`
-  themselves, and the target scorer is selected on the vehicle's own `mode` word — `FUN_00421950`
-  for everything that is not `jet` or `wingman` ([`docs/org/aiPilot.md`](docs/org/aiPilot.md):68-87,
-  :119-124).
-  *Decoded, and the `t_truck` question is settled:* `FUN_0041c270` has a branch for `mode` 3
-  (`ship`), 5 (`plane`) and 1 (`heli`) that never promotes to pursue and instead runs the per-mount
-  lead solver `FUN_0041afe0` and, on a solution, calls the fire decision `FUN_0041f420(1, 1)` itself
-  (`0x0041c348`), so a boat shoots while flying its net. Its list is the def's own `weapons` block
-  through `FUN_004b59b0`, and `FUN_00476250` gives every vehicle a gun mount, unclamped on both axes
-  for a def authoring no `gun_pitch`/`gun_yaw`. The truck's `ai.zrd` emplacement is a second gun on
-  top of that same vehicle gun, so a boat with no `ai.zrd` entry is not authored silent. The dwell
-  fields are pursuit timers (`attack_dwell` to `+0x304`, `not_pursuit_dwell` to `+0x308`) and are
-  inert on a hull; the target hold is a hardcoded 20 s in `FUN_004b0f20`.
-  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) ("What a `mode ship` vehicle runs") and
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) carry the full reading.
-  *Fix shape:* give a `mode ship` hull the target selection (the non-`jet` scorer `FUN_00421950`),
-  the 20 s hold, the aim solve against its one free-aiming mount, and the fire decision reading the
-  `weapons` tuple. No pursuit and no dwell handling. Invent no rate and no range.
-  *⚠ Traps:* **The lifeboat's gun is not this item and not a defect.**
-  `lifesaverNM > lifesaver > lifeboat > healthy > turret > gun > firepoint` is a complete rig, but
-  `TurretController.BuildEmplacements` instantiates only what an `ai.zrd` `NODES` pattern matches,
-  and no shipped pattern matches `lifeboat`, `patrolboat` or `ptboat*`; the original reads the same
-  file, so it is authored silent and `PT-100`(a) asked for something the original never does. The
-  `docs/architecture.md` line that misattributed the silent gun to `BL-523` no longer exists, so
-  there is nothing left to correct there.
-  **"Turrets shoot at player" on CM10 is correct behaviour**, not an inverted team: `bbtur**` authors
-  no `TEAM`, takes `TurretDef.DefaultTeamId = 2` (`CSVM/src/Flight/TurretDefs.cs:20`), and minimises
-  distance over one running best, so the nearer player is what it locks. **The structure-team decode
-  is not refuted** — the hospital ship and the Goose's engines both carry `field040 = 0x90155555` on
-  the player's side, the scan reaches them and `AimAssist.Hostile` excludes a player-team gun. And
-  **`PT-101`(a)/(b) is unflyable as written**: C2's gamez carries no `aagun`, `maagun`, `thug`,
-  `bbtur` or `b_turret` node, so no turret exists near the Goose to slew.
-  *Cross-refs:* `BL-523` (the AI mode machine, which this is not), `BL-626`, `BL-664`, `BL-598`,
-  `BL-637`, `PT-87`, `PT-100`, `PT-101`.
-
 - `BL-714` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A zeppelin's own turrets fire
   through its own hull.** *Evidence:* reported at the controls, in flight along the far flank of a
   pirate zeppelin in an Instant Action Dogfight: a ring on the far side fires at the player through
@@ -1762,25 +1710,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
   (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
-- `BL-770` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **An exported build
-  launched by double-clicking `CSVM.exe` is silent, and nothing on screen says why.**
-  *Evidence (traced, found by `PLAN-public-release` A1):* `Launcher.MasterVolumeDefault` is `0`
-  (`CSVM/src/Session/Launcher.cs:57`) so that a scripted or agent run never sounds by accident, and
-  `ApplyMasterVolume` (`:1568-1585`) resolves the master gain from `--volume=` first, then the
-  `audio.volume` config key, then that default. `RunGame.ps1` and `RunDev.ps1` pass `--volume=1.0`,
-  which is why the silence has never been seen in development, and `ExportRelease.ps1`'s
-  `$ReleaseFiles` carries no `config.json` and no launch wrapper, so a recipient following
-  `packaging/README.md`'s "double-click `CSVM.exe`" gets a full session with no sound at all.
-  `Config.Load` reads `res://config.json` through `File.Exists` on the globalized path, so a file
-  packed into the `.pck` would not answer either. *Fix shape:* one switch on the same seam that
-  tells an exported run from a repo run, so the export defaults to audible while a repo run keeps
-  its silent default; the flag and the config key still beat it. *⚠ Traps:* do not raise
-  `MasterVolumeDefault` itself, which is what keeps agent and golden runs quiet, and do not ship a
-  `config.json` as the fix, since it is git-ignored and would make the payload depend on an
-  untracked file. *Playtest after fix:* run the exported build from a bare folder with no
-  arguments and listen. *Cross-refs:* `BL-455` (there is no in-game level control either),
-  `BL-391`; `PLAN-public-release` C21, which owns the first run on someone else's machine.
-
 ## Cameras & views
 
 - `BL-150` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **plan-sized — not a TUNE. Numpad camera views — the whole scheme needs a rebuild, not a
@@ -2347,7 +2276,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   same message key themselves, which is a legitimate use of the per-block field and not a licence to
   read the def. So do not "fall back to the class". The same page warns a fourth author is unfound
   rather than ruled out.
-  *Cross-refs:* `BL-687` (the same boats, their guns), `BL-626`.
+  *Cross-refs:* the same boats' own guns, which they now fire (`git log --grep=BL-687`); `BL-626`.
 
 - `BL-706` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The PLANE NAME dialog
   sits off-centre because its pane is drawn at a raw 0,0 and its rows are drawn as though their
@@ -3344,35 +3273,35 @@ usual.
   older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
-- `BL-742` `[Testing]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty stage
-  cannot host a zeppelin, and `--ai=` cannot put its planes on a side, so an AI-versus-zeppelin
-  question takes a full campaign flight per iteration.** *Evidence:* the AI-attacks-zeppelin-parts
-  work (`git log --grep=BL-740`) took four user flights of C4/M03 and three log reads to find that
-  the Pandora's gasbag pools reached the AI as nobody's, and the rocketeer's own gates were still
-  unread after the last one. `--stage=empty`
-  builds no chapter gamez, and a zeppelin is a chapter world node (`rock_zeppelin` under the
-  mission's gamez) that `ZeppelinRuntime` resolves by name, so no hull exists to wire. `AiSpawn`
-  already carries a `Team` (`CSVM/src/Session/FlightRoster.cs:25`), but the `--ai=` parser
-  (`SessionSpec.cs`, `GameSession.cs:2391-2449`) offers no token for it, so every CLI plane lands
-  on one side. *Fix shape:* a `team=<id>` token on `--ai=` entries; a `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x,y,z]` flag for the empty stage that slices the record's hull subtree
-  out of that chapter's gamez the way the `--node=` inspection stage slices one, registers its
-  destructibles, and hands the borrowed record with the team override to `ZeppelinRuntime`, so
-  gasbags, engines and cannons wire as in a mission; a built-in net on the stage, a circular ring
-  of nodes above the grid origin at patrol altitude, that `--ai=<plane>:<net>` and `--zep=` can
-  name the way a chapter's `neindex` net is named (the `AiNet` shape is just nodes and edges, so a
-  synthetic one needs no file), so net patrol, the net's own volumes and the netted-versus-netless
-  fork of `AiPilot` are testable there too; then one in-engine suite that spawns a torpedo-armed
-  Warhawk against a hostile zeppelin on the stage and asserts an acquisition and a launch. *⚠
-  Traps:* a record's team fans onto every zone, so the override must go through
-  `AuthoredTeam`'s path rather than a stamp on the pools, or the rule that gives a zone the team
-  its flagged `panels` child carries is bypassed; the stage has no `AnimProgram`, so the gasbag
-  destroy anims resolve to nothing and the
-  pools register without choreography, which is fine for a targeting probe and wrong for a damage
-  one. *Playtest after fix:*
-  `.\RunGame.ps1 --stage=empty --zep=C4/M03:piratezep:team=1 --ai=player_warhawk:ring:def=bhatwarhawk:team=2 --ai-attack --frames=3600 --det`
-  and read the `ai gunner`/`ai rocketeer` lines; without `:ring` the same planes fly netless.
-  *Cross-refs:* `BL-741` (the cargozep case wants the same rig with a mission structure instead of
-  a record); the `warhawk-torpedo-run` suite is the held-world version of what this makes flyable.
+- `BL-772` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty-stage
+  rig has no patrol net, and a `--ai=` plane never takes a net's volumes, so patrol and the
+  netted-versus-netless fork of `AiPilot` cannot be watched there.** *Evidence:* `AiNet` requires
+  only `Id`, `Name`, `Nodes` and `Edges` (`AiNets.cs:250-261`) and leaves `Volumes` a plain `init`
+  property, so a synthetic net needs no file, but the `--ai=` net lookup reads the chapter's
+  `neindex` (`GameSession.cs:2413`), which an empty stage does not have. Separately,
+  `ApplyVolumes` is called only from `CampaignDirector` (`CampaignDirector.cs:380`), so a CLI
+  plane runs on `AiModeMachine`'s decoded defaults (2000/1200, `AiModeMachine.cs:141`) whatever
+  net it is given. *Fix shape:* a built-in circular net above the grid origin at patrol altitude
+  that `--ai=<plane>:<net>` and `--zep=` can name the way a chapter's `neindex` net is named, and
+  the net's volumes applied to the CLI spawn through `CampaignRosterPlan.ApplyVolumes`. *⚠ Traps:*
+  applying volumes on the `--ai=` path changes behaviour for existing command lines that name a
+  chapter net, which today take the machine defaults instead; that is the fix rather than a side
+  effect, but it is a behaviour change to announce rather than slip in. *Cross-refs:* the
+  empty-stage rig this extends, which shipped deliberately without a net and whose `--ai=` squadron
+  tokens and `--zep=` graft are documented in `docs/cli.md` (`git log --grep=BL-742`).
+
+- `BL-773` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`--perf` has no
+  term that attributes frame cost to the AI step, so a plane-count sweep can only be read as a
+  whole-frame differential.** *Evidence:* `FlightController` steps in `_Process`
+  (`FlightController.cs:1844`), so AI cost lands in script time; `script_ms` is `_perfProcess / n`
+  (`Launcher.cs:1721`), one of the two Godot `TIME_*` monitors `BL-617` establishes hold the worst
+  step of the last wall second rather than a mean; and `phys_tick_ms` brackets the physics tick
+  (`PhysicsTickCost.cs`), which the AI never enters. The honest terms left on the window line are
+  `p95_ms` and `max_ms` (`Launcher.cs:1735-1739`), both whole-frame. *Fix shape:* bracket the
+  roster's per-frame AI walk the way `PhysicsTickCost` brackets the physics tick, and report an
+  `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `BL-617` (the same misreading, on `script_ms`); the
+  empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
+  term worth having (`docs/cli.md`, `git log --grep=BL-742`).
 
 ## Misc
 

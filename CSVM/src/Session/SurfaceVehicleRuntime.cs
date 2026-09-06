@@ -26,6 +26,11 @@ public sealed partial class SurfaceVehicleRuntime : Node
     private const int WaterProbeHits = 4;
     private const float WaterProbeStep = 0.05f;
 
+    // The acquisition radius a def authoring no `activation` falls back to, metres. Both shipped
+    // surface defs author 2500, so nothing reaches this today; it is the same floor the aircraft
+    // path takes when a mission supplies no min_ai_active_dist.
+    private const float DefaultActivationM = 2000f;
+
     private readonly GameZ _gamez;
     private readonly SceneBuilder _scene;
     private readonly AnimRuntime _runtime;
@@ -48,6 +53,14 @@ public sealed partial class SurfaceVehicleRuntime : Node
 
     /// <summary>Every hull built so far, roster and generator launches alike.</summary>
     public IReadOnlyList<SurfaceVehicle> Vessels => _vessels;
+
+    /// <summary>The pool a hull's gun scans and fires through. Null in a build with no weapons
+    /// (the suite labs, a bare stage), which leaves every hull unarmed rather than half-built.</summary>
+    public ProjectilePool? Projectiles { get; set; }
+
+    /// <summary>The weapon catalogue a hull's authored <c>weapons</c> id resolves against; null
+    /// with the same effect as <see cref="Projectiles"/>.</summary>
+    public WeaponDefs? Weapons { get; set; }
 
     /// <summary>The hull a mission clause names, or null.</summary>
     public SurfaceVehicle? ByName(string name) =>
@@ -94,11 +107,17 @@ public sealed partial class SurfaceVehicleRuntime : Node
         }
         var vessel = new SurfaceVehicle(name, plan, body, _runtime, pool,
             _defs.StartAnimsOf(plan.Def), _defs.InjureAnimsOf(plan.Def), waterY, heading);
+        // The hull's own gun, from the def's own weapons block: the engine's weapon builder runs
+        // for every vehicle it parses, so a boat is armed by the same path an aeroplane is
+        // (docs/org/aiPilot.md "What a mode ship vehicle runs").
+        vessel.Gunner = SurfaceGunner.Build(vessel, Projectiles, Weapons,
+            _defs.WeaponsOf(plan.Def), _defs.ActivationOf(plan.Def) ?? DefaultActivationM);
         _vessels.Add(vessel);
         _byName[name] = vessel;
         GD.Print($"surface: '{name}' ({plan.Def}, {plan.Mode}) built at ({position.X:0},{waterY:0.##},{position.Z:0}){waterNote}" +
                  $" team={plan.Team?.ToString() ?? "-"} group={plan.Group}" +
                  (pool != null ? $" pool '{pool.Def.Name}' HP {pool.MaxHealth:0}" : " no destructible pool") +
+                 (vessel.Gunner != null ? $" armed {vessel.Gunner.Ammo} rounds" : " unarmed") +
                  (plan.Inert ? " DEACTIVATED" : ""));
         return vessel;
     }

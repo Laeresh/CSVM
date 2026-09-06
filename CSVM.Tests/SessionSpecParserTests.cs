@@ -161,27 +161,82 @@ public class SessionSpecParserTests
     }
 
     /// <summary>The B5/E16 grammar: `--ai=plane[:net][:accent=id][:def=name],…` splits into
-    /// (plane, net, accent, def) entries, a bare name has a null net, accent and def, an empty net
-    /// after the colon reads as none, and the keyed segments bind wherever they appear.</summary>
+    /// entries, a bare name has a null net, accent and def, an empty net after the colon reads as
+    /// none, and the keyed segments bind wherever they appear.</summary>
     [Fact]
     public void AiEntriesCarryTheirOptionalNetReference()
     {
         var s = SessionSpec.Parse(new[] { "--ai=player_fury:M4ReinfAce,player_bhawk,ebrigand:10,edevast:" });
         Assert.Equal(4, s.AiPlanes!.Count);
-        Assert.Equal(("player_fury", "M4ReinfAce", null, null), s.AiPlanes[0]);
-        Assert.Equal(("player_bhawk", null, null, null), s.AiPlanes[1]);
-        Assert.Equal(("ebrigand", "10", null, null), s.AiPlanes[2]);
-        Assert.Equal(("edevast", null, null, null), s.AiPlanes[3]);
+        Assert.Equal(new AiPlaneEntry("player_fury", "M4ReinfAce"), s.AiPlanes[0]);
+        Assert.Equal(new AiPlaneEntry("player_bhawk"), s.AiPlanes[1]);
+        Assert.Equal(new AiPlaneEntry("ebrigand", "10"), s.AiPlanes[2]);
+        Assert.Equal(new AiPlaneEntry("edevast"), s.AiPlanes[3]);
 
         var a = SessionSpec.Parse(new[] { "--ai=player_fury:M4ReinfAce:accent=12,ebrigand:accent=14,edevast:accent=12:7" });
-        Assert.Equal(("player_fury", "M4ReinfAce", 12, null), a.AiPlanes![0]);
-        Assert.Equal(("ebrigand", null, 14, null), a.AiPlanes[1]);
-        Assert.Equal(("edevast", "7", 12, null), a.AiPlanes[2]);
+        Assert.Equal(new AiPlaneEntry("player_fury", "M4ReinfAce", 12), a.AiPlanes![0]);
+        Assert.Equal(new AiPlaneEntry("ebrigand", null, 14), a.AiPlanes[1]);
+        Assert.Equal(new AiPlaneEntry("edevast", "7", 12), a.AiPlanes[2]);
 
         // The militia variant an AI flies: its own weapons, paint and skills come off that def.
         var d = SessionSpec.Parse(new[] { "--ai=player_warhawk:def=bhatwarhawk:accent=12,player_fury:def=secfury" });
-        Assert.Equal(("player_warhawk", null, 12, "bhatwarhawk"), d.AiPlanes![0]);
-        Assert.Equal(("player_fury", null, null, "secfury"), d.AiPlanes[1]);
+        Assert.Equal(new AiPlaneEntry("player_warhawk", null, 12, "bhatwarhawk"), d.AiPlanes![0]);
+        Assert.Equal(new AiPlaneEntry("player_fury", null, null, "secfury"), d.AiPlanes[1]);
+    }
+
+    /// <summary>BL-742's squadron tokens: `n=` counts an entry's planes, `team=` puts two entries
+    /// on one side (without it every CLI plane takes its own banded id and fights the rest), and
+    /// `pos=` is slash-separated because the entry list has already spent the comma. An absent
+    /// token leaves the count at one and the team and position unset.</summary>
+    [Fact]
+    public void AiEntriesCarryTheirSquadronCountTeamAndPosition()
+    {
+        var s = SessionSpec.Parse(new[]
+        {
+            "--ai=player_warhawk:n=4:team=2:def=bhatwarhawk,player_fury:n=4:team=3",
+        });
+        Assert.Equal(new AiPlaneEntry("player_warhawk", null, null, "bhatwarhawk", 2, 4), s.AiPlanes![0]);
+        Assert.Equal(new AiPlaneEntry("player_fury", Team: 3, Count: 4), s.AiPlanes[1]);
+
+        var p = SessionSpec.Parse(new[] { "--ai=player_fury:pos=10/300/-20,player_bhawk" });
+        Assert.Equal(new Vector3(10f, 300f, -20f), p.AiPlanes![0].Pos);
+        Assert.Null(p.AiPlanes[1].Pos);
+        Assert.Equal(1, p.AiPlanes[1].Count);
+        Assert.Null(p.AiPlanes[1].Team);
+
+        // A count below one would spawn nothing from an entry that names a plane.
+        Assert.Equal(1, SessionSpec.Parse(new[] { "--ai=player_fury:n=0" }).AiPlanes![0].Count);
+    }
+
+    /// <summary>BL-742's zeppelin graft: `--zep=chapter/mission:record` takes the chapter and
+    /// mission with it, since the record's gamez, textures, nets and zeppelins.zrd are all read
+    /// off those. It is the empty stage's flag alone, and a value that is not
+    /// chapter/mission:record is refused with a note rather than half-applied.</summary>
+    [Fact]
+    public void ZepGraftTakesItsChapterAndMissionWithIt()
+    {
+        var s = SessionSpec.Parse(new[] { "--stage=empty", "--fly", "--zep=C4/M03:piratezep:team=1" });
+        Assert.NotNull(s.Zep);
+        Assert.Equal(new ZepStageSpec("C4", "M03", "piratezep", 1), s.Zep!.Value);
+        Assert.Equal("C4", s.Chapter);
+        Assert.Equal("M03", s.Mission);
+
+        var p = SessionSpec.Parse(new[]
+        {
+            "--stage=empty", "--fly", "--zep=C2/M01:hk_zep:pos=100/700/-50",
+        });
+        Assert.Equal(new Vector3(100f, 700f, -50f), p.Zep!.Value.Pos);
+        Assert.Null(p.Zep!.Value.Team);
+
+        // A chapter world places its own airships; grafting one on again would be two hulls under
+        // one node name, so the flag is dropped rather than obeyed.
+        var w = SessionSpec.Parse(new[] { "--fly", "--chapter=C4", "--zep=C4/M03:piratezep" });
+        Assert.Null(w.Zep);
+
+        foreach (string bad in new[] { "--zep=C4:piratezep", "--zep=C4/M03", "--zep=C4/M03:" })
+        {
+            Assert.Null(SessionSpec.Parse(new[] { "--stage=empty", "--fly", bad }).Zep);
+        }
     }
 
     /// <summary>The D14 gunnery arm: bare `--ai-attack` reads skill 5, a value clamps to the

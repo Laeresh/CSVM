@@ -1184,9 +1184,11 @@ internal static class CampaignRosterSuites
                 IsPlayer = rig.IsHumanPiloted,
                 ObjectiveBias = 0f,
             };
-            float plainRank = AiTargetRanking.Score(origin, fwd, ScanRangeM, candidate).Rank;
+            float plainRank = AiTargetRanking.Score(origin, fwd, ScanRangeM, AiScorer.Jet,
+                candidate).Rank;
             candidate.ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(key, biases);
-            float biasedRank = AiTargetRanking.Score(origin, fwd, ScanRangeM, candidate).Rank;
+            float biasedRank = AiTargetRanking.Score(origin, fwd, ScanRangeM, AiScorer.Jet,
+                candidate).Rank;
             report.AppendLine($"  {rig.Name} as '{key}' at {ring:0} m: rank {plainRank:0.#} -> "
                               + $"{biasedRank:0.#} (bias term {candidate.ObjectiveBias:0.#})");
         }

@@ -3161,7 +3161,10 @@ public partial class FlightController : Node3D
 
     // The breadcrumb label for a standing target: "P{n}" for a human-readable aircraft slot, the
     // node/label name (TargetPool.NameOf) for a turret or structure.
-    private static string TargetLabel(object? source) =>
+    // How a target is named in a log line and in the F15 overlay's roll-call. Internal so the
+    // overlay reuses it: a second naming rule there would drift from what the flight log says,
+    // and the two get read side by side when a run is being explained.
+    internal static string TargetLabel(object? source) =>
         source is FlightController fc ? $"P{fc.PlayerIndex + 1}" : TargetPool.NameOf(source);
 
     // The gunner's one standing target of any class, which AiPilot reads as its pursuit quarry.
@@ -3414,12 +3417,17 @@ public partial class FlightController : Node3D
             // Log the assigned pick with its own rank inputs (informational — rank not consulted).
             int idx = _rankSources.IndexOf(primary);
             if (idx >= 0)
-                score = AiTargetRanking.Score(ownPos, ownFwd, activation, _rankCandidates[idx]);
+                score = AiTargetRanking.Score(ownPos, ownFwd, activation, AiScorer.Jet,
+                    _rankCandidates[idx]);
             how = byRole ? "primary target: nearest human" : "primary target";
             return primary;
         }
 
-        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, _rankCandidates, out score);
+        // ⚠ Jet is asserted, not derived: the engine picks the scorer off the SHOOTER's own mode,
+        // so a mode plane or heli aeroplane should take Other. Deriving it here would change what
+        // those aircraft target, which is a behaviour claim wanting its own evidence.
+        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, AiScorer.Jet,
+            _rankCandidates, out score);
         return best >= 0 ? _rankSources[best] : null;
     }
 

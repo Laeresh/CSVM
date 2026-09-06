@@ -36,6 +36,10 @@ public partial class GameSession : Node3D
     // How many near-miss names a failed --node= lookup offers: a usable hint, not a census.
     private const int NodeSuggestCap = 20;
 
+    // The empty stage's squadron ring, metres. Two opposed sides therefore start 2000 m apart,
+    // AiModeMachine's decoded attack range, so an --ai= sortie engages without a dead approach.
+    private const float SquadronRingRadiusM = 1000f;
+
     // Smallest orbit radius a synthesized pivot may sit at, so an aim ray passing behind the
     // subject still leaves something to orbit rather than spinning about the eye.
     private const float MinOrbitRadius = 1f;
@@ -447,8 +451,12 @@ public partial class GameSession : Node3D
             DebugCollision = _spec.DebugCollision,
         };
         state.TexturesPath = _spec.Textures ?? SessionPaths.ChapterTextures(_dataRoot, _spec.Chapter);
+        // --zep= grafts one chapter node onto the empty stage, so it needs that chapter's gamez
+        // where the bare stage needs only planes.zbd. Chapter is already the flag's own by here.
         state.GamezPath = _spec.Gamez
-            ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
+            ?? (_spec.WorldMode || _spec.Zep != null
+                ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter)
+                : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
 
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
@@ -519,7 +527,16 @@ public partial class GameSession : Node3D
             using var soundsScope = _spec.AnimLab ? null : state.Sounds;
             if (!ResolveNodeSubtree(state))
                 return false;
-            if (_spec.EmptyStage)
+            if (_spec.EmptyStage && _spec.Zep != null)
+            {
+                // The graft goes through the chapter-world path with NodeSubtree set: one subtree,
+                // no MissionSetup and no clutter, but a real AnimRuntime, so the damage, targeting
+                // and sub-part feeds bind to the airship as they do to a mission's own.
+                if (!BuildWorldStage(state))
+                    return false;
+                AttachEmptyStageGrid(state);
+            }
+            else if (_spec.EmptyStage)
             {
                 BuildEmptyStage(state);
             }
@@ -795,6 +812,75 @@ public partial class GameSession : Node3D
         }
     }
 
+    // One placement slot per side on a ring about the grid origin, each squadron facing the centre.
+    // Two sides therefore start 2 * SquadronRingRadiusM apart, which is AiModeMachine's decoded
+    // engagement gate, so they are in contact from the first frames. A teamless entry is its own
+    // side: a spawn naming no team= takes its own banded id (AimAssist.TeamOfPilot) regardless.
+    // ⚠ Slot order is first appearance on the command line, not team id, so adding an entry does
+    // not renumber the sides already there.
+    private static List<(Vector3 Anchor, Vector3 Facing)> SquadronAnchors(IReadOnlyList<AiPlaneEntry> entries)
+    {
+        var slotOf = new Dictionary<int, int>();
+        var keys = new int[entries.Count];
+        for (int i = 0; i < entries.Count; i++)
+        {
+            keys[i] = entries[i].Team ?? int.MinValue + i;
+            if (!slotOf.ContainsKey(keys[i]))
+                slotOf[keys[i]] = slotOf.Count;
+        }
+        var anchors = new List<(Vector3, Vector3)>(entries.Count);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            float angle = Mathf.Tau * slotOf[keys[i]] / slotOf.Count;
+            var anchor = new Vector3(Mathf.Sin(angle) * SquadronRingRadiusM,
+                EmptyStage.SpawnAltitude, -Mathf.Cos(angle) * SquadronRingRadiusM);
+            if (entries[i].Pos is { } over)
+                anchor = over;
+            var toCentre = new Vector3(-anchor.X, 0f, -anchor.Z);
+            anchors.Add((anchor, toCentre.LengthSquared() > 0.001f
+                ? toCentre.Normalized() : Vector3.Forward));
+        }
+        return anchors;
+    }
+
+    // --zep=: the named record alone, on a one-node net at the stage seat. The net is synthetic
+    // rather than the chapter's because a chapter net would fly the hull off to its own authored
+    // coordinates, thousands of metres from the squadron ring. ⚠ It must have a net at all: a def
+    // whose net does not resolve is placed but held OUT of the live list, so its zones never wire
+    // and nothing on it can be shot. The seat defaults to the grid origin at the record's own
+    // altitude, which is what puts it inside the ring rather than at its mission coordinates.
+    private static (List<ZeppelinDef> Defs, IReadOnlyList<AiNet> Nets, Vector3? Seat) GraftedZeppelin(
+        IReadOnlyList<ZeppelinDef> all, ZepStageSpec graft)
+    {
+        var only = new List<ZeppelinDef>();
+        foreach (var def in all)
+        {
+            if (def.Node.Equals(graft.Record, StringComparison.OrdinalIgnoreCase))
+                only.Add(def);
+        }
+        if (only.Count == 0)
+        {
+            GD.Print($"zep: '{graft.Record}' has no record in {graft.Chapter}/{graft.Mission}'s " +
+                     $"zeppelins.zrd.json — the hull is built but nothing is wired to it");
+            return (only, System.Array.Empty<AiNet>(), null);
+        }
+        var seat = graft.Pos ?? new Vector3(0f, only[0].Position.Y, 0f);
+        var nets = new List<AiNet>
+        {
+            new AiNet
+            {
+                Id = 0,
+                Name = only[0].Net,
+                Nodes = new[] { new AiNetNode(seat, System.Array.Empty<float>()) },
+                Edges = System.Array.Empty<(int A, int B)>(),
+            },
+        };
+        GD.Print($"zep: graft '{graft.Record}' from {graft.Chapter}/{graft.Mission} seated at " +
+                 $"({seat.X:0},{seat.Y:0},{seat.Z:0}), " +
+                 (graft.Team is { } t ? $"team {t}" : "team as the record authors it"));
+        return (only, nets, seat);
+    }
+
     // A campaign mission has ended and its result is banked (the director records the attempt and
     // saves the profile before raising this). The world stays up for the rest of the frame; the
     // Launcher frees this session and shows the menu at the debrief, which re-reads the profile
@@ -906,6 +992,28 @@ public partial class GameSession : Node3D
     // sanitized and auto-renamed; duplicates are normal, so the first match builds.
     private bool ResolveNodeSubtree(BuildState state)
     {
+        // --zep= is the same subtree build under another name: the record's hull instead of a node
+        // the user named, so the graft borrows this resolution rather than repeating it.
+        if (_spec.Zep is { } zep)
+        {
+            var zepMatches = WorldBuilder.MatchNodes(state.Gamez, zep.Record);
+            if (zepMatches.Count == 0)
+            {
+                var zepNear = WorldBuilder.SuggestNodes(state.Gamez, zep.Record, NodeSuggestCap);
+                Log.Warn("world", $"--zep: '{zep.Record}' matches no node in {zep.Chapter}'s gamez ({state.Gamez.Nodes.Count} nodes)");
+                if (zepNear.Count > 0)
+                {
+                    Log.Warn("world", $"--zep= candidates containing '{zep.Record}': {string.Join(", ", zepNear)}");
+                }
+                _sessionTextures?.Dispose();
+                _sessionTextures = null;
+                GetTree().Quit();
+                return false;
+            }
+            state.NodeSubtree = zepMatches[0];
+            Log.Info("world", $"--zep='{zep.Chapter}/{zep.Mission}:{zep.Record}' grafting '{zepMatches[0].Name}'#{zepMatches[0].Index} onto the empty stage");
+            return true;
+        }
         if (_spec.NodeName == null || !_spec.WorldMode)
             return true;
         var matches = WorldBuilder.MatchNodes(state.Gamez, _spec.NodeName);
@@ -951,6 +1059,20 @@ public partial class GameSession : Node3D
         state.MeshInstances = stage.MeshInstanceCount;
         state.Colliders = stage.ColliderCount;
         state.What = "empty stage";
+    }
+
+    // --zep=: the graft's ground. The same grid and collidable plane the bare stage builds, added
+    // beside the subtree rather than as the subject, since on this path _plane is the airship and
+    // AttachPlaneAndLabs joins that one.
+    private void AttachEmptyStageGrid(BuildState state)
+    {
+        long mark = StartupProfile.Mark();
+        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision);
+        StartupProfile.Record("world", mark);
+        _worldRoot!.AddChild(stage.Root);
+        state.MeshInstances += stage.MeshInstanceCount;
+        state.Colliders += stage.ColliderCount;
+        state.What += " on the empty stage";
     }
 
     // Builds the chapter world through WorldSession and binds its animation program, then the
@@ -1812,9 +1934,12 @@ public partial class GameSession : Node3D
     private void BuildFlightRigs(BuildState state)
     {
         long mark = StartupProfile.Mark();
-        // On the empty stage the session gamez IS planes.zbd (there is no chapter world),
-        // so there is nothing to load a second time.
-        var planesGamez = _spec.EmptyStage ? state.Gamez : GameZ.Load(state.PlanesGamezPath);
+        // On the empty stage the session gamez IS planes.zbd (there is no chapter world), so there
+        // is nothing to load a second time. ⚠ Unless --zep= grafted a chapter node on: the session
+        // gamez is then that chapter's, and planes.zbd has to be loaded here as everywhere else.
+        var planesGamez = _spec.EmptyStage && _spec.Zep == null
+            ? state.Gamez
+            : GameZ.Load(state.PlanesGamezPath);
         StartupProfile.Record("gamez", mark);
         // Stats are per plane, not per player (splitscreen players can pick
         // different aircraft) — load each distinct one once, logging it as it appears.
@@ -2057,6 +2182,14 @@ public partial class GameSession : Node3D
         // The same reasoning for the third pool: a gun standing beside a hostile mission structure
         // has nothing else to see it through.
         projectiles.Structures = state.WorldRuntime?.Destructibles;
+        if (surfaceVehicleRuntime != null)
+        {
+            // The other direction: a hull's own gun scans through the pool and fires through it,
+            // and resolves the weapon id its def authors against the same catalogue everything
+            // else uses. Without both, hulls build unarmed (docs/org/aiPilot.md).
+            surfaceVehicleRuntime.Projectiles = projectiles;
+            surfaceVehicleRuntime.Weapons = weaponDefs;
+        }
         var worldBindings = new FlightWorldBindings
         {
             Ambience = _ambience,
@@ -2391,19 +2524,25 @@ public partial class GameSession : Node3D
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
-            // Without a net: ahead of P1 on its own spawn heading, fanned right/left, holding
-            // that course. With one: on the net's first node, patrolling the graph.
+            // Without a net: ahead of P1 on its own spawn heading, fanned right/left, holding that
+            // course. With one: on the net's first node, patrolling the graph. ⚠ The empty stage
+            // anchors each side to the grid origin instead, so a count sweep repeats one geometry.
             var basis = lead.GlobalTransform.Basis;
             var fwd = -basis.Z;
             var right = basis.X;
+            var anchors = _spec.EmptyStage ? SquadronAnchors(aiPlanes) : null;
             List<AiNet>? nets = null;
             bool netsTried = false;
+            int fanIndex = 0;
+            int spawnedTotal = 0;
             for (int i = 0; i < aiPlanes.Count; i++)
             {
-                var (planeName, netRef, accentId, aiDef) = aiPlanes[i];
-                float lateral = 60f * ((i + 1) / 2) * (i % 2 == 0 ? 1f : -1f);
+                var entry = aiPlanes[i];
+                string planeName = entry.Plane;
+                string? aiDef = entry.Def;
+                int? accentId = entry.Accent;
                 AiNet? net = null;
-                if (netRef != null)
+                if (entry.Net != null)
                 {
                     if (!netsTried)
                     {
@@ -2417,44 +2556,63 @@ public partial class GameSession : Node3D
                             GD.PushWarning($"--ai: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
                         }
                     }
-                    net = nets != null ? AiNets.Resolve(nets, netRef) : null;
+                    net = nets != null ? AiNets.Resolve(nets, entry.Net) : null;
                     if (net == null)
-                        GD.PushWarning($"--ai: net '{netRef}' not in {_spec.Chapter}'s neindex; " +
+                        GD.PushWarning($"--ai: net '{entry.Net}' not in {_spec.Chapter}'s neindex; " +
                                        $"'{planeName}' spawns without a patrol");
                 }
-                if (net != null)
+                for (int k = 0; k < entry.Count; k++)
                 {
-                    // Spawned on the net itself, so a scripted run sees it patrolling within
-                    // seconds. ⚠ Take node positions off the follower, not the record, or an
-                    // anchored net puts the plane where the ring is not.
-                    var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
-                        trailerTarget: netTrailers.For(net));
-                    var pos = follower.NodePosition(0) + right * lateral;
-                    var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
-                    var pilot = AiPilot.HoldingCourse(pos, look);
-                    pilot.Patrol = follower;
-                    var spawnedOnNet = flightRoster.SpawnAi(new AiSpawn(
-                        planeName, pos, look, pilot, AiDef: aiDef));
-                    RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
-                    ApplyAiHullPreset(spawnedOnNet);
-                }
-                else
-                {
-                    var pos = lead.WorldPosition + fwd * 250f + right * lateral;
-                    var spawnedAhead = flightRoster.SpawnAi(new AiSpawn(planeName, pos, pos + fwd,
-                        AiPilot.HoldingCourse(pos, pos + fwd), AiDef: aiDef));
-                    RegisterAiVoice(spawnedAhead, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
-                    ApplyAiHullPreset(spawnedAhead);
+                    // Per squadron on the ring, per session otherwise, so a command line of
+                    // one-plane entries keeps exactly the spread it had before n= existed.
+                    int fi = anchors != null ? k : fanIndex;
+                    fanIndex++;
+                    float lateral = 60f * ((fi + 1) / 2) * (fi % 2 == 0 ? 1f : -1f);
+                    if (net != null)
+                    {
+                        // Spawned on the net itself, so a scripted run sees it patrolling within
+                        // seconds. ⚠ Take node positions off the follower, not the record, or an
+                        // anchored net puts the plane where the ring is not.
+                        var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
+                            trailerTarget: netTrailers.For(net));
+                        var pos = follower.NodePosition(0) + right * lateral;
+                        var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
+                        var pilot = AiPilot.HoldingCourse(pos, look);
+                        pilot.Patrol = follower;
+                        var spawnedOnNet = flightRoster.SpawnAi(new AiSpawn(
+                            planeName, pos, look, pilot, Team: entry.Team, AiDef: aiDef));
+                        RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
+                        ApplyAiHullPreset(spawnedOnNet);
+                    }
+                    else if (anchors != null)
+                    {
+                        var (anchor, facing) = anchors[i];
+                        var pos = anchor + facing.Cross(Vector3.Up).Normalized() * lateral;
+                        var look = pos + facing;
+                        var spawnedOnRing = flightRoster.SpawnAi(new AiSpawn(planeName, pos, look,
+                            AiPilot.HoldingCourse(pos, look), Team: entry.Team, AiDef: aiDef));
+                        RegisterAiVoice(spawnedOnRing, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
+                        ApplyAiHullPreset(spawnedOnRing);
+                    }
+                    else
+                    {
+                        var pos = lead.WorldPosition + fwd * 250f + right * lateral;
+                        var spawnedAhead = flightRoster.SpawnAi(new AiSpawn(planeName, pos, pos + fwd,
+                            AiPilot.HoldingCourse(pos, pos + fwd), Team: entry.Team, AiDef: aiDef));
+                        RegisterAiVoice(spawnedAhead, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
+                        ApplyAiHullPreset(spawnedAhead);
+                    }
+                    spawnedTotal++;
                 }
             }
-            state.What += $" + {aiPlanes.Count} AI";
+            state.What += $" + {spawnedTotal} AI";
         }
 
         // --zeppelins: the mission's zeppelin instances, placed at their authored pose and flown
         // along their nets as kinematic world nodes. ⚠ Build them before --generators below, so a
         // zeppelin generator's min_altitude gate reads the flown host's live Y from the first step.
         bool iaZeppelinRun = iaRt?.IsZeppelinRun ?? false;
-        if (_spec.Zeppelins || iaZeppelinRun)
+        if (_spec.Zeppelins || iaZeppelinRun || _spec.Zep != null)
         {
             List<ZeppelinDef> zepDefs;
             try
@@ -2466,13 +2624,25 @@ public partial class GameSession : Node3D
                 GD.Print($"zep: no zeppelins file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
                 zepDefs = new List<ZeppelinDef>();
             }
-            var zepNets = AiNets.Load(worldBindings.ChapterZrdrPath);
+            IReadOnlyList<AiNet> zepNets;
+            int? zepTeamOverride = null;
+            Vector3? zepSeat = null;
+            if (_spec.Zep is { } graft)
+            {
+                (zepDefs, zepNets, zepSeat) = GraftedZeppelin(zepDefs, graft);
+                zepTeamOverride = graft.Team;
+            }
+            else
+            {
+                zepNets = AiNets.Load(worldBindings.ChapterZrdrPath);
+            }
             _zeppelins = new ZeppelinRuntime(zepDefs,
                 name => worldBindings.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
                 zepNets, netTrailers.For,
                 // The bootstrap has already run the start anims: a hull an SI script owns from
                 // its first frame must not be placed at the record seat on top of it.
-                host => worldBindings.WorldRuntime?.Motions.DrivesTransform(host) ?? false);
+                host => worldBindings.WorldRuntime?.Motions.DrivesTransform(host) ?? false,
+                zepTeamOverride, zepSeat);
             _worldRoot!.AddChild(_zeppelins);
             // F18: the multi-zone damage half — per-part pools over the world registry, the
             // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.

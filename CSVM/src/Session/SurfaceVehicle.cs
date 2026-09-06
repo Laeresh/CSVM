@@ -112,6 +112,11 @@ public sealed class SurfaceVehicle
             ? Vector3.Zero
             : new Vector3(_follower.Velocity.X, 0f, _follower.Velocity.Z);
 
+    /// <summary>This hull's gun, or null when the build wired no weapon catalogue, the def arms
+    /// nothing, or the model carries no mount (<see cref="SurfaceGunner.Build"/>). Set once by
+    /// <see cref="SurfaceVehicleRuntime"/> at spawn.</summary>
+    internal SurfaceGunner? Gunner { get; set; }
+
     /// <summary>The <c>WAKEUP_ENEMIES</c> half: the hull appears where it was placed, its pool
     /// becomes a target and its route, if it has one, starts. False when it was never inert.</summary>
     public bool Wake()
@@ -157,7 +162,15 @@ public sealed class SurfaceVehicle
             return;
         }
         StepInjureLadder();
-        if (_follower == null || Inert)
+        if (Inert)
+        {
+            return;
+        }
+        // The gun hangs off the AI update, not the net follower, so a hull parked with no route
+        // still shoots. ⚠ It poses the turret and gun nodes, which is safe only past the death
+        // check above: from there the sequence owns every child transform (see WritePose).
+        Gunner?.Step(dt);
+        if (_follower == null)
         {
             return;
         }

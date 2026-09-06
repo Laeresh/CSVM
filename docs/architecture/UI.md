@@ -365,6 +365,15 @@ artwork with nowhere to put one. It draws on `HudLayers.PerfReadout`, above the 
 same reason that readout does. Hidden in flight, so no golden screenshot ever sees it. The number
 itself is `Utils/BuildVersion.cs`.
 
+## src/UI/NoGameDataScreen.cs
+The dead end a launch with no extraction under the data root reaches instead of the menu: the
+title, the sentence naming the step that produces the data, the path that was looked in, and Esc
+as the way out. `Missing` is the whole test, an absent or empty `extracted` directory, and it is
+engine-free so the launcher's branch and its unit read one rule; `Instruction` is the single
+sentence the screen and the launcher's own log line share, worded for a release payload
+(`Extract.cmd`) or a repo checkout (the two extractor scripts). Provenance is not asked about
+here: `Session/ExtractionStamp.cs` owns whether an extraction is stale and stays a warning.
+
 ## src/UI/MeshLab.cs
 The geometry and shading lab (key M): normal lines, the smoothing-seam wireframe, collider boxes,
 light sliders with a headlight, and cull by normal-source override cyclers, all scripted by

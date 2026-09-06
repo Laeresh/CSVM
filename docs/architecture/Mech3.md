@@ -279,8 +279,9 @@ The `vehicle.json` def table as an index, next to `Flight/PlaneStats.cs`'s full 
 `kind_of` to the nearest authored `mode` (`jet` at the root, the engine's zero default),
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
 of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
-`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. Pure over the parsed root
-(`FromRoot`), pinned in `CampaignRosterPlanTests`.
+`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `StartAnimsOf`, `InjureAnimsOf`,
+`WeaponsOf` and `ActivationOf` return the nearest authored value up that chain, the last two arming
+a hull with its def's own gun. Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of

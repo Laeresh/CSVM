@@ -34,13 +34,13 @@ public class AiTargetRankingTests
         // rank units, so the player out-ranks (rank is minimised) the AI target exactly by it.
         var player = Ahead(800f, isPlayer: true, xOffset: 100f);
         var ai = Ahead(800f, xOffset: -100f);
-        var sPlayer = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, player);
-        var sAi = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, ai);
+        var sPlayer = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Jet, player);
+        var sAi = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Jet, ai);
         Assert.Equal(0.7f + 0.2f - 0.2f - 0.2f, sPlayer.Weight, 3); // ahead +, level −, away −
         Assert.Equal(1.0f + 0.2f - 0.2f - 0.2f, sAi.Weight, 3);
         Assert.Equal(360f, sAi.Rank - sPlayer.Rank, 1);
 
-        int pick = AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        int pick = AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { ai, player }, out var best);
         Assert.Equal(1, pick);
         Assert.Equal(sPlayer.Rank, best.Rank, 2);
@@ -52,9 +52,9 @@ public class AiTargetRankingTests
         // The 0.3 player-weight delta equals 360 m: an AI target 500 m closer wins, one only
         // 300 m closer still loses.
         var player = Ahead(900f, isPlayer: true, xOffset: 100f);
-        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { Ahead(400f, xOffset: -100f), player }, out _));
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { Ahead(600f, xOffset: -100f), player }, out _));
         // One ±0.2 term flip is 480 rank units: a target ahead loses to one 400 m farther
         // astern (ahead/behind is the only differing term; the astern one flies away too, so
@@ -62,7 +62,7 @@ public class AiTargetRankingTests
         var behind = Ahead(800f);
         behind.Position = OwnPos + new Vector3(0f, 0f, 800f);
         behind.Velocity = new Vector3(0f, 0f, 60f);
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { Ahead(400f), behind }, out _));
     }
 
@@ -72,7 +72,7 @@ public class AiTargetRankingTests
         var near = Ahead(500f);
         var far = Ahead(900f);
         Assert.Equal(400f, RankOf(far) - RankOf(near), 1);
-        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { near, far }, out _));
     }
 
@@ -82,7 +82,7 @@ public class AiTargetRankingTests
         var outside = Ahead(Activation + 1f);
         Assert.Equal(AiTargetRanking.NotRanked, RankOf(outside));
         // Even alone, an out-of-activation target is never selected.
-        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { outside }, out _));
         // At the radius it still ranks (the cutoff is strictly beyond).
         Assert.True(RankOf(Ahead(Activation)) < AiTargetRanking.NotRanked);
@@ -127,9 +127,9 @@ public class AiTargetRankingTests
         justAhead.Position = OwnPos + new Vector3(500f, 0f, -0.6f);
         var justBehind = abeam;
         justBehind.Position = OwnPos + new Vector3(500f, 0f, 0.6f);
-        float w = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, abeam).Weight;
-        Assert.Equal(w + 0.2f, AiTargetRanking.Score(OwnPos, OwnFwd, Activation, justAhead).Weight, 3);
-        Assert.Equal(w - 0.2f, AiTargetRanking.Score(OwnPos, OwnFwd, Activation, justBehind).Weight, 3);
+        float w = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Jet, abeam).Weight;
+        Assert.Equal(w + 0.2f, AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Jet, justAhead).Weight, 3);
+        Assert.Equal(w - 0.2f, AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Jet, justBehind).Weight, 3);
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class AiTargetRankingTests
         Assert.Equal(-AiTargetRanking.GasbagWeight * AiTargetRanking.WeightScale,
             RankOf(gasbag) - RankOf(plain), 1);
         // 600 m in the gasbag's favour: it beats an equal aircraft 500 m nearer.
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { Ahead(500f), Ahead(1000f, xOffset: 50f) with { IsGasbag = true } }, out _));
     }
 
@@ -216,12 +216,12 @@ public class AiTargetRankingTests
     {
         // The whole point of the exclusion: a −1.0 target is not merely deprioritised.
         var excluded = Ahead(500f, bias: AiTargetRanking.NotRanked);
-        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { excluded }, out _));
 
         // …and a plain target beats it however much farther away it is, inside the radius.
         var plain = Ahead(1900f, xOffset: 50f);
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { excluded, plain }, out _));
     }
 
@@ -233,7 +233,7 @@ public class AiTargetRankingTests
         // The better-ranked candidate is already held by an ally: the free peer wins.
         var held = Ahead(500f, attackers: 1);
         var free = Ahead(900f, xOffset: 50f);
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { held, free }, out var best));
         Assert.Equal(900f, best.Distance, 1);
     }
@@ -245,7 +245,7 @@ public class AiTargetRankingTests
         // the best-ranked candidate is taken anyway.
         var a = Ahead(500f, attackers: 1);
         var b = Ahead(900f, attackers: 2, xOffset: 50f);
-        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
             new[] { a, b }, out var best));
         Assert.Equal(500f, best.Distance, 1);
     }
@@ -331,6 +331,65 @@ public class AiTargetRankingTests
         Assert.Equal(0, thirds);
     }
 
+    // ---- the non-jet scorer, FUN_00421950 ------------------------------------------------------
+
+    [Fact]
+    public void TheNonJetScorerHasNoneOfTheThreeGeometryTerms()
+    {
+        // The same candidate scored both ways. The jet scorer's three ±0.2 terms are all on this
+        // one (ahead +, level −, away −, netting −0.2); the ship/tank/plane/heli scorer has none
+        // of them at all, so its weight is the bare 1.0 base.
+        var c = Ahead(800f);
+        Assert.Equal(1.0f + 0.2f - 0.2f - 0.2f, ScoreAs(AiScorer.Jet, c).Weight, 3);
+        Assert.Equal(1.0f, ScoreAs(AiScorer.Other, c).Weight, 3);
+    }
+
+    [Fact]
+    public void TheNonJetScorerKeepsTheThreeSharedTerms()
+    {
+        // What FUN_00421950 does have: the player's lower base weight, the wingman penalty and
+        // the gasbag credit. Those are the shared half of the formula, not the jet's own.
+        Assert.Equal(0.7f, ScoreAs(AiScorer.Other, Ahead(800f, isPlayer: true)).Weight, 3);
+        var wingman = Ahead(800f);
+        wingman.IsWingman = true;
+        Assert.Equal(1.4f, ScoreAs(AiScorer.Other, wingman).Weight, 3);
+        var gasbag = Ahead(800f);
+        gasbag.IsGasbag = true;
+        Assert.Equal(0.5f, ScoreAs(AiScorer.Other, gasbag).Weight, 3);
+    }
+
+    [Fact]
+    public void TheNonJetScorerIgnoresTheShootersFacingEntirely()
+    {
+        // A hull's own heading changes nothing about what it picks: with no ahead/behind term
+        // there is nothing left that reads ownForward. Two candidates equidistant fore and aft
+        // therefore tie, where the jet scorer prefers the one astern by 480 rank units.
+        var ahead = Ahead(800f);
+        var astern = Ahead(800f);
+        astern.Position = OwnPos + new Vector3(0f, 0f, 800f);
+        astern.Velocity = new Vector3(0f, 0f, 60f); // flying away, so only the ahead term differs
+        Assert.Equal(ScoreAs(AiScorer.Other, ahead).Rank, ScoreAs(AiScorer.Other, astern).Rank, 2);
+        Assert.True(ScoreAs(AiScorer.Jet, astern).Rank < ScoreAs(AiScorer.Jet, ahead).Rank);
+        // And reversing the hull's own nose leaves its ranking untouched.
+        Assert.Equal(
+            AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Other, ahead).Rank,
+            AiTargetRanking.Score(OwnPos, -OwnFwd, Activation, AiScorer.Other, ahead).Rank, 2);
+    }
+
+    [Fact]
+    public void TheNonJetScorerStillRespectsActivationAndDistance()
+    {
+        Assert.Equal(AiTargetRanking.NotRanked,
+            ScoreAs(AiScorer.Other, Ahead(Activation + 1f)).Rank);
+        Assert.Equal(400f,
+            ScoreAs(AiScorer.Other, Ahead(900f)).Rank - ScoreAs(AiScorer.Other, Ahead(500f)).Rank, 1);
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Other,
+            new[] { Ahead(500f), Ahead(900f) }, out _));
+    }
+
+    private static TargetScore ScoreAs(AiScorer scorer, in RankedTargetCandidate c) =>
+        AiTargetRanking.Score(OwnPos, OwnFwd, Activation, scorer, c);
+
     // A candidate ahead of the shooter with every ±0.2 term on the same arm as its
     // peers: ahead (unfavourable), level with the shooter (level counts as below, favourable),
     // flying away (favourable).
@@ -345,7 +404,7 @@ public class AiTargetRankingTests
         };
 
     private static float RankOf(in RankedTargetCandidate c) =>
-        AiTargetRanking.Score(OwnPos, OwnFwd, Activation, c).Rank;
+        AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Jet, c).Rank;
 
     private static IEnumerable<List<(string Name, List<object?> Fields)>> AllRosters()
     {

@@ -47,6 +47,23 @@ public enum MenuMode
     Versus,
 }
 
+/// <summary>One <c>--ai=</c> entry: the airframe, plus the optional tokens that follow it.
+/// <c>Count</c> is the entry's <c>n=</c>, so one entry stands for a whole squadron rather than a
+/// plane. <c>Team</c> is its <c>team=</c>, and it is the only way two CLI planes can be put on the
+/// SAME side: a spawn that names none takes its own banded id through
+/// <see cref="Flight.AimAssist.TeamOfPilot"/>, which makes every CLI plane hostile to every other.
+/// <c>Pos</c> overrides the squadron's placement outright, in world metres.</summary>
+public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int? Accent = null,
+    string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
+
+/// <summary>One <c>--zep=</c> request: the zeppelin record to graft onto the empty stage, and the
+/// two overrides the stage needs. <c>Team</c> reaches the hull as the borrowed def's own team id,
+/// so it arrives through <c>ZeppelinRuntime.AuthoredTeam</c> rather than as a stamp on the part
+/// pools, and the rule that gives a zone the team its flagged <c>panels</c> child carries still
+/// runs. <c>Pos</c> replaces the record's authored seat, world metres.</summary>
+public readonly record struct ZepStageSpec(string Chapter, string Mission, string Record,
+    int? Team = null, Vector3? Pos = null);
+
 /// <summary>
 /// One immutable value for everything the command line settles about a session: parsed once,
 /// then resolved once, so a consumer reads an answer instead of re-deriving one.
@@ -336,10 +353,18 @@ public sealed record SessionSpec
     public float? IncomingPass { get; private set; }
     /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
     public string? IncomingWeapon { get; private set; }
-    /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][:accent=&lt;id&gt;][:def=&lt;vehicle def&gt;][,…]</c>:
+    /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][:accent=&lt;id&gt;][:def=&lt;vehicle def&gt;][:team=&lt;id&gt;][:n=&lt;count&gt;][:pos=x,y,z][,…]</c>:
     /// AI-piloted aircraft spawned into the flight session (docs/cli.md). <c>def=</c> names the
-    /// militia variant flown; without it the airframe's base def. Null when the flag was absent.</summary>
-    public IReadOnlyList<(string Plane, string? Net, int? Accent, string? Def)>? AiPlanes { get; private set; }
+    /// militia variant flown; without it the airframe's base def. One entry can stand for a
+    /// squadron (<see cref="AiPlaneEntry.Count"/>). Null when the flag was absent.</summary>
+    public IReadOnlyList<AiPlaneEntry>? AiPlanes { get; private set; }
+    /// <summary><c>--zep=&lt;chapter&gt;/&lt;mission&gt;:&lt;record&gt;[:team=&lt;id&gt;][:pos=x/y/z]</c>: one
+    /// zeppelin record's hull grafted onto <c>--stage=empty</c> and wired through
+    /// <c>ZeppelinRuntime</c> the way a mission's own is (docs/cli.md). Null when the flag was
+    /// absent. ⚠ Takes <see cref="Chapter"/> and <see cref="Mission"/> with it: the record's
+    /// gamez, textures, nets and <c>zeppelins.zrd.json</c> are all read off those, so the graft
+    /// needs no second chapter/mission pair threaded through the build.</summary>
+    public ZepStageSpec? Zep { get; private set; }
     /// <summary><c>--ai-damage=&lt;fraction&gt;</c>: the hull health fraction every <c>--ai=</c> plane
     /// is spent down to as it spawns, so its authored injure_anims stages are already up in a
     /// scripted shot. Null when the flag was absent. <c>--damage=</c> is the player's counterpart
@@ -960,7 +985,7 @@ public sealed record SessionSpec
             }
             else if (arg.StartsWith("--ai="))
             {
-                var entries = new List<(string Plane, string? Net, int? Accent, string? Def)>();
+                var entries = new List<AiPlaneEntry>();
                 foreach (var token in arg["--ai=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries))
                 {
                     var segments = token.Split(':');
@@ -968,17 +993,26 @@ public sealed record SessionSpec
                     string? net = null;
                     int? accent = null;
                     string? def = null;
+                    int? team = null;
+                    int count = 1;
+                    Vector3? pos = null;
                     for (int si = 1; si < segments.Length; si++)
                     {
                         if (segments[si].StartsWith("accent="))
                             accent = int.Parse(segments[si]["accent=".Length..]);
                         else if (segments[si].StartsWith("def="))
                             def = segments[si]["def=".Length..];
+                        else if (segments[si].StartsWith("team="))
+                            team = int.Parse(segments[si]["team=".Length..]);
+                        else if (segments[si].StartsWith("n="))
+                            count = Math.Max(1, int.Parse(segments[si]["n=".Length..]));
+                        else if (segments[si].StartsWith("pos="))
+                            pos = ParseVec3Slashed(segments[si]["pos=".Length..]);
                         else if (segments[si].Length > 0 && net == null)
                             net = segments[si];
                     }
                     if (plane.Length > 0)
-                        entries.Add((plane, net, accent, def));
+                        entries.Add(new AiPlaneEntry(plane, net, accent, def, team, count, pos));
                 }
                 if (entries.Count > 0)
                     s.AiPlanes = entries;
@@ -1004,6 +1038,30 @@ public sealed record SessionSpec
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--zeppelins") { s.Zeppelins = true; }
+            else if (arg.StartsWith("--zep="))
+            {
+                var zepSegments = arg["--zep=".Length..].Split(':');
+                var zepWhere = zepSegments[0].Split('/');
+                if (zepWhere.Length != 2 || zepWhere[0].Length == 0 || zepWhere[1].Length == 0
+                    || zepSegments.Length < 2 || zepSegments[1].Length == 0)
+                {
+                    s.Print($"--zep='{arg["--zep=".Length..]}' is not <chapter>/<mission>:<record>; ignoring it");
+                }
+                else
+                {
+                    int? zepTeam = null;
+                    Vector3? zepPos = null;
+                    for (int si = 2; si < zepSegments.Length; si++)
+                    {
+                        if (zepSegments[si].StartsWith("team="))
+                            zepTeam = int.Parse(zepSegments[si]["team=".Length..]);
+                        else if (zepSegments[si].StartsWith("pos="))
+                            zepPos = ParseVec3Slashed(zepSegments[si]["pos=".Length..]);
+                    }
+                    s.Zep = new ZepStageSpec(zepWhere[0], zepWhere[1], zepSegments[1], zepTeam, zepPos);
+                    s.HasContentArg = true;
+                }
+            }
             else if (arg == "--wake-turrets") { s.WakeTurrets = true; }
             else if (arg == "--wake-generators") { s.WakeGenerators = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
@@ -1306,6 +1364,16 @@ public sealed record SessionSpec
     public static Vector3 ParseVec3(string s)
     {
         var parts = s.Split(',');
+        return new Vector3(Flt(parts[0]), Flt(parts[1]), Flt(parts[2]));
+    }
+
+    /// <summary>Parse an "x/y/z" triple, invariant culture. Slash-separated because <c>--ai=</c>
+    /// has already spent the comma separating one entry from the next, so a <c>pos=</c> token
+    /// inside an entry cannot use one; <c>--zep=</c> spells it the same way so that one form
+    /// serves both flags.</summary>
+    public static Vector3 ParseVec3Slashed(string s)
+    {
+        var parts = s.Split('/');
         return new Vector3(Flt(parts[0]), Flt(parts[1]), Flt(parts[2]));
     }
 
@@ -1647,6 +1715,23 @@ public sealed record SessionSpec
             else
             {
                 EmptyStage = true;
+            }
+        }
+        // --zep= reads its record's gamez, textures, nets and zeppelins.zrd off the chapter and
+        // mission it names, so it takes both rather than threading a second pair through the build.
+        // ⚠ Empty stage only: a chapter world already places that hull through --zeppelins.
+        if (Zep is { } zep)
+        {
+            if (!EmptyStage)
+            {
+                Print("--zep= grafts onto --stage=empty; a chapter world places its own with --zeppelins. Ignoring it");
+                Zep = null;
+            }
+            else
+            {
+                Chapter = zep.Chapter;
+                Mission = zep.Mission;
+                ChapterGiven = true;
             }
         }
         // The static viewer shows a chapter world when asked for one, else the parked plane.

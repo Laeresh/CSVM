@@ -127,7 +127,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: the intercept lead, the quick-draw cone and engagement window, the traverse clamp, the scatter.
 - `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the per-pylon gates, an aim cosine tighter than the gun's, the lockout, the per-pylon lead solve.
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch: the talker roll, the bearing halving, the broadcast election, the damage tiers.
-- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula, minimised over weight, distance and objective bias, plus the deconfliction pick.
+- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula, minimised over weight, distance and objective bias, the deconfliction pick, and the two-scorer selector.
+- `src/Flight/SurfaceGunMount.cs` — a `mode ship` hull's gun mount: the elevation guards, the 4.0/s slew, and the residual measured against the raw lead.
 - `src/Flight/PursuitQuarry.cs` — the flight law's one-step snapshot of the standing target of any class: an aircraft, a turret or a zeppelin part.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints, nose-picked edges and along-leg arrival; shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/DangerZoneRibbon.cs` — one `dzpathN` route as a metre-parameterised spline with lanes, a pilot's cursor on it, and the rail integrator.
@@ -353,6 +354,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
 - `src/UI/BuildStamp.cs` — the build's version in the menu's bottom-right corner, once for the window and over every presentation; hidden in flight.
+- `src/UI/NoGameDataScreen.cs` — the screen shown instead of the menu when the data root holds no extraction: what is missing, and the extraction step that fills it.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
 - `src/UI/DebugKillTarget.cs` — the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
 - `src/UI/SelectionService.cs` — the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
@@ -441,6 +443,7 @@ clusters they delegate to.
 - `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, the handoff back.
 - `src/Session/SurfaceVehicleRuntime.cs` — builds and steps a mission's `mode ship` hulls: a library-root copy placed on the water, indexed on the runtime.
 - `src/Session/SurfaceVehicle.cs` — one built hull: the scripted-path follower over its patrol net, the wake and injure anims, and the pool a hit reaches.
+- `src/Session/SurfaceGunner.cs` — a hull's own gun: the non-jet acquisition, the 20 s target hold, the mount, and the fire decision on the def's authored tuple.
 - `src/Session/CampaignRoster.cs` — the engine-free plan of a campaign mission's `aiv` roster: each block's airframe, and its net or its netless escort.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin) to a live position, so an anchored net rides its target.

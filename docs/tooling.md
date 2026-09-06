@@ -75,13 +75,22 @@ shared `VERSION.json` one level above `-Dest`, and skips that stamp with a note 
 follows the canonical `…\extracted\rof` layout. Formats: [rof](formats/rof.md),
 [strings](formats/strings.md), [menu layout](formats/menu-layout.md).
 
-## `packaging/Extract.ps1` — the friend-facing dispatcher
+## `packaging/Extract.cmd` and `packaging/Extract.ps1` — the recipient-facing extraction
 
-Ships in the release zip (`packaging/MANIFEST.md`), never used in the dev tree. It takes the
-recipient's install root, checks `ZBD` and `GOSDATA\ASSETS` exist with a friendly error, and
-dispatches to the two UNMODIFIED scripts above with `.\` paths anchored to `$PSScriptRoot`. **Keep
-all extraction logic in the two scripts only.** Its one post-step unpacks `rimage.zip` into
-`extracted\rimage\`, because the HUD-font and reticle loaders read loose PNGs there.
+Both ship in the release zip (`packaging/MANIFEST.md`) and neither is used in the dev tree.
+`Extract.cmd` is the half a recipient double-clicks: it runs `Extract.ps1` beside it with
+`-NoProfile -ExecutionPolicy Bypass`, forwards any argument (so a folder dropped on it is the
+install root) and holds the window open on both outcomes, since a console that closes the instant
+it finishes cannot be told from one that crashed.
+
+`Extract.ps1` takes the install root, or resolves one when it is passed none: it probes
+`Microsoft Games\Crimson Skies` under either Program Files and a `Games\` or bare
+`Crimson Skies\` folder on every fixed drive, reports what it found, and offers the folder picker
+either way so the path is never typed. It then checks `ZBD`, its `.zbd` archives and
+`GOSDATA\ASSETS` exist with a friendly error, and dispatches to the two UNMODIFIED scripts above
+with `.\` paths anchored to `$PSScriptRoot`. **Keep all extraction logic in the two scripts
+only.** Its one post-step unpacks `rimage.zip` into `extracted\rimage\`, because the HUD-font and
+reticle loaders read loose PNGs there.
 
 ## Launch scripts
 
