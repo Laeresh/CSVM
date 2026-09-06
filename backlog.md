@@ -2906,11 +2906,17 @@ usual.
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
 
-- `BL-584` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **`PerfSampleTests.AScopeAllocatesNothing` went red once and neither named
-  mechanism reproduces.** *Evidence:* the full `RunTests.ps1` unit stage reported it red once
-  (`Expected: 0, Actual: 3984` bytes) on a tree whose only difference from six green runs was
-  PowerShell and documentation edits; it has passed on every run since. **Both mechanisms this
-  entry used to name are ruled out, so do not re-chase them.** Cross-class interference on a shared
+- `BL-584` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **`PerfSampleTests.AScopeAllocatesNothing` goes red intermittently and neither named
+  mechanism reproduces.** *Evidence:* two sightings, both isolated, both green on every run
+  either side. The first was a full `RunTests.ps1` unit stage (`Expected: 0, Actual: 3984` bytes)
+  on a tree whose only difference from six green runs was PowerShell and documentation edits. The
+  second came from a whole-project `dotnet test` in an agent worktree, 3441 of 3442, and passed 15
+  of 15 on an immediate re-run of the same test. ⚠ **The second sighting's evidence was lost, and
+  the way it was lost is itself the finding:** neither the byte count nor the TRX was copied out
+  before the agent's worktree was removed, so this recurrence adds a rate observation and nothing
+  else. **A flake reported by an agent needs its `.scratch/testresults/units.trx` copied out of
+  that worktree before `git worktree remove`**, which deletes the whole directory. **Both
+  mechanisms this entry used to name are ruled out, so do not re-chase them.** Cross-class interference on a shared
   thread-pool thread cannot charge this assertion: `GC.GetAllocatedBytesForCurrentThread` is
   per-thread by construction, confirmed empirically with sixteen background tasks allocating and
   forcing gen-0 collections across the whole measured window (8 of 8 trials read exactly 0 bytes),
@@ -2919,9 +2925,9 @@ usual.
   stage never loads. A tiered-JIT recompile landing mid-scope is ruled out the same way: warm-up
   counts of 0, 1, 5, 50 and 500 against the 10,000-iteration measured loop all read 0 bytes.
   Roughly forty forced-contention trials produced no failure. *Fix shape:* none until the cause is
-  known; the one reading remains unexplained rather than explained-and-fixed. **On recurrence,
-  capture the binary hash and the concurrent-class list from the TRX**, neither of which was
-  captured the one time this fired, and reopen from there. *⚠ Traps:* do not widen the assertion
+  known; both readings remain unexplained rather than explained-and-fixed. **On recurrence,
+  capture the binary hash and the concurrent-class list from the TRX**, captured on neither
+  sighting so far, and reopen from there. *⚠ Traps:* do not widen the assertion
   to a tolerance; zero allocations is the contract `PerfSample` makes, and `BL-562` needs
   this test able to catch a real regression. A handful of green runs is not evidence at the
   observed rate: at a 1-in-10 base rate, 30 consecutive clean unit stages give about 95%
