@@ -3328,39 +3328,39 @@ usual.
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
 - `BL-742` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty stage
-  cannot host a zeppelin and `--ai=` cannot group its planes into sides, so AI behaviour and its
-  frame cost can only be watched inside a campaign flight.** *Evidence:* the
-  AI-attacks-zeppelin-parts work (`git log --grep=BL-740`) took four user flights of C4/M03 and
-  three log reads to find that the Pandora's gasbag pools reached the AI as nobody's, and the
-  rocketeer's own gates were still unread after the last one. Sides are the opposite of missing:
-  each spawn takes a distinct index (`FlightRoster.cs:216`) and `FlightController.Team` falls back
-  to `AimAssist.TeamOfPilot` (`FlightController.cs:604`), which bands every id separately
-  (`AimAssist.cs:326`), so CLI planes are already mutually hostile and what cannot be said is that
-  two of them share a side. Count and placement are the other gaps: `n` planes need `n`
-  comma-separated tokens (`SessionSpec.cs:964`), and both spawn branches measure from the player's
-  nose (`GameSession.cs:2396-2404`), so no two runs share geometry and a plane-count sweep is not
-  comparable against itself. `--stage=empty` builds no gamez at all (`GameSession.cs:945`), and
-  `ZeppelinDef` names its parts but carries no per-zone geometry (`Zeppelins.cs:288-291`), so a
-  hand-placed hull has invented offsets and every distance-driven decision watched on it is
-  fiction. *Fix shape:* `team=<id>` and `n=<count>` tokens on `--ai=` entries, parsed as
-  `accent=`/`def=` already are (`SessionSpec.cs:971-979`) and kept flat enough for a JSON scenario
-  file to express later; on the empty stage anchor squadrons to the grid origin, one slot per team
-  on a 1000 m circle at `SpawnAltitude` facing the centre (two teams therefore 2000 m apart, at
-  the decoded engagement gate of `AiModeMachine.cs:141`), keeping the existing 60 m lateral fan
-  within a squadron, with `pos=x/y/z` overriding per entry (slash-separated, since the entry list
-  itself is comma-separated) and chapter worlds keeping today's player-anchored fan; and a
-  `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x/y/z]` flag
-  that builds the record's hull through `WorldSession.Build` with `NodeSubtree` set to its node
-  (`WorldSession.cs:89-127`), composing that subtree with the empty stage's grid rather than
-  replacing it, then wires `ZeppelinRuntime` as `GameSession.cs:2470-2493` does. *⚠ Traps:* the
+  cannot host a zeppelin, so an AI-versus-airship question still takes a campaign flight per
+  iteration.** *Evidence:* the AI-attacks-zeppelin-parts work (`git log --grep=BL-740`) took four
+  user flights of C4/M03 and three log reads to find that the Pandora's gasbag pools reached the
+  AI as nobody's, and the rocketeer's own gates were still unread after the last one. The
+  aeroplane half of the rig has landed: `--ai=` takes `n=` for a squadron and `team=` for a side,
+  and on the empty stage each side anchors to a 1000 m ring about the grid origin, so an
+  eight-plane sortie engages at 2000 m with no chapter loaded. The airship half has not.
+  `--stage=empty` builds no chapter gamez (`GameSession.cs:945` and the `state.GamezPath` choice
+  at `GameSession.cs:454-455`, which reads planes.zbd unless `WorldMode`), and `ZeppelinDef` names
+  its parts but carries no per-zone geometry (`Zeppelins.cs:288-291`), so a hand-placed hull has
+  invented offsets and every distance-driven decision watched on it is fiction. *Fix shape:* a
+  `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x/y/z]` flag, routed through the existing
+  chapter-world path rather than a second loader, which is five contained edits: `--zep=` takes
+  `Chapter`/`Mission` with it in `Resolve` so every path (gamez, textures, `neindex`,
+  `zeppelins.zrd.json`) resolves with no second pair threaded through the build; widen
+  `state.GamezPath`'s `WorldMode` test to include it; set `state.NodeSubtree` from
+  `WorldBuilder.MatchNodes` on the record's node; run `BuildWorldStage`, which with `NodeSubtree`
+  set builds that subtree alone and skips `MissionSetup` and clutter (`WorldSession.cs:89-127`),
+  and add the grid beside it, so `state.WorldRuntime` binds damage, targeting and the sub-part
+  feed exactly as in a mission; and widen the `--zeppelins` block (`GameSession.cs:2518-2547`) to
+  fire for `--zep=` with the record filtered out and the team and position overrides applied.
+  ⚠ Routed that way the graft carries the chapter's own anim program, so the no-choreography trap
+  below applies only to a stage built without it; confirm which before relying on either.
+  *⚠ Traps:* the
   team override must arrive through `AuthoredTeam` (`ZeppelinRuntime.cs:118`) by setting the
   borrowed def's `TeamId`, never stamped onto the pools, because `WireZones` reads the flagged
   `panels` child only where the pool has no team (`inst.Team ??=`, `ZeppelinRuntime.cs:606`) and
   `CollectTargetParts` fans `zep.Team` over every part (`ZeppelinRuntime.cs:238`); the stage has
   no `AnimProgram`, so the gasbag destroy anims resolve to nothing and the pools register without
   choreography, which is fine for a targeting probe and wrong for a damage one; `--stage=empty`
-  leaves `WorldMode` false (`SessionSpec.cs:1654`), so the `--node=` subtree path is unreachable
-  as written and `--zep=` must drive `WorldSession` itself; a run needs `--fly` or there is no
+  leaves `WorldMode` false (`SessionSpec.cs:1654`), which is the one test gating both the chapter
+  gamez and `ResolveNodeSubtree` (`GameSession.cs:909`), so `--zep=` widens those two rather than
+  calling the `--node=` path as it stands; a run needs `--fly` or there is no
   player rig, the `--ai=` block never runs (`GameSession.cs:2391`) and the ground plane builds
   without collision (`GameSession.cs:948`); read `p95_ms` and `max_ms` off `--perf` and ignore
   `script_ms` and `physics_ms`, so a plane-count sweep is read as a differential on a deliberately
