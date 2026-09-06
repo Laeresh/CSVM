@@ -1,5 +1,5 @@
 # HARD RULE (XWVM legal model): the game install and anything derived from it
-# must NEVER be committed. Code and format documentation only.
+# must NEVER be committed. Code and documentation only.
 /CrimsonSkiesGame/
 /extracted/
 /tools/

@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — What the public reads
 
-31. ☐ Pre-flip audit: the method claim, and the tracked files a stranger reads
+31. ☑ Pre-flip audit: the method claim, and the tracked files a stranger reads
 32. ☐ `packaging/README.md` rewritten for a reader nobody knows
 33. ☐ `.github/`: the bug form and the policies
 34. ☐ `PublishRelease.ps1`: tag, versioned zip, checksum, release
@@ -543,7 +543,7 @@ which makes a below-floor run test a machine with the host's GPU passed through.
 
 # Wave D — What the public reads
 
-## D31 ☐ Pre-flip audit: the method claim, and the tracked files a stranger reads
+## D31 ☑ Pre-flip audit: the method claim, and the tracked files a stranger reads
 
 **Goal.** Every public-facing claim in the repository is true of the tree that ships with it.
 
@@ -575,6 +575,47 @@ one consistent account.
 method reads worse to the audience the paragraph exists for than one that says exactly what was
 done. Removing `docs/org/` instead was considered and rejected; it would need a history rewrite and
 would leave dangling citations across `backlog.md`, the plans and `docs/formats/`.
+
+**Verified.** The false sentence is replaced in `README.md` by the account `docs/formats/README.md`
+already gives: most of the reference decoded by inspecting extracted data and matching behaviour
+against the original game, static analysis of `crimson.exe` cited at the point of use where the data
+cannot settle a question, the findings that come from the executable wholesale named as living in
+`docs/org/` with their function addresses so any claim can be re-checked at source, and no game code
+or assets reproduced or redistributed. That is the wording D32 uses. **The source sentence was
+itself understated, and the first draft of the correction inherited it.** `docs/formats/README.md`
+said "A few pages additionally cite `crimson.exe`", and characterised the citation as a literal the
+binary embeds. Counted: 35 of the 48 pages name a Ghidra symbol (`FUN_`/`DAT_`/`LAB_`, 626
+occurrences) and 40 name a function, address or global in some form, leaving 8 that rest on
+extracted data alone; and the citation is more often a traced routine than a literal, as in
+`objectives.md`, where the parser `FUN_00466b70` and the tick `FUN_0046a490` carry every directive's
+semantics. Both files now say most pages, with the count and both kinds of citation named. The
+placement rule is unaffected: those pages decode a shipped data file and cite the executable as
+evidence for what a field means, which is the point-of-use case, not the wholesale case that belongs
+in `docs/org/`. Two paraphrases carried the
+same false claim and are corrected with it: `PROJECT_CONTEXT.md`'s flight-model bullet said "No exe
+decompilation" while `docs/org/flightModel.md` is the authority for every flight quantity, and its
+documentation-routing bullet named only `docs/formats/` as the home for reverse-engineering
+knowledge. "Code and format documentation only" in `README.md`, `PROJECT_CONTEXT.md` and
+`.gitignore` becomes "code and documentation only", because `docs/org/` is neither format
+documentation nor an asset; the no-assets rule those sentences exist for is unchanged and now
+excludes reproduced game code and decompiler output explicitly. The reference's stale page count,
+17, is now 48, the tracked count behind `docs/formats/README.md`. Grepping the tree for the sentence
+and for "decompil"/"disassembl"/"clean room"/"black box" leaves this item's own two quotations of it
+in this plan, the `docs/org/` and `docs/formats/` pages that state the same practice truthfully, and
+internal notes about decompiler *output*, which is genuinely reproduced nowhere.
+`git log --all --diff-filter=A --name-only` yields 1975 distinct paths ever added on any ref, whose
+extensions are `cs`, `uid`, `md`, `py`, `json`, `ps1`, `txt`, `gdshaderinc`, `ahk`, `csv`, `csproj`,
+`html`, `census`, `script`, `h`, `cfg`, `cmd`, `props`, `yaml`, `godot`, `sln`, `ts`, `tscn`,
+`editorconfig`, `gitattributes`, `gitignore` and eleven extensionless files: no asset-shaped file, no
+image and no archive has ever been tracked. The reader path holds. `README.md` now names both
+directories and what separates them, `docs/formats/README.md` describes the same split and points at
+`docs/org/` by name, and every `docs/org/` page opens with the executable it was read out of and the
+statement that no decompiler output is reproduced. The tracked root documents read cleanly to a
+stranger, and no tracked markdown contains a personal path, an address or a credential. `NOTES.md`,
+the one formerly-tracked now-ignored file, ends its history as a 45-line idea list whose issue
+section had already been moved to `backlog.md`; it exposes nothing private, and one of the two links
+it carries is the Ghidra MCP server, which the corrected sentence now accounts for rather than
+contradicts.
 
 ## D32 ☐ `packaging/README.md` rewritten for a reader nobody knows
 

@@ -7,11 +7,14 @@ model: **format documentation and code only — no game asset data.** Pages carr
 tables and tiny excerpt values, never bulk extracted content.
 
 Most of this was decoded by inspecting extracted data and matching behavior against the original
-game (screenshots, videos, in-game measurements). A few pages additionally cite `crimson.exe` —
-where the retail binary embeds a literal that settles a question the data cannot, such as the
-editor format comment naming every `aiv` roster field ([ai-rosters.md](ai-rosters.md)) or the
-absent `ThrustFactor` token ([vehicle.md](vehicle.md)). Such claims name the evidence at the point
-of use; no code is reproduced.
+game (screenshots, videos, in-game measurements). Most pages additionally cite `crimson.exe`, at
+each point where the retail binary settles a question the data cannot: 40 of the 48 pages here name
+a function, address or global from it. That is sometimes a literal the file's meaning depends on,
+such as the editor format comment naming every `aiv` roster field ([ai-rosters.md](ai-rosters.md))
+or the absent `ThrustFactor` token ([vehicle.md](vehicle.md)), and more often the routine that
+consumes the field, such as the parser and per-frame tick behind every directive's semantics in
+[objectives.md](objectives.md). Such claims name their evidence at the point of use, so any of them
+can be re-checked at source; no code is reproduced.
 
 A page whose claims come from the executable **wholesale** does not live here at all — it goes in
 [`docs/org/`](../org/), outside this directory and outside its licence:

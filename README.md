@@ -3,8 +3,8 @@
 An XWVM-style remake of **Crimson Skies** (2000, Zipper Interactive / Microsoft): a modern
 engine that plays the original game using your own legally-owned game files.
 
-This repository ships **code and format documentation only**. It contains no game assets of
-any kind. The engine reads your existing retail install at runtime.
+This repository ships **code and documentation only**. It contains no game assets of
+any kind, and reproduces no game code. The engine reads your existing retail install at runtime.
 
 ## Status
 
@@ -70,10 +70,17 @@ line of every log state as well. See [`packaging/MANIFEST.md`](packaging/MANIFES
 
 ## Format documentation
 
-The reverse-engineered format reference lives in [`docs/formats/`](docs/formats/) — 17 pages
+The reverse-engineered format reference lives in [`docs/formats/`](docs/formats/) — 48 pages
 covering the GameZ container, reader archives, paint schemes, animation definitions, world
-structure and more. Everything was decoded by inspecting extracted data and matching
-behaviour against the original game. **No executable decompilation was performed.**
+structure and more. Most of it was decoded by inspecting extracted data and matching
+behaviour against the original game. Most of those pages also rest on static analysis of the
+retail `crimson.exe` wherever it settles a question the data cannot, naming the function or
+address at the point of use rather than reproducing code. Findings that come from
+the executable wholesale live apart from the format reference, in [`docs/org/`](docs/org/): the
+flight model, the weapon and particle runtimes, the AI, and the rest of the original behaviour
+this engine matches. Those pages describe behaviour and constants, and name the function
+addresses so any claim can be re-checked at source. **No game code and no game assets are
+reproduced or redistributed here**; the engine is an independent implementation.
 
 ## Legal
 
