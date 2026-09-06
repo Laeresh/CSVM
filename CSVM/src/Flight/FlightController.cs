@@ -3409,12 +3409,17 @@ public partial class FlightController : Node3D
             // Log the assigned pick with its own rank inputs (informational — rank not consulted).
             int idx = _rankSources.IndexOf(primary);
             if (idx >= 0)
-                score = AiTargetRanking.Score(ownPos, ownFwd, activation, _rankCandidates[idx]);
+                score = AiTargetRanking.Score(ownPos, ownFwd, activation, AiScorer.Jet,
+                    _rankCandidates[idx]);
             how = byRole ? "primary target: nearest human" : "primary target";
             return primary;
         }
 
-        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, _rankCandidates, out score);
+        // ⚠ Jet is asserted, not derived: the engine picks the scorer off the SHOOTER's own mode,
+        // so a mode plane or heli aeroplane should take Other. Deriving it here would change what
+        // those aircraft target, which is a behaviour claim wanting its own evidence.
+        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, AiScorer.Jet,
+            _rankCandidates, out score);
         return best >= 0 ? _rankSources[best] : null;
     }
 

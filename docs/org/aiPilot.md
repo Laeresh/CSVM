@@ -101,7 +101,9 @@ nothing on the path from the world tick to the trigger tests for a surface hull:
   `patrolboat` and `t_truck` each carry one `wep_29` at 9000 rounds, a 0.3 s refire and a 1 to 500 m
   window;
 - `FUN_00476250` gives every vehicle a gun mount whether or not the def authors gun limits, and
-  neither def authors any, so a boat's mount is unclamped on both axes and spends no aim residual;
+  neither def authors any; but both models carry a `turret` and a `gun` node, so the mount is the
+  ANIMATED one, which brings its own elevation band and a slew whose lag the aim residual pays
+  for ([`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md), "A `mode ship` vehicle's mount");
 - `FUN_004897c0` calls the AI update for every awake vehicle, with no mode test at the call;
 - the target scorer is the non-`jet` one, `FUN_00421950`, selected on `+0x67c` at `0x0041fe75`;
 - the fire decision's quick-draw gate applies only when the *shooter's* mode is `jet` or `wingman`,

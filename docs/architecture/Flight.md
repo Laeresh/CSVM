@@ -421,6 +421,16 @@ window, then the airframe's traverse clamp on the lead with the residual the cla
 turn, so the employable cone is the traverse limit plus that gate. Engine-free; the live half is the
 `ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
+## src/Flight/SurfaceGunMount.cs
+The gun mount a `mode ship` hull carries, pure and frame-local
+([../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md) "A `mode ship` vehicle's mount"): the
+animated branch of the per-mount aim update, which a boat and a truck take and no aeroplane does.
+`Guard` pins the desired elevation into the band while preserving azimuth and unit length, and never
+touches yaw. `Slew` closes a fixed FRACTION of the remaining angle per step, over the engine's own
+lerp/slerp/opposed three-way, snapping whole once a step covers the turn. `AimQuality` is measured
+against the RAW lead, so the guard's give-away is charged to the shot the way an aeroplane's
+traverse clamp is. Pinned by `SurfaceGunMountTests`; not the aeroplane's mount.
+
 ## src/Flight/AiRocketeer.cs
 The AI's ordnance employment, the gun path's twin: per sim tick the host `FlightController` ages the
 vehicle-wide lockout and hands over the fire geometry (`Solve`), which answers with the trigger, the
@@ -444,10 +454,10 @@ The decoded target-ranking formula ([../org/aiPilot.md](../org/aiPilot.md) "Targ
 rank built from a weight, the distance and an objective bias, and MINIMISED, with the player carrying
 a lower base weight than everyone else, a wingman a higher one, a gasbag a lower one, ±0.2 terms for
 ahead/behind on a half-metre deadband, altitude sign and closing, and an effectively infinite rank
-beyond the activation radius. Snapshots in, index and score out, engine-free. `SelectBest` prefers
-the best candidate no ally already holds and falls back to the overall best when the pool is
-exhausted, and `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins, saturating at
-always-target and at exclusion.
+beyond the activation radius. `AiScorer` names the engine's two implementations and is required
+because the wrong one is silent: `Other` drops those three geometry terms. Snapshots in, index and
+score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `ObjectiveBiasFor`
+matches `rating_biases` patterns, first match wins, saturating at always-target and at exclusion.
 
 ## src/Flight/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
