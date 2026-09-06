@@ -829,27 +829,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   at all, so the mismatch is the AI's alone; [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md),
   "Who aims ordnance, and who does not"); `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
-- `BL-559` `[Research]` `[S]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]` **Do the original's gun rounds carry the launcher's velocity?** *Evidence:*
-  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) ("Launch velocity is inherited, and decays
-  over `LOCK_ON`") decodes `FUN_005aef40` as copying the launcher's velocity into a round only when
-  the weapon carries `LOCK_ON`, and writing a zero vector otherwise. No gun authors `LOCK_ON`.
-  `ProjectilePool.InheritedAtLaunch` deliberately holds guns outside that rule, and the comment above
-  it says so and states the question was never settled. Two decoded facts pull the other way and are
-  the reason this is worth reading rather than assuming: the aim assist solves its intercept on the
-  RELATIVE velocity, which is the correct solve only for an inheriting round, and the decoded pipper
-  places itself at `muzzle + 0.5 × (VELOCITY × nose + planeVelocity)`
-  ([`docs/org/aim-assist.md`](docs/org/aim-assist.md)), which is where an inheriting round would be.
-  Either guns take a spawn path other than `FUN_005aef40`, or the `LOCK_ON` gate is narrower than the
-  ordnance page states, or the original's sight and its rounds genuinely disagree.
-  *What to settle:* which spawn function the `CANNON` branch of `FUN_004b6820` calls, and whether the
-  `+0x30`..`+0x38` launch-velocity copy is reached on that path.
-  *⚠ Traps:* not a TTK item. If CSVM is wrong here it is wrong in the player's FAVOUR, since an
-  inheriting round lands where the relative-frame lead predicts and a non-inheriting one falls short
-  of it. Do not "fix" it as part of a lethality pass, and do not change the pipper formula or the
-  assist's relative-velocity solve to match a change here without re-reading both: the three are one
-  system and the decode page records the sight and the assist as deliberately disagreeing already.
-  *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
-
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
   carries the def's `collision` list as rays from the previous pose, six points on the `p*` player

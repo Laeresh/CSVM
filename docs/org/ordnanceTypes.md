@@ -286,14 +286,36 @@ renormalises, so a guided round noses up to clear terrain. A `TETHER_GUIDED` wea
 branch: instead of the pull-up it **zeroes any climb component** once the round is near a global
 altitude limit, which reads as a ceiling clamp rather than a floor.
 
-### Launch velocity is inherited, and decays over `LOCK_ON`
+### Every round inherits its launcher's velocity; only a motor round can lose it
 
-This is the piece with the most consequence, and it is not visible in the data at all.
+This is the piece with the most consequence, and it is not visible in the data at all. It runs
+through two different slots, and reading either one alone gives the wrong answer.
 
-At spawn (`FUN_005aef40`), a weapon carrying `LOCK_ON` (`+0x74` bit `0x8000`) has the **launcher's
-velocity vector** copied into the round at `+0x30`..`+0x38`. A weapon without `LOCK_ON` gets a zero
-vector there. Then every frame, while the round is younger than `LOCK_ON` seconds, the guidance step
-sets
+**A round with no motor is seeded with the launcher's velocity and keeps it.** The spawn splits at
+`0x005af124`–`0x005af13e` on `ACCELERATION` (`+0x38`) being zero and `INSTANT` (`+0x74` bit `0x800`)
+being absent. In that arm the speed `+0x640` takes `VELOCITY` (`0x005af147`), equal to the cap
+already written at `0x005af0ea`, and `FUN_005389a0` builds the round's velocity vector `+0x60` at
+`0x005af15a` as
+
+    velocity = launcherVelocity + VELOCITY * direction
+
+under no flag gate at all. The motion step moves the round by `dt * velocity` and rebuilds `+0x60`
+only while the speed is below its cap, so a round seeded AT its cap is never rebuilt and carries the
+launcher's velocity for its whole flight. **This is what every gun does**: all 31 `CANNON` entries
+author neither `ACCELERATION` nor `LOCK_ON`, and nothing in this install authors `INSTANT`. The gun
+aim assist's relative-velocity intercept and the pipper's `muzzle + 0.5 * (VELOCITY * nose +
+planeVelocity)` ([`aim-assist.md`](aim-assist.md)) are both built on this round, and both are right.
+
+**`+0x30` is the motor round's base vector, not the inheritance.** A weapon authoring
+`ACCELERATION` takes the other arm and has its `+0x60` rebuilt every frame as
+`+0x30 + speed * heading`, so what it inherits is whatever `+0x30` holds. That is where the
+`LOCK_ON` gate sits: the spawn zeroes `+0x30`..`+0x38` at `0x005af5eb` and copies the **launcher's
+velocity vector** in at `0x005af626`, only when the weapon carries `LOCK_ON` (`+0x74` bit `0x8000`,
+tested at `0x005af616`). A motor round without `LOCK_ON` rebuilds from zero, keeping the launcher's
+speed as the scalar added to its speed and cap (below) along its own heading, and none of the
+vector. The four accelerating types are `wep_04`/`25`/`26`/`27`.
+
+Then every frame, while the round is younger than `LOCK_ON` seconds, the guidance step sets
 
     velocity = heading * speed  +  ((LOCK_ON - age) / LOCK_ON) * inheritedLaunchVelocity
 
@@ -310,8 +332,8 @@ reproduce that synthetic target; the divergence is recorded on `Projectile.cs` i
 [`architecture.md`](../architecture.md).
 
 `LOCK_ON` is doing three separate jobs, which is why the name misleads: it is the lead-guidance ramp
-denominator, the launch-velocity decay window, and the flag that decides whether launch velocity is
-inherited at all. [`formats/weapons.md`](../formats/weapons.md) describes it as lock-acquisition
+denominator, the launch-velocity decay window, and the flag that decides whether a **motor** round
+inherits its launcher's velocity as a vector. [`formats/weapons.md`](../formats/weapons.md) describes it as lock-acquisition
 time; that is the one job this decode did **not** find it doing.
 
 ## The motion step, and where a round dies

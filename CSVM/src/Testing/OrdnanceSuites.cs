@@ -193,8 +193,8 @@ internal static class OrdnanceSuites
         "seconds (BL-290): wep_14 launched at 120 m/s leaves at 180, reads 120 at half the " +
         "window and holds its authored 60 from 2.5 s on, while a slow launch barely changes; " +
         "the decay runs for a LOCK_ON round holding NO target too (the recorded divergence " +
-        "from the original's target-gated step); and neither a gun nor a rocket without " +
-        "LOCK_ON changes")]
+        "from the original's target-gated step); and a gun and a motorless rocket both carry " +
+        "their launcher's velocity undecayed, since the gate is the MOTOR round's alone")]
     internal static void LaunchVelocityDecay(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -213,7 +213,7 @@ internal static class OrdnanceSuites
             $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##} — the decode's 60 m/s over 2.5 s");
         ctx.Check(ProjectilePool.CarriesLockOn(torpedo) && !ProjectilePool.CarriesLockOn(choker)
                   && !ProjectilePool.CarriesLockOn(gun),
-            $"the inherit-at-all flag is LOCK_ON itself: wep_14 carries it, the choker and the gun do not");
+            $"the decay window flag is LOCK_ON itself: wep_14 carries it, the choker and the gun do not");
         ctx.Check(ProjectilePool.SteeringStepRuns(torpedo, hasTarget: true)
                   && !ProjectilePool.SteeringStepRuns(torpedo, hasTarget: false)
                   && !ProjectilePool.SteeringStepRuns(choker, hasTarget: true),
@@ -272,9 +272,12 @@ internal static class OrdnanceSuites
             ctx.Check(Mathf.Abs(untargeted - 60f) < 0.5f,
                 $"a LOCK_ON round holding NO target still sheds its launcher's velocity speed={untargeted:0.##} expected=60");
 
+            // The choker authors no ACCELERATION, so the original seeds it like a gun and never
+            // rebuilds it. LOCK_ON gates the MOTOR round's inheritance, not every round's.
             float chokerSpeed = SpeedAt(choker, 120f, target, 0.3f);
-            ctx.Check(Mathf.Abs(chokerSpeed - (choker.Velocity ?? 0f)) < 0.5f,
-                $"a rocket without LOCK_ON inherits nothing at all speed={chokerSpeed:0.##} expected={choker.Velocity ?? 0f:0.##}");
+            float chokerExpected = (choker.Velocity ?? 0f) + 120f;
+            ctx.Check(Mathf.Abs(chokerSpeed - chokerExpected) < 0.5f,
+                $"a motorless rocket carries its launcher's velocity like a gun speed={chokerSpeed:0.##} expected={chokerExpected:0.##}");
 
             float gun0 = SpeedAt(gun, 120f, null, 0f);
             float gunLater = SpeedAt(gun, 120f, null, 0.2f);

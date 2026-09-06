@@ -496,10 +496,10 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>Whether the weapon authors <c>LOCK_ON</c> (weapon <c>+0x74</c> bit <c>0x8000</c>).
     /// The key does three jobs and lock acquisition is none of them
-    /// (docs/org/ordnanceTypes.md): it decides whether a round inherits its launcher's velocity at
-    /// all, it is the window that inheritance decays over, and it is the guidance ramp's
-    /// denominator. No <c>CANNON</c> in this install authors it; ten of the twelve ordnance types
-    /// do.</summary>
+    /// (docs/org/ordnanceTypes.md): it decides whether a MOTOR round inherits its launcher's
+    /// velocity as a vector, it is the window that inheritance decays over, and it is the guidance
+    /// ramp's denominator. No <c>CANNON</c> in this install authors it; ten of the twelve ordnance
+    /// types do.</summary>
     public static bool CarriesLockOn(WeaponDef weapon) => weapon.LockOn is > 0f;
 
     /// <summary>The steering step's gate (<c>FUN_005af720</c> → <c>FUN_005af960</c>): the weapon
@@ -1413,13 +1413,13 @@ public sealed partial class ProjectilePool : Node3D
     private static Basis EffectOrient(in ImpactOutcome outcome, Vector3 normal) =>
         outcome.SurfaceOriented ? SurfaceUpBasis(normal) : Basis.Identity;
 
-    // The launcher's velocity a round actually carries away. FUN_005aef40 gives it to a LOCK_ON
-    // weapon and zeroes it for one without. ⚠ Guns are held outside that rule: no CANNON authors
-    // LOCK_ON, so applying it to them would strip every bullet of its launcher's velocity, and both
-    // the gun aim assist and the impact reticle (Ballistics.March) are built on the inheriting
-    // round. Whether the original's guns fly without it is the gun path's question, not this one's.
+    // The launcher's velocity a round actually carries away. ⚠ The discriminator is ACCELERATION,
+    // never the weapon class: a round with no motor is seeded launcherVel + VELOCITY x direction
+    // and never rebuilt, so it inherits whatever it was fired from, guns included. A motor round is
+    // rebuilt every frame off a base vector the original fills only under LOCK_ON, so without that
+    // key it keeps the launcher's SPEED alone, along its own heading (Ballistics.LaunchSpeed).
     private static Vector3 InheritedAtLaunch(WeaponDef weapon, Vector3 launcherVel) =>
-        !weapon.IsRocket || CarriesLockOn(weapon) ? launcherVel : Vector3.Zero;
+        (weapon.Acceleration ?? 0f) == 0f || CarriesLockOn(weapon) ? launcherVel : Vector3.Zero;
 
     // What is left of the inherited launch velocity this frame: 1 at launch, falling linearly to 0
     // at LOCK_ON seconds, for EVERY round whose weapon carries LOCK_ON, target or none; a gun's
