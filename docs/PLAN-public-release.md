@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ A version the build states in its exe, its log and its filename
 12. ☑ The third-party notices the binary is obliged to carry
-13. ☐ An exported build writes `logs\`, and the README says where saves live
+13. ☑ An exported build writes `logs\`, and the README says where saves live
 
 ### Wave C — The first run on someone else's machine
 
@@ -413,7 +413,7 @@ and `$ReleaseFiles` agree, and that the recorded fork commit matches
 fork commit breaks the source correspondence, which is why the commit is recorded and checked rather
 than assumed.
 
-## B13 ☐ An exported build writes `logs\`, and the README says where saves live
+## B13 ☑ An exported build writes `logs\`, and the README says where saves live
 
 **Goal.** A recipient finds their log without being told about a hidden developer folder, and can
 answer "where are my settings and profiles" from the README.

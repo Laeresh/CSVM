@@ -289,6 +289,9 @@ public partial class Launcher : Node3D
     // root (res://'s parent on disk); in an exported build it is the exe's own directory, since
     // GlobalizePath("res://") only maps to a real directory inside the editor.
     private string _repoRoot = "";
+    // Set beside the root above, by the same editor check. The log directory is all that reads it
+    // (Log.DirectoryFor): a recipient's log must not land in a hidden developer folder.
+    private bool _exported;
     // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
     // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
@@ -347,7 +350,8 @@ public partial class Launcher : Node3D
         else
         {
             // Exported build: res:// lives inside the pck, so the root is the exe's own folder —
-            // extracted/ ships beside the exe, and .scratch/ output lands there too.
+            // extracted/ ships beside the exe, and logs/ and .scratch/ output land there too.
+            _exported = true;
             _repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
         }
 
@@ -477,7 +481,7 @@ public partial class Launcher : Node3D
         // Opened under the session shape's name (it names the file) and before anything else can
         // log. The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
-        Log.Open(_repoRoot, _spec.ModeName, BuildVersion.Current);
+        Log.Open(_repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
         Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
@@ -488,7 +492,7 @@ public partial class Launcher : Node3D
         // Ahead of --dump-config, same reason as _hitchMonitor: registers the two
         // hitchSidecar.* keys. The fallback path only matters if Log.Open itself failed.
         string hitchLogPath = Log.SinkPath
-            ?? Path.Combine(_repoRoot, ".scratch", "logs", $"{_spec.ModeName}-nolog.hitches.jsonl");
+            ?? Path.Combine(Log.DirectoryFor(_repoRoot, _exported), $"{_spec.ModeName}-nolog.hitches.jsonl");
         _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
 
         // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()

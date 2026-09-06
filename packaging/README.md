@@ -55,11 +55,24 @@ anywhere else, don't run it.
 
 ## If something goes wrong
 
-Logs are written to `.scratch\logs` next to `CSVM.exe`. When you report a problem, send
+Logs are written to `logs\` next to `CSVM.exe`. When you report a problem, send
 the newest log file from there along with what you did — that is usually all we need.
 
 If extraction fails, copy the message it printed; if the game starts but warns about the
 extraction at boot, re-run the extraction command from step 1.
+
+## Where your files live
+
+The engine, your `extracted` game assets and the `logs` folder all sit in this one folder,
+wherever you unzipped it. Your settings, control bindings, campaign profiles, stunt scores
+and custom planes are kept outside it, in:
+
+```
+%APPDATA%\Godot\app_userdata\CSVM
+```
+
+(paste that into Explorer's address bar). Deleting those two folders removes everything
+CSVM has written; your Crimson Skies install is never modified.
 
 ## Legal
 
