@@ -50,10 +50,11 @@ public partial class Launcher : Node3D
     // and everything (both audio paths) is on it by default.
     private const int MasterBus = 0;
 
-    // Master output gain, linear, when neither `--volume=` nor the
+    // Master output gain, linear, for a REPO run where neither `--volume=` nor the
     // `audio.volume` config key says otherwise. 0: launches are silent
     // unless someone asks for sound (the Run scripts pass `--volume=1.0`), so a scripted
-    // or agent run never sounds by accident — see ApplyMasterVolume.
+    // or agent run never sounds by accident. An exported build defaults to the resting gain
+    // below instead — see ApplyMasterVolume.
     private const float MasterVolumeDefault = 0f;
 
     // The bus's own resting gain (0 dB). A launch resolving to this leaves the bus
@@ -730,6 +731,14 @@ public partial class Launcher : Node3D
         // path; Esc from a menu-launched flight returns here (ReturnToMenu).
         if (_spec.ShowsMenu)
         {
+            // Only on the path a recipient takes. Every other entry carries a content arg, which
+            // is a developer's launch, and the log is where that reader already looks.
+            if (UI.NoGameDataScreen.Missing(_dataRoot))
+            {
+                ShowNoGameData();
+                return;
+            }
+
             _menuDriven = true;
             ShowMenu(MenuReturnDestination.TopLevel);
             return;
@@ -1199,6 +1208,15 @@ public partial class Launcher : Node3D
         env.TonemapAgxContrast = EnhancedTonemapAgxContrast;
     }
 
+    // The dead end for a launch with no extraction under the data root: the screen goes up and
+    // nothing else is built, so the window carries the answer instead of the log. Esc leaves
+    // through _UnhandledInput, which quits with neither a menu nor a session up.
+    private void ShowNoGameData()
+    {
+        Log.Error("core", $"no extracted game data path={Path.Combine(_dataRoot, "extracted")} — {UI.NoGameDataScreen.Instruction(_exported)}");
+        AddChild(UI.NoGameDataScreen.Build(_dataRoot, _exported));
+    }
+
     // Shows the menu at a semantic destination, building the host on first use. Re-shown by
     // ReturnToMenu after the boards' Exit and a failed build, and by OpenDebrief after a campaign
     // mission. The --menu= aid is the cold start's alone: the presentation created inside the
@@ -1573,14 +1591,19 @@ public partial class Launcher : Node3D
         ShowMenu(destination);
     }
 
-    // Settles the master output gain: --volume= if given, else audio.volume, else silent.
+    // Settles the master output gain: --volume= if given, else audio.volume, else silent in a
+    // repo run and full in an exported one.
     // Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so
     // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one —
     // see this file's docs/architecture.md entry, which also covers why the config read stays
     // unconditional so it self-registers for --dump-config.
     private void ApplyMasterVolume()
     {
-        float volume = Config.GetFloat("audio.volume", MasterVolumeDefault);
+        // An exported build defaults to audible, on the switch that settles the log directory.
+        // The silent default keeps agent and golden runs quiet, and a recipient who starts the
+        // exe passes no flag and has no config file to write one into.
+        float fallback = _exported ? MasterVolumeUnattenuated : MasterVolumeDefault;
+        float volume = Config.GetFloat("audio.volume", fallback);
         string source = "config";
         if (_spec.Volume is { } asked)
         {

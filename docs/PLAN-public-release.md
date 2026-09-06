@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The first run on someone else's machine
 
-21. ☐ Extraction without a terminal, and a screen for the player who skipped it
+21. ☑ Extraction without a terminal, and a screen for the player who skipped it
 22. ☐ The renderer floor, observed rather than assumed
 
 ### Wave D — What the public reads
@@ -443,7 +443,7 @@ run writes.
 
 # Wave C — The first run on someone else's machine
 
-## C21 ☐ Extraction without a terminal, and a screen for the player who skipped it
+## C21 ☑ Extraction without a terminal, and a screen for the player who skipped it
 
 **Goal.** A recipient extracts their assets by double-clicking one file and pointing it at their
 install, and a recipient who skips that step is told so on screen, in a sentence they can act on.
@@ -461,8 +461,9 @@ existing dispatcher with the bypass switch applied, probing the known install lo
 back to a folder picker so the path is never typed; added to `packaging/MANIFEST.md` and
 `$ReleaseFiles`. Then a launcher-side screen when the data root holds no `extracted/`, naming
 `Extract.cmd` and staying up rather than proceeding into a world it cannot build. All extraction
-logic stays in `ExtractAssets.ps1` and `ExtractRof.ps1`. <TODO: the retail installer's default path
-and its plausible variants need the author's own install plus any others they know of.>
+logic stays in `ExtractAssets.ps1` and `ExtractRof.ps1`. The probe order the author settled:
+`Microsoft Games\Crimson Skies` under either Program Files, then a `Games\` or bare
+`Crimson Skies\` folder on every fixed drive.
 
 Third piece, from A1: `BL-770`, the silent first run. `Launcher.MasterVolumeDefault` is `0` so that
 a scripted or agent run never sounds by accident, the run scripts pass `--volume=1.0`, and the
@@ -705,9 +706,8 @@ Two rules this list is written to. Nothing here meets Decision 3's bar, because 
 that does except `BL-694`, which A2 fixes and which therefore never reaches the notes. And nothing
 here is an internal decode: the sentence says what happens on screen, not which function is wrong.
 
-Before E42 uses it: `BL-694` is fixed by then, so re-read the CM14 entries against the landed fix,
-and check `BL-770` against whatever C21 does about it. Anything A2 or a later wave closes comes off
-this list.
+Before E42 uses it: `BL-694` is fixed by then, so re-read the CM14 entries against the landed fix.
+Anything A2 or a later wave closes comes off this list.
 
 ## Campaign missions
 
@@ -763,10 +763,6 @@ this list.
 
 ## What the world looks and sounds like
 
-- **The game starts silent when `CSVM.exe` is launched by double-clicking it.** Run
-  `.\CSVM.exe --volume=1.0` from a terminal in the same folder, which is audible at full volume.
-  (`BL-770`, filed by A1; `Launcher.MasterVolumeDefault` is `0` and the payload supplies neither
-  the flag nor an `audio.volume` config key. C21 is expected to remove this entry before release.)
 - **There is no in-game audio menu, and the player's own engine loop reads too loud against
   everything else.** The `--volume=` launch flag is the only level control there is. (`BL-455` and
   `BL-391`; no landing commit for either, and the master gain is reachable only from the command
