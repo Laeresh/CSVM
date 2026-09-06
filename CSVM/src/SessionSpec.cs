@@ -56,6 +56,14 @@ public enum MenuMode
 public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int? Accent = null,
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
 
+/// <summary>One <c>--zep=</c> request: the zeppelin record to graft onto the empty stage, and the
+/// two overrides the stage needs. <c>Team</c> reaches the hull as the borrowed def's own team id,
+/// so it arrives through <c>ZeppelinRuntime.AuthoredTeam</c> rather than as a stamp on the part
+/// pools, and the rule that gives a zone the team its flagged <c>panels</c> child carries still
+/// runs. <c>Pos</c> replaces the record's authored seat, world metres.</summary>
+public readonly record struct ZepStageSpec(string Chapter, string Mission, string Record,
+    int? Team = null, Vector3? Pos = null);
+
 /// <summary>
 /// One immutable value for everything the command line settles about a session: parsed once,
 /// then resolved once, so a consumer reads an answer instead of re-deriving one.
@@ -350,6 +358,13 @@ public sealed record SessionSpec
     /// militia variant flown; without it the airframe's base def. One entry can stand for a
     /// squadron (<see cref="AiPlaneEntry.Count"/>). Null when the flag was absent.</summary>
     public IReadOnlyList<AiPlaneEntry>? AiPlanes { get; private set; }
+    /// <summary><c>--zep=&lt;chapter&gt;/&lt;mission&gt;:&lt;record&gt;[:team=&lt;id&gt;][:pos=x/y/z]</c>: one
+    /// zeppelin record's hull grafted onto <c>--stage=empty</c> and wired through
+    /// <c>ZeppelinRuntime</c> the way a mission's own is (docs/cli.md). Null when the flag was
+    /// absent. ⚠ Takes <see cref="Chapter"/> and <see cref="Mission"/> with it: the record's
+    /// gamez, textures, nets and <c>zeppelins.zrd.json</c> are all read off those, so the graft
+    /// needs no second chapter/mission pair threaded through the build.</summary>
+    public ZepStageSpec? Zep { get; private set; }
     /// <summary><c>--ai-damage=&lt;fraction&gt;</c>: the hull health fraction every <c>--ai=</c> plane
     /// is spent down to as it spawns, so its authored injure_anims stages are already up in a
     /// scripted shot. Null when the flag was absent. <c>--damage=</c> is the player's counterpart
@@ -1023,6 +1038,30 @@ public sealed record SessionSpec
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--zeppelins") { s.Zeppelins = true; }
+            else if (arg.StartsWith("--zep="))
+            {
+                var zepSegments = arg["--zep=".Length..].Split(':');
+                var zepWhere = zepSegments[0].Split('/');
+                if (zepWhere.Length != 2 || zepWhere[0].Length == 0 || zepWhere[1].Length == 0
+                    || zepSegments.Length < 2 || zepSegments[1].Length == 0)
+                {
+                    s.Print($"--zep='{arg["--zep=".Length..]}' is not <chapter>/<mission>:<record>; ignoring it");
+                }
+                else
+                {
+                    int? zepTeam = null;
+                    Vector3? zepPos = null;
+                    for (int si = 2; si < zepSegments.Length; si++)
+                    {
+                        if (zepSegments[si].StartsWith("team="))
+                            zepTeam = int.Parse(zepSegments[si]["team=".Length..]);
+                        else if (zepSegments[si].StartsWith("pos="))
+                            zepPos = ParseVec3Slashed(zepSegments[si]["pos=".Length..]);
+                    }
+                    s.Zep = new ZepStageSpec(zepWhere[0], zepWhere[1], zepSegments[1], zepTeam, zepPos);
+                    s.HasContentArg = true;
+                }
+            }
             else if (arg == "--wake-turrets") { s.WakeTurrets = true; }
             else if (arg == "--wake-generators") { s.WakeGenerators = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
@@ -1676,6 +1715,24 @@ public sealed record SessionSpec
             else
             {
                 EmptyStage = true;
+            }
+        }
+        // --zep= reads its record's gamez, textures, nets and zeppelins.zrd off the chapter and
+        // mission it names, so it takes both with it rather than threading a second pair through
+        // the build. ⚠ The empty stage only: a chapter world places its own airships through
+        // --zeppelins, and grafting one of them on again would be two hulls under one node name.
+        if (Zep is { } zep)
+        {
+            if (!EmptyStage)
+            {
+                Print("--zep= grafts onto --stage=empty; a chapter world places its own with --zeppelins. Ignoring it");
+                Zep = null;
+            }
+            else
+            {
+                Chapter = zep.Chapter;
+                Mission = zep.Mission;
+                ChapterGiven = true;
             }
         }
         // The static viewer shows a chapter world when asked for one, else the parked plane.

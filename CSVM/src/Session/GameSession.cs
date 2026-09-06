@@ -451,8 +451,12 @@ public partial class GameSession : Node3D
             DebugCollision = _spec.DebugCollision,
         };
         state.TexturesPath = _spec.Textures ?? SessionPaths.ChapterTextures(_dataRoot, _spec.Chapter);
+        // --zep= grafts one chapter node onto the empty stage, so it needs that chapter's gamez
+        // where the bare stage needs only planes.zbd. Chapter is already the flag's own by here.
         state.GamezPath = _spec.Gamez
-            ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
+            ?? (_spec.WorldMode || _spec.Zep != null
+                ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter)
+                : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
 
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
@@ -523,7 +527,16 @@ public partial class GameSession : Node3D
             using var soundsScope = _spec.AnimLab ? null : state.Sounds;
             if (!ResolveNodeSubtree(state))
                 return false;
-            if (_spec.EmptyStage)
+            if (_spec.EmptyStage && _spec.Zep != null)
+            {
+                // The graft goes through the chapter-world path with NodeSubtree set: one subtree,
+                // no MissionSetup and no clutter, but a real AnimRuntime, so the damage, targeting
+                // and sub-part feeds bind to the airship as they do to a mission's own.
+                if (!BuildWorldStage(state))
+                    return false;
+                AttachEmptyStageGrid(state);
+            }
+            else if (_spec.EmptyStage)
             {
                 BuildEmptyStage(state);
             }
@@ -830,6 +843,44 @@ public partial class GameSession : Node3D
         return anchors;
     }
 
+    // --zep=: the named record alone, on a one-node net at the stage seat. The net is synthetic
+    // rather than the chapter's because a chapter net would fly the hull off to its own authored
+    // coordinates, thousands of metres from the squadron ring. ⚠ It must have a net at all: a def
+    // whose net does not resolve is placed but held OUT of the live list, so its zones never wire
+    // and nothing on it can be shot. The seat defaults to the grid origin at the record's own
+    // altitude, which is what puts it inside the ring rather than at its mission coordinates.
+    private static (List<ZeppelinDef> Defs, IReadOnlyList<AiNet> Nets, Vector3? Seat) GraftedZeppelin(
+        IReadOnlyList<ZeppelinDef> all, ZepStageSpec graft)
+    {
+        var only = new List<ZeppelinDef>();
+        foreach (var def in all)
+        {
+            if (def.Node.Equals(graft.Record, StringComparison.OrdinalIgnoreCase))
+                only.Add(def);
+        }
+        if (only.Count == 0)
+        {
+            GD.Print($"zep: '{graft.Record}' has no record in {graft.Chapter}/{graft.Mission}'s " +
+                     $"zeppelins.zrd.json — the hull is built but nothing is wired to it");
+            return (only, System.Array.Empty<AiNet>(), null);
+        }
+        var seat = graft.Pos ?? new Vector3(0f, only[0].Position.Y, 0f);
+        var nets = new List<AiNet>
+        {
+            new AiNet
+            {
+                Id = 0,
+                Name = only[0].Net,
+                Nodes = new[] { new AiNetNode(seat, System.Array.Empty<float>()) },
+                Edges = System.Array.Empty<(int A, int B)>(),
+            },
+        };
+        GD.Print($"zep: graft '{graft.Record}' from {graft.Chapter}/{graft.Mission} seated at " +
+                 $"({seat.X:0},{seat.Y:0},{seat.Z:0}), " +
+                 (graft.Team is { } t ? $"team {t}" : "team as the record authors it"));
+        return (only, nets, seat);
+    }
+
     // A campaign mission has ended and its result is banked (the director records the attempt and
     // saves the profile before raising this). The world stays up for the rest of the frame; the
     // Launcher frees this session and shows the menu at the debrief, which re-reads the profile
@@ -941,6 +992,28 @@ public partial class GameSession : Node3D
     // sanitized and auto-renamed; duplicates are normal, so the first match builds.
     private bool ResolveNodeSubtree(BuildState state)
     {
+        // --zep= is the same subtree build under another name: the record's hull instead of a node
+        // the user named, so the graft borrows this resolution rather than repeating it.
+        if (_spec.Zep is { } zep)
+        {
+            var zepMatches = WorldBuilder.MatchNodes(state.Gamez, zep.Record);
+            if (zepMatches.Count == 0)
+            {
+                var zepNear = WorldBuilder.SuggestNodes(state.Gamez, zep.Record, NodeSuggestCap);
+                Log.Warn("world", $"--zep: '{zep.Record}' matches no node in {zep.Chapter}'s gamez ({state.Gamez.Nodes.Count} nodes)");
+                if (zepNear.Count > 0)
+                {
+                    Log.Warn("world", $"--zep= candidates containing '{zep.Record}': {string.Join(", ", zepNear)}");
+                }
+                _sessionTextures?.Dispose();
+                _sessionTextures = null;
+                GetTree().Quit();
+                return false;
+            }
+            state.NodeSubtree = zepMatches[0];
+            Log.Info("world", $"--zep='{zep.Chapter}/{zep.Mission}:{zep.Record}' grafting '{zepMatches[0].Name}'#{zepMatches[0].Index} onto the empty stage");
+            return true;
+        }
         if (_spec.NodeName == null || !_spec.WorldMode)
             return true;
         var matches = WorldBuilder.MatchNodes(state.Gamez, _spec.NodeName);
@@ -986,6 +1059,20 @@ public partial class GameSession : Node3D
         state.MeshInstances = stage.MeshInstanceCount;
         state.Colliders = stage.ColliderCount;
         state.What = "empty stage";
+    }
+
+    // --zep=: the graft's ground. The same grid and collidable plane the bare stage builds, added
+    // beside the subtree rather than as the subject, since on this path _plane is the airship and
+    // AttachPlaneAndLabs joins that one.
+    private void AttachEmptyStageGrid(BuildState state)
+    {
+        long mark = StartupProfile.Mark();
+        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision);
+        StartupProfile.Record("world", mark);
+        _worldRoot!.AddChild(stage.Root);
+        state.MeshInstances += stage.MeshInstanceCount;
+        state.Colliders += stage.ColliderCount;
+        state.What += " on the empty stage";
     }
 
     // Builds the chapter world through WorldSession and binds its animation program, then the
@@ -1847,9 +1934,12 @@ public partial class GameSession : Node3D
     private void BuildFlightRigs(BuildState state)
     {
         long mark = StartupProfile.Mark();
-        // On the empty stage the session gamez IS planes.zbd (there is no chapter world),
-        // so there is nothing to load a second time.
-        var planesGamez = _spec.EmptyStage ? state.Gamez : GameZ.Load(state.PlanesGamezPath);
+        // On the empty stage the session gamez IS planes.zbd (there is no chapter world), so there
+        // is nothing to load a second time. ⚠ Unless --zep= grafted a chapter node on: the session
+        // gamez is then that chapter's, and planes.zbd has to be loaded here as everywhere else.
+        var planesGamez = _spec.EmptyStage && _spec.Zep == null
+            ? state.Gamez
+            : GameZ.Load(state.PlanesGamezPath);
         StartupProfile.Record("gamez", mark);
         // Stats are per plane, not per player (splitscreen players can pick
         // different aircraft) — load each distinct one once, logging it as it appears.
@@ -2515,7 +2605,7 @@ public partial class GameSession : Node3D
         // along their nets as kinematic world nodes. ⚠ Build them before --generators below, so a
         // zeppelin generator's min_altitude gate reads the flown host's live Y from the first step.
         bool iaZeppelinRun = iaRt?.IsZeppelinRun ?? false;
-        if (_spec.Zeppelins || iaZeppelinRun)
+        if (_spec.Zeppelins || iaZeppelinRun || _spec.Zep != null)
         {
             List<ZeppelinDef> zepDefs;
             try
@@ -2527,13 +2617,25 @@ public partial class GameSession : Node3D
                 GD.Print($"zep: no zeppelins file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
                 zepDefs = new List<ZeppelinDef>();
             }
-            var zepNets = AiNets.Load(worldBindings.ChapterZrdrPath);
+            IReadOnlyList<AiNet> zepNets;
+            int? zepTeamOverride = null;
+            Vector3? zepSeat = null;
+            if (_spec.Zep is { } graft)
+            {
+                (zepDefs, zepNets, zepSeat) = GraftedZeppelin(zepDefs, graft);
+                zepTeamOverride = graft.Team;
+            }
+            else
+            {
+                zepNets = AiNets.Load(worldBindings.ChapterZrdrPath);
+            }
             _zeppelins = new ZeppelinRuntime(zepDefs,
                 name => worldBindings.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
                 zepNets, netTrailers.For,
                 // The bootstrap has already run the start anims: a hull an SI script owns from
                 // its first frame must not be placed at the record seat on top of it.
-                host => worldBindings.WorldRuntime?.Motions.DrivesTransform(host) ?? false);
+                host => worldBindings.WorldRuntime?.Motions.DrivesTransform(host) ?? false,
+                zepTeamOverride, zepSeat);
             _worldRoot!.AddChild(_zeppelins);
             // F18: the multi-zone damage half — per-part pools over the world registry, the
             // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.

@@ -40,9 +40,18 @@ public sealed partial class ZeppelinRuntime : Node
     /// <param name="transformDriven">Whether an animation motion owns a node's transform channel
     /// right now (<c>MotionSet.DrivesTransform</c>). Null until <see cref="WireDamage"/> adopts
     /// the runtime's own, which is one bootstrap late for a start anim's SI script.</param>
+    /// <param name="teamOverride">--zep='s side for the grafted record, or null to read the
+    /// record's own. Applied where <see cref="AuthoredTeam"/>'s answer lands, so the override fans
+    /// onto the zones and guns through the one path they already read; never stamped on the part
+    /// pools, which would suppress the flagged-<c>panels</c> rule in <see cref="WireZones"/>.</param>
+    /// <param name="seatOverride">--zep='s stage seat for the grafted record, or null to start
+    /// from the record's authored position. Applied through <see cref="ZeppelinMotion.ResumeAt"/>
+    /// so the law itself is re-seated: placing the node alone would be undone by the next step,
+    /// which writes the motion's own position back onto it.</param>
     public ZeppelinRuntime(IReadOnlyList<ZeppelinDef> defs, Func<string, Node3D?> resolveNode,
         IReadOnlyList<AiNet> chapterNets, Func<AiNet, Func<Vector3?>?>? trailerTarget = null,
-        Func<Node3D, bool>? transformDriven = null)
+        Func<Node3D, bool>? transformDriven = null, int? teamOverride = null,
+        Vector3? seatOverride = null)
     {
         Name = "zeppelins";
         _transformDriven = transformDriven;
@@ -78,7 +87,11 @@ public sealed partial class ZeppelinRuntime : Node
             var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), ArrivalFloorM,
                 trailerTarget?.Invoke(net), observesStopPoints: true);
             var motion = new ZeppelinMotion(def, follower);
-            var zep = new LiveZeppelin(def, motion, host);
+            if (seatOverride is { } seat)
+            {
+                motion.ResumeAt(seat, Mathf.DegToRad(def.YawDeg), Mathf.DegToRad(def.PitchDeg));
+            }
+            var zep = new LiveZeppelin(def, motion, host, teamOverride);
             // A start anim's SI script already owns the hull's pose at bootstrap: the follower
             // parks and the record seat is where the script ends, not where the hull starts.
             if (Driven(host))
@@ -86,8 +99,10 @@ public sealed partial class ZeppelinRuntime : Node
             else
                 Place(host, motion.Position, motion.YawRad, motion.PitchRad);
             _live.Add(zep);
-            GD.Print($"zep: '{def.Node}' placed at ({def.Position.X:0},{def.Position.Y:0}," +
-                     $"{def.Position.Z:0}) on net '{net.Name}' ({net.Nodes.Count} nodes), " +
+            // ⚠ The motion's position, not the record's: --zep= re-seats the law, so the authored
+            // seat and where the hull actually stands are different points on that path.
+            GD.Print($"zep: '{def.Node}' placed at ({motion.Position.X:0},{motion.Position.Y:0}," +
+                     $"{motion.Position.Z:0}) on net '{net.Name}' ({net.Nodes.Count} nodes), " +
                      $"max_speed {def.MaxSpeed:0.#} m/s, engines {motion.TotalEngines}, " +
                      $"team {AuthoredTeam(def)?.ToString() ?? "unauthored"}" +
                      (def.Deactivated ? " — deactivated, out of the world until woken" : ""));
@@ -779,7 +794,8 @@ public sealed partial class ZeppelinRuntime : Node
 
     private sealed class LiveZeppelin
     {
-        public LiveZeppelin(ZeppelinDef def, ZeppelinMotion motion, Node3D host)
+        public LiveZeppelin(ZeppelinDef def, ZeppelinMotion motion, Node3D host,
+            int? teamOverride = null)
         {
             Def = def;
             Motion = motion;
@@ -787,7 +803,7 @@ public sealed partial class ZeppelinRuntime : Node
             ZoneAlive = node => ZoneIsAlive(
                 GasbagZones.TryGetValue(node, out var inst) ? inst : null);
             Dormant = def.Deactivated;
-            Team = AuthoredTeam(def);
+            Team = teamOverride ?? AuthoredTeam(def);
         }
 
         public ZeppelinDef Def { get; }

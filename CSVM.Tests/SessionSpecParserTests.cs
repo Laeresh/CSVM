@@ -208,6 +208,37 @@ public class SessionSpecParserTests
         Assert.Equal(1, SessionSpec.Parse(new[] { "--ai=player_fury:n=0" }).AiPlanes![0].Count);
     }
 
+    /// <summary>BL-742's zeppelin graft: `--zep=chapter/mission:record` takes the chapter and
+    /// mission with it, since the record's gamez, textures, nets and zeppelins.zrd are all read
+    /// off those. It is the empty stage's flag alone, and a value that is not
+    /// chapter/mission:record is refused with a note rather than half-applied.</summary>
+    [Fact]
+    public void ZepGraftTakesItsChapterAndMissionWithIt()
+    {
+        var s = SessionSpec.Parse(new[] { "--stage=empty", "--fly", "--zep=C4/M03:piratezep:team=1" });
+        Assert.NotNull(s.Zep);
+        Assert.Equal(new ZepStageSpec("C4", "M03", "piratezep", 1), s.Zep!.Value);
+        Assert.Equal("C4", s.Chapter);
+        Assert.Equal("M03", s.Mission);
+
+        var p = SessionSpec.Parse(new[]
+        {
+            "--stage=empty", "--fly", "--zep=C2/M01:hk_zep:pos=100/700/-50",
+        });
+        Assert.Equal(new Vector3(100f, 700f, -50f), p.Zep!.Value.Pos);
+        Assert.Null(p.Zep!.Value.Team);
+
+        // A chapter world places its own airships; grafting one on again would be two hulls under
+        // one node name, so the flag is dropped rather than obeyed.
+        var w = SessionSpec.Parse(new[] { "--fly", "--chapter=C4", "--zep=C4/M03:piratezep" });
+        Assert.Null(w.Zep);
+
+        foreach (string bad in new[] { "--zep=C4:piratezep", "--zep=C4/M03", "--zep=C4/M03:" })
+        {
+            Assert.Null(SessionSpec.Parse(new[] { "--stage=empty", "--fly", bad }).Zep);
+        }
+    }
+
     /// <summary>The D14 gunnery arm: bare `--ai-attack` reads skill 5, a value clamps to the
     /// 1–9 rating scale, and an absent flag stays null (no gunner armed).</summary>
     [Fact]
