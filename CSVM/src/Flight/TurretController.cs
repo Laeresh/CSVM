@@ -165,6 +165,11 @@ public sealed class TurretController
     /// solution — the overlay draws the line to the TARGET and the barrel shows the lead.</summary>
     public Vector3 TargetPosition { get; private set; }
 
+    /// <summary>What <see cref="TargetPosition"/> belongs to, for the F15 overlay's roll-call, or
+    /// null with no target. Observation only, like <see cref="Gate"/>: the acquisition already
+    /// decided on geometry, and nothing reads this back into the gunner.</summary>
+    public object? TargetSource { get; private set; }
+
     /// <summary>Carried: alive while the host is <see cref="FlightController.InPlay"/>. Emplacement:
     /// alive while its <c>HEALTHY_NODE</c> (default <c>healthy</c>) is visible IN THE TREE
     /// (docs/formats/turrets.md "Being alive, and being awake"): a mission's <c>.gw</c> switches a
@@ -628,6 +633,7 @@ public sealed class TurretController
     {
         pos = default;
         vel = default;
+        TargetSource = null;
         _scan.Clear();
         _pool.CollectVehicleList(_scan);
         _pool.CollectMissionStructures(_scan);
@@ -651,6 +657,7 @@ public sealed class TurretController
             best = d;
             pos = c.Position;
             vel = c.Velocity;
+            TargetSource = c.Source;
         }
 
         // Walked after the vehicles against the same running best, ties going to it, which is the
@@ -671,6 +678,7 @@ public sealed class TurretController
             best = d;
             pos = c.Position;
             vel = Vector3.Zero;
+            TargetSource = c.Source;
         }
 
         return best < float.MaxValue;

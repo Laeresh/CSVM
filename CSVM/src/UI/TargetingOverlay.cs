@@ -19,6 +19,10 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class TargetingOverlay : Node
 {
+    // How many shooters the roll-call prints before it says how many it left out. A screenful,
+    // not a census: the counts in the header are the census.
+    private const int RollCallRows = 12;
+
     // Firing this tick: every gate passed.
     private static readonly Color FiringColor = new(1f, 0.25f, 0.2f);
 
@@ -146,7 +150,11 @@ public sealed partial class TargetingOverlay : Node
             return;
         }
         _mesh.ClearSurfaces();
+        // Two lists, aeroplanes printed first, because the roll-call is capped and one airship
+        // carries seventeen turrets: a single list would spend the whole cap on emplacements and
+        // never show the four aircraft the run is actually about.
         var rows = new List<string>();
+        var pilotRows = new List<string>();
         int firing = 0, tracking = 0, held = 0, idle = 0;
 
         // ⚠ The surface opens on the FIRST line, not before the walk: SurfaceEnd on an empty
@@ -187,10 +195,8 @@ public sealed partial class TargetingOverlay : Node
             {
                 tracking++;
             }
-            if (rows.Count < 12)
-            {
-                rows.Add($"{t.Label}  {GateName(t.Gate)}  {t.WorldPosition.DistanceTo(t.TargetPosition):0} m");
-            }
+            rows.Add($"{t.Label}  {GateName(t.Gate)}  {Flight.FlightController.TargetLabel(t.TargetSource)}"
+                     + $"  {t.WorldPosition.DistanceTo(t.TargetPosition):0} m");
         }
 
         foreach (var t in _turrets())
@@ -224,11 +230,9 @@ public sealed partial class TargetingOverlay : Node
                 {
                     tracking++;
                 }
-                if (rows.Count < 12)
-                {
-                    rows.Add($"{rig.Name}  {(gunner.WantsFire ? "firing" : "tracking")}  " +
-                             $"{rig.WorldPosition.DistanceTo(preyPos):0} m");
-                }
+                pilotRows.Add($"{rig.Name}  {(gunner.WantsFire ? "firing" : "tracking")}  " +
+                              $"{FlightController.TargetLabel(gunner.Target)}  " +
+                              $"{rig.WorldPosition.DistanceTo(preyPos):0} m");
             }
         }
         if (begun)
@@ -236,8 +240,11 @@ public sealed partial class TargetingOverlay : Node
             _mesh.SurfaceEnd();
         }
 
-        ShowHud($"targets (F15): {firing} firing, {tracking} tracking, {held} held, {idle} without a target\n"
-            + string.Join("\n", rows));
+        pilotRows.AddRange(rows);
+        int shown = Math.Min(pilotRows.Count, RollCallRows);
+        ShowHud($"targets (F15): {firing} firing, {tracking} tracking, {held} held, {idle} without a target"
+            + (pilotRows.Count > shown ? $" ({pilotRows.Count - shown} more not listed)" : string.Empty)
+            + "\n" + string.Join("\n", pilotRows.GetRange(0, shown)));
     }
 
     private void ShowHud(string text)

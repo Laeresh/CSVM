@@ -3156,7 +3156,10 @@ public partial class FlightController : Node3D
 
     // The breadcrumb label for a standing target: "P{n}" for a human-readable aircraft slot, the
     // node/label name (TargetPool.NameOf) for a turret or structure.
-    private static string TargetLabel(object? source) =>
+    // How a target is named in a log line and in the F15 overlay's roll-call. Internal so the
+    // overlay reuses it: a second naming rule there would drift from what the flight log says,
+    // and the two get read side by side when a run is being explained.
+    internal static string TargetLabel(object? source) =>
         source is FlightController fc ? $"P{fc.PlayerIndex + 1}" : TargetPool.NameOf(source);
 
     // The gunner's one standing target of any class, which AiPilot reads as its pursuit quarry.
