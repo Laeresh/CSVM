@@ -578,9 +578,7 @@ public sealed class HangarFeature : IMenuFeature
             // remedy, and selling a plane back at full price answers both at once.
             if (!wallet.HasFreeSlot)
             {
-                return Strings.Text(
-                    204,
-                    "You have reached your hangar limit of planes.  Click Sell Planes, and sell one or more planes.");
+                return HangarFullText();
             }
 
             if (!wallet.IsAirframeAvailable(Scratch.Airframe))
@@ -596,6 +594,13 @@ public sealed class HangarFeature : IMenuFeature
 
         return null;
     }
+
+    /// <summary>The full-hangar refusal in the original's own words (langui 204). Composed here
+    /// rather than at each reader because a presentation that greys its purchase row ahead of the
+    /// press must say what the press itself would say.</summary>
+    public string HangarFullText() => Strings.Text(
+        204,
+        "You have reached your hangar limit of planes.  Click Sell Planes, and sell one or more planes.");
 
     /// <summary>Saves the scratch plane and ends the build, or refuses and leaves
     /// <see cref="Message"/> saying why (<see cref="Refusal"/>). Over a wallet the same commit also

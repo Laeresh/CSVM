@@ -54,7 +54,8 @@ internal static class MenuOriginalCampaignSuites
         + "from the sortie roster until one EXPORT press crosses it, a purchase over a profile at the "
         + "decoded slot cap is refused in the original's own words until a plane is sold back, the "
         + "screenshot aids' input script stands the pilot's plane list and the ammo screen's rocket "
-        + "list open and draws them through idle frames while export is still the EXPORT press, and "
+        + "list open and draws them through idle frames while export is still the EXPORT press and a "
+        + "script spelling the secondary press this presentation lacks is refused whole, and "
         + "Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
@@ -725,6 +726,14 @@ internal static class MenuOriginalCampaignSuites
         shell.RunAidScript("4da");
         ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:4",
             $"4da steps four rows down the ammo screen and stands that rocket list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+
+        // The one verb Original cannot spell, since it binds no secondary press: refused whole, so
+        // not even the two downs before it move the cursor and the run ends without a shot.
+        string focus = shell.FocusedKey;
+        int rows = shell.Rows.Count;
+        bool ran = shell.RunAidScript("2d-x");
+        ctx.Check(!ran && shell.Rows.Count == rows && shell.FocusedKey == focus,
+            $"2d-x is refused whole rather than replayed as far as x ({ran}, {rows} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
 
         shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
         shell.RunAidScript(CampaignAidProfiles.ExportArgument);

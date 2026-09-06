@@ -117,6 +117,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☑ `BL-697` Only player 1's keymap can be reached
 33. ☑ `BL-710` Quitting flashes Godot's default sky before the window closes
 
+### Wave F — What the run itself turned up
+
+The letter is F because A to E were already assigned; the wave runs before `E41`, which judges it
+along with everything else. Both items are consequences of items in this run rather than backlog
+entries, so neither carries a `BL-` id: they are fixed here instead of being filed and rescheduled.
+
+51. ☑ Built-in's Purchase Now row stays live at the slot cap and refuses on the press
+52. ☑ The aid script's `x` verb is silently inert under Original
+
 ### Wave E — At the controls
 
 41. ☐ Closing sortie: every landed item judged at the controls, and `BL-706` and `BL-696` answered
@@ -875,6 +884,134 @@ verification budgets, not a theoretical one.
 merged in: build clean at 0 warnings, 3442 units, 256 engine suites over four shards, 18 goldens
 hash-identical, engine errors clean, exit 0. The engine stage ran 110.4s against its 100s budget,
 which is awareness only and does not move the exit code.
+
+# Wave F — What the run itself turned up
+
+## F51 ☑ Built-in's Purchase Now row stays live at the slot cap and refuses on the press
+
+**Landed.** `HangarPurchasePage`'s two enumerations gained the third campaign reason, in the
+commit's own order: `BuildEnabled` now also wants `Flow.Campaign.HasFreeSlot`, and
+`CampaignProblemsText` reads the cap ahead of the availability threshold and the funds line, so at
+the cap the row is drawn with the refusal mark and its detail is langui 204 rather than the
+shortfall. One plane under the cap the row is live and its detail is empty, which is where it
+stood before.
+
+The predicate is `A3`'s own `IHangarWallet.HasFreeSlot`, which `CampaignWallet` answers from
+`PurchasedPlaneCap` against the profile's non-award records. No count and no cap literal was added
+anywhere: the page asks the wallet, and the wallet is the only thing that knows the number. The
+words are shared the same way. `HangarFeature.HangarFullText` now composes langui 204 once and both
+`Refusal` and the page read it, since a row that greys ahead of the press has to say what the press
+would say. The press-time refusal is untouched and still checked: a unit fills the profile behind
+an enabled row and presses, and the commit refuses in the same words with nothing written.
+
+Covered by three units in `HangarPurchasePageTests` (the row at the cap, the row one plane under
+it, and the press with the profile filled behind it) and a `MenuHangarSuites` walk that drives a
+real `LaunchMenu` to the purchase review over the aid's scratch profile, fills it and reads the
+drawn row and detail, then sells one plane back and reads them again. The walk fills against
+`HasFreeSlot` rather than a record count, because that profile has flown and its award records sit
+outside the cap; filling to 20 records left it one bought plane short of the cap and the row
+correctly stayed live, which is what the first run of the suite caught.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree with Wave F landed and main
+merged in: build clean at 0 warnings, 3450 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 111.0s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
+
+**Goal.** At the decoded slot cap, Built-in's Purchase Now row is drawn refused before it is
+pressed, and says why, as its two older refusals already do.
+
+**Evidence (confidence: traced).** `A3` put the cap refusal on `HangarFeature.Refusal`, ahead of
+the funds line, which is the seam both presentations read, so Original composes langui 204
+correctly. Built-in does not reach it the same way: `HangarPurchasePage`'s `BuildEnabled` and
+`CampaignProblemsText` enumerate only the two older campaign reasons (the reward aircraft and the
+two-plane floor), so at the cap the row stays live and the refusal arrives on the press instead of
+before it. The behaviour is correct either way; what is wrong is that Built-in tells the player
+after the fact where it could tell them first.
+
+**Approach.** Give the page the third reason from the same source `A3` used rather than a second
+count of anything: `CampaignWallet.PurchasedPlaneCap` against `Profile.Planes.Count`, through
+whatever `IHangarWallet` member `A3` added. The two existing reasons are the shape to copy.
+
+**Model recommendation.** medium. Two enumerations gaining a third case, with the value already
+decoded and asserted by a landed item.
+
+**Verify.** `MenuHangarSuites`: at the cap, Built-in's Purchase Now row is drawn refused and its
+problems text names the limit; one plane sold back re-enables it. A unit on the page's
+`BuildEnabled` at the cap and one under it. Then the complete `.\RunTests.ps1`.
+
+**⚠ Traps.** **Do not re-derive the cap here.** It is `CampaignWallet`'s constant and the decode
+behind it is recorded in `docs/org/hangar.md`; a second literal 20 in a page class is how the two
+drift apart. **The count is on records, never on the shared build directory**, which is the trap
+`A3` carried and which applies unchanged to a page asking the same question. Do not remove or
+weaken the press-time refusal: greying the row is an addition to it, since a row can be enabled
+and the profile change underneath it.
+
+## F52 ☑ The aid script's `x` verb is silently inert under Original
+
+**Landed.** The grammar still carries `x` and both presentations still read one language. What
+changed is that a replay refuses a script it cannot press instead of dropping the verb and
+carrying on. `CampaignAidScript.Presses(argument, verbs, controls)` is the one gate both replays
+go through: it parses as before and returns null as soon as a step names a verb outside the set
+the running presentation binds, logging `ERROR [ui] --menu= aid refused: the Original presentation
+has no 'x' press, so '2d-x' spells nothing it can replay and the run ends without a shot (verbs it
+takes: dulrab)`. `Verbs` stays `dulrabx`, which is what Built-in's pad passes;
+`VerbsWithoutSecondary` is `dulrab`, which is what `OriginalCampaign.RunAidScript` passes because
+Original selects a row by clicking it.
+
+Both aid entry points end the run on a refusal rather than shooting the screen: `LaunchMenu`'s
+`OpenCampaignAid` and `OriginalPresentation`'s each call `GetTree()?.Quit(1)`, the same shape the
+startup guard against `--headless` with `--screenshot` uses. The quit lands inside `_Ready`,
+before `CaptureDirector` has counted its frames down, so no PNG is written and the probe's exit
+code is the whole diagnosis. A probe proves it: `--presentation=original
+--menu=campaign-previous:2d-x --screenshot=…` exits 1 and writes no file, while the same command
+without the `x` exits 0 and writes the shot.
+
+Original was not given a secondary press, so no aid reaches a state its controls cannot. The
+refusal is whole rather than partial, so the two downs in `2d-x` do not move the cursor either; a
+half-replayed script would still hand back a picture that reads as an answer. No `--menu=` call
+site in `CSVM/src/Testing/**`, `CSVM.Tests/**` or `analysis/goldens/manifest.json` spells `x`, so
+nothing else moved.
+
+**Verified.** The complete `RunTests.ps1` on the merged plan tree with Wave F landed and main
+merged in: build clean at 0 warnings, 3450 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 111.0s against its 100s budget,
+which is awareness only and does not move the exit code.
+
+**Original approach (kept for reference).**
+
+**Goal.** An aid string that cannot do what it says under the presentation it is aimed at fails
+loudly rather than returning a shot of the wrong thing.
+
+**Evidence (confidence: traced).** `CampaignAidScript`'s grammar carries `x`, the secondary press,
+because Built-in's pad uses X to select a row. `OriginalShell.Step` reads `MoveY`, `MoveX`,
+`Accept` and `Back` and has no secondary command at all, by design, since Original selects a row
+by clicking it. So `--menu=<screen>:x` presses something under Built-in and nothing under
+Original, with no diagnostic either way, and the shot that comes back looks like a screen that
+simply did not respond.
+
+**Approach.** **Not by giving Original a secondary press.** `B11`'s agent declined that
+deliberately and was right: an aid able to reach a state no player at Original's controls can
+reach would invalidate every shot taken with it, which is the invariant the whole aid rests on.
+Make the divergence loud instead. The aid already voids an unreadable argument; a verb the running
+presentation cannot spell should be refused the same way and say so through `Log`, so a probe
+returns a diagnosable failure rather than a plausible wrong picture.
+
+**Model recommendation.** medium. Small, but the judgement about which way to resolve the
+divergence is the whole item, and it is already made.
+
+**Verify.** A unit that `x` parses everywhere but is refused when replayed against a presentation
+without a secondary press, and that every other verb still replays under both. A probe with `:x`
+under Original returns a failure rather than a screenshot. `docs/cli.md`'s `--menu=` bullet says
+which verbs each presentation takes, inside its 600-character cap. Then the complete
+`.\RunTests.ps1`.
+
+**⚠ Traps.** **Do not silently drop the verb and continue**, which is what happens today and is
+the actual defect; a partially-replayed script is worse than a refused one because it still
+produces an image. Keep one grammar: the language stays shared and only the replay refuses, or the
+two presentations begin accepting different strings, which is the wart this item exists to remove
+rather than to formalise.
 
 # Wave E — At the controls
 

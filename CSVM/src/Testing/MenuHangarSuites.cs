@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Flight;
+using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
@@ -41,7 +42,9 @@ internal static class MenuHangarSuites
         + "without touching its file, deletes it through the two-stage list, opens the --menu= aids "
         + "and the campaign wallet door over the aid's scratch profile, walks every page after the buy "
         + "row with the money on hand beside the totals and a marked yet pickable over-priced part, "
-        + "and drops an open build on a presentation switch; every check is what the screens do today")]
+        + "draws the Purchase Now row refused with the hangar limit under it at the decoded slot cap "
+        + "and live again one plane sold back, and drops an open build on a presentation switch; "
+        + "every check is what the screens do today")]
     internal static void MenuHangarJourney(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -64,6 +67,7 @@ internal static class MenuHangarSuites
             Aids(ctx, menu);
             CampaignDoor(ctx, menu);
             CampaignPages(ctx, menu);
+            CampaignSlotCap(ctx, menu);
             Delete(ctx, menu, store, scratch);
         }
         finally
@@ -474,6 +478,60 @@ internal static class MenuHangarSuites
         }
 
         ctx.Check(menu.Hangar == null && menu.ShownScreen == "Campaign", $"Back out of every page cancels and resumes the cabin ({menu.ShownScreen})");
+    }
+
+    // The decoded slot cap on Built-in's own Purchase Now row: a profile holding its bought planes
+    // draws the row refused with langui 204 under it before any press, as the two older campaign
+    // reasons already do, and one plane sold back makes the row live again.
+    private static void CampaignSlotCap(TestContext ctx, LaunchMenu menu)
+    {
+        menu.ShowMenu("campaign-hangar");
+        menu.Drive(MenuCommands.None);
+        if (menu.Hangar is not { Campaign: { } wallet } flow)
+        {
+            ctx.Check(false, $"--menu=campaign-hangar opens the flow over a wallet ({menu.ShownScreen})");
+            return;
+        }
+
+        // Funds and progress well clear of the other two reasons, so the row can only be reading
+        // the cap. The aid's profile store is a scratch one, emptied on the next open.
+        var profile = wallet.Profile;
+        profile.Funds = 500_000;
+        profile.MissionsCompleted = 20;
+        for (int guard = 0; flow.Screen != HangarScreen.Purchase && guard < HangarFlow.Order.Length + 4; guard++)
+        {
+            menu.Drive(Accept);
+        }
+
+        ctx.Check(flow.Screen == HangarScreen.Purchase, $"the walk reaches the purchase review ({flow.Screen})");
+
+        // Filled against the wallet's own predicate rather than a record count: this profile has
+        // flown, so some of its records are awards, which sit outside the cap.
+        for (int i = 0; wallet.HasFreeSlot && i <= CampaignWallet.PurchasedPlaneCap; i++)
+        {
+            profile.Planes.Add(new OwnedPlane { Name = "Filler " + i, Airframe = 10 });
+        }
+
+        ctx.Check(!wallet.HasFreeSlot && profile.Planes.Count > CampaignWallet.PurchasedPlaneCap - 2,
+            $"the profile stands at its bought-plane cap ({profile.Planes.Count} records)");
+
+        string limit = flow.Strings.Text(
+            204,
+            "You have reached your hangar limit of planes.  Click Sell Planes, and sell one or more planes.");
+        menu.Drive(Up);
+        ctx.Check(menu.ShownRowText.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal),
+            $"at the slot cap the Purchase Now row is drawn refused ({menu.ShownRowText})");
+        Is(ctx, "and says why before the press", limit, menu.ShownDetail);
+
+        flow.DeleteSaved("Filler 0");
+        menu.Drive(MenuCommands.None);
+        ctx.Check(!menu.ShownRowText.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal)
+            && menu.ShownDetail.Length == 0,
+            $"one plane sold back makes the row live again ({menu.ShownRowText}, {menu.ShownDetail})");
+        for (int guard = 0; menu.Hangar != null && guard < HangarFlow.Order.Length + 1; guard++)
+        {
+            menu.Drive(Back);
+        }
     }
 
     private static void Delete(TestContext ctx, LaunchMenu menu, CustomPlaneStore store, string scratch)

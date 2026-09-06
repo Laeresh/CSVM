@@ -1869,9 +1869,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         // The briefing spends its colon on a reveal's seconds and campaign-guestcheck on a player
         // number, both of which WalkCampaignAid took; every other screen's is the input script
         // CampaignAidScript replays, a bare number still meaning that many steps down.
-        if (value is not ("campaign-briefing" or "campaign-guestcheck"))
+        if (value is not ("campaign-briefing" or "campaign-guestcheck") && !CampaignAidScript.Replay(flow, word))
         {
-            CampaignAidScript.Replay(flow, word);
+            // A script this presentation cannot press leaves nothing worth shooting, so the run
+            // ends before the capture takes a screen that looks like it simply did not respond.
+            GetTree()?.Quit(1);
         }
     }
 

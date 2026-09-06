@@ -140,7 +140,9 @@ where the walk left it: counted cursor verbs, a confirm, a back and a secondary 
 `-`, plus a word naming a `BoardButton` to focus and confirm. A confirm is what lets an aid leave a
 drop-down standing open, which a step count could not reach. A count with no verb after it is a run
 of downs, so a bare number is the step count it always was, and `export` is a button word rather
-than a case beside the language. `docs/cli.md` states the grammar for the command line.
+than a case beside the language. One grammar serves both presentations, and the replay refuses a
+script spelling a press the running one lacks, which is how the secondary verb fails loudly under
+Original. `docs/cli.md` states the grammar for the command line.
 
 ## src/UI/ScrapbookComposition.cs
 The scrapbook's per-spread scrap layout, read from the shipped `SCRAPBOOK.CSV` rather than invented:

@@ -2,7 +2,9 @@ using System;
 using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Session;
 using CSVM.UI;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -19,19 +21,26 @@ namespace CSVM.Tests;
 public class HangarPurchasePageTests : IDisposable
 {
     private readonly string _dir;
+    private readonly string _profilesDir;
     private readonly CustomPlaneStore _store;
+    private readonly CampaignProfileStore _profiles;
 
     public HangarPurchasePageTests()
     {
         _dir = Path.Combine(Path.GetTempPath(), "csvm-purchase-" + Guid.NewGuid().ToString("N"));
+        _profilesDir = Path.Combine(Path.GetTempPath(), "csvm-purchase-profiles-" + Guid.NewGuid().ToString("N"));
         _store = new CustomPlaneStore(_dir);
+        _profiles = new CampaignProfileStore(_profilesDir);
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir))
+        foreach (var dir in new[] { _dir, _profilesDir })
         {
-            Directory.Delete(_dir, true);
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
         }
 
         GC.SuppressFinalize(this);
@@ -216,6 +225,49 @@ public class HangarPurchasePageTests : IDisposable
         Assert.Empty(_store.List());
     }
 
+    /// <summary>The decoded slot cap is the row's own third campaign reason: a profile already
+    /// holding its bought planes draws the Purchase Now row refused, saying what the press would
+    /// say (langui 204), rather than staying live and refusing afterwards.</summary>
+    [Fact]
+    public void TheBuildRowIsRefusedAtTheSlotCap()
+    {
+        var page = (HangarPurchasePage)OpenOnPurchaseOverWallet(CampaignWallet.PurchasedPlaneCap).Page;
+
+        int build = page.RowCount - 1;
+        Assert.False(page.BuildEnabled);
+        Assert.StartsWith("✕", page.RowText(build), StringComparison.Ordinal);
+        Assert.Contains("hangar limit", page.Detail(build), StringComparison.Ordinal);
+    }
+
+    /// <summary>One plane under the cap the same build is live and its row says nothing, so what
+    /// greys the row is the cap itself and not the campaign door.</summary>
+    [Fact]
+    public void TheBuildRowStaysLiveOnePlaneUnderTheSlotCap()
+    {
+        var page = (HangarPurchasePage)OpenOnPurchaseOverWallet(CampaignWallet.PurchasedPlaneCap - 1).Page;
+
+        Assert.True(page.BuildEnabled);
+        Assert.Equal("Purchase Now", page.RowText(page.RowCount - 1));
+        Assert.Equal(string.Empty, page.Detail(page.RowCount - 1));
+    }
+
+    /// <summary>The press-time refusal stands underneath the greyed row: a row can be enabled and
+    /// the profile fill behind it, so the commit checks the cap again in the same words.</summary>
+    [Fact]
+    public void ThePressIsStillRefusedWhenTheCapIsReachedBehindTheRow()
+    {
+        var flow = OpenOnPurchaseOverWallet(CampaignWallet.PurchasedPlaneCap - 1);
+        var page = (HangarPurchasePage)flow.Page;
+        Assert.True(page.BuildEnabled);
+
+        flow.Campaign!.Profile.Planes.Add(new OwnedPlane { Name = "Filled Behind It", Airframe = 10 });
+        flow.Scratch.Name = "One Too Many";
+
+        Assert.True(page.Accept(page.RowCount - 1));
+        Assert.Contains("hangar limit", flow.Message, StringComparison.Ordinal);
+        Assert.Null(_store.Load("One Too Many"));
+    }
+
     // The overweight rig HangarFlowTests uses: a Balmoral loaded far past its 15760 lb capacity.
     private static void MakeOverweight(CustomPlaneDef def)
     {
@@ -247,6 +299,31 @@ public class HangarPurchasePageTests : IDisposable
         }
 
         Assert.Equal(HangarScreen.Purchase, flow.Screen);
+        return flow;
+    }
+
+    // The same walk over a campaign wallet whose profile already owns `bought` planes, with funds
+    // and progress well clear of the other two campaign reasons so the slot cap is the only one
+    // left to read, and an engine picked so the economy's own verdict is Ok.
+    private HangarFlow OpenOnPurchaseOverWallet(int bought)
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Funds = 1_000_000;
+        profile.MissionsCompleted = 20;
+        for (int i = profile.Planes.Count; i < bought; i++)
+        {
+            profile.Planes.Add(new OwnedPlane { Name = "Bought " + i, Airframe = 10 });
+        }
+
+        var flow = new HangarFlow(_store, UiStrings.Empty, campaign: new CampaignWallet(_profiles, profile, _store));
+        for (int guard = 0; flow.Screen != HangarScreen.Purchase && guard < HangarFlow.Order.Length + 3; guard++)
+        {
+            flow.AnswerDefaultsAsk(false);
+            flow.Accept();
+        }
+
+        Assert.Equal(HangarScreen.Purchase, flow.Screen);
+        flow.Scratch.Engine = 1;
         return flow;
     }
 }

@@ -555,6 +555,11 @@ internal static class MenuCampaignSuites
         ctx.Check(menu.Campaign is { Screen: CampaignScreen.Cabin } && menu.Campaign.Profile?.MissionsCompleted == FlownBefore, $"--menu=campaign-cabin opens the progressed cabin ({menu.Campaign?.Profile?.MissionsCompleted})");
         menu.ShowMenu("campaign-previous");
         ctx.Check(menu.Campaign is { Screen: CampaignScreen.PreviousMissions } && menu.ShownRowCount == FlownBefore + 5, $"--menu=campaign-previous opens the contents with three flights ({menu.ShownRowCount})");
+        // x is the pad's secondary press, which Built-in binds and Original does not: here it views
+        // the mission the cursor stands on without walking down to the button.
+        menu.ShowMenu("campaign-previous:1d-x");
+        ctx.Check(menu.Campaign is { Screen: CampaignScreen.Scrapbook, MissionSeq: 1 },
+            $"--menu=campaign-previous:1d-x presses Built-in's secondary on the second flight ({menu.Campaign?.Screen}, {menu.Campaign?.MissionSeq})");
         menu.ShowMenu("campaign-scrapbook");
         ctx.Check(menu.Campaign is { Screen: CampaignScreen.Scrapbook, MissionSeq: FlownBefore - 1 } && menu.ShownRowText == "RETURN TO CABIN", $"--menu=campaign-scrapbook opens the book on the last flown mission ({menu.Campaign?.MissionSeq})");
         menu.ShowMenu("campaign-briefing:24");

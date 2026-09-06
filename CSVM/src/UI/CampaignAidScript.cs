@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.UI.Menu;
+using CSVM.Utils;
 
 namespace CSVM.UI;
 
@@ -20,6 +21,11 @@ public static class CampaignAidScript
 {
     /// <summary>The verbs, in the order <see cref="Press"/> reads them.</summary>
     public const string Verbs = "dulrabx";
+
+    /// <summary>The verbs a presentation binding no secondary press can reach. Original selects a
+    /// row by clicking it and binds no X at all, so <c>x</c> spells a press nobody at its controls
+    /// can make; the grammar stays one for both presentations and the replay refuses instead.</summary>
+    public const string VerbsWithoutSecondary = "dulrab";
 
     /// <summary>What joins two segments, so a button word can stand beside a run of verbs.</summary>
     public const char Separator = '-';
@@ -52,18 +58,46 @@ public static class CampaignAidScript
         return presses;
     }
 
+    /// <summary>The presses an argument spells, or null when it spells one <paramref name="verbs"/>
+    /// cannot reach: a presentation lacking a press refuses the whole script rather than replaying
+    /// the half it reaches and handing back a shot of a screen that looks like it did not respond.
+    /// <paramref name="controls"/> names the refuser. ⚠ A caller that gets null ends the run: the
+    /// message says so, and a probe that shot the screen anyway would read as an answer.</summary>
+    public static IReadOnlyList<Step>? Presses(string argument, string verbs, string controls)
+    {
+        IReadOnlyList<Step> script = Parse(argument);
+        foreach (Step press in script)
+        {
+            if (press.Button == BoardButton.None && (verbs ?? string.Empty).IndexOf(press.Verb) < 0)
+            {
+                Log.Error("ui", $"--menu= aid refused: {controls} has no '{press.Verb}' press, so '{argument}' spells nothing it can replay and the run ends without a shot (verbs it takes: {verbs})");
+                return null;
+            }
+        }
+
+        return script;
+    }
+
     /// <summary>Replays a script on a flow standing where the walk left it. Every step is a call a
-    /// player's own presses would make, so no aid can reach a state the campaign itself cannot.</summary>
-    public static void Replay(CampaignFlow flow, string argument)
+    /// player's own presses would make, so no aid can reach a state the campaign itself cannot.
+    /// False for a script Built-in's pad cannot spell, which its caller ends the run on.</summary>
+    public static bool Replay(CampaignFlow flow, string argument)
     {
         ArgumentNullException.ThrowIfNull(flow);
-        foreach (Step press in Parse(argument))
+        if (Presses(argument, Verbs, "Built-in's pad") is not { } script)
+        {
+            return false;
+        }
+
+        foreach (Step press in script)
         {
             for (int i = 0; i < press.Count; i++)
             {
                 Press(flow, press);
             }
         }
+
+        return true;
     }
 
     // A button word: an alias first, then the button's own member name. Checked before the verbs
