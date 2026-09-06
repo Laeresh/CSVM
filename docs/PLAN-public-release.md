@@ -736,9 +736,6 @@ this list.
 - **Aircraft under fire rarely break off to evade.** No workaround; it makes them easier to shoot
   down than they should be. (`BL-728`; no landing commit, and it is unsettled against `BL-558`,
   which reads the same machine from the other side.)
-- **Patrol boats and other surface craft never fire, whatever their own definition arms them
-  with.** No workaround; those missions are easier than intended. (`BL-687`; the decode landed but
-  the gun did not, and `SurfaceVehicle` still reaches no projectile spawner.)
 - **A zeppelin's turrets can shoot the player through the hull they are mounted on.** Break away
   from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
   (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed

@@ -863,68 +863,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-667`'s closing record in `PLAN-M5-polish-10` `A2`, `BL-517` and
   `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
 
-- `BL-687` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A `mode ship` vehicle takes no gun at all, so a patrol boat never fires the
-  weapon its own def authors.** *Evidence (traced):* reported at the controls on three missions in
-  one sortie: CM08 "the guns are not firing at me" (`PT-87`), CM12 "boats dont fire" (`PT-101`), and
-  CM10 "patrol boats and lifeboats dont shoot and dont track" (`PT-100`), whose A/B is
-  `OriginalScreenshots/Videos/CM10.mkv` showing the boats firing on the hospital ship shortly after
-  the start. A `mode ship` roster block or generator launch becomes a `SurfaceVehicle`: a hull on a
-  `PathFollower` with a destructible pool and nothing else — no `FlightController`, no `AiPilot`, no
-  `AiGunner`, no weapon. The roster loop takes the surface branch and `continue`s
-  (`CSVM/src/Session/CampaignDirector.cs:443-447`) before the `AiPilot` every aircraft block reaches
-  at `:449`; `AiGeneratorRuntime` returns straight after `vessel.Launch` (`:408-419`);
-  `SurfaceVehicle.Step` is the injure ladder and the follower alone
-  (`CSVM/src/Session/SurfaceVehicle.cs:147-167`). The only production callers of
-  `ProjectilePool.Spawn` are `FlightController`, `TurretController`, `ZeppelinRuntime.Cannons` and
-  `IncomingFire`, and a hull reaches none of them. So there is no gun object, no target selection and
-  no fire decision for a hull — this is not a mode the AI machine fails to set. `vehicle.zrd`'s
-  `patrolboat` authors `weapons [wep_29, 9000, 0.3, 1.0, 500.0]` with `activation 2500`,
-  `attack_dwell 60` and `not_pursuit_dwell 5`, and the original runs them: the world tick walks every
-  awake vehicle into `FUN_0041c270`, all three behaviours call the fire decision `FUN_0041f420`
-  themselves, and the target scorer is selected on the vehicle's own `mode` word — `FUN_00421950`
-  for everything that is not `jet` or `wingman` ([`docs/org/aiPilot.md`](docs/org/aiPilot.md):68-87,
-  :119-124).
-  *Decoded, and the `t_truck` question is settled:* `FUN_0041c270` has a branch for `mode` 3
-  (`ship`), 5 (`plane`) and 1 (`heli`) that never promotes to pursue and instead runs the per-mount
-  lead solver `FUN_0041afe0` and, on a solution, calls the fire decision `FUN_0041f420(1, 1)` itself
-  (`0x0041c348`), so a boat shoots while flying its net. Its list is the def's own `weapons` block
-  through `FUN_004b59b0`, and `FUN_00476250` gives every vehicle a gun mount, unclamped on both axes
-  for a def authoring no `gun_pitch`/`gun_yaw`. The truck's `ai.zrd` emplacement is a second gun on
-  top of that same vehicle gun, so a boat with no `ai.zrd` entry is not authored silent. The dwell
-  fields are pursuit timers (`attack_dwell` to `+0x304`, `not_pursuit_dwell` to `+0x308`) and are
-  inert on a hull; the target hold is a hardcoded 20 s in `FUN_004b0f20`.
-  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) ("What a `mode ship` vehicle runs") and
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) carry the full reading.
-  *Fix shape:* give a `mode ship` hull the target selection (the non-`jet` scorer `FUN_00421950`),
-  the 20 s hold, the aim solve against its mount, and the fire decision reading the
-  `weapons` tuple. No pursuit and no dwell handling. Invent no rate and no range.
-  *The mount is not free-aiming, and both defs carry a real one:* `patrolboat` and `t_truck` both
-  hold `turret > gun > firepoint` in every chapter's gamez, resolved by the recursive name search
-  `FUN_004761c0`, so `FUN_004b7670` takes its ANIMATED branch. Authoring no `gun_pitch`/`gun_yaw`
-  skips the per-axis clamp but not the guards: `FUN_004b7e70` pins the desired elevation to `+0.5`
-  and `-0.2588` (30 degrees up, 15 down, azimuth kept, yaw unrestricted), the aim then slews at
-  `4.0`/s (`FUN_00460840` over `FUN_00538d70`), `+0xa4` is measured against the RAW lead so both the
-  guard and the slew lag are charged to the shot, and `FUN_004b7590` writes the pose back onto the
-  two nodes, so the barrel visibly tracks.
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) ("A `mode ship` vehicle's mount")
-  carries it.
-  *⚠ Traps:* **The lifeboat's gun is not this item and not a defect.**
-  `lifesaverNM > lifesaver > lifeboat > healthy > turret > gun > firepoint` is a complete rig, but
-  `TurretController.BuildEmplacements` instantiates only what an `ai.zrd` `NODES` pattern matches,
-  and no shipped pattern matches `lifeboat`, `patrolboat` or `ptboat*`; the original reads the same
-  file, so it is authored silent and `PT-100`(a) asked for something the original never does. The
-  `docs/architecture.md` line that misattributed the silent gun to `BL-523` no longer exists, so
-  there is nothing left to correct there.
-  **"Turrets shoot at player" on CM10 is correct behaviour**, not an inverted team: `bbtur**` authors
-  no `TEAM`, takes `TurretDef.DefaultTeamId = 2` (`CSVM/src/Flight/TurretDefs.cs:20`), and minimises
-  distance over one running best, so the nearer player is what it locks. **The structure-team decode
-  is not refuted** — the hospital ship and the Goose's engines both carry `field040 = 0x90155555` on
-  the player's side, the scan reaches them and `AimAssist.Hostile` excludes a player-team gun. And
-  **`PT-101`(a)/(b) is unflyable as written**: C2's gamez carries no `aagun`, `maagun`, `thug`,
-  `bbtur` or `b_turret` node, so no turret exists near the Goose to slew.
-  *Cross-refs:* `BL-523` (the AI mode machine, which this is not), `BL-626`, `BL-664`, `BL-598`,
-  `BL-637`, `PT-87`, `PT-100`, `PT-101`.
-
 - `BL-714` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A zeppelin's own turrets fire
   through its own hull.** *Evidence:* reported at the controls, in flight along the far flank of a
   pirate zeppelin in an Instant Action Dogfight: a ring on the far side fires at the player through
@@ -2339,7 +2277,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   same message key themselves, which is a legitimate use of the per-block field and not a licence to
   read the def. So do not "fall back to the class". The same page warns a fourth author is unfound
   rather than ruled out.
-  *Cross-refs:* `BL-687` (the same boats, their guns), `BL-626`.
+  *Cross-refs:* the same boats' own guns, which they now fire (`git log --grep=BL-687`); `BL-626`.
 
 - `BL-706` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The PLANE NAME dialog
   sits off-centre because its pane is drawn at a raw 0,0 and its rows are drawn as though their
