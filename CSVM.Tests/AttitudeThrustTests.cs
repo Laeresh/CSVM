@@ -72,16 +72,16 @@ public class AttitudeThrustTests
     /// <summary>The sustained full-throttle climb the original was filmed holding, against the
     /// model. The bound separates the four candidate arrangements (docs/org/flightModel.md, "The
     /// sustained climb"); the residual against the measured 163.05 mph is real and recorded, not
-    /// tuned away. The clamp check matters: a run that reaches the altitude clamp reports the
-    /// clamp's speed, not the climb's.</summary>
+    /// tuned away. The band-edge check matters: a run that crosses 2000 m reports a coast in thin
+    /// air, not the climb.</summary>
     [ExtractedDataFact]
     public void TheSustainedClimbSettlesFarBelowEitherFittedArrangement()
     {
         var r = Probes.SustainedClimb(ZrdrPath, "player_bhawk");
         Assert.True(r.Error == null, $"{r.Error ?? "-"}");
-        Assert.True(r.ClampedAt < 0,
-            $"the altitude clamp bound at +{r.ClampedAt:0.0} s — this run measures the clamp, "
-            + "not the climb");
+        Assert.True(r.BandEdgeAt < 0,
+            $"the climb crossed the 2000 m band edge at +{r.BandEdgeAt:0.0} s — this run measures "
+            + "the coast above it, not the climb");
         Assert.True(r.PlateauMph < 220.0,
             $"sustained climb settles at {r.PlateauMph:0.00} mph against a measured 163.05 — every "
             + "arrangement that keeps the climb-gravity constant or drops the attitude terms sits "

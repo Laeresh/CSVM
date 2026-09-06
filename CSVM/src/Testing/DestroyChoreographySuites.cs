@@ -588,8 +588,8 @@ internal static class DestroyChoreographySuites
                 ctx.Check(found,
                     $"chapter {ctx.Chapter} offers a flat run of land to sink onto at {(found ? $"({lowSpawn.X:0},{lowSpawn.Y:0},{lowSpawn.Z:0})" : "nowhere")}");
 
-                // ⚠ Below FlightModel's altitude cap, which SNAPS a higher spawn down to 2045.8 m on
-                // its first step: a fall arm above it measures that teleport as 450 m of falling.
+                // ⚠ Below the 2000 m atmosphere band edge: a wreck released above it falls through
+                // air 16.73x thinner, so the fall arm would measure the wrong regime's drag.
                 const float FallFrom = 1500f;
                 WreckFallsBeforeItIsHandedOver(ctx, spawner, FallFrom);
                 // Both airframes, because the reported split was between them: the immortal stage is

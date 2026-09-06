@@ -106,7 +106,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   plant's own value or a named exception; a footage figure that disagrees (the filmed 33.00 °/s
   pitch rate, the 28.60 s `yaw-360`, `accel-150-290`, `decel-290-150`) is discarded and kept only
   as row prose that gates nothing ([`docs/org/flightModel.md`](docs/org/flightModel.md), "Parity
-  ledger"). `FlightScenarios` is 5.
+  ledger"). `FlightScenarios` is 4.
 
 ## Damage & destruction
 
@@ -1018,17 +1018,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
   5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
   [`docs/org/flightModel.md`](docs/org/flightModel.md).
-- `BL-447` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The eight unsupported nitro and shake edges in the parity ledger.**
-  `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
-  atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`
-  on a nitro engage, the AI's positional `snd_nitro` blip, the nitro decay lockout on a runtime
-  callback, the mouse-flying arm's `is_autogyro` roll/yaw exchange, plus `BL-448`.
+- `BL-447` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The five unsupported nitro and shake edges in the parity ledger.**
+  `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the
+  `level_off_rate` auto-level torque, the AI's `medium_aishake` on a nitro engage, the AI's
+  positional `snd_nitro` blip, the nitro decay lockout on a runtime callback, and the mouse-flying
+  arm's `is_autogyro` roll/yaw exchange. The thin atmosphere band above 2000 m has left this list:
+  it is decoded and live, and it is the flight ceiling (`git log --grep=BL-448`).
   Each is small and independently landable; each names its address in the table.
-- `BL-448` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Is the 2003 m `AltitudeCapM` the dense-band edge?** The measured
-  flight ceiling (an intentional exception) sits 3 m above the decoded atmosphere band boundary
-  (2000 m, `6561.6796875` ft, writer `FUN_00463640`). If the original's ceiling is the thin band's
-  own lift loss rather than a separate cap, the exception becomes a decoded mechanism and the cap
-  constant goes. Lead recorded in the plan's A1 section; `AtmosphereBandTests` has the band.
+- `BL-774` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **The sustained climb plateaus at 204 mph against the original's
+  filmed 163, and the ceiling now shows it.** `--dump-flight`'s sustained climb settles at 204.03 mph
+  on a 56.3° path where the footage reads 163.05 at 55.5°, so CSVM crosses the 2000 m band edge at
+  75.8 m/s where the original crosses at about 61. With no clamp cutting every climb off at 2003 m
+  (`git log --grep=BL-448`), that residual reads as altitude: the apex above the edge is
+  `v_y² / 2g`, so a 24% fast climb reads as a ceiling several hundred feet high. *Lead:* the residual
+  is the same α question as the pitch rate, recorded in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) "The sustained climb"; the entry angle is free
+  after the first step, so the candidates are the lift-demand lag and the attitude-thrust terms rather
+  than a climb-gravity scale, which the decode already disproved. *⚠ Do not* close the gap with a
+  constant on the ceiling: the height above the edge is bought with the climb and has no term of its
+  own. *How you'd know it worked:* the plateau moves toward 163 mph and `altitude-ceiling` falls
+  toward the ~7,000 ft the original reaches at the controls.
 - `BL-456` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
   decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,

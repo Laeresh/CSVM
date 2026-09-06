@@ -436,10 +436,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   instrument is broken; cross-site nesting is routine.** A death's event dispatch legitimately
   reaches the effect and audio sites, so the outer record absorbs the inner ones' cost by
   construction: read it as "more happened here than the named sites show", not as a defect.
-- **INSTR-18** — **Never place a flight-model probe above `flightModel.altitudeCapM`: the first step
-  teleports it down to the cap and every distance downstream measures the teleport.** The clamp snaps
-  any position over 2003 m to 2045.8 m, so a wreck released at 2500 m reports 454 m of "falling" in
-  one frame, where the same wreck at 1500 m holds its altitude to the metre.
+- **INSTR-18** — **A flight-model probe placed above 2000 m is flying in the thin atmosphere band,
+  where lift is 16.73× and thrust 22.0× smaller, so every aerodynamic number it reports is the wrong
+  regime's.** Nothing clamps altitude, so the probe does not teleport and the run looks plausible; it
+  simply cannot hold a load factor of 1 on any airframe but the autogyro. Start below the edge.
 - **INSTR-19** — **The flight-dump hash agrees across the Godot runtime and the `dotnet test` host
   only because the print is rounded past where they diverge; prefer a same-host A/B, and treat a
   cross-host mismatch as a rounding boundary before a plant change.** The two runtimes' knife-edge

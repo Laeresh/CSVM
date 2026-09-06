@@ -21,7 +21,7 @@ public class FlightEnvelopeTests
 {
     // How many flight scenarios carry a decoded target to assert. Pinned so that silently demoting
     // one to informational cannot read as a green run.
-    private const int FlightScenarios = 5;
+    private const int FlightScenarios = 4;
     private const double Mph = 0.44704;
 
     // The dive the terminal-dive row is flown at, and the along-path share of gravity there.
@@ -110,14 +110,17 @@ public class FlightEnvelopeTests
             + $"around the pinned {pinned:0.00} mph — the control measures nothing");
     }
 
-    /// <summary>The one asserted row whose target is not decoded is the altitude cap, and it is the
-    /// product exception's own value rather than the 173.7 mph settle speed filmed beside it.</summary>
+    /// <summary>The ceiling row asserts no target, because the height an aircraft reaches above the
+    /// band edge is the coast its climb rate buys and the plant's climb rate is a recorded residual.
+    /// What it must do is cross the edge at all, which is what makes it a ceiling measurement.</summary>
     [ExtractedDataFact]
-    public void TheAltitudeCapRowIsPinnedToTheExceptionsOwnValue()
+    public void TheAltitudeCeilingRowAssertsNoTarget()
     {
-        double pinned = Probes.FlightEnvelope(ZrdrPath, "player_bhawk")
-            .Rows.Single(x => x.Name == "altitude-cap").Target!.Value;
-        Assert.Equal(2003.0 / MetresPerFoot, pinned, 0);
+        var row = Probes.FlightEnvelope(ZrdrPath, "player_bhawk")
+            .Rows.Single(x => x.Name == "altitude-ceiling");
+        Assert.Null(row.Target);
+        Assert.True(row.Model > 2000.0 / MetresPerFoot,
+            $"the ceiling row apexed at {row.Model:0} ft, below the 2000 m band edge it must cross");
     }
 
     private static double Rad(double deg) => deg * Math.PI / 180.0;

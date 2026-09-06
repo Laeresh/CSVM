@@ -110,12 +110,16 @@ public sealed class FlightModel
     private const float ClMaxStatic = 0.75f;
     private const float ClMaxMach = 0.15f;
 
-    // Atmosphere. A single band with no altitude gradient: the aerodynamic intermediates run in
-    // imperial (ft/s, slug/ft³, lb/ft²) and only the results come back to metric.
-    // ⚠ The thin band the original also carries is NOT the operative one — it puts the stall of a
-    // 3500/335 airframe at 309 mph against this band's 75.5 mph, which is what settles the choice.
-    private const float AirDensitySlugPerFt3 = 2.2688e-3f;
-    private const float SpeedOfSoundFps = 1109.5f;
+    // Atmosphere: the original's two-band step on the aircraft's own altitude, with no gradient
+    // between them (FUN_0041aca0, threshold live at 0x0071bb3c). The intermediates run in imperial
+    // (ft/s, slug/ft³, lb/ft²) and only the results come back to metric. Crossing into the thin band
+    // divides lift by 16.73 and thrust by 22.0 at once, which is what ceilings a climb.
+    // docs/org/flightModel.md, "The resting altitude cap is the atmosphere band edge".
+    private const float BandThresholdFt = 6561.6796875f;
+    private const float DenseDensitySlugPerFt3 = 2.2688e-3f;
+    private const float DenseSoundFps = 1109.5f;
+    private const float ThinDensitySlugPerFt3 = 1.3560e-4f;
+    private const float ThinSoundFps = 968f;
     private const float FeetPerMetre = 3.28084f;
     private const float MetresPerFoot = 0.3048f;
     // The force/acceleration conversion the lift and gravity terms share: lift force is
@@ -136,14 +140,6 @@ public sealed class FlightModel
     // ⚠ Do not tighten this until it binds. A cap that binds replaces a measured terminal with a
     // guess, and the aerodynamics already terminate the Bloodhawk's 71° dive at 1.11 × fd_speed.
     private const float MaxDiveSpeedFrac = 1.75f;
-
-    // The measured resting altitude cap, a clamp on altitude rather than an energy limit: it deletes
-    // climbing velocity outright instead of fading thrust, lift or drag toward it. That deletion is
-    // also what bounds the overshoot above the line, so no second constant carries one.
-    // docs/org/flightModel.md, "The resting altitude cap".
-    // ⚠ Traced to ONE mission and one airframe. Do not assume it is global, per-chapter/zone or
-    // per-aircraft.
-    private const float AltitudeCapM = 2003f;
 
     // Ground blow's two constants that are NOT in player.json (the three that are live on
     // PlaneStats). Both are decoded, neither is a TUNE: the 0.05 is an immediate in the player
@@ -329,8 +325,8 @@ public sealed class FlightModel
 
     /// <summary>The original's stall flag, <c>1 − L(9°)/Weight</c>: how far the maximum available
     /// lift falls short of carrying the aircraft's weight, and the depth the nose-drop torque scales
-    /// with. Positive exactly where the lift cap is under 1, which is the same condition as being
-    /// under <see cref="StallSpeed"/> — that speed is this equation solved for zero.
+    /// with. Positive where the lift cap is under 1, which in the dense band is the same condition as
+    /// being under <see cref="StallSpeed"/>; the thin band moves this and not that speed.
     /// ⚠ It is NOT the speed ratio it replaced: this is quadratic in speed, so the drop deepens
     /// faster as speed bleeds. docs/org/flightModel.md, "Stall".</summary>
     public float StallFlag => 1f - AvailableLoadFactor;
@@ -351,6 +347,16 @@ public sealed class FlightModel
     /// AI code reads it: a choked pilot is never told, and simply flies an aircraft with no
     /// thrust.</summary>
     public bool EngineDead => EngineDeadRemainingS > 0f;
+
+    // Read per use off the altitude the step ENTERS with, as FUN_0048fc40 passes [obj+0x208]·3.28084
+    // into the atmosphere before it composes any force.
+    // ⚠ Nothing clamps altitude, here or in the original: what an aircraft reaches above the line is
+    // bought with the vertical speed it crossed at, and no constant bounds it.
+    private bool InDenseBand => Position.Y * FeetPerMetre <= BandThresholdFt;
+
+    private float AirDensitySlugPerFt3 => InDenseBand ? DenseDensitySlugPerFt3 : ThinDensitySlugPerFt3;
+
+    private float SpeedOfSoundFps => InDenseBand ? DenseSoundFps : ThinSoundFps;
 
     /// <summary>How much of the available thrust the nose's attitude leaves: 1 wings-level, 0.6612
     /// pointing straight up, 1.24 pointing straight down. A climb is PENALISED and a dive rewarded.
@@ -561,7 +567,6 @@ public sealed class FlightModel
         _ = Config.GetFloat("flightModel.stallWarnLoadFactor", StallWarnLoadFactor);
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
-        float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
         float noseChaseFactor = Config.GetFloat("flightModel.noseChaseFactor", NoseChaseFactor);
         float aoaLimiter = Config.GetFloat("flightModel.aoaLimiterFactor", AoaLimiterFactor);
 
@@ -767,20 +772,6 @@ public sealed class FlightModel
                 : VelocityDir.Slerp(nose, t)).Normalized();
         }
 
-        // Hard altitude clamp (see AltitudeCapM): at or above the resting cap this frame's climbing
-        // velocity is deleted outright rather than redirected, so a sustained pull against it bleeds
-        // airspeed instead of gaining height. A no-op below the cap by construction.
-        if (Position.Y >= altitudeCapM && VelocityDir.Y > 0f)
-        {
-            var levelVel = VelocityDir * Speed;
-            levelVel.Y = 0f;
-            Speed = levelVel.Length();
-            if (Speed > 1e-6f)
-            {
-                VelocityDir = levelVel.Normalized();
-            }
-        }
-
         Position += VelocityDir * Speed * dt;
     }
 
@@ -846,16 +837,17 @@ public sealed class FlightModel
     // fixed-point passes converge to float precision because stall speeds sit well below the speed
     // of sound, so the correction off the Mach-free start is only a percent or two. Computed once per
     // instance — VehWeight/RefArea never change after construction.
+    // ⚠ Pinned to the DENSE band, so it is the airframe's figure for the whole flyable envelope.
     private static float ComputeStallSpeed(PlaneStats stats)
     {
         if (stats.VehWeight <= 1e-3f || stats.RefArea <= 1e-3f)
             return 0f;
-        float vFps = Mathf.Sqrt(2f * stats.VehWeight / (ClMaxStatic * AirDensitySlugPerFt3 * stats.RefArea));
+        float vFps = Mathf.Sqrt(2f * stats.VehWeight / (ClMaxStatic * DenseDensitySlugPerFt3 * stats.RefArea));
         for (int i = 0; i < 5; i++)
         {
-            float mach = vFps / SpeedOfSoundFps;
+            float mach = vFps / DenseSoundFps;
             float clMax = Mathf.Max(0.05f, ClMaxStatic - ClMaxMach * mach);
-            vFps = Mathf.Sqrt(2f * stats.VehWeight / (clMax * AirDensitySlugPerFt3 * stats.RefArea));
+            vFps = Mathf.Sqrt(2f * stats.VehWeight / (clMax * DenseDensitySlugPerFt3 * stats.RefArea));
         }
         return vFps * MetresPerFoot;
     }
