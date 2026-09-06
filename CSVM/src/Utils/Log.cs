@@ -123,17 +123,28 @@ public static class Log
         }
     }
 
+    /// <summary>The directory the file sink writes into, and the one place that decides it. A repo
+    /// run uses the git-ignored <c>.scratch/logs/</c> the verification toolchain reads. An exported
+    /// build uses a plain <c>logs/</c> beside the exe, since a recipient must find their own log.
+    /// Pure, so both branches are assertable without an engine.
+    /// ⚠ Do not point a development tree at <c>logs/</c>: <c>.gitignore</c> covers <c>.scratch/</c>,
+    /// so a new top-level directory would be committed.</summary>
+    public static string DirectoryFor(string root, bool exported) =>
+        exported ? Path.Combine(root, "logs") : Path.Combine(root, ".scratch", "logs");
+
     /// <summary>Opens the always-on file sink and flushes anything logged before it existed.
     /// One sink per process; a second call is a no-op.</summary>
-    /// <param name="repoRoot">Repo root — the log lands in its <c>.scratch/logs/</c>.</param>
+    /// <param name="root">The run's root: the repo checkout, or the exe's own folder.</param>
     /// <param name="mode">The session shape (<c>fly</c>, <c>freecam</c>, …), used in the filename.</param>
-    public static void Open(string repoRoot, string mode)
+    /// <param name="version">The build's version (<see cref="BuildVersion.Current"/>), written as the file's first line.</param>
+    /// <param name="exported">An exported build, which logs where <see cref="DirectoryFor"/> says.</param>
+    public static void Open(string root, string mode, string version, bool exported)
     {
         if (_sink != null)
         {
             return;
         }
-        string dir = Path.Combine(repoRoot, ".scratch", "logs");
+        string dir = DirectoryFor(root, exported);
         string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
         string path = Path.Combine(dir, $"{mode}-{stamp}.log");
         try
@@ -159,6 +170,10 @@ public static class Log
             {
                 _sink = writer;
                 SinkPath = path;
+                // The FIRST line in the file, ahead of the prelude: a report arrives as an
+                // attached log, and which build wrote it has to be readable from the top. Written
+                // straight to the writer, since Emit would queue it after the prelude.
+                writer.WriteLine(FileLine(Level.Info, "core", $"csvm version={version}"));
                 foreach (string line in Prelude)
                 {
                     writer.WriteLine(line);

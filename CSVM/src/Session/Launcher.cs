@@ -271,6 +271,9 @@ public partial class Launcher : Node3D
     // The F14 / --debug-fps frame-cost readout, ticked every frame like
     // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
     private UI.PerfHud _perfHud = null!;
+    // The version stamp drawn in the menu's corner, shown and hidden off the host's own "the menu
+    // is up" so no presentation has to carry one and no flight capture ever sees it.
+    private UI.BuildStamp _buildStamp = null!;
     private Rid _viewportRid;
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
@@ -286,6 +289,9 @@ public partial class Launcher : Node3D
     // root (res://'s parent on disk); in an exported build it is the exe's own directory, since
     // GlobalizePath("res://") only maps to a real directory inside the editor.
     private string _repoRoot = "";
+    // Set beside the root above, by the same editor check. The log directory is all that reads it
+    // (Log.DirectoryFor): a recipient's log must not land in a hidden developer folder.
+    private bool _exported;
     // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
     // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
@@ -344,7 +350,8 @@ public partial class Launcher : Node3D
         else
         {
             // Exported build: res:// lives inside the pck, so the root is the exe's own folder —
-            // extracted/ ships beside the exe, and .scratch/ output lands there too.
+            // extracted/ ships beside the exe, and logs/ and .scratch/ output land there too.
+            _exported = true;
             _repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
         }
 
@@ -474,7 +481,7 @@ public partial class Launcher : Node3D
         // Opened under the session shape's name (it names the file) and before anything else can
         // log. The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
-        Log.Open(_repoRoot, _spec.ModeName);
+        Log.Open(_repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
         Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
@@ -485,7 +492,7 @@ public partial class Launcher : Node3D
         // Ahead of --dump-config, same reason as _hitchMonitor: registers the two
         // hitchSidecar.* keys. The fallback path only matters if Log.Open itself failed.
         string hitchLogPath = Log.SinkPath
-            ?? Path.Combine(_repoRoot, ".scratch", "logs", $"{_spec.ModeName}-nolog.hitches.jsonl");
+            ?? Path.Combine(Log.DirectoryFor(_repoRoot, _exported), $"{_spec.ModeName}-nolog.hitches.jsonl");
         _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
 
         // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()
@@ -708,6 +715,11 @@ public partial class Launcher : Node3D
         };
         AddChild(_perfHud);
 
+        // The version stamp on the menu, process-wide for the same reason and built beside it: the
+        // build a capture came from is a fact about the binary, not about a presentation.
+        _buildStamp = new UI.BuildStamp();
+        AddChild(_buildStamp);
+
         // The music channel, once per process and after every early-quit probe: one player that
         // outlives every session, over a sound archive of its own for the same reason (D37's
         // wiring contract, step 1).
@@ -855,6 +867,7 @@ public partial class Launcher : Node3D
         ReportRate(frameMs);
         // Early-quit probes do not construct the readout, but Godot may process one shutdown frame.
         _perfHud?.Tick(frameMs, counters);
+        _buildStamp?.Tick(_menuHost is { Shown: true });
         if (_spec.Perf)
             ReportPerf(delta, counters);
 

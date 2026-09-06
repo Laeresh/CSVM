@@ -42,12 +42,21 @@ a drawn one. Realtime only; elsewhere `Fraction` is 1 and every path is an ident
 ## src/Utils/Log.cs
 The diagnostic log: `Log.Info("world", $"…")` and its `Warn` / `Error` / `Debug` siblings over a
 fixed category vocabulary and four levels, with two sinks that have different jobs. The console is
-the human's view and stays quiet by default; the `.scratch/logs/<mode>-<stamp>.log` file is the
-machine's and always takes everything, line-flushed. `ConsoleSink` and the scoped
-`PushConsoleSink` redirect console lines, so a plain class that logs is callable without an engine
-and a test can assert on its own lines without a parallel class stealing them. Categories, levels,
-the file-line grammar, the `--log=` filter and the sink path:
-[../org/logging.md](../org/logging.md). `HitchSidecar.cs` shares this sink's stem.
+the human's view and stays quiet by default; the `<mode>-<stamp>.log` file is the machine's and
+always takes everything, line-flushed. `DirectoryFor` decides where that file lands, in one place:
+`.scratch/logs/` in a repo run, a plain `logs/` beside the exe in an exported build. `ConsoleSink`
+and the scoped `PushConsoleSink` redirect console lines, so a plain class that logs is callable
+without an engine. Categories, levels, the file-line grammar, the `--log=` filter and the sink
+path: [../org/logging.md](../org/logging.md). `HitchSidecar.cs` shares this sink's stem.
+
+## src/Utils/BuildVersion.cs
+The build's own version, read once from `application/config/version` in `project.godot`, which is
+the number's one home. Three surfaces state it back so a report names its build without being
+asked: `Log.Open` writes it as the log file's first line, `UI/BuildStamp.cs` draws it in the menu's
+corner, and the Windows export preset stamps it into the exe's file properties (`ExportRelease.ps1`
+reads the same key to name the zip, and refuses an export whose exe does not carry it). Reads
+`ProjectSettings`, so it resolves only inside a running engine, which is why `Log.Open` takes the
+version as an argument instead of reading it.
 
 ## src/Utils/ShaderTime.cs
 The GPU's view of the clock: the `csky_time` global shader uniform (seconds), registered once in

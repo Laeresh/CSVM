@@ -184,6 +184,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`FUN_004b3800`, `docs/org/vehicleDamage.md` "Damage staging"): the whole-vehicle health fraction
   at 10%, which a graze that leaves the hull healthy never reaches — so this clip showing no
   whole-plane trail is expected, not a puzzle.
+  *Cross-refs:* `PT-123` (the flight that judges the scatter).
 
 - `BL-122` `[Tuning]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
@@ -320,6 +321,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   player stays alive, which would keep the scene up; worth a capture only if the hold time above
   turns out to be the binding constraint when tuning. Otherwise what remains is the **A/B against
   our build at the controls**, with the reference numbers above to judge against.
+  *Cross-refs:* `PT-124` (the flight that judges it, both surfaces and the sound).
 
 - `BL-297` `[Research]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Panel-damage semantics: what the original actually
   shows when a part is damaged — the user's re-test verdict is that our authored-data reading has
@@ -565,7 +567,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-222`). (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS`
   entry and named nowhere) — do not conflate the four groups.
 
-- `BL-227` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Blast knockback magnitude (D10, 2026-08-01).** The
+- `BL-227` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Blast knockback magnitude (D10, 2026-08-01).** The
   splash falloff half of this item is closed: `Projectile.ApplyDamage` deals
   `damage × (1 − d² / IMPACT_PROXIMITY²)` to both pools, cover-tested and capped at 32 targets, per
   the decode in [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "Half two, the splash"
@@ -592,6 +594,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Traps: `CANNON_SPREAD` scatters each round several metres over any real firing range, so the
   achieved distance is a distribution — judge over a burst, never off one pass. Raising it far enough
   that a round crossing the sky sounds is the failure mode, not a louder cue.
+  *Cross-refs:* `PT-125` (the flight that judges it).
 
 - `BL-233` `[Feature]` `[Blocked: M4]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Extend the proximity fuse to zeppelins (and any other M4 flyer) when they get
   bodies.** The fuse itself came back 2026-08-06 (PLAN-vs-mode B14): re-enabled **aircraft-only**
@@ -615,7 +618,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (b) a world-armed fuse re-detonates every rocket 15–50 m short of terrain (the 2026-08-02
   failure) — never widen the mask to world bodies.
 
-- `BL-286` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)** — two
+- `BL-286` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)** — two
   small opens. (a) closed 2026-08-06: the muzzle-light stand-in magnitudes (was `BL-200`, rode
   `BL-261`/`BL-263`; `MuzzleLightEnergy` 2.5, 2-frame `MuzzleLightLife` 0.03 s — the def carries
   range/colour only) are signed off, judged in `--weapon-lab`; static, so the sign-off covers
@@ -633,6 +636,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `MuzzleFlash1-3.png` if the flash shape is ever revisited.
   ⚠ Trap: the pick-one single-quad reading (+ `_muzzle1`→`_muzzle2` flip) was implemented and
   rejected at the controls — do not re-land it without new footage evidence.
+  *Playtest after fix:* the anchoring, judged in flight rather than in the lab: the flash sits on
+  the muzzle at speed and the light travels with the plane over its two frames.
 
 - `BL-289` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)** —
   ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted
@@ -645,6 +650,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   2026-08-06 with the fades in (`BL-265` closed — the authored quad is 5 cm wide, sub-pixel past
   ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
+  *Cross-refs:* `PT-128` (the flight that judges the ricochet).
 
 - `BL-357` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The hardpoint selector steps one way only; the original cycles in both
   directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
@@ -695,7 +701,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ignores the deadzone on purpose, so capturing the right trigger takes it from both Camera Boost
   (0.5) and Camera Dolly Out (0) rather than stacking a third reading. Raising or lowering these
   numbers does not change that, and must not be used to try to.
-  *Cross-refs:* `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
+  *Cross-refs:* `PT-120` (the pad sitting that judges the three), `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
 - `BL-696` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Original presentation has no way into the rebinding screen, so the
   keymap is editable in Built-in alone.** *Decided:* the door is built, and it is a fidelity fix
@@ -1445,12 +1451,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Where to look:* isolate `ApplyOpacity`'s material/shader-param cost from `SetFaded`'s collider-resync cost before changing either — `EnsureOpacityPath`'s own `Shader.Code.Contains` scan is measured NOT to be the bottleneck (under 0.1 ms typically). Both are shared machinery well beyond the sonic burst; `WorldCollision._fadedRoots` is a single process-wide counter, so `FadedAbove`'s ancestor walk degrades for every currently-faded object in the world, not just this one, once more than one is faded at a time.
   *Cross-refs:* `BL-231` (closed; the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
-  *Cross-refs:* `BL-535` (the per-burst re-reset cost measured under the same instrument), `BL-296`/`BL-299` (the other splitscreen-scoped items).
-- `BL-538` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[C5]` **At what distance C5's city is meant to reach the dark level of its facade mip chain.** The dark band reported at the controls in C5 is not the clutter fade: it is the shipped hand-authored mip chain of the `cblock*` facade textures, whose level 1 is a non-monotone dip. `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) → 4.41 (L1) → 6.77 (L2) and `cblock2` at 9.60 → 0.83 → 1.84, so a facade near enough for L0 reads bright, one in the L1 band three to eleven times darker, and one far enough for L2 brighter again. `--mips=generated` removes the band completely; `graphics.clutterFarFade=false` does not touch it. The chain installs correctly (every `installed` line in the dump reads `== authored`), and the levels are the original's own art that must not be regenerated, so what is left is a judgement about *selection*: the artists tuned these levels against a 640×480 DX7 pipeline, and nothing yet says the remake reaches L1 at the distance they drew it for.
-  *Where to look:* the sampler and any LOD bias on the world shader (`SceneBuilder.GetBiasShader` emits `filter_linear_mipmap_anisotropic`), and whether the original point-selected a level where the remake trilinearly blends L0 into L1 across a range. Instrument: `--dump-mips` for the installed chain, `--mips=generated` for the A/B. The judgement itself is the user's at the controls, over the pose in the entry below.
+  *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-535` (the per-burst re-reset cost measured under the same instrument), `BL-296`/`BL-299` (the other splitscreen-scoped items).
+- `BL-538` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` `[C5]` **C5's city draws a dark band across its facades that the original never draws.** The dark band reported at the controls in C5 is not the clutter fade: it is the shipped hand-authored mip chain of the `cblock*` facade textures, whose level 1 is a non-monotone dip. `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) → 4.41 (L1) → 6.77 (L2) and `cblock2` at 9.60 → 0.83 → 1.84, so a facade near enough for L0 reads bright, one in the L1 band three to eleven times darker, and one far enough for L2 brighter again. `--mips=generated` removes the band completely; `graphics.clutterFarFade=false` does not touch it. The chain installs correctly (every `installed` line in the dump reads `== authored`), and the levels are the original's own art that must not be regenerated, so what is wrong is *selection*. Flown against the original at the controls (`PT-85`, closed), the original shows no band at any distance and under any of its video settings: "The original does not have the dark band at all. Tried different video settings. But the building view distance in the original is only inside the ring so perhaps the darkened building are just never visible." The artists tuned these levels against a 640×480 DX7 pipeline, and the reading the flight leaves is that the original stops drawing a facade before it ever reaches the distance L1 takes over, while the remake draws the same building out past that distance and shows an L1 the original's own camera never reached.
+  *Where to look:* the original's building draw distance first, since that is what the flight points at: find the cull range the original applies to ordinary gamez scene nodes (the clutter fade is ruled out below, and is a different path) and compare it against the camera distance at which our sampler reaches L1. Then the sampler and any LOD bias on the world shader (`SceneBuilder.GetBiasShader` emits `filter_linear_mipmap_anisotropic`), and whether the original point-selected a level where the remake trilinearly blends L0 into L1 across a range. Instrument: `--dump-mips` for the installed chain, `--mips=generated` for the A/B.
   *Reproduce:* `.\RunProbe.ps1 --freecam --chapter=C5 "--pos=-9491,140,-3479" "--direction=-0.588,-0.03,-0.809" --det --mute "--screenshot=.scratch\band.png"`, then the same with `--mips=generated`.
   *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); a per-texture lighting term (the original's hardware draw has none, and the band is a function of camera distance that lifts under a mip-policy switch, which changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
-  *Cross-refs:* `PT-85` (the flight that judges it, with the pose and the A/B), `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
+  *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
 
 - `BL-555` `[Feature]` `[Divergence]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A held key fast-forwards a mid-mission cutscene instead of
   skipping it: the definition plays at a raised rate that spools up while the key is held and
@@ -1639,6 +1645,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   loudness, and the mix ratio differs by view because the original's **cockpit** engine is damped
   while ours is not — so it cannot be read across. **Needs a level match by ear against the
   original, not another measurement** (user, 2026-08-04: "the only tune parameter would be volume").
+  *Cross-refs:* `PT-126` (the flight that names the sound and matches its level).
 
 - `BL-269` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The 3D sound falloff curve between the authored `RANGE` radii is an admitted
   approximation** (`WorldSounds.cs:159-161` — endpoints authored, curve "an approximation of
@@ -1667,6 +1674,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   judgement is unaffected, but a splitscreen listen must judge it at whatever `N` the pilot is
   testing, not assume the 1P level. `snd_propstart` (the other half of this A/B) is unchanged —
   D32 kept it raw, "your prop" on respawn stays loud on purpose.
+  *Cross-refs:* `PT-127` (the cockpit sitting that judges both).
 
 - `BL-391` `[Tuning]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Own-ship engine loop reads too loud, including single-player.** Found
   2026-08-15 at the `BL-126` splitscreen chrome playtest — a 4-player Dogfight session flagged the
@@ -2101,7 +2109,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   because it returns to the halted world the board froze and `halted` is its own no-write branch in
   `_Process`. The debug callers are not covered by an automated check: all three sites are private
   methods behind a live session, so the suites reach the seam but not its callers.
-  *Cross-refs:* `git log --grep=BL-625` (the seam and why both edges belong to the caller).
+  *Cross-refs:* `PT-122` (the flight that judges it), `git log --grep=BL-625` (the seam and why both edges belong to the caller).
 
 - `BL-702` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The chase camera's
   zoom range sits inside the original's rather than on it: the original starts at its closest and
@@ -2134,6 +2142,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
+  *Cross-refs:* `PT-121` (the flight that judges the three).
 
 - `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
   fidelity sign-off.** Playtested 2026-07-30
@@ -2776,10 +2785,9 @@ usual.
   (`git log --grep=BL-545`): the hookup definition now reaches the flown airframe's own subtree, so
   its per-airframe hook extend and wing fold run instead of every `IF NODE_ACTIVE` arm reading
   false, and the presence flag moved off the airframe node whose visibility is the ACTIVE bit those
-  arms test. What is owed is the same auto-land watched again. *Playtest after fix:* CM02's
-  auto-land, from outside: the hook extends, the aeroplane sits on the trapeze rather than above
-  it, and a Balmoral folds its wings. *Cross-refs:* `BL-544`; the closing commit carries the
-  three-fault diagnosis.
+  arms test. What is owed is the same auto-land watched again, from outside, which `PT-130` now
+  carries with its three checks. *Cross-refs:* `PT-130` (the flight that judges it), `BL-544`;
+  the closing commit carries the three-fault diagnosis.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen
@@ -2838,7 +2846,7 @@ usual.
   authored for exactly this mode. MP worlds already load (`--mission=MP1`); only their spawns fall
   back today (`SpawnPicker` warns).
 
-- `BL-301` `[Tuning]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Dogfight (VS mode) tuning** — every deliberate v1 deferral, to be re-judged from
+- `BL-301` `[Tuning]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Dogfight (VS mode) tuning** — every deliberate v1 deferral, to be re-judged from
   `PT-43` evidence, not speculation. **Aim-assist strength settled 2026-08-13** from `PT-43`(a)/(b):
   the shipped `sticky_bullet_*` constants (decoded in
   [`docs/org/aim-assist.md`](docs/org/aim-assist.md), built by `BL-342`) read right at the
@@ -3078,7 +3086,9 @@ usual.
   hitch on every wave spawn in every mission, not only CM18's generator launches. The measured
   case is `BL-641`'s remainder (`PLAN-M5-polish-8` B14): with the crash rig
   deferred behind the launch, a CM18 generator launch still costs 68 to 141 ms against a 40 ms
-  threshold, paired A/B under `--det` at 1P and 4P. What is left on the launch frame is the model
+  threshold, paired A/B under `--det` at 1P and 4P. Flown since inside the docking film itself
+  (`PT-118` (d), closed), the five credited launches read with no stall at all, so five spawns
+  4 s apart behind a film camera do not show what ten from load do. What is left on the launch frame is the model
   build and `FlightController.Bind`, 50 to 90 ms together, and neither moves behind the frame that
   puts the aeroplane in the world without the aeroplane arriving late. The deferred frames carry one
   `AnimRuntime.PrewarmEmitters` call over about 194 emitters at 15 to 103 ms, whose
@@ -3152,6 +3162,31 @@ usual.
   episode. *⚠ Traps:* a loss inside a film and a win in free flight are separate paths; the fade
   case in `CampaignSuites` should assert all three. *Playtest after fix:* CM14, dock with the
   objectives complete. *Cross-refs:* `BL-727`'s closing commit.
+
+- `BL-771` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` `[CM18]` **A generator
+  credited long after load fires its first launch on the same step its hangar door starts opening,
+  so that aircraft flies out through a door that is still closed.** *Evidence:* reported at the
+  controls on CM18's docking film (`PT-118` (b), closed; the row's four other checks passed).
+  Five allied Furies drop from `cargozep1` about 4 s apart, but "the first one
+  starts a little early and flies through the still closed door". `GeneratorCycle.Step` is where it
+  comes from: an uncredited cycle is `Blocked`, and a blocked step advances `_timer` without ever
+  opening the door, so by the time cutscene callback 800 grants capacity minutes into the mission
+  the timer is far past `_nextEvent`. On that first unblocked step the door-lead branch sets
+  `DoorOpen` and the spawn branch fires inside the same call, spending the whole
+  `DoorLeadSeconds` at once, and `AiGeneratorRuntime` only starts the open anim on that same step
+  (`PlayDoor`, `CSVM/src/Session/AiGeneratorRuntime.cs:263-267`), so the panels have not moved yet.
+  Launches two to five are clean because the spawn resets `_timer` to 0 and leaves the door open.
+  *Fix shape:* on a step that opens a door from closed, hold the spawn until the lead has actually
+  run (clamp `_timer` to `_nextEvent - DoorLeadSeconds` as `DoorOpen` flips) instead of letting one
+  step satisfy both thresholds. *⚠ Traps:* whether the original does the same is not decoded, and
+  `FUN_00452850`'s loop order is what settles it: the remake mirrors the decoded order, so this may
+  be authentic and the fix a deliberate deviation. Read it before touching the cycle. The
+  `generator-callback-credit` suite pins five launches one every 4 s but does not look at the door
+  at the first spawn; extend that suite rather than adding one. *Playtest after fix:* CM18
+  (`./RunGame.ps1 --campaign=<profile>:17`), the docking beauty shot, the first Fury only.
+  *Cross-refs:* `BL-657`'s closing commit (the credit rule and the callback host), `BL-699` (the
+  per-launch hitch, which is a separate item and was not seen on these five),
+  `docs/formats/mission-entities/enemy-generators.md`.
 
 ## Tooling, platform & docs
 
