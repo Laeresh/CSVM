@@ -912,7 +912,10 @@ drawn row and detail, then sells one plane back and reads them again. The walk f
 outside the cap; filling to 20 records left it one bought plane short of the cap and the row
 correctly stayed live, which is what the first run of the suite caught.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree with Wave F landed and main
+merged in: build clean at 0 warnings, 3450 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 111.0s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
@@ -971,7 +974,10 @@ half-replayed script would still hand back a picture that reads as an answer. No
 site in `CSVM/src/Testing/**`, `CSVM.Tests/**` or `analysis/goldens/manifest.json` spells `x`, so
 nothing else moved.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree with Wave F landed and main
+merged in: build clean at 0 warnings, 3450 units, 256 engine suites over four shards, 18 goldens
+hash-identical, engine errors clean, exit 0. The engine stage ran 111.0s against its 100s budget,
+which is awareness only and does not move the exit code.
 
 **Original approach (kept for reference).**
 
