@@ -4,6 +4,23 @@ using Godot;
 
 namespace CSVM.Flight;
 
+/// <summary>Which of the two decoded scorer implementations a shooter runs. The engine selects on
+/// the SCORING vehicle's own <c>mode</c> at <c>0x0041fe75</c>, so this is a property of who is
+/// looking and never of what is being looked at (docs/org/aiPilot.md "The scorer, and which one
+/// runs").</summary>
+public enum AiScorer
+{
+    /// <summary><c>FUN_00421ad0</c>, run by a <c>jet</c> or a <c>wingman</c>: the shared terms plus
+    /// the three geometry ones (ahead/behind, altitude, closing).</summary>
+    Jet,
+
+    /// <summary><c>FUN_00421950</c>, run by everything else — a <c>ship</c>, a <c>plane</c>, a
+    /// <c>heli</c>, a <c>tank</c>. ⚠ It has the shared terms and NOTHING else: a ground or sea AI
+    /// scores on base weight and the two class terms alone. Do not let the three geometry terms
+    /// reach it because they read like part of one formula.</summary>
+    Other,
+}
+
 /// <summary>One target-selection candidate, as a snapshot. Built per acquisition by
 /// whoever holds the live lists; the ranker reads nothing else, so the formula unit-tests
 /// without a scene tree (the <see cref="AiModeMachine"/> pattern).</summary>
@@ -127,11 +144,12 @@ public static class AiTargetRanking
     public const float TurretBiasFlat = 37.5f;
 
     /// <summary>One candidate's rank and its inputs, the decoded arithmetic term for term.
-    /// <paramref name="ownForward"/> must be unit-length (a basis column). ⚠ Ahead is the
-    /// UNFAVOURABLE arm and so is being above the scorer: the engine prefers the target on its
-    /// tail and below it. Do not "fix" either sign to the design document's front-arc reading.</summary>
+    /// <paramref name="ownForward"/> must be unit-length (a basis column), and is unread under
+    /// <see cref="AiScorer.Other"/>. ⚠ Ahead is the UNFAVOURABLE arm and so is being above the
+    /// scorer: do not "fix" either sign to the design document's front-arc reading.
+    /// <paramref name="scorer"/> has no default because the wrong one is silent.</summary>
     public static TargetScore Score(Vector3 ownPos, Vector3 ownForward, float activationRange,
-        in RankedTargetCandidate c)
+        AiScorer scorer, in RankedTargetCandidate c)
     {
         var to = c.Position - ownPos;
         float dist = to.Length();
@@ -140,17 +158,21 @@ public static class AiTargetRanking
         float weight = c.IsPlayer ? PlayerWeight : BaseWeight;
         if (c.IsWingman)
             weight += WingmanWeight;
-        // Ahead/behind on the raw offset: a half-metre deadband, then ±0.2 either side.
-        float ahead = to.Dot(ownForward);
-        if (ahead > AheadDeadbandM)
-            weight += TermWeight;
-        else if (ahead < -AheadDeadbandM)
-            weight -= TermWeight;
-        // Altitude sign: strictly above the scorer is the unfavourable arm, level counts as below.
-        weight += to.Y > 0f ? TermWeight : -TermWeight;
-        // Closing: a candidate whose velocity points back at the scorer is the unfavourable arm;
-        // a stationary one, or one flying away, the favourable.
-        weight += c.Velocity.Dot(to) < 0f ? TermWeight : -TermWeight;
+        if (scorer == AiScorer.Jet)
+        {
+            // Ahead/behind on the raw offset: a half-metre deadband, then ±0.2 either side.
+            float ahead = to.Dot(ownForward);
+            if (ahead > AheadDeadbandM)
+                weight += TermWeight;
+            else if (ahead < -AheadDeadbandM)
+                weight -= TermWeight;
+            // Altitude sign: strictly above the scorer is the unfavourable arm, level counts as below.
+            weight += to.Y > 0f ? TermWeight : -TermWeight;
+            // Closing: a candidate whose velocity points back at the scorer is the unfavourable arm;
+            // a stationary one, or one flying away, the favourable.
+            weight += c.Velocity.Dot(to) < 0f ? TermWeight : -TermWeight;
+        }
+
         if (c.IsGasbag)
             weight -= GasbagWeight;
         return new TargetScore(weight, dist, c.ObjectiveBias,
@@ -162,13 +184,13 @@ public static class AiTargetRanking
     /// fallback). Returns the candidate's index and its score, or −1 when nothing ranks (all
     /// beyond activation, or the list is empty).</summary>
     public static int SelectBest(Vector3 ownPos, Vector3 ownForward, float activationRange,
-        IReadOnlyList<RankedTargetCandidate> candidates, out TargetScore best)
+        AiScorer scorer, IReadOnlyList<RankedTargetCandidate> candidates, out TargetScore best)
     {
         int bestAny = -1, bestFree = -1;
         TargetScore scoreAny = default, scoreFree = default;
         for (int i = 0; i < candidates.Count; i++)
         {
-            var s = Score(ownPos, ownForward, activationRange, candidates[i]);
+            var s = Score(ownPos, ownForward, activationRange, scorer, candidates[i]);
             if (s.Rank >= NotRanked)
                 continue;
             if (bestAny < 0 || s.Rank < scoreAny.Rank)

@@ -896,8 +896,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/org/aiPilot.md`](docs/org/aiPilot.md) ("What a `mode ship` vehicle runs") and
   [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) carry the full reading.
   *Fix shape:* give a `mode ship` hull the target selection (the non-`jet` scorer `FUN_00421950`),
-  the 20 s hold, the aim solve against its one free-aiming mount, and the fire decision reading the
+  the 20 s hold, the aim solve against its mount, and the fire decision reading the
   `weapons` tuple. No pursuit and no dwell handling. Invent no rate and no range.
+  *The mount is not free-aiming, and both defs carry a real one:* `patrolboat` and `t_truck` both
+  hold `turret > gun > firepoint` in every chapter's gamez, resolved by the recursive name search
+  `FUN_004761c0`, so `FUN_004b7670` takes its ANIMATED branch. Authoring no `gun_pitch`/`gun_yaw`
+  skips the per-axis clamp but not the guards: `FUN_004b7e70` pins the desired elevation to `+0.5`
+  and `-0.2588` (30 degrees up, 15 down, azimuth kept, yaw unrestricted), the aim then slews at
+  `4.0`/s (`FUN_00460840` over `FUN_00538d70`), `+0xa4` is measured against the RAW lead so both the
+  guard and the slew lag are charged to the shot, and `FUN_004b7590` writes the pose back onto the
+  two nodes, so the barrel visibly tracks.
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) ("A `mode ship` vehicle's mount")
+  carries it.
   *⚠ Traps:* **The lifeboat's gun is not this item and not a defect.**
   `lifesaverNM > lifesaver > lifeboat > healthy > turret > gun > firepoint` is a complete rig, but
   `TurretController.BuildEmplacements` instantiates only what an `ai.zrd` `NODES` pattern matches,

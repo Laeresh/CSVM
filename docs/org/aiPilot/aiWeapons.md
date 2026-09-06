@@ -27,6 +27,7 @@ turret's 0.4-second cadence sounds continuous while still emitting one projectil
 - [The trigger routine](#the-trigger-routine)
 - [The fire routine, and the aim gate](#the-fire-routine-and-the-aim-gate)
 - [`gun_pitch`/`gun_yaw` clamp the mount, they do not gate the shot](#gun_pitchgun_yaw-clamp-the-mount-they-do-not-gate-the-shot)
+  - [A `mode ship` vehicle's mount](#a-mode-ship-vehicles-mount)
 - [The specials](#the-specials)
 - [What `AiGunner` runs](#what-aigunner-runs)
 - [What the shipped data amounts to](#what-the-shipped-data-amounts-to)
@@ -210,12 +211,14 @@ mount's `+0x94`, `+0x98`, `+0x9c`, `+0xa0` at spawn. Nothing else reads them.
 
 **Every vehicle gets that mount, authored limits or not.** `FUN_00476250` first pushes one mount per
 entry in the def's turret list (`def+0x144` to `def+0x148`), then pushes the main gun mount
-unconditionally, locating its firepoint down the model nodes `turret` > `gun` > `firepoint` and
-falling back to the vehicle-forward direction when the model has no `gun` node. A def that authors
-no `gun_pitch` and no `gun_yaw` therefore still has a mount, and since `FUN_004b7670` clamps only an
-axis whose min differs from its max, **that mount is unclamped on both axes and its `+0xa4` residual
-is never spent**. This is the patrol boat's and the turret truck's case: they aim freely, where an
-aeroplane pays for every degree outside its `[-11, 11]`.
+unconditionally. It resolves `turret` and `gun` by recursive name search from the vehicle root
+(`FUN_004761c0`, depth-first over the child array at `+0x5c`, last child first) and the muzzle as
+`firepoint` under the `gun` node, read by `FUN_004d1cc0`. The two fallbacks: a `gun` node carrying
+no `firepoint` puts the muzzle at the literal `(0, 0, -1)`, and no `gun` node at all leaves it at
+the vehicle origin. A def that authors no `gun_pitch` and no `gun_yaw` therefore still has a mount,
+and since `FUN_004b7670` clamps only an axis whose min differs from its max, **that mount takes no
+per-axis clamp**. What happens instead depends on whether the mount is animated, which is the next
+section: an aeroplane's is not, a hull's is.
 
 `FUN_004b7670` rotates the desired lead direction into the vehicle frame and then, **for each axis
 whose min differs from its max**, decomposes to pitch `atan2(y, sqrt(x^2 + z^2))` and yaw
@@ -237,7 +240,7 @@ An animated mount (a node in `+0x34`/`+0x38`) slews toward the clamped direction
 `FUN_00460840` rather than snapping to it, so its `+0xa4` also carries however far the mount still
 has to travel. A fixed forward gun has no node and reaches the clamped direction the same frame.
 
-**Census: no shipped airframe carries that node.** The ten AI airframes that author ordnance
+**Census: no shipped AIRFRAME carries that node.** The ten AI airframes that author ordnance
 (`bloodhawk`, `fury`, `warhawk`, `autogyro`, `avenger`, `balmoral`, `brigand`, `firebrand`,
 `kestrel`, `peacemaker`, which is every `gun_pitch`/`gun_yaw` carrier except `devastator` and
 `bswingman`, and those two carry no ordnance) hang their pylons off the same rig the player planes
@@ -246,8 +249,35 @@ distinguishing flag (`extracted/planes/nodes.json`). `vehicle.zrd.json` authors 
 node-reference field at all. The only nodes any shipped plane model ever moves are the five turret
 airframes' barrels (`fgun`/`rgun`/`bgun0`…`bgun3`/`hgun`/`hgun2`), and turrets do not run through
 this mount: they are `Turret`/`TurretRate` in `turret.cpp`, entered through their own projectile
-spawner, never through `FUN_004897c0`'s vehicle-list walk. So the slewing branch is decoded and
-correct, but nothing shipped ever takes it: every mount, gun or ordnance, is the fixed case.
+spawner, never through `FUN_004897c0`'s vehicle-list walk. So every aeroplane's mount, gun or
+ordnance, is the fixed case. ⚠ The census covers airframes only. The two SURFACE defs do carry the
+node, and take the branch below.
+
+### A `mode ship` vehicle's mount
+
+`patrolboat` and `t_truck` carry the full chain in every chapter's gamez —
+`patrolboat > healthy > turret > gun > firepoint` and `t_truck > healthy > l1 > turret > gun >
+firepoint` — so `+0x34` and `+0x38` are both set and **the mount is the animated case**. Neither def
+authors `gun_pitch` or `gun_yaw`, which puts them on the one path where an unclamped mount is still
+bounded, at `0x004b7?`:
+
+- the desired direction's `y` in the vehicle frame is pinned to at most **`0.5`** and at least
+  **`-0.2588`** by `FUN_004b7e70`, which writes the bound into `y` and rescales `x` and `z` to keep
+  the vector unit. That is **30 degrees of elevation and 15 of depression**, and the azimuth is
+  untouched: yaw is unrestricted, so a hull traverses the full circle. ⚠ The two literals are
+  unrelated numbers, not a `±` pair;
+- the aim then slews toward the guarded direction at **`4.0` per second** (`FUN_00460840`, which
+  snaps whole once one frame covers `dt × rate ≥ 1`, so at or past 0.25 s). The interpolation is
+  `FUN_00538d70`: a plain lerp while the two directions are within `0.96`, a slerp through the angle
+  between them otherwise, and a swept `pi × t` about a perpendicular when they oppose;
+- `+0xa4` is then `dot(actual, desired)` against the **raw** desired direction, so the guard's
+  give-away and the slew's remaining travel are both charged to the shot. A hull swinging onto a new
+  bearing holds fire until it is within the gun's `0.9848`, and a target more than 10 degrees above
+  the elevation ceiling cannot be shot at all;
+- `FUN_004b7590` writes the resulting aim back onto the `gun` and `turret` nodes, so the barrel a
+  player sees is the barrel that shoots.
+
+⚠ **So "a boat aims freely" is wrong.** It has no authored band, which is not the same as no band.
 
 ## The specials
 
@@ -295,6 +325,13 @@ The match's zeppelin side is flown. The acquisition offers a gasbag to a pilot w
 flies its def's own fit, so the Black Hat Warhawk's eight `wep_14` torpedoes reach a pylon walk
 against the Pandora's gasbags. The `warhawk-torpedo-run` suite flies the whole run.
 
+`SurfaceGunner` runs the hull's own version, and shares less with `AiGunner` than it looks: the lead
+solver and the `0.9848` threshold, and nothing else. It applies no quick draw, because that gate
+reads the shooter's own mode and a `ship` never satisfies it; it has no pursue gate, because the
+class is never promoted to pursue; and its mount is `SurfaceGunMount`, the guarded-and-slewed one
+above rather than the aeroplane's traverse clamp. Its acquisition ranks with the non-`jet` scorer and
+holds a target for the hardcoded 20 s. The live half is the `surface-vehicle-guns` suite.
+
 ⚠ **A pass affords about one roll.** The torpedo's authored band is 350 to 800 m and an attacking
 Warhawk crosses it at roughly 95 m/s, so the 5 s refire allows a single `quick_draw_chance` draw
 per approach, 0.31 at rating 6. A mission flight showing no torpedo from a flight of Warhawks is
@@ -335,6 +372,12 @@ rarer still for the 89 mook blocks whose only authored skill is `dead_eye 1`.
 | `FUN_00460e30` | the constant-speed intercept, in the `u = 1/t` form ([`aim-assist.md`](../aim-assist.md)) |
 | `FUN_00462ce0` | the accelerating intercept a motor round is led with, fed `ACCELERATION`, `VELOCITY` and the launcher's velocity |
 | `FUN_004b7670` | the per-mount aim update: clamps to `gun_pitch`/`gun_yaw` and writes the aim quality `+0xa4` |
+| `FUN_004b7e70` | pins a direction's `y` to a bound and rescales `x`/`z` to unit — the hull mount's elevation guards |
+| `FUN_00460840` | the mount's slew step: snap at `dt × rate ≥ 1`, else interpolate by that fraction |
+| `FUN_00538d70` | the interpolation itself: lerp inside `0.96`, slerp otherwise, swept half turn when opposed |
+| `FUN_004b7590` | writes the mount's aim back onto its `gun` and `turret` nodes |
+| `FUN_004761c0` | the recursive find-by-name from a vehicle root that locates `turret` and `gun` |
+| `FUN_004d1cc0` | reads a node's local position — the `firepoint` marker's, as the mount's muzzle offset |
 | `FUN_00476250` | the spawn that copies the def's gun limits onto each mount |
 | `FUN_004897c0` | the world tick over the vehicle list that drives the mount update |
 | `FUN_004b2080` | weapon-slot lookup by numeric id |
