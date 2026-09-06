@@ -3327,55 +3327,6 @@ usual.
   older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
-- `BL-742` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty stage
-  cannot host a zeppelin, so an AI-versus-airship question still takes a campaign flight per
-  iteration.** *Evidence:* the AI-attacks-zeppelin-parts work (`git log --grep=BL-740`) took four
-  user flights of C4/M03 and three log reads to find that the Pandora's gasbag pools reached the
-  AI as nobody's, and the rocketeer's own gates were still unread after the last one. The
-  aeroplane half of the rig has landed: `--ai=` takes `n=` for a squadron and `team=` for a side,
-  and on the empty stage each side anchors to a 1000 m ring about the grid origin, so an
-  eight-plane sortie engages at 2000 m with no chapter loaded. The airship half has not.
-  `--stage=empty` builds no chapter gamez (`GameSession.cs:945` and the `state.GamezPath` choice
-  at `GameSession.cs:454-455`, which reads planes.zbd unless `WorldMode`), and `ZeppelinDef` names
-  its parts but carries no per-zone geometry (`Zeppelins.cs:288-291`), so a hand-placed hull has
-  invented offsets and every distance-driven decision watched on it is fiction. *Fix shape:* a
-  `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x/y/z]` flag, routed through the existing
-  chapter-world path rather than a second loader, which is five contained edits: `--zep=` takes
-  `Chapter`/`Mission` with it in `Resolve` so every path (gamez, textures, `neindex`,
-  `zeppelins.zrd.json`) resolves with no second pair threaded through the build; widen
-  `state.GamezPath`'s `WorldMode` test to include it; set `state.NodeSubtree` from
-  `WorldBuilder.MatchNodes` on the record's node; run `BuildWorldStage`, which with `NodeSubtree`
-  set builds that subtree alone and skips `MissionSetup` and clutter (`WorldSession.cs:89-127`),
-  and add the grid beside it, so `state.WorldRuntime` binds damage, targeting and the sub-part
-  feed exactly as in a mission; and widen the `--zeppelins` block (`GameSession.cs:2518-2547`) to
-  fire for `--zep=` with the record filtered out and the team and position overrides applied.
-  ⚠ Routed that way the graft carries the chapter's own anim program, so the no-choreography trap
-  below applies only to a stage built without it; confirm which before relying on either.
-  *⚠ Traps:* the
-  team override must arrive through `AuthoredTeam` (`ZeppelinRuntime.cs:118`) by setting the
-  borrowed def's `TeamId`, never stamped onto the pools, because `WireZones` reads the flagged
-  `panels` child only where the pool has no team (`inst.Team ??=`, `ZeppelinRuntime.cs:606`) and
-  `CollectTargetParts` fans `zep.Team` over every part (`ZeppelinRuntime.cs:238`); the stage has
-  no `AnimProgram`, so the gasbag destroy anims resolve to nothing and the pools register without
-  choreography, which is fine for a targeting probe and wrong for a damage one; `--stage=empty`
-  leaves `WorldMode` false (`SessionSpec.cs:1654`), which is the one test gating both the chapter
-  gamez and `ResolveNodeSubtree` (`GameSession.cs:909`), so `--zep=` widens those two rather than
-  calling the `--node=` path as it stands; a run needs `--fly` or there is no
-  player rig, the `--ai=` block never runs (`GameSession.cs:2391`) and the ground plane builds
-  without collision (`GameSession.cs:948`); read `p95_ms` and `max_ms` off `--perf` and ignore
-  `script_ms` and `physics_ms`, so a plane-count sweep is read as a differential on a deliberately
-  bare stage; and PowerShell splits an unquoted `--ai=` value on its commas into an array the
-  launcher cannot pass on, so the argument has to be single-quoted. *Playtest after fix:*
-  `.\RunGame.ps1 --stage=empty --fly --debug-spectate --ai-attack --perf --det '--ai=player_warhawk:n=4:team=2:def=bhatwarhawk,player_fury:n=4:team=3'`
-  and read the `ai gunner`/`ai mode` lines: the eight acquire across the two sides at about
-  2000 m, hold pursue and open fire near 900 m. `--frames=` is a screenshot warm-up rather than a
-  session length, so a watched sortie runs until it is closed; add `--screenshot=` to bound one.
-  Then the same run with `--zep=C4/M03:piratezep:team=1` for the airship case. *Cross-refs:* `BL-772` (the ring net and
-  the volumes the CLI path never applies), `BL-773` (an `ai_ms` term to attribute the cost this
-  rig varies), `BL-617` (why `script_ms` is not the term to read), `BL-741` (the cargozep case
-  wants the same rig with a mission structure instead of a record); the `warhawk-torpedo-run`
-  suite is the hand-placed version of what this makes flyable.
-
 - `BL-772` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty-stage
   rig has no patrol net, and a `--ai=` plane never takes a net's volumes, so patrol and the
   netted-versus-netless fork of `AiPilot` cannot be watched there.** *Evidence:* `AiNet` requires
@@ -3389,8 +3340,9 @@ usual.
   the net's volumes applied to the CLI spawn through `CampaignRosterPlan.ApplyVolumes`. *⚠ Traps:*
   applying volumes on the `--ai=` path changes behaviour for existing command lines that name a
   chapter net, which today take the machine defaults instead; that is the fix rather than a side
-  effect, but it is a behaviour change to announce rather than slip in. *Cross-refs:* `BL-742`
-  (the rig this extends, which deliberately shipped without a net).
+  effect, but it is a behaviour change to announce rather than slip in. *Cross-refs:* the
+  empty-stage rig this extends, which shipped deliberately without a net and whose `--ai=` squadron
+  tokens and `--zep=` graft are documented in `docs/cli.md` (`git log --grep=BL-742`).
 
 - `BL-773` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`--perf` has no
   term that attributes frame cost to the AI step, so a plane-count sweep can only be read as a
@@ -3401,8 +3353,9 @@ usual.
   (`PhysicsTickCost.cs`), which the AI never enters. The honest terms left on the window line are
   `p95_ms` and `max_ms` (`Launcher.cs:1735-1739`), both whole-frame. *Fix shape:* bracket the
   roster's per-frame AI walk the way `PhysicsTickCost` brackets the physics tick, and report an
-  `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `BL-617` (the same misreading, on `script_ms`),
-  `BL-742` (the rig that makes the sweep worth running).
+  `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `BL-617` (the same misreading, on `script_ms`); the
+  empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
+  term worth having (`docs/cli.md`, `git log --grep=BL-742`).
 
 ## Misc
 
