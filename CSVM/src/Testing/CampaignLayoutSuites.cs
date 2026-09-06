@@ -84,8 +84,9 @@ internal static class CampaignLayoutSuites
         ctx.Check(layout.At(CampaignLayout.FlightCheckSection, "FC_B_CHANGEPLANE", 0f, 0f).Y == 132f
             && layout.At(CampaignLayout.FlightCheckSection, "FC_B_CHANGEPLANEW", 0f, 0f).Y == 350f,
             $"the flight check's paper plaques are authored at 132 and 350, pinned at the measured 131 and 349");
-        ctx.Check(layout.Box(CampaignLayout.AmmoSection, "OL_S_AMMODESC", 0f, 0f, 0f).Y == 96f,
-            $"OL_S_AMMODESC is authored at y 96, pinned at the measured 92");
+        ctx.Check(layout.Box(CampaignLayout.AmmoSection, "OL_S_AMMODESC", 0f, 0f, 0f).Y == 96f
+            && layout.Box(CampaignLayout.AmmoSection, "OL_S_ROCKETDESC", 0f, 0f, 0f).Y == 332f,
+            $"the two description panes are authored at y 96 and 332, pinned at the measured 92 and 328");
         ctx.Check(layout.Box(CampaignLayout.AmmoSection, "OL_T_TITLE", 0f, 0f, 0f).X == 132f
             && layout.Box(CampaignLayout.FlightCheckSection, "FC_T_TITLE", 0f, 0f, 0f).X == 132f,
             $"the ammo and flight check titles are authored at x 132, centred, pinned at the measured 138 left-justified");

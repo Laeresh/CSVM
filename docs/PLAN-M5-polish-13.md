@@ -104,7 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — The campaign boards' panes, and the shots that pin them
 
 11. ☑ `BL-659` No screenshot aid can open a campaign combo box
-12. ☐ `BL-658` The ammo screen shows one description pane where the original fills two
+12. ☑ `BL-658` The ammo screen shows one description pane where the original fills two
 
 ### Wave C — Original's dialogs and rows
 
@@ -434,7 +434,47 @@ up. The plane selection and ammo screens' open lists are **unpinned by any golde
 exists, so a golden added here is new coverage, and a new golden's hash is never evidence on its
 first run: look at the image.
 
-## B12 ☐ `BL-658` The ammo screen shows one description pane where the original fills two
+## B12 ☑ `BL-658` The ammo screen shows one description pane where the original fills two
+
+**Landed.** `ORDINANCELAYOUT.SCRIPT` keeps both panes filled and lets neither touch the other.
+`gui_init` (lines 142-153) writes the first armed gun group's ammunition into `ol_s_ammodesc`
+through `uiData` 2032 and the first fitted pylon's ordnance into `ol_s_rocketdesc` through 2033,
+taking index 4 when the plane carries neither, and every later update is dispatched on the sender's
+`2027` class, so an ammunition dropdown writes the upper pane alone and a rocket dropdown the lower.
+`gui_create` also initializes two headings we drew nowhere, `ol_t_ammodesctitle` and
+`ol_t_rocketdesctitle` (langui 1024 and 1025, "AMMO DESCRIPTION" and "ROCKET DESCRIPTION"), which
+`Campaign Ammo Selection.png` shows over each pane.
+
+A `BoardDetailPane` enum (`Upper`, `Lower`) names the pane, `ICampaignPage.DetailRow(pane, row)`
+answers which row's `Detail` each pane reads, and `CampaignBoards.For` walks both panes rather than
+the focused row's one. The base answers the focused row for `Upper` and -1 for `Lower`, so no other
+screen changes; `CampaignAmmoPage` answers the cursor's own row in its half and the first armed
+group or first fitted pylon in the other, which is `gui_init`'s rule. `DetailSlot` takes the pane
+and reads `OL_S_ROCKETDESC` for the lower one. ACCEPT and CANCEL are in neither half, so
+`CampaignBoards.DetailPaned` (the shell's new banding test) sends their hint to the hint band and
+leaves both panes on the gun and the pylon they describe, as the original's stay.
+
+**The second pane needed the same four-pixel lift as the first, measured rather than assumed.** In
+`Campaign Ammo Selection.png` the two headings sit 236 pixels apart and the two panes' first body
+lines sit 236 pixels apart, which is exactly the rows' own 76-to-312 and 96-to-332 separation, so
+the lower pane is pinned at 328 the way the upper one is pinned at 92. `CampaignLayoutSuites`'
+canary now reads both rows, and the pin table in `docs/org/campaign-board.md` carries both.
+
+**The overlay order was already right and is unchanged.** A pane's words are a board line and an
+open drop-down is an overlay, and `ComposedBoardView._Draw` draws every overlay after every line,
+so a list that reached a pane would cover it. Neither can: the lists stand at x 136-284 and 410-558
+and the panes at 566. The 4da shot shows the open left list covering the pylon field under it, and
+the 8da shot shows the right list opening flush against the ROCKET DESCRIPTION column without
+touching it.
+
+`CampaignAmmoPageTests.BothDescriptionPanesFillAtOnce` pins the pane routing, the two headings and
+the composed lines; `CampaignLayoutTests` pins both slots over a fixture whose `OL_S_ROCKETDESC` row
+sits elsewhere; `menu-campaign-journey` checks on a real board that the two panes differ and that
+walking to ACCEPT leaves them alone.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The ammo screen reads a gun's ammunition and a pylon's ordnance side by side, each under
 its own heading, as `ORDINANCELAYOUT.SCRIPT` fills them.

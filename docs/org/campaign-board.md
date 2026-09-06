@@ -104,7 +104,7 @@ Three sources, and a reader should know which one is under any given number.
 | `FC_B_CHANGEPLANE` / `FC_B_CHANGEAMMO` y (`<V2>`) | flight check | `132` | `131` | the CHANGE AMMO plaque's edges in `Campaign Flight Check.png` |
 | `FC_B_CHANGEPLANEW` / `FC_B_CHANGEAMMOW` y (`<V3>`) | flight check | `350` | `349` | the same match on the wingman block |
 | `FC_T_TITLE` / `OL_T_TITLE` x and justification | flight check, ammo selection | `132`, centred in 190 | `138`, left | the heading's first glyph in both reference shots; the row's y and width read |
-| `OL_S_AMMODESC` y | ammo selection | `96` | `92` | the description column's first line in `Campaign Ammo Selection.png`; the row's x and width read |
+| `OL_S_AMMODESC` / `OL_S_ROCKETDESC` y | ammo selection | `96`, `332` | `92`, `328` | each column's first line in `Campaign Ammo Selection.png`, whose 236-pixel separation is the rows' own, so both panes take the same lift; the rows' x and width read |
 | `FC_T_GUNLISTW` / `FC_T_ROCKETLISTW` y | flight check | `400` | `399` | the wingman tables keep the pilot pair's 17-pixel drop under their heading row |
 | `PS_T_WINGPLANE` y | plane selection | `323` | `324` | the wingman's plane line keeps the pilot line's `106 + 218`, the drop every other widget of the pair has |
 

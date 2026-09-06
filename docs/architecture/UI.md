@@ -185,10 +185,10 @@ The fixed chrome of all eight campaign screens, plus the composer that turns a p
 into a `ComposedBoard`. Every button slot, background pane and text slot names its `LAYOUT.CSV`
 section and row and reads through `CampaignLayout` with the value the board drew before the layout
 existed as its fallback, so a screen composes the same whether the file is present, absent or
-unreadable; the briefing is the exception, its chrome being `Briefing.zrd`'s own. A slot marked
-pinned keeps a value measured off the reference screenshot where the row differs from it.
-`SlotOf` and `DialogSlot` answer a plaque's board rectangle, which is how a pointer presentation
-hit-tests. The pinned values, row by row: [../org/campaign-board.md](../org/campaign-board.md).
+unreadable; the briefing is the exception, its chrome being `Briefing.zrd`'s own, and a slot marked
+pinned keeps a measured value instead. `SlotOf` and `DialogSlot` answer a plaque's rectangle for a
+pointer to hit-test, `DetailSlot` and `DetailPaned` the description panes, the ammo screen's two
+filled at once. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/CampaignLayout.cs
 The decoded menu layout as the campaign boards read it: one widget row's authored geometry and art

@@ -190,9 +190,13 @@ public class CampaignLayoutTests
         var fallback = CampaignBoards.SlotOf(CampaignScreen.FlightCheck, BoardButton.ChangePlane);
         Assert.Equal(("FC_B_PaperButton.Png", 128f, 131f), (fallback!.Value.Art.Name, fallback.Value.X, fallback.Value.Y));
 
-        Assert.Equal((560f, 92f, 180f), CampaignBoards.DetailSlot(CampaignScreen.Ammo, fixture));
-        Assert.Equal((566f, 92f, 172f), CampaignBoards.DetailSlot(CampaignScreen.Ammo));
-        Assert.Null(CampaignBoards.DetailSlot(CampaignScreen.Cabin, fixture));
+        // Both description panes take their column from their own row and keep their measured y.
+        Assert.Equal((560f, 92f, 180f), CampaignBoards.DetailSlot(CampaignScreen.Ammo, BoardDetailPane.Upper, fixture));
+        Assert.Equal((560f, 328f, 180f), CampaignBoards.DetailSlot(CampaignScreen.Ammo, BoardDetailPane.Lower, fixture));
+        Assert.Equal((566f, 92f, 172f), CampaignBoards.DetailSlot(CampaignScreen.Ammo, BoardDetailPane.Upper));
+        Assert.Equal((566f, 328f, 172f), CampaignBoards.DetailSlot(CampaignScreen.Ammo, BoardDetailPane.Lower));
+        Assert.Null(CampaignBoards.DetailSlot(CampaignScreen.Cabin, BoardDetailPane.Upper, fixture));
+        Assert.Null(CampaignBoards.DetailSlot(CampaignScreen.Cabin, BoardDetailPane.Lower, fixture));
     }
 
     /// <summary>The message box reads its internal geometry off <c>[@MessageBox@]</c> and keeps

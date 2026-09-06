@@ -132,6 +132,12 @@ public interface ICampaignPage
     /// <summary>The detail line under the list for the focused row, or "" for none.</summary>
     string Detail(int row);
 
+    /// <summary>Which row's <see cref="Detail"/> pane <paramref name="pane"/> reads while the
+    /// cursor is on <paramref name="row"/>, or -1 for a pane this screen does not author. A screen
+    /// with one pane answers the focused row and nothing else; the ammo screen fills both at once,
+    /// so the pane the cursor is not in names the row it keeps describing.</summary>
+    int DetailRow(BoardDetailPane pane, int row);
+
     /// <summary>The horizontal stepper on the focused row. Returns whether anything changed.</summary>
     bool Step(int row, int dir);
 
@@ -706,6 +712,10 @@ public abstract class CampaignPage : ICampaignPage
 
     /// <inheritdoc/>
     public virtual string Detail(int row) => string.Empty;
+
+    /// <summary>The one pane a screen authors carries the focused row's own description, which is
+    /// every screen but the ammo one.</summary>
+    public virtual int DetailRow(BoardDetailPane pane, int row) => pane == BoardDetailPane.Upper ? row : -1;
 
     /// <inheritdoc/>
     public virtual bool Step(int row, int dir) => false;

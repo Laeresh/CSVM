@@ -2850,7 +2850,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         string detail = _error.Length > 0 ? _error : page.Detail(row);
         // A block of text is the screen's own to place; the one-line hint band takes only what a
         // screen has nowhere else to put, which is every short description and every refusal.
-        bool banded = CampaignBoards.DetailSlot(page.Screen, flow.Layout) == null && !detail.Contains('\n');
+        bool banded = !CampaignBoards.DetailPaned(page, row, flow.Layout) && !detail.Contains('\n');
         _boardRoot.Show(
             CampaignBoards.For(page, row, _pressFrames > 0, detail, flow.Modal, flow.Layout),
             BoardPalette.For(page.Screen),

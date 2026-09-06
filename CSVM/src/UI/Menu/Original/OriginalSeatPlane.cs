@@ -492,6 +492,8 @@ public sealed partial class OriginalShell
 
         public string Detail(int row) => string.Empty;
 
+        public int DetailRow(BoardDetailPane pane, int row) => pane == BoardDetailPane.Upper ? row : -1;
+
         public bool Step(int row, int dir) => false;
 
         public bool Accept(int row) => false;

@@ -38,7 +38,8 @@ internal static class MenuCampaignSuites
         + "the cabin, the roster then stands on that player, a second player is created and deleted "
         + "through the confirm stage, previous missions lists a progressed profile's three flights and "
         + "opens the scrapbook, the briefing runs its reveal and restarts its narration on REPLAY, the "
-        + "flight check opens ammo selection whose ACCEPT writes the pick into the profile and whose "
+        + "flight check opens ammo selection whose two description panes fill at once, whose ACCEPT "
+        + "writes the pick into the profile and whose "
         + "CANCEL writes nothing, plane selection writes the pilot's pick on ACCEPT and keeps it on "
         + "CANCEL, PLANE CONSTRUCTION opens the hangar over the profile's wallet and Back resumes the "
         + "cabin, FLY MISSION leaves as one CampaignMissionExit with the profile saved, the debrief "
@@ -353,8 +354,15 @@ internal static class MenuCampaignSuites
         Is(ctx, "the group's field reads the stock ammunition", flow.Strings.Text(3360, "Slug"), menu.ShownRowText);
         menu.Drive(Right);
         Is(ctx, "the stepper takes the next ammunition", flow.Strings.Text(3361, "Dum-dum"), menu.ShownRowText);
+        string upper = PaneText(menu.ShownBoard, BoardDetailPane.Upper, flow.Layout);
+        string lower = PaneText(menu.ShownBoard, BoardDetailPane.Lower, flow.Layout);
+        ctx.Check(upper.Length > 0 && lower.Length > 0 && upper != lower,
+            $"the screen reads the gun's ammunition and the pylon's ordnance side by side (\"{upper}\" / \"{lower}\")");
         ctx.Check(store.Load(Pilot)!.Planes[0].Ammo[group] == 0, $"nothing is written before ACCEPT");
         WalkTo(menu, "ACCEPT LOADOUT");
+        ctx.Check(PaneText(menu.ShownBoard, BoardDetailPane.Upper, flow.Layout) == upper
+            && PaneText(menu.ShownBoard, BoardDetailPane.Lower, flow.Layout) == lower,
+            $"and the plaques leave both panes on the gun and the pylon they describe");
         menu.Drive(Accept);
         ctx.Check(flow.Screen == CampaignScreen.FlightCheck, $"ACCEPT LOADOUT returns to the flight check ({flow.Screen})");
         ctx.Check(store.Load(Pilot)!.Planes[0].Ammo[group] == 1, $"and the profile file carries the pick");
@@ -562,6 +570,26 @@ internal static class MenuCampaignSuites
         menu.Drive(MenuCommands.None);
         ctx.Check(menu.ShownScreen == "Hangar" && menu.Hangar is { Campaign: not null } && menu.Campaign is { Screen: CampaignScreen.Cabin },
             $"--menu=campaign-hangar opens the hangar over the scratch profile's wallet with the cabin behind it ({menu.ShownScreen})");
+    }
+
+    // What one of the ammo screen's two description panes carries, found by the pane's own authored
+    // position: the composer writes each pane's words into its own column.
+    private static string PaneText(ComposedBoard? board, BoardDetailPane pane, CampaignLayout layout)
+    {
+        if (board == null || CampaignBoards.DetailSlot(CampaignScreen.Ammo, pane, layout) is not { } slot)
+        {
+            return string.Empty;
+        }
+
+        foreach (var line in board.Lines)
+        {
+            if (line.X == slot.X && line.Y == slot.Y)
+            {
+                return line.Text;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static bool HasLine(ComposedBoard board, string text)
