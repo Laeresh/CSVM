@@ -132,7 +132,7 @@ draws its authored 800x600 space one-to-one.
 | `CAP-38` | Beeper and seeker hits ON an aircraft, **with audio** | In the original, fire the beeper (`wep_10`) and the seeker (`wep_11`) at an aircraft and film the hit itself, external/chase, close enough to read the burst on the airframe. Both weapons author `ANIMATION large_fireball` on their aircraft `IMPACT` row and ours plays exactly that on a struck plane; a fused burst reads the `default` row in the original and in ours (`docs/org/ordnanceTypes.md` "Which row a burst reads"), so the beeper's near miss draws nothing and the seeker's draws its white flare at the round. The ground-side look is already signed off, so this clip is only the on-plane half. *Look for:* whether a direct strike shows the large fireball on the plane, something smaller, or nothing beyond the paint; whether a near miss shows nothing (beeper) or the flare (seeker); and the per-type impact sound on the same take (`snd_missile_beeper` / `snd_missile_seeker`) | Nothing tracks the outcome; a mismatch with our on-plane burst mints a new `BL` |
 | `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. **Reduced 2026-08-15 by the `BL-297` decode**, which answered all three questions out of `crimson.exe` (`docs/org/vehicleDamage.md`, "Damage staging"): (a) effects land at the node the def names, so a nose hit DOES spark wing sites; (b) nothing per-part fires at all while a part's armor absorbs; (c) each entry fires once per downward crossing, so a panel tears once until repaired. **What is still owed is the look:** watch one panel cross its tear threshold and judge whether the flung debris reads as a piece of that panel or as generic flakes, and what visibly changes on the airframe. The other three are now confirmation, worth capturing on the same take if the framing allows but not worth a dedicated sortie | `BL-297` |
 | `CAP-47` | A gasbag burning out, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and set the Gemini's gasbags alight, holding one bag in frame from ignition through to whatever ends it, close enough to read both the fire and the envelope under it. *Look for:* what a finished gasbag looks like (a collapsed or missing envelope, a scorched one that stays, or a fire that simply stops), and what the zeppelin does once **three of its five** have finished, which is the authored death gate (`all_gmzep_gasbags` carries `MINIMUM_TO_SATISFY 3` over the five `finish_gmzepgasbagN` animations). Qualitative only: no burn duration is read off this clip as a constant | `BL-639` |
-| `CAP-55` | The Gemini's own death and where its wreck rests, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and torpedo three of the Gemini's five gasbags down **without destroying any left broadside bay**, then hold the hull in frame from the first bag falling through to where the wreck settles and stops moving. *Look for:* (a) how many gasbags separate and fall, counted against the hull (ours sheds five, and the eye agrees with the data), and whether every one of them stays on the water, since ours drops the front and back bags through it (`BL-698`); (b) whether the gondola/underside disappears as it settles (`breakunder` switches `underneath` inactive); (c) the waterline against the three left broadside bays and their hatches once it is at rest, since ours puts at least one bay under the sea; (d) a gun burst fired into whichever bay sits nearest the water, held long enough to see whether it takes damage; (e) the pause-screen objectives readout before and after that burst. Qualitative only: no distance or rest height is read off this clip as a constant. | `BL-694` (whether the original leaves a bay unreachable at all, and whether its breakup takes the bays with it), `BL-695`, `BL-698` |
+| `CAP-55` | The Gemini's own death and where its wreck rests, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and torpedo three of the Gemini's five gasbags down **without destroying any left broadside bay**, then hold the hull in frame from the first bag falling through to where the wreck settles and stops moving. *Look for:* (a) how many gasbags separate and fall, counted against the hull (ours sheds five, and the eye agrees with the data), and whether every one of them stays on the water, since ours drops the front and back bags through it (`BL-698`); (b) whether the gondola/underside disappears as it settles (`breakunder` switches `underneath` inactive); (c) the waterline against the three left broadside bays and their hatches once it is at rest, since ours puts at least one bay under the sea; (d) a gun burst fired into whichever bay sits nearest the water, held long enough to see whether it takes damage; (e) the pause-screen objectives readout before and after that burst. Qualitative only: no distance or rest height is read off this clip as a constant. | `BL-698`, `BL-695`, and `PT-119` (b) and (d): whether the original leaves a bay unreachable at all, where ours no longer needs one, since the hull's own death demolishes every bay |
 
 ### World
 
@@ -755,6 +755,28 @@ is a judgement on our own remake.
     own airframe alone — the same behaviour, the other human.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
+
+### CM14 (C2B/M04) · the Gemini, both kill orders
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:13
+```
+
+- `PT-119` `[Own]` **The mission reaches an end whichever way the Gemini goes (`BL-694`).** The
+  third primary is the only route to a win, and it counts five of the six `deploy_gmzep_lbroadNN`
+  animations INVALID, which only a cannon bay's own destruction writes. Two authored chains supply
+  them: a torpedoed gasbag demolishes its section's four bays, and the hull death demolishes every
+  section that was not torpedoed. `gemini-gasbag-bays` proves both headless over three orderings,
+  so this row is the confirmation at the controls that they arrive in a flown sortie. *Look for:*
+  - (a) torpedo three gasbags with no bay shot at all: the Gemini dies and the third primary
+    completes with it, rather than the sortie running on with nothing left that can happen;
+  - (b) the reverse order, bays first and the hull afterwards, reaching the same end;
+  - (c) the pause-screen objectives readout ticking primaries 1 to 3 as the bays go, and the
+    mission then reaching its win through the docking;
+  - (d) whether a bay under the water is still reachable, and whether it needs to be, since the
+    hull death should already have taken it.
+  *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
+  state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
 
 ### CM18 (C4/M03) · the generator launches
 

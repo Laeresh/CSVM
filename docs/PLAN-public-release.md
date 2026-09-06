@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — What must be true before strangers play
 
 1. ☑ Triage `backlog.md` against the release bar
-2. ☐ `BL-694` CM14 becomes unwinnable when the Gemini dies before its cannon bays
+2. ☑ `BL-694` CM14 becomes unwinnable when the Gemini dies before its cannon bays
 
 ### Wave B — What the package says about itself
 
@@ -205,7 +205,7 @@ not an A-wave item, and it belongs to the first run on someone else's machine, s
 
 The Known Issues draft E42 uses is the appendix at the foot of this file.
 
-## A2 ☐ `BL-694` CM14 becomes unwinnable when the Gemini dies before its cannon bays
+## A2 ☑ `BL-694` CM14 becomes unwinnable when the Gemini dies before its cannon bays
 
 **Goal.** CM14 always reaches an end. A player who kills the Gemini early either still completes the
 third primary or loses the mission, but never flies on with nothing left that can happen.
@@ -263,7 +263,7 @@ regression and the full `.\RunTests.ps1`, since this lands under `CSVM/`.
 rocks, so a direct gasbag-to-objective credit would invent a win condition; the credit goes through
 the bays being destroyed, which is a destructible-state change and not an objective edit. `CAP-55`
 (d) and (e) are what show whether the original's own breakup takes the bays with it. ⚠ **`killgmzep`
-has never run under test:** `CSVM/src/Testing/ZeppelinBreakupSuites.cs:11,22` pins C1/M04 and
+had never run under test:** `CSVM/src/Testing/ZeppelinBreakupSuites.cs:11,22` pins C1/M04 and
 `piratezep` only, asserts six bags where the Gemini has five, and would fail its 12-of-12 engine
 check on a 14-engine hull, so a green suite is no evidence about this ship. There is also no
 recovery for a player already stuck: `--debug-objective=N` drives `INACTIVEn` conditions only and
@@ -272,6 +272,63 @@ RECORDED failures, which an unwinnable-and-unlosable mission never produces. Do 
 `y = 0`; `BL-668` tuned no constant and this should not either. `BL-695` is the mirror-image defect
 (the ladder crediting with no cannon touched) and stays its own item. *Cross-refs:* `BL-695`,
 `BL-698`, `BL-639`, `BL-640`, `BL-668`, `CAP-55`.
+
+**Verified.** The open question first, because it is the whole item. The fifth and sixth
+invalidations do not come from the gasbag count and they do not come from a direct credit: they
+come from the ship's own demolition chain, which the evidence paragraph above had only half of.
+A gasbag's record entry carries a destruction anim, and that anim demolishes the section it belongs
+to. `gmzep_gasbagtorpedo1` invalidates its section's two burn anims and, half a second later,
+calls the destroy definitions of `lbroad11`, `lbroad12`, `rbroad11`, `rbroad12` and four engines
+(`extracted/C2B/M04/mis_anim/gasbag1-gmzep_gasbagtorpedo1.json`). The bays reach the same
+demolition from the other side: each bay's death calls its section's left burn at +1 s and its
+right burn at +8 s, and `gmzepleft_gasbag1` destroys the section's other bays and engines before
+calling `finish_gmzepgasbag1`. The hull death closes the set: `all_gmzep_gasbags` calls both burns
+of every section, the sections that already died have invalidated their own, and the rest go. So
+`killgmzep` never had to credit anything, and neither did the gasbag count.
+
+**The code that carries that chain landed on 2026-09-05 in `4648f333`, two days after `BL-694` was
+filed and after the sorties it was filed on.** That commit closed `BL-738` on C5/M04's Dante and
+introduced `KillCalledDestructible`, which routes a `CALL_ANIMATION` naming a destructible's own
+death definition through that definition's pool. Before it, such a call started the definition on
+the caller's anchor and ran its listed sequences alone; the four `deploy_*`/`retract_*`
+invalidations live in the compiled destruction slot, which only a pool death dispatches
+(`AnimRuntime.RunDeathSlot`, reached from `RunDeathSequence` alone), so no gasbag death could write
+an objective-visible state and the blocked sortie is exactly what that build had to produce. The
+commit never names `BL-694`, which is why A1's `git log --grep` and code read both missed it, the
+same shape A1 recorded for `BL-079`. It also follows that the winning sortie's fifth invalidation
+came from the third bay its own account says was shot on the wreck, not from anything else: on that
+build a bay's own `WeaponHit` was the only writer of a `deploy_*` INVALID.
+
+**Measured, not inferred.** `gemini-gasbag-bays`
+(`CSVM/src/Testing/GeminiGasbagBaySuites.cs`) kills C2B/M04's Gemini through the damage sink a
+torpedo reaches and reads the state OBJECTIVE13 reads, over three orderings on three worlds.
+Gasbags 1, 2 and 3, the tidy case. Gasbags 3, 4 and 5, which is the case that matters: the Gemini
+carries bays on sections 1 to 3 only, and `gmzep_gasbagtorpedo4`/`…5` name `lbroad41`…`lbroad52`
+that this hull does not have, so four of the six bays can only arrive from the hull death. Then the
+reverse order, a deployed `lbroad21` shot off a still-flying hull before the same three gasbags.
+All three end with six of six bays Destroyed, six of six `deploy_gmzep_lbroadNN` INVALID, and
+OBJECTIVE13's authored `COMPLETION_COUNT 5` met at 6, the chain settling at 1.0 s, 9.0 s and 3.0 s
+of its 60 s cap. The states run ahead of the pools, which is why the suite's own settle test reads
+both: a bay's destruction slot latches BOTH deploys of its pair, so three deaths cover all six
+states while three sister pools are still waiting on the +1 s and +8 s burns, and a settle test on
+the states alone stopped the clock with three pools still healthy. The suite also pins the hull death chain
+itself, which no suite reached before: `all_gmzep_gasbags` and `killgmzep` both run, so the trap
+about `killgmzep` never running under test is answered on the five-bag ship rather than on
+`piratezep`. Able to fail (METHOD-9): with `KillCalledDestructible` made to return null, every leg
+reports 0 bays destroyed and OBJECTIVE13 at 0 of 5, reproducing the blocked sortie's "no cannon
+destroyed at all"; `git status` is clean of that perturbation.
+
+**So this item lands a regression suite and no engine change**, which is the outcome the ground
+rules call a success. The release bar is met: no ordering of the Gemini's death leaves CM14 without
+a route to its third primary, because every route to the hull's death demolishes all three sections
+that carry bays. The 8-chapter `--freecam` regression exits 0 in every chapter with no error line,
+and the complete `.\RunTests.ps1` is green: 3,450 units, 257 engine suites with engine errors
+clean, 18 goldens hash-identical, exit 0. The one thing a headless run
+cannot sign off is the sortie itself, so the two flights this item's Verify names are `PT-119`, and
+`CAP-55` still owes the original's own answer to (b) and (d) there. `BL-695`'s and `BL-698`'s traps
+are corrected in `backlog.md`: both were waiting on this open question, and `BL-695`'s central
+evidence needs re-reading against `docs/verification.md`'s DIAG-25, since a bay killed by another
+definition's call writes no `[anim] damage:` line at all.
 
 # Wave B — What the package says about itself
 
@@ -639,8 +696,11 @@ this list.
 
 - **In the CM14 attack on the Gemini, the cannon-hatch objectives can tick over from engine kills
   rather than from hatch hits, so the third primary sometimes completes without a hatch destroyed.**
-  No workaround is needed, since the mission still reaches its end. (`BL-695`; the only commit
-  naming it is its filing, and the counting it describes is unchanged.)
+  No workaround is needed, since the mission still reaches its end. (`BL-695`; ⚠ **E42 should drop
+  this entry unless it is re-flown first.** A2's decode shows a gasbag section owns its four bays
+  and its four engines together, so the two counts moving together is the authored chain, and a
+  ladder completing with no hatch shot is what the hull's own death does. The entry's log was taken
+  on a build without `KillCalledDestructible`, and its trap in `backlog.md` now says so.)
 - **The Gemini's gasbags burn without ever finishing, so fire alone never brings the zeppelin
   down.** Shoot the gasbags directly instead of waiting for the fire, since three of the five kill
   it. (`BL-639`; no landing commit, and it is blocked on unfilmed reference footage, `CAP-47`.)

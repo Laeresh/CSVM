@@ -1070,10 +1070,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   bags sit farthest from the pitch pivot, so they carry the most vertical speed at the break. Read
   where `gasbag1` and `gasbag5` are on the frame `break1`/`break5` starts, against `ColumnDepth`,
   before changing anything.
-  *⚠ Traps:* `zeppelin-breakup` pins `piratezep` only and would pass green while this ship sinks;
-  a fix owes this hull its own resting check (`BL-694`'s trap says the same about `killgmzep`). Do
-  not clamp bags to y = 0: `BL-668` tuned no constant and the fix here should not either.
-  *Cross-refs:* `BL-694` (the wreck's own rest, and the bays it drowns), `BL-668`, `CAP-55` (a).
+  *⚠ Traps:* `zeppelin-breakup` pins `piratezep` only and would pass green while this ship sinks,
+  so a fix owes this hull its own resting check. `gemini-gasbag-bays` does start `killgmzep` on
+  this ship, but over a collision-less world where nothing comes to rest, so it is no cover for
+  that check either. Do not clamp bags to y = 0: `BL-668` tuned no constant and the fix here should
+  not either.
+  *Cross-refs:* `BL-668`, `CAP-55` (a). The wreck no longer drowns a bay the mission needs:
+  the hull's own death demolishes every cannon bay before it sinks (`BL-694`'s landing commit).
 
 ## Environment & world
 
@@ -3105,13 +3108,22 @@ usual.
   `geminizep' engines 11/14`, the third engine kill, and `objective 13` (`COMPLETION_COUNT 5`) on
   the line after `engines 9/14`, the fifth. Ten `wep_07` FLAK launches and five engine kills over the
   window, no hatch damage.
-  This is the mirror of `BL-694`: the same gate, credited by the wrong destructible set. A second
-  logged run shows the ladder working correctly off real hatch kills, so the fault is conditional
-  rather than constant, and finding what distinguishes the two runs is the first step.
-  *⚠ Traps:* do not "fix" this by tightening the count before `BL-694`'s open question is answered —
-  that run completed `objective 13` on four invalidations where five are authored, and the two
-  anomalies may share a cause. Neither should be changed on its own.
-  *Cross-refs:* `BL-694`, `BL-639`.
+  A second logged run shows the ladder working correctly off real hatch kills, so the fault is
+  conditional rather than constant, and finding what distinguishes the two runs is the first step.
+  *⚠ Traps:* **the evidence above is stale and has to be re-flown before anything is changed.** It
+  was taken on a build without `KillCalledDestructible`, and `BL-694`'s landing commit
+  (`git log --grep=BL-694`) is where the whole cannon-hatch chain is decoded: a gasbag section owns
+  its four bays AND its four engines, so a section demolition moves both counts together and a bay
+  and engine correlation is what the authored data produces rather than a defect. Two of this
+  entry's own readings are unsafe on any build: an absent `[anim] damage:` line is not evidence a
+  bay survived, because a bay killed by another definition's call logs none
+  (`docs/verification.md` DIAG-25), and a ladder completing with no hatch shot is authored
+  behaviour once the hull dies, since `all_gmzep_gasbags` demolishes every section. What is left to
+  answer is the run's own shape: the Gemini alive at the end with five engines gone and the ladder
+  complete. Do not tighten the objective count; `gemini-gasbag-bays` asserts the authored six.
+  *Cross-refs:* `BL-694`'s landing commit, `BL-639`,
+  [`docs/formats/mission-entities.md`](docs/formats/mission-entities.md) "A gasbag section owns its
+  bays and its engines".
 
 - `BL-699` `[Perf]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls, and no test measures the
   launch frame.** *Evidence (at the controls, and measured on one mission):* the author feels a

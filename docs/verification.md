@@ -88,6 +88,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   activations behind `pz_deploy_hook`'s `WAIT_FOR_COMPLETION`, a 3 s offset plus a 10 s rotate, so
   `zeppelin-hull-activation`'s 12 s window read `cones 0/2` on cones that draw together at t=13 s.
 
+- **DIAG-25** — **A destructible killed by another definition's call logs no `[anim] damage:`
+  line; read the pool's status, or the state its death latches, and never the damage log.** Only
+  `AnimRuntime.DamageAt` writes that line, while `KillCalledDestructible` zeroes the pool and runs
+  the death straight, which is how a Gemini whose gasbag deaths had demolished four cannon bays
+  reads as "no cannon destroyed at all".
+
 ## SHOT — screenshots and pixel evidence
 
 - **SHOT-1** — **Respect capture quantisation; tiny effects need another metric.**

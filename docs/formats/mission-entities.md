@@ -27,7 +27,7 @@ instances; the rest are conditional.
 | `healthy` | `[[zoneNode, "panels"], …]` | the **critical** zones; second field is `"panels"` on all 316 entries |
 | `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine — see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
 | `engines` | node names | the engine nacelles (12 or 14: `leng11`…`reng42`) |
-| `gasbags` | `[[name, hp, [animName]], …]` | per-gasbag hit points (80–400) and its destruction anim |
+| `gasbags` | `[[name, hp, [animName]], …]` | per-gasbag hit points (80–400) and its destruction anim, which demolishes that gasbag's whole section ([below](#a-gasbag-section-owns-its-bays-and-its-engines)) |
 | `cannon_fire_delay` / `cannon_fire_range` | s / m | broadside cadence (10/15/20 s) and reach (500–15000 m) |
 | `left_cannons` / `right_cannons` | `[[node, deployAnim, retractAnim], …]` | the broadside guns and the animations that run them out and back in |
 | `cannon_health` | see below | per-cannon damage record (24 of 58 instances) |
@@ -79,6 +79,46 @@ key). The remake seeds record-first, def where unauthored. ⚠ One shipped gap: 
 `gasbags`, and its gasbag defs are `HEALTH 0` like all others, so no hp is authored anywhere;
 what the original does there is undecoded, and the remake leaves those zones undamageable and
 says so in a `zep:` line rather than inventing a default.
+
+### A gasbag section owns its bays and its engines
+
+The `gasbags` entry's third field is not a bag effect. It is the demolition of everything mounted
+on that stretch of hull, and it is what lets a zeppelin killed by torpedoes alone still credit an
+objective counting its cannon bays. On C2B/M04's Gemini, `gmzep_gasbagtorpedo1` switches section
+1's panels off, calls `finish_gmzepgasbag1`, invalidates the section's two burn anims
+`gmzepleft_gasbag1` and `gmzepright_gasbag1`, and half a second later calls the destroy definitions
+of that section's four cannon bays (`destroy_gmzep_lbroad11`, `lbroad12`, `rbroad11`, `rbroad12`)
+and its four engines.
+
+The burns are the same demolition reached from the other side. A cannon bay's own death calls its
+section's left burn at +1 s and its right burn at +8 s; each burn destroys the section's remaining
+bays and engines on its side and calls `finish_*` at +6 s. So a bay shot off a flying hull takes
+its section with it, and a torpedoed gasbag takes its section's bays.
+
+The hull death covers whatever neither reached. `all_<ship>_gasbags` calls both burns of every
+section, and a section that already died directly has invalidated its own two, so those calls do
+nothing while the untouched sections go. Whichever gasbags a player takes, every section of the
+ship is demolished by the time the hull dies.
+
+⚠ **Sections are not uniform, and the anim names outrun the ship.** The Gemini's five gasbags carry
+bays on sections 1 to 3 only; `gmzep_gasbagtorpedo4` and `…5` name `lbroad41`…`lbroad52`, which
+this hull does not have, so those two calls demolish nothing. A kill on gasbags 3, 4 and 5 leaves
+four of the six left bays to the hull death alone, and C2B/M04's third primary is an `ANIM_STATE`
+count of five of the six `deploy_gmzep_lbroadNN` going INVALID
+([objectives.md](objectives.md)), which only a bay's destruction writes.
+
+⚠ **A call to a bay's destroy definition credits nothing unless it runs through that definition's
+pool.** The four `deploy_*`/`retract_*` invalidations sit in the compiled destruction slot, which
+only a death dispatches ([destructibles.md](destructibles.md), "The slot is loaded and dispatched
+at death"); a plain start on the caller's anchor runs the listed sequences alone and writes no
+objective-visible state.
+
+Those four invalidations are the section's PAIR, not the one bay: `destroy_gmzep_lbroad11` and
+`destroy_gmzep_lbroad12` each latch both `deploy_gmzep_lbroad11` and `deploy_gmzep_lbroad12` off.
+That is what the mission's ladder is cut for, since one bay of a pair takes the count to two,
+two pairs to four and three pairs to six against thresholds of 1, 3 and 5. It also means the
+`INVALID` states run ahead of the pools: three bay deaths latch all six while their three sister
+pools are still waiting on the +1 s and +8 s burns.
 
 ### Units and the load-time pitch clamp
 
