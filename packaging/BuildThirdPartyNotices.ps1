@@ -1,0 +1,303 @@
+<#
+.SYNOPSIS
+    Regenerates packaging/LICENSE-thirdparty.txt from the three payloads it speaks for.
+
+.DESCRIPTION
+    The release zip ships CSVM.exe (the Godot engine statically linked), a self-contained
+    .NET runtime beside it, and tools/unzbd.exe (a Rust binary). Each carries notice
+    obligations that CSVM's own LICENSE and LICENSE-unzbd do not cover, so the assembled
+    file is what discharges them.
+
+    All three sources are read from the artefacts themselves rather than from a copy of
+    upstream's website:
+
+    - Godot. The Windows distribution ships NO LICENSE.txt or COPYRIGHT.txt on disk, and
+      neither does the export-template archive: the engine keeps both texts inside the
+      binary and hands them back through Engine.get_license_text(),
+      get_copyright_info() and get_license_info(). So this script runs the pinned editor
+      headless over a throwaway project and reads them out of the same binary the export
+      templates were cut from. The dump project is built in TEMP, never in CSVM/, so no
+      Godot run here can touch project.godot.
+    - .NET. A self-contained publish copies the Microsoft.NETCore.App runtime pack into
+      the payload, and that pack ships LICENSE.TXT (MIT) plus THIRD-PARTY-NOTICES.TXT.
+      Those two files are the notice the publish requires, taken from the exact version
+      in the NuGet cache rather than from the machine-wide dotnet install, which is a
+      different (usually newer) build.
+    - unzbd. EUPL-1.2 covers mech3ax's own code, not the crates statically linked into
+      the binary, whose MIT and Apache terms want their own copyright notices carried.
+      cargo resolves them for the target triple and each crate's licence text is read
+      out of the registry checkout it was built from. Texts are deduplicated by content,
+      so the identical Apache-2.0 sixty crates ship appears once.
+
+    ExportRelease.ps1 checks the three version stamps this script writes into the file's
+    header against what it is actually packaging, and refuses an export whose notice was
+    assembled for a different engine, runtime or fork commit. That check is what makes a
+    stale notice a build failure rather than a silent shipping mistake.
+
+.EXAMPLE
+    .\packaging\BuildThirdPartyNotices.ps1
+    Rewrite packaging/LICENSE-thirdparty.txt from the current tools/ and NuGet cache.
+#>
+
+[CmdletBinding()]
+param(
+    # Empty means "the newest win-x64 runtime pack in the NuGet cache", which is what a
+    # self-contained publish on this machine picks up.
+    [string] $RuntimeVersion = ""
+)
+
+$ErrorActionPreference = "Stop"
+
+$RepoRoot     = Split-Path $PSScriptRoot -Parent
+$GodotExe     = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
+$Mech3axRepo  = Join-Path $RepoRoot "tools\mech3ax"
+$OutFile      = Join-Path $PSScriptRoot "LICENSE-thirdparty.txt"
+$PackRoot     = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.netcore.app.runtime.win-x64"
+
+$Rule = "=" * 78
+$Thin = "-" * 78
+
+# BOM-less UTF-8 everywhere: PowerShell 5.1's Get-Content/Set-Content default to ANSI and
+# would double-encode every copyright sign in 800 KB of upstream text (verification.md
+# SHELL-7, CLAUDE.md). Read and write through the .NET APIs, which detect and emit UTF-8.
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+function Read-Utf8([string] $Path) { return [System.IO.File]::ReadAllText($Path) }
+
+foreach ($required in @($GodotExe, $Mech3axRepo, $PackRoot)) {
+    if (-not (Test-Path $required)) {
+        throw "Not found: $required -- see PROJECT_CONTEXT.md for the tools/ setup."
+    }
+}
+
+# ---------------------------------------------------------------- Godot
+
+$godotBuild = (& $GodotExe --version | Select-Object -Last 1).Trim()
+if (-not $godotBuild) {
+    throw "Could not read a version string from $GodotExe."
+}
+
+$dumpDir = Join-Path $env:TEMP "csvm-notices-$PID"
+if (Test-Path $dumpDir) { Remove-Item $dumpDir -Recurse -Force }
+New-Item -ItemType Directory -Force $dumpDir | Out-Null
+try {
+    [System.IO.File]::WriteAllText(
+        (Join-Path $dumpDir "project.godot"),
+        "config_version=5`n`n[application]`n`nconfig/name=`"csvm-notices`"`n",
+        $Utf8NoBom)
+
+    # Space-indented on purpose: a tab that a copy-paste turns into spaces is a GDScript
+    # parse error, and this script is edited far more often than it is read by Godot.
+    $dumpScript = @'
+extends SceneTree
+
+
+func _init():
+    var f := FileAccess.open("res://license.txt", FileAccess.WRITE)
+    f.store_string(Engine.get_license_text())
+    f.close()
+
+    # COPYRIGHT.txt's machine-readable (DEP5) stanzas, rebuilt from the engine's tables.
+    f = FileAccess.open("res://copyright.txt", FileAccess.WRITE)
+    for component in Engine.get_copyright_info():
+        f.store_string("Comment: " + str(component["name"]) + "\n")
+        for part in component["parts"]:
+            var files: Array = Array(part["files"])
+            f.store_string("Files: " + "\n       ".join(files) + "\n")
+            var holders: Array = Array(part["copyright"])
+            f.store_string("Copyright: " + "\n           ".join(holders) + "\n")
+            f.store_string("License: " + str(part["license"]) + "\n")
+        f.store_string("\n")
+    f.close()
+
+    f = FileAccess.open("res://license_info.txt", FileAccess.WRITE)
+    var info := Engine.get_license_info()
+    for k in info:
+        f.store_string("License: " + str(k) + "\n")
+        f.store_string(str(info[k]))
+        f.store_string("\n\n")
+    f.close()
+
+    quit()
+'@
+    [System.IO.File]::WriteAllText((Join-Path $dumpDir "dump.gd"), $dumpScript, $Utf8NoBom)
+
+    Write-Host "Reading Godot $godotBuild licence tables out of the engine..." -ForegroundColor Cyan
+    & $GodotExe --headless --path $dumpDir --script dump.gd | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Godot licence dump failed (exit $LASTEXITCODE)."
+    }
+
+    $godotLicense   = Read-Utf8 (Join-Path $dumpDir "license.txt")
+    $godotCopyright = Read-Utf8 (Join-Path $dumpDir "copyright.txt")
+    $godotLicenses  = Read-Utf8 (Join-Path $dumpDir "license_info.txt")
+} finally {
+    Remove-Item $dumpDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ---------------------------------------------------------------- .NET runtime
+
+if (-not $RuntimeVersion) {
+    # Sort as versions, not as strings: 8.0.9 sorts after 8.0.30 alphabetically.
+    $RuntimeVersion = (Get-ChildItem $PackRoot -Directory |
+        Sort-Object { [version] $_.Name } | Select-Object -Last 1).Name
+}
+$packDir = Join-Path $PackRoot $RuntimeVersion
+if (-not (Test-Path $packDir)) {
+    throw "Runtime pack $RuntimeVersion not in the NuGet cache ($PackRoot) -- publish once " +
+        "so the pack is restored, or pass -RuntimeVersion for one that is there."
+}
+$dotnetLicense = Read-Utf8 (Join-Path $packDir "LICENSE.TXT")
+$dotnetNotices = Read-Utf8 (Join-Path $packDir "THIRD-PARTY-NOTICES.TXT")
+
+# ---------------------------------------------------------------- unzbd's crates
+
+$forkCommit = (& git -C $Mech3axRepo rev-parse cs-anim).Trim()
+if ($LASTEXITCODE -ne 0 -or $forkCommit -notmatch '^[0-9a-f]{40}$') {
+    throw "Could not resolve cs-anim in $Mech3axRepo."
+}
+
+Write-Host "Resolving unzbd's crates at cs-anim $($forkCommit.Substring(0, 8))..." -ForegroundColor Cyan
+Push-Location $Mech3axRepo
+try {
+    # --filter-platform keeps the Unix-only crates out; --offline keeps the enumeration a
+    # read of the lockfile and the registry checkouts the binary was actually built from,
+    # rather than a resolve that could pull something newer than the shipped exe.
+    $metadataJson = & cargo metadata --format-version 1 --offline --filter-platform x86_64-pc-windows-msvc
+    if ($LASTEXITCODE -ne 0) {
+        throw "cargo metadata failed (exit $LASTEXITCODE) in $Mech3axRepo."
+    }
+} finally {
+    Pop-Location
+}
+$metadata = $metadataJson | ConvertFrom-Json
+
+# A null source is a workspace member (mech3ax's own crates), covered by LICENSE-unzbd.
+$crates = @($metadata.packages | Where-Object { $_.source } | Sort-Object name, version)
+if ($crates.Count -eq 0) {
+    throw "cargo metadata resolved no external crates -- the filter or the lockfile is wrong."
+}
+
+$crateRows = New-Object System.Text.StringBuilder
+$texts = @{}
+foreach ($crate in $crates) {
+    $spdx = if ($crate.license) { $crate.license } else { "(no license field; see $($crate.repository))" }
+    [void] $crateRows.AppendLine(("  {0,-32} {1,-12} {2}" -f $crate.name, $crate.version, $spdx))
+
+    $crateDir = Split-Path $crate.manifest_path -Parent
+    $licenseFiles = @(Get-ChildItem $crateDir -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING|NOTICE|UNLICENSE)' } | Sort-Object Name)
+    foreach ($licenseFile in $licenseFiles) {
+        $text = Read-Utf8 $licenseFile.FullName
+        # Keyed on the text, so the one Apache-2.0 body sixty crates ship is printed once
+        # under all of their names instead of sixty times.
+        if (-not $texts.ContainsKey($text)) { $texts[$text] = New-Object System.Collections.ArrayList }
+        [void] $texts[$text].Add("$($crate.name) $($crate.version) ($($licenseFile.Name))")
+    }
+}
+$crateBlocks = New-Object System.Text.StringBuilder
+foreach ($text in ($texts.Keys | Sort-Object { $texts[$_][0] })) {
+    [void] $crateBlocks.AppendLine($Thin)
+    [void] $crateBlocks.AppendLine("As shipped by: " + ($texts[$text] -join ", "))
+    [void] $crateBlocks.AppendLine($Thin)
+    [void] $crateBlocks.AppendLine()
+    [void] $crateBlocks.AppendLine($text.TrimEnd())
+    [void] $crateBlocks.AppendLine()
+}
+
+# ---------------------------------------------------------------- assembly
+
+function Section([string] $Number, [string] $Title, [string] $Body) {
+    return @(
+        $Rule
+        "$Number. $Title"
+        $Rule
+        ""
+        $Body.TrimEnd()
+        ""
+        ""
+    ) -join "`n"
+}
+
+$header = @"
+CSVM third-party notices
+========================
+
+This file carries the notices that the third-party software inside this build is
+licensed on condition of carrying. It is not CSVM's own licence: CSVM is under the
+GNU General Public License v3, whose text is in LICENSE beside this file, and the
+extractor tools\unzbd.exe is under the EUPL-1.2, whose text is in LICENSE-unzbd.
+
+This archive contains no Crimson Skies code, data or artwork. The game files a
+player extracts with Extract.ps1 stay on their own machine.
+
+Assembled from these exact payload versions, which ExportRelease.ps1 re-checks
+against what it packages before it will build a zip:
+
+  Godot Engine build: $godotBuild
+  .NET runtime version: $RuntimeVersion
+  mech3ax cs-anim commit: $forkCommit
+
+Regenerate with packaging\BuildThirdPartyNotices.ps1, which reads every text below
+out of the shipped artefacts themselves.
+
+Sections
+--------
+
+  1. Godot Engine, the engine linked into CSVM.exe
+  2. Godot Engine third-party components
+  3. Godot Engine third-party licence texts
+  4. .NET runtime, published self-contained into data_CSVM_windows_x86_64\
+  5. .NET runtime third-party notices
+  6. Rust crates linked into tools\unzbd.exe
+
+"@
+
+$crateIntro = @"
+tools\unzbd.exe is built from the mech3ax fork, branch cs-anim, at commit
+$forkCommit.
+The fork's own code is EUPL-1.2 and its text is in LICENSE-unzbd, not repeated
+here; the crates statically linked into the binary are under their own terms and
+are listed below with the SPDX expression each crate's Cargo.toml declares.
+
+The list is every non-workspace package cargo resolves for
+x86_64-pc-windows-msvc, which is a superset of what any single binary links, so
+nothing linked is missing from it. The licence texts follow, deduplicated by
+content: a text several crates ship identically appears once, under all of their
+names.
+
+$($crateRows.ToString().TrimEnd())
+
+$($crateBlocks.ToString().TrimEnd())
+"@
+
+$document = @(
+    $header
+    (Section "1" "Godot Engine, the engine linked into CSVM.exe" $godotLicense)
+    (Section "2" "Godot Engine third-party components" $godotCopyright)
+    (Section "3" "Godot Engine third-party licence texts" $godotLicenses)
+    (Section "4" "The .NET runtime published into data_CSVM_windows_x86_64\" $dotnetLicense)
+    (Section "5" ".NET runtime third-party notices" $dotnetNotices)
+    (Section "6" "Rust crates linked into tools\unzbd.exe" $crateIntro)
+) -join "`n"
+
+# Godot 4.7 embeds the FreeType licence with its copyright sign ALREADY double-encoded --
+# the engine hands back U+00C2 U+00A9 where one copyright sign was meant -- and the repo's own
+# CheckEncoding.ps1 is right to refuse to commit that. Undoing the sequence restores the
+# character upstream meant and changes no term of any licence, but it is still a deliberate
+# edit to a verbatim text, so it is confined to that one pattern and counted out loud: a
+# second occurrence turning up here is something to go and look at, not to wave through.
+# Written as regex escapes, not as the characters themselves: a BOM-less .ps1 carrying
+# non-ASCII is mangled by PowerShell 5.1's own interpreter before it runs (CLAUDE.md).
+$repairPattern = '\u00C2([\u00A0-\u00BF])'
+$repaired = [regex]::Matches($document, $repairPattern).Count
+$document = [regex]::Replace($document, $repairPattern, '$1')
+
+# CRLF throughout, matching the other files in the zip: a recipient opens this in whatever
+# Windows hands them. Normalise from LF rather than replacing blindly, or the upstream
+# files that already use CRLF gain a second carriage return per line.
+$document = ($document -replace "`r`n", "`n") -replace "`n", "`r`n"
+[System.IO.File]::WriteAllText($OutFile, $document, $Utf8NoBom)
+
+Write-Host "Wrote $OutFile" -ForegroundColor Green
+Write-Host "  Godot $godotBuild, .NET runtime $RuntimeVersion, $($crates.Count) crates, $($texts.Count) distinct crate licence texts"
+Write-Host "  Repaired $repaired double-encoded character(s) in upstream text (expected 1, Godot's FreeType notice)"
