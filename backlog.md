@@ -2309,6 +2309,130 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Centring it by hand would hide that, and would be a departure from the layout on a screen every
   other element of which is placed by it. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7.
 
+- `BL-746` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Back on the per-seat
+  plane-selection screen unjoins the second pilot instead of returning to the screen they came
+  from.** *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "pressing
+  B should not remove the player but return to the previous screen; only a B on the main Instant
+  Action screen or a controller disconnect should remove the player". `BackSeatPlane`
+  (`CSVM/src/UI/Menu/Original/OriginalSeatPlane.cs:248-271`) undoes a selection while the seat is
+  locked and calls `_setup.Unjoin` while it is browsing, and `ActivateSeatPlane`'s CANCEL
+  SELECTIONS arm does the same (`:221-223`), so a seat that has not yet picked loses its place on
+  its first Back. *Fix shape:* Back on the per-seat screen leaves the walk and reopens
+  `_seatReturn` with every seat kept, the way seat 0's own Back already does through
+  `CancelSeatWalk` (`:171-179`); unjoining moves to Back on the Instant Action screen and to the
+  device-lost path. *⚠ Traps:* CANCEL SELECTIONS is the campaign board's own button and reads as
+  "unjoin" nowhere else; decide what it means here rather than leaving it wired to `Unjoin` while
+  Back stops doing so. A seat kept but unconfirmed still gates FLY, so the return must not leave
+  the sortie screen unlaunchable with no way back into the walk. *Cross-refs:* `BL-747` (the same
+  screen's input rule), `BL-704`'s landing (`git log --grep=BL-704`).
+
+- `BL-747` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The per-seat
+  plane-selection screen takes seat 0's controller as well as the picking seat's.** *Evidence:*
+  reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "P2 Plane Selection in
+  Instant Action should only be controlled by P2 controller or mouse". This is deliberate today:
+  `OriginalSeatPlane.cs:14-17` says seat 0's controller drives the screen "so one pad at the desk
+  can walk it", and `_steppingSeat` (`:31`, read at `:255`) exists only to tell seat 0's Back from
+  the picking seat's. *Fix shape:* the picking seat's device and the mouse drive the screen; seat
+  0's commands do nothing there unless seat 0 is the picking seat. *⚠ Traps:* seat 0's Back
+  currently leaves the walk (`:255-259`), so removing seat 0's reach needs another way out of a
+  walk whose second pad has gone quiet. Do not fix this by gating on device kind; the seat's own
+  `Source` is the identity that matters. *Cross-refs:* `BL-746` (Back on the same screen).
+
+- `BL-748` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A joined pilot
+  can pick an aircraft but never a weapon loadout, on Instant Action and on Free Flight alike.**
+  *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, twice: "P2 Plane
+  Selection cant select Weapon loadout" and "Free flight 2P: P2 cant select Weapon loadout here
+  too". The per-seat screen draws three rows only, the list, ACCEPT SELECTIONS and CANCEL
+  SELECTIONS (`OriginalSeatPlane.cs:473-491`), and Weapon Loadout is the Instant Action screen's
+  own strip over seat 0's `LoadoutChoice` or the feature's wingman fit
+  (`CSVM/src/UI/Menu/Original/OriginalLoadout.cs:9-11`, `:66-100`), reached from
+  `OriginalInstantAction.cs:437`. Free Flight's sortie screen has no loadout row at all
+  (`OriginalSeats.cs:192-226`). *Fix shape:* give the per-seat screen a Weapon Loadout row that
+  opens the existing loadout screen against the picking seat's own choice, and carry that choice
+  into the launch through `_setup.Choices`. *⚠ Traps:* the loadout screen is written against seat
+  0 and the wingman radio pair; a per-seat loadout needs its own storage rather than a fourth
+  reader of `LoadoutChoice`. Nothing here is decoded, the original has no second pilot.
+  *Cross-refs:* `BL-749` (the Free Flight walk this row would sit in).
+
+- `BL-749` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A two-pilot Free
+  Flight walk ends back on the Free Flight screen instead of launching.** *Evidence:* reported at
+  the controls over `PLAN-M5-polish-12`'s closing sortie, "Free Flight 2P should follow the same
+  rules: P1 selects map and aircraft, other players join with Start, on P1 pressing ready the P2
+  plane-selection screen, on P2 ready go to fly, not back to the Free Flight screen".
+  `FinishSeatWalk` (`OriginalSeatPlane.cs:156-167`) launches only when `_seatReturn` is
+  `InstantAction`; every other return reopens the sortie screen and waits for seat 0's FLY, which
+  is the screen's documented rule that FLY is seat 0's confirmation and the launch in one press
+  (`OriginalSeats.cs:11-14`). *Fix shape:* the last seat's confirm launches the sortie the way it
+  launches Instant Action, so seat 0's pick is the ready and the walk is the launch. *⚠ Traps:*
+  Dogfight shares the sortie path and additionally withholds the launch until a second seat has
+  joined; keep that gate. Seat 0 alone is the single-player case and must still reach FLY by
+  pressing it. *Cross-refs:* `BL-748`, `BL-704`'s landing (`git log --grep=BL-704`).
+
+- `BL-750` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Instant Action's list
+  arrows and scrollbar thumb sit on the page background rather than clear of the list.**
+  *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "Instant Action:
+  scrollbar and arrows a bit to the right, not on the background". Every one of them is placed
+  flush against the list's right edge: the open dropdown's arrows at `box.X + box.Width`
+  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs:360-364`), the contents window's at
+  `x + width` (`:395-399`), and both thumbs at the same edge (`:837-845`, `:865-873`). *Fix
+  shape:* one inset constant applied at all four sites, so the chrome clears the field's border
+  instead of straddling it. *⚠ Traps:* the list boxes themselves are authored geometry; move the
+  remake chrome, never the box. Check the layout's own widget for an authored arrow position
+  before choosing a constant. *Cross-refs:* `BL-707`'s landing (`git log --grep=BL-707`), which
+  added the thumbs.
+
+- `BL-751` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Original's seat
+  strip is a monochrome device list on the left where Built-in's is a colourised P1 to P4 chip row
+  on the right.** *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie,
+  "the strip showing the players should be the same as in Built-in, colorized P1 P2 P3 P4 on the
+  right side". `CampaignSeatPanel` (`CSVM/src/UI/Menu/Original/OriginalSeats.cs:165-187`) draws
+  `P<n>  <device>` rows at the top left over a scrim, focused row in `BoardInk.RowFocused` and the
+  rest in `BoardInk.Detail`; Built-in's chip strip draws `SplitScreen.PlayerTag(i)` in
+  `SplitScreen.PlayerColor(i)` at the top right (`CSVM/src/UI/LaunchMenu.cs:272`, `:2860-2885`).
+  *Fix shape:* Original's strip takes the same tags, the same per-player colours and the same
+  top-right corner. *⚠ Traps:* the strip's left-top band was chosen because no campaign board
+  puts a plaque there (`OriginalSeats.cs:49-55`); moving it right has to clear the book tab at
+  x 558 and the Instant Action screen's own paper. The `onPaper` light-scrim case exists because
+  the Instant Action palette swallows the dark one, so keep a ground behind coloured text there.
+  *Cross-refs:* `BL-703`'s landing (`git log --grep=BL-703`), which added the strip.
+
+- `BL-752` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Built-in takes the
+  mouse forwards but offers no way back with it.** *Evidence:* reported at the controls over
+  `PLAN-M5-polish-12`'s closing sortie, "mouse controls in Built-In dont have a way to go back
+  with mouse, only with the keyboard". `PointerEvent`
+  (`CSVM/src/UI/LaunchMenu.cs:1077-1100`) handles motion, the wheel and the left button only, so
+  every screen without a drawn BACK row is a one-way door for a mouse-only player. *Fix shape:*
+  the right button as Back in `PointerEvent`, matching what Esc and B already do on the standing
+  screen. *⚠ Traps:* the right button must not reach the flight HUD or the panes behind the rows;
+  the same `MouseFilter` care `BL-654` needed applies. A Back from the top level is an exit
+  prompt, not a silent quit. *Cross-refs:* `BL-654`'s landing (`git log --grep=BL-654`).
+
+- `BL-753` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Plane Construction's
+  tab labels ride high enough on their strips to touch the element above.** *Evidence:* reported
+  at the controls over `PLAN-M5-polish-12`'s closing sortie, "Plane Construction: move the text of
+  the tabs a little bit down so they dont overlap with the element above". The tabs are authored
+  strips carrying their label on the plaque (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:769-772`,
+  drawn through the paper-button arm at `:1676-1679`), so the label's baseline inside the plaque is
+  ours, not the layout's. *Fix shape:* drop the tab label's baseline within its strip. *⚠ Traps:*
+  the strip geometry is decoded; move the text inside it, never the strip. Every other paper
+  button shares the same draw arm, so a change there has to leave OK, Cancel and the export
+  variants where they are. *Cross-refs:* `BL-706` (the same screen's PLANE NAME dialog).
+
+- `BL-754` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Plane Construction's
+  CURRENT WEIGHT line stays in the ordinary ink when the build is over its airframe's capacity.**
+  *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "colour Current
+  Weight: xxx lbs. red if overweight". The hub draws it in `BoardInk.Dialog` unconditionally
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1333-1339`) while the cash figure two blocks above
+  already takes the problems ink once the build outruns the wallet (`:1312-1317`), and Built-in
+  colours the same totals line through `TotalsOverweight`
+  (`CSVM/src/UI/LaunchMenu.cs:2364`, `CSVM/src/UI/HangarFlow.cs:244-246`). *Fix shape:* the weight
+  line takes the same problems ink when `bill.Total.Weight` exceeds `bill.Capacity`, the condition
+  `HangarEconomy.Price` already reports as `PurchaseVerdict.Overweight`
+  (`CSVM/src/Flight/HangarEconomy.cs:181`). *⚠ Traps:* the ink is the board palette's, not a
+  literal colour; use the mark the cash figure uses so the two agree. The pending case before an
+  airframe is chosen has no weight and must stay plain. *Cross-refs:* `BL-655`'s landing
+  (`git log --grep=BL-655`), which added the cash note.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
