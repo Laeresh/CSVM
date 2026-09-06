@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — The first run on someone else's machine
 
 21. ☑ Extraction without a terminal, and a screen for the player who skipped it
-22. ☐ The renderer floor, observed rather than assumed
+22. ☑ The renderer floor, observed rather than assumed
 
 ### Wave D — What the public reads
 
@@ -484,7 +484,7 @@ Do not fork a package variant of the extractors, which is the rule `packaging/MA
 about `ExtractAssets.ps1` and `ExtractRof.ps1`. ⚠ The no-data screen must not become a second
 provenance check: `ExtractionStamp` already owns the stale-tree warning and stays a warning.
 
-## C22 ☐ The renderer floor, observed rather than assumed
+## C22 ☑ The renderer floor, observed rather than assumed
 
 **Goal.** The requirements state what hardware runs this build, and the sentence they state is one
 somebody watched happen.
@@ -513,6 +513,33 @@ unchanged, since this item should change no shipped pixel.
 shader bake ran, so a second renderer means a second bake or a knowingly unbaked path. If the
 observed failure turns out to be illegible, that is a finding for the author, not a licence to build
 the fallback inside this item.
+
+**Verified.** The build does not refuse to start below the floor, so the sentence this item exists
+to write is not the one it expected. On the below-floor machine Godot reports `Required Vulkan
+instance extension VK_KHR_surface not found` and then `Your video card drivers seem not to support
+Vulkan, switching to Direct3D 12`, and runs Forward+ on Direct3D 12's `Microsoft Basic Render
+Driver`, the WARP software rasterizer. Nothing has to be passed to reach that fallback, so the
+troubleshooting flag the Approach anticipated does not exist, and no error dialog appears at any
+point: `appDialogs=0` across every run, and the desktop screenshots hold none. The menu and C21's
+no-game-data screen render normally and hold the sandbox's 32 Hz presentation cap. A flight does
+not. With the dev tree's `extracted/` mapped in read-only and `-- --data-root=<desktop> --fly
+--chapter=C1 --plane=player_fury --no-vsync`, the chapter loads (37508 clutter instances placed),
+then `buffer_create` fails with `0x8007000e`, out of memory on the software device, across 52670
+stderr lines, and the process dies of an access violation (`0xC0000005`) fourteen seconds in,
+leaving no window and no message. 8 GB and 16 GB of guest memory fail identically, so the constraint
+is the device and not the VM. The same zip and the same flight command above the floor, where the
+sandbox passes the host's RTX 5080 through and the build reports `driver=vulkan
+method=forward_plus`, ran the full 79-second watch at 740 to 793 fps uncapped with zero stderr
+lines, which is what attributes the failure to the renderer rather than to the command or the mapped
+data root. So the floor D32 states is a GPU with a working Vulkan or Direct3D 12 driver, and what a
+machine below it gives a player is menus that work followed by a mission that vanishes. No
+Compatibility renderer was built (Decision 6). The golden sweep is unchanged and nothing under
+`CSVM/` was touched.
+
+The rig E41 reuses is `RunSandbox.ps1` plus `sandbox/RendererFloor.ps1`, with `-Driver` for a
+procedure of its own and `-MapReadOnly` for the retail install; `docs/tooling.md` carries what it
+cost to make it honest, including that a `<VGpu>` spelling of the vGPU element is ignored silently,
+which makes a below-floor run test a machine with the host's GPU passed through.
 
 # Wave D — What the public reads
 

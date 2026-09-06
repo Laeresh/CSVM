@@ -300,6 +300,64 @@ makes the pck copies reachable. ⚠ `exclude_filter="config.json"` keeps the dev
 tuning override out of every build. Smoke-test an export from a **bare folder** with a **foreign
 CWD** and no `CSVM_DATA_ROOT`; either can mask a broken default root.
 
+## Clean-machine runs in Windows Sandbox
+
+**`RunSandbox.ps1` (repo root)** runs a release zip on a machine that has never seen this project.
+It stages `.scratch\sandbox\<timestamp>-<vgpu|novgpu>\` with an `input\` folder (the zip plus the
+driver script, mapped read-only) and a writable `output\`, writes the `.wsb`, starts Windows Sandbox
+on it and waits for the driver's `done.txt`. `-NoVGpu` is the below-the-floor machine, `-MemoryMB`
+its memory, `-MapReadOnly` adds host folders the zip does not carry (a retail install, an extraction
+tree), and `-Driver` chooses what runs inside, so a later item can supply its own procedure without
+rebuilding the harness. Everything the run produced stays on the host in `output\`: screenshots,
+both streams, the build's own `logs\`, a line-by-line `steps.log` and `summary.json`.
+
+**`sandbox/RendererFloor.ps1`** is the driver that answers "what does this machine do with this
+build". It unzips to `C:\CSVM`, launches `CSVM.exe` the way a recipient double-clicks it, records
+every window and dialog it sees (title, class, owning process and child-control text), screenshots
+at eight seconds and at the end, copies `logs\` back, and reports the renderer from the build's own
+`[perf] gpu=` line. A launch counts as reaching the game only if it drew its own window, put no
+dialog on screen, wrote a log and was still running when the watch ended; when the plain launch does
+not, the driver repeats it with `--rendering-driver d3d12`, with `--rendering-method
+gl_compatibility` and with `--rendering-driver opengl3`, so a fallback that does work becomes a
+documented troubleshooting line rather than a guess. With an extraction tree mapped it also flies a
+chapter with `--no-vsync`, because whether a machine renders a menu says nothing about whether it
+can fly.
+
+What the rig had to learn, none of it visible in a failed run:
+
+- ⚠ **The element is `<vGPU>`.** A `<VGpu>` spelling is ignored without an error, and the run then
+  measures a machine with the host's GPU passed through, which is not a floor test at all. The check
+  is the guest's own hardware, which the driver records first: below the floor it has only the
+  "Microsoft Remote Display Adapter" and no registered Vulkan ICD, and with the vGPU on it has the
+  "Microsoft Virtual Render Driver" and the host card's Vulkan.
+- ⚠ **Ask the person to close the sandbox window; never close it from a script.** Killing the
+  processes wedges the Container Manager until an elevated `Restart-Service CmService -Force`; the
+  window ignores a posted close; and an Alt+F4 is delivered into the guest, or, when the raise the
+  script asked for is refused, into whatever window the person was working in.
+- **One session at a time.** A second session started while one is live comes up with no mapped
+  folders and no driver, so nothing runs and nothing is written. The process to test for is
+  `WindowsSandboxRemoteSession`.
+- **WMI is access-denied to the sandbox account**, so the machine facts come from the display-class
+  registry key rather than from `Win32_VideoController`.
+- **The engine's flags are user args, so a scripted run passes them after a bare `--`.** Before it
+  they reach Godot, which ignores them, and a `--fly` silently becomes a plain menu launch.
+- **The logon command can fire before the mapped folders mount,** so it polls for them, and its
+  console is invisible, so it redirects. That redirect is still buffered when the session ends, which
+  is why the driver appends `steps.log` line by line and reads its own `summary.json` back off the
+  share before saying it finished.
+
+**The renderer floor, as observed.** The build does not refuse to start without Vulkan. On the
+below-floor machine Godot reports `Required Vulkan instance extension VK_KHR_surface not found`,
+then `Your video card drivers seem not to support Vulkan, switching to Direct3D 12`, and runs
+Forward+ on Direct3D 12's `Microsoft Basic Render Driver`, which is the WARP software rasterizer.
+No error dialog appears at any point, and nothing has to be passed to reach that fallback. The menu
+and the no-game-data screen render normally. A flight does not: loading a chapter fills the software
+device, `buffer_create` fails with `0x8007000e` (out of memory) tens of thousands of times, and the
+process dies of an access violation (`0xC0000005`) about fourteen seconds in, leaving no window and
+no message. Guest memory is not the constraint, since 8 GB and 16 GB fail identically. So the floor
+is a GPU with a working Vulkan or Direct3D 12 driver, and what a machine below it shows a player is
+menus that work followed by a mission that vanishes.
+
 ## `tools/` (git-ignored)
 
 Downloaded binaries: mech3ax v0.6.1 (pinned pre-fork extractor, for rollback), the fork checkout
