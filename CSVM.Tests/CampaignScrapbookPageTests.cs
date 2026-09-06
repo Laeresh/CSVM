@@ -65,6 +65,37 @@ public class CampaignScrapbookPageTests
         Assert.Contains(flow.Page.Captions, l => l.Text == "Mission Failed"); // the decoded bug
     }
 
+    /// <summary>Every row the page offers names one thing a pointer can be aimed at: an authored
+    /// button, the art the row draws itself with, or a scrap. The unselected tab is the only row of
+    /// the middle kind, and the two tabs swap kinds when the selection moves, so no row on the page
+    /// is left without a rectangle for a presentation to hit-test.</summary>
+    [Fact]
+    public void EveryRowNamesAButtonOrArtOrAScrapAndTheTabsSwapWhichKindTheyAre()
+    {
+        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+        var page = (CampaignScrapbookPage)flow.Page;
+
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            int named = (page.Button(row).Button != BoardButton.None ? 1 : 0)
+                + (page.ArtOf(row) != null ? 1 : 0) + (page.ScrapOf(row) != null ? 1 : 0);
+            Assert.Equal(1, named);
+        }
+
+        int best = RowOf(page, BoardButton.MostTab) - 1; // Best to Date, the tab under the card
+        Assert.Equal("SB_B_Statcardtab.png", page.ArtOf(best)?.Art.Name);
+        Assert.Null(page.ArtOf(best + 1));
+
+        flow.FocusRow(best);
+        flow.Accept();
+
+        Assert.Null(page.ArtOf(best));
+        Assert.Equal("SB_B_Statcardtab.png", page.ArtOf(best + 1)?.Art.Name);
+    }
+
     /// <summary>Replay Mission is offered only where <c>uiData</c> 2411 offers it: a mission whose
     /// record holds a time, and only on the results page.</summary>
     [Fact]

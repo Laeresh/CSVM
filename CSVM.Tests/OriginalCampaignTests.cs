@@ -420,6 +420,33 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
     }
 
+    /// <summary>The book's unselected results tab presses no authored button, so it is the page's
+    /// own art that gives it a rectangle: without one the pointer passed over a row the keyboard
+    /// could reach. The scrap rows keep answering at their own regions beside it.</summary>
+    [Fact]
+    public void TheBooksUnselectedTabIsHitAtItsArtAndSwitchesTheHalfTheCardReads()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, new MissionAttempt(0, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120, 5, "Gypsy Magic"));
+        _store.Save(profile);
+        var shell = Shell(out _, out _);
+
+        shell.OpenCampaignOver(_store);
+        Assert.True(shell.ShowScrapbook("Zachary", 0));
+
+        // Most Recent is the plaque the card shows, Best to Date the picture beside it, at the
+        // slot's authored 432,283 and the fixture's unmeasured-strip fallback size.
+        Assert.Contains(shell.Rows, r => r.Key == nameof(BoardButton.MostTab));
+        var best = Assert.Single(shell.Rows, r => r.X == 432f && r.Y == 283f);
+        Assert.Equal((113f, 34f, true), (best.Width, best.Height, best.Visible));
+
+        shell.Step(Pointer(best.X + 2f, best.Y + 2f, pressed: true, clicked: true));
+
+        Assert.Contains(shell.Rows, r => r.Key == nameof(BoardButton.BestTab));
+        Assert.DoesNotContain(shell.Rows, r => r.Key == nameof(BoardButton.MostTab));
+        Assert.Contains(shell.Rows, r => r.X == 594f && r.Y == 283f && r.Width == 113f);
+    }
+
     [Fact]
     public void TheExportPressRaisesTheOneButtonBoxInItsOwnInkOverThePaperScreenAndWritesTheGivenStore()
     {

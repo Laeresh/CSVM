@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Original's dialogs and rows
 
 21. ☑ `BL-744` The export notice draws the message box's `?` icon where the original draws `!`
-22. ☐ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
+22. ☑ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
 
 ### Wave D — Text entry, seats, and the way out
 
@@ -455,7 +455,47 @@ one-button notices may each use either frame, so a rule of "one button means `!`
 twice by accident and wrong later. The sheet stacks three icons, not four button states, so the
 frame arithmetic is not `PlaqueFrame`'s.
 
-## C22 ☐ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
+## C22 ☑ `BL-705` The scrapbook's Best to Date and Most Recent tabs cannot be clicked
+
+**Landed.** The dead row was never the pair of tabs as such, it was whichever tab the results card
+is not showing. `CampaignScrapbookPage.Button` hands the presentation an authored button for the
+selected tab alone (`BestTab when _bestToDate`, `MostTab when !_bestToDate`), because the tab in
+front is a plaque over the card while the other draws as a picture under it. A row that presses no
+button fell through to `OriginalCampaign.ListRowBox`, whose book arm asked `book.ScrapOf(row)` and
+answered null for everything that was not a scrap, so the picture had no rectangle and the pointer
+crossed it without a hit.
+
+The page now answers for the class rather than for the two tabs. `CampaignScrapbookPage.ArtOf(row)`
+returns the art a row draws itself with where it presses no authored button, which is the
+unselected tab's own `SB_B_Statcardtab.png` slot and null for every other row. `ListRowBox`'s arm
+lost its `when` clause and is now `case CampaignScrapbookPage book:`, taking a scrap's region where
+the row is a scrap (that chain moved unchanged into a `ScrapBox` helper) and otherwise the
+rectangle of whatever `ArtOf` names. The size comes from `PlaqueSizeOf`, the same strip measurement
+the selected tab gets through the plaque path, rather than from the page's `TabWidth` constant, so
+both tabs answer at one size and an unmeasurable file falls back once for both.
+
+Every `RowKind` the page produces and what a pointer press now finds on it: `Replay`, `PrevPage`,
+`NextPage`, `CurrentMission`, `ViewAllMissions` and `ReturnToCabin` press authored buttons and were
+already hit at their plaque slots; the tab the card shows is a plaque at its own slot; the tab it
+does not show is hit at its picture's rectangle, which is the fix; a `Scrap` is hit at its authored
+region, at the fixed region a capture stands in, or at the shipped image's measured bounds, and
+answers null only where the file cannot be measured, which leaves that scrap keyboard-only rather
+than clickable at a guessed size. No row the page offers is now unreachable by pointer.
+
+The wheel and thumb path was left alone. `OriginalShell.Lists` still carries the contents window
+and the open drop-down alone, and the tabs are row boxes rather than list entries.
+
+Coverage: a `CampaignScrapbookPageTests` unit walks every row of a spread with a scrap on it and
+asserts each names exactly one of a button, an art or a scrap, then presses the unselected tab and
+asserts the two swap which kind they are; an `OriginalCampaignTests` unit reads the unselected tab's
+rectangle off the shell at the slot's authored position and clicks it, asserting the card changes
+hands; and the `menu-original-campaign` engine suite clicks both tabs in turn over the install's own
+decoded layout and leaves the book as the debrief return left it. No golden photographs the
+scrapbook, so none needs re-pinning.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Every non-scrap row on the scrapbook page answers the pointer, the two tabs first, as the
 keyboard already reaches them.

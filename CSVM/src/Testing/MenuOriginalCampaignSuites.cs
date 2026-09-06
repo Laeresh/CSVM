@@ -43,7 +43,9 @@ internal static class MenuOriginalCampaignSuites
         + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
         + "from a blank map with the narration starting over, the flight check walks two debug-joined "
         + "guests and FLY MISSION leaves as one CampaignMissionExit with three seats, the debrief "
-        + "return lands on the book with RETURN TO CABIN focused and starts no narration, the cabin "
+        + "return lands on the book with RETURN TO CABIN focused and starts no narration, a pointer "
+        + "press on the book's unselected results tab switches the half the card reads and a press "
+        + "on the one it swapped with reads Most Recent again, the cabin "
         + "return lands on the cabin, ammo selection and plane selection write their picks through "
         + "the feature, a wheel step over the scrapbook's contents page and over Plane Construction's "
         + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
@@ -100,7 +102,7 @@ internal static class MenuOriginalCampaignSuites
             Roster(ctx, host, seat, shell, fit, campaign, store, audio);
             Briefing(ctx, host, seat, shell, fit, campaign, audio);
             FlightCheckAndLaunch(ctx, host, seat, shell, fit, campaign, store, exits, audio);
-            Returns(ctx, host, shell, campaign, store, audio);
+            Returns(ctx, host, shell, fit, campaign, store, audio);
             AmmoAndPlanes(ctx, host, seat, shell, fit, campaign, store);
             Scrolling(ctx, host, seat, shell, fit, store);
             HangarRoundTrip(ctx, host, seat, shell, fit);
@@ -322,7 +324,7 @@ internal static class MenuOriginalCampaignSuites
     }
 
     // The session's director records the flown mission; the two returns map onto the book and the cabin.
-    private static void Returns(TestContext ctx, MenuHost host, OriginalShell shell, CampaignFeature campaign,
+    private static void Returns(TestContext ctx, MenuHost host, OriginalShell shell, BoardFit fit, CampaignFeature campaign,
         CampaignProfileStore store, RecordingAudio audio)
     {
         var profile = store.Load(Pilot)!;
@@ -341,6 +343,7 @@ internal static class MenuOriginalCampaignSuites
         var back = Row(shell, "ReturnToCabin");
         ctx.Check(back != null, $"the page carries RETURN TO CABIN");
         var seat0 = (ScriptedSeat)host.Seats[0];
+        Tabs(ctx, host, seat0, shell, fit, back);
         Press(host, seat0, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"RETURN TO CABIN lands on the cabin ({shell.Screen})");
         Press(host, seat0, Back);
@@ -351,6 +354,54 @@ internal static class MenuOriginalCampaignSuites
         host.Show(new CabinReturn(Pilot));
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && campaign.Profile?.Name == Pilot,
             $"the cabin return lands on the cabin with the profile seated ({shell.Screen}, {campaign.Profile?.Name})");
+    }
+
+    // The results card's two tabs under the pointer: the tab the card is not showing draws as a
+    // picture rather than a plaque, so its rectangle is the page's own art. Pressing it switches
+    // the half the card reads, pressing the one it swapped with puts the book back as the debrief
+    // return left it, and the pointer over RETURN TO CABIN hands the focus back to the way out.
+    private static void Tabs(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, OriginalRow? back)
+    {
+        var tab = UnselectedTab(shell);
+        ctx.Check(tab != null && tab.Kind == OriginalRowKind.ListRow && tab.Width > 0f && tab.Height > 0f,
+            $"the book's unselected tab carries a rectangle ({tab?.Key}, {tab?.Width}x{tab?.Height})");
+        if (tab == null || back == null)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, tab.X + 4f, tab.Y + 4f, pressed: true, clicked: true));
+        ctx.Check(Row(shell, "BestTab") != null && Row(shell, "MostTab") == null,
+            $"a press on it puts Best to Date on the card ({shell.FocusedKey})");
+        if (UnselectedTab(shell) is { } other)
+        {
+            Press(host, seat, Pointer(fit, other.X + 4f, other.Y + 4f, pressed: true, clicked: true));
+            ctx.Check(Row(shell, "MostTab") != null, $"and a press on the other reads Most Recent again");
+        }
+
+        Press(host, seat, Pointer(fit, back.X + 4f, back.Y + 4f));
+        ctx.Check(shell.FocusedKey == "ReturnToCabin", $"the pointer over the way out takes the focus back ({shell.FocusedKey})");
+    }
+
+    // Whichever results tab the card is not showing: the two are offered next to each other, Best
+    // to Date first, and only the shown one presses an authored button.
+    private static OriginalRow? UnselectedTab(OriginalShell shell)
+    {
+        var rows = shell.Rows;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Key == "BestTab")
+            {
+                return i + 1 < rows.Count ? rows[i + 1] : null;
+            }
+
+            if (rows[i].Key == "MostTab")
+            {
+                return i > 0 ? rows[i - 1] : null;
+            }
+        }
+
+        return null;
     }
 
     // Ammo selection's stepper and ACCEPT write the pick into the profile; a third plane makes

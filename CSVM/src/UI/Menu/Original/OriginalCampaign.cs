@@ -617,8 +617,10 @@ public sealed partial class OriginalShell
         !(page.Screen == CampaignScreen.Cabin && page.Button(row).Button == BoardButton.NextMission && _campaign?.CampaignComplete == true);
 
     // Where a list or text row sits: the roster's box and its list rows at the layout's own item
-    // height, a mission row inside the table of contents' window, a scrap at its authored region
-    // (or its picture's bounds where the row authors none), and nothing for anything else.
+    // height, a mission row inside the table of contents' window, and on the book a scrap at its
+    // authored region (or its picture's bounds where the row authors none), else whatever art the
+    // row draws itself with, at that strip's frame. The book's answer is per row and not per scrap
+    // because a row the page offers and the pointer cannot reach is a control the player has lost.
     private (float X, float Y, float Width, float Height)? ListRowBox(ICampaignPage page, int row, int listIndex)
     {
         switch (page)
@@ -634,26 +636,45 @@ public sealed partial class OriginalShell
 
             case CampaignPreviousMissionsPage contents:
                 return contents.RowBox(row);
-            case CampaignScrapbookPage book when book.ScrapOf(row) is { } scrap:
-                if (scrap.Region is { } region)
+            case CampaignScrapbookPage book:
+                if (book.ScrapOf(row) is { } scrap)
                 {
-                    return region;
+                    return ScrapBox(scrap);
                 }
 
-                if (scrap.IsCapture)
+                if (book.ArtOf(row) is not { } drawn)
                 {
-                    return (scrap.X, scrap.Y, CaptureRegionWidth, CaptureRegionHeight);
+                    return null;
                 }
 
-                if (Measure($"SCRAPBOOK/{scrap.FileName}") is { } size)
-                {
-                    return (scrap.X, scrap.Y, size.Width, size.Height);
-                }
-
-                return null;
+                var frame = PlaqueSizeOf(drawn.Art);
+                return (drawn.X, drawn.Y, frame.Width, frame.Height);
             default:
                 return null;
         }
+    }
+
+    // A scrap's clickable region: the one SCRAPBOOK.CSV authors, else the fixed region a capture
+    // stands in, else the shipped image's own bounds. Null where the file is not there to measure,
+    // which leaves the row keyboard-only rather than hit at a guessed size.
+    private (float X, float Y, float Width, float Height)? ScrapBox(ScrapbookScrap scrap)
+    {
+        if (scrap.Region is { } region)
+        {
+            return region;
+        }
+
+        if (scrap.IsCapture)
+        {
+            return (scrap.X, scrap.Y, CaptureRegionWidth, CaptureRegionHeight);
+        }
+
+        if (Measure($"SCRAPBOOK/{scrap.FileName}") is { } size)
+        {
+            return (scrap.X, scrap.Y, size.Width, size.Height);
+        }
+
+        return null;
     }
 
     // A plaque's one-frame size: the strip measured where the file is a rof bitmap, the shipped
