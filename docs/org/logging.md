@@ -49,6 +49,11 @@ The console is the human's view and stays quiet by default. The file sink is the
 and always takes everything, at every level, in every category, line-flushed so a crash still
 leaves what was written.
 
+The file's first line is `INFO  [core] csvm version=<version>`, ahead of everything the prelude
+holds: a report arrives as an attached log, and which build wrote it has to be readable from the
+top. The version is `application/config/version` in `project.godot`, passed in by the launcher
+(`Utils/BuildVersion.cs`) rather than read here.
+
 The file is `<repo>/.scratch/logs/<mode>-<stamp>.log`, where `mode` is the session shape (`fly`,
 `freecam`, and so on) and `stamp` is `yyyyMMdd-HHmmss`. Two sessions starting in the same second
 collide, so the process id is appended in that case. `Log.SinkPath` is the open file's absolute

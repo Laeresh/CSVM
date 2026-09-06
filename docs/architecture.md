@@ -352,6 +352,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint, pylon and target overlay (K): coloured gizmos with de-cluttered labels.
 - `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
+- `src/UI/BuildStamp.cs` — the build's version in the menu's bottom-right corner, once for the window and over every presentation; hidden in flight.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
 - `src/UI/DebugKillTarget.cs` — the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
 - `src/UI/SelectionService.cs` — the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
@@ -366,6 +367,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 The things every subsystem depends on: the clock, the log, the seed. Changing one of these changes
 determinism repo-wide; read `docs/verification.md` first.
 
+- `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
 - `src/Utils/EffectPools.cs` — the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs` — the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.

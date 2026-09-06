@@ -58,4 +58,9 @@ internal static class HudLayers
     /// <c>ColorRect</c> on that layer, and the readout has to read there too — fps/frame cost/GC
     /// are process-wide facts, not something a mode screen should be able to hide.</summary>
     public const int PerfReadout = 11;
+
+    /// <summary>The build's version stamp on the menu (<c>UI.BuildStamp</c>). Shares
+    /// <see cref="PerfReadout"/>'s tier for the same reason: it has to read over whatever the
+    /// active presentation drew on <see cref="Board"/>, opaque backdrop or decoded artwork.</summary>
+    public const int BuildStamp = PerfReadout;
 }

@@ -4,13 +4,15 @@ The friend-release zip holds these pieces. Everything sits at the zip root excep
 `tools\unzbd.exe`; the friend unzips, runs `Extract.ps1`, then `CSVM.exe`.
 
 `ExportRelease.ps1` assembles it: it exports into `.scratch\export\`, copies the rows below in
-beside the export output, and zips that folder to `.scratch\CSVM.zip`. This file is the
+beside the export output, and zips that folder to `.scratch\CSVM-v<version>-win64.zip`, the version
+being `application/config/version` from `CSVM/project.godot` — the same number the exe's file
+properties and the first line of every log state. This file is the
 statement of what belongs in the zip; the script is what performs it, so a row added here
 needs a matching entry in the script's `$ReleaseFiles`.
 
 | Zip path | Source | Notes |
 |---|---|---|
-| `CSVM.exe` + export payload (`.pck`/`.dll`s etc.) | B11's Godot release export output | Whatever the export produces at its root, copied verbatim |
+| `CSVM.exe` + export payload (`.pck`/`.dll`s etc.) | the Godot release export output | Whatever the export produces at its root, copied verbatim; the exe's file properties carry the version |
 | `Extract.ps1` | `packaging/Extract.ps1` | The thin dispatcher; contains no extraction logic |
 | `ExtractAssets.ps1` | repo root `ExtractAssets.ps1` | UNMODIFIED repo script — do not fork a package variant |
 | `ExtractRof.ps1` | repo root `ExtractRof.ps1` | UNMODIFIED repo script — do not fork a package variant |

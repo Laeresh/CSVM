@@ -234,8 +234,19 @@ into `%APPDATA%\Godot\export_templates\4.7.stable.mono\` (create the dir; do not
 export templates, the fork-built `tools\mech3ax\target\release\unzbd.exe` and the rest of the
 payload exist (named errors up front), empties `.scratch\export\`,
 builds, imports headless, exports, copies the payload in beside the output, and zips the folder to
-`.scratch\CSVM.zip`. That folder is cleared because all of it is zipped, and the clear refuses to
-run if it holds a junction, since PowerShell 5.1's recursive delete follows one into its target.
+`.scratch\CSVM-v<version>-win64.zip`. That folder is cleared because all of it is zipped, and the
+clear refuses to run if it holds a junction, since PowerShell 5.1's recursive delete follows one
+into its target.
+
+**The version has one home: `application/config/version` in `CSVM/project.godot`.** Bump it there
+and nowhere else. The engine reads it at startup for the log's first line and the menu's corner
+stamp; the Windows export preset stamps it into the exe's file and product version, which is what
+`application/modify_resources=true` in the preset is for (off, the export succeeds and ships an exe
+whose Properties pane still names Godot's own template); and `ExportRelease.ps1` reads the key back
+to name the zip. The script reads the stamp off the exported exe afterwards and throws if it is not
+the version it started from, since nothing else about a missing stamp is visible. ⚠ The script
+snapshots and restores `project.godot` around the export and is its only writer — the version is
+read from that file, never written into it, and never stamped into the preset during a run.
 The zip is built through `System.IO.Compression`, since `Compress-Archive` reports success after
 writing nothing when a single file is locked.
 

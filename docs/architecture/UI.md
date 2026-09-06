@@ -356,6 +356,15 @@ someone presses the key, and off by default so the golden screenshots stay byte-
 the frame's cost split, GC counts, breadcrumbs and a rolling frame-time strip, every term a second
 view of data collected elsewhere rather than a new sample. What a frame number proves: PERF-1.
 
+## src/UI/BuildStamp.cs
+The build's version in the menu's bottom-right corner, so a screenshot a stranger sends already
+carries the build it was taken on. Built once by `Launcher` beside `PerfHud` and shown off the menu
+host's own "the menu is up", which is what puts it on every presentation at once: the stamp is a
+fact about the binary, not part of a presentation's screen graph, and Original draws decoded
+artwork with nowhere to put one. It draws on `HudLayers.PerfReadout`, above the boards, for the
+same reason that readout does. Hidden in flight, so no golden screenshot ever sees it. The number
+itself is `Utils/BuildVersion.cs`.
+
 ## src/UI/MeshLab.cs
 The geometry and shading lab (key M): normal lines, the smoothing-seam wireframe, collider boxes,
 light sliders with a headlight, and cull by normal-source override cyclers, all scripted by

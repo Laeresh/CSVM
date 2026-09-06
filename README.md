@@ -62,8 +62,10 @@ checking the export templates are installed and clearing `.scratch\export\` befo
 nothing) plus its data folder. It then copies the rest of the friend-facing release in beside it,
 `packaging/Extract.ps1` (the dispatcher a recipient runs against their own game install), the
 unmodified `ExtractAssets.ps1` / `ExtractRof.ps1`, the built `unzbd.exe`, and
-`packaging/README.md` / `LICENSE` / `LICENSE-unzbd`, and zips the folder to `.scratch\CSVM.zip`,
-the archive to hand over. See [`packaging/MANIFEST.md`](packaging/MANIFEST.md) for the layout and
+`packaging/README.md` / `LICENSE` / `LICENSE-unzbd`, and zips the folder to
+`.scratch\CSVM-v<version>-win64.zip`, the archive to hand over. The version is
+`application/config/version` in `CSVM/project.godot`, which the exe's file properties and the first
+line of every log state as well. See [`packaging/MANIFEST.md`](packaging/MANIFEST.md) for the layout and
 [`docs/tooling.md`](docs/tooling.md) for the full export and packaging detail.
 
 ## Format documentation
