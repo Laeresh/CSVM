@@ -3327,35 +3327,82 @@ usual.
   older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
-- `BL-742` `[Testing]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty stage
-  cannot host a zeppelin, and `--ai=` cannot put its planes on a side, so an AI-versus-zeppelin
-  question takes a full campaign flight per iteration.** *Evidence:* the AI-attacks-zeppelin-parts
-  work (`git log --grep=BL-740`) took four user flights of C4/M03 and three log reads to find that
-  the Pandora's gasbag pools reached the AI as nobody's, and the rocketeer's own gates were still
-  unread after the last one. `--stage=empty`
-  builds no chapter gamez, and a zeppelin is a chapter world node (`rock_zeppelin` under the
-  mission's gamez) that `ZeppelinRuntime` resolves by name, so no hull exists to wire. `AiSpawn`
-  already carries a `Team` (`CSVM/src/Session/FlightRoster.cs:25`), but the `--ai=` parser
-  (`SessionSpec.cs`, `GameSession.cs:2391-2449`) offers no token for it, so every CLI plane lands
-  on one side. *Fix shape:* a `team=<id>` token on `--ai=` entries; a `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x,y,z]` flag for the empty stage that slices the record's hull subtree
-  out of that chapter's gamez the way the `--node=` inspection stage slices one, registers its
-  destructibles, and hands the borrowed record with the team override to `ZeppelinRuntime`, so
-  gasbags, engines and cannons wire as in a mission; a built-in net on the stage, a circular ring
-  of nodes above the grid origin at patrol altitude, that `--ai=<plane>:<net>` and `--zep=` can
-  name the way a chapter's `neindex` net is named (the `AiNet` shape is just nodes and edges, so a
-  synthetic one needs no file), so net patrol, the net's own volumes and the netted-versus-netless
-  fork of `AiPilot` are testable there too; then one in-engine suite that spawns a torpedo-armed
-  Warhawk against a hostile zeppelin on the stage and asserts an acquisition and a launch. *⚠
-  Traps:* a record's team fans onto every zone, so the override must go through
-  `AuthoredTeam`'s path rather than a stamp on the pools, or the rule that gives a zone the team
-  its flagged `panels` child carries is bypassed; the stage has no `AnimProgram`, so the gasbag
-  destroy anims resolve to nothing and the
-  pools register without choreography, which is fine for a targeting probe and wrong for a damage
-  one. *Playtest after fix:*
-  `.\RunGame.ps1 --stage=empty --zep=C4/M03:piratezep:team=1 --ai=player_warhawk:ring:def=bhatwarhawk:team=2 --ai-attack --frames=3600 --det`
-  and read the `ai gunner`/`ai rocketeer` lines; without `:ring` the same planes fly netless.
-  *Cross-refs:* `BL-741` (the cargozep case wants the same rig with a mission structure instead of
-  a record); the `warhawk-torpedo-run` suite is the held-world version of what this makes flyable.
+- `BL-742` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty stage
+  cannot host a zeppelin and `--ai=` cannot group its planes into sides, so AI behaviour and its
+  frame cost can only be watched inside a campaign flight.** *Evidence:* the
+  AI-attacks-zeppelin-parts work (`git log --grep=BL-740`) took four user flights of C4/M03 and
+  three log reads to find that the Pandora's gasbag pools reached the AI as nobody's, and the
+  rocketeer's own gates were still unread after the last one. Sides are the opposite of missing:
+  each spawn takes a distinct index (`FlightRoster.cs:216`) and `FlightController.Team` falls back
+  to `AimAssist.TeamOfPilot` (`FlightController.cs:604`), which bands every id separately
+  (`AimAssist.cs:326`), so CLI planes are already mutually hostile and what cannot be said is that
+  two of them share a side. Count and placement are the other gaps: `n` planes need `n`
+  comma-separated tokens (`SessionSpec.cs:964`), and both spawn branches measure from the player's
+  nose (`GameSession.cs:2396-2404`), so no two runs share geometry and a plane-count sweep is not
+  comparable against itself. `--stage=empty` builds no gamez at all (`GameSession.cs:945`), and
+  `ZeppelinDef` names its parts but carries no per-zone geometry (`Zeppelins.cs:288-291`), so a
+  hand-placed hull has invented offsets and every distance-driven decision watched on it is
+  fiction. *Fix shape:* `team=<id>` and `n=<count>` tokens on `--ai=` entries, parsed as
+  `accent=`/`def=` already are (`SessionSpec.cs:971-979`) and kept flat enough for a JSON scenario
+  file to express later; on the empty stage anchor squadrons to the grid origin, one slot per team
+  on a 1000 m circle at `SpawnAltitude` facing the centre (two teams therefore 2000 m apart, at
+  the decoded engagement gate of `AiModeMachine.cs:141`), keeping the existing 60 m lateral fan
+  within a squadron, with `pos=x/y/z` overriding per entry (slash-separated, since the entry list
+  itself is comma-separated) and chapter worlds keeping today's player-anchored fan; and a
+  `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x/y/z]` flag
+  that builds the record's hull through `WorldSession.Build` with `NodeSubtree` set to its node
+  (`WorldSession.cs:89-127`), composing that subtree with the empty stage's grid rather than
+  replacing it, then wires `ZeppelinRuntime` as `GameSession.cs:2470-2493` does. *⚠ Traps:* the
+  team override must arrive through `AuthoredTeam` (`ZeppelinRuntime.cs:118`) by setting the
+  borrowed def's `TeamId`, never stamped onto the pools, because `WireZones` reads the flagged
+  `panels` child only where the pool has no team (`inst.Team ??=`, `ZeppelinRuntime.cs:606`) and
+  `CollectTargetParts` fans `zep.Team` over every part (`ZeppelinRuntime.cs:238`); the stage has
+  no `AnimProgram`, so the gasbag destroy anims resolve to nothing and the pools register without
+  choreography, which is fine for a targeting probe and wrong for a damage one; `--stage=empty`
+  leaves `WorldMode` false (`SessionSpec.cs:1654`), so the `--node=` subtree path is unreachable
+  as written and `--zep=` must drive `WorldSession` itself; a run needs `--fly` or there is no
+  player rig, the `--ai=` block never runs (`GameSession.cs:2391`) and the ground plane builds
+  without collision (`GameSession.cs:948`); read `p95_ms` and `max_ms` off `--perf` and ignore
+  `script_ms` and `physics_ms`, so a plane-count sweep is read as a differential on a deliberately
+  bare stage; and PowerShell splits an unquoted `--ai=` value on its commas into an array the
+  launcher cannot pass on, so the argument has to be single-quoted. *Playtest after fix:*
+  `.\RunGame.ps1 --stage=empty --fly --debug-spectate --ai-attack --perf --det '--ai=player_warhawk:n=4:team=2:def=bhatwarhawk,player_fury:n=4:team=3'`
+  and read the `ai gunner`/`ai mode` lines: the eight acquire across the two sides at about
+  2000 m, hold pursue and open fire near 900 m. `--frames=` is a screenshot warm-up rather than a
+  session length, so a watched sortie runs until it is closed; add `--screenshot=` to bound one.
+  Then the same run with `--zep=C4/M03:piratezep:team=1` for the airship case. *Cross-refs:* `BL-772` (the ring net and
+  the volumes the CLI path never applies), `BL-773` (an `ai_ms` term to attribute the cost this
+  rig varies), `BL-617` (why `script_ms` is not the term to read), `BL-741` (the cargozep case
+  wants the same rig with a mission structure instead of a record); the `warhawk-torpedo-run`
+  suite is the hand-placed version of what this makes flyable.
+
+- `BL-772` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty-stage
+  rig has no patrol net, and a `--ai=` plane never takes a net's volumes, so patrol and the
+  netted-versus-netless fork of `AiPilot` cannot be watched there.** *Evidence:* `AiNet` requires
+  only `Id`, `Name`, `Nodes` and `Edges` (`AiNets.cs:250-261`) and leaves `Volumes` a plain `init`
+  property, so a synthetic net needs no file, but the `--ai=` net lookup reads the chapter's
+  `neindex` (`GameSession.cs:2413`), which an empty stage does not have. Separately,
+  `ApplyVolumes` is called only from `CampaignDirector` (`CampaignDirector.cs:380`), so a CLI
+  plane runs on `AiModeMachine`'s decoded defaults (2000/1200, `AiModeMachine.cs:141`) whatever
+  net it is given. *Fix shape:* a built-in circular net above the grid origin at patrol altitude
+  that `--ai=<plane>:<net>` and `--zep=` can name the way a chapter's `neindex` net is named, and
+  the net's volumes applied to the CLI spawn through `CampaignRosterPlan.ApplyVolumes`. *⚠ Traps:*
+  applying volumes on the `--ai=` path changes behaviour for existing command lines that name a
+  chapter net, which today take the machine defaults instead; that is the fix rather than a side
+  effect, but it is a behaviour change to announce rather than slip in. *Cross-refs:* `BL-742`
+  (the rig this extends, which deliberately shipped without a net).
+
+- `BL-773` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`--perf` has no
+  term that attributes frame cost to the AI step, so a plane-count sweep can only be read as a
+  whole-frame differential.** *Evidence:* `FlightController` steps in `_Process`
+  (`FlightController.cs:1844`), so AI cost lands in script time; `script_ms` is `_perfProcess / n`
+  (`Launcher.cs:1721`), one of the two Godot `TIME_*` monitors `BL-617` establishes hold the worst
+  step of the last wall second rather than a mean; and `phys_tick_ms` brackets the physics tick
+  (`PhysicsTickCost.cs`), which the AI never enters. The honest terms left on the window line are
+  `p95_ms` and `max_ms` (`Launcher.cs:1735-1739`), both whole-frame. *Fix shape:* bracket the
+  roster's per-frame AI walk the way `PhysicsTickCost` brackets the physics tick, and report an
+  `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `BL-617` (the same misreading, on `script_ms`),
+  `BL-742` (the rig that makes the sweep worth running).
 
 ## Misc
 

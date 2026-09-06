@@ -36,6 +36,10 @@ public partial class GameSession : Node3D
     // How many near-miss names a failed --node= lookup offers: a usable hint, not a census.
     private const int NodeSuggestCap = 20;
 
+    // The empty stage's squadron ring, metres. Two opposed sides therefore start 2000 m apart,
+    // AiModeMachine's decoded attack range, so an --ai= sortie engages without a dead approach.
+    private const float SquadronRingRadiusM = 1000f;
+
     // Smallest orbit radius a synthesized pivot may sit at, so an aim ray passing behind the
     // subject still leaves something to orbit rather than spinning about the eye.
     private const float MinOrbitRadius = 1f;
@@ -793,6 +797,37 @@ public partial class GameSession : Node3D
         {
             return false;
         }
+    }
+
+    // One placement slot per side on a ring about the grid origin, each squadron facing the centre.
+    // Two sides therefore start 2 * SquadronRingRadiusM apart, which is AiModeMachine's decoded
+    // engagement gate, so they are in contact from the first frames. A teamless entry is its own
+    // side: a spawn naming no team= takes its own banded id (AimAssist.TeamOfPilot) regardless.
+    // ⚠ Slot order is first appearance on the command line, not team id, so adding an entry does
+    // not renumber the sides already there.
+    private static List<(Vector3 Anchor, Vector3 Facing)> SquadronAnchors(IReadOnlyList<AiPlaneEntry> entries)
+    {
+        var slotOf = new Dictionary<int, int>();
+        var keys = new int[entries.Count];
+        for (int i = 0; i < entries.Count; i++)
+        {
+            keys[i] = entries[i].Team ?? int.MinValue + i;
+            if (!slotOf.ContainsKey(keys[i]))
+                slotOf[keys[i]] = slotOf.Count;
+        }
+        var anchors = new List<(Vector3, Vector3)>(entries.Count);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            float angle = Mathf.Tau * slotOf[keys[i]] / slotOf.Count;
+            var anchor = new Vector3(Mathf.Sin(angle) * SquadronRingRadiusM,
+                EmptyStage.SpawnAltitude, -Mathf.Cos(angle) * SquadronRingRadiusM);
+            if (entries[i].Pos is { } over)
+                anchor = over;
+            var toCentre = new Vector3(-anchor.X, 0f, -anchor.Z);
+            anchors.Add((anchor, toCentre.LengthSquared() > 0.001f
+                ? toCentre.Normalized() : Vector3.Forward));
+        }
+        return anchors;
     }
 
     // A campaign mission has ended and its result is banked (the director records the attempt and
@@ -2393,17 +2428,24 @@ public partial class GameSession : Node3D
         {
             // Without a net: ahead of P1 on its own spawn heading, fanned right/left, holding
             // that course. With one: on the net's first node, patrolling the graph.
+            // ⚠ The empty stage anchors each side to the grid origin instead of to the player, so
+            // a plane-count sweep repeats one geometry run to run; a chapter world keeps the fan.
             var basis = lead.GlobalTransform.Basis;
             var fwd = -basis.Z;
             var right = basis.X;
+            var anchors = _spec.EmptyStage ? SquadronAnchors(aiPlanes) : null;
             List<AiNet>? nets = null;
             bool netsTried = false;
+            int fanIndex = 0;
+            int spawnedTotal = 0;
             for (int i = 0; i < aiPlanes.Count; i++)
             {
-                var (planeName, netRef, accentId, aiDef) = aiPlanes[i];
-                float lateral = 60f * ((i + 1) / 2) * (i % 2 == 0 ? 1f : -1f);
+                var entry = aiPlanes[i];
+                string planeName = entry.Plane;
+                string? aiDef = entry.Def;
+                int? accentId = entry.Accent;
                 AiNet? net = null;
-                if (netRef != null)
+                if (entry.Net != null)
                 {
                     if (!netsTried)
                     {
@@ -2417,37 +2459,56 @@ public partial class GameSession : Node3D
                             GD.PushWarning($"--ai: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
                         }
                     }
-                    net = nets != null ? AiNets.Resolve(nets, netRef) : null;
+                    net = nets != null ? AiNets.Resolve(nets, entry.Net) : null;
                     if (net == null)
-                        GD.PushWarning($"--ai: net '{netRef}' not in {_spec.Chapter}'s neindex; " +
+                        GD.PushWarning($"--ai: net '{entry.Net}' not in {_spec.Chapter}'s neindex; " +
                                        $"'{planeName}' spawns without a patrol");
                 }
-                if (net != null)
+                for (int k = 0; k < entry.Count; k++)
                 {
-                    // Spawned on the net itself, so a scripted run sees it patrolling within
-                    // seconds. ⚠ Take node positions off the follower, not the record, or an
-                    // anchored net puts the plane where the ring is not.
-                    var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
-                        trailerTarget: netTrailers.For(net));
-                    var pos = follower.NodePosition(0) + right * lateral;
-                    var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
-                    var pilot = AiPilot.HoldingCourse(pos, look);
-                    pilot.Patrol = follower;
-                    var spawnedOnNet = flightRoster.SpawnAi(new AiSpawn(
-                        planeName, pos, look, pilot, AiDef: aiDef));
-                    RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
-                    ApplyAiHullPreset(spawnedOnNet);
-                }
-                else
-                {
-                    var pos = lead.WorldPosition + fwd * 250f + right * lateral;
-                    var spawnedAhead = flightRoster.SpawnAi(new AiSpawn(planeName, pos, pos + fwd,
-                        AiPilot.HoldingCourse(pos, pos + fwd), AiDef: aiDef));
-                    RegisterAiVoice(spawnedAhead, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
-                    ApplyAiHullPreset(spawnedAhead);
+                    // Per squadron on the ring, per session otherwise, so a command line of
+                    // one-plane entries keeps exactly the spread it had before n= existed.
+                    int fi = anchors != null ? k : fanIndex;
+                    fanIndex++;
+                    float lateral = 60f * ((fi + 1) / 2) * (fi % 2 == 0 ? 1f : -1f);
+                    if (net != null)
+                    {
+                        // Spawned on the net itself, so a scripted run sees it patrolling within
+                        // seconds. ⚠ Take node positions off the follower, not the record, or an
+                        // anchored net puts the plane where the ring is not.
+                        var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
+                            trailerTarget: netTrailers.For(net));
+                        var pos = follower.NodePosition(0) + right * lateral;
+                        var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
+                        var pilot = AiPilot.HoldingCourse(pos, look);
+                        pilot.Patrol = follower;
+                        var spawnedOnNet = flightRoster.SpawnAi(new AiSpawn(
+                            planeName, pos, look, pilot, Team: entry.Team, AiDef: aiDef));
+                        RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
+                        ApplyAiHullPreset(spawnedOnNet);
+                    }
+                    else if (anchors != null)
+                    {
+                        var (anchor, facing) = anchors[i];
+                        var pos = anchor + facing.Cross(Vector3.Up).Normalized() * lateral;
+                        var look = pos + facing;
+                        var spawnedOnRing = flightRoster.SpawnAi(new AiSpawn(planeName, pos, look,
+                            AiPilot.HoldingCourse(pos, look), Team: entry.Team, AiDef: aiDef));
+                        RegisterAiVoice(spawnedOnRing, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
+                        ApplyAiHullPreset(spawnedOnRing);
+                    }
+                    else
+                    {
+                        var pos = lead.WorldPosition + fwd * 250f + right * lateral;
+                        var spawnedAhead = flightRoster.SpawnAi(new AiSpawn(planeName, pos, pos + fwd,
+                            AiPilot.HoldingCourse(pos, pos + fwd), Team: entry.Team, AiDef: aiDef));
+                        RegisterAiVoice(spawnedAhead, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
+                        ApplyAiHullPreset(spawnedAhead);
+                    }
+                    spawnedTotal++;
                 }
             }
-            state.What += $" + {aiPlanes.Count} AI";
+            state.What += $" + {spawnedTotal} AI";
         }
 
         // --zeppelins: the mission's zeppelin instances, placed at their authored pose and flown
