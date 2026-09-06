@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☐ `BL-711` A refused character in a name box makes no sound
 32. ☐ `BL-697` Only player 1's keymap can be reached
-33. ☐ `BL-710` Quitting flashes Godot's default sky before the window closes
+33. ☑ `BL-710` Quitting flashes Godot's default sky before the window closes
 
 ### Wave E — At the controls
 
@@ -456,7 +456,44 @@ unbound), so the join here cannot be resolved through the seat's own bindings. `
 missing door from Original, is deliberately not in this run, so do not solve it on the way past;
 `E41` answers it.
 
-## D33 ☐ `BL-710` Quitting flashes Godot's default sky before the window closes
+## D33 ☑ `BL-710` Quitting flashes Godot's default sky before the window closes
+
+**Landed.** One `Launcher.BlankAndQuit` now serves the three quits reached from a frame that is
+still drawing: Esc in the viewer (`Launcher.cs:783`), the menu's `QuitExit` sink (`:1374`) and the
+boards' `ExitSession` (`:1520`). It sets the process-lifetime `WorldEnvironment`'s background to
+flat black and then ends the frame, so the image held on screen through shutdown is black rather
+than the engine's sky. Every other exit keeps its bare `GetTree().Quit()`.
+
+**Which teardown uncovers it.** `MenuHost.Exit` (`CSVM/src/UI/Menu/MenuHost.cs:150-156`) sets
+`Shown = false`, calls `Active?.Hide()` and only then hands the exit to the launcher's sink, so the
+active presentation's opaque layer is already invisible when `case QuitExit` runs. Both
+presentations hide a full-screen opaque layer: Built-in's `LaunchMenu` is a `CanvasLayer` whose
+backdrop `ColorRect` carries the comment "Fully opaque backdrop so the empty 3D scene (procedural
+sky) never shows through" (`CSVM/src/UI/LaunchMenu.cs:457`), and Original's `ComposedBoardView`
+fills its rect with black (`:83`). Behind them, `Launcher.SetupLighting` (`:1094-1120`) keeps a
+`WorldEnvironment` whose sky is a `ProceduralSkyMaterial`, and at the menu no session is in the
+tree, so what the hidden layer uncovers is that sky and nothing else. A probe screenshot of the
+persistent scene is the artefact itself: grey-blue above a hard horizon, brown below.
+
+**Why the other exits are not it.** The two remaining drawing exits cannot produce the report:
+`ExitSession` quits with the live session still in the tree, so the world and its own sky dome
+draw, and Esc in the viewer quits on a frame that was already showing the procedural sky, so
+nothing appears that was not there. The sixteen probe exits render nothing a player sees, which
+`GameSession.cs:592` states for the seven inside the session build. `Launcher.cs` and
+`GameSession.cs` hold nineteen `GetTree().Quit()` calls between them rather than the twenty the
+entry counted, and nothing else in either file calls it.
+
+**Cost to headless runs.** None. The three changed sites are unreachable from any probe or suite,
+`BlankAndQuit` waits for nothing, and the nine probe exits in `Launcher.cs` plus all seven in
+`GameSession.cs` are untouched, so no wall-time comparison against
+`analysis/verification-budgets.json` is owed.
+
+**What still needs eyes.** No headless capture can photograph the frame after `Quit()`, since it
+is drawn by the engine after the last managed callback has run. At the controls, quit from the
+menu in both presentations and watch the last instant before the window goes: it should be black,
+and never the grey-blue-over-brown gradient above.
+
+**Original approach (kept for reference).**
 
 **Goal.** Quitting the game shows the game until the window is gone.
 
@@ -483,6 +520,8 @@ time against `analysis/verification-budgets.json` before and after. Then the com
 nothing visible and is invisible in tests. **A fix that hides the flash by delaying the quit would
 slow every headless probe and every suite that ends in one**, which is a real cost measured in the
 verification budgets, not a theoretical one.
+
+**Verified.** <pending orchestrator run>
 
 # Wave E — At the controls
 
