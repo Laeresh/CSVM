@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Text entry, seats, and the way out
 
 31. ☑ `BL-711` A refused character in a name box makes no sound
-32. ☐ `BL-697` Only player 1's keymap can be reached
+32. ☑ `BL-697` Only player 1's keymap can be reached
 33. ☑ `BL-710` Quitting flashes Godot's default sky before the window closes
 
 ### Wave E — At the controls
@@ -666,7 +666,44 @@ casualty). Widening the polled keys **touches text entry on both presentations**
 edge-detected per key in a fixed-length parallel array, so the array and the table have to grow
 together or the detection silently reads the wrong key.
 
-## D32 ☐ `BL-697` Only player 1's keymap can be reached
+## D32 ☑ `BL-697` Only player 1's keymap can be reached
+
+**Landed.** The rebinding screen takes the join gesture itself. `LaunchMenu.ScanJoins` opens
+joining on the Plane, the Campaign and now the Controls screen, so Start on a pad no seat owns
+seats that pad through `MenuSeatDevices.ScanJoins`, exactly as it does at the aircraft pick, and
+`OpenControls` primes the per-pad edges on the way in so a Start held on entry does not fire.
+Nothing new reads a device. The press is `MenuInput.JoinPressed(pad)`, the static raw
+`Input.IsJoyButtonPressed(pad, JoyButton.Start)` whose own comment forbids moving it to an action,
+edge-detected per device in `MenuSeatDevices._joinPrev`; `MenuJoin` stays unbound.
+
+**Registration follows the seats, not the screen's opening.** The one-shot loop `OpenControls` held
+is now `LaunchMenu.SyncControlsSeats`, called there and at the top of `HandleControlsInput`, so it
+runs on every frame the screen is up. It keeps a registration while the poller behind a player
+number is the same object, which is what lets a staged rebind survive; a number that changed hands
+is registered again, since the number is what picks the `BindingStore` file.
+`ControlsFeature.RemoveSeat` is the other half: a seat that leaves takes its row, its staged edits
+and its dirty flag with it, and the screen falls back to the first remaining player. `AddSeat`
+clears the dirty flag on a re-registration for the same reason, so Accept never writes a working
+copy the seat on screen never edited.
+
+**A seat with no device gets no row.** `SyncControlsSeats` registers a slot only when its poller
+reads the keyboard or holds at least one pad. `--debug-join`'s `MenuIdleSource` seats fail that
+test, because `InputBehind` gives them a bare `MenuInput` with no keyboard and an empty pad array,
+and they stay off the Player stepper while remaining ordinary seats everywhere else. Registering
+four seats up front would have offered three players a screen with nothing to press. The join
+strip says what the press is for here, "press START on a free pad to edit its own keymap", rather
+than sending the pad to aircraft select.
+
+**The data path needed nothing.** `ControlsProfile` reads a seat's Flight and Camera maps through
+`LaunchBindings` and its Menu map from the live poller, and `Accept` writes each dirty seat's
+profile through the save the launcher injects,
+`BindingStore.UserBindings().Save(player, profile)`. `BL-696`, the missing door from Original, is
+untouched: Original registers no seats with this feature and still reaches no rebinding screen of
+its own.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** More than player 1's keymap can be edited on the rebinding screen, with each editable
 seat having a device to capture with.

@@ -251,6 +251,67 @@ public class ControlsFeatureTests
     }
 
     [Fact]
+    public void ASeatThatLosesItsDeviceLeavesTheStepperAndTakesTheScreenWithIt()
+    {
+        var written = new List<int>();
+        var feature = new ControlsFeature((player, _) => written.Add(player));
+        var one = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var two = BindingProfile.Defaults(Pad, readsKeyboard: false);
+        feature.AddSeat(1, one, OnePad(), true);
+        feature.AddSeat(2, two, OnePad(), false);
+        feature.Player = 2;
+        feature.Context = InputContext.Flight;
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        feature.MoveSlot(9);
+        feature.Offer(Key(Godot.Key.M));
+
+        feature.RemoveSeat(2);
+
+        Assert.Equal(new[] { 1 }, feature.Players);
+        Assert.Equal(1, feature.Player);
+        Assert.False(feature.Dirty);
+        feature.Accept();
+        Assert.Empty(written);
+        Assert.DoesNotContain(Key(Godot.Key.M), two.Map(InputContext.Flight).Bindings(InputAction.Nitro));
+    }
+
+    [Fact]
+    public void APlayerNumberThatChangesHandsIsStagedAfreshFromTheNewSeatsKeymap()
+    {
+        var feature = new ControlsFeature();
+        var two = BindingProfile.Defaults(Pad, readsKeyboard: false);
+        feature.AddSeat(1, BindingProfile.Defaults(Pad, true), OnePad(), true);
+        feature.AddSeat(2, two, OnePad(), false);
+        feature.Player = 2;
+        feature.Context = InputContext.Flight;
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        feature.MoveSlot(9);
+        feature.Offer(Key(Godot.Key.M));
+        Assert.True(feature.Dirty);
+
+        var third = BindingProfile.Defaults(Pad, readsKeyboard: false);
+        feature.AddSeat(2, third, OnePad(), false);
+
+        Assert.Equal(new[] { 1, 2 }, feature.Players);
+        Assert.False(feature.Dirty);
+        feature.Player = 2;
+        feature.Context = InputContext.Flight;
+        Assert.DoesNotContain(Key(Godot.Key.M), feature.Bindings(InputAction.Nitro));
+        Assert.DoesNotContain(Key(Godot.Key.M), two.Map(InputContext.Flight).Bindings(InputAction.Nitro));
+    }
+
+    [Fact]
+    public void RemovingASeatNobodyRegisteredChangesNothing()
+    {
+        var (feature, _) = Flight();
+
+        feature.RemoveSeat(4);
+
+        Assert.Equal(new[] { 1 }, feature.Players);
+        Assert.Equal(1, feature.Player);
+    }
+
+    [Fact]
     public void TheSlotCursorReplacesTheControlItIsOnRatherThanAddingOne()
     {
         var (feature, _) = Flight();

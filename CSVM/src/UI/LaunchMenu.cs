@@ -153,6 +153,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private readonly List<Slot> _slots = new();
     // Player 1's row controls by absolute row index, as last built, for RowControl.
     private readonly Dictionary<int, Control> _rowControls = new();
+    // Which seat's poller each player number is registered with on the rebinding screen, by slot,
+    // or null where that slot has no device to capture with. Kept so a registration survives while
+    // the seat behind it does, and is redone when the number changes hands.
+    private readonly List<MenuInput?> _controlsSeats = new();
     private int _slotsRevision = -1;
     // The menu host: its first seat is player 1's commands, its feature set holds Free Flight's and
     // Instant Action's state and launch rules and the shared player setup, its audio service plays
@@ -1111,11 +1115,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         _pointer = _pointer with { MoveY = delta, Accept = true };
     }
 
-    // Start on an unclaimed pad joins a new player on the Plane or Campaign screen; the scan
-    // itself is the device bookkeeping's. A campaign join closes at the seated player's FLY MISSION.
+    // Start on an unclaimed pad joins a new player on the Plane, Campaign or Controls screen; the
+    // scan itself is the device bookkeeping's. A campaign join closes at the seated player's FLY
+    // MISSION. Controls takes the gesture because Options is reached with seat 0 alone, so this is
+    // the only door to another player's keymap, and the pad that presses it is what that player
+    // then captures with.
     private bool ScanJoins()
     {
-        if (_screen != Screen.Plane && _screen != Screen.Campaign)
+        if (_screen != Screen.Plane && _screen != Screen.Campaign && _screen != Screen.Controls)
             return false;
         // The seated player's FLY MISSION opens the first guest's check instead of leaving, so
         // the field's own lock closes joining.
@@ -2433,28 +2440,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
     }
 
-    // Opens the rebinding screen on this seat's live keymaps. Every joined seat is registered once
-    // and then kept, because the maps are what the pollers read and rebuilding one would throw away
-    // whatever the player had already rebound.
+    // Opens the rebinding screen on the joined seats' live keymaps. Joining is open here (ScanJoins)
+    // because Options is reached with seat 0 alone, so a pad pressing Start is the only way another
+    // player's keymap is ever on screen.
     private void OpenControls()
     {
-        // Before the loop, not after: the aid path opens this screen out of ShowMenu, before any
+        // Before the sync, not after: the aid path opens this screen out of ShowMenu, before any
         // frame has run, and a screen with no registered seat has no keymap to draw.
         SyncSlots();
-        for (int i = 0; i < _slots.Count; i++)
-        {
-            int player = i + 1;
-            if (!ControlsHasSeat(player))
-            {
-                var input = _slots[i].Input;
-                _controls.AddSeat(
-                    player,
-                    ControlsProfile(player, input),
-                    new SeatCaptureDevices(ControlsPadOf, () => input.Pads),
-                    input.Keyboard);
-            }
-        }
-
+        SyncControlsSeats();
+        PrimeJoins(); // joining opens here — a Start held on the way in must not fire
         _controlsIndex = 0;
         _controlsTop = 0;
         // Cancel first, so the screen opens on what the game is actually playing rather than on a
@@ -2489,22 +2484,54 @@ public sealed partial class LaunchMenu : CanvasLayer
     private DeviceId ControlsPadOf(InputContext context) =>
         context == InputContext.Menu ? MenuInput.SeatPads : DefaultBindings.AnyPad;
 
-    private bool ControlsHasSeat(int player)
+    // Keeps the rebinding screen's player rows in step with the joined seats, once a frame while it
+    // is up. A registration is kept while the seat behind its number is the same poller, so a rebind
+    // already staged survives; a number that changed hands is registered again, since the number is
+    // what picks the keymap file.
+    private void SyncControlsSeats()
     {
-        foreach (int seated in _controls.Players)
+        while (_controlsSeats.Count < _slots.Count)
+            _controlsSeats.Add(null);
+
+        for (int i = 0; i < _slots.Count; i++)
         {
-            if (seated == player)
-                return true;
+            var input = _slots[i].Input;
+            // Nothing to press means no row: the stepper must never offer a player who cannot
+            // capture. A null pad list is the in-session "every connected pad" reading, still a
+            // device, so only a keyboard-less empty list is device-less (what --debug-join adds).
+            var editable = input.Keyboard || input.Pads is not { Length: 0 } ? input : null;
+            if (ReferenceEquals(_controlsSeats[i], editable))
+                continue;
+
+            _controlsSeats[i] = editable;
+            if (editable == null)
+                _controls.RemoveSeat(i + 1);
+            else
+                AddControlsSeat(i + 1, editable);
         }
 
-        return false;
+        for (int i = _controlsSeats.Count - 1; i >= _slots.Count; i--)
+        {
+            _controls.RemoveSeat(i + 1);
+            _controlsSeats.RemoveAt(i);
+        }
     }
+
+    private void AddControlsSeat(int player, MenuInput input) =>
+        _controls.AddSeat(
+            player,
+            ControlsProfile(player, input),
+            new SeatCaptureDevices(ControlsPadOf, () => input.Pads),
+            input.Keyboard);
 
     // One frame of the Controls screen. A capture in progress swallows the frame: the player is
     // pressing a control to BIND it, so reading the same press as a menu command would move the
     // cursor and confirm a row under them.
     private bool HandleControlsInput(MenuInput p1)
     {
+        // First, so a pad that joined this frame already has its row before anything is drawn or
+        // stepped onto, and a seat whose pad left has lost one.
+        SyncControlsSeats();
         if (_controls.Capturing)
         {
             return _controls.Poll();
@@ -3415,15 +3442,20 @@ public sealed partial class LaunchMenu : CanvasLayer
         return string.Join(" | ", parts);
     }
 
-    // The hint beside the join strip. Joining only happens on the aircraft screen, so
-    // the earlier screens say where it will be rather than inviting a press that does nothing.
-    // Dogfight below 2 players gets its own line — CanLaunch is withholding the
-    // launch gesture, so the generic "you may join" hint would undersell what is actually
-    // blocking it.
+    // The hint beside the join strip. Joining happens on the aircraft screen and on the rebinding
+    // screen, so the other screens say where it will be rather than inviting a press that does
+    // nothing. The rebinding screen names what the press is for there, since a pad joins to be
+    // rebound rather than to fly. Dogfight below 2 players gets its own line — CanLaunch is
+    // withholding the launch gesture, so the generic "you may join" hint would undersell what is
+    // actually blocking it.
     private string JoinHint()
     {
         if (_slots.Count >= SplitScreen.MaxPlayers)
             return $"({SplitScreen.MaxPlayers}-player maximum)";
+        if (_screen == Screen.Controls)
+            return Pads.Connected().Count > 0
+                ? "(press START on a free pad to edit its own keymap)"
+                : "(connect a pad and press START to edit its own keymap)";
         if (_screen != Screen.Plane)
             return "(other players join at aircraft select)";
         if (_mode == MenuMode.Versus && _slots.Count < 2)

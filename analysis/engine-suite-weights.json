@@ -235,6 +235,7 @@
     "bindings-launch-load": 0.1,
     "menu-player-setup-journey": 0.1,
     "menu-player-setup-seats": 0.2,
+    "menu-controls-seats": 0.1,
     "menu-instant-action-journey": 0.6,
     "menu-original-instant-action": 0.1,
     "menu-hangar-journey": 0.6,
