@@ -6,8 +6,12 @@ description: Explain the active plan's item in plain language — where it sits,
 Explain one item of the **active plan** so it can be worked cold, then start it, close it, or park it.
 
 The sibling skill for `backlog.md` entries is [`/backlog`](../backlog/SKILL.md) — a `BL-NNN` that is
-*not* scheduled into the active plan belongs there, not here. The binary-decode rule below — §4's
-provenance triage and §5's decode option — is mirrored from that skill; keep the two in sync.
+*not* scheduled into the active plan belongs there, not here. The binary-decode **rule** below (§4's
+provenance triage, and §5 option 2's Ghidra read-only charter, its what-a-decode-reports contract and
+its write-it-down contract) is mirrored from that skill; keep those in sync. The **handoffs
+deliberately diverge**, and syncing them is the mistake: an item here carries an Approach and a Verify
+step to work from, so §5 works it directly, while a bare `BL-NNN` carries neither and that skill sizes
+the work itself before it offers to do it.
 
 The explanation phase is **read-only**: no builds, no `RunTests.ps1`, no `--freecam` runs. Once the
 user picks *start it here*, that restriction lifts — that is the work.

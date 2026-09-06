@@ -1,27 +1,32 @@
 ---
 name: backlog
-description: Explain a backlog item in plain language — its goal, the problem it solves, its traps, how it gets done, and what it's related to. Use when the user names a BL-NNN item or asks what a backlog entry means.
+description: Explain a backlog item in plain language — its goal, the problem it solves, its traps, how it gets done, and what it's related to; then decode it out of `crimson.exe`, and make the fix in the same session when it is localized. Use when the user names a BL-NNN item, asks what a backlog entry means, or asks to fix one.
 ---
 
 Explain one `backlog.md` item so it can be understood cold, months later, without re-reading 1800
 lines of prose or chasing its references by hand.
 
-This skill is **read-only**. Never edit `backlog.md`, never build, never run tests. That holds for
-the explanation, which is the whole of §1–§4; §5 runs only after the user picks the decode handoff,
-and even there every write is offered and approved first.
+The explanation phase is **read-only**: never edit `backlog.md`, never build, never run tests. That
+holds for the whole of §1–§4, and for §5's decode, which runs only after the user picks the decode
+handoff and whose every write is offered and approved first. The restriction lifts wholesale the
+moment the user picks *work it here* (§6), because that is the work: edits, a build and
+`.\RunTests.ps1` all belong to it.
 
-⚠ **Output rule: text written between tool calls is not shown in chat.** The explanation is this
-skill's entire deliverable, so it must be the **final message after the last tool call** — do the
-reading of §1–§2 first, then emit §3 and §4 together as one message and stop. Do **not** call
-`AskUserQuestion` (or any other tool) to pose §4's choice: that turns the explanation into
-between-calls text and the user sees only the question. §4's options are plain text at the end of
-that message.
+⚠ **Output rule: text written between tool calls is not shown in chat.** What this skill produces,
+the explanation and the decode's findings alike, must be the **final message after the last tool
+call**: do the reading of §1–§2 first, then emit §3 and §4 together as one message and stop. This
+binds **every menu this skill offers**, §4's and §5's re-offer both. Never call `AskUserQuestion` (or
+any other tool) to pose one; that turns the text it was meant to close into between-calls text, and
+the user sees only the question. Menu options are plain text at the end of the message they close.
 
 The sibling skill for **active-plan** items (`A1`, `B11`) is [`/plan-item`](../plan-item/SKILL.md) —
 a `BL-NNN` already scheduled into the active plan is better explained there, since that skill reads
 the plan's ground rules and dependency notes too and can start, close, or defer the item. The
-binary-decode rule below — §3's provenance triage and §4's decode option — is mirrored in that skill;
-keep the two in sync.
+binary-decode **rule** below (§3's provenance triage, §5's Ghidra read-only charter, its
+what-a-decode-reports contract and its write-it-down contract) is mirrored in that skill; keep those
+in sync. The **handoffs deliberately diverge**, and syncing them is the mistake: a plan item carries
+an Approach and a Verify step to work from, a bare `BL-NNN` carries neither, so this skill sizes the
+work itself (§3) before it offers to do it.
 
 ## 1. Resolve the item
 
@@ -91,7 +96,10 @@ Use these headings, in this order:
   `crimson.exe` could answer. Name the quantity, name its stated source, and say the binary holds the
   real one.
 - **How it gets reached** — the route to the goal: files, mechanism, order of work.
-- **Size** — LARGER or localized, with the reason.
+- **Size** — LARGER or localized, with the reason. **Localized** means the change is confined to the
+  files the entry (or a decode of it) names, introduces no new mechanism, and needs no new test
+  fixture; anything else is LARGER. This verdict is what §4's *start work* routes on and what lets
+  §6 lift the read-only rule, so it has to be checkable rather than a feeling.
 - **How you'd know it worked** — the confirm-in-the-cockpit line, or the relevant
   `docs/verification.md` procedure.
 - **Open questions** — what neither the code nor the binary can settle: a genuine taste call, a
@@ -111,7 +119,7 @@ call (see the output rule at the top; an `AskUserQuestion` here hides §3 entire
 
 - decode it in `crimson.exe` — read the flagged quantity out of the binary (§5);
 - scaffold a plan — run `/new-plan`;
-- start work — run `/grill-me` on the item first, then work from what that settles;
+- start work — see the rule below;
 - stop here.
 
 **Rank the decode option by what §3 found.** If §3 flagged anything decodable — an open question the
@@ -124,8 +132,17 @@ sits last, unranked, unremarked.
 It is an offer, never a gate. Do not refuse to recommend *start work* because something is
 undecoded — a skill that blocks you is a skill you stop running.
 
-If scaffold a plan or start work is chosen, ask if a worktree should be used.
-Take no action until the answer comes back.
+**What *start work* means, wherever it is picked** (here, or from §5's re-offer after a decode):
+§3's **Size** routes it. Localized, and the work happens here, in this context, under §6. LARGER,
+and it starts with `/grill-me` on the item, then works from what that settles. One rule with one
+meaning; a menu line that means two different things depending on which menu it appeared in is a
+line people stop trusting.
+
+If scaffold a plan or start work is chosen **here**, ask if a worktree should be used. If *decode it*
+is chosen, do not ask: the decode's write-ups land in the tree you are already in, and §6 keeps the
+fix there with them, one unit of work in one commit window. A worktree on that path has to be asked
+for before the decode writes anything, never after, or the write-ups and the fix they justify end up
+in different trees. Take no action until the answer comes back.
 
 ## 5. If the decode is picked
 
@@ -181,3 +198,53 @@ address, and the pointer to the write-up. No date — `backlog.md` is live prose
 decode belongs in the commit message that lands it. That line is load-bearing. Without it the next
 `/backlog` on this item re-reads the stale footage number, re-flags it under **Traps**, and
 re-recommends the decode that was already done.
+
+### Then re-offer, ranked by what the decode found
+
+A decode is not a stopping point. It usually settles the number the work was waiting on, and
+sometimes it settles the item outright, so close §5 with a menu of its own rather than ending here
+and making the user re-invoke the skill for one. Plain text at the end of the message, no tool call:
+the output rule at the top binds this menu too. It is not a reprint of §4's, whose *decode it* line
+is now spent.
+
+- **work it here** — Size: localized (§6);
+- **`/grill-me` first** — Size: LARGER, then work from what that settles;
+- **`/new-plan`** — the decode opened a body of work rather than a fix;
+- **`/close-backlog-item <BL-NNN>`** — the decode settled the item and there is nothing to build;
+- **stop here.**
+
+**Mark exactly one line recommended**, picked from the decode's outcome against §3's **Size**, with a
+one-line reason that names the decoded quantity: "the stall onset rate is 0.35/s at `0042ee40` and
+the entry's 0.5 came from a video; the change is one constant in `FlightController`." Never two
+marks, and never a "default" on one line and a "recommended" on another: that is a menu people stop
+reading.
+
+The ranking is an ordering, never a gate. Nothing here refuses a line the user asks for, *stop here*
+after a decode that looks finishable included.
+
+## 6. If *work it here* is picked
+
+Read-only lifts (see the top); this is the work. It happens in the current tree, alongside the
+decode's write-ups, in one commit window.
+
+- Read each touched module's entry in `docs/architecture/<Namespace>.md`, found through the index in
+  `docs/architecture.md`, before modifying that module, then the comments on the members you touch.
+  Dead ends are recorded in the landing commits (`git log --grep=BL-NNN`), so search those before
+  re-chasing one.
+- **Take every value from the extracted JSON or from the decode, never from a guess.** A guessed
+  number is the failure §3's provenance flags exist to catch, and it is no better for having arrived
+  during the fix instead of during the write-up.
+- Land it complete: the code change, whatever `docs/architecture` or `docs/formats` entry the change
+  requires, and `.\RunTests.ps1` green. That runner is the landing gate for anything under `CSVM/`.
+- The verification record goes in the commit message, not into `backlog.md` and not into the docs.
+
+When it is done, say in one line what `.\RunTests.ps1` reported, a failure included. Then:
+
+- **offer the commit, do not make it.** One line, then stop. Commits happen when the user asks.
+- **if the fix resolves the entry, offer `/close-backlog-item <BL-NNN>`, unmodified.** That skill
+  owns the closure kind, deleting the entry, the closure record in the closing commit's message,
+  retiring any `CAP-nn`/`PT-nn`, and the restated-caveat sweep. Do not pre-empt its closure record.
+
+If the work turns out LARGER than §3 sized it (a new mechanism appears, a fixture is needed, the
+change spreads past the files the entry names), say so and stop rather than pushing through. That
+Size verdict is the reason read-only lifted, and it was wrong.
