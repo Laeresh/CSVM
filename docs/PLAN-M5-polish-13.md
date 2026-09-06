@@ -123,7 +123,7 @@ The letter is F because A to E were already assigned; the wave runs before `E41`
 along with everything else. Both items are consequences of items in this run rather than backlog
 entries, so neither carries a `BL-` id: they are fixed here instead of being filed and rescheduled.
 
-51. ☐ Built-in's Purchase Now row stays live at the slot cap and refuses on the press
+51. ☑ Built-in's Purchase Now row stays live at the slot cap and refuses on the press
 52. ☐ The aid script's `x` verb is silently inert under Original
 
 ### Wave E — At the controls
@@ -887,7 +887,34 @@ which is awareness only and does not move the exit code.
 
 # Wave F — What the run itself turned up
 
-## F51 ☐ Built-in's Purchase Now row stays live at the slot cap and refuses on the press
+## F51 ☑ Built-in's Purchase Now row stays live at the slot cap and refuses on the press
+
+**Landed.** `HangarPurchasePage`'s two enumerations gained the third campaign reason, in the
+commit's own order: `BuildEnabled` now also wants `Flow.Campaign.HasFreeSlot`, and
+`CampaignProblemsText` reads the cap ahead of the availability threshold and the funds line, so at
+the cap the row is drawn with the refusal mark and its detail is langui 204 rather than the
+shortfall. One plane under the cap the row is live and its detail is empty, which is where it
+stood before.
+
+The predicate is `A3`'s own `IHangarWallet.HasFreeSlot`, which `CampaignWallet` answers from
+`PurchasedPlaneCap` against the profile's non-award records. No count and no cap literal was added
+anywhere: the page asks the wallet, and the wallet is the only thing that knows the number. The
+words are shared the same way. `HangarFeature.HangarFullText` now composes langui 204 once and both
+`Refusal` and the page read it, since a row that greys ahead of the press has to say what the press
+would say. The press-time refusal is untouched and still checked: a unit fills the profile behind
+an enabled row and presses, and the commit refuses in the same words with nothing written.
+
+Covered by three units in `HangarPurchasePageTests` (the row at the cap, the row one plane under
+it, and the press with the profile filled behind it) and a `MenuHangarSuites` walk that drives a
+real `LaunchMenu` to the purchase review over the aid's scratch profile, fills it and reads the
+drawn row and detail, then sells one plane back and reads them again. The walk fills against
+`HasFreeSlot` rather than a record count, because that profile has flown and its award records sit
+outside the cap; filling to 20 records left it one bought plane short of the cap and the row
+correctly stayed live, which is what the first run of the suite caught.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** At the decoded slot cap, Built-in's Purchase Now row is drawn refused before it is
 pressed, and says why, as its two older refusals already do.

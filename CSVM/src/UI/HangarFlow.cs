@@ -375,8 +375,8 @@ public sealed class HangarFlow
     /// <see cref="Message"/> saying why. The gate is <see cref="HangarEconomy"/>'s verdict plus a
     /// name, in the original's own words; funds are never checked over the two IA/top-level doors
     /// (Decision 2). Over a campaign flow (<see cref="Campaign"/> non-null, B13) the same commit
-    /// also refuses an unavailable airframe or an unaffordable total, and on success moves the
-    /// money and records ownership. Returns whether the plane was saved.</summary>
+    /// also refuses a full hangar, an unavailable airframe or an unaffordable total, and on success
+    /// moves the money and records ownership. Returns whether the plane was saved.</summary>
     public bool Commit()
     {
         if (!_feature.Commit())

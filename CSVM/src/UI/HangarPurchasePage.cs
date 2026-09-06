@@ -46,8 +46,9 @@ public sealed class HangarPurchasePage : HangarPage
 
     /// <summary>Whether the Purchase Now row is live: the original greys the button whenever the
     /// problems callback reports, and this is the remake's reading of that state. Over a campaign
-    /// flow (<see cref="HangarFlow.Campaign"/> non-null, B13) the row also greys out for an
-    /// unavailable airframe or an unaffordable total; the two wallet-free doors never see either.</summary>
+    /// flow (<see cref="HangarFlow.Campaign"/> non-null, B13) the row also greys out for a full
+    /// hangar, an unavailable airframe or an unaffordable total; the wallet-free doors see none of
+    /// the three.</summary>
     public bool BuildEnabled
     {
         get
@@ -59,7 +60,9 @@ public sealed class HangarPurchasePage : HangarPage
             }
 
             return Flow.Campaign is not { } campaign
-                || (campaign.IsAirframeAvailable(Scratch.Airframe) && campaign.CanAfford(bill.Total.Cost));
+                || (campaign.HasFreeSlot
+                    && campaign.IsAirframeAvailable(Scratch.Airframe)
+                    && campaign.CanAfford(bill.Total.Cost));
         }
     }
 
@@ -196,14 +199,20 @@ public sealed class HangarPurchasePage : HangarPage
             Flow.Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " " + Flow.Strings.Text(1171, "No Engine Selected"),
     };
 
-    // The campaign-only reasons (B13): the underlying verdict is Ok, but the wallet or the
-    // availability threshold still refuses. Empty over the two wallet-free doors, where
-    // Flow.Campaign is null.
+    // The campaign-only reasons (B13): the underlying verdict is Ok, but the slot cap, the wallet
+    // or the availability threshold still refuses. In the commit's own order (HangarFeature.
+    // Refusal), so the row says ahead of the press what the press would say. Empty over the two
+    // wallet-free doors, where Flow.Campaign is null.
     private string CampaignProblemsText(HangarBill bill)
     {
         if (Flow.Campaign is not { } campaign)
         {
             return string.Empty;
+        }
+
+        if (!campaign.HasFreeSlot)
+        {
+            return Flow.Feature.HangarFullText();
         }
 
         if (!campaign.IsAirframeAvailable(Scratch.Airframe))
