@@ -51,8 +51,9 @@ internal static class MenuOriginalCampaignSuites
         + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
         + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
         + "the wallet and Back resumes the cabin, a plane built over the campaign's wallet is absent "
-        + "from the sortie roster until one EXPORT press crosses it, and Deactivate leaves no open "
-        + "campaign")]
+        + "from the sortie roster until one EXPORT press crosses it, a purchase over a profile at the "
+        + "decoded slot cap is refused in the original's own words until a plane is sold back, and "
+        + "Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -107,6 +108,7 @@ internal static class MenuOriginalCampaignSuites
             Scrolling(ctx, host, seat, shell, fit, store);
             HangarRoundTrip(ctx, host, seat, shell, fit);
             ExportGate(ctx, host, seat, shell, fit, campaign, root);
+            SlotCap(ctx, host, seat, shell, campaign, root);
         }
         finally
         {
@@ -643,6 +645,53 @@ internal static class MenuOriginalCampaignSuites
             $"which is what puts it in the sortie roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
         ctx.Check(wallet.OwnedBuilds().Count == 3 && profile.Planes.Count == 3,
             $"and the campaign still owns all three, the two starters included ({wallet.OwnedBuilds().Count})");
+    }
+
+    // The decoded slot cap over its own scratch stores: a profile holding its 20 bought planes is
+    // refused the next purchase in the original's own words, and selling one back makes room for
+    // exactly one more.
+    private static void SlotCap(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        CampaignFeature campaign, string root)
+    {
+        const string OneMore = "One Too Many";
+        var profiles = new CampaignProfileStore(Path.Combine(root, "CapProfiles"));
+        var planes = new CustomPlaneStore(Path.Combine(root, "CapPlanes"));
+        shell.OpenCampaignOver(profiles, planes);
+        Press(host, seat, new MenuCommands { Typed = Pilot });
+        Press(host, seat, Accept);
+        if (campaign.Profile is not { } profile || shell.CampaignWallet is not { } wallet)
+        {
+            ctx.Check(false, $"the slot-cap walk seats a player over its own stores ({campaign.Profile?.Name})");
+            return;
+        }
+
+        profile.Funds = 500_000;
+        for (int i = profile.Planes.Count; i < CampaignWallet.PurchasedPlaneCap; i++)
+        {
+            profile.Planes.Add(new OwnedPlane { Name = "Filler " + i, Airframe = 10 });
+        }
+
+        profiles.Save(profile);
+
+        var hangar = host.Features.Get<HangarFeature>();
+        hangar.Open(planes, wallet);
+        hangar.StartDefaultPlane();
+        hangar.Scratch.Name = OneMore;
+        int funds = profile.Funds;
+        bool committed = hangar.Commit();
+        string limit = hangar.Strings.Text(
+            204,
+            "You have reached your hangar limit of planes.  Click Sell Planes, and sell one or more planes.");
+        ctx.Check(!committed && hangar.Message == limit,
+            $"a purchase at the slot cap is refused in the original's own words ({committed}, {hangar.Message})");
+        ctx.Check(profile.Funds == funds && profile.Planes.Count == CampaignWallet.PurchasedPlaneCap
+            && planes.Load(OneMore) == null,
+            $"with the wallet, the ownership list and the build store untouched ({profile.Funds}, {profile.Planes.Count})");
+
+        hangar.DeleteSaved("Filler 5");
+        ctx.Check(hangar.Commit() && planes.Load(OneMore) != null,
+            $"and one plane sold back makes room for exactly one more ({hangar.Message})");
+        hangar.Discard();
     }
 
     private static bool HasLine(ComposedBoard board, string text)

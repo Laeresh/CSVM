@@ -329,9 +329,33 @@ it cost, and rebuilding is free of loss.**
 A record whose class dword `+0x00` is `2` is a **special** plane: the sell handler branches at
 `0x0040a1d9` to `langui` 704 `IDS_PS_SPECIALPLANE` ("This %1!s!, %2!s!, cannot be sold")
 instead. `langui` 701 carries the separate floor, "you must keep at least two planes in your
-hangar". The slot array runs 25 records (`0x0064b78c` to `0x0064cb77`), and the free-slot
-finder `FUN_004111f0` refuses a purchase unless at least **six** slots are free or hold special
-planes, so five slots stay reserved for the campaign awards below.
+hangar". How much of the slot array the purchase side may take is the section below.
+
+### The slot cap reserves the five awards
+
+The profile's plane records run 25 (`0x0064b78c` to `0x0064cb77`, stride 204, the loop bound
+`CMP EDX,0x64cb78` at `0x0041121e` and the `CMP ECX,0x19` at `0x0040608c`), and two finders share
+them.
+The award half `FUN_00406060` takes the first record whose class dword `+0x00` is `0`, scanning all
+25 with nothing held back. The purchase half `FUN_004111f0` walks the same 25 with a counter that
+starts at `-5` and rises once per record that is empty or special (class `2`), and returns the
+first empty record's index, or `-1` when that counter never reaches 1.
+
+So a purchase needs six of the 25 records to be empty or special: one for the plane being bought,
+five for the mission awards. **An already granted award keeps counting towards the six**, its own
+record being the reservation it was holding, so the specials cancel out of the arithmetic and what
+the finder enforces is a cap on **bought** planes alone: 20 of them, whatever the profile has been
+awarded. A profile holding 19 bought planes and all five awards may still buy its twentieth,
+filling the array exactly; a profile holding 20 bought planes and no award at all is refused, and
+its five empty records stay held for awards that have not arrived.
+
+The refusal is `langui` 204 `IDS_PN_TOOMANYPLANES`, "You have reached your hangar limit of planes.
+Click Sell Planes, and sell one or more planes." The id is pushed nowhere in the image (every
+`PUSH 0xcc` in it is a 204-byte record copy): the callback ending at `0x0040d260` calls the finder
+and returns its value as its own, and the message is chosen above that from the `-1`. The purchase
+commit calls the same finder at `0x0040b5d0` and copies the scratch record into the slot it names
+(`0x0040b60f`, `rep movsd` of 0x33 dwords, then class dword `1` at `0x0040b613`), so the gate sits
+at the button and not at the write.
 
 ### The inventory screen's own strings
 

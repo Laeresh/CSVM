@@ -20,6 +20,12 @@ namespace CSVM.UI.Menu;
 /// </summary>
 public sealed class CampaignWallet : IHangarWallet
 {
+    /// <summary>The most planes a profile may buy (docs/org/hangar.md, "The slot cap reserves the
+    /// five awards"): the 25 records of the slot array less the five the purchase-side free-slot
+    /// finder <c>FUN_004111f0</c> holds for the mission awards, which are granted through their own
+    /// unreserved finder <c>FUN_00406060</c>.</summary>
+    public const int PurchasedPlaneCap = 20;
+
     private readonly CampaignProfileStore _store;
     private readonly CustomPlaneStore _planes;
 
@@ -40,6 +46,12 @@ public sealed class CampaignWallet : IHangarWallet
     /// <summary>The wallet balance (docs/org/hangar.md "The campaign wallet"): $0 on a fresh
     /// profile, since the first mission has not yet paid out.</summary>
     public int Funds => Profile.Funds;
+
+    /// <summary>Whether the profile has a slot for another bought plane (langui 204). A reward
+    /// aircraft never counts against it: the original's finder reads an awarded record as still
+    /// holding its own reservation, so the five awards drop out of the arithmetic and the cap
+    /// falls on bought planes alone, granted or ungranted awards notwithstanding.</summary>
+    public bool HasFreeSlot => Profile.Planes.Count(p => !p.Special) < PurchasedPlaneCap;
 
     /// <summary>Whether the build's total cost is affordable right now.</summary>
     public bool CanAfford(int cost) => Profile.Funds >= cost;
@@ -62,7 +74,8 @@ public sealed class CampaignWallet : IHangarWallet
 
     /// <summary>Whether the named owned plane can be sold right now: it is actually owned, it is
     /// not one of the five unsellable reward aircraft, and at least two planes remain afterwards
-    /// (docs/org/hangar.md, langui 701, the free-slot finder's own floor).</summary>
+    /// (docs/org/hangar.md, langui 701, a floor of the sell handler's own and not of the slot
+    /// finder, which holds no floor at all).</summary>
     public bool CanSell(string planeName) =>
         Profile.Planes.Any(p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase))
         && !IsSpecial(planeName)

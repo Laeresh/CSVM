@@ -317,6 +317,8 @@ public class HangarFeatureTests : IDisposable
 
         public bool Sellable { get; set; }
 
+        public bool RoomForOneMore { get; set; } = true;
+
         public List<CustomPlaneDef> Owned { get; } = new();
 
         public HashSet<string> Special { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -326,6 +328,8 @@ public class HangarFeatureTests : IDisposable
         public (string Name, int Airframe, int Cost)? Purchased { get; private set; }
 
         public int Funds => FundsValue;
+
+        public bool HasFreeSlot => RoomForOneMore;
 
         public bool CanAfford(int cost) => FundsValue >= cost;
 

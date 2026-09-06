@@ -18,6 +18,9 @@ public interface IHangarWallet
     /// <summary>The wallet balance in dollars.</summary>
     int Funds { get; }
 
+    /// <summary>Whether the profile has a slot for another bought plane.</summary>
+    bool HasFreeSlot { get; }
+
     /// <summary>Whether a build's total cost is affordable right now.</summary>
     bool CanAfford(int cost);
 
@@ -552,8 +555,8 @@ public sealed class HangarFeature : IMenuFeature
 
     /// <summary>Why a commit would be refused right now, in the original's own words, or null when
     /// it would save: a name (langui 203), then the economy's verdict (1182 with 1227 OVERWEIGHT or
-    /// 1171 No Engine Selected), then over a wallet an unavailable airframe or an unaffordable total
-    /// (1226). Funds are never checked on a wallet-free door.</summary>
+    /// 1171 No Engine Selected), then over a wallet a full hangar (204), an unavailable airframe or
+    /// an unaffordable total (1226). Neither slots nor funds are checked on a wallet-free door.</summary>
     public string? Refusal()
     {
         if (string.IsNullOrWhiteSpace(Scratch.Name))
@@ -571,6 +574,15 @@ public sealed class HangarFeature : IMenuFeature
 
         if (Wallet is { } wallet)
         {
+            // Ahead of the funds line because a full hangar is the refusal that names its own
+            // remedy, and selling a plane back at full price answers both at once.
+            if (!wallet.HasFreeSlot)
+            {
+                return Strings.Text(
+                    204,
+                    "You have reached your hangar limit of planes.  Click Sell Planes, and sell one or more planes.");
+            }
+
             if (!wallet.IsAirframeAvailable(Scratch.Airframe))
             {
                 return Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " That airframe is not available yet.";

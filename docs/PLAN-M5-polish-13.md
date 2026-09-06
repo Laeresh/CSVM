@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-723` An armour step adds 4 lb where the original's dropdown step adds 20
 2. ☑ `BL-724` The ARMOR screen sets each wing on its own where the original moves both together
-3. ☐ `BL-650` The campaign hangar's decoded slot cap is not enforced
+3. ☑ `BL-650` The campaign hangar's decoded slot cap is not enforced
 
 ### Wave B — The campaign boards' panes, and the shots that pin them
 
@@ -299,7 +299,44 @@ the UI, not the model.** A saved profile with unequal wings must still load and 
 stepped. Whichever way `A1` settled the scale is the value this row now writes twice, so run `A1`
 first or this lands on a number that then moves.
 
-## A3 ☐ `BL-650` The campaign hangar's decoded slot cap is not enforced
+## A3 ☑ `BL-650` The campaign hangar's decoded slot cap is not enforced
+
+**Landed.** The cap is **20 bought planes**, which is neither of the two readings the item offered.
+The profile's array is 25 records (`0x0064b78c` to `0x0064cb77`, stride 204), and two finders share
+it. The award half `FUN_00406060` takes the first record whose class dword is `0`, scanning all 25
+with nothing held back. The purchase half `FUN_004111f0` walks the same 25 with a counter seeded at
+`-5` that rises once per record that is empty or special (class `2`), and returns `-1` unless that
+counter reaches 1. A purchase therefore needs six of the 25 to be empty or special: one for the
+plane being bought, five for the mission awards. An already granted award keeps counting towards
+the six, its own record being the reservation it was holding, so the specials cancel out of the
+arithmetic and what the finder enforces is a cap on bought planes alone, 25 less the five awards,
+whatever the profile has been awarded. A profile holding 19 bought planes and all five awards may
+still buy its twentieth and fill the array exactly; one holding 20 bought planes and no award at
+all is refused with five records still empty, held for awards that have not arrived. A cap of 25
+would let a profile crowd out an award it has not received yet, and a cap of 19 would refuse a
+purchase the original accepts.
+
+`CampaignWallet.PurchasedPlaneCap` is that 20, and `HasFreeSlot` counts the profile's records that
+are not `Special` against it. That is a count of ownership records and never of the build directory
+the two modes share; `CustomPlaneDef.AwaitingExport` is what separates them there and is untouched
+by this item. `IHangarWallet` carries the predicate and `HangarFeature.Refusal` composes `langui`
+204 from it, ahead of the funds line because a full hangar is the refusal that names its own remedy
+and one sale at full build cost answers both at once. Both presentations reach it through that one
+seam, and a wallet-free door still checks neither slots nor funds.
+
+`docs/org/hangar.md` gains "The slot cap reserves the five awards", which carries the two finders,
+the arithmetic and the addresses, so the paragraph under the sell price now points there instead of
+naming a bare six. The same file's claim that the two-plane sell floor is "the free-slot finder's
+own floor" was wrong (that finder holds no floor at all) and the wording it seeded in
+`CampaignWallet.CanSell` is corrected to the sell handler.
+
+**Left for the orchestrator.** `HangarPurchasePage`'s `BuildEnabled` and `CampaignProblemsText`
+still know only the two campaign reasons, so Built-in's Purchase Now row stays live at the cap and
+refuses on the press rather than greying before it. Both are outside this item's fence.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A campaign purchase past the profile's slot cap is refused with the original's own
 message rather than silently completing, so a wealthy profile cannot grow its inventory past
