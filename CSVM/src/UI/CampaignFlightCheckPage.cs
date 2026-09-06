@@ -628,9 +628,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // airframe, so it must never be looked up by name: a hangar plane called "Devastator" would
     // otherwise fit that guest with somebody else's build.
     // ⚠ Do not drop the cache: CustomPlaneStore.Load re-reads and re-parses the file on every
-    // call, and the board asks for these rows dozens of times per repaint. The seated profile is
-    // the key because the one thing that rewrites a build, a hangar visit, replaces the profile
-    // instance on the way back (CampaignFeature.Resume).
+    // call, and the board asks for these rows dozens of times per repaint. It is keyed by profile
+    // instance because a hangar visit replaces that instance (CampaignFeature.Resume).
     private CustomPlaneDef? BuildFor(OwnedPlane plane)
     {
         if (Flow.Field.IsStock(plane))
