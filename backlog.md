@@ -1162,49 +1162,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
 
-- `BL-317` `[Research]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The original renders ambient wisp puffs around the plane at all times —
-  a third cloud population we don't have** (user at the controls of the original, 2026-08-08).
-  Identified while re-reading CAP-12's climb: the "first wisps at ~982 m" are these plane-local
-  puffs, not the `fvol` field appearing and not the whiteout ramp — "another disjunct feature."
-  ⚠ Vocabulary: this is a THIRD population beside the `fvol` `cloudsprite` field and the
-  world-placed `cloudparent` clusters (`BL-325` carries the full vocabulary note) — a claim about
-  one is not evidence about the others. Note the deleted hand-tuned `CloudPuffs.cs` (removed by `BL-273`,
-  2026-08-06) accidentally imitated exactly this; its constants survive in git history as a
-  starting point, but the decode should come from footage: when they are visible, their size,
-  count, and whether they move with the air or hang world-fixed. Needs a dedicated original
-  capture at several altitudes in clear air away from the deck band.
-  ⚠ **The original exclusion of authored puffers was wrong** (corrected 2026-08-10). The census
-  filtered out `ON_CALL` events, but chapter-local `speed_cue.zrd` is an `ON_CALL` animation that
-  player setup starts automatically and that loops every 0.1 s. Its three distance puffers attach
-  at `player (0,0,-60)` — 60 m ahead — and use `smoke101`–`103`, 2.5–4.5 m size, 3–4 s life,
-  transparent→low-alpha white→transparent colour, and 30/15/8 m intervals selected by camera
-  altitude. Emitted particles stay in world space. C1 and C4 have the same geometry and timing;
-  C4 raises the three midpoint alphas from 0.4/0.5/0.5 to 0.6/0.7/0.7. This exactly matches the
-  user's new observations: the texture pool, low opacity, spawning directly ahead, the aircraft
-  passing each puff, and ~24 visible frames at ~110 mph versus ~8 at ~300 mph. Full data and
-  Ghidra runtime chain: `analysis/bl-317-plane-wisps/FINDINGS.md`.
-  ⚠ **Three other mechanisms are ruled out — do not re-walk them** (2026-08-09, `crimson.exe` via
-  Ghidra + a census of the shipped extraction; full evidence in that day's
-  `git log --grep=BL-317`). (a) The profiler bucket **`ZBT_CAMDYN_CLOUDHACK`**, whose name
-  promises exactly this feature, brackets `FUN_0042ee40` — the `CLOUD_COVER` whiteout and band
-  flicker this repo already decodes (`WeatherRig.BandFlicker`, `weather.md`). It renders no
-  sprites at all. (b) The GameGen keyword **`fluff`** (node-flag bit 12 = `0x1000` =
-  `flags.unk12`, gated by the debug switch `CameraRenderFluffClutter`) is **foliage**: 47 nodes,
-  all in C1, all fir trees and bushes, bbox 3.7 × 6.7 m at ground level — see `gamez.md`'s
-  bit-12 bullet, written so this one is not chased twice. (c) There is **no third cloud
-  population in the world data**: sweeping every node name in all eight chapters returns only
-  `cloudparent` and `cloudsprite1/2` plus effect emitters. The wisps are neither world geometry nor
-  clutter; they are the authored `speed_cue` puffer above.
-  ⚠ **The hard-coded aircraft-local puffer is separate engine exhaust** (2026-08-10):
-  `FUN_00476250` creates a `FUN_00550100` puffer at every
-  `exhaust%d` locator (`exhaust1`, `exhaust2`, …); `FUN_004afbc0` enables it only from a
-  positive commanded-vs-current
-  throttle gap; `FUN_0054ee10` / `FUN_0054f8b0` leave world-space `smoke101`–`103` particles
-  behind the moving plane (0.4 m distance interval, 0.2–0.3 m initial size, 0.5–1.5 s life,
-  near-black→transparent). Its shared textures explain the false lead, but its rear attachment,
-  scale, colour, life and throttle trigger rule it out. **BL-317's spawning mechanism is now
-  located; remaining work is to implement the authored `speed_cue` animation/puffers in CSVM.**
-
 - `BL-322` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
   vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT fog — `BL-303`'s own adjunct note, and the Wave
@@ -1242,7 +1199,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ **Vocabulary — three populations, never one phrase for two** (`BL-118`'s note, kept alive
   here): **`cloudsprite1`/`cloudsprite2`** are the `fvol*` clutter scatter (the deck field,
   world-locked and tiled); **`cloudparent`** are discrete world-placed clusters (C1B's 70, C1's
-  28, C4's 45); and `BL-317`'s **plane-local ambient wisps** are a third. A claim about one is not
+  28, C4's 45); and the **plane-local ambient wisps** each chapter's `speed_cue.zrd` emits 60 m
+  ahead of the player (`Flight.SpeedCue`, `docs/formats/effects.md`) are a third. A claim about one is not
   evidence about the others, and the first two **share their textures** — `--tex-override` on
   `cloud1.tif`/`cloud2.tif` paints both (`SHOT-21`), so separate them by altitude or cluster
   position, never by texture.
@@ -1252,7 +1210,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   brightness knob beside `FogVolumeClutter`'s `CardVertexColorTune`.
   *Playtest after fix:* the C1B night spawn above, against `playtest/CAP-11/`'s t5 and t16
   frames, saying for every measured puff which side of the moon it faces.
-  *Cross-refs:* `BL-317` (the third population), `BL-327` (whether `lighting` gates `WorldLight`
+  *Cross-refs:* `docs/formats/effects.md`'s speed-cue section (the third population), `BL-327` (whether `lighting` gates `WorldLight`
   on a cloud card at all — if it does not, this item's arithmetic changes), `CAP-11`.
 
 - `BL-327` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **Is `lighting: true` on a `Facade` cloud card a `WorldLight` gate at all —

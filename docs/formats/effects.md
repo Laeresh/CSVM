@@ -196,7 +196,8 @@ commanded-versus-current throttle gap and otherwise decays it to off. The generi
 particles in world space, which is why they pass behind the moving aircraft.
 
 This is the executable counterpart of the throttle-rise smoke described in
-`CSVM/src/Flight/ThrottleSlamSmoke.cs`, not the speed-cue wisp system. The full BL-317 trace is in
+`CSVM/src/Flight/ThrottleSlamSmoke.cs`, not the speed-cue wisp system. The full Ghidra trace of
+both emitters, and of the mechanisms ruled out on the way to them, is in
 `analysis/bl-317-plane-wisps/FINDINGS.md`.
 
 
