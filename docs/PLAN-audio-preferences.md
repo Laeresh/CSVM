@@ -165,6 +165,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ The options carrier takes a level that is not a vocabulary word
 5. ☑ The slider the shell has never had
 6. ☑ The AUDIO page opens from Preferences
+8. ☐ A slider a player can hear while moving it
 7. ☐ The precedence ladder, and the re-based mix judged at the controls
 
 ## Dependency and parallelism notes
@@ -463,6 +464,50 @@ rows 2 to 4 sit about 26 pixels under theirs, because row 1 was authored for a c
 is now a slider at X=137; place it at the slider offset, not the checkbox's.
 
 **Verified.** <pending orchestrator run>
+
+## B8 ☐ A slider a player can hear while moving it
+
+**Goal.** While the AUDIO page is open, a level applies as it moves: the menu music follows Music and
+Master at once, and moving Effects or Voice fires a short sample on that bus so the level is
+audible. CANCEL CHANGES restores the mix that was saved before the page opened, and leaving by any
+other route does the same. Nothing here writes the options file.
+
+**Evidence (confidence: lead-only for the original, traced for the absence).** `playtest.md`'s
+`CAP-51` instructs "On Audio, move each of the three volume sliders and let the preview loop play"
+and names `BL-455` among the items it unblocks, so a preview was known about before this plan was
+written and no item carried it. ⚠ `CAP-51` is still unfilmed, so what the original actually plays,
+and whether it loops, is a claim in the record rather than a confirmed reading; this item builds a
+preview that serves the player, and the capture may later correct its shape. Traced: `AudioMix.Apply`
+has exactly two callers, `Launcher._Ready` and `Launcher.ApplyOptions`, so no level applies while the
+page is open. `MenuAudioService` already holds `_cuePlayer` on Effects and `_narration` on Voice, and
+`MusicPlayer` is on Music, so a player exists on all three category buses inside the menu.
+
+**Approach.** The three category sliders each get a sample the player can judge: Music needs none of
+its own, because the menu music is already playing on that bus, while Effects and Voice fire a short
+clip read from the sound archive. Master applies to all three at once, being their multiplier.
+`OriginalShell` is engine-free by contract and must not learn what a bus is, so the page states that
+a level moved and the host applies it, the same division the page already uses for its exit. Pick
+the two clips from the shipped archive rather than inventing one, and name in the report which they
+are and why.
+
+**Model recommendation.** high. The live apply breaks the property that made CANCEL trivially
+correct, and a cue fired on a pointer path can fire once per frame.
+
+**Verify.** Assert the restore, which is the half a player notices when it is wrong: open the page
+over a saved mix, move every level, cancel, and assert the three bus gains read back exactly what
+they were before the page opened; then the same through Back. Assert a preview cue fires on a level
+change and not on every frame of a drag. Assert the page still writes no options file, the single
+writer being `Launcher.ApplyOptions`. Then at the controls, in `B7`'s pass: each slider is audible
+while moving and the page leaves the mix where it found it on cancel. `.\RunTests.ps1` green.
+
+**⚠ Traps.** CANCEL is currently correct by accident, because nothing is ever applied while the page
+is open; once levels apply live, cancel has to restore the saved mix and the suite has to prove it
+against a mix that is nothing like the shipped defaults. A cue must fire on a value change, not on
+every pointer frame, or a drag becomes a machine gun; the drag moves a level many times per second.
+Do not fire a cue under `--run-tests`, `--det` or `--screenshot`, and do not let a preview reach the
+options file. Master is a multiplier, so moving it alone must move all three buses and not just one.
+The preview is a menu affordance and must not survive the page: leaving it applied on cancel is the
+failure this item exists to avoid.
 
 ## B7 ☐ The precedence ladder, and the re-based mix judged at the controls
 
