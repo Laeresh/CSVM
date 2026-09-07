@@ -502,6 +502,21 @@ both sit on top of these types.
 - `src/Bindings/BindingStore.cs` — the versioned JSON keymap file, one per player under `user://`, falling back per action to the shipped default.
 - `src/Bindings/LaunchBindings.cs` — where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults.
 
+### `src/Video/` — the MPEG-1 cinema decoder
+
+The managed decoder for the install's ten `.mpg` files, from the container down to pixels. It
+holds no engine type, so it runs in a plain unit test; formats and evidence are in
+[`formats/cinemas.md`](formats/cinemas.md).
+
+- `src/Video/MpegMovie.cs` — one cinema opened from its own bytes: the file's declared parameters, the next frame, and its audio packets.
+- `src/Video/MpegSystemStream.cs` — the system-stream demultiplexer: the video stream joined into one buffer, the audio one kept as timestamped packets.
+- `src/Video/MpegVideoDecoder.cs` — the video decoder: sequence, picture, slice and macroblock, yielding frames in display order on the container's clock.
+- `src/Video/MpegBitReader.cs` — the bit reader every symbol is read through: bit fields, alignment, start-code scanning, the variable-length code walk.
+- `src/Video/VideoVlcTables.cs` — the video variable-length code tables as data, each a flattened binary tree walked one bit at a time.
+- `src/Video/DctBlock.cs` — the 8x8 block: scan order, the default quantiser matrices, dequantisation, and the integer inverse transform.
+- `src/Video/MotionCompensation.cs` — half-pel motion-compensated prediction of one macroblock of one plane, written or averaged into the current picture.
+- `src/Video/VideoFrame.cs` — one decoded picture: three 4:2:0 planes, its presentation time, and the BT.601 conversion to RGBA.
+
 ### Session root and tests
 
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy, the launch-time roster split, the focus gate and `--no-pads`.

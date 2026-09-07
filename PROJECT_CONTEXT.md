@@ -169,6 +169,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/Flight/` — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
 - `src/Effects/` — particle systems: puffers, the ambient cloud field, precipitation, the world wind.
 - `src/UI/` — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
+- `src/Video/` — the managed MPEG-1 decoder for the install's `.mpg` cinemas: system-stream demux, video decode, frames as pixel buffers. Holds no engine type.
 - `src/Utils/` — session-wide services: clock, log, seed, shader time, config, startup profile, options, graphics mode. Determinism lives here.
 - `src/Testing/` — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
 - `src/Bindings/` — the input binding model and the named-action seam: device identity, the tagged control, the binding list an action resolves through, the registry that resolves a device identity to a live pad, the seat device state a polling site reads its pad set through, a player's action map resolved once per tick, and the shipped default keymap with its versioned per-player file.

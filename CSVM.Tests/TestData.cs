@@ -18,11 +18,22 @@ public static class TestData
     public const string NoDataReason =
         "no extracted game data: set CSVM_DATA_ROOT to a checkout holding extracted/ (or to the extraction tree itself)";
 
+    /// <summary>Printed by every skipped cinema test. The movies are not part of an extraction:
+    /// they sit loose in the retail install, so they are found by their own env var or by the
+    /// install path under a data root.</summary>
+    public const string NoMoviesReason =
+        "no cinema files: set CSVM_MPG_ROOT to the install's GOSDATA/ASSETS/GRAPHICS/MPG folder";
+
+    // Where the ten .mpg cinemas sit inside the retail install, relative to a data root.
+    private static readonly string[] MoviePathParts =
+        { "CrimsonSkiesGame", "GOSDATA", "ASSETS", "GRAPHICS", "MPG" };
+
     static TestData()
     {
         RepoRoot = FindRepoRoot(AppContext.BaseDirectory);
         ExtractedRoot = FindExtracted();
         DataRoot = ExtractedRoot == null ? null : Directory.GetParent(ExtractedRoot)?.FullName;
+        MovieRoot = FindMovies();
     }
 
     /// <summary>The repo checkout this assembly was built from.</summary>
@@ -35,6 +46,10 @@ public static class TestData
     /// <summary>The folder <c>extracted/</c> sits in — the "data root" the engine's
     /// <see cref="CSVM.SessionPaths"/> takes. Null when <see cref="ExtractedRoot"/> is.</summary>
     public static string? DataRoot { get; }
+
+    /// <summary>The install folder holding the ten <c>.mpg</c> cinemas, or null when none is
+    /// reachable.</summary>
+    public static string? MovieRoot { get; }
 
     /// <summary>Path of a committed fixture, e.g. <c>Fixture("zrdr")</c>.</summary>
     public static string Fixture(params string[] parts)
@@ -101,6 +116,43 @@ public static class TestData
     private static bool IsExtraction(string dir) =>
         Directory.Exists(dir)
         && (File.Exists(Path.Combine(dir, "zrdr.zip")) || Directory.Exists(Path.Combine(dir, "zrdr")));
+
+    // CSVM_MPG_ROOT names the folder itself; every other candidate is a data root the install
+    // path hangs under, which is the same shape the engine resolves game files through.
+    private static string? FindMovies()
+    {
+        string? direct = Environment.GetEnvironmentVariable("CSVM_MPG_ROOT");
+        if (!string.IsNullOrWhiteSpace(direct) && HasMovies(direct))
+        {
+            return Path.GetFullPath(direct);
+        }
+
+        foreach (var root in new[] { DataRoot, Environment.GetEnvironmentVariable("CSVM_DATA_ROOT"), RepoRoot })
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+
+            string candidate = root;
+            foreach (var part in MoviePathParts)
+            {
+                candidate = Path.Combine(candidate, part);
+            }
+
+            if (HasMovies(candidate))
+            {
+                return Path.GetFullPath(candidate);
+            }
+        }
+
+        return null;
+    }
+
+    // The looping front-end background is in every install and named the same way in all of
+    // them, so its presence is what says this folder is the cinema folder.
+    private static bool HasMovies(string dir) =>
+        Directory.Exists(dir) && File.Exists(Path.Combine(dir, "crimflag.mpg"));
 }
 
 /// <summary>
@@ -129,6 +181,31 @@ public sealed class ExtractedDataTheoryAttribute : TheoryAttribute
         if (TestData.ExtractedRoot == null)
         {
             Skip = TestData.NoDataReason;
+        }
+    }
+}
+
+/// <summary>A fact that needs the install's cinema files. They are not in an extraction, so
+/// they have their own probe and their own reason; see <see cref="TestData.MovieRoot"/>.</summary>
+public sealed class MovieDataFactAttribute : FactAttribute
+{
+    public MovieDataFactAttribute()
+    {
+        if (TestData.MovieRoot == null)
+        {
+            Skip = TestData.NoMoviesReason;
+        }
+    }
+}
+
+/// <summary>The data-driven twin of <see cref="MovieDataFactAttribute"/>.</summary>
+public sealed class MovieDataTheoryAttribute : TheoryAttribute
+{
+    public MovieDataTheoryAttribute()
+    {
+        if (TestData.MovieRoot == null)
+        {
+            Skip = TestData.NoMoviesReason;
         }
     }
 }

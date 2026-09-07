@@ -2,8 +2,8 @@
 
 Part of the [format documentation](README.md). This page describes the ten video files the retail
 install ships, what they actually are as containers and codecs, where the original names them from,
-and how CSVM would play them. Nothing in CSVM plays video today; the decision below is what any
-player work starts from.
+and how CSVM plays them. CSVM decodes them itself, in `CSVM.Video`; nothing composes a decoded
+frame on screen yet.
 
 ## Contents
 
@@ -12,6 +12,7 @@ player work starts from.
 - [Where the files are named from](#where-the-files-are-named-from)
 - [How the original plays them](#how-the-original-plays-them)
 - [Playing them in CSVM](#playing-them-in-csvm)
+- [Frame counts and durations](#frame-counts-and-durations)
 - [Evidence and limits](#evidence-and-limits)
 
 ## The shipped set
@@ -30,6 +31,13 @@ Ten files, about 110 MB together, all with the `.mpg` extension:
 Nine of the ten are cinemas in the ordinary sense, played once for the player to watch.
 `crimflag.mpg` is not: it is a decorative loop that runs behind four front-end screens as their
 backmost layer, which is why it is a tenth the size of the others and the only one authored in mono.
+
+They sit loose in the install under `GOSDATA\ASSETS\GRAPHICS\MPG\`, outside the `.rof` archive that
+holds the rest of the front end's art. The archive does carry an `ASSETS/GRAPHICS/MPG` directory
+entry, so an extraction produces that folder with nothing in it, and no extraction script names the
+files. `SessionPaths` resolves paths only under `dataRoot/extracted/`, so a player wanting these
+bytes has to be given them there; the extraction copying them across is `A5` of
+[`PLAN-cinemas.md`](../PLAN-cinemas.md).
 
 ## Container and codecs
 
@@ -148,6 +156,29 @@ double what anyone downloads, on top of a second licence file and a third payloa
 notices to lock. A trimmed ffmpeg built from source, on the `mech3ax` model, would land near 5 to
 10 MB and remains the fallback if the decoder work stalls.
 
+## Frame counts and durations
+
+No header states a frame count: it is what a walk of the whole file produces. These are the counts
+`CSVM.Video` yields, with the duration each implies at the file's own rate, and they are what
+`CSVM.Tests/MpegMovieTests.cs` holds the decoder to.
+
+| File | Frames | Duration |
+|---|---|---|
+| `crimflag.mpg` | 240 | 8.0 s |
+| `msopen1.mpg` | 404 | 13.5 s |
+| `zipper.mpg` | 608 | 20.3 s |
+| `chap0.mpg` | 4349 | 145.0 s |
+| `chap1.mpg` | 3926 | 130.9 s |
+| `chap2.mpg` | 3698 | 123.3 s |
+| `chap3.mpg` | 2784 | 92.8 s |
+| `chap4.mpg` | 4124 | 137.5 s |
+| `chap5.mpg` | 2874 | 95.8 s |
+| `final.mpg` | 3330 | 111.0 s |
+
+The flag loop is eight seconds long, the shortest of the ten by a wide margin, which is why it is
+a tenth the size of the others. `msopen1.mpg` is the only one whose duration is read against
+30000/1001 rather than 30.
+
 ## Evidence and limits
 
 The container and codec facts above are read out of the files' own pack, sequence and audio frame
@@ -157,16 +188,15 @@ over `crimson.exe`, with every address stated at the claim it supports.
 
 Where this stops:
 
-- **No frame of these files has ever been displayed by this project.** No decoder exists in the
-  checkout yet, so every claim here rests on headers and on the reader, layout and script data
-  rather than on decoded pixels. There is also no reference decoder to check a first decode
-  against, and MPEG-1 permits IDCT mismatch between conformant decoders, so exact-match testing
-  against one would not work even if there were. Correctness is settled the way every other
-  presentation claim in this project is settled, by the user at the controls.
+- **No frame of these files has been displayed by this project.** All ten decode end to end in
+  `CSVM.Video`, which is where the frame counts below come from, but nothing composes a decoded
+  frame on screen, so no claim here rests on a picture anyone has looked at. There is also no
+  reference decoder to check the decode against, and MPEG-1 permits IDCT mismatch between
+  conformant decoders, so exact-match testing against one would not work even if there were.
+  Correctness is settled the way every other presentation claim in this project is settled, by
+  the user at the controls.
 - **The engine side of the script callbacks is not traced.** Callback 2151 supplies the chapter
   number `CAMPAIGNINTRO` builds its filename from, and callback 3104 gates the final cinema, but
   neither was followed into the executable: the script callback dispatch is not a plain switch on
   the id, so finding it is its own job. Neither blocks a player, since the chapter number is
   something the campaign already knows and the gate is campaign completion.
-- **Per-file durations and frame counts are not stated.** Only the first sequence header of each
-  file was parsed; the headers give the frame rate but the files were not walked to the end.

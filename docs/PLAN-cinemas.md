@@ -14,11 +14,15 @@ record (`git log --grep=BL-446` finds only its minting; `docs/PLAN-public-releas
 as a shipped known limitation) and the code (the tree contains no `VideoStreamPlayer`, no `.ogv`
 and no transcode step).
 
-**Transcoding is out of scope and stays out.** No ffmpeg, no `.ogv`, no change to the extraction
-scripts or the release manifest. The decode happens at runtime from the player's own shipped bytes.
+**Transcoding is out of scope and stays out.** No ffmpeg, no `.ogv`, no conversion of any kind, and
+no media binary in the release. The decode happens at runtime from the player's own shipped bytes.
 The engine side of GUI script callbacks 2151 and 3104 is also out of scope: this plan reads the
 chapter number and the completion gate from CSVM's own campaign state rather than tracing the
 original's dispatch.
+
+**The extraction does gain one step, and only one.** The ten files are not in `extracted/` and no
+extraction script has ever mentioned them, so `A5` copies them across verbatim. That is a copy, not
+a conversion, and it is the whole of this plan's reach into `packaging/` beyond `A4`'s notice.
 
 ## Milestone goal
 
@@ -58,10 +62,12 @@ prose below disagrees with itself.
 | 1 | The chapter cinemas are named by the executable, from the `char[9]` array at `0x0061e68c`. | `get_xrefs_to` shows the array's only reference is a pointer at `0x0061daec`, and that slot has no code reference at all. `CAMPAIGNINTRO.SCRIPT` builds the name as `"chap" conv$(FC) ".mpg"`. The array is dead, which is also why `chap6.mpg` has no file. |
 | 2 | Nothing names `final.mpg` or `crimflag.mpg`. | `ASSETS/LAYOUT.CSV` names both, as `movie` widgets on six screens. Neither string appears in `crimson.exe` at all. |
 | 3 | A case-sensitive lookup fails on the three names `fmv.zrd` spells with capitals. | It fails on four of the ten files (`msopen1.mpg`, `chap0.mpg`, `crimflag.mpg`, `final.mpg`). `zipper.mpg` was always spelled to match, and the script-built chapter names are lower case. |
+| 4 | The ten files are reachable, so playing them is only a decoding problem. | They are not in `extracted/` at all. They sit loose in the install under `GOSDATA\ASSETS\GRAPHICS\MPG\`; `extracted/rof/ASSETS/GRAPHICS/MPG/` is an empty directory entry, `ExtractRof.ps1` never mentions them, and `SessionPaths` resolves nothing outside `dataRoot/extracted/`. `A5` exists because of this. |
+| 5 | `packaging/BuildThirdPartyNotices.ps1` assembles three sections, so pl_mpeg's is the fourth. | It assembles six, and pl_mpeg's is the seventh. The count in `A4`'s Evidence was wrong; the `Section` helper it named was right. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B11, B12, C22, C23, C24 | Confirm the trace against [`docs/formats/cinemas.md`](formats/cinemas.md), then implement. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A5, B11, B12, C22, C23, C24 | Confirm the trace against [`docs/formats/cinemas.md`](formats/cinemas.md), then implement. |
 | **Leads only — no mechanism yet** | A3, A4, C21 | Budget for investigation; C21's premise in particular rests on recall, not on a decode. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
@@ -111,6 +117,9 @@ Full census in [`docs/formats/cinemas.md`](formats/cinemas.md); the facts this p
 - **Read the module's entry in `docs/architecture/<Namespace>.md` (found through the index in
   `docs/architecture.md`) before modifying it,** then the comments on the members you touch; dead
   ends are in the landing commits (`git log --grep=<ID>`), so search those before re-chasing one.
+- **Every item here runs on Opus.** That is why each item's Model recommendation says only "Opus":
+  the tier is a property of this project's orchestration rather than of any one item, and a cheaper
+  tier on a wave of items has already cost this project two whole waves of work.
 
 ## Checklist
 
@@ -118,10 +127,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the decoder, headless
 
-1. ☐ System-stream demux and MPEG-1 video decode, as a managed module with no Godot in it
+1. ☑ System-stream demux and MPEG-1 video decode, as a managed module with no Godot in it
 2. ☐ MPEG-1 audio layer II decode
 3. ☐ The test surface: spec vectors, and whole-file checks skipped when `extracted/` is absent
-4. ☐ The port's third-party notice
+4. ☑ The port's third-party notice
+5. ☐ The extraction copies the ten `.mpg` files into `extracted/`
 
 ### Wave B — the flag background
 
@@ -138,21 +148,74 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ## Dependency and parallelism notes
 
 A1 blocks everything; nothing else in the plan can start until frames come out of a file. A2 blocks
-C21 only, so it can run in parallel with all of Wave B. A3 follows A1 and A2 and is the wave's exit
-gate. A4 is independent of the code and can run at any point in Wave A.
+C21 only, so it can run in parallel with all of Wave B. A3 follows A1, A2 and A5, and is the wave's
+exit gate. A4 and A5 are independent of the code and can run at any point in Wave A.
 
-B11 needs A1. B12 needs B11. C21 needs A2 and B11. C22, C23 and C24 each need C21 and B11, and are
-independent of each other.
+A5 blocks every item that names a file rather than taking bytes: A3's whole-file half, B12, C22, C23
+and C24 all resolve a path that does not resolve until it lands. A1, A2 and B11 are unaffected,
+because each takes bytes or a stream from its caller and never names a file of its own.
+
+B11 needs A1. B12 needs B11 and A5. C21 needs A2 and B11. C22, C23 and C24 each need C21, B11 and
+A5, and are independent of each other.
 
 File contention: B12, C23 and C24 all touch the front-end composition (`CampaignBoards.cs`,
 `OriginalAssetManifest.cs`), so they must not run in parallel worktrees. A4 is the only item that
-touches `packaging/`.
+touches `packaging/`, and A5 the only one that touches `ExtractRof.ps1`.
 
 ---
 
 # Wave A — the decoder, headless
 
-## A1 ☐ System-stream demux and MPEG-1 video decode, as a managed module with no Godot in it
+## A1 ☑ System-stream demux and MPEG-1 video decode, as a managed module with no Godot in it
+
+**Landed.** `CSVM.Video`, eight modules under `CSVM/src/Video/`, with `docs/architecture/Video.md`
+and its index section. `MpegMovie` is the façade: `FromFile`/`FromBytes`, then `Width`, `Height`,
+`FrameRate`, `PixelAspectRatio`, `NextFrame()` returning null at the end, and `Rewind()`. Frames
+alias the decoder's rotating buffers and are valid only until the next call, which the member says.
+`MpegSystemStream` and `MpegVideoDecoder` are usable on their own, which is what `B11` needs.
+
+The VLC tables and the four 64-entry transform tables were generated and checked by script against
+the reference rather than transcribed by hand, and the generator stayed out of the repo. The port
+diverges from `pl_mpeg` in four places, each a defect in the reference rather than a preference:
+its motion-compensation guard is a flat-offset check that permits a read past a plane and a
+horizontally wrapped prediction, where this one checks rows and columns and repeats the edge sample;
+its picture loop can spin forever on a header it rejects, where this one drops the start code and
+rescans; it leaves a half-filled block behind after an invalid run, leaking into every later block of
+the picture, where this one clears it; and its packet header parse reads two bits and then skips
+sixteen for a sixteen-bit P-STD field, so the demux here is written from ISO 11172-1 byte by byte,
+which is what the Approach asked for anyway.
+
+**Verified.** The full battery on the merged tree, run by the orchestrator rather than reported by
+the agent: `.\RunTests.ps1` PASS, exit 0, 275.5 s. Build 2.6 s with zero StyleCop warnings; units
+84.6 s, 3639 passed, 0 failed, 0 skipped; engine 145.6 s, 263 passed, engine errors clean; goldens
+42.6 s, 18 shots hash-identical. All ten files decode end to end, all 320x240 with square pixels:
+`crimflag` 240 frames in 8.0 s, `msopen1` 404 in 13.5 s at 30000/1001 fps, `zipper` 608 in 20.3 s,
+`chap0` 4349 in 145.0 s, `chap1` 3926, `chap2` 3698, `chap3` 2784, `chap4` 4124, `chap5` 2874, and
+`final` 3330 in 111.0 s, the other nine all at 30.0 fps. Frame times increase strictly and land at
+`firstPts + n/rate` throughout. The skip path was exercised separately: with the files unreachable
+the theory reports one skipped and zero passed, so an absent install cannot read as a pass.
+`VideoNamespaceDependencyTests` scans `CSVM.dll` for the `CSVM.Video` subject namespace and bans
+every `Godot.` type, and `AssemblyDependencyScan.Violations` throws on a scan that matches nothing,
+so the boundary cannot go green on an empty scan.
+
+**⚠ The transform keeps the reference's precision loss, deliberately.** `pl_mpeg` holds its inverse
+transform's scale factors to eight bits, which attenuates the topmost basis function by about 18%:
+a lone coefficient at index 63 measures 16 against the standard's 19.677. ISO 11172-2 permits
+exactly this mismatch between conformant decoders, and Decision 7 settles correctness at the
+controls, so the arithmetic stands and the tables it comes from are pinned exactly instead.
+`ThePremultiplierIsTheTransformsOwnScaleFactors` checks all 64 entries against
+`round(32 * s(u) * s(v))`, and the transform test uses a documented loose bound that a wrong
+constant or a transposed pass still overshoots by an order of magnitude. If anything looks soft or
+ringy at the controls in `B12` or `C21`, this is the first thing to suspect and the cheapest to
+change.
+
+**⚠ The unit stage is now over budget.** The ten full decodes add about 55 s, taking units from
+roughly 16 s to 84.6 s against a 30 s budget, and the whole run to 275.5 s against 180 s. Both are
+awareness-only and the exit code is unchanged. `A3` owns the fix. The engine stage is separately
+over budget at 145.6 s against 100 s, measured with no concurrent load and with nothing in the
+engine referencing `CSVM.Video`, so that one is not this item's and not this plan's.
+
+### Original approach (kept for reference)
 
 **Goal.** Given the bytes of any of the ten files, the module yields decoded frames as raw pixel
 buffers, in order, with their presentation timestamps, running in a plain unit test with no engine
@@ -172,7 +235,7 @@ decode loop as a deep module whose public surface is "give me the next frame". N
 the boundary, which is what makes A3 possible and what Decision 4 relies on. Do not touch the
 extraction scripts or `packaging/`; this module reads bytes handed to it.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** Frame count, dimensions and frame rate for each of the ten files match what the headers
 declare, run against a real `extracted/` tree. `.\RunTests.ps1` green.
@@ -192,7 +255,16 @@ stereo at 64 kbps where the other stereo files run higher.
 
 **Approach.** The layer II half of the same `pl_mpeg` port. Same module, same no-Godot boundary.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**The contract `A1` left for this item.** `MpegMovie.AudioPackets` is an
+`IReadOnlyList<MpegPacket>` in container order. Each packet carries `StreamId` (`0xC0` for all ten
+files), `Time` in seconds on the container's 90 kHz clock with `MpegSystemStream.NoTimestamp`
+(-1.0) where the packet carried none, and `Data` as a `ReadOnlyMemory<byte>` window into the file
+bytes rather than a copy. Concatenating the payloads gives the layer II elementary stream. The
+timestamps share a clock with `VideoFrame.Time`, so `C21` needs no second time base. Nothing in
+`A1` decodes, inspects or validates an audio payload, so every claim about the contents of these
+packets is this item's to establish. Packet counts per file are in `A1`'s Verified paragraph.
+
+**Model recommendation.** Opus.
 
 **Verify.** Sample rate, channel count and frame count per file match the headers. `.\RunTests.ps1`
 green.
@@ -203,7 +275,15 @@ stereo-only path breaks the first visible deliverable.
 ## A3 ☐ The test surface: spec vectors, and whole-file checks skipped when `extracted/` is absent
 
 **Goal.** `.\RunTests.ps1` gates the decoder on a machine with no game install, and gates it harder
-on a machine with one.
+on a machine with one, without the landing gate costing five times what it did.
+
+**⚠ Inherited from A1: the unit stage is over budget.** The ten full decodes cost about 55 s, taking
+units from roughly 16 s to 84.6 s against a 30 s budget. Put the whole-file walk behind a switch, or
+reduce it to a sample with the full ten opt-in. Do not resolve this by raising the budget in
+`analysis/verification-budgets.json`: the budget is the tripwire, and moving it hides the thing it
+was put there to show. `A1` also left `MovieDataFactAttribute`/`MovieDataTheoryAttribute` in
+`CSVM.Tests/TestData.cs`, which probes `CSVM_MPG_ROOT` and then the install path with `crimflag.mpg`
+as its marker; folding it into the existing extraction probe is this item's call to make.
 
 **Evidence (confidence: lead-only).** `PROJECT_CONTEXT.md:101` describes `CSVM.Tests` as "reader
 units on hand-authored fixtures + `extracted/` golden counts, skipped when absent", which is the
@@ -216,7 +296,7 @@ hand-authored fixtures and commit freely. The whole-file checks ride the existin
 pattern. Per Decision 7, ffmpeg may be used once informally on a development machine as a sanity
 check and is never committed and never shipped.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** The suite passes with `extracted/` absent and with it present. Deliberately corrupt one
 VLC table entry and confirm a test fails, because an unchanged number is not evidence until you have
@@ -226,7 +306,37 @@ seen it able to fail.
 exact pixel equality against another decoder's output is wrong even when both decoders are right.
 ⚠ No `.mpg` from the install may be committed as a fixture.
 
-## A4 ☐ The port's third-party notice
+## A4 ☑ The port's third-party notice
+
+**Landed.** `packaging/LICENSE-plmpeg` holds the MIT terms with `Dominic Szablewski` as the holder
+and no year, because upstream declares MIT by SPDX identifier alone: the repository ships no
+`LICENSE` file and the header carries no licence block in its 3614 lines. The terms therefore live
+in this repo rather than being read out of a shipped artefact, and both
+`packaging/BuildThirdPartyNotices.ps1` and `packaging/MANIFEST.md` say so at the point a reader
+would otherwise assume the opposite. The notice is section 7, guarded by a `Test-Path` whose error
+explains why the text is local. `packaging/MANIFEST.md` gains a row for the new file and records
+that it takes no `$ReleaseFiles` entry, since a licence file shipped loose would be a stray. The
+notice covers source this project ported, not a binary it redistributes, and is worded that way.
+
+**Verified.** The regenerated `LICENSE-thirdparty.txt` reproduces every upstream text and the whole
+74-crate enumeration byte-identically, so the run read the same artefacts the committed file was
+built from; the diff is section 7 plus the header lines that count the sections. `CheckEncoding.ps1`
+reports no mojibake over the whole tree. The generated file has no BOM, 7119 CRLF pairs and no bare
+LF, and decodes clean under a strict `UTF8Encoding($false, $true)` over all 367626 bytes. The
+version lock is `ExportRelease.ps1:108-119`, three `[regex]::Match` calls over the whole document
+for the Godot build, the .NET runtime version and the `mech3ax cs-anim` commit; each still matches
+exactly once, inside the header, at the values the export compares against. Section 7 adds no fourth
+stamp on purpose, because ported source moves with CSVM's own commit, which `BUILD-INFO.txt`
+already records, and an unchecked stamp is a claim nothing enforces.
+
+**⚠ Author review.** `packaging/README.md` gained a clause naming pl_mpeg in the recipient-facing
+list of what `LICENSE-thirdparty.txt` covers. `MANIFEST.md` marks that file author-reviewed before
+hand-off, so the clause needs your eyes rather than a check's.
+
+**⚠ The Evidence below was wrong about the section count.** The script assembles six sections, not
+three, so this notice is the seventh and not the fourth. The `Section` helper it named was right.
+
+### Original approach (kept for reference)
 
 **Goal.** The release carries `pl_mpeg`'s MIT notice, assembled the same way every other notice is.
 
@@ -240,13 +350,47 @@ source is a natural extension, but no such section exists yet and its exact shap
 corresponding row in `packaging/MANIFEST.md`. Keep the script pure ASCII and write through the .NET
 APIs, per the header's own note about PowerShell 5.1 double-encoding copyright signs.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** `packaging/BuildThirdPartyNotices.ps1` regenerates cleanly, `CheckEncoding.ps1` passes,
 and the generated file contains the notice.
 
 **⚠ Traps.** ⚠ The notices file is version-locked and the export throws when the header disagrees
 with what it is packaging; a new section must not break that check.
+
+## A5 ☐ The extraction copies the ten `.mpg` files into `extracted/`
+
+**Goal.** After a recipient runs the extraction, the ten files sit under the data root where
+`SessionPaths` can reach them, so every later item can name a file instead of being handed bytes.
+
+**Evidence (confidence: traced).** Nothing puts them there today, checked four ways. The files are
+loose in the install at `GOSDATA\ASSETS\GRAPHICS\MPG\`, outside the `.rof` archive, 10 files and
+106 MB. `extracted/rof/ASSETS/GRAPHICS/MPG/` exists but is empty, a directory entry the archive
+carries with no payload behind it. `ExtractRof.ps1` contains no occurrence of `MPG`, `GRAPHICS`,
+`.mpg` or `Copy-Item`. `SessionPaths.cs` resolves only `dataRoot/extracted/...` and has no concept
+of an install root, so reading them in place would need a path concept the project does not have.
+For scale, the extraction is already 1534 MB across 61011 files, so the copy grows it by about 7%
+and grows the 78 MB download by nothing.
+
+**Approach.** `ExtractRof.ps1` copies the ten files verbatim from the install into
+`extracted/rof/ASSETS/GRAPHICS/MPG/`. A copy, never a conversion. Record the step in
+`extracted/VERSION.json`'s `rof` section and bump its schema, then find every reader of that schema
+number and update it in the same turn. Make the copy idempotent and skip a file already present at
+the right size, or a re-extraction pays 106 MB of copying it did not need to.
+
+**Model recommendation.** Opus.
+
+**Verify.** Run the extraction against the real install and confirm the ten files arrive with
+byte-identical lengths, then re-run it and confirm the second pass copies nothing. `git status` must
+stay clean afterwards, which is the check that the copy landed somewhere ignored.
+
+**⚠ Traps.** ⚠ **No `.mpg` may ever be committed.** The target must be inside the ignored
+`extracted/` tree, and that must be confirmed rather than assumed, because a 106 MB accident here is
+exactly what `CheckCommitContent.ps1` exists to catch and exactly what it would be embarrassing to
+need. ⚠ Four of the ten names are spelled in a case the data does not have, which Windows forgives
+and a case-sensitive reader would not; keep the on-disk names verbatim and resolve
+case-insensitively rather than renaming on the way in. ⚠ The schema bump is only safe once every
+reader of it is found; a bumped number nothing reads is worse than no bump at all.
 
 ---
 
@@ -266,7 +410,7 @@ layout's `Loops` field is a play count in which zero means endless.
 texture for the composition to draw. Feed it the layout row's `Loops`. Nothing here knows which
 screen it is on.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** <TODO: name the headless check that proves the clock advances at the file's own rate,
 including the 29.97 fps file>
@@ -289,7 +433,7 @@ dialog's title mark "stands alone and the ground behind it stays plain". Both la
 `NotDrawn` entries. Take the position and scale from the layout row rather than hardcoding them, so
 the two screens that are not yet composed (`Save`, `Load`) need no second implementation.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** Both screens at the controls, judged by the user, per Decision 7. Then pin goldens for
 both as the drift tripwire, and confirm `git diff` shows `analysis/goldens/manifest.json` unmodified
@@ -318,7 +462,7 @@ II track, read from its frame headers, so the tracks exist regardless.
 stream's presentation timestamps. Route onto whatever bus `PLAN-audio-preferences` lands; today
 `Launcher.cs` touches only `MasterBus`.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** The user watches a full cinema end to end and confirms the audio has not drifted by the
 end, which is the failure this item exists to prevent.
@@ -342,7 +486,7 @@ present so no test, golden or perf launch grows by two minutes. Add `--skip-intr
 documented as the bare-launch desktop-shortcut case rather than as a general suppressor, since any
 argument already suppresses.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** A bare launch plays the sequence and a key press reaches the launch screen. A launch with
 any argument plays nothing. `.\RunTests.ps1` wall time is unchanged, checked against
@@ -366,7 +510,7 @@ Return or a left mouse press, all posting message 11006, which runs `script_cont
 than from callback 2151, which stays untraced and out of scope. The `CrimFlag.MPG` in the
 `CampaignIntro` layout row is a placeholder the original overwrites, so do not read it.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** <TODO: name the chapter to run and the handoff to confirm at the controls>
 
@@ -387,7 +531,7 @@ which is `Final.MPG`. It skips on Escape or a left mouse press only, not Space a
 **Approach.** A flow state in C#, with the gate read from CSVM's own campaign-completion state
 rather than from callback 3104.
 
-**Model recommendation.** <TODO: not settled in the session that wrote this plan>
+**Model recommendation.** Opus.
 
 **Verify.** <TODO: name how a completed campaign is reached or simulated for this check>
 
