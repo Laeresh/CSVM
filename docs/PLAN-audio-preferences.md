@@ -20,11 +20,13 @@ returns `13cf0f18 A3 BL-455: delete AiControlLaw.Throttle's dead far-from-player
 different item under a reused number from the same day; the live entry was minted in `3bbc4a7d` and
 has no closing commit. No other backlog item is drawn into this plan.
 
-**Another session is building `docs/PLAN-video-preferences.md` at the same time.** That plan's `B2`
-widens the same three types this plan's `B4` widens (`OptionsDef`, `OptionsStore`,
-`OptionsApplyExit`) and its `A1` adds a page partial beside the one this plan's `B6` adds. The
-contention is real and named in "Dependency and parallelism notes"; neither plan's carrier item may
-run while the other's is open.
+**The video plan has landed, so the contention is resolved in its favour.** The widening this plan's
+`B4` was going to race is already in the tree: `OptionsDef`, `OptionsStore`'s validation and the
+`OptionsApplyExit` record carry four display settings beside the three vocabulary words, and the
+VIDEO page is a built partial beside `OriginalGameOptions.cs` with `PF_B_VIDEO` enabled. `B4` extends
+that widening rather than performing a second one, and `B6` mirrors the video page rather than Game
+Options. Read both before starting either; their reasoning is in their landing commits
+(`git log --grep=BL-768`).
 
 ## Milestone goal
 
@@ -176,20 +178,14 @@ field) and are the one pair in this plan that can run in parallel; give B5 `Orig
 give B4 `OptionsStore.cs`/`MenuExit.cs`, and neither touches the other's file. B6 needs both. B7
 verifies the whole ladder and runs last.
 
-**Wave B waits on the video plan.** The video plan's `B2` and five of its siblings are landed on
-branch `video-preferences` and not yet on `main`, and that branch's `OriginalShell.cs` already
-occupies the regions `B5` and `B6` need: `PreferencesPageKeys`, the shell's saved-setting fields and
-its choice properties. Wave A is clean against `main` and runs first; Wave B runs after
-`video-preferences` merges to `main` and that merge is pulled into this branch, so `B4` widens the
-record the video plan actually shipped rather than a second copy of it.
-
-**Cross-plan contention with `docs/PLAN-video-preferences.md`.** B4 and that plan's B2 both widen
-`OptionsDef`, `OptionsStore`'s validation and the `OptionsApplyExit` record, which is deliberately a
-closed hierarchy; two independent widenings of it will conflict textually and, worse, will each
-review only their own half. Land one and rebase the other. B6 and that plan's A1 both add a page
-partial beside `OriginalGameOptions.cs` and both edit `PreferencesPageKeys`; the conflict there is a
-one-line array and is cheap, but B6 should read the video page's partial before mirroring Game
-Options, in case that plan already generalised the row shape.
+**The video plan landed first, so B4 and B6 build on it.** `OptionsDef`, `OptionsStore`'s validation
+and the `OptionsApplyExit` record are already widened once, which settles the question of two
+independent widenings of a deliberately closed hierarchy: B4 adds its fields to the widened shape and
+follows the validation the display settings established, where a value that is not a vocabulary word
+is proved by shape and dropped rather than failing the file. B6 mirrors the VIDEO page's partial
+rather than `OriginalGameOptions.cs`, since that page is the newer read of the row table and is
+already composed over its section's own authored geometry, and `PreferencesPageKeys` needs only its
+own door enabled.
 
 ---
 

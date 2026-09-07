@@ -187,15 +187,21 @@ the window, so a scripted pose and a suite walk still pick by index whatever the
 `OptionsStore` (`CSVM/src/Utils/OptionsStore.cs`) is the one process-wide options file,
 `user://options.json`, independent of any profile: version-tolerant (an unknown version invalidates
 the file, an unknown value drops only that field, a field the file does not carry reads as never
-set), read as empty when missing or malformed, written atomically. Its fields are
-`menuPresentation` (`built-in`, `original`), `graphicsMode` (`original`, `enhanced`) and
-`difficulty` (`normal`, `hard`, `hardest`); a value outside a field's set reads as never set.
+set), read as empty when missing or malformed, written atomically. Its word-valued fields are
+`menuPresentation` (`built-in`, `original`), `graphicsMode` (`original`, `enhanced`), `difficulty`
+(`normal`, `hard`, `hardest`), `displayMode` (`windowed`, `borderless`, `fullscreen`) and `vsync`
+(`on`, `off`, `60`, `120`, `144`); a value outside a field's set reads as never set. Two fields are
+not words: `monitorIndex` is a screen index rendered decimal and `resolution` is a canonical
+`1920x1080`, both validated by shape, so a malformed one is dropped the same way an unknown word is.
+Shape is all the store can prove. Whether that screen is plugged in and whether it offers that mode
+are questions for the caller holding an engine, which owns the fallback.
 
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
-a nullable field on `OptionsDef` with its accepted-value set, the two writes in `Serialize` and
+a nullable field on `OptionsDef` with its accepted-value set (or its shape check, and the canonical
+form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
 `Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options
-page draws its rows from, a value on `OptionsApplyExit`, and the line in `Launcher.ApplyOptions`
-that saves it. The store's
+or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
+`Launcher.ApplyOptions` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
 written before the field existed loads with everything it does have, and the version gate is
 reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
@@ -204,7 +210,24 @@ graphics mode that is `GraphicsMode.Resolve`, where the `--graphics=` flag beats
 which beats the `graphics.mode` config key (`docs/cli.md`); for the difficulty it is
 `SessionSpec.WithSavedDifficulty`, applied by `Launcher.LaunchSession` at every launch, where a
 parsed `--difficulty=` flag beats the saved word, a `--det` run reads no saved option, and the
-default is `normal`.
+default is `normal`. For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
+the saved word, which beats the `display.vsync` config key, which beats V-Sync on, and for the
+display mode `DisplayModeSetting.Resolve`, where the saved word beats the windowed default and
+there is no flag or config key above it. The window size is `ResolutionSetting.Resolve`, the same
+two layers over `project.godot`'s 1280x720, with the extra rule that the saved size has to be one
+the chosen screen offers: a size it does not offer falls back to that default rather than to the
+nearest, since every other option falls through to its own default and a nearest match would hand
+the player an aspect ratio they did not pick. The screen is `MonitorSetting.Resolve`, the one setting
+whose saved value can name something that is not there: an index no screen answers to is dropped like an
+unknown word and the window stays on the screen it already stands on, which is the primary on a launch
+that has moved nothing. A display setting is also the case where the apply does
+more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
+there and then rather than at the next start. Those calls run in the order the window needs them: the
+screen the window sits on first, since a mode applied before the move would fill the screen the
+window is leaving, then the mode, then the size, then the pacing. The startup half of the pair is not
+symmetric: the pacing is applied on every launch, the mode and the size only on a session someone is
+at, a scripted run's window being hidden off screen with its capture compared against the viewport
+`project.godot` pins.
 
 A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
 writer, so the options file has exactly one, and no test or suite that drives an Options screen
@@ -231,8 +254,10 @@ never re-selects.
 Every presentation exposes Options, since a player must be able to leave a presentation from inside
 it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
 page behind its Preferences page's first door (`--menu=game-options` under
-`--presentation=original`). Both offer the same saved options, read them from the store on entry,
-and leave through an `OptionsApplyExit` carrying every choice. Both presentation choosers offer the
+`--presentation=original`), with the graphics mode on the VIDEO page behind the third
+(`--menu=video`). Every one of them reads the saved options from the store on entry and leaves
+through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
+keeps its one writer. Both presentation choosers offer the
 two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
 below); both graphics choosers cover `original` and `enhanced` and say in their description that
 the choice takes effect on the next start, since the mode is resolved once at launch and applying
@@ -269,7 +294,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the requested `PresentationId` and the graphics-mode word | save both, then the three-call switch one frame later |
+| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, and the four display settings | save every one of them, then the three-call switch one frame later |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build
@@ -348,7 +373,9 @@ scan automatically; anything it adds to the shared namespace falls under the fir
 the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in's unless
 `--presentation=original` is set, in which case the same flag carries Original's own values
 (`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
-list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`, the
+list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
+`game-options` and `game-options:open` with its Difficulty list standing open, `video` and
+`video:checked` with its Enhanced Graphics box ticked, the
 `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
 poses, `campaign-delete`), and any other value opens that
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.

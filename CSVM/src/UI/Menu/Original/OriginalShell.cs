@@ -23,13 +23,17 @@ public enum OriginalScreen
     /// shape over the sortie roster, one joined seat picking at a time.</summary>
     SeatPlane,
 
-    /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS
-    /// door live and its three other doors drawn disabled.</summary>
+    /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS and
+    /// VIDEO doors live and its two other doors drawn disabled.</summary>
     Options,
 
     /// <summary>The decoded <c>[@GameOptions@]</c> page: the shared options in its authored row
     /// shape, with ACCEPT CHANGES and CANCEL CHANGES under them.</summary>
     GameOptions,
+
+    /// <summary>The decoded <c>[@Video@]</c> page: the display settings in its authored row shape,
+    /// with ACCEPT CHANGES and CANCEL CHANGES beside them.</summary>
+    Video,
 
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
@@ -146,15 +150,15 @@ public sealed record OriginalInks(
     MenuLayoutColor Disabled, MenuLayoutColor Active, MenuLayoutColor Rollover, MenuLayoutColor Depressed,
     MenuLayoutColor LabelNormal, MenuLayoutColor LabelRollover, MenuLayoutColor LabelDepressed);
 
-/// <summary>The colours the Options screen and the Game Options page write in, read off
+/// <summary>The colours the Options screen and the pages behind its doors write in, read off
 /// <c>[@Preferences@]</c>: its description rows' authored text colour and its title's, which
-/// <c>[@GameOptions@]</c> repeats row for row.</summary>
+/// <c>[@GameOptions@]</c> and <c>[@Video@]</c> repeat row for row.</summary>
 public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutColor Title);
 
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
 /// remake-only Free Flight and Dogfight doors, the sortie screens, the Options screen over the
-/// decoded Preferences chrome with the Game Options page behind its live door, and the decoded
+/// decoded Preferences chrome with the Game Options and VIDEO pages behind its two live doors, and the decoded
 /// Instant Action, loadout, campaign and hangar screens over their shared features (each family
 /// its own partial file), driven by each seat's semantic commands and composed into a
 /// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat
@@ -180,8 +184,20 @@ public sealed partial class OriginalShell
     /// <summary>The Game Options page's menu-presentation dropdown.</summary>
     public const string PresentationKey = "PRESENTATION";
 
-    /// <summary>The Game Options page's enhanced-graphics checkbox.</summary>
+    /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
+
+    /// <summary>The VIDEO page's monitor dropdown, the page's first row.</summary>
+    public const string MonitorKey = "MONITOR";
+
+    /// <summary>The VIDEO page's resolution dropdown.</summary>
+    public const string ResolutionKey = "RESOLUTION";
+
+    /// <summary>The VIDEO page's display-mode dropdown.</summary>
+    public const string DisplayModeKey = "DISPLAYMODE";
+
+    /// <summary>The VIDEO page's V-Sync dropdown.</summary>
+    public const string VSyncKey = "VSYNC";
 
     /// <summary>The Options screen's section in the layout, whose chrome it is composed over.</summary>
     public const string PreferencesSection = "Preferences";
@@ -190,9 +206,9 @@ public sealed partial class OriginalShell
     public const string OptionsBackKey = "PF_B_MAINMENU";
 
     /// <summary>The Preferences page's four page doors, in their authored order. The first opens
-    /// the Game Options page; the other three draw disabled, no shared option standing behind
-    /// them.</summary>
-    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS" };
+    /// the Game Options page and the third the VIDEO page; the other two draw disabled, no shared
+    /// audio or controls option standing behind them.</summary>
+    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, "PF_B_AUDIO", VideoDoorKey, "PF_B_CONTROLS" };
 
     private const float PreferencesTitleFont = 20f;
     private const float PreferencesTextFont = 14f;
@@ -240,6 +256,8 @@ public sealed partial class OriginalShell
     private readonly BoardArt _activePointer;
     private readonly BoardArt _passivePointer;
     private readonly Func<CSVM.Utils.OptionsDef>? _options;
+    private readonly Func<IReadOnlyList<string>>? _screenSizes;
+    private readonly Func<CSVM.Utils.ScreenList>? _screens;
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -253,6 +271,13 @@ public sealed partial class OriginalShell
     private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
     private int _difficulty = CSVM.Flight.Difficulty.Normal;
+    // The four display settings as they were saved. A page that shows a setting still has to hand
+    // back the ones it does not, or the one writer's save would clear them; carrying them on the
+    // shell is what lets either page's apply do that.
+    private string? _monitorIndex;
+    private string? _resolution;
+    private string? _displayMode;
+    private string? _vsync;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
@@ -276,7 +301,13 @@ public sealed partial class OriginalShell
         string? dataRoot = null,
         // Reads the saved options the Options screen shows back; null opens it on the defaults,
         // which is what an engine-free test wants. The shell never writes them.
-        Func<CSVM.Utils.OptionsDef>? options = null)
+        Func<CSVM.Utils.OptionsDef>? options = null,
+        // Reads the sizes the window's own screen can hold, the resolution row's words; null offers
+        // every candidate size, there being no screen to ask without an engine.
+        Func<IReadOnlyList<string>>? screenSizes = null,
+        // Reads the screens the machine has, the monitor row's words and the screen a saved index
+        // that names none falls back to; null offers the one screen an engine-free caller can.
+        Func<CSVM.Utils.ScreenList>? screens = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -292,6 +323,8 @@ public sealed partial class OriginalShell
         _stock = stock;
         _dataRoot = dataRoot;
         _options = options;
+        _screenSizes = screenSizes;
+        _screens = screens;
         _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
@@ -381,8 +414,27 @@ public sealed partial class OriginalShell
     /// <summary>The presentation the Game Options page would apply.</summary>
     public string PresentationChoice => _choice;
 
-    /// <summary>The graphics mode word the Game Options page would apply.</summary>
+    /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
+    /// VIDEO page would apply, or null while nothing has been saved and no row has been
+    /// touched.</summary>
+    public string? MonitorChoice => _monitorIndex;
+
+    /// <summary>The window size (<see cref="CSVM.Utils.OptionsStore.FormatResolution"/>'s spelling)
+    /// the VIDEO page would apply, or null while nothing has been saved and no row has been
+    /// touched.</summary>
+    public string? ResolutionChoice => _resolution;
+
+    /// <summary>The display-mode word (<see cref="CSVM.Utils.DisplayWords.DisplayModes"/>) the
+    /// VIDEO page would apply, or null while nothing has been saved and no row has been
+    /// touched.</summary>
+    public string? DisplayModeChoice => _displayMode;
+
+    /// <summary>The V-Sync word (<see cref="CSVM.Utils.DisplayWords.VSyncChoices"/>) the VIDEO page
+    /// would apply, or null while nothing has been saved and no row has been touched.</summary>
+    public string? VSyncChoice => _vsync;
 
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
     /// would apply.</summary>
@@ -416,7 +468,7 @@ public sealed partial class OriginalShell
         }
 
         _drag = null;
-        if (screen == OriginalScreen.GameOptions)
+        if (screen is OriginalScreen.GameOptions or OriginalScreen.Video)
         {
             ReadSavedOptions();
         }
@@ -524,14 +576,19 @@ public sealed partial class OriginalShell
         if (commands.MoveX != 0)
         {
             // A sideways step changes a value where a screen has one under the cursor (an Instant
-            // Action or loadout dropdown, a radio, a Game Options row, a hangar dropdown or tab, a
-            // closed campaign field); anywhere else it crosses columns.
+            // Action or loadout dropdown, a radio, a Game Options or VIDEO row, a hangar dropdown
+            // or tab, a closed campaign field); anywhere else it crosses columns.
             if (IsInstantActionFamily && StepInstantActionValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
             else if (_screen == OriginalScreen.GameOptions && StepGameOptionValue(rows, focus, commands.MoveX))
+            {
+                rows = Rows;
+                focus = EnsureFocus(rows);
+            }
+            else if (_screen == OriginalScreen.Video && StepVideoValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -595,7 +652,8 @@ public sealed partial class OriginalShell
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
-            or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.SeatPlane
+            or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Video
+            or OriginalScreen.SeatPlane
             || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
@@ -633,6 +691,9 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.GameOptions:
                 ComposeGameOptions(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
+                break;
+            case OriginalScreen.Video:
+                ComposeVideo(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
                 break;
         }
 
@@ -1036,6 +1097,9 @@ public sealed partial class OriginalShell
                     case GameOptionsDoorKey:
                         OpenGameOptions();
                         break;
+                    case VideoDoorKey:
+                        OpenVideo();
+                        break;
                     case BackKey:
                     case OptionsBackKey:
                         Open(OriginalScreen.TopLevel);
@@ -1045,6 +1109,8 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.GameOptions:
                 return ActivateGameOptions(row);
+            case OriginalScreen.Video:
+                return ActivateVideo(row);
         }
 
         return null;
@@ -1054,8 +1120,8 @@ public sealed partial class OriginalShell
     // On a sortie screen it undoes seat 0's pick a stage at a time, then leaves; the per-seat
     // screen has its own, whose meaning depends on who pressed it. On Instant Action, its loadout
     // and Game Options the first Back closes an open list and the next leaves (CANCEL LOADOUT,
-    // CANCEL CHANGES). The campaign and the hangar walk their own graphs back. The top level
-    // quits outright, as MAINMENU.SCRIPT's Quit terminates with no confirm.
+    // CANCEL CHANGES); the VIDEO page has no list, so Back is its CANCEL CHANGES. The campaign and
+    // the hangar walk their graphs back, and the top level quits as MAINMENU.SCRIPT's Quit does.
     private MenuExit? Back()
     {
         if (_dialog is { } dialog)
@@ -1093,6 +1159,12 @@ public sealed partial class OriginalShell
         if (_screen == OriginalScreen.GameOptions)
         {
             BackGameOptions();
+            return null;
+        }
+
+        if (_screen == OriginalScreen.Video)
+        {
+            BackVideo();
             return null;
         }
 
@@ -1160,22 +1232,26 @@ public sealed partial class OriginalShell
             case OriginalScreen.GameOptions:
                 BuildGameOptionsRows(rows);
                 break;
+            case OriginalScreen.Video:
+                BuildVideoRows(rows);
+                break;
         }
 
         return rows;
     }
 
     // The Options screen over [@Preferences@]: the four page doors at their authored corners, the
-    // GAME OPTIONS door live and the other three disabled since no shared option stands behind
-    // them, and the section's own RETURN TO MAIN MENU. Without the section the page's own door
-    // stands alone with a BACK plaque, so the screen is still navigable.
+    // GAME OPTIONS and VIDEO doors live and the other two disabled since no shared audio or
+    // controls option stands behind them, and the section's own RETURN TO MAIN MENU. Without the
+    // section the two live doors stand alone with a BACK plaque, so the screen is still navigable.
     private void BuildOptionsRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(PreferencesSection);
         if (screen == null)
         {
             rows.Add(TextButton(GameOptionsDoorKey, "GAME OPTIONS", OptionsX, OptionsTop, true, 0));
-            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + OptionsPitch, true, 0));
+            rows.Add(TextButton(VideoDoorKey, "VIDEO", OptionsX, OptionsTop + OptionsPitch, true, 0));
+            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (2f * OptionsPitch), true, 0));
             return;
         }
 
@@ -1183,7 +1259,7 @@ public sealed partial class OriginalShell
         {
             if (screen.Widget(key) is { } door)
             {
-                rows.Add(Button(door, key == GameOptionsDoorKey));
+                rows.Add(Button(door, key is GameOptionsDoorKey or VideoDoorKey));
             }
         }
 

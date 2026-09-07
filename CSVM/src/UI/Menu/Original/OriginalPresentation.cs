@@ -41,8 +41,11 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
-    /// <summary>The Game Options aid's argument that leaves its checkbox checked.</summary>
-    public const string GameOptionsCheckedAid = "checked";
+    /// <summary>The aid value that opens the VIDEO page behind the Preferences page's third door.</summary>
+    public const string VideoAid = "video";
+
+    /// <summary>The VIDEO aid's argument that leaves its Enhanced Graphics checkbox checked.</summary>
+    public const string VideoCheckedAid = "checked";
 
     /// <summary>The aid value that opens the Instant Action screen.</summary>
     public const string InstantActionAid = "instant-action";
@@ -233,7 +236,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                 profiles: () => CampaignProfiles ?? CampaignProfileStore.UserProfiles(),
                 stock: () => StockLoadouts.Load(),
                 dataRoot: _dataRoot,
-                options: () => OptionsStore.UserOptions().Load());
+                options: () => OptionsStore.UserOptions().Load(),
+                screenSizes: ResolutionSetting.ScreenSizes,
+                screens: MonitorSetting.Screens);
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);
@@ -307,8 +312,16 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case GameOptionsAid:
                 case GameOptionsAid + ":" + GameOptionsOpenAid:
-                case GameOptionsAid + ":" + GameOptionsCheckedAid:
                     OpenGameOptionsAid(aid);
+                    break;
+                case VideoAid:
+                    _shell.OpenVideo();
+                    break;
+                case VideoAid + ":" + VideoCheckedAid:
+                    // Onto the checkbox by name: the page opens on its first row, which is a
+                    // display setting rather than the graphics one this pose is about.
+                    _shell.OpenVideoOn(OriginalShell.GraphicsKey);
+                    _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case InstantActionAid:
                     _shell.OpenInstantAction();
@@ -481,22 +494,13 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
-    // The Game Options aid's two posed states, each the keyboard walk that reaches it rather than a
-    // state the page can only be put in from outside: Accept on the opening focus stands the
-    // Difficulty dropdown's list open, and two steps down (past the Menu dropdown) then Accept
-    // checks the box.
+    // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the
+    // page can only be put in from outside: Accept on the opening focus stands the Difficulty
+    // dropdown's list open.
     private void OpenGameOptionsAid(string aid)
     {
         _shell!.OpenGameOptions();
-        int colon = aid.IndexOf(':');
-        string pose = colon >= 0 ? aid[(colon + 1)..] : string.Empty;
-        if (pose == GameOptionsCheckedAid)
-        {
-            _shell.Step(new MenuCommands { MoveY = 1 });
-            _shell.Step(new MenuCommands { MoveY = 1 });
-        }
-
-        if (pose.Length > 0)
+        if (aid.IndexOf(':') >= 0)
         {
             _shell.Step(new MenuCommands { Accept = true });
         }
@@ -666,7 +670,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             // in its shared board component's palette, and the rest in the file-wide inks.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
-                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions ? _preferencesPalette
+                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Video ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;

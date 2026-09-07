@@ -45,7 +45,7 @@ public class OriginalCoverageTests : IDisposable
     // the inventory's own list and are counted, not driven.
     private static readonly string[] InScopeSections =
     {
-        "MainMenu", "Preferences", "GameOptions", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
+        "MainMenu", "Preferences", "GameOptions", "Video", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
         "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
@@ -66,6 +66,8 @@ public class OriginalCoverageTests : IDisposable
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
             new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
+        new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey },
+            new[] { OriginalShell.VideoCancelKey, OriginalShell.OptionsBackKey }),
         new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
         new("instant-action-exit", OriginalScreen.TopLevel, new[] { "MM_B_INSTANTACTION", OriginalShell.ExitKey }, Array.Empty<string>()),
         new("instant-action-loadout", OriginalScreen.InstantActionLoadout, new[] { "MM_B_INSTANTACTION", OriginalShell.WeaponLoadoutKey },
@@ -110,9 +112,12 @@ public class OriginalCoverageTests : IDisposable
         new("apply-options", null,
             new[]
             {
-                "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey, OriginalShell.GraphicsKey,
+                "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey,
                 OriginalShell.PresentationKey, OriginalShell.PresentationKey + ":1", OriginalShell.GameOptionsAcceptKey,
             },
+            Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
+        new("apply-video", null,
+            new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey, OriginalShell.GraphicsKey, OriginalShell.VideoAcceptKey },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, "C1", OriginalShell.AirframeKey(0), OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalShell.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
@@ -134,7 +139,9 @@ public class OriginalCoverageTests : IDisposable
         ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalShell.GameOptionsAcceptKey),
         ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalShell.GameOptionsCancelKey),
         ["Preferences.PF_B_AUDIO"] = Edge.Disabled("PF_B_AUDIO", "no shared audio option stands behind the page", "options"),
-        ["Preferences.PF_B_VIDEO"] = Edge.Disabled("PF_B_VIDEO", "no shared video option stands behind the page", "options"),
+        ["Preferences.PF_B_VIDEO"] = Edge.Driven("video", OriginalShell.VideoDoorKey),
+        ["Video.VP_B_ACCEPTCHANGES"] = Edge.Driven("apply-video", OriginalShell.VideoAcceptKey),
+        ["Video.VP_B_CANCELCHANGES"] = Edge.Driven("video", OriginalShell.VideoCancelKey),
         ["Preferences.PF_B_CONTROLS"] = Edge.Disabled("PF_B_CONTROLS", "no shared controls option stands behind the page", "options"),
         ["PassengerCabin.PC_B_CHANGEMOMENTO"] = Edge.OutOfScope("MomentoSelection is deferred (BL-463); the cabin page offers no memento row"),
         ["PassengerCabin.PC_B_PREVIOUS"] = Edge.Driven("campaign-previous", "PreviousMissions"),
@@ -227,6 +234,21 @@ public class OriginalCoverageTests : IDisposable
         var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
         Assert.True(layout != null, reason ?? "the install's decoded layout reads");
         GameOptionRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
+    }
+
+    [Fact]
+    public void TheVideoRowsClearEachOtherAndTheirWordsOverTheFixture()
+    {
+        VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
+    }
+
+    [ExtractedDataFact]
+    public void TheVideoRowsClearEachOtherAndTheirWordsOverTheInstall()
+    {
+        string dataRoot = TestData.DataRoot!;
+        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
+        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
+        VideoRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
     }
 
     private static string[] Then(string[] route, params string[] more)
@@ -626,10 +648,8 @@ public class OriginalCoverageTests : IDisposable
         return 1;
     }
 
-    // The page's five rows share one plate, so no two of them may overlap, and no control may sit
-    // over a title or a description: a control that covered the words beside it is what sent the
-    // options off the Preferences page in the first place. The authored space scales uniformly, so
-    // disjoint here is disjoint at every window size.
+    // The Game Options page's four rows share one plate, so no two of them may overlap, and no
+    // control may sit over a title or a description.
     private void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
     {
         var shell = Fresh(layout, measure, dataRoot, out _, out _);
@@ -638,12 +658,41 @@ public class OriginalCoverageTests : IDisposable
         Assert.Equal(
             new[]
             {
-                OriginalShell.DifficultyKey, OriginalShell.PresentationKey, OriginalShell.GraphicsKey,
+                OriginalShell.DifficultyKey, OriginalShell.PresentationKey,
                 OriginalShell.GameOptionsAcceptKey, OriginalShell.GameOptionsCancelKey,
             },
             rows.Select(r => r.Key));
-        var words = shell.Compose().Lines.Where(l => l.Row < 0 && l.Text != "GAME OPTIONS").ToArray();
-        Assert.Equal(6, words.Length);
+        RowsAreClearOfEachOther(shell, rows, "GAME OPTIONS", 4);
+    }
+
+    // The VIDEO page's rows, the same rule over its own plate: each control must stand clear of the
+    // title beside it and the description must stop before the plaque column, which is what makes
+    // the authored Shadows row carry a longer title and a longer description than it was written
+    // for. The rows come back in authored order, since that is the order the cursor walks.
+    private void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
+    {
+        var shell = Fresh(layout, measure, dataRoot, out _, out _);
+        shell.OpenVideo();
+        var rows = shell.Rows.ToArray();
+        Assert.Equal(
+            new[]
+            {
+                OriginalShell.MonitorKey, OriginalShell.ResolutionKey, OriginalShell.DisplayModeKey,
+                OriginalShell.VSyncKey, OriginalShell.GraphicsKey,
+                OriginalShell.VideoAcceptKey, OriginalShell.VideoCancelKey,
+            },
+            rows.Select(r => r.Key));
+        RowsAreClearOfEachOther(shell, rows, "VIDEO", 10);
+    }
+
+    // No row of an option page may overlap another, and no control may sit over a title or a
+    // description: a control that covered the words beside it is what sent the options off the
+    // Preferences page in the first place. The authored space scales uniformly, so disjoint here is
+    // disjoint at every window size.
+    private void RowsAreClearOfEachOther(OriginalShell shell, OriginalRow[] rows, string pageTitle, int wordCount)
+    {
+        var words = shell.Compose().Lines.Where(l => l.Row < 0 && l.Text != pageTitle).ToArray();
+        Assert.Equal(wordCount, words.Length);
         foreach (var row in rows)
         {
             foreach (var line in words)

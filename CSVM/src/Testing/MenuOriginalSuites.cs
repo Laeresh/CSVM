@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
@@ -34,7 +35,7 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "three rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
+        + "two rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
         + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
@@ -44,8 +45,11 @@ internal static class MenuOriginalSuites
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty and both other choices, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying them, the force flag recovers "
-        + "and a missing layout falls back with the request kept")]
+        + "carrying them, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "over the V-Sync one whose five words pick a frame cap and the Enhanced Graphics checkbox "
+        + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
+        + "leaves as one more apply exit carrying them, the force flag recovers and a missing layout "
+        + "falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -91,7 +95,10 @@ internal static class MenuOriginalSuites
             OriginalOptionsRoute(ctx, host, seat, shell, exits);
             SwitchToBuiltIn(ctx, host, seat, shell);
             BuiltInOptionsRoute(ctx, host, seat, exits);
-            SwitchBackToOriginal(ctx, host);
+            // The VIDEO route runs on the shell the switch back creates, and last of the Original
+            // walks: its ACCEPT CHANGES hides the presentation for the launcher to act, so nothing
+            // after it can drive the same shell.
+            OriginalVideoRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits);
             Recovery(ctx, host, registry, audio);
         }
         finally
@@ -427,7 +434,7 @@ internal static class MenuOriginalSuites
     }
 
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose three rows take every choice
+    // Preferences page, its GAME OPTIONS door the decoded page, whose two rows take every choice
     // and whose CANCEL CHANGES drops them; the walk leaves the top level as it found it.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
@@ -442,17 +449,10 @@ internal static class MenuOriginalSuites
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" ? 1 : 0;
         }
 
-        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
-        bool box = false;
-        foreach (var plaque in board.Plaques)
-        {
-            box |= plaque.Art.Frames == 8;
-        }
-
-        ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        ctx.Check(titles == 3, $"drawing the section's own tab title over the two row titles ({titles} of 3)");
         Press(host, seat, Accept);
         ctx.Check(shell.OpenGameOption == OriginalShell.DifficultyKey && shell.Rows.Count == 3,
             $"Accept opens the dropdown over the three campaign tiers ({shell.OpenGameOption}, {shell.Rows.Count})");
@@ -468,15 +468,11 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.PresentationChoice == PresentationId.BuiltIn.Value,
             $"and picking the second closes it on the other token ({shell.PresentationChoice})");
-        Press(host, seat, Down);
-        Press(host, seat, Accept);
-        ctx.Check(shell.GraphicsChoice == GraphicsMode.EnhancedWord,
-            $"Accept on the checkbox under it flips the graphics word ({shell.GraphicsChoice})");
         WalkTo(host, seat, shell, OriginalShell.GameOptionsCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.PresentationChoice == PresentationId.Original.Value
-            && shell.GraphicsChoice == GraphicsMode.Default && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal,
-            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.GraphicsChoice}, {shell.DifficultyChoice})");
+            && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal,
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.DifficultyChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
@@ -493,7 +489,7 @@ internal static class MenuOriginalSuites
         }
     }
 
-    private static void SwitchBackToOriginal(TestContext ctx, MenuHost host)
+    private static OriginalShell? SwitchBackToOriginal(TestContext ctx, MenuHost host)
     {
         host.Deactivate();
         string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "original");
@@ -503,6 +499,99 @@ internal static class MenuOriginalSuites
             $"the saved request re-selects Original and Show creates a fresh instance ({host.Selected})");
         ctx.Check(shell is { Screen: OriginalScreen.TopLevel, PickedChapter: null, FocusedKey: OriginalShell.FreeFlightKey },
             $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.PickedChapter ?? "none"}, {shell?.FocusedKey})");
+        return shell;
+    }
+
+    // Original's VIDEO route over the install's decoded sections: the Preferences page's third door
+    // opens the decoded page on its monitor dropdown, the rows under it take a screen, a size, a
+    // display mode and a frame cap, the checkbox flips the graphics word, CANCEL CHANGES drops them
+    // all without an exit, and ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
+    private static void OriginalVideoRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
+    {
+        if (shell == null)
+        {
+            return;
+        }
+
+        int before = exits.Count;
+        WalkTo(host, seat, shell, "MM_B_PREFERENCES");
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.MonitorKey,
+            $"VIDEO opens the decoded page on its Monitor row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
+        var board = shell.Compose();
+        int titles = 0;
+        foreach (var line in board.Lines)
+        {
+            titles += line.Text is "VIDEO" or "Monitor" or "Resolution" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
+        }
+
+        ctx.Check(titles == 6, $"drawing the section's own tab title over the five row titles ({titles} of 6)");
+        bool box = false;
+        foreach (var plaque in board.Plaques)
+        {
+            box |= plaque.Art.Frames == 8;
+        }
+
+        ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        // The monitor row's words are this machine's screens, so the claim is the count rather than
+        // the labels: one per screen the engine reports, which is one on a single-screen machine.
+        ctx.Check(shell.MonitorWords.Count == Godot.DisplayServer.GetScreenCount(),
+            $"the monitor row offers one label per screen ({string.Join(" ", shell.MonitorWords)})");
+        Press(host, seat, Right);
+        ctx.Check(shell.MonitorChoice != null
+            && OptionsStore.TryParseMonitorIndex(shell.MonitorChoice, out int picked) && picked < shell.MonitorWords.Count,
+            $"and a sideways step on it takes a screen this machine has ({shell.MonitorChoice ?? "unset"} of {shell.MonitorWords.Count})");
+        WalkTo(host, seat, shell, OriginalShell.ResolutionKey);
+        Press(host, seat, Right);
+        // The row's own words are this machine's screen sizes, so what it steps to is read back off
+        // the shell rather than named: the claim is that the step lands on a size the screen offers
+        // and not on the project default it opened at.
+        ctx.Check(shell.ResolutionChoice != null && shell.ResolutionChoice != ResolutionSetting.Default
+            && shell.ResolutionWords.Contains(shell.ResolutionChoice),
+            $"a sideways step on the focused row takes the next size this screen offers ({shell.ResolutionChoice ?? "unset"} of {shell.ResolutionWords.Count})");
+        WalkTo(host, seat, shell, OriginalShell.DisplayModeKey);
+        Press(host, seat, Right);
+        ctx.Check(shell.DisplayModeChoice == DisplayWords.Borderless,
+            $"a sideways step on the focused row takes the next display mode ({shell.DisplayModeChoice ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalShell.VSyncKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.OpenVideoOption == OriginalShell.VSyncKey && shell.Rows.Count == DisplayWords.VSyncChoices.Count,
+            $"Accept on the V-Sync row opens the dropdown over every choice ({shell.OpenVideoOption}, {shell.Rows.Count})");
+        Press(host, seat, Down);
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.VSyncChoice == "60" && shell.FocusedKey == OriginalShell.VSyncKey,
+            $"and picking the third closes it on the 60 fps cap ({shell.VSyncChoice ?? "unset"}, {shell.FocusedKey})");
+        WalkTo(host, seat, shell, OriginalShell.GraphicsKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.GraphicsChoice == GraphicsMode.EnhancedWord,
+            $"Accept on the checkbox under it flips the graphics word ({shell.GraphicsChoice})");
+        WalkTo(host, seat, shell, OriginalShell.VideoCancelKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Options && shell.GraphicsChoice == GraphicsMode.Default
+            && shell.VSyncChoice == null && shell.DisplayModeChoice == null && shell.ResolutionChoice == null
+            && shell.MonitorChoice == null && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with all five edits dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {shell.VSyncChoice ?? "unset"}, {shell.DisplayModeChoice ?? "unset"}, {shell.ResolutionChoice ?? "unset"}, {shell.MonitorChoice ?? "unset"})");
+
+        WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.DisplayModeKey);
+        Press(host, seat, Right);
+        WalkTo(host, seat, shell, OriginalShell.VSyncKey);
+        Press(host, seat, Right);
+        WalkTo(host, seat, shell, OriginalShell.GraphicsKey);
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.VideoAcceptKey);
+        Press(host, seat, Accept);
+        ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
+        {
+            Graphics: GraphicsMode.EnhancedWord, VSync: DisplayWords.VSyncOff,
+            DisplayMode: DisplayWords.Borderless,
+        },
+            $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all three words ({exits.Count - before}, {exits[^1].GetType().Name})");
+        ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
     }
 
     // Recovery: the force flag beats an Original override, and a registered Original whose layout

@@ -209,6 +209,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   layout to the master seed.** Measured on the same `--det` pose across two runs: `Precipitation`'s
   `Rng.Precip` draw took C2B rain from 5.44 % of pixels differing to 0.00 %, C4 snow from 25.84 %
   to 0.00 %.
+- **DET-14** — **A golden sweep cannot see a `--det` drop fail while a second guard stands in front
+  of it, so test the drop where it is written and not by its pixels.** Removing the `--det` guard
+  from `ResolutionSetting.SavedWord` left all 18 goldens hash-identical, `Launcher`'s
+  `!_spec.IsScripted` still holding the size back; removing both moved every shot to 1920x1080.
 
 ## PERF — performance
 

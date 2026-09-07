@@ -157,20 +157,60 @@ warns and falls back. `--det` drops both machine-state layers and keeps only an 
 `--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
 itself is written up as a divergence in `docs/architecture/Root.md`.
 
+## src/Utils/VSyncSetting.cs
+The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
+runs to without it, since a cap only means anything with V-Sync off. `Resolve` layers the sources
+the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the `display.vsync`
+config key, then on; a word outside `DisplayWords.VSyncChoices` reads as never set. `SavedWord`
+holds the `--det` guard, so a deterministic run reads no saved display setting. `Apply` is the one
+place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are called, used by `Launcher`'s
+startup and by its Options apply, and it logs the source that won. The cap is a render rate and
+reaches no simulation. Read `Session/Launcher.cs` next for both call sites.
+
+## src/Utils/DisplayModeSetting.cs
+The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
+the screen, or exclusive fullscreen. `Resolve` layers the way `VSyncSetting` does with one layer fewer,
+there being no config key: the saved `displayMode` word, then windowed, which is what `project.godot`
+ships; an unknown word reads as never set. `SavedWord` holds the `--det` guard. `Apply` is the one place
+`DisplayServer.WindowSetMode` is called and skips it when the window already stands in that mode. Godot's
+names invert the reading: `Fullscreen` is the borderless window, `ExclusiveFullscreen` the exclusive mode.
+Nothing here touches focus, which `Launcher._Ready` owns (`../verification.md`'s SHELL-13); that startup
+call is skipped for a scripted run, whose hidden window is captured against the pinned viewport.
+
+## src/Utils/ResolutionSetting.cs
+The window's size. Godot exposes no video-mode list, only a screen's own size, so `Sizes` builds the
+per-screen list as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that size
+and the project default, both always offerable. `Resolve` layers the saved `resolution` over the 1280x720
+`project.godot` ships. A saved size the screen does not offer falls back to that default and never to the
+nearest offered one, since every other option here falls through to its own default and a nearest match
+would hand the player an aspect ratio they did not pick. `SavedWord` holds the `--det` guard. `Apply` is
+the one place `DisplayServer.WindowSetSize` is called; it skips a window that is not windowed, whose size
+the mode owns, and re-centres one it resized, a resize otherwise growing off the screen's bottom-right.
+
+## src/Utils/MonitorSetting.cs
+The screen the window sits on. `Screens` labels the machine's screens one per index, "Screen 0 (1920x1080)"
+off the engine's own zero-based index so the page, the options file and the log line name a screen the same
+way, and carries the screen the window stands on as the fallback. `Resolve` layers the saved `monitorIndex`
+over that: this is the one display setting whose saved value can name something absent, so an index no
+screen answers to is dropped like an unknown word, and the standing screen (the primary on a launch that has
+moved nothing) leaves a window where the player is looking. `SavedWord` holds the `--det` guard. `Apply` is
+the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a window already there; both of
+`Launcher`'s call sites make it before the mode and the size, a mode applied first filling the old screen.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`, today the requested menu
-presentation, the requested graphics mode and the difficulty word: one file, `user://options.json`, independent of
-`Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version
-invalidates it, an unknown value drops only that field, and a field the file does not carry reads
-as never set, which is why adding a field does not bump `Version`. `Save` writes a sibling temp
-file and renames it over the real one. Under `--run-tests`, `UserOptions()` reads and writes an
-emptied per-process scratch directory (`DirectoryOverride`) instead, so no suite touches the
-player's file; `Launcher.ApplyOptions` is the only writer.
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, and
+the four display settings (monitor index, resolution, display mode, V-Sync). One file, `user://options.json`, independent of
+`Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an unknown
+value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
+`Version`. Five fields are checked against a word set (`DisplayWords` holds the two new vocabularies); the monitor index and the
+canonical `1920x1080` resolution have none, so `FormatResolution` and the `TryParse` pair check their shape and drop a bad one
+the same way. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
+directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` is the only writer.
 
 ## src/Utils/AudioBuses.cs
 The names of the four buses `CSVM/default_bus_layout.tres` ships: `Master`, and `Music`, `Effects`

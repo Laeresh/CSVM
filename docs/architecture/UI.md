@@ -588,11 +588,11 @@ handoff into a launching session. The host implementation is `MenuAudioService`
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the `PresentationId`, the graphics-mode word and the difficulty word an Options screen applied).
-An applied choice rides the exit rather than being saved by the screen that took it, so the
-options file keeps one writer; a custom plane rides it as a resolved `CustomPlaneDef`, never a
-store name. Presentations never construct sessions. The return side is `MenuReturnDestination`;
-the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
+`OptionsApplyExit` (the `PresentationId`, the graphics-mode and difficulty words, and the four display settings, null where never set).
+An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a
+screen hands back the settings it does not show; a custom plane rides it as a resolved `CustomPlaneDef`, never a store name.
+Presentations never construct sessions. The return side is `MenuReturnDestination`; the exit table
+and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`
@@ -675,7 +675,7 @@ and the shared Free Flight, player-setup, Instant Action, hangar and campaign fe
 art measurer and the flight-devices answer injected. It owns the top level composed from
 `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
 Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the Game
-Options, Instant Action, loadout, campaign and hangar screens are its five partials, below. `Step` applies
+Options, VIDEO, Instant Action, loadout, campaign and hangar screens are its six partials, below. `Step` applies
 one seat's frame (pointer, typed text, cursor walk, accept and back) and `Compose` is the screen
 as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -683,11 +683,21 @@ as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-i
 The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content
 is a table: per option a key, a title, a description, the control kind and how the store field is
 read and written, so a further option is one entry plus its field. Row one is the original's own
-Difficulty dropdown at its authored box over the three campaign tiers; under it the two remake-only
-rows, the presentation as a dropdown over the registered tokens and the graphics mode as a checkbox
-off the section's own strip. The row shape is read off the section's widgets, so a layout that moves
-a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only `Launcher.ApplyOptions`
-writes the store. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
+Difficulty dropdown at its authored box over the three campaign tiers; under it the remake-only Menu
+row, the presentation as a dropdown over the registered tokens. The row shape is read off the
+section's widgets, so a layout that moves a row moves ours. ACCEPT CHANGES leaves as the
+`OptionsApplyExit`; only `Launcher.ApplyOptions` writes the store. The display settings stand on the
+VIDEO page instead. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalVideo.cs
+The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third
+door. Same table as Game Options with one column more: each setting names the authored title, control and
+description widgets it stands on, so a row keeps its geometry, and the table is in authored row order because
+the cursor walks it. The monitor and Resolution keep the authored Graphics and Resolution rows, their words
+enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`; the Graphics row's title
+and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
+and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
+Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the

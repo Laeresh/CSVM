@@ -133,7 +133,7 @@ public class OriginalManifestTests : IDisposable
 
         Assert.False(report.Complete);
         Assert.Contains("MainMenu.MM_B_CAMPAIGN names FX_B_Campaign.png (not there)", report.Reason);
-        Assert.Contains("schema 1", report.Reason);
+        Assert.Contains($"schema {OriginalAssetManifest.Schema}", report.Reason);
         Assert.Null(OriginalAvailability.Load(_root, out var reason, out _));
         Assert.Equal(report.Reason, reason);
 

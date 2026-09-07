@@ -2115,6 +2115,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   pose the view opens on before any zoom input. *Cross-refs:* `BL-433`'s closing commit
   (`git log --grep=BL-433`), which carries the keybind decode.
 
+- `BL-776` `[Bug]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **The first-person
+  FOV law holds the horizontal angle constant and shrinks the vertical one as the viewport widens,
+  so an ultrawide screen shows no more world than a 16:9 one and crops the cockpit.**
+  *Evidence:* `CameraController.HorizontalToVerticalFovDeg`
+  (`CSVM/src/Flight/CameraController.cs:338-343`) computes
+  `halfV = atan(tan(H/2) * AssumedAspect / liveAspect)` with `AssumedAspect = 4/3` (`:88`) over the
+  per-mode bases `CockpitHorizontalFovDeg = 80` and `NoseHorizontalFovDeg = 60` (`:82-83`). Because
+  the live aspect divides, the horizontal half-angle `atan(tan(halfV) * liveAspect)` is invariant
+  and the vertical shrinks: cockpit vertical is 80.0 degrees at 4:3, 64.4 at 16:9 and 34.9 at 32:9,
+  with horizontal 96.4 throughout. At 32:9 the canopy rails and instrument panel fall outside the
+  view, which is what a player reads as a cropped cockpit. `ApplyFirstPersonFov` (`:352-357`) and
+  `CockpitOverlay` (`CSVM/src/Flight/CockpitOverlay.cs:106-108`) both take the angle from that one
+  table, so a change reaches the world camera and the cockpit pass together.
+  *Fix shape:* hold the vertical angle and let the horizontal grow with the aspect, so a wider
+  screen shows more world to the sides instead of less above and below.
+  *⚠ Traps:* (i) **This is a fidelity decision, not a defect with one right answer**, which is why
+  `Next` is `decide`. The law is decoded (`docs/org/cameraViews.md`, "FOV constants and aspect
+  correction") and reproduces the original at the aspects the original could run. It could not run
+  32:9, so extending it is a choice about a case the decode never covered, not a departure from it.
+  (ii) The pinned 16:9 values 46.8 and 64.4 are asserted in tests and cited in the decode doc; a
+  change to the law must keep them or re-pin both together. (iii) A 2-player splitscreen pane is
+  this same case exactly, never an analogy: `GameSession.cs:3293-3294` stacks 2 panes top/bottom, so
+  a 1280x720 window gives each pane 1280x360, an aspect of 3.5556, which is 32:9. One law serves
+  both and no aspect-conditional branch is wanted.
+  *Playtest after fix:* fly the Cockpit and Nose views at 32:9 and in a 2-player stacked pane, and
+  confirm the panel and canopy read as they do at 16:9.
+  *Cross-refs:* `BL-777` (side-by-side panes on an ultrawide reduce how often this bites but do not
+  remove it, since single-player fullscreen is still 32:9), `BL-778` (the HUD half of the same
+  ultrawide exposure), `BL-420` (the per-view base FOV decode this law rests on).
+
 ## HUD & UI
 
 - `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
@@ -2612,34 +2642,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reading off the strip before its look is called wrong. *Cross-refs:* `BL-744`'s landing
   (`git log --grep=BL-744`), the same box's icon.
 
-- `BL-768` `[Feature]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Preferences'
-  VIDEO page is decoded and unbuilt, and Enhanced Graphics stands on Game Options instead of on
-  it.** *Decided:* the page carries five rows rather than the authored nine. Graphics becomes the
-  monitor pick with its description rewritten, Resolution, Display Mode and V-Sync are the other
-  three, and Enhanced Graphics moves on from Game Options. The five quality dropdowns and the
-  Clutter and Shadows checkboxes are left out: nothing behind them costs anything on modern
-  hardware, and Shadows would be a second switch on the shadow gate Enhanced Graphics already owns
-  (`Launcher.EnableSunShadows`). A frame limit rides the V-Sync row's off state rather than taking a
-  row of its own, since the simulation steps on the physics tick (`GameClock.ParentDriven`) and the
-  render rate never reaches the flight model. *Evidence:* reported at the controls over
-  `PLAN-M5-polish-13`'s closing sortie, "Move Enhanced Graphics into the not yet existing video
-  screen under Prefrences". `PF_B_VIDEO` draws disabled beside the other two unbuilt doors
-  (`CSVM/src/UI/Menu/Original/OriginalShell.cs:192-195`), while the `Video` section carries seven
-  dropdowns, the Clutter and Shadows checkboxes and a description per row
-  (`extracted/rof/menu_layout.json`); the graphics choice is the third row of our Game Options page
-  instead (`CSVM/src/UI/Menu/Original/OriginalGameOptions.cs:79-82`), a remake-only row on an
-  authored page. *Fix shape:* the page over its own artwork, with Enhanced Graphics moved on to it
-  and the four decided rows beside it. *⚠ Traps:* nothing in the port sets a window size, mode or
-  screen at runtime today, so the display rows are a new mechanism rather than a new page row.
-  `OptionsApplyExit` is a closed record carrying three words and `OptionsStore` validates every
-  field against a fixed vocabulary, so a resolution or a monitor index is the first option of
-  another shape; whatever moves keeps leaving through that exit, the options file's one writer. A
-  saved display setting has to lose to `--no-vsync` the way `display.vsync` does and be ignored
-  under `--det`, or a scripted run moves every golden. The graphics word still resolves once at
-  launch while the other rows apply live, so the page has to say which is which. *Cross-refs:*
-  `BL-696` (the same shape behind `PF_B_CONTROLS`), `BL-331` (why a Shadows row would have almost
-  nothing to switch), `OriginalScreenshots/Preferences Video.png`.
-
 - `BL-769` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The PLANE NAME
   screen's empty-name refusal stands as a line under the buttons instead of being raised as a
   message box when OK is pressed.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s
@@ -2690,6 +2692,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scope call, the edge tally and the screen census all move together), `BL-446` and `BL-463` (the
   other screens Decision-era scope left out), `BL-744`'s landing (`git log --grep=BL-744`, the
   message box icon rule ABOUT would need).
+
+- `BL-778` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The flight HUD
+  anchors to the viewport's own edges, so on an ultrawide screen its elements sit at the far left
+  and right instead of within the reading area.**
+  *Evidence:* `HudMetrics` sizes every element off HEIGHT alone,
+  `windowH / ReferenceHeight` damped by the pane share (`CSVM/src/Flight/HudMetrics.cs:47-53`,
+  `ReferenceHeight = 1440`), so at 32:9 the elements are already the right SIZE and only their
+  horizontal placement is wrong. The class's own note says positions anchor to a pane edge rather
+  than the top-left (`:10-11`), so on a 5120x1440 screen a left-anchored and a right-anchored
+  element stand 5120 px apart, at the edges of peripheral vision.
+  *Fix shape:* give the HUD a 16:9 box centred in the viewport and anchor to that box's edges
+  rather than the viewport's. A layout-box change, not a scaling one: `HudMetrics.Scale` is already
+  correct and should not move.
+  *⚠ Traps:* (i) **Edge markers are the exception to check, not to assume.** `EdgeMarker` points at
+  targets that are off screen; clamped to a 16:9 box it would indicate a direction for a target
+  actually visible in the 32:9 area outside the box. Decide per element whether it belongs to the
+  reading box or to the true viewport edge, and judge it at the controls rather than by rule.
+  (ii) Do not fix this by scaling the HUD down: the size is right and shrinking it would hurt 16:9,
+  which is every machine that is not the ultrawide case.
+  *Playtest after fix:* fly at 32:9 and confirm the status text, gauges and target HUD sit within
+  comfortable reading width while off-screen target markers still point usefully.
+  *Cross-refs:* `BL-776` (the FOV half of the same ultrawide exposure), `BL-777` (a side-by-side
+  pane is 16:9 and does not show this).
 
 ## Splitscreen
 
@@ -2762,6 +2787,27 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-391` (base engine level,
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
+
+- `BL-777` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A 2-player split
+  is always stacked top and bottom, so on an ultrawide window each pane is far wider than it is
+  tall; the split should follow the window's aspect and stand the panes side by side.**
+  *Evidence:* `GameSession.cs:3293-3294` logs the layout as `count == 2 ? "stacked top/bottom" :
+  "2x2 grid"`, with no aspect input anywhere in the choice. On a 5120x1440 window that gives two
+  5120x720 panes, an aspect of 7.1 (64:9); side by side would give two 2560x1440 panes at exactly
+  16:9, the shape every HUD and FOV metric in the port is calibrated for.
+  *Fix shape:* pick the split axis from the window's aspect rather than the player count alone,
+  splitting along the longer axis; 4 players stay a 2x2 grid at every aspect.
+  *⚠ Traps:* (i) The pane share feeds `HudMetrics.PaneFactor`
+  (`CSVM/src/Flight/HudMetrics.cs:32-42`) through the HEIGHT ratio `paneH / windowH`, so a
+  side-by-side pane keeps full height and its factor becomes 1 rather than sqrt(1/2). That is
+  arguably correct, since the pane is no longer short, but it changes HUD size in 2-player
+  splitscreen on every aspect where the split flips, and it wants a look at the controls before it
+  is called done. (ii) Do not make this conditional on a hardcoded aspect threshold without saying
+  what the threshold means; splitting along the longer axis needs no threshold at all.
+  *Playtest after fix:* a 2-player session on an ultrawide window, confirming each pane reads as a
+  normal 16:9 view and the HUD sits correctly in both.
+  *Cross-refs:* `BL-776` (today's stacked pane is exactly the 32:9 case that item describes, so
+  this one reduces its reach without removing it), `BL-778` (the HUD's own ultrawide item).
 
 ## Missions, modes & campaign
 

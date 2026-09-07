@@ -186,6 +186,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int _difficultyChoice = Difficulty.Normal;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
+    // The four display settings as saved. This screen shows none of them and hands them back
+    // untouched, so its apply cannot clear a setting the Original presentation's VIDEO page wrote.
+    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
     private int _presetCursor, _presetTop;
@@ -1543,7 +1546,8 @@ public sealed partial class LaunchMenu : CanvasLayer
                     // The launcher persists every choice and restarts the menu; the screen stays
                     // standing for the host to hide.
                     _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
-                        Difficulty.Word(_difficultyChoice)));
+                        Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
+                        _displayModeChoice, _vsyncChoice));
                 }
 
                 break;
@@ -2440,6 +2444,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
         _presentationChoice = saved.MenuPresentation ?? PresentationId.BuiltIn.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
+        _monitorChoice = saved.MonitorIndex;
+        _resolutionChoice = saved.Resolution;
+        _displayModeChoice = saved.DisplayMode;
+        _vsyncChoice = saved.VSync;
     }
 
     // Opens the rebinding screen on the joined seats' live keymaps. Joining is open here (ScanJoins)
