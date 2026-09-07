@@ -148,8 +148,9 @@ presentation with a pointer maps the window-pixel pointer into its own space; Or
 through the same `BoardFit` its board view draws with. Built-in reads no `MenuPointer` at all: its rows are Godot
 `Control`s, so player 1's rows take Godot's own hit test through `gui_input` (`LaunchMenu.Pointable`)
 and fold the mouse into the next frame's commands (a hover is the cursor step onto that row, a
-press and release on one row is that step plus Accept in one frame, a wheel notch is a step; the
-frame's own step outranks a hover, so a pad and the mouse cannot each own a row). The centred
+press and release on one row is that step plus Accept in one frame, a wheel notch is a step, a
+right-button press is Back on every screen but Mode, where Back is the quit; the frame's own step
+outranks a hover, so a pad and the mouse cannot each own a row). The centred
 layout's lists, the hangar pages and player 1's pane on a split aircraft screen are pointable;
 the campaign boards under Built-in are one composed surface and stay on the keys and pads.
 
@@ -172,8 +173,8 @@ nothing under it), then a wheel step over the list the pointer stands in, then r
 hit-tests. A write that moves a window also pulls the focus to the window's nearer edge when it
 stood on a row the move would hide, because the window otherwise follows the focus straight back.
 The arrows and the keyboard do not go through any of this, so the wheel is an addition on top of the
-decoded screens rather than a change to them. Original's mouse is the only one today; Built-in's is
-`BL-654`.
+decoded screens rather than a change to them. Original's mouse is the only one that reaches a list
+this way; Built-in's rows are Godot controls and take the wheel through `gui_input`, as above.
 
 The windows themselves are the list widgets': `CampaignBoards.ComboWindow` for an open campaign
 drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's contents page, and

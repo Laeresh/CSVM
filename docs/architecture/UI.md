@@ -12,9 +12,9 @@ Godot control behind it. Mode leads to Chapter and Plane for Free Flight and Dog
 Instant Action's own wizard; the Options, Controls, hangar and campaign doors hang off the same
 graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the screenshot key and
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
-step and Accept), and nothing else: rosters, seats, picks, gates and the typed exit are the host's
-features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign screens are
-`HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
+step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
+the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -682,13 +682,14 @@ missions with every objective bit set, plus the scratch build store the export a
 
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout`
-and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the art
-measurer and the flight-devices answer injected. It owns the top level composed from `[MainMenu]`'s
-own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome,
-and the messagebox idiom every refusal and confirm goes through; the Game Options, AUDIO, VIDEO, Instant
-Action, loadout, campaign and hangar screens are its seven partials, below. `Step` applies one seat's
-frame (pointer, typed text, cursor walk, accept and back), `Compose` is the screen as a
-`ComposedBoard`, and the row kinds every page draws are here, `OriginalSlider` and the slider row's builder and drawing among them. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the
+art measurer and the flight-devices answer injected. It owns the top level composed from
+`[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
+Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
+screens are its ten partials, below. `Step` applies one seat's frame (pointer, typed text, cursor
+walk, accept and back), `Compose` is the screen as a `ComposedBoard`, and the row kinds every page
+draws are here, `OriginalSlider` and the slider row's builder and drawing among them.
+Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -728,6 +729,16 @@ enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting
 and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
 and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
 Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalCredits.cs
+The credits screen, the shell's partial over the decoded `[@Credits@]` section behind the top
+level's fifth row. The section is three widgets: a full-screen background pane, ABOUT and the DONE
+plaque. The credit names are painted into the background art, so the pane is the whole composition
+and the two buttons are drawn over it by the shell's row loop. DONE and Escape both land on the top
+level, the plaque's own `ScriptToExe` and what `CREDITS.SCRIPT`'s `gui_char` does, so `Back` needs
+no arm here. ABOUT is drawn disabled because its box wants the messagebox's `ma_` widget set, which
+the shared chrome does not compose; its words are decoded.
+The screen and its unbuilt parts: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the

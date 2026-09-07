@@ -63,8 +63,8 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
 | Distinct art files `LAYOUT.CSV` names | **124** (122 present in the extraction, 2 absent) |
 | Distinct `IDS_*` symbols `LAYOUT.CSV` names | **152**, of which **149** resolve to text |
 | UI sound files | **8** |
-| Original screens in this plan's scope | **27** of the 34 single-player screens (23 built; the 4 remaining Preferences pages stand behind doors drawn disabled) |
-| Layout-stated navigation edges in the original | **46** (25 driven by Original, 2 realised as the wingman slot's row, 5 drawn disabled, 14 out of scope; see [Coverage](#coverage)) |
+| Original screens in this plan's scope | **28** of the 34 single-player screens (25 built; the 3 remaining Preferences pages stand behind doors drawn disabled) |
+| Layout-stated navigation edges in the original | **46** (30 driven by Original, 2 realised as the wingman slot's row, 3 drawn disabled, 11 out of scope; see [Coverage](#coverage)) |
 
 ## Part 1: Built-in as it stands
 
@@ -425,15 +425,14 @@ families (pointer clicks on the rows' rectangles, keyboard cursor commands walki
 pad cursor commands walking up and left), once over the hand-authored fixture layout and once over
 the install's own `menu_layout.json` and art. Every `ScriptToExe` edge of an in-scope section must
 have an entry saying how Original realises it, and the entry is checked against the shell. The
-tally over the install: 28 screens reached and left with no open campaign,
-build or dialog behind; 46 journeys by 3 families; 46 edges of which **31 are driven** (the row is
+tally over the install: 29 screens (every `OriginalScreen`) reached and left with no open campaign,
+build or dialog behind; 47 journeys by 3 families; 46 edges of which **33 are driven** (the row is
 pressed and the target screen shows), **2 are realised as the wingman slot's row** (`FC_B_CHANGEPLANEW`
 and `FC_B_CHANGEAMMOW` are the pilot's plaques at the wingman's slot, present exactly when the
-mission flies a wingman), **3 are drawn disabled** (`MM_B_MULTIPLAYER`, `MM_B_CREDITS` and
-`PF_B_CONTROLS`, the one page door the Options screen has no page behind) and **10 are out of scope**
-(ControlsPrefs' two ACCEPT/CANCEL returns, `CP_B_KEYS` and Keys' two returns,
-MomentoSelection's two returns and the cabin's `PC_B_CHANGEMOMENTO`, `IAWU_B_CONTINUE`,
-`CR_B_Exit`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, ACCEPT CHANGES as a
+mission flies a wingman), **2 are drawn disabled** (`MM_B_MULTIPLAYER` and `PF_B_CONTROLS`, the one
+page door the Options screen has no page behind) and **9 are out of scope** (ControlsPrefs' two
+ACCEPT/CANCEL returns, `CP_B_KEYS` and Keys' two returns, MomentoSelection's two returns and the
+cabin's `PC_B_CHANGEMOMENTO`, `IAWU_B_CONTINUE`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, ACCEPT CHANGES as a
 `OptionsApplyExit`, FLY on Free Flight and Fly Mission on Instant Action as a `LaunchExit`,
 FLY MISSION as a `CampaignMissionExit`, and Purchase Now returning to the top level with the plane
 saved. Keyboard and pad share one semantic command vocabulary at the seat seam (Decision 25), so
@@ -443,26 +442,27 @@ device mapping behind them is the seats' own tests.
 ### In scope and out of scope
 
 Decision 5 puts everything `LaunchMenu` hosts in scope. Mapping that onto the original's 34
-single-player screens leaves **27 in and 7 out**, before the 22 multiplayer screens, which are all
+single-player screens leaves **28 in and 6 out**, before the 22 multiplayer screens, which are all
 out (CSVM's Dogfight is splitscreen on `dogfight_ace` spawns, not the original's network play).
 
-**In scope (27):** MainMenu; Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys;
+**In scope (28):** MainMenu; Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys; Credits;
 InstantAction; Campaign, PassengerCabin, FlightCheck, PlaneSelection, OrdinanceLayout, ScrapBook,
 ScrapBook_TOC, ScrapbookZoom; Hangar, PlaneName, PlaneConstruction, AirFrame, Engine, Armor, Guns,
 HardPoints, Paint, Purchase; MessageBox.
 
-**Out of scope (7):** CampaignIntro and FinalCinema (MPG playback, `BL-446`); Save and Load (no
-savegame system here, and the `LOAD` branch is unreachable in the shipped build); Credits;
+**Out of scope (6):** CampaignIntro and FinalCinema (MPG playback, `BL-446`); Save and Load (no
+savegame system here, and the `LOAD` branch is unreachable in the shipped build);
 MomentoSelection (deferred, `BL-463`); IA_WrapUp (a flight board, excluded by Decision 5).
 
-**Of the 27, two are in the census and out of this plan:** ControlsPrefs and Keys. No shared
+**Of the 28, two are in the census and out of this plan:** ControlsPrefs and Keys. No shared
 controls option exists behind either, so Original draws `PF_B_CONTROLS` disabled; a later plan that
 adds one owns the page it belongs on.
 GameOptions, Audio and Video are built: the difficulty and the presentation stand on the first, the
 four volume levels on the second, the graphics mode, the display mode and the V-Sync choice on the
 third, and `PF_B_GAMEOPTIONS`, `PF_B_AUDIO` and `PF_B_VIDEO` are live.
 Multiplayer is network play with no local counterpart, so `MM_B_MULTIPLAYER` draws its disabled
-frame and takes no input; `MM_B_CREDITS` does the same, Credits being out of scope.
+frame and takes no input. `MM_B_CREDITS` is live and opens the credits screen; the one part of that
+screen still unbuilt is ABOUT, below.
 
 ### Screen by screen
 
@@ -471,7 +471,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 
 | Original screen | Built-in counterpart | Layout | Script decoded | Capture | Interaction evidence |
 |---|---|---|---|---|---|
-| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips: Campaign, Instant Action, Preferences (the Options screen) and Quit react, Multiplayer and Credits draw the disabled frame and take no input (out of scope), and the movie's place is black. Quit terminates on the press with no confirm, which is `MAINMENU.SCRIPT`'s own `terminate` on `mm_b_quit` |
+| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips: Campaign, Instant Action, Preferences (the Options screen), Credits and Quit react, Multiplayer draws the disabled frame and takes no input, and the movie's place is black. Quit terminates on the press with no confirm, which is `MAINMENU.SCRIPT`'s own `terminate` on `mm_b_quit` |
 | (none: remake-only) | Free Flight, Chapter, Plane | none | none | none | **Original's Free Flight door and screen, of our design under Decision 11.** The door is a text button in the `FC_B_CHANGEPLANE` paper-plaque convention beside the button frame, level with Campaign; the screen is the logo over two text lists (the shared chapter roster and the shared aircraft roster, the eleven stock airframes then the saved custom planes in an eleven-row window) with BACK and FLY plaques and a seat strip under the chapters. Seat 0 alone picks here; each joined seat picks on the per-seat aircraft screen below. Nothing on it is decoded |
 | (none: remake-only) | Dogfight, Chapter, Plane | none | none | none | **Original's Dogfight door and screen, of our design under Decision 11.** The door sits under the Free Flight door in the same plaque convention; the screen is the Free Flight screen's shape over the Dogfight gate (a second seat must join and confirm before FLY stands). The original's Multiplayer is network play and ships no split-screen Dogfight, so nothing here is decoded |
 | (none: remake-only) | the join strip and per-seat picks | none | none | none | **Original's join flow, of our design.** Start on an unclaimed pad joins a seat on either sortie screen, the Instant Action screen or the campaign flight check (the same gesture and pad bookkeeping as Built-in's, through `MenuSeatDevices`); seat 0's mouse, keyboard or pad picks the map and the aircraft and presses FLY, which is its own confirmation. The original has no join gesture |
@@ -483,6 +483,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | Video | (none) | 31 rows | no | `Preferences Video.png` | layout only for the composition; both plaques state `Preferences` as their edge. **Built as Original's VIDEO page**, `PF_B_VIDEO`'s destination: `VP_BACKGROUND` and `VP_T_TITLE` at their corners, then the settings on their own authored rows (a title in the `X` 18 column at the row's line, a control beside it, a description in the `X` 325 column), with `VP_B_ACCEPTCHANGES` leaving as the options apply carrying every saved choice and `VP_B_CANCELCHANGES` returning to Preferences with the edits dropped. Each row keeps its own geometry rather than a shared pitch: the authored lines run 270, 305, 342, 381, 417, 454, 494, 530, 565 and each control has its own column and width, so a fixed pitch would put no row where the artwork draws it. Remake-only are the rows built so far, held in the table in authored order because the cursor walks it. "Resolution" stands on its own authored line, a dropdown at `VP_D_Display`'s own column and width over the sizes the chosen screen can hold, keeping the authored description "Select the screen resolution." because that line describes what the row does here. Its words are enumerated per screen rather than shipped as a list, so it cannot offer a size the monitor cannot hold; Godot exposes no video-mode list, so the enumeration is the standard desktop sizes that fit inside the screen's own reported size, plus that size and the project default. A saved size the screen no longer offers shows as the project default rather than as the nearest one, which is the rule `ResolutionSetting` applies. "Monitor" stands on the authored Graphics line, the page's first row, a dropdown at `VP_D_Device`'s own column and width over the screens the engine reports, each labelled by the index it is saved as and the size that screen reports, described "Select the monitor the game opens on." Both its title and its description are the page's own, the authored pair naming a 3D card or a software renderer and this port having neither a card choice nor a software path. A saved index no screen answers to shows as the screen the window already stands on, which is the rule `MonitorSetting` applies and is the feature rather than an error path, a monitor being unpluggable between two launches. "Display Mode" stands on the authored Viewing Range line, a dropdown at `VP_D_View`'s own column and width reading Windowed, Borderless or Fullscreen, described "Select how the window sits on the screen. Borderless leaves the desktop beneath it."; it takes that row because the two above it are the monitor and the resolution, and its authored description names a draw distance the mission data owns. "V-Sync" stands on the authored Effects Level line, a dropdown at `VP_D_Effects`' own column and width reading On, Off, or one of the 60, 120 and 144 fps caps, described "Select the frame pacing. On follows the screen; off runs free, or to a frame cap."; one control carries both the choice and the cap, a cap meaning nothing while the loop waits for the screen. It takes that row because the three authored rows above it are where the monitor, the resolution and the display mode belong, which is the order those read in, and its authored description names a tier system this port has no counterpart for. "Enhanced Graphics" stands on the authored Shadows line, a checkbox drawn from `PF_B_CheckBoxSmall.png` at `VP_B_SHADOWS`' own corner, described "Select the lit world. Takes effect on the next start." while the choice matches the running mode and "This run is original; restart to apply." (or enhanced) while it does not, since the mode resolves once at launch and a saved word the world has not picked up would otherwise read as a failed switch. It takes the Shadows row because the sun shadows that row would have switched already ride the enhanced gate, and because that row's authored title box is the wide one a long title needs. Two numbers the section does not state are derived: a title box stops at the control beside it (every Video title but the Graphics one is authored 162 wide whatever stands to its right, and that one's 90 already stops short of `VP_D_Device` at 105), and a description the section gives no width wraps at the plaque column, the widthless `VP_T_ClutterDESC` and `VP_T_ShadowsDESC` being the two rows the plaques stand beside. The page draws the Preferences page's `PF_LOGO`, its own section authoring no logo pane. **The rows still empty** are Objects Detail, Lighting Quality, Texture Quality and Clutter Detail, which do not come back: they were tiers for 2000-era hardware, and the knobs nearest to them here are either fidelity values the mission data owns or settings that cost nothing on a modern GPU |
 | ControlsPrefs | (none) | 12 rows | no | **none** | layout only. **Out of this plan**: `PF_B_CONTROLS` draws disabled, and Keys behind it is unreached |
 | Keys | (none) | 17 rows | no | `Keybinds Movement/Throttle/Targeting/Weapons/Views 1/Views 2/Other.png` | composition of all seven tabs; no interaction. **Out of this plan** with ControlsPrefs |
+| Credits | (none: Built-in has no counterpart) | 3 rows | this page | **none** | `CREDITS.SCRIPT` decoded: the background pane, ABOUT, and the DONE plaque whose `ScriptToExe` is MainMenu; `gui_char` ends the script and runs `mainmenu.script` on Escape. **Built as Original's credits screen** from the full-screen pane the credit names are painted into, the two buttons over it, and both ways back landing on the top level. `CR_B_Exit` wears MomentoSelection's `MS_B_Done.png`; there is no `CR_B_Exit.png`. Two parts stand unbuilt, neither for want of a decode. **ABOUT** is drawn disabled: the press sets `@globals@OR.XR`, which switches the messagebox to the `ma_` widget set over `CR_AboutMessageBox.png` and takes the skull icon, and the shared chrome composes the `mb_` set alone. Its words are `uiData` 2108 (`0x0040a2cb`), langui 1301 formatted over the product id `FUN_004073d0` reads from `HKLM\SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`, value `PID`, which falls back to `???` when the key or the value is absent. **The right-button easter egg** is not read: `rbutton_update` activates a text widget at 288,308 while the right button is held inside 287..353 by 313..333, its line built by shifting each character of an obfuscated literal down by three (`CREDITS.SCRIPT:63-72`), and the seat seam carries no right-button signal |
 | InstantAction | Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, Presets | 48 rows | [`instant-action.md`](../formats/instant-action.md) | **none** | option sets, the ace's control hiding and the paged enemy rows are script-proven; the screen itself has never been seen. **Built as Original's Instant Action screen** from the section's rows over the shared feature: `IA_BackGround`, the `T` rows, the contents list in its 14-row window with its own scroll arrows and slider, the dropdowns on their authored lines, the enemy rows paged by `IA_B_UP`/`IA_B_DOWN`, the radio pair, View Story, Fly Mission and Exit; `IA_B_BUILD` opens the wallet-free hangar and `IA_B_CHANGEWEAPONS` the Weapon Loadout screen for the seat the radio pair names (both destinations remake readings, no layout row stating either edge). What the data does not settle is listed under Part 4 for `CAP-50` |
 | OrdinanceLayout (as Instant Action's Weapon Loadout) | `WingmanLoadout`, the plane pane's loadout | 31 rows | same | same | **Built as Original's Instant Action loadout screen** over the same section: the ammunition fields for the airframe's firable gun slots and the rocket fields for its pylons (left column pylons 1 to 4, right 5 to 8), each over the stock table's option list, the two diagram panes on the airframe's frame, `OL_T_PLANEINFO` naming the fitted aircraft, the focused field's description in its pane, `OL_B_ACCEPT` keeping the picks and `OL_B_CANCEL` or Back restoring the picks the screen opened on. Remake-only: the original reaches this section from the flight check alone |
 | Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits. **Built as Original's profile screen** over the shared campaign feature and the shared board component: the name box pre-filled with the last player seated, `CM_B_START` / Enter in the box / a second click on the filled roster row starting, a first click filling the box, the list sub-script's own selection bar and pointer frame, the four refusals as the one-button messagebox, `CM_B_DELETEPLAYER` asking with langui 201 as the two-button box whose answers read Yes and No (langui 102 and 103, the words `MESSAGEBOX.SCRIPT` gives a `0x4` box), `CM_B_CANCEL` leaving. The box opens on Yes, the left button `MESSAGEBOX.SCRIPT` focuses for the plain `0x4` mask the campaign passes. Remake-only: the caret |
@@ -746,8 +747,10 @@ then the tab bar and steps a dropdown's value sideways, a remake equivalence).
   *usable* without the artwork, not that it does not use it. A3's fallback wording depends on which
   of the two the milestone means.
 - **Built-in plays no menu sounds.** The original has four UI wavs plus the splash track.
-- **Built-in takes no mouse input.** Every launchscreen `Control` is `MouseFilterEnum.Ignore`
-  (`BL-654`), where the original's layout gives every button a rollover and a depressed colour and
+- **Built-in's mouse reaches its own rows only.** The centred layout's rows are `Control`s that take
+  Godot's hit test, so a hover focuses a row, the left button confirms it, the wheel steps a list and
+  the right button is Back; the campaign boards under Built-in are one composed surface and stay on
+  the keys and pads. The original's layout gives every button a rollover and a depressed colour and
   its listboxes frame the row under the pointer.
 
 ## The decoded layout

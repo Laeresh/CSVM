@@ -45,7 +45,8 @@ public class OriginalCoverageTests : IDisposable
     // the inventory's own list and are counted, not driven.
     private static readonly string[] InScopeSections =
     {
-        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
+        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "Credits", "InstantAction", "Campaign",
+        "PassengerCabin", "FlightCheck",
         "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
@@ -70,6 +71,7 @@ public class OriginalCoverageTests : IDisposable
             new[] { OriginalShell.AudioCancelKey, OriginalShell.OptionsBackKey }),
         new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey },
             new[] { OriginalShell.VideoCancelKey, OriginalShell.OptionsBackKey }),
+        new("credits", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey }, new[] { OriginalShell.CreditsExitKey }),
         new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
         new("instant-action-exit", OriginalScreen.TopLevel, new[] { "MM_B_INSTANTACTION", OriginalShell.ExitKey }, Array.Empty<string>()),
         new("instant-action-loadout", OriginalScreen.InstantActionLoadout, new[] { "MM_B_INSTANTACTION", OriginalShell.WeaponLoadoutKey },
@@ -139,7 +141,8 @@ public class OriginalCoverageTests : IDisposable
         ["MainMenu.MM_B_INSTANTACTION"] = Edge.Driven("instant-action", "MM_B_INSTANTACTION"),
         ["MainMenu.MM_B_MULTIPLAYER"] = Edge.Disabled("MM_B_MULTIPLAYER", "network play; the 22 multiplayer scripts have no layout and no local counterpart"),
         ["MainMenu.MM_B_PREFERENCES"] = Edge.Driven("options", "MM_B_PREFERENCES"),
-        ["MainMenu.MM_B_CREDITS"] = Edge.Disabled("MM_B_CREDITS", "Credits is out of this plan's scope"),
+        ["MainMenu.MM_B_CREDITS"] = Edge.Driven("credits", OriginalShell.CreditsDoorKey),
+        ["Credits.CR_B_Exit"] = Edge.Driven("credits", OriginalShell.CreditsExitKey),
         ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Driven("game-options", OriginalShell.GameOptionsDoorKey),
         ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalShell.GameOptionsAcceptKey),
         ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalShell.GameOptionsCancelKey),

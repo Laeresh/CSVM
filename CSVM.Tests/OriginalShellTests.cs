@@ -36,9 +36,9 @@ public class OriginalShellTests
             shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
         // The decoded rows with no remake destination yet are disabled; Instant Action,
-        // Preferences (the Options door) and Quit react. The hangar is reached through Instant
-        // Action's Build Custom Plane, so no door of its own stands here.
-        Assert.Equal(new[] { true, true, false, true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
+        // Preferences (the Options door), Credits and Quit react. The hangar is reached through
+        // Instant Action's Build Custom Plane, so no door of its own stands here.
+        Assert.Equal(new[] { true, true, false, true, false, true, true, true }, shell.Rows.Select(r => r.Enabled));
         // A decoded button's rectangle is its authored corner and its measured strip's frame.
         var quit = shell.Rows.Single(r => r.Key == "MM_B_QUIT");
         Assert.Equal((280f, 530f, 240f, 50f), (quit.X, quit.Y, quit.Width, quit.Height));
@@ -92,6 +92,8 @@ public class OriginalShellTests
         Assert.Equal("MM_B_INSTANTACTION", shell.FocusedKey);
         shell.Step(Down);
         Assert.Equal("MM_B_PREFERENCES", shell.FocusedKey);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.CreditsDoorKey, shell.FocusedKey);
         shell.Step(Down);
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         shell.Step(Down);
@@ -168,6 +170,7 @@ public class OriginalShellTests
         step = shell.Step(Back);
         Assert.IsType<QuitExit>(step.Exit);
 
+        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);

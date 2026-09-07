@@ -39,6 +39,10 @@ public enum OriginalScreen
     /// with ACCEPT CHANGES and CANCEL CHANGES beside them.</summary>
     Video,
 
+    /// <summary>The decoded <c>[@Credits@]</c> screen: the background pane the credit names are
+    /// painted into, ABOUT drawn disabled and the DONE plaque.</summary>
+    Credits,
+
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
     InstantAction,
@@ -737,7 +741,7 @@ public sealed partial class OriginalShell
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
             or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video
-            or OriginalScreen.SeatPlane
+            or OriginalScreen.SeatPlane or OriginalScreen.Credits
             || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
@@ -773,6 +777,9 @@ public sealed partial class OriginalShell
             case OriginalScreen.Options:
                 ComposeOptions(pictures, lines);
                 break;
+            case OriginalScreen.Credits:
+                ComposeCredits(pictures);
+                break;
             case OriginalScreen.GameOptions:
                 ComposeGameOptions(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
                 break;
@@ -784,7 +791,7 @@ public sealed partial class OriginalShell
                 break;
         }
 
-        if (!ownPage || _screen == OriginalScreen.Options)
+        if (!ownPage || _screen is OriginalScreen.Options or OriginalScreen.Credits)
         {
             ComposeRows(screenRows, screenFocus, fills, lines, plaques);
         }
@@ -1169,6 +1176,9 @@ public sealed partial class OriginalShell
                     case "MM_B_PREFERENCES":
                         Open(OriginalScreen.Options);
                         break;
+                    case CreditsDoorKey:
+                        Open(OriginalScreen.Credits);
+                        break;
                     case "MM_B_QUIT":
                         return new QuitExit();
                 }
@@ -1177,6 +1187,8 @@ public sealed partial class OriginalShell
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
                 return ActivateSortie(row);
+            case OriginalScreen.Credits:
+                return ActivateCredits(row);
             case OriginalScreen.InstantAction:
                 return ActivateInstantAction(row);
             case OriginalScreen.InstantActionLoadout:
@@ -1304,12 +1316,15 @@ public sealed partial class OriginalShell
                 {
                     if (main?.Widget(key) is { } widget)
                     {
-                        bool enabled = key is "MM_B_QUIT" or "MM_B_PREFERENCES" or "MM_B_INSTANTACTION"
+                        bool enabled = key is "MM_B_QUIT" or "MM_B_PREFERENCES" or "MM_B_INSTANTACTION" or CreditsDoorKey
                             || (key == CampaignKey && _campaign != null && _profiles != null);
                         rows.Add(Button(widget, enabled));
                     }
                 }
 
+                break;
+            case OriginalScreen.Credits:
+                BuildCreditsRows(rows);
                 break;
             case OriginalScreen.InstantAction:
                 BuildInstantActionRows(rows);

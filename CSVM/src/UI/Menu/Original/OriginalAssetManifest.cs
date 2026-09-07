@@ -111,7 +111,7 @@ public sealed class OriginalAssetManifest
     /// <summary>The manifest schema. Bump it when the derivation changes what Original needs: the
     /// composed-section table, the rows Original does not draw, the script-named files, or what
     /// <see cref="Check"/> accepts as a readable file.</summary>
-    public const int Schema = 3;
+    public const int Schema = 4;
 
     /// <summary>The extraction stamp schema Original refuses to read a tree below: the loaders'
     /// own expectation, which the decoded menu layout's first reader raised, so a tree extracted
@@ -122,9 +122,10 @@ public sealed class OriginalAssetManifest
     /// optional, since nothing Original draws reads it.</summary>
     public static readonly IReadOnlyList<string> ComposedSections = new[]
     {
-        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
-        "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
-        "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
+        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "Credits", "InstantAction", "Campaign",
+        "PassengerCabin", "FlightCheck", "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC",
+        "ScrapbookZoom", "Hangar", "PlaneName", "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns",
+        "HardPoints", "Paint", "Purchase", "MessageBox",
     };
 
     // The files the GUI scripts name outside the layout and Original draws anyway: the two pointer
@@ -151,10 +152,10 @@ public sealed class OriginalAssetManifest
         ["MessageBox.MP_B_LEFT"] = "the multiplayer error box, which has no local counterpart",
         ["MessageBox.MP_B_CENTER"] = "the multiplayer error box, which has no local counterpart",
         ["MessageBox.MP_B_RIGHT"] = "the multiplayer error box, which has no local counterpart",
-        ["MessageBox.MA_P_BACKGROUND"] = "the About box, which is out of scope",
-        ["MessageBox.MA_B_LEFT"] = "the About box, which is out of scope",
-        ["MessageBox.MA_B_CENTER"] = "the About box, which is out of scope",
-        ["MessageBox.MA_B_RIGHT"] = "the About box, which is out of scope",
+        ["MessageBox.MA_P_BACKGROUND"] = "the About box, whose widget set the shared chrome does not compose",
+        ["MessageBox.MA_B_LEFT"] = "the About box, whose widget set the shared chrome does not compose",
+        ["MessageBox.MA_B_CENTER"] = "the About box, whose widget set the shared chrome does not compose",
+        ["MessageBox.MA_B_RIGHT"] = "the About box, whose widget set the shared chrome does not compose",
     };
 
     // The extensions of a file Original could draw or play. Anything else a script names (the

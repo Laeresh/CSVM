@@ -2404,17 +2404,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the Instant Action palette swallows the dark one, so keep a ground behind coloured text there.
   *Cross-refs:* `BL-703`'s landing (`git log --grep=BL-703`), which added the strip.
 
-- `BL-752` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Built-in takes the
-  mouse forwards but offers no way back with it.** *Evidence:* reported at the controls over
-  `PLAN-M5-polish-12`'s closing sortie, "mouse controls in Built-In dont have a way to go back
-  with mouse, only with the keyboard". `PointerEvent`
-  (`CSVM/src/UI/LaunchMenu.cs:1077-1100`) handles motion, the wheel and the left button only, so
-  every screen without a drawn BACK row is a one-way door for a mouse-only player. *Fix shape:*
-  the right button as Back in `PointerEvent`, matching what Esc and B already do on the standing
-  screen. *⚠ Traps:* the right button must not reach the flight HUD or the panes behind the rows;
-  the same `MouseFilter` care `BL-654` needed applies. A Back from the top level is an exit
-  prompt, not a silent quit. *Cross-refs:* `BL-654`'s landing (`git log --grep=BL-654`).
-
 - `BL-753` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Plane Construction's
   tab labels ride high enough on their strips to touch the element above.** *Evidence:* reported
   at the controls over `PLAN-M5-polish-12`'s closing sortie, "Plane Construction: move the text of
@@ -2646,42 +2635,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first and has to be drawn after it. *Cross-refs:* `BL-706` (the same dialog's placement),
   `BL-744`'s landing (`git log --grep=BL-744`).
 
-- `BL-775` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **CREDITS draws
-  disabled on Original's top level, and the original's credits screen behind it is unbuilt.**
-  *Evidence:* the top level enables four of its six decoded rows and `MM_B_CREDITS` is not among
-  them (`CSVM/src/UI/Menu/Original/OriginalShell.cs:1127-1129`), so the button takes the disabled
-  ink and no press reaches the activate switch (`:997-1017`);
-  `CSVM.Tests/OriginalCoverageTests.cs:132` records the edge as
-  `Edge.Disabled("MM_B_CREDITS", "Credits is out of this plan's scope")` and
-  `docs/org/menu-inventory.md` states that scope call in its tally and again in its in-scope list.
-  What stands behind the button is small and complete: the `Credits` section is three widgets, the
-  full-screen `CR_BackGround.jpg` pane, `CR_B_About` at 490,550 and `CR_B_Exit` at 650,550 whose
-  `ScriptToExe` is `MainMenu` (`extracted/rof/menu_layout.json`), and every art file ships
-  (`extracted/rof/ASSETS/GRAPHICS/CR_BACKGROUND.JPG`, `CR_B_ABOUT.PNG`, `CR_ABOUTMESSAGEBOX.PNG`).
-  The credit names are painted into the background image, so the screen lays out no roster of its
-  own. *Fix shape:* a `Credits` member on `OriginalScreen` opened from the top-level press,
-  the pane and its two buttons, ESC and `CR_B_Exit` both returning to the top level the way
-  `CREDITS.SCRIPT`'s `gui_char` and that button's edge do, the enabled set widened, a `credits`
-  name in `LaunchMenu.cs` so `--menu=credits --screenshot=` can shoot it, and the coverage entry
-  moved from `Edge.Disabled` to a driven edge with `CR_B_Exit` taken out of the out-of-scope list.
-  *⚠ Traps:* **the ABOUT button is the part that is not decoded, and it is not the same screen.**
-  `CREDITS.SCRIPT` answers its press by setting `@globals@OR.UR = 0x1`, `XR = 1` and `WR = 0` and
-  running `messagebox.script`, so ABOUT raises the one box in the game that asks for the skull
-  icon (`CSVM/src/UI/CampaignModal.cs:19-21`), and its text comes from `uiData` callback 2108,
-  which nothing here decodes. Build the screen without ABOUT rather than inventing that string.
-  The screen also carries a right-button easter egg: `rbutton_update` activates a text widget at
-  288,308 while the right button is held inside 287..353 by 313..333, and its line is built by
-  shifting each character of an obfuscated literal down by three
-  (`extracted/rof/ASSETS/SCRIPTS/CREDITS.SCRIPT:63-72`). Decode it at runtime as the script does;
-  a plain-text copy in our source is the same string with the joke removed. Do not go hunting for
-  a missing `CR_B_Exit.png` either, that button wears MomentoSelection's `MS_B_Done.png`.
-  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu`, press CREDITS on the top
-  level, and check the background fills the frame, that ESC and the DONE plaque both come back,
-  and that the right-button hold reveals its line. *Cross-refs:* `docs/org/menu-inventory.md` (the
-  scope call, the edge tally and the screen census all move together), `BL-446` and `BL-463` (the
-  other screens Decision-era scope left out), `BL-744`'s landing (`git log --grep=BL-744`, the
-  message box icon rule ABOUT would need).
-
 - `BL-778` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The flight HUD
   anchors to the viewport's own edges, so on an ultrawide screen its elements sit at the far left
   and right instead of within the reading area.**
@@ -2704,6 +2657,78 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   comfortable reading width while off-screen target markers still point usefully.
   *Cross-refs:* `BL-776` (the FOV half of the same ultrawide exposure), `BL-777` (a side-by-side
   pane is 16:9 and does not show this).
+
+- `BL-779` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Original's
+  credits screen draws ABOUT disabled, because the box it raises wants a widget set the shared
+  messagebox chrome does not compose.**
+  *Evidence:* `MESSAGEBOX.SCRIPT:11-25` picks the box's widget prefix off two globals, `WR` taking
+  `mp`, else a set `XR` taking `ma`, else `mb`. `CREDITS.SCRIPT:52-61` sets `XR = 1`, so ABOUT's box
+  is the `ma_` set: `MA_P_BACKGROUND` over `CR_AboutMessageBox.png` (505x416), `MA_T_MESSAGE` at
+  96,70 by 375x240 and `MA_B_CENTER` at 224,371 (`extracted/rof/menu_layout.json`).
+  `CampaignBoards.Dialog` composes the `mb_` set alone (`CSVM/src/UI/CampaignBoards.cs:394-419`) off
+  the constants `DialogX = 195` and `DialogY = 150` (`:83-84`), and `DialogSlot` is hard-wired the
+  same way (`:424-435`), so the shell draws ABOUT as a disabled row and the manifest records the
+  four `MA_` rows as not drawn.
+  *Fix shape:* a variant on the dialog composer carrying the widget prefix and the box's origin,
+  defaulting to today's `mb_` set so every campaign caller is unchanged, then that variant through
+  `OriginalDialog`, `RaiseDialog`, `DialogRows` and `ComposeDialog`, and ABOUT enabled with
+  `DialogIcon.Death`. The origin is the script's own centring, `(800 - w) / 2` by `(600 - h) / 2`
+  over the chosen background, which is exactly what 195,150 already is for `MB_Background.png`'s
+  410x300; for the `ma_` box it is 147,92.
+  *⚠ Traps:* **the icon does not take the prefix.** `MESSAGEBOX.SCRIPT:32-34` initialises
+  `mb_p_icon` whatever the variant and only the `mp` box moves it (`:69-72`), so the `ma_` box draws
+  the same strip at the same authored place, frame 2. There is no `MA_P_ICON` row and adding one
+  would be an invention. The words are already decoded, so do not re-run that: `uiData` 2108 at
+  `0x0040a2cb` is langui 1301 over the product id. That row carries a `[COUR9]` tag `UiStrings`
+  strips and a `<B>`/`<b>` pair around its one placeholder that nothing strips centrally, though
+  `OriginalHangar.cs:1077` does it inline for one question string. Without `BL-780` the placeholder
+  reads `???`, which is the original's own answer on a machine with no such key.
+  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu=credits`, press ABOUT, and
+  check the box is the tall parchment rather than the small one, with the skull icon and one OK.
+  *Cross-refs:* `docs/org/menu-inventory.md` (the Credits row, which holds the decode), `BL-780`,
+  `BL-744`'s landing (`git log --grep=BL-744`, the icon rule), `BL-775`'s landing
+  (`git log --grep=BL-775`).
+
+- `BL-780` `[Feature]` `[Blocked: BL-779]` `[S]` `[Next: decide]` `[Impact: low]`
+  `[Evidence: decoded]` **The About box's product identification number would read `???`, because
+  CSVM does not read the registry value the original reads.**
+  *Evidence:* `uiData` 2108's handler calls `FUN_004073d0(HKEY_LOCAL_MACHINE, "PID", "???")`, which
+  opens `SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`, queries `PID` into a 512-byte static
+  buffer at `0x006464cc` and returns it, copying the default in and returning that when either the
+  open or the query fails. langui 1301's one `%1!s!` placeholder takes that string.
+  *Fix shape:* read the same key and value, falling back to `???` exactly as the original does.
+  *⚠ Traps:* this is a dependency decision before it is a code change. `CSVM/CSVM.csproj` targets
+  plain `net8.0` rather than `net8.0-windows`, so `Microsoft.Win32.Registry` is a package reference
+  the project does not carry today and the call needs a platform guard the analyzers will ask for;
+  nothing else in `CSVM/src` reads the registry. Weigh that against what it buys: a player who
+  installed the retail game sees their own id and everyone else sees `???`, and both readings are
+  faithful. Do not source the id from anywhere else, since it is the installer's and not the game
+  files'.
+  *Cross-refs:* `BL-779` (the box this text stands in), `docs/org/menu-inventory.md`.
+
+- `BL-781` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The credits
+  screen's right-button easter egg cannot be revealed, because the seat seam carries no
+  right-button signal.**
+  *Evidence:* `CREDITS.SCRIPT:25-39` activates a text widget while the right button is held inside
+  the authored rectangle x 287..353 by y 313..333, and deactivates it on release. The widget is
+  created at 288,308 in colour `0xffffff00` (`:14-19`) and its line is built once at create, on the
+  `mail(20001)` the script sends itself, by shifting each character of the obfuscated literal
+  `"xl#ghy#ohdg=#ulfk#hl}hqkrhihu"` down by three (`:63-72`). `MenuPointer` carries `Pressed`,
+  `Clicked` and `Wheel`, all of them the left button (`CSVM/src/UI/Menu/MenuCommands.cs:31`), and
+  `PointerSeat` reads one injected `_pressed` func (`PointerSeat.cs:44-59`).
+  *Fix shape:* a right-button field on `MenuPointer` fed by a second injected read in `PointerSeat`,
+  then a held-inside-the-rectangle test on the credits screen that activates the line.
+  *⚠ Traps:* decode the string at runtime as the script does; a plain-text copy in our source is the
+  same string with the joke removed. It is a HOLD and not a click, so a click edge is the wrong
+  signal. The five test helpers that construct a `MenuPointer` move with the record
+  (`MenuHangarSuites.cs:889`, `MenuInstantActionSuites.cs:1072`, `MenuLaunchReturnSuites.cs:518`,
+  `MenuOriginalCampaignSuites.cs:771`, `MenuOriginalSuites.cs:635`). ⚠ Do not route this as a
+  general secondary-click command; `MenuCommands` is device-neutral by contract and no other screen
+  reads a right button.
+  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu=credits`, hold the right
+  button inside that rectangle, and check a line appears while held and goes on release.
+  *Cross-refs:* `docs/org/menu-inventory.md` (the Credits row), `BL-775`'s landing
+  (`git log --grep=BL-775`).
 
 ## Splitscreen
 

@@ -286,9 +286,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int _pressFrames;
 
     // The mouse's commands since the last frame, folded into player 1's next frame by WithPointer:
-    // a hover is a cursor step onto its row, a click is Accept, a wheel notch a step. Held for the
-    // frame rather than applied in the event, since Rebuild replaces the very controls the event
-    // is dispatched through.
+    // a hover is a cursor step onto its row, a click is Accept, a wheel notch a step, the right
+    // button Back. Held for the frame rather than applied in the event, since Rebuild replaces the
+    // very controls the event is dispatched through.
     private MenuCommands _pointer = MenuCommands.None;
     // The row the left button went down on and whether the pointer is still over it, Godot's own
     // button rule: a release confirms only inside the control that took the press. Null between
@@ -1062,6 +1062,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             MoveY = frame.MoveY != 0 ? frame.MoveY : pointer.MoveY,
             Accept = frame.Accept || pointer.Accept,
+            Back = frame.Back || pointer.Back,
         };
     }
 
@@ -1076,9 +1077,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         _rowControls[index] = row;
     }
 
-    // One mouse event over a row, or over the list between rows (row null, the wheel alone). A
-    // motion focuses the row, a wheel notch steps the cursor, and the left button confirms on the
-    // release when it went down on this row and the pointer never left it.
+    // One mouse event over a row, or over the list between rows (row null, the wheel and the right
+    // button alone). A motion focuses the row, a wheel notch steps the cursor, the left button
+    // confirms on the release when it went down on this row and the pointer never left it, and the
+    // right button is Back. Back takes the press rather than the release: it leaves the screen and
+    // not a row, so there is no control a release would have to land back inside of.
     private void PointerEvent(int? row, InputEvent ev)
     {
         switch (ev)
@@ -1091,6 +1094,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 break;
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelDown }:
                 _pointer = _pointer with { MoveY = _pointer.MoveY + 1 };
+                break;
+            // ⚠ Not on the Mode screen: Back there is the quit, and a stray right click must not
+            // take it. The footer names Esc for that one, as it always has.
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }
+                when _screen != Screen.Mode:
+                _pointer = _pointer with { Back = true };
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button when row is { } pressed:
                 if (button.Pressed)
