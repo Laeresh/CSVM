@@ -1,15 +1,18 @@
 <#
 .SYNOPSIS
-    Regenerates packaging/LICENSE-thirdparty.txt from the three payloads it speaks for.
+    Regenerates packaging/LICENSE-thirdparty.txt from the payloads and the ported source
+    it speaks for.
 
 .DESCRIPTION
     The release zip ships CSVM.exe (the Godot engine statically linked), a self-contained
     .NET runtime beside it, and tools/unzbd.exe (a Rust binary). Each carries notice
     obligations that CSVM's own LICENSE and LICENSE-unzbd do not cover, so the assembled
-    file is what discharges them.
+    file is what discharges them. A fourth obligation is not a payload at all: CSVM's
+    managed MPEG-1 decoder is a port of pl_mpeg, and MIT requires the notice to travel
+    with the derived source.
 
-    All three sources are read from the artefacts themselves rather than from a copy of
-    upstream's website:
+    The three payload sources are read from the artefacts themselves rather than from a
+    copy of upstream's website:
 
     - Godot. The Windows distribution ships NO LICENSE.txt or COPYRIGHT.txt on disk, and
       neither does the export-template archive: the engine keeps both texts inside the
@@ -29,10 +32,18 @@
       out of the registry checkout it was built from. Texts are deduplicated by content,
       so the identical Apache-2.0 sixty crates ship appears once.
 
+    pl_mpeg is the exception to that rule, and cannot be anything else: upstream declares
+    MIT through an SPDX-License-Identifier line in its header and publishes no licence
+    file, so there is no upstream text to read. The terms are therefore kept in this
+    repository as packaging/LICENSE-plmpeg, and the section says in the shipped file where
+    that text came from so a reader is not misled into taking it for a verbatim copy.
+
     ExportRelease.ps1 checks the three version stamps this script writes into the file's
     header against what it is actually packaging, and refuses an export whose notice was
     assembled for a different engine, runtime or fork commit. That check is what makes a
-    stale notice a build failure rather than a silent shipping mistake.
+    stale notice a build failure rather than a silent shipping mistake. pl_mpeg carries no
+    such stamp because it is source this project derives from rather than a binary the zip
+    carries: it moves with CSVM's own history, which BUILD-INFO.txt already records.
 
 .EXAMPLE
     .\packaging\BuildThirdPartyNotices.ps1
@@ -52,6 +63,7 @@ $RepoRoot     = Split-Path $PSScriptRoot -Parent
 $GodotExe     = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
 $Mech3axRepo  = Join-Path $RepoRoot "tools\mech3ax"
 $OutFile      = Join-Path $PSScriptRoot "LICENSE-thirdparty.txt"
+$PlMpegFile   = Join-Path $PSScriptRoot "LICENSE-plmpeg"
 $PackRoot     = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.netcore.app.runtime.win-x64"
 
 $Rule = "=" * 78
@@ -67,6 +79,11 @@ foreach ($required in @($GodotExe, $Mech3axRepo, $PackRoot)) {
     if (-not (Test-Path $required)) {
         throw "Not found: $required -- see PROJECT_CONTEXT.md for the tools/ setup."
     }
+}
+
+if (-not (Test-Path $PlMpegFile)) {
+    throw "Not found: $PlMpegFile -- the MIT terms the pl_mpeg port ships under live in " +
+        "the repository, because upstream publishes no licence file to read them from."
 }
 
 # ---------------------------------------------------------------- Godot
@@ -204,6 +221,29 @@ foreach ($text in ($texts.Keys | Sort-Object { $texts[$_][0] })) {
     [void] $crateBlocks.AppendLine()
 }
 
+# ---------------------------------------------------------------- pl_mpeg
+
+$plmpegLicense = Read-Utf8 $PlMpegFile
+
+$plmpegIntro = @"
+CSVM's MPEG-1 video and MP2 audio decoding is a port of pl_mpeg, a single-header
+C library by Dominic Szablewski (https://phoboslab.org), published at
+https://github.com/phoboslab/pl_mpeg. The C source is not in this archive and no
+pl_mpeg binary is shipped: the code that runs is C# derived from it, so this
+notice is carried for the source CSVM's own decoder is written from rather than
+for a component inside a binary here.
+
+pl_mpeg declares its terms as the line SPDX-License-Identifier: MIT in its
+header. It publishes no LICENSE file and reproduces no licence block in the
+header itself, so there is no upstream text to copy. What follows is therefore
+the standard MIT licence with pl_mpeg's author named as the copyright holder,
+kept in this project as packaging\LICENSE-plmpeg, and not a verbatim copy of a
+file upstream distributes. No copyright year is given because upstream states
+none.
+
+$($plmpegLicense.TrimEnd())
+"@
+
 # ---------------------------------------------------------------- assembly
 
 function Section([string] $Number, [string] $Title, [string] $Body) {
@@ -223,9 +263,10 @@ CSVM third-party notices
 ========================
 
 This file carries the notices that the third-party software inside this build is
-licensed on condition of carrying. It is not CSVM's own licence: CSVM is under the
-GNU General Public License v3, whose text is in LICENSE beside this file, and the
-extractor tools\unzbd.exe is under the EUPL-1.2, whose text is in LICENSE-unzbd.
+licensed on condition of carrying, and one notice for third-party source CSVM's own
+code is ported from. It is not CSVM's own licence: CSVM is under the GNU General
+Public License v3, whose text is in LICENSE beside this file, and the extractor
+tools\unzbd.exe is under the EUPL-1.2, whose text is in LICENSE-unzbd.
 
 This archive contains no Crimson Skies code, data or artwork. The game files a
 player extracts with Extract.ps1 stay on their own machine.
@@ -237,8 +278,9 @@ against what it packages before it will build a zip:
   .NET runtime version: $RuntimeVersion
   mech3ax cs-anim commit: $forkCommit
 
-Regenerate with packaging\BuildThirdPartyNotices.ps1, which reads every text below
-out of the shipped artefacts themselves.
+Regenerate with packaging\BuildThirdPartyNotices.ps1, which reads every text in
+sections 1 to 6 out of the shipped artefacts themselves. Section 7 is the one
+exception and says so in its own text: pl_mpeg publishes no licence file to read.
 
 Sections
 --------
@@ -249,6 +291,7 @@ Sections
   4. .NET runtime, published self-contained into data_CSVM_windows_x86_64\
   5. .NET runtime third-party notices
   6. Rust crates linked into tools\unzbd.exe
+  7. pl_mpeg, the MPEG-1 decoder CSVM's video code is ported from
 
 "@
 
@@ -278,6 +321,7 @@ $document = @(
     (Section "4" "The .NET runtime published into data_CSVM_windows_x86_64\" $dotnetLicense)
     (Section "5" ".NET runtime third-party notices" $dotnetNotices)
     (Section "6" "Rust crates linked into tools\unzbd.exe" $crateIntro)
+    (Section "7" "pl_mpeg, the MPEG-1 decoder CSVM's video code is ported from" $plmpegIntro)
 ) -join "`n"
 
 # Godot 4.7 embeds the FreeType licence with its copyright sign ALREADY double-encoded --
@@ -301,3 +345,4 @@ $document = ($document -replace "`r`n", "`n") -replace "`n", "`r`n"
 Write-Host "Wrote $OutFile" -ForegroundColor Green
 Write-Host "  Godot $godotBuild, .NET runtime $RuntimeVersion, $($crates.Count) crates, $($texts.Count) distinct crate licence texts"
 Write-Host "  Repaired $repaired double-encoded character(s) in upstream text (expected 1, Godot's FreeType notice)"
+Write-Host "  pl_mpeg's MIT terms taken from packaging\LICENSE-plmpeg (upstream ships no licence file)"
