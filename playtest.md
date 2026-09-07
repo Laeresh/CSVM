@@ -504,8 +504,9 @@ reasons that have nothing to do with any of these checks.
   - (c) dragging the window back under 2:1 flips it to stacked while the sortie runs, and back;
   - (d) the plane select before the sortie splits the same way the flight then does.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The threshold's reasoning is in the
-  landing commit (`git log --grep=BL-777`). ⚠ A cropped cockpit in a STACKED pane is `BL-776`, not
-  this: a 16:9 window still stacks, and each of its panes is still 32:9.
+  landing commit (`git log --grep=BL-777`). A stacked pane's first-person views hold their vertical
+  angle and widen horizontally like any other viewport, so a cropped cockpit in one is a new fault
+  rather than a known one.
 
 ### C1 · two pilots — stunt race (splitscreen starting grid)
 

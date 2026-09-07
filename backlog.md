@@ -2135,38 +2135,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   pose the view opens on before any zoom input. *Cross-refs:* `BL-433`'s closing commit
   (`git log --grep=BL-433`), which carries the keybind decode.
 
-- `BL-776` `[Bug]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **The first-person
-  FOV law holds the horizontal angle constant and shrinks the vertical one as the viewport widens,
-  so an ultrawide screen shows no more world than a 16:9 one and crops the cockpit.**
-  *Evidence:* `CameraController.HorizontalToVerticalFovDeg`
-  (`CSVM/src/Flight/CameraController.cs:338-343`) computes
-  `halfV = atan(tan(H/2) * AssumedAspect / liveAspect)` with `AssumedAspect = 4/3` (`:88`) over the
-  per-mode bases `CockpitHorizontalFovDeg = 80` and `NoseHorizontalFovDeg = 60` (`:82-83`). Because
-  the live aspect divides, the horizontal half-angle `atan(tan(halfV) * liveAspect)` is invariant
-  and the vertical shrinks: cockpit vertical is 80.0 degrees at 4:3, 64.4 at 16:9 and 34.9 at 32:9,
-  with horizontal 96.4 throughout. At 32:9 the canopy rails and instrument panel fall outside the
-  view, which is what a player reads as a cropped cockpit. `ApplyFirstPersonFov` (`:352-357`) and
-  `CockpitOverlay` (`CSVM/src/Flight/CockpitOverlay.cs:106-108`) both take the angle from that one
-  table, so a change reaches the world camera and the cockpit pass together.
-  *Fix shape:* hold the vertical angle and let the horizontal grow with the aspect, so a wider
-  screen shows more world to the sides instead of less above and below.
-  *⚠ Traps:* (i) **This is a fidelity decision, not a defect with one right answer**, which is why
-  `Next` is `decide`. The law is decoded (`docs/org/cameraViews.md`, "FOV constants and aspect
-  correction") and reproduces the original at the aspects the original could run. It could not run
-  32:9, so extending it is a choice about a case the decode never covered, not a departure from it.
-  (ii) The pinned 16:9 values 46.8 and 64.4 are asserted in tests and cited in the decode doc; a
-  change to the law must keep them or re-pin both together. (iii) A 2-player splitscreen pane is
-  this same case exactly, never an analogy: a window under 2:1 still stacks its two panes
-  (`SplitScreen.SideBySide`), so a 1280x720 window gives each pane 1280x360, an aspect of 3.5556,
-  which is 32:9. One law serves both and no aspect-conditional branch is wanted.
-  *Playtest after fix:* fly the Cockpit and Nose views at 32:9 and in a 2-player stacked pane, and
-  confirm the panel and canopy read as they do at 16:9.
-  *Cross-refs:* the split axis and the HUD's layout box, the other two items this exposure was
-  filed with, have both landed (`git log --grep=BL-777`, `git log --grep=BL-778`): a 2-player split
-  on a window 2:1 or wider now stands side by side, where each pane is 16:9 and this law is right,
-  which leaves single-player fullscreen and any stacked pane under 2:1 as the cases that still
-  read wrong. `BL-420` (the per-view base FOV decode this law rests on).
-
 ## HUD & UI
 
 - `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
