@@ -2999,7 +2999,7 @@ usual.
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
-- `BL-446` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The MPG movie cinemas do not play.** *Evidence:* Decision 2 of
+- `BL-446` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The MPG movies do not play.** *Evidence:* Decision 2 of
   `PLAN-M5-campaign` put them out of scope for the campaign milestone: plain MPG playback
   is a codec and container problem orthogonal to the campaign flow, and the loop reaches the cabin
   and the mission without one. **The decision this entry was waiting on is made and recorded in
@@ -3009,13 +3009,24 @@ usual.
   they cannot play as they ship. The decision is to transcode at extract time to `.ogv` and play
   through a stock `VideoStreamPlayer`, with a C# `VideoStreamPlayback` subclass recorded as the
   reversible alternative. *Fix shape:* the transcode step in the extraction pipeline and the player.
+  **This is two jobs of very different sizes, and the decode says so.** `crimflag.mpg` is not a
+  cinema: `ASSETS/LAYOUT.CSV` places it as a `movie` widget on `MainMenu`, `Save`, `Load` and
+  `Preferences` at X, Y and Z zero with `Loops` 0, so it is a looping backmost background, scaled
+  `250` per cent to fill the original's 800x600 authored space from its 320x240 source exactly.
+  The cinema sequence is the larger half: `fmv.zrd`'s `INTRO` and `CHAP0` blocks, the per-chapter
+  intro that hands off to the passenger cabin, and the final cinema that hands off to the scrapbook.
+  Both halves wait only on a decodable format and a look at the transcode.
   *⚠ Traps:* two files break the otherwise uniform profile and a reader must not assume one
-  (`msopen1.mpg` is 29.97 fps at 1500 kbps, `crimflag.mpg` is mono). `fmv.zrd`'s `PLAYAVI` actions
-  name `MSopen1.mpg`, `zipper.mpg` and `Chap0.mpg` in a case the on-disk names do not have, so a
-  case-sensitive lookup fails on all three. The chapter array at `0x0061e68c` names `chap1.mpg`
-  through `chap6.mpg` and `chap6.mpg` has no file in the install. Nobody has judged a transcode at
+  (`msopen1.mpg` is 29.97 fps at 1500 kbps, `crimflag.mpg` is mono). Four of the ten are named in a
+  case the on-disk names do not have, so a case-sensitive lookup fails on `msopen1.mpg`,
+  `chap0.mpg`, `crimflag.mpg` and `final.mpg`; `zipper.mpg` and the script-built chapter names match.
+  The chapter array at `0x0061e68c` is **dead** and is not where chapter names come from: its only
+  reference is a pointer at `0x0061daec` that no code touches, and `CAMPAIGNINTRO.SCRIPT` builds the
+  name as `"chap" conv$(FC) ".mpg"` from callback 2151, so chapter N plays `chapN.mpg` and the
+  missing `chap6.mpg` is a leftover nothing asks for. Nobody has judged a transcode at
   the controls, which is a presentation call and not a technical one.
-  *Cross-refs:* `PLAN-M5-campaign` Decision 2, which filed it; `docs/formats/cinemas.md`.
+  *Cross-refs:* `PLAN-M5-campaign` Decision 2, which filed it; `docs/formats/cinemas.md`, which
+  carries the naming, scaling, skip-key and handoff decode with its addresses.
 
 - `BL-463` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: spec]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
   `PLAN-M5-campaign` deferred it: the function is cosmetic and rests on the undecoded

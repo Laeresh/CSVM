@@ -10,6 +10,7 @@ player work starts from.
 - [The shipped set](#the-shipped-set)
 - [Container and codecs](#container-and-codecs)
 - [Where the files are named from](#where-the-files-are-named-from)
+- [How the original plays them](#how-the-original-plays-them)
 - [Playing them in CSVM](#playing-them-in-csvm)
 - [Evidence and limits](#evidence-and-limits)
 
@@ -24,7 +25,11 @@ Ten files, about 110 MB together, all with the `.mpg` extension:
 | `chap0.mpg` | 17.8 MB | the opening cinema |
 | `chap1.mpg` .. `chap5.mpg` | 11.0 to 16.4 MB | one per story chapter |
 | `final.mpg` | 12.9 MB | the closing cinema |
-| `crimflag.mpg` | 0.9 MB | a short loop, the only mono-audio file in the set |
+| `crimflag.mpg` | 0.9 MB | the looping front-end background, and the only mono-audio file in the set |
+
+Nine of the ten are cinemas in the ordinary sense, played once for the player to watch.
+`crimflag.mpg` is not: it is a decorative loop that runs behind four front-end screens as their
+backmost layer, which is why it is a tenth the size of the others and the only one authored in mono.
 
 ## Container and codecs
 
@@ -44,18 +49,72 @@ assume one set of parameters:
 
 ## Where the files are named from
 
-Two places name them, and neither is a directory scan.
+Three places name them, and none is a directory scan. The executable itself names none of them.
 
-`fmv.zrd` holds the front-end sequence as `PLAYAVI` actions: its `INTRO` block plays
-`MSopen1.mpg`, waits, fades and plays `zipper.mpg`, and its `CHAP0` block plays `Chap0.mpg`. Those
-are the only three `.mpg` strings in the whole extracted reader set, and the block's `IMAGE_PATH` is
-`video`. Note the case: the reader spells them with capitals the on-disk names do not have, so a
-case-sensitive lookup would fail on all three.
+**`fmv.zrd`, as `PLAYAVI` actions**, holds the boot sequence: its `INTRO` block plays `MSopen1.mpg`,
+waits, fades and plays `zipper.mpg`, and its `CHAP0` block plays `Chap0.mpg`. Those are the only
+three `.mpg` strings in the whole extracted reader set, and the block's `IMAGE_PATH` is `video`.
 
-The chapter cinemas come from the executable instead, as a `char[9]` array at `0x0061e68c` holding
-`chap1.mpg` through `chap6.mpg` back to back with no terminator between entries. `chap6.mpg` has no
-file in the install, and `final.mpg` and `crimflag.mpg` appear in neither place, so the naming of
-the last three is not fully accounted for.
+**`ASSETS/LAYOUT.CSV`, as `movie` widgets**, holds every other placement. A `movie` row is widget
+type `M` with script class `@ctl@AL`, and it carries an `ArtPath`, a position, a `Loops` count and a
+scale:
+
+| Screen | Widget key | `ArtPath` | `Loops` |
+|---|---|---|---|
+| `MainMenu` | `MOVIE` | `CrimFlag.MPG` | 0 |
+| `Save` | `MOVIE` | `CrimFlag.MPG` | 0 |
+| `Load` | `MOVIE` | `CrimFlag.MPG` | 0 |
+| `Preferences` | `MOVIE` | `CrimFlag.MPG` | 0 |
+| `CampaignIntro` | `CM_MOVIE` | `CrimFlag.MPG` (a placeholder, see below) | 1 |
+| `FinalCinema` | `CF_MOVIE` | `Final.MPG` | 1 |
+
+Every one of the six sits at X, Y and Z all zero with the whole screen as its region, so the movie
+is the backmost layer and the rest of the screen draws over it. All six carry `ScaleX` and `ScaleY`
+of 250, and every one is a percentage of the 320x240 source against the original's fixed 800x600
+authored dialog space: 320 x 2.5 is 800 and 240 x 2.5 is 600, so the movie fills that space exactly,
+uniformly, at the same 4:3 aspect, with no crop and no letterbox. `Loops` is a play count in which
+zero means endless, which is what separates the four background rows from the two cinema rows.
+
+**`ASSETS/SCRIPTS/CAMPAIGNINTRO.SCRIPT` builds the chapter names at runtime.** Its `gui_create` runs
+`callback($$E$$, 2151, FC)`, which fills `FC` with the chapter number, and its `gui_init` then sets
+the control's art path to `"chap" conv$(FC) ".mpg"`. So the chapter-to-file mapping is the identity,
+chapter N plays `chapN.mpg`, and the `CrimFlag.MPG` in that screen's layout row is a placeholder
+overwritten before the control initialises. `FINALCINEMA.SCRIPT` sets no art path, so its screen
+plays whatever its `CF_MOVIE` row names.
+
+Four of the ten files are named in a case the on-disk names do not have, so a case-sensitive lookup
+fails on `msopen1.mpg`, `chap0.mpg`, `crimflag.mpg` and `final.mpg`. `zipper.mpg` is spelled to
+match, and the script-built chapter names are lower case throughout.
+
+The executable does hold a `char[9]` array at `0x0061e68c` naming `chap1.mpg` through `chap6.mpg`
+back to back with no terminator between entries, **and nothing reads it**. Its only reference is a
+pointer stored at `0x0061daec`, and that slot has no code reference of any kind; the seven sibling
+slots from `0x0061dad0` point at unrelated name strings and are orphaned the same way. That is why
+`chap6.mpg` has no file in the install: it is a leftover in a table no code path reaches, and the
+chapter names that are actually used come from the script above.
+
+## How the original plays them
+
+The executable's whole involvement is one function, `FUN_004a7c70`, the boot sequence. It resolves
+the string `Assets\Graphics\MPG` and copies the result into a `MAX_PATH` buffer at `DAT_0064fde4`,
+which is the base directory the `PLAYAVI` names resolve under, so those names are relative and the
+folder is the caller's to set. It then runs two reader blocks through `FUN_0044ae70`, which takes a
+file and a block name: `fmv.zrd` `INTRO`, then `fmv.zrd` `CHAP0`. `FUN_0044ae70` has exactly one
+caller, so those two blocks are the only reader-driven video in the game. Everything else is
+layout and script driven.
+
+The two script-driven cinemas each end by handing off, and each accepts its own skip keys:
+
+- **`CAMPAIGNINTRO`** ends on Escape, Space, Return or a left mouse button press, any of which posts
+  message 11006. That runs `script_continue @passengercabin@` and ends the script, so a chapter
+  cinema hands off to the passenger cabin.
+- **`FINALCINEMA`** ends on Escape or a left mouse button press only, not Space and not Return.
+  Message 11006 there runs `scrapbook.script` at priority `0x1000` and mails 11005. The whole screen
+  is gated on `callback($$E$$, 3104)`: when that returns false the movie is skipped outright and the
+  scrapbook runs directly.
+
+Both guard against a double handoff with an `EC` latch, so a second key press during the transition
+does nothing.
 
 ## Playing them in CSVM
 
@@ -66,35 +125,48 @@ only `VideoStream` subclass in the editor binary, and the binary carries no MPEG
 all. The one `.mpg` literal in it belongs to the Android exporter's list of already-compressed
 extensions, and the one `webm` match is the colour name `webmaroon`.
 
-**The decision is to transcode at extract time to Ogg Theora**, alongside the existing extraction
-steps, and to play the result through a stock `VideoStreamPlayer`. The reasons are that it uses a
-decoder the engine maintains rather than one this project would own and debug, that the playback
-surface (a player node, the fade and wait steps `fmv.zrd` already spells out, a skip key) is
-identical whichever route supplies the frames, and that the source is 320x240 and already lossy, so
-a second encode at that size is not a fidelity question the original can lose.
+**The decision is a managed MPEG-1 decoder in this project's own code**, producing an
+`ImageTexture` per frame that the front end composes like any other picture, with the audio
+elementary stream pushed to a generator. No `VideoStream` subclass and no `VideoStreamPlayer` are
+involved, because the front end is not a node tree with a video slot in it: `ComposedBoard` resolves
+each screen into pictures in the original's 800x600 space and `BoardFit` maps that onto the window,
+so a `movie` row is structurally a picture at Z=0 under everything else, and routing it through a
+player node would put the one element that must sit under the screen into a different rendering path
+from everything above it, with `BoardFit`'s scaling mirrored there by hand.
 
-The alternative, recorded because the choice is reversible and this is the form it would take: a
-runtime MPEG-1 decoder written as a C# `VideoStreamPlayback` subclass. That is available without an
-engine build or a GDExtension, because `VideoStreamPlayback`'s whole virtual set is scriptable and
-it exposes `mix_audio` for the audio side. MPEG-1 video is a small codec by modern standards, and
-320x240 at 30 fps is not a performance question. It wins on two grounds the transcode route loses:
-the extraction step stays owned by this project's own code with no third-party media binary in it,
-and the shipped bytes are what plays, so the output cannot drift from what the original showed.
-Choosing the transcode first does not close this route, because the player node is the same either
-way.
+Three things follow from owning the decode. The release carries no media binary, which matters
+because the recipient runs extraction on their own machine, so a transcoder would ship in the
+download rather than living on a developer's box. The shipped bytes are what plays, so the output
+cannot drift from what the original showed. And nobody ever has to judge a transcode, which deletes
+a presentation question rather than answering it.
+
+The rejected alternative, recorded because the choice is reversible: transcode at extract time to
+Ogg Theora and play through a stock `VideoStreamPlayer`, which uses a decoder the engine maintains
+rather than one this project owns and debugs. It was rejected on the download it obliges. The
+release zip is 78 MB and a stock ffmpeg is roughly 80 to 90 MB, so ten short videos would about
+double what anyone downloads, on top of a second licence file and a third payload version for the
+notices to lock. A trimmed ffmpeg built from source, on the `mech3ax` model, would land near 5 to
+10 MB and remains the fallback if the decoder work stalls.
 
 ## Evidence and limits
 
 The container and codec facts above are read out of the files' own pack, sequence and audio frame
-headers in the retail install. Nothing here reproduces file content.
+headers in the retail install. Nothing here reproduces file content. The naming and playback facts
+come from the extracted `ASSETS/LAYOUT.CSV` and `ASSETS/SCRIPTS/*.SCRIPT` and from a read-only pass
+over `crimson.exe`, with every address stated at the claim it supports.
 
 Where this stops:
 
-- **Nobody has judged a transcode.** No transcoder is present in this checkout, so no `.ogv` sample
-  was produced and no one has looked at one. Whether the encode holds up is a presentation call the
-  user makes at the controls, the way every other presentation claim in this project is settled.
-- **The chapter play order is not established.** The `char[9]` array's index base was not traced, so
-  which chapter maps to which `chapN.mpg` is unread, and the reader that names `final.mpg` and
-  `crimflag.mpg` was not found.
+- **No frame of these files has ever been displayed by this project.** No decoder exists in the
+  checkout yet, so every claim here rests on headers and on the reader, layout and script data
+  rather than on decoded pixels. There is also no reference decoder to check a first decode
+  against, and MPEG-1 permits IDCT mismatch between conformant decoders, so exact-match testing
+  against one would not work even if there were. Correctness is settled the way every other
+  presentation claim in this project is settled, by the user at the controls.
+- **The engine side of the script callbacks is not traced.** Callback 2151 supplies the chapter
+  number `CAMPAIGNINTRO` builds its filename from, and callback 3104 gates the final cinema, but
+  neither was followed into the executable: the script callback dispatch is not a plain switch on
+  the id, so finding it is its own job. Neither blocks a player, since the chapter number is
+  something the campaign already knows and the gate is campaign completion.
 - **Per-file durations and frame counts are not stated.** Only the first sequence header of each
   file was parsed; the headers give the frame rate but the files were not walked to the end.
