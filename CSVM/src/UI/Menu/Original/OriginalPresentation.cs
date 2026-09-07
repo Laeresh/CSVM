@@ -47,6 +47,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The VIDEO aid's argument that leaves its Enhanced Graphics checkbox checked.</summary>
     public const string VideoCheckedAid = "checked";
 
+    /// <summary>The aid value that opens the credits screen behind the top level's fifth row.</summary>
+    public const string CreditsAid = "credits";
+
     /// <summary>The aid value that opens the Instant Action screen.</summary>
     public const string InstantActionAid = "instant-action";
 
@@ -322,6 +325,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                     // display setting rather than the graphics one this pose is about.
                     _shell.OpenVideoOn(OriginalShell.GraphicsKey);
                     _shell.Step(new MenuCommands { Accept = true });
+                    break;
+                case CreditsAid:
+                    _shell.Open(OriginalScreen.Credits);
                     break;
                 case InstantActionAid:
                     _shell.OpenInstantAction();
