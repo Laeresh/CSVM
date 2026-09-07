@@ -166,6 +166,15 @@ clamped; `ThumbYFor` places a thumb for a given window, and is the one rule ever
 thumb by. Each list widget builds one from its own geometry and the presentation that owns the
 pointer decides what a new top writes back, so the arrows and the keyboard keep their own rules.
 
+## src/UI/SliderTrack.cs
+A continuous control's track as a pointer sees it, the list window's opposite number: the slot a
+thumb slides along, the thumb's own size, and the whole numbers the slot spans. `ValueAt` reads a
+pointer's X as a value and `ThumbX` puts the thumb back where it read, so the drawn thumb sits under
+the finger that moved it; `Stepped` moves a value sideways. Every answer is clamped into the range
+and none wraps, which is what keeps a step away from an end from landing on the other one. Each
+slider widget builds one from its own geometry and the presentation that owns the pointer decides
+what a new value writes back. Driven by `Menu/Original/SliderControl.cs`.
+
 ## src/UI/BoardFit.cs
 How the original's fixed 800x600 campaign dialog space lands on an arbitrary window: one uniform
 scale on both axes, the board centred, the remainder letterboxed. A `record struct`, so every
@@ -671,13 +680,22 @@ missions with every objective bit set, plus the scratch build store the export a
 
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout`
-and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the
-art measurer and the flight-devices answer injected. It owns the top level composed from
-`[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
-Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the Game
-Options, VIDEO, Instant Action, loadout, campaign and hangar screens are its six partials, below. `Step` applies
-one seat's frame (pointer, typed text, cursor walk, accept and back) and `Compose` is the screen
-as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the art
+measurer and the flight-devices answer injected. It owns the top level composed from `[MainMenu]`'s
+own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome,
+and the messagebox idiom every refusal and confirm goes through; the Game Options, VIDEO, Instant
+Action, loadout, campaign and hangar screens are its six partials, below. `Step` applies one seat's
+frame (pointer, typed text, cursor walk, accept and back), `Compose` is the screen as a
+`ComposedBoard`, and the row kinds every page draws are here, `OriginalSlider` and the slider row's builder and drawing among them. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/SliderControl.cs
+The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
+sideways step that moves one from the keyboard or the pad. It is the shell's second hold-and-move
+and keeps a hold of its own, the list thumb's being the first; the shell gives the thumb first
+refusal each frame and consults this one only when no list holds, so neither drag can be continued
+as the other. `Drive` reports a slider holding the pointer, which is how the shell knows a click was
+spent and activates nothing under it. A row declares its slider through `OriginalShell.cs`'s
+`OriginalSlider`; this class knows a track and a value and nothing about the setting behind them.
 
 ## src/UI/Menu/Original/OriginalGameOptions.cs
 The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content is a

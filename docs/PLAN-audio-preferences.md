@@ -163,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the page
 
 4. ☑ The options carrier takes a level that is not a vocabulary word
-5. ☐ The slider the shell has never had
+5. ☑ The slider the shell has never had
 6. ☐ The AUDIO page opens from Preferences
 7. ☐ The precedence ladder, and the re-based mix judged at the controls
 
@@ -362,7 +362,7 @@ to construct no exit of its own. A page writes only the fields its own rows touc
 
 **Verified.** <pending orchestrator run>
 
-## B5 ☐ The slider the shell has never had
+## B5 ☑ The slider the shell has never had
 
 **Goal.** `OriginalShell` has a slider control: it draws from the authored slot and thumb art at a
 row's authored line, a pointer drag moves it, a sideways keyboard or pad step moves it, and its value
@@ -390,18 +390,35 @@ than by a strip frame.
 **Model recommendation.** high. This is the shell's first continuous control and every later
 presentation inherits its shape; the drag interacting with the existing thumb drag is the risk.
 
-**Verify.** `<TODO: name the existing shell suite that drives pointer input, so the drag is asserted
-rather than only clicked. OriginalShellTests covers the engine-free half; the pointer path may only
-be reachable from an in-engine suite.>` The assertions to make: a press inside the slot sets the
-value to the pressed point, a held move tracks it, a release ends the drag, a drag that began on a
-slider is not also an activation of the row under the release point (the shell already makes exactly
-that distinction for a list thumb, `:486-489`), and a sideways step clamps at both ends instead of
-wrapping. A `--screenshot` of the page at four different values. `.\RunTests.ps1` green.
+**Verify.** `OriginalShellTests` is the suite, engine-free throughout: it already drives pointer
+input (`MenuCommands.Pointer`, press and click edges included), so nothing about this path needs an
+engine, and `SliderControlTests` beside it drives the control directly over rows the test declares,
+which is what lets the drag be asserted while `B6` still owns the page that carries one. The
+assertions: a press inside the slot sets the value to the pressed point, a held move tracks it, a
+release ends the drag, a drag that began on a slider holds the pointer through the frame carrying
+the click (`SliderControlTests`) and the shell spends a held drag's click rather than activating the
+row under it (`OriginalShellTests`, over the aircraft column's thumb, which is the hold an
+engine-free screen has), and a sideways step of 5 clamps at both ends instead of wrapping.
+`.\RunTests.ps1` green. ⚠ **The `--screenshot` at four values is owed to `B6`**: this item lands the
+control and no page carries one until `B6` supplies the rows.
 
 **⚠ Traps.** A slider must clamp, not wrap. Every other stepped control on this shell wraps
 (`StepGameOptionValue`), and inheriting that would step a player from silence to full volume with one
 press. The existing `_drag` field is keyed by list; a slider drag needs its own state or a widened
 one, and sharing it carelessly would let a drag begun on a scrollbar finish on a slider.
+
+**The B6 seam.** A page declares a slider row with `OriginalShell.SliderRow(widget, key, fallbackX,
+fallbackY, min, max, value, setValue)`: the authored `AP_S_*` widget (null falls back to the authored
+numbers), the row's key, the slot's corner where the section is absent, the range
+(`AudioMix.MinLevel`/`MaxLevel`), the level the row stands at and where a new level goes. The slot
+and thumb come off the widget's own two art names and are measured, the row's rectangle is the
+authored press region, and the value is `OriginalSlider.Value` on the row. The pointer drag, the
+sideways step and the drawing are already wired and screen-independent, so `B6` adds no `Step` case
+and no compose case: its control loop reaches the drawing through `ComposeInstantActionRow`, as the
+VIDEO page's does. ⚠ `B6` must not give a slider row its own `Activate` branch that changes the
+value, and must not reuse the shell's `_drag`.
+
+**Verified.** <pending orchestrator run>
 
 ## B6 ☐ The AUDIO page opens from Preferences
 

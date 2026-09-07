@@ -529,6 +529,41 @@ public class OriginalShellTests
         Assert.Contains(GraphicsMode.Enhanced ? "This run is enhanced" : "This run is original", owed[0]);
     }
 
+    /// <summary>A drag holds the pointer, so the click that took hold of a thumb is spent on it
+    /// and the row the thumb is drawn over is not activated. The shell makes that distinction once
+    /// for anything that holds the pointer; the list thumb is the hold an engine-free screen has,
+    /// and a slider row joins the same gate (<see cref="SliderControlTests"/> drives that
+    /// side).</summary>
+    [Fact]
+    public void ADragHoldsThePointerSoItsClickActivatesNoRowUnderIt()
+    {
+        // A roster longer than the eleven-row window, so the aircraft column has a thumb at all.
+        var setup = new PlayerSetupFeature();
+        var roster = OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()).ToList();
+        roster.AddRange(roster.Take(3).ToList());
+        setup.SetRoster(roster);
+        setup.Join(new ScriptedMenuSeat());
+        var shell = new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure);
+        shell.Open(OriginalScreen.FreeFlight);
+
+        var window = shell.Lists.Single(l => l.Key == "AIRFRAMES").Window;
+        Assert.True(window.Scrolls);
+        // The thumb runs down the column's own right edge, so the point it stands on is an
+        // aircraft row that a click would otherwise pick.
+        float x = window.ThumbX + 1f;
+        float y = window.ThumbY + 1f;
+        Assert.StartsWith("AIRFRAME", HitTestKey(shell, x, y), System.StringComparison.Ordinal);
+
+        shell.Step(Pointer(x, y, pressed: true, clicked: true));
+        Assert.Equal("AIRFRAMES", shell.Dragging);
+        Assert.Null(shell.PickedAirframe);
+
+        shell.Step(Pointer(x, y + window.Height, pressed: true));
+        shell.Step(Pointer(x, y + window.Height));
+        Assert.Null(shell.Dragging);
+        Assert.Null(shell.PickedAirframe);
+    }
+
     [Fact]
     public void TheOptionsScreenIsComposedOverThePreferencesChromeWithItsTwoBuiltDoorsLive()
     {
@@ -724,4 +759,19 @@ public class OriginalShellTests
 
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+
+    // The key of the topmost row a point lands on, the shell's own last-hit-wins reading.
+    private static string HitTestKey(OriginalShell shell, float x, float y)
+    {
+        var rows = shell.Rows;
+        for (int i = rows.Count - 1; i >= 0; i--)
+        {
+            if (rows[i].Visible && rows[i].Contains(x, y))
+            {
+                return rows[i].Key;
+            }
+        }
+
+        return string.Empty;
+    }
 }

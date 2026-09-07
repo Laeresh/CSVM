@@ -159,6 +159,28 @@ Sibling dropdowns on one screen carry *descending* `Z` values (`155, 150, 145, 1
 ammo pickers, `100 … 70` on the seven video pickers) so that an opened list draws over the rows
 below it.
 
+### Sliders: two art files and a widened press region
+
+A `Z` row carries no `Width`, no `Height` and no frame count. **The slot's rectangle is `RegionArt`'s
+own pixel size at `X, Y`, and the thumb is `SliderArt` at its own size**, each one image rather than
+a strip, so a thumb has no rollover or depressed frame to draw. All four shipped rows name
+`PF_B_SliderSlot.png` (`171 x 3`) and `PF_B_Slider.png` (`43 x 21`), a thumb seven times the slot's
+height standing centred on it, and all four run `MinValue 1, MaxValue 100, CurrentValue 50`.
+
+**`Left, Top, Right, Bottom` on a `Z` row are insets from that slot rectangle into the region a press
+has to land in, negative outward.** The region runs from `X + Left, Y + Top` to
+`X + Width - Right, Y + Height - Bottom`. All four rows author `0, -10, 1, -10`, which turns the
+3-pixel slot into a 23-pixel region reaching ten pixels above and below it. That is the only reading
+of those numbers that leaves the 21-pixel thumb pressable: read the other way round, as outsets added
+to each edge, the top would move down ten and the bottom up ten and the rectangle would invert.
+`Right 1` stops the region a pixel short of the slot's right edge, which is where the thumb's own
+extent ends when it stands at `MaxValue`.
+
+The three `[@Audio@]` volume rows and `CP_S_MOUSE` in `[@ControlsPrefs@]` are the four rows that
+exercise this, so the fields are not an audio-only convention. What a `B` row's four columns of the
+same name mean is a separate question the shipped data still cannot answer;
+[Evidence & limits](#evidence--limits) records that one as open.
+
 ### Strings
 
 `ResID` is a symbol, not a number. It joins through `ASSETS/SCRIPTS/RESOURCE.H` (`#define IDS_…
@@ -273,7 +295,11 @@ comment exactly, so there is no basis for shifting the list; the value is simply
 
 **A `B` row's `Left/Top/Right/Bottom` are exercised six times.** Only the `PlaneConstruction` tab
 buttons set them, all to `0,<V5>,0,0`. The comment does not say what they are and six identical
-rows cannot show it; they are carried through unread.
+rows cannot show it; they are carried through unread. A `Z` row's four columns of the same name are
+read as insets into the press region, on evidence a slider row carries and a button row does not
+([Sliders](#sliders-two-art-files-and-a-widened-press-region)), and that reading does not extend to
+these six: all six values are `0` or one macro, so they would look the same under any of the
+readings a slider row rules out.
 
 **Twelve colour tokens are byte-rotated.** Four rows in `[@Hangar@]` and `[@PlaneName@]` author
 colours with the alpha byte last (`0x76767600` where every sibling row writes `0xff767676`).

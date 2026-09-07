@@ -271,6 +271,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/FreeFlightFeature.cs` — Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs` — Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its seven partials below.
+- `src/UI/Menu/Original/SliderControl.cs` — the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
 - `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
 - `src/UI/Menu/Original/OriginalVideo.cs` — the shell's VIDEO page (a `partial`): the display settings as a table of authored rows, the resolution row's words enumerated per screen.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
@@ -331,6 +332,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.
 - `src/UI/CampaignAidScript.cs` — the input script a `--menu=` colon argument spells: counted moves, confirms and button words a campaign aid replays.
 - `src/UI/ListWindow.cs` — a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
+- `src/UI/SliderTrack.cs` — a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
 - `src/UI/BoardFit.cs` — how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
 - `src/UI/ComposedBoard.cs` — what a composed campaign screen is made of: backdrop, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
 - `src/UI/CampaignBoards.cs` — the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.

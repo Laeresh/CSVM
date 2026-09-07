@@ -121,14 +121,26 @@ public enum OriginalRowKind
     /// <summary>A decoded edit box: its label is the text typed so far, and the seat's typed
     /// characters feed it while its screen shows.</summary>
     TextField,
+
+    /// <summary>A decoded slider: a thumb held and moved along a slot, or stepped sideways, over
+    /// the whole numbers its track spans. The one continuous control the shell has.</summary>
+    Slider,
 }
 
+/// <summary>One slider carried by its row, for the pointer's hold-and-move and the sideways step:
+/// the track the thumb runs on, the value it stands at, the write that puts it somewhere else, and
+/// the slot art under it (the row's own art being the thumb, the one piece that moves). A page
+/// declares one of these and the shell needs to know nothing else about the setting behind it,
+/// which is the same bargain <see cref="OriginalList"/> strikes for a scrolled list.</summary>
+public sealed record OriginalSlider(SliderTrack Track, int Value, Action<int> SetValue, BoardArt? Slot);
+
 /// <summary>One interactive element of a screen in authored 800x600 pixels: what it is, where it
-/// is, whether it reacts, which column it belongs to for the seat's cursor, and whether it is on
-/// screen (a list row outside its window keeps its place for the keyboard, unseen and unhit).</summary>
+/// is, whether it reacts, which column it belongs to for the seat's cursor, whether it is on
+/// screen (a list row outside its window keeps its place for the keyboard, unseen and unhit), and
+/// the slider it carries when it is one.</summary>
 public sealed record OriginalRow(
     string Key, string Label, OriginalRowKind Kind, float X, float Y, float Width, float Height,
-    bool Enabled, int Column, BoardArt? Art, bool Visible = true)
+    bool Enabled, int Column, BoardArt? Art, bool Visible = true, OriginalSlider? Slider = null)
 {
     /// <summary>Whether an authored point lies on the row.</summary>
     public bool Contains(float x, float y) => x >= X && x < X + Width && y >= Y && y < Y + Height;
@@ -241,6 +253,24 @@ public sealed partial class OriginalShell
     private const float FallbackButtonWidth = 220f;
     private const float FallbackButtonHeight = 42f;
 
+    // The slider's two art files, and their shipped pixel sizes as the fallback when neither can
+    // be measured. Neither row carries a frame count, so each is one image with no state to draw.
+    // docs/formats/menu-layout.md holds the Z row's decode.
+    private const string SliderSlotArt = "PF_B_SliderSlot.png";
+    private const string SliderThumbArt = "PF_B_Slider.png";
+    private const float FallbackSlotWidth = 171f;
+    private const float FallbackSlotHeight = 3f;
+    private const float FallbackThumbWidth = 43f;
+    private const float FallbackThumbHeight = 21f;
+
+    // The authored insets from the slot to the region a press has to land in, negative where the
+    // region grows: three pixels of slot become twenty-three, which is what makes the whole thumb
+    // pressable. Every shipped slider row authors these four.
+    private const int SliderInsetLeft = 0;
+    private const int SliderInsetTop = -10;
+    private const int SliderInsetRight = 1;
+    private const int SliderInsetBottom = -10;
+
     private static readonly string[] TopLevelButtons =
     {
         "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT",
@@ -258,6 +288,7 @@ public sealed partial class OriginalShell
     private readonly Func<CSVM.Utils.OptionsDef>? _options;
     private readonly Func<IReadOnlyList<string>>? _screenSizes;
     private readonly Func<CSVM.Utils.ScreenList>? _screens;
+    private readonly SliderControl _slider = new();
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -414,6 +445,10 @@ public sealed partial class OriginalShell
     /// <summary>The list whose thumb the pointer is dragging, or null.</summary>
     public string? Dragging => _drag?.Key;
 
+    /// <summary>The slider row the pointer is dragging, or null. Kept apart from
+    /// <see cref="Dragging"/> so a drag can never change which of the two it belongs to.</summary>
+    public string? DraggingSlider => _slider.Held;
+
     /// <summary>The picked chapter's code, or null.</summary>
     public string? PickedChapter => _pickedChapter >= 0 ? _chapters[_pickedChapter].Code : null;
 
@@ -487,6 +522,7 @@ public sealed partial class OriginalShell
         }
 
         _drag = null;
+        _slider.LetGo();
         if (screen is OriginalScreen.GameOptions or OriginalScreen.Video)
         {
             ReadSavedOptions();
@@ -516,9 +552,16 @@ public sealed partial class OriginalShell
         {
             changed |= _pointer != (pointer.X, pointer.Y);
             _pointer = (pointer.X, pointer.Y);
-            // The thumb and the wheel come before the rows: a held thumb owns the pointer until
-            // it is let go, and a wheel step moves the rows the hit test then reads.
-            bool dragging = DragThumb(pointer, ref changed);
+            // The thumb, the slider and the wheel come before the rows: a held one owns the
+            // pointer until it is let go, and a wheel step moves the rows the hit test then reads.
+            // The thumb has first refusal and stands down while a slider holds, so neither crosses.
+            bool dragging = _slider.Held == null && DragThumb(pointer, ref changed);
+            if (!dragging)
+            {
+                dragging = _slider.Drive(rows, pointer, out bool moved);
+                changed |= moved;
+            }
+
             if (!dragging && pointer.Wheel != 0)
             {
                 changed |= WheelList(pointer);
@@ -556,7 +599,8 @@ public sealed partial class OriginalShell
             _pressed = pressed;
             if (dragging)
             {
-                // A drag's click was spent on the thumb; nothing under the pointer is activated.
+                // A drag's click was spent on the thumb or the slider it took hold of; nothing
+                // under the pointer is activated.
             }
             else if (pointer.Clicked && over >= 0 && rows[over].Enabled)
             {
@@ -594,10 +638,15 @@ public sealed partial class OriginalShell
 
         if (commands.MoveX != 0)
         {
-            // A sideways step changes a value where a screen has one under the cursor (an Instant
-            // Action or loadout dropdown, a radio, a Game Options or VIDEO row, a hangar dropdown
-            // or tab, a closed campaign field); anywhere else it crosses columns.
-            if (IsInstantActionFamily && StepInstantActionValue(rows, focus, commands.MoveX))
+            // A sideways step changes a value where the cursor stands on one (a slider, first
+            // because it belongs to no one screen, then an Instant Action or loadout dropdown, a
+            // radio, an option row, a hangar tab, a campaign field); else it crosses columns.
+            if (SliderControl.StepValue(rows, focus, commands.MoveX))
+            {
+                rows = Rows;
+                focus = EnsureFocus(rows);
+            }
+            else if (IsInstantActionFamily && StepInstantActionValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -775,6 +824,15 @@ public sealed partial class OriginalShell
         }
 
         return fileName;
+    }
+
+    // The n-th art a slider row names, falling back to the shipped file name so the control still
+    // has a name to draw where the section is absent. Neither art is a strip.
+    private static BoardArt SliderArt(MenuLayoutWidget? widget, int index, string fallback)
+    {
+        var art = widget?.Art;
+        string name = art != null && index < art.Count && art[index].Length > 0 ? art[index] : fallback;
+        return new BoardArt(BoardArtLibrary.Ui, name, 1);
     }
 
     private static int HitTest(IReadOnlyList<OriginalRow> rows, float x, float y)
@@ -1301,6 +1359,59 @@ public sealed partial class OriginalShell
         float height = size != null ? (float)Math.Floor(size.Value.Height / (float)frames) : FallbackButtonHeight;
         return new OriginalRow(widget.Key, string.Empty, OriginalRowKind.Button, widget.Int("X"), widget.Int("Y"),
             width, height, enabled, 0, art.Length > 0 ? new BoardArt(BoardArtLibrary.Ui, art, frames) : null);
+    }
+
+    // A slider row from its authored widget: the slot at the widget's corner in its own art's
+    // measured size, the thumb measured from its own art, and the row's rectangle the region the
+    // widget insets the slot into, which is what the pointer has to hit. A page supplies the range
+    // its setting spans, the level it stands at and where a new level goes.
+    private OriginalRow SliderRow(
+        MenuLayoutWidget? widget, string key, float fallbackX, float fallbackY,
+        int min, int max, int value, Action<int> setValue, bool enabled = true, int column = 0)
+    {
+        var slot = SliderArt(widget, 0, SliderSlotArt);
+        var thumb = SliderArt(widget, 1, SliderThumbArt);
+        var slotSize = StripSize(slot, FallbackSlotWidth, FallbackSlotHeight);
+        var thumbSize = StripSize(thumb, FallbackThumbWidth, FallbackThumbHeight);
+        float x = widget?.Int("X", (int)fallbackX) ?? fallbackX;
+        float y = widget?.Int("Y", (int)fallbackY) ?? fallbackY;
+        var track = new SliderTrack(x, y, slotSize.Width, slotSize.Height, thumbSize.Width, thumbSize.Height, min, max);
+        float left = x + (widget?.Int("Left", SliderInsetLeft) ?? SliderInsetLeft);
+        float top = y + (widget?.Int("Top", SliderInsetTop) ?? SliderInsetTop);
+        float right = x + slotSize.Width - (widget?.Int("Right", SliderInsetRight) ?? SliderInsetRight);
+        float bottom = y + slotSize.Height - (widget?.Int("Bottom", SliderInsetBottom) ?? SliderInsetBottom);
+        return new OriginalRow(key, string.Empty, OriginalRowKind.Slider, left, top,
+            Math.Max(1f, right - left), Math.Max(1f, bottom - top), enabled, column, thumb,
+            Slider: new OriginalSlider(track, track.Clamp(value), setValue, slot));
+    }
+
+    // A slider as drawn: the slot, then the thumb at the value's own place on it. The thumb is one
+    // frame with no focused or pressed state, so focus is the wash this page's other controls take.
+    // With neither art measurable both stand as rectangles, as a missing plaque leaves an outlined
+    // label, so the control still shows its level.
+    private void ComposeSlider(OriginalRow row, bool focused, List<BoardFill> fills, List<BoardPicture> pictures)
+    {
+        if (row.Slider is not { } slider)
+        {
+            return;
+        }
+
+        var track = slider.Track;
+        if (focused)
+        {
+            fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
+        }
+
+        float thumbX = track.ThumbX(slider.Value);
+        if (slider.Slot != null && row.Art != null && Measure(slider.Slot.Name) != null && Measure(row.Art.Name) != null)
+        {
+            pictures.Add(new BoardPicture(slider.Slot, track.X, track.Y));
+            pictures.Add(new BoardPicture(row.Art, thumbX, track.ThumbY));
+            return;
+        }
+
+        fills.Add(new BoardFill(track.X, track.Y, track.Width, track.Height, 255, 255, 255, 0.6f, Border: true));
+        fills.Add(new BoardFill(thumbX, track.ThumbY, track.ThumbWidth, track.ThumbHeight, 255, 255, 255, 0.6f));
     }
 
     private OriginalRow TextButton(string key, string label, float x, float y, bool enabled, int column)

@@ -1084,6 +1084,9 @@ public sealed partial class OriginalShell
                 lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
                     focused ? BoardInk.RowFocused : BoardInk.Row, index));
                 break;
+            case OriginalRowKind.Slider:
+                ComposeSlider(row, focused, fills, pictures);
+                break;
             case OriginalRowKind.Radio when row.Art != null:
                 // An eight-state strip: the four button states unmarked, then the same four marked.
                 bool checkedRadio = (row.Key == PlayerRadioKey) == (_iaRadio == 0);
