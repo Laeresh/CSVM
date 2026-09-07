@@ -51,22 +51,6 @@ public partial class Launcher : Node3D
     // three child buses alone.
     private const int MasterBus = 0;
 
-    // Master output gain, linear, for a REPO run where neither `--volume=` nor the
-    // `audio.volume` config key says otherwise. 0: launches are silent
-    // unless someone asks for sound (the Run scripts pass `--volume=1.0`), so a scripted
-    // or agent run never sounds by accident. An exported build defaults to the resting gain
-    // below instead — see ApplyMasterVolume.
-    private const float MasterVolumeDefault = 0f;
-
-    // The bus's own resting gain (0 dB). A launch resolving to this leaves the bus
-    // untouched, keeping it byte-identical in output and console log to a launch that never
-    // had a volume path at all.
-    private const float MasterVolumeUnattenuated = 1f;
-
-    // Gain floor for the dB conversion, since `LinearToDb(0)` is negative infinity.
-    // -80 dB is inaudible, which is the whole point of `--volume=0`.
-    private const float MasterVolumeFloor = 0.0001f;
-
     // TUNE, and the FALLBACK only: a flown mission overwrites this per zone from its own pushed-out
     // fog near (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze ramp
     // begins. This value is what a session with no weather.json gets, and it sits in the middle of
@@ -1618,32 +1602,25 @@ public partial class Launcher : Node3D
         ShowMenu(destination);
     }
 
-    // Settles the master output gain: --volume= if given, else audio.volume, else silent in a
-    // repo run and full in an exported one.
+    // Writes the master output gain Utils/MasterVolume.cs resolves, and is its only caller.
     // Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so
     // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one —
-    // see this file's docs/architecture.md entry, which also covers why the config read stays
-    // unconditional so it self-registers for --dump-config.
+    // see this file's docs/architecture.md entry. ⚠ Bus 0 alone: the player's four levels are
+    // written on the three buses under it by Utils/AudioMix.cs, so neither gain can stand in for
+    // the other and a saved level cannot lift a run this silenced.
     private void ApplyMasterVolume()
     {
-        // An exported build defaults to audible, on the switch that settles the log directory.
-        // The silent default keeps agent and golden runs quiet, and a recipient who starts the
-        // exe passes no flag and has no config file to write one into.
-        float fallback = _exported ? MasterVolumeUnattenuated : MasterVolumeDefault;
-        float volume = Config.GetFloat("audio.volume", fallback);
-        string source = "config";
-        if (_spec.Volume is { } asked)
-        {
-            volume = asked;
-            source = "--volume";
-        }
+        // The exported switch is the one that settles the log directory, so an export's audible
+        // default and its logs\ folder are decided together.
+        float volume = MasterVolume.Resolve(_spec.Volume, _exported);
+        string source = _spec.Volume.HasValue ? "--volume" : "config";
         // Full volume is the bus's own resting state, so leaving it alone keeps a full-volume
         // launch byte-identical in both output and console log.
-        if (Mathf.IsEqualApprox(volume, MasterVolumeUnattenuated))
+        if (Mathf.IsEqualApprox(volume, MasterVolume.Unattenuated))
         {
             return;
         }
-        AudioServer.SetBusVolumeDb(MasterBus, Mathf.LinearToDb(Mathf.Max(volume, MasterVolumeFloor)));
+        AudioServer.SetBusVolumeDb(MasterBus, MasterVolume.VolumeDb(volume));
         string note = volume <= 0f ? " — sounds still load, play, count and log" : "";
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }

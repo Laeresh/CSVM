@@ -21,10 +21,12 @@ namespace CSVM.Session;
 /// </summary>
 public sealed partial class MenuAudioService : Node, IMenuAudio
 {
-    // The two clips a moved level is judged by, the original's own preview loops for those
+    // The two clips a moved level is judged by, the original's own preview files for those
     // categories (its AUDIO script builds a sound object per category over music_loop.wav,
     // sfx_loop.wav and voice_loop.wav). Music needs none of the three here: the menu's score is
     // already sounding on that bus, which is what the Music and Master rows move.
+    // ⚠ Firing one on a move is a deliberate departure: the original starts its three at page open
+    // and sends only setvolume on a move (docs/menu-presentations.md's Audio section).
     private const string EffectsPreviewFile = "SFX_LOOP.WAV";
     private const string VoicePreviewFile = "VOICE_LOOP.WAV";
 

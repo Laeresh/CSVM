@@ -279,6 +279,25 @@ playback, volume, the buses and the handoff into a launching session. A cue name
 missing file or a failed decode is logged once and cached as silence; a presentation never learns
 whether a sound exists.
 
+**The bus model and the four levels.** The process runs four audio buses, shipped as
+`CSVM/default_bus_layout.tres`: Master, with Music, Effects and Voice sending into it. Every site
+that builds a player names its category at construction (`Utils/AudioBuses.cs`), because Godot
+resolves an unknown bus name to Master with no error and a misplaced player is otherwise silent
+about it; the `audio-buses` suite walks the live tree and fails on any player left on Master. The
+AUDIO page carries four levels on 0..100, Master, Music, Effects and Voice, and a fresh install
+opens on 100, 50, 50 and 50, the authored `CurrentValue` of the three category rows and full on the
+added one. `Utils/AudioMix.cs` turns them into one gain per category bus, `category/100 x
+master/100`, so Master is a multiplier over the other three rather than a level of its own.
+
+**Bus 0 is not part of that mix.** It carries the developer gain alone, `--volume=` over the
+`audio.volume` key over silence in a repo run (`Utils/MasterVolume.cs`), and `AudioMix` refuses to
+write index 0 by construction. The two gains therefore reach the output as a product: `--volume=0`
+still silences a scripted run whatever the saved levels say, a full-volume launch still leaves bus 0
+untouched, and a `--det` launch reads no saved level at all and mixes the shipped defaults. The
+`audio-levels-launch` suite drives that ladder from a parsed command line, since a screenshot proves
+nothing about audio and a golden sweep cannot see the `--det` drop fail
+([verification.md](verification.md)'s INSTR-45 and DET-14).
+
 **The mix preview.** While a page that sets the four volume levels is open, it states them every
 frame and names which one that frame moved (`MenuMixLevel`, the page's own rows and never a bus).
 The service applies them through `AudioMix` and sounds the moved category on a player of its own:
@@ -290,6 +309,16 @@ page opened and is called on every door out of the page and on `Hide`, so a prev
 the page; an accepted mix is written and reapplied by `Launcher.ApplyOptions`, which stays the
 options file's one writer. ⚠ Previews are off in any run that drives itself (`--det`,
 `--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
+
+**A clip on the move is a deliberate departure.** The original's own page
+(`extracted/rof/ASSETS/SCRIPTS/AUDIO.SCRIPT`) builds one sound object per category on `gui_create`,
+starts them there, sends only `setvolume` as a slider moves and stops all three on `gui_destroy`;
+no play message reaches a category's object on a move. This port fires a clip on the level that
+moved instead, so a slider is audible at the moment the player touches it rather than only while
+something happens to be running. Whether the original's clips loop or play once is undecodable from
+the script: `ZB = 0` stands on every `@ctl@SK` object the shipped scripts build, including
+`GLOBALS.SCRIPT`'s menu music, which plays on while the menu is up, so the field settles nothing.
+Film of the original is the only thing that would.
 
 The cue table (`MenuCueTable`, `CSVM/src/Session/MenuCueTable.cs`) resolves the four names the
 original's globals script binds: `menu.rollover`, `menu.click`, `menu.text`, `menu.text-error`, each

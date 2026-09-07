@@ -17,7 +17,10 @@ namespace CSVM.Testing;
 /// rather than on Master. A player left on Master is silent about it, since Godot resolves an
 /// unknown or unset bus name to Master with no error, so this is the only thing that can see the
 /// omission. The suite builds each site itself and then walks the live scene tree, because a walk
-/// alone would pass by seeing nothing.</summary>
+/// alone would pass by seeing nothing. Which level reaches a bus is the neighbouring
+/// <c>audio-levels-launch</c> suite's, so the saved-and-<c>--det</c> ladder is asserted once rather
+/// than in both places; here the levels are only ever the shipped defaults or this suite's
+/// own.</summary>
 internal static class AudioBusSuites
 {
     // The whine slot no shipped airframe names, and a crash set an install may lack, make an exact
@@ -39,10 +42,9 @@ internal static class AudioBusSuites
         + "and one-shot, and the projectile pool) builds its players on the bus its category names, "
         + "a walk of the whole live scene tree fails on any player left on Master, the four "
         + "levels reach the three child buses at startup and on a live change while bus 0, which "
-        + "carries the developer volume alone, is untouched by either, a plain launch reads the "
-        + "saved levels while a --det one reads none and mixes the shipped defaults, and a page's "
-        + "live preview moves all three buses from Master alone, sounds one clip over twenty-one "
-        + "level changes rather than twenty-one, and puts back the exact mix it opened over")]
+        + "carries the developer volume alone, is untouched by either, and a page's live preview "
+        + "moves all three buses from Master alone, sounds one clip over twenty-one level changes "
+        + "rather than twenty-one, and puts back the exact mix it opened over")]
     internal static void AudioBusPlacement(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -54,7 +56,6 @@ internal static class AudioBusSuites
         var report = new StringBuilder();
         CheckLayout(ctx, report);
         CheckMix(ctx, report);
-        CheckSavedDrop(ctx, report);
 
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
@@ -231,49 +232,6 @@ internal static class AudioBusSuites
         CheckBus(ctx, AudioBuses.Voice, AudioMix.DefaultVoice, AudioMix.DefaultMaster, report);
     }
 
-    // The read half of the ladder: a saved mix reaches a plain launch and reaches no deterministic
-    // one. A level that escaped the drop would make a golden run's mix a function of the levels
-    // saved at whoever's machine took the shot, which is the same rule the display settings hold
-    // (docs/verification.md's DET-8). The saved mix is nothing like the defaults on purpose, so
-    // "reads as never set" cannot pass by reading a file that says the defaults anyway.
-    private static void CheckSavedDrop(TestContext ctx, StringBuilder report)
-    {
-        string dir = Path.Combine(ctx.ScratchDir, "audio-saved-drop");
-        if (Directory.Exists(dir))
-        {
-            Directory.Delete(dir, recursive: true);
-        }
-
-        Directory.CreateDirectory(dir);
-        string? previous = OptionsStore.DirectoryOverride;
-        OptionsStore.DirectoryOverride = dir;
-        try
-        {
-            OptionsStore.UserOptions().Save(new OptionsDef
-            {
-                AudioMaster = 0,
-                AudioMusic = 7,
-                AudioEffects = 100,
-                AudioVoice = 33,
-            });
-            var plain = AudioMix.SavedLevels(det: false);
-            report.AppendLine($"saved levels plain={Describe(plain)}");
-            ctx.Check(plain == new AudioLevels(0, 7, 100, 33),
-                $"a plain launch reads the saved mix, a Master of 0 included ({Describe(plain)})");
-            var det = AudioMix.SavedLevels(det: true);
-            report.AppendLine($"saved levels det={Describe(det)}");
-            ctx.Check(det == default(AudioLevels),
-                $"and a --det launch reads no saved level at all ({Describe(det)})");
-            AudioMix.Apply(det.Master, det.Music, det.Effects, det.Voice);
-            CheckBus(ctx, AudioBuses.Music, AudioMix.DefaultMusic, AudioMix.DefaultMaster, report);
-        }
-        finally
-        {
-            OptionsStore.DirectoryOverride = previous;
-            AudioMix.Apply();
-        }
-    }
-
     // The preview half: the mix a page applies while it is open reaches all three child buses,
     // Master moves every one of them at once, a level moved twenty times over sounds one clip rather
     // than twenty, and ending the preview puts back exactly the gains that stood when it began.
@@ -338,12 +296,6 @@ internal static class AudioBusSuites
             AudioMix.Apply();
         }
     }
-
-    private static string Describe(AudioLevels levels) =>
-        $"master={Level(levels.Master)} music={Level(levels.Music)} effects={Level(levels.Effects)} voice={Level(levels.Voice)}";
-
-    private static string Level(int? level) =>
-        level?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unset";
 
     private static void CheckBus(TestContext ctx, string bus, int level, int master,
         StringBuilder report)

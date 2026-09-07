@@ -69,6 +69,13 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 **Audio**
 `--mute` · `--volume`
 
+Neither of those reaches the player's own mix, and no flag or config key does. The four volume
+levels (Master, Music, Effects, Voice) are set on Preferences' AUDIO page, saved in
+`user://options.json` and written on the three category buses beneath Master, so the two gains
+multiply rather than compete: `--volume=0` silences a repo run whatever the saved levels say, and a
+`--det` run reads none of them. The mix is
+[`docs/menu-presentations.md`](menu-presentations.md)'s Audio section.
+
 Three flag families live in their own sections further down, with the lab they script:
 the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the world damage lab
 (`--debug-damage`).

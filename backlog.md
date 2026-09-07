@@ -1591,17 +1591,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-455` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **There is no audio options menu, so the music level is a hard-coded
-  stand-in.** *Evidence:* at the controls the music drowned the briefing narration, so
-  `MusicPlayer.ChannelLevel` now mixes the channel at 0.2 of the master bus. That constant is a
-  stand-in for a control, not a tuned value: the original mixes music against a user setting, and
-  with no options menu there is nothing to read. *Fix shape:* an options menu carrying at least a
-  music level, then delete `ChannelLevel` and read the setting. *⚠ Traps:* do not re-tune
-  `ChannelLevel` as if it were a fidelity constant; it is a placeholder and its own doc comment says
-  to remove rather than adjust it. `MusicPlayer.Gain` deliberately stays the fade's own 0..1 value
-  so the decoded ramp assertions still read what the decode describes. *Cross-refs:*
-  `docs/org/music.md` for the fade rates the level does not affect.
-
 - `BL-079` `[Feature]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **Positional 3D audio for another aircraft's WEAPONS; its engine already has one.**
   The original's IA traffic is clearly audible in the reference video.
   ⚠ **The entry's original claim, that all sound is own-plane and non-positional, is false and was

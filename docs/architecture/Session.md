@@ -32,7 +32,7 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 
 ## src/Session/Launcher.cs
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
-editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/AudioMix.cs`), the `--dump-*`/`--run-tests` early quits,
+editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits,
 and what outlives a session (camera, sun, audio, music, the perf and hitch instruments). It owns the
 menu as one `MenuHost` built on the first show, the presentation resolution, the only options write,
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`),

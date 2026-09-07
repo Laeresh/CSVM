@@ -59,6 +59,7 @@ below them. This plan adds a player-facing control; it does not touch how a scri
 | 5 | What does a fresh install open on? | **Master 100, Music 50, Effects 50, Voice 50** — the authored `CurrentValue` on the three category rows, and full on the added one. ⚠ This re-bases the whole mix 6 dB down for a player who never opens the page; `B7` is where that gets judged rather than assumed. |
 | 6 | Where do the sliders apply, given `--volume=` already writes the Master bus? | **On the three child buses, never on Master.** Each child bus takes `category × master`, and the Master bus stays the developer gain alone. `--volume=0` therefore still silences a repo run whatever the saved sliders say, and a full-volume launch still leaves Master at its resting gain and stays byte-identical in output and console log. |
 | 7 | Combat voice plays through `WorldSounds.PlayOneShot`, the effects one-shot path. Which bus? | **Voice, through a bus argument on the call.** The category boundary cuts across one call site rather than one module, so the seam goes on the call. A separate voice-only pool was rejected: it would duplicate the pooling, the prewarm and the 3D falloff for one caller. |
+| 8 | Does the preview follow the original's shape? | **No: this port sounds one clip on the level that moved, and the departure is deliberate.** `AUDIO.SCRIPT` builds a sound object per category on `gui_create`, starts all three there, sends only `setvolume` on a slider move and stops them on `gui_destroy`; no play message reaches a category's object on a move. A clip on the move guarantees the slider is audible the moment a player touches it, where the original's shape leaves one silent unless a clip happens to still be running. ⚠ Whether the original's clips loop or play once is **undecodable from the script**: `ZB = 0` stands on every `@ctl@SK` object the shipped scripts build, `GLOBALS.SCRIPT`'s menu music included, and that music plays on while the menu is up. Film is the only thing that would settle it, and the port's shape does not wait on it. |
 
 ## ⚠ Read this before implementing anything
 
@@ -166,7 +167,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 5. ☑ The slider the shell has never had
 6. ☑ The AUDIO page opens from Preferences
 8. ☑ A slider a player can hear while moving it
-7. ☐ The precedence ladder, and the re-based mix judged at the controls
+7. ◐ The precedence ladder, and the re-based mix judged at the controls (the ladder is asserted; the
+   mix is owed at the controls)
 
 ## Dependency and parallelism notes
 
@@ -478,9 +480,12 @@ one per category over `music_loop.wav`, `sfx_loop.wav` and `voice_loop.wav`, eac
 row's current level; a slider move sets that category's volume live (`case 10019`), CANCEL re-reads
 the saved settings and restores the volume from them (`case MA`), and `gui_destroy` stops all three.
 The three wavs ship, in `extracted/rof/ASSETS/SOUNDS` beside the four cue sounds. So the preview is
-the original's, the live apply is the original's, and so is the restore on cancel. ⚠ The one thing
-the script does not settle is how it sounds: the loops run for as long as the page is open, and this
-port sounds a clip on the level that moved instead, which is `B7`'s to judge at the controls.
+the original's, the live apply is the original's, and so is the restore on cancel. ⚠ **What the
+script does not settle is how long a clip runs.** It starts all three at page open and sends only
+`setvolume` on a move, with no play message reaching a category's object there, but `ZB = 0` stands
+on every `@ctl@SK` object the shipped scripts build, `GLOBALS.SCRIPT`'s menu music included, so
+loop-versus-once is undecodable from this data. Decision 8 settles the port's own shape without
+waiting on film: a clip fires on the level that moved.
 Traced in this tree: `AudioMix.Apply` had exactly two callers, `Launcher._Ready` and
 `Launcher.ApplyOptions`, so no level applied while the page was open. `MenuAudioService` already
 holds `_cuePlayer` on Effects and `_narration` on Voice, and `MusicPlayer` is on Music, so a player
@@ -520,7 +525,7 @@ the bus gains and the clip count, which is not the same claim.
 
 **Verified.** <pending orchestrator run>
 
-## B7 ☐ The precedence ladder, and the re-based mix judged at the controls
+## B7 ◐ The precedence ladder, and the re-based mix judged at the controls
 
 **Goal.** The four levels sit in the same precedence ladder the existing options do, `--volume=` and
 `audio.volume` still beat them into silence in a repo run, `--det` reads none of them, and the mix
@@ -562,3 +567,12 @@ errors. `.\RunTests.ps1` green.
 Do not let a saved level un-silence a repo run: that is the failure decision 6 exists to prevent, and
 it is the one this item has to demonstrate rather than assume. `BL-455` is deleted from `backlog.md`
 in this item's commit, not marked fixed there, and its record goes in the commit message.
+
+⚠ **The item stays ◐ until the mix is heard.** The ladder half is landed and asserted
+(`audio-levels-launch`, both rungs shown able to fail), and the documentation and the `BL-455`
+closure are done. What is owed is the author's ear on the re-based mix, which
+`docs/verification.md` places in the half this project cannot verify itself; no headless
+measurement stands in for it, and any level that changes as a result is TUNE and lands as the new
+default.
+
+**Verified.** <pending orchestrator run>

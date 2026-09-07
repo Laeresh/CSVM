@@ -605,7 +605,7 @@ Five minted, filed in [`playtest.md`](../../playtest.md) under **Menus and front
 |---|---|---|
 | `CAP-49` | the main menu: composition, the flag movie, rollover and press, music, and what Quit does | E41's Original top level, E42's main-menu asset rules, `BL-654` |
 | `CAP-50` | the Instant Action setup page: every drop-down open, the paged enemy rows, the ace hiding every enemy control, the Table of Contents and View Story | C21, B13, and the whole wizard's fidelity target |
-| `CAP-51` | Preferences and its four leaves, each opened and changed | A3's options store, E41's Options route, `BL-570`, `BL-455` |
+| `CAP-51` | Preferences and its four leaves, each opened and changed | A3's options store, E41's Options route, `BL-570`, and the AUDIO page's preview against the decoded script |
 | `CAP-52` | menu audio and pointer behaviour across screens | A4's audio and input contracts, D33's cue work |
 | `CAP-53` | the Plane Construction tab bar driven between its six screens | C23's Original hangar navigation |
 

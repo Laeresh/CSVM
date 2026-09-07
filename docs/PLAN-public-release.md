@@ -1098,10 +1098,10 @@ Anything A2 or a later wave closes comes off this list.
 
 ## What the world looks and sounds like
 
-- **There is no in-game audio menu, and the player's own engine loop reads too loud against
-  everything else.** The `--volume=` launch flag is the only level control there is. (`BL-455` and
-  `BL-391`; no landing commit for either, and the master gain is reachable only from the command
-  line or a config key.)
+- **The player's own engine loop reads too loud against everything else.** Preferences' AUDIO page
+  carries Master, Music, Effects and Voice levels, so a player can pull the effects category down,
+  but nothing separates that one loop from the rest of its category. (`BL-391`; no landing commit,
+  and the gain in question is the loop's own rather than a category's.)
 - **Aircraft cast no shadow on the ground in the faithful presentation.** Set Enhanced Graphics in
   Game Options and restart, which lights the world and casts shadow maps, though those are not the
   shadow the original drew. (`BL-331`;

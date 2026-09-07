@@ -231,6 +231,16 @@ and falls back to the shipped default; it is the startup apply (`Session/Launche
 controls never reaches a scripted run. `Capture`/`Restore` take and put back the three child buses' gains verbatim, for
 the AUDIO page's preview, which owes back the mix it opened over. The arithmetic is pure and unit-tested.
 
+## src/Utils/MasterVolume.cs
+The developer output gain, the whole of what bus 0 carries: `Resolve` takes the command line's `--volume=` over the
+`audio.volume` config key over a default that is silence in a repo run and the resting gain in an exported one, and
+`VolumeDb` converts it with the same -80 dB floor `AudioMix` uses. The config key is read even where the flag beats it,
+so it self-registers for `--dump-config`. Resolution only: `Session/Launcher.cs` is the one caller that writes the bus,
+and is where a launch resolving to the resting gain writes nothing at all, keeping a full-volume launch byte-identical
+in output and console log. ⚠ The player's four saved levels are no part of this gain. They multiply on the three child
+buses underneath it (`AudioMix`), so the two reach the output as a product and a level saved at the controls cannot
+un-silence a scripted run. The `audio-levels-launch` suite drives that whole ladder from a parsed command line.
+
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
 request → Built-in default, with the caller's availability check applied only after the request is
