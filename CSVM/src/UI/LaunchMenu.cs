@@ -2926,7 +2926,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         for (int i = 0; i < _slots.Count; i++)
         {
-            var rect = SplitScreen.PaneRect(i, _slots.Count, paneArea);
+            // ⚠ The axis comes from the WINDOW, not from `paneArea`: the bottom strip leaves this
+            // area proportionally wider than the flight's, and reading the axis off it would pick
+            // your aircraft in a left/right pane and then fly you in a top/bottom one.
+            var rect = SplitScreen.PaneRect(i, _slots.Count, paneArea, SplitScreen.SideBySide(size));
             var panel = new PanelContainer
             {
                 Position = rect.Position,

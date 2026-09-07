@@ -7,9 +7,9 @@ namespace CSVM.UI;
 /// The splitscreen rendering rig: N panes, each a <see cref="SubViewportContainer"/> +
 /// <see cref="SubViewport"/> with its own <see cref="Camera3D"/>, all rendering the same
 /// <see cref="World3D"/> as the main viewport. Built only for 2+ players; a single player keeps
-/// GameSession's original main-viewport camera untouched. Layout: 2P is a horizontal split, 3P
-/// and 4P a 2x2 grid with 3P's last quadrant black. Each player owns one visual layer out of a
-/// reserved band (<see cref="PlayerLayerBit0"/>) for camera-anchored singletons like the skydome;
+/// GameSession's original main-viewport camera untouched. Layout is <see cref="PaneRect"/>'s, with
+/// 3P's last quadrant black. Each player owns one visual layer out of a reserved band
+/// (<see cref="PlayerLayerBit0"/>) for camera-anchored singletons like the skydome;
 /// <see cref="SetVisualLayer"/> moves the copies, <see cref="PlayerCullMask"/> culls the rest of
 /// the band. Every pane is a 3D audio listener, or a splitscreen session has no listener at all.
 /// The zone-gate band (<c>Mech3.ZoneGate.LayerBand</c>) is a separate, shared allocation of the
@@ -77,14 +77,28 @@ public sealed partial class SplitScreen : CanvasLayer
     /// and its modulate is that player's own <see cref="PlayerColor"/>.</summary>
     public Label? SkipNotice => _skipNotice is { Visible: true } label ? label : null;
 
+    /// <summary>Whether a 2-player split stands side by side rather than stacked. The threshold is
+    /// the pane's own shape, not a screen name: side by side only once each half is still at least
+    /// as wide as it is tall, which is every window from 2:1 out to an ultrawide's 32:9. A 16:9
+    /// window is not one — halving either axis lands the pane exactly as far from the reference
+    /// frame either way, and a 640x720 pane is a shape nothing in the port is calibrated for.</summary>
+    public static bool SideBySide(Vector2 window) => window.X >= window.Y * 2f;
+
+    /// <summary>What the current layout is called in a log line, read off the same rule
+    /// <see cref="PaneRect"/> lays out by, so the report cannot drift from the geometry.</summary>
+    public static string LayoutName(int players, Vector2 window) =>
+        players != 2 ? "2×2 grid" : SideBySide(window) ? "side by side" : "stacked top/bottom";
+
     /// <summary>Where player <paramref name="index"/>'s pane sits in a <paramref name="size"/>
-    /// area shared by <paramref name="players"/> players: 2P stacked top/bottom, 3–4P a 2×2 grid
-    /// (3P's fourth quadrant unused). Static and public because the launchscreen's splitscreen
-    /// plane select lays its panes out with the very same call — so you pick your aircraft in the
-    /// pane you will then fly in.</summary>
-    public static Rect2 PaneRect(int index, int players, Vector2 size)
+    /// area shared by <paramref name="players"/> players: 2P stacked top/bottom, or side by side
+    /// when <paramref name="sideBySide"/> says the window is wide enough for it, 3–4P a 2×2 grid
+    /// (3P's fourth quadrant unused). ⚠ The axis is decided on the WINDOW and passed in, because
+    /// the launchscreen lays its panes into a shorter area than it flies in and would otherwise
+    /// choose a different axis from the flight it is picking for.</summary>
+    public static Rect2 PaneRect(int index, int players, Vector2 size, bool sideBySide)
     {
-        int cols = players <= 2 ? 1 : 2, rows = 2;
+        int cols = players > 2 || sideBySide ? 2 : 1;
+        int rows = players <= 2 && sideBySide ? 1 : 2;
         float paneW = (size.X - (cols - 1) * Gutter) / cols;
         float paneH = (size.Y - (rows - 1) * Gutter) / rows;
         int col = index % cols, row = index / cols;
@@ -242,8 +256,9 @@ public sealed partial class SplitScreen : CanvasLayer
         Relayout();
     }
 
-    // Places the panes over the current window rect: 2P stacked top/bottom, 3–4P in a
-    // 2×2 grid (3P's fourth quadrant stays backdrop-black). Runs on every resize.
+    // Places the panes over the current window rect: 2P stacked top/bottom or side by side by the
+    // window's own shape, 3–4P in a 2×2 grid (3P's fourth quadrant stays backdrop-black). Runs on
+    // every resize, so dragging a window past 2:1 flips the 2P axis under the players.
     private void Relayout()
     {
         var size = _root.Size;
@@ -253,7 +268,9 @@ public sealed partial class SplitScreen : CanvasLayer
         {
             // Filled, the hidden panes keep their own quadrant: only pane 1 is moved, so handing
             // the window back is a visibility change and one rect rather than a re-layout.
-            var rect = Filled && i == 0 ? new Rect2(Vector2.Zero, size) : PaneRect(i, _panes.Count, size);
+            var rect = Filled && i == 0
+                ? new Rect2(Vector2.Zero, size)
+                : PaneRect(i, _panes.Count, size, SideBySide(size));
             _panes[i].Position = rect.Position;
             _panes[i].Size = rect.Size;
         }
