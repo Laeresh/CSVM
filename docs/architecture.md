@@ -372,6 +372,7 @@ determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
+- `src/Utils/DisplayModeSetting.cs` — the window's display mode: the saved word against the shipped windowed default, and the one place the window mode is set.
 - `src/Utils/EffectPools.cs` — the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs` — the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.

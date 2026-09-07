@@ -677,11 +677,11 @@ public class OriginalCoverageTests : IDisposable
         Assert.Equal(
             new[]
             {
-                OriginalShell.VSyncKey, OriginalShell.GraphicsKey,
+                OriginalShell.DisplayModeKey, OriginalShell.VSyncKey, OriginalShell.GraphicsKey,
                 OriginalShell.VideoAcceptKey, OriginalShell.VideoCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "VIDEO", 4);
+        RowsAreClearOfEachOther(shell, rows, "VIDEO", 6);
     }
 
     // No row of an option page may overlap another, and no control may sit over a title or a

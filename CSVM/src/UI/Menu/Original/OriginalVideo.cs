@@ -9,9 +9,10 @@ namespace CSVM.UI.Menu.Original;
 /// and title, the display settings in the section's own row shape (a title in the title column, a
 /// control beside it, a description in the description column) and ACCEPT CHANGES and CANCEL
 /// CHANGES beside them. The settings are a table in authored row order, so a further one is an
-/// entry plus the store field it reads and the authored row it stands on. V-Sync is a dropdown on
-/// the authored Effects Level row; Enhanced Graphics takes the checkbox row, Shadows, whose gate it
-/// owns. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
+/// entry plus the store field it reads and the authored row it stands on. Display Mode and V-Sync
+/// are dropdowns on the authored Viewing Range and Effects Level rows; Enhanced Graphics takes the
+/// checkbox row, Shadows, whose gate it owns. The decode and the readings are in
+/// <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -48,6 +49,12 @@ public sealed partial class OriginalShell
 
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
+    // The display-mode row's labels, one per DisplayWords.DisplayModes entry and in that order,
+    // since the row reads and writes the store word by index. The two fullscreen modes read as one
+    // word each because the authored box is 120 wide; which of them keeps the desktop alive beside
+    // the game is what the row's description says.
+    private static readonly string[] DisplayModeWords = { "Windowed", "Borderless", "Fullscreen" };
+
     // The V-Sync row's labels, one per DisplayWords.VSyncChoices entry and in that order, since the
     // row reads and writes the store word by index. A word that parses as a number is a cap in
     // frames per second with V-Sync off, which is why the caps read as rates rather than as bare
@@ -61,10 +68,15 @@ public sealed partial class OriginalShell
     // one writer.
     private static readonly VideoOption[] VideoOptions =
     {
+        new(DisplayModeKey, "Display Mode", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
+            _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            OriginalRowKind.Dropdown, DisplayModeWords,
+            s => WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode),
+            (s, i) => s._displayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
         new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
             OriginalRowKind.Dropdown, VSyncWords,
-            s => VSyncIndex(s._vsync),
+            s => WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, GraphicsWords,
@@ -96,15 +108,14 @@ public sealed partial class OriginalShell
         FocusKey(key);
     }
 
-    // Where a V-Sync word sits among the row's own values, and the row's default: a word this
-    // vocabulary does not know, or none saved at all, shows as V-Sync on, which is the behaviour
-    // with no options file.
-    private static int VSyncIndex(string? word)
+    // Where a saved word sits among a row's own values, and every word row's default: a word the
+    // vocabulary does not know, or none saved at all, shows as the first value, which each of these
+    // vocabularies orders as the behaviour with no options file.
+    private static int WordIndex(IReadOnlyList<string> words, string? word)
     {
-        var choices = CSVM.Utils.DisplayWords.VSyncChoices;
-        for (int i = 0; i < choices.Count; i++)
+        for (int i = 0; i < words.Count; i++)
         {
-            if (choices[i] == word)
+            if (words[i] == word)
             {
                 return i;
             }

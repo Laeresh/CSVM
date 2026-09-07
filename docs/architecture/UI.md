@@ -690,14 +690,14 @@ section's widgets, so a layout that moves a row moves ours. ACCEPT CHANGES leave
 VIDEO page instead. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalVideo.cs
-The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences
-page's third door. Same table as the Game Options page with one column more: each setting names the
-authored title, control and description widgets it stands on, so a row keeps its own geometry, and the
-table is in authored row order because the cursor walks it. V-Sync is a dropdown on the Effects Level
-row over `DisplayWords.VSyncChoices`; Enhanced Graphics takes the Shadows checkbox, whose gate it owns,
-and says whether a restart is still owed. A dropdown opens its list as `OriginalGameOptions.cs` does,
-sharing that page's `ComposeOptionList`. ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL
-CHANGES and Back drop the edits. Row by row: [../org/menu-inventory.md](../org/menu-inventory.md).
+The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's
+third door. Same table as the Game Options page with one column more: each setting names the authored
+title, control and description widgets it stands on, so a row keeps its own geometry, and the table is in
+authored row order because the cursor walks it. Display Mode and V-Sync are dropdowns on the Viewing Range
+and Effects Level rows over `DisplayWords`' two vocabularies; Enhanced Graphics takes the Shadows checkbox,
+whose gate it owns, and says whether a restart is still owed. A dropdown opens its list as
+`OriginalGameOptions.cs` does, sharing its `ComposeOptionList`; ACCEPT CHANGES leaves as the
+`OptionsApplyExit` and CANCEL CHANGES drops the edits. Row by row: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the

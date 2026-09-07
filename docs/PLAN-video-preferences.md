@@ -78,7 +78,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 2. ☑ The options carrier takes a setting that is not a vocabulary word
 3. ☑ V-Sync, with the frame limit on its off state
-4. ☐ Display Mode
+4. ☑ Display Mode
 5. ☐ Resolution
 6. ☐ Graphics, as the monitor pick
 7. ☐ The precedence ladder and the golden guard
@@ -276,7 +276,7 @@ for the On word, restoring the entry pacing in a `finally`. It proves the ladder
 guard with the non-det read as its control, so a guard that always returned null fails rather than
 passes (`docs/verification.md` METHOD-10).
 
-## B4 ☐ Display Mode
+## B4 ☑ Display Mode
 
 **Goal.** A Display Mode row offering windowed, borderless fullscreen and exclusive fullscreen,
 applied immediately and restored at the next launch.
@@ -285,24 +285,62 @@ applied immediately and restored at the next launch.
 window calls are the focus pair at `CSVM/src/Session/Launcher.cs:437-443`. The project ships a
 windowed 1280x720 (`CSVM/project.godot:17-21`), and `window/size/no_focus=true` is what the
 interactive path clears at startup so a scripted run does not steal focus (see
-`docs/verification.md`'s SHELL-13).
+`docs/verification.md`'s SHELL-13). **A second claim this item started from is wrong and is
+corrected here:** a mode change is not the first time the menu meets a viewport other than
+1280x720. `project.godot` sets no `window/size/resizable` and no `display/window/stretch/*`, so
+Godot's defaults stand and the window has always been resizable; `CSVM/src/UI/BoardFit.cs:16-34`
+maps every board into a fixed 800x600 authored space at a uniform
+`scale = min(vw/800, vh/600)`, centred with the remainder letterboxed, and
+`CSVM/src/UI/LaunchMenu.cs:852-854` marks the board dirty when `GetVisibleRect().Size` changes, so a
+live resize already recomposes. What this item adds is setting the mode explicitly and persisting
+it, not new size handling.
 
 **Approach.** Three words, `DisplayServer.WindowSetMode` in `ApplyOptions` and again at startup from
-the saved value. Fullscreen changes the viewport size, so this item is where the menu's composition
-over its authored geometry gets its first test at a size nobody has run it at.
+the saved value.
 
 **Model recommendation.** medium.
 
 **Verify.** The golden harness carries the size surface already: `analysis/goldens/manifest.json`
 pins `"size": "1280x720"` and `RunTests.ps1` fails any shot whose rendered size differs, naming both
 (`:1153`). The manifest holds one size for every shot, so a menu shot at a second viewport is a
-`--screenshot` probe compared by eye, not a pinned golden. At the controls: switch modes on the page and confirm the page redraws
-correctly in each, then leave and re-enter to confirm the choice persisted. `.\RunTests.ps1` green.
+`--screenshot` probe compared by eye, not a pinned golden. Since the uniform fit is proven at 16:9
+already, the probe's subject is an **aspect ratio** the fit has not been looked at: 32:9, which is
+what both fullscreen words resolve to on the development machine. At the controls: switch modes on
+the page and confirm the page redraws correctly in each, then leave and re-enter to confirm the
+choice persisted. `.\RunTests.ps1` green.
 
 **⚠ Traps.** Do not clear `no_focus` twice or re-request foreground on a mode change; the startup
 path owns focus and a scripted run depends on it not being handed back (SHELL-13). Exclusive
 fullscreen on a multi-monitor machine interacts with B6's monitor pick, so land B6 after this and
 apply the screen before the mode.
+
+**Landed.** `Utils/DisplayModeSetting.cs` is the setting, `VSyncSetting`'s shape with one source
+fewer: `Resolve` layers the saved word over the windowed default (there is no flag and no config
+key above it), `SavedWord` holds the `--det` guard, and `Apply` is the only place
+`DisplayServer.WindowSetMode` is called. It skips the engine call when the window already stands in
+the resolved mode, so a launch that changes nothing leaves the window alone, and it makes no focus
+call of its own. Godot's names invert the reading and the module says so at the parse: `Fullscreen`
+is the borderless window filling the screen and `ExclusiveFullscreen` is the exclusive mode.
+`Launcher` calls it in both places, and the startup one **only for a session someone is at**: a
+scripted run's window is hidden off screen and its capture is compared against the viewport
+`project.godot` pins, so a saved mode must not reach one, which is a second guard beside `--det` for
+a `--screenshot` probe that is not deterministic. `ApplyOptions` now applies the display settings in
+the order the window needs them, the mode ahead of the pacing and the screen ahead of both once B6
+adds it. The page's row is a dropdown on the authored Viewing Range line, first in the table because
+that line is above the V-Sync one; `VSyncIndex` became `WordIndex` over any vocabulary, since both
+word rows want the same lookup and the same fall back to the first value.
+
+**Verified.** Full `RunTests.ps1` on the plan tree: build 0 warnings, units 3486 passed / 0 failed,
+engine 260 passed / 0 failed with engine errors clean over 4 shards, goldens 18 shots
+hash-identical, exit 0. The new `display-mode` suite proves the ladder, the `--det` guard, the page
+row and the word-to-enum mapping against the engine, asserting `DisplayServer.WindowGetMode()` on
+this run's own windowed window equals what `windowed` resolves to, so a mapping that drifted fails.
+Probes at 5120x1440, 1680x1050 and 1280x720 compose correctly: at 32:9 `BoardFit` is height-limited
+(`scale = min(5120/800, 1440/600) = 2.4`), so the board renders 1920x1440 over 37.5% of the width,
+centred, with every row and both plaques where they stand at 720p. The mode change itself, its
+persistence across a restart, and exclusive fullscreen on a second monitor are owed at the controls:
+a scripted run's window is hidden and its startup apply is skipped, so no headless run can prove
+them.
 
 ## B5 ☐ Resolution
 

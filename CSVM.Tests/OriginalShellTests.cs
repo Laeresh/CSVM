@@ -23,6 +23,7 @@ public class OriginalShellTests
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
+    private static readonly MenuCommands Left = new() { MoveX = -1 };
 
     [Fact]
     public void TheTopLevelIsTheSixDecodedRowsPlusTheFreeFlightDoorAndOpensFocusedOnTheDoor()
@@ -279,10 +280,12 @@ public class OriginalShellTests
         Assert.Equal(OriginalShell.VideoDoorKey, shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Video, shell.Screen);
-        Assert.Equal(OriginalShell.VSyncKey, shell.FocusedKey);
+        Assert.Equal(OriginalShell.DisplayModeKey, shell.FocusedKey);
+        Assert.Null(shell.DisplayModeChoice);
         Assert.Null(shell.VSyncChoice);
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
 
+        shell.Step(Down);
         shell.Step(Down);
         Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
         shell.Step(Accept);
@@ -300,9 +303,47 @@ public class OriginalShellTests
         var step = shell.Step(Accept);
         var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
+        Assert.Null(exit.DisplayMode);
         Assert.Null(exit.VSync);
         Assert.Equal(PresentationId.Original, exit.Presentation);
         Assert.Equal("normal", exit.Difficulty);
+    }
+
+    /// <summary>The display-mode row, the page's first: its list opens over the three words at the
+    /// authored Viewing Range dropdown's own box, picking one closes the list on it, and ACCEPT
+    /// CHANGES carries the store word rather than the label the row draws.</summary>
+    [Fact]
+    public void TheVideoPageDisplayModeRowPicksAWordAndCarriesItOnTheApply()
+    {
+        var shell = Shell(out _);
+        shell.OpenVideo();
+        Assert.Equal("Windowed", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
+
+        shell.Step(Accept);
+        Assert.Equal(OriginalShell.DisplayModeKey, shell.OpenVideoOption);
+        Assert.Equal(DisplayWords.DisplayModes.Count, shell.Rows.Count);
+        Assert.Equal((260f, 352f, 70f, 17f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Null(shell.OpenVideoOption);
+        Assert.Equal(DisplayWords.Borderless, shell.DisplayModeChoice);
+        Assert.Equal("Borderless", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
+
+        // A sideways step wraps past the last word back to the first, as every word row does.
+        shell.Step(Right);
+        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
+        shell.Step(Right);
+        Assert.Equal(DisplayWords.Windowed, shell.DisplayModeChoice);
+
+        shell.Step(Left);
+        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
+
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.VideoAcceptKey, shell.FocusedKey);
+        var exit = Assert.IsType<OptionsApplyExit>(shell.Step(Accept).Exit);
+        Assert.Equal(DisplayWords.Fullscreen, exit.DisplayMode);
     }
 
     /// <summary>The V-Sync row's dropdown: Accept opens the list over every choice at the row's own
@@ -312,7 +353,7 @@ public class OriginalShellTests
     public void TheVideoPageVSyncRowOpensItsListPicksAndCloses()
     {
         var shell = Shell(out _);
-        shell.OpenVideo();
+        shell.OpenVideoOn(OriginalShell.VSyncKey);
         Assert.Equal("On", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
 
         shell.Step(Accept);
@@ -344,6 +385,9 @@ public class OriginalShellTests
         var shell = Shell(out _);
         shell.OpenVideo();
         shell.Step(Right);
+        Assert.Equal(DisplayWords.Borderless, shell.DisplayModeChoice);
+        shell.Step(Down);
+        shell.Step(Right);
         Assert.Equal(DisplayWords.VSyncOff, shell.VSyncChoice);
         shell.Step(Down);
         shell.Step(Accept);
@@ -354,9 +398,11 @@ public class OriginalShellTests
         Assert.Null(shell.Step(Accept).Exit);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
+        Assert.Null(shell.DisplayModeChoice);
         Assert.Null(shell.VSyncChoice);
 
         shell.OpenVideo();
+        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
@@ -401,7 +447,11 @@ public class OriginalShellTests
     [Fact]
     public void TheRowsOpenOnTheSavedWords()
     {
-        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value, Difficulty = "hardest", VSync = "120" };
+        var saved = new OptionsDef
+        {
+            GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value,
+            Difficulty = "hardest", VSync = "120", DisplayMode = DisplayWords.Fullscreen,
+        };
         var shell = Shell(out _, () => saved);
         shell.OpenGameOptions();
 
@@ -413,12 +463,15 @@ public class OriginalShellTests
         shell.OpenVideo();
         Assert.Equal("120", shell.VSyncChoice);
         Assert.Equal("120 FPS", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
+        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
+        Assert.Equal("Fullscreen", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
 
         // A file that never set the fields opens the rows on the shipped defaults.
         saved.GraphicsMode = null;
         saved.MenuPresentation = null;
         saved.Difficulty = null;
         saved.VSync = null;
+        saved.DisplayMode = null;
         shell.OpenGameOptions();
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
@@ -426,6 +479,8 @@ public class OriginalShellTests
         shell.OpenVideo();
         Assert.Null(shell.VSyncChoice);
         Assert.Equal("On", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
+        Assert.Null(shell.DisplayModeChoice);
+        Assert.Equal("Windowed", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
     }
 
     /// <summary>The graphics row's description reads the choice against the running mode, so a
@@ -512,16 +567,18 @@ public class OriginalShellTests
         Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
     }
 
-    /// <summary>The VIDEO page over its own section: the dropdown at the authored Effects Level
-    /// box and the checkbox at the authored Shadows box, each title box stopped at the control
-    /// beside it and each description at the description column, the Shadows one wrapped at the
-    /// plaque column since that authored row carries no width of its own.</summary>
+    /// <summary>The VIDEO page over its own section: the dropdowns at the authored Viewing Range
+    /// and Effects Level boxes and the checkbox at the authored Shadows box, each title box stopped
+    /// at the control beside it and each description at the description column, the Shadows one
+    /// wrapped at the plaque column since that authored row carries no width of its own.</summary>
     [Fact]
     public void TheVideoPageIsComposedOverItsSectionsOwnRowShape()
     {
         var shell = Shell(out _);
         shell.OpenVideo();
 
+        var mode = shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey);
+        Assert.Equal((260f, 335f, 70f, 17f), (mode.X, mode.Y, mode.Width, mode.Height));
         var vsync = shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey);
         Assert.Equal((260f, 380f, 70f, 17f), (vsync.X, vsync.Y, vsync.Width, vsync.Height));
         var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
@@ -534,15 +591,18 @@ public class OriginalShellTests
         var board = shell.Compose();
         Assert.Equal(new[] { "PM_Logo.png", "PP_VpBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
         Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
+        Assert.Contains(board.Lines, l => l.Text == "Display Mode" && l.X == 130f && l.Y == 335f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how the window sits", System.StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 335f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", System.StringComparison.Ordinal)
             && l.X == 340f && l.Y == 380f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 425f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)
             && l.X == 340f && l.Y == 425f && l.Width == 160f);
-        Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
-        // The checkbox draws unchecked and unfocused, the page opening on the V-Sync row above it:
-        // the second of its eight frames.
+        Assert.Equal(7, board.Lines.Count(l => l.Row < 0));
+        // The checkbox draws unchecked and unfocused, the page opening on the display-mode row two
+        // above it: the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
     }
 

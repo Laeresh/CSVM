@@ -167,6 +167,16 @@ place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are called, used by
 startup and by its Options apply, and it logs the source that won. The cap is a render rate and
 reaches no simulation. Read `Session/Launcher.cs` next for both call sites.
 
+## src/Utils/DisplayModeSetting.cs
+The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
+the screen, or exclusive fullscreen. `Resolve` layers the way `VSyncSetting` does with one layer fewer,
+there being no config key: the saved `displayMode` word, then windowed, which is what `project.godot`
+ships; an unknown word reads as never set. `SavedWord` holds the `--det` guard. `Apply` is the one place
+`DisplayServer.WindowSetMode` is called and skips it when the window already stands in that mode. Godot's
+names invert the reading: `Fullscreen` is the borderless window, `ExclusiveFullscreen` the exclusive mode.
+Nothing here touches focus, which `Launcher._Ready` owns (`../verification.md`'s SHELL-13); that startup
+call is skipped for a scripted run, whose hidden window is captured against the pinned viewport.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`

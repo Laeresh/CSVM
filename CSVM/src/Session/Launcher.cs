@@ -474,6 +474,14 @@ public partial class Launcher : Node3D
         bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, true);
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, VSyncSetting.SavedWord(_spec.Det), vsyncOnByConfig));
 
+        // The saved window mode, for a session someone is at only: a scripted run's window is hidden
+        // off screen and its capture is compared against the viewport project.godot pins. The apply
+        // asks for no focus of its own; docs/architecture/Utils.md has the rest.
+        if (!_spec.IsScripted)
+        {
+            DisplayModeSetting.Apply(DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det)));
+        }
+
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
         // legacy spelling of their console filter; an explicit --log= is applied after it and can
         // still narrow either one.
@@ -1346,9 +1354,10 @@ public partial class Launcher : Node3D
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
         store.Save(options);
-        // The frame pacing is the one choice here that takes effect now instead of at the next
-        // start, through the same call the startup path makes. --no-vsync still beats it, so a
-        // measurement run keeps its uncapped loop whatever the player saved.
+        // The display settings take effect now instead of at the next start, through the same calls
+        // the startup path makes and in the order the window needs them: the screen it sits on, then
+        // the mode, then the pacing, which --no-vsync still beats (docs/menu-presentations.md).
+        DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, true)));
         Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
         _menuHost.Deactivate();

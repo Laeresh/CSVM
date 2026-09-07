@@ -44,10 +44,11 @@ internal static class MenuOriginalSuites
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty and both other choices, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying them, Original's VIDEO door opens the decoded page on its V-Sync dropdown whose "
-        + "five words pick a frame cap and whose Enhanced Graphics checkbox flips, whose CANCEL "
-        + "CHANGES drops both with no exit and whose ACCEPT CHANGES leaves as one more apply exit "
-        + "carrying them, the force flag recovers and a missing layout falls back with the request kept")]
+        + "carrying them, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "over the V-Sync one whose five words pick a frame cap and the Enhanced Graphics checkbox "
+        + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
+        + "leaves as one more apply exit carrying them, the force flag recovers and a missing layout "
+        + "falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -501,9 +502,9 @@ internal static class MenuOriginalSuites
     }
 
     // Original's VIDEO route over the install's decoded sections: the Preferences page's third door
-    // opens the decoded page on its V-Sync dropdown, whose list picks a frame cap, the checkbox
-    // under it flips the graphics word, CANCEL CHANGES drops both without an exit, and ACCEPT
-    // CHANGES on a second visit leaves as one apply exit carrying them.
+    // opens the decoded page on its display-mode dropdown, the V-Sync list under it picks a frame
+    // cap, the checkbox flips the graphics word, CANCEL CHANGES drops them all without an exit, and
+    // ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
     private static void OriginalVideoRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
     {
         if (shell == null)
@@ -516,16 +517,16 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.VSyncKey,
-            $"VIDEO opens the decoded page on its V-Sync row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.DisplayModeKey,
+            $"VIDEO opens the decoded page on its Display Mode row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "VIDEO" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "VIDEO" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 3, $"drawing the section's own tab title over the two row titles ({titles} of 3)");
+        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {
@@ -533,6 +534,10 @@ internal static class MenuOriginalSuites
         }
 
         ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        Press(host, seat, Right);
+        ctx.Check(shell.DisplayModeChoice == DisplayWords.Borderless,
+            $"a sideways step on the focused row takes the next display mode ({shell.DisplayModeChoice ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalShell.VSyncKey);
         Press(host, seat, Accept);
         ctx.Check(shell.OpenVideoOption == OriginalShell.VSyncKey && shell.Rows.Count == DisplayWords.VSyncChoices.Count,
             $"Accept on the V-Sync row opens the dropdown over every choice ({shell.OpenVideoOption}, {shell.Rows.Count})");
@@ -548,18 +553,24 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalShell.VideoCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.GraphicsChoice == GraphicsMode.Default
-            && shell.VSyncChoice == null && exits.Count == before,
-            $"CANCEL CHANGES lands back on Preferences with both edits dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {shell.VSyncChoice ?? "unset"})");
+            && shell.VSyncChoice == null && shell.DisplayModeChoice == null && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with all three edits dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {shell.VSyncChoice ?? "unset"}, {shell.DisplayModeChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
         Press(host, seat, Accept);
+        Press(host, seat, Right);
+        WalkTo(host, seat, shell, OriginalShell.VSyncKey);
         Press(host, seat, Right);
         WalkTo(host, seat, shell, OriginalShell.GraphicsKey);
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalShell.VideoAcceptKey);
         Press(host, seat, Accept);
-        ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit { Graphics: GraphicsMode.EnhancedWord, VSync: DisplayWords.VSyncOff },
-            $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying both words ({exits.Count - before}, {exits[^1].GetType().Name})");
+        ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
+        {
+            Graphics: GraphicsMode.EnhancedWord, VSync: DisplayWords.VSyncOff,
+            DisplayMode: DisplayWords.Borderless,
+        },
+            $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all three words ({exits.Count - before}, {exits[^1].GetType().Name})");
         ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
     }
 

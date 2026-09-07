@@ -187,7 +187,10 @@ public sealed partial class OriginalShell
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
-    /// <summary>The VIDEO page's V-Sync dropdown, the page's first row.</summary>
+    /// <summary>The VIDEO page's display-mode dropdown, the page's first row.</summary>
+    public const string DisplayModeKey = "DISPLAYMODE";
+
+    /// <summary>The VIDEO page's V-Sync dropdown.</summary>
     public const string VSyncKey = "VSYNC";
 
     /// <summary>The Options screen's section in the layout, whose chrome it is composed over.</summary>
@@ -260,9 +263,9 @@ public sealed partial class OriginalShell
     private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
     private int _difficulty = CSVM.Flight.Difficulty.Normal;
-    // The four display settings as they were saved. No page shows one yet, and a page that shows a
-    // setting still has to hand back the ones it does not, or the one writer's save would clear
-    // them; carrying them on the shell is what lets either page's apply do that.
+    // The four display settings as they were saved. A page that shows a setting still has to hand
+    // back the ones it does not, or the one writer's save would clear them; carrying them on the
+    // shell is what lets either page's apply do that.
     private string? _monitorIndex;
     private string? _resolution;
     private string? _displayMode;
@@ -397,6 +400,11 @@ public sealed partial class OriginalShell
 
     /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The display-mode word (<see cref="CSVM.Utils.DisplayWords.DisplayModes"/>) the
+    /// VIDEO page would apply, or null while nothing has been saved and no row has been
+    /// touched.</summary>
+    public string? DisplayModeChoice => _displayMode;
 
     /// <summary>The V-Sync word (<see cref="CSVM.Utils.DisplayWords.VSyncChoices"/>) the VIDEO page
     /// would apply, or null while nothing has been saved and no row has been touched.</summary>
