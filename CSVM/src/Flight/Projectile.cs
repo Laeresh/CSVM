@@ -878,7 +878,9 @@ public sealed partial class ProjectilePool : Node3D
         AddChild(_casingModels);
         for (int i = 0; i < 8; i++)
         {
-            var p = new AudioStreamPlayer();
+            // The bus is set here and never per shot: the pool is built once and every player in it
+            // is handed back and reused, so a per-shot write would be the same value every time.
+            var p = new AudioStreamPlayer { Bus = AudioBuses.Effects };
             AddChild(p);
             _sfxPool.Add(p);
         }

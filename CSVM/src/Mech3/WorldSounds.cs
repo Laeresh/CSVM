@@ -188,6 +188,7 @@ public sealed partial class WorldSounds : Node3D
             MaxDistance = def.RangeMax,
             VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
             AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            Bus = AudioBuses.Effects,
         };
         AddChild(player);
         var emitter = new Emitter { Name = name, Player = player, Looped = def.Looped };
@@ -394,6 +395,7 @@ public sealed partial class WorldSounds : Node3D
             MaxDistance = def.RangeMax,
             VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
             AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            Bus = AudioBuses.Effects,
         };
         AddChild(player);
         player.GlobalPosition = worldPos;

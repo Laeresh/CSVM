@@ -109,8 +109,11 @@ which is where it differs from Game Options.
 with the hit region widened by `Left 0, Top -10, Right 1, Bottom -10`. Two art files, one for the
 slot and one for the thumb, and no frame count, so the thumb is a single image and not a state strip.
 
-**Every site that constructs a player**, which is the whole surface `A1` has to place. Eleven sites,
-in three categories:
+**Every site that constructs a player**, which is the whole surface `A1` has to place. Fourteen
+sites, in three categories, plus combat voice, which has no player of its own; the count is the
+number of `new AudioStreamPlayer`/`AudioStreamPlayer3D` expressions under `CSVM/src`, and every one
+of them is named by line number below. `CSVM/scenes/Main.tscn` authors no audio node, so there is no
+site outside the code:
 
 | Category | Sites |
 |---|---|
@@ -118,10 +121,11 @@ in three categories:
 | Voice | `MissionRadio._player` (`CSVM/src/Mech3/MissionRadio.cs:35`), `MenuAudioService._narration` (`CSVM/src/Session/MenuAudioService.cs:46`), and combat voice, which has no player of its own and rides `WorldSounds.PlayOneShot` (`A2`) |
 | Effects | `FlightAudio`'s crash, warning shot, gun loop, nitro loop and its two factories (`CSVM/src/Flight/FlightAudio.cs:114,132,157,180,418,437`), `AiEngineAudio`'s engine slots (`CSVM/src/Flight/AiEngineAudio.cs:234`), `WorldSounds`' ambient emitters and one-shots (`CSVM/src/Mech3/WorldSounds.cs:184,390`), `Projectile`'s eight-player pool (`CSVM/src/Flight/Projectile.cs:881`), `MenuAudioService._cuePlayer` (`CSVM/src/Session/MenuAudioService.cs:48`) |
 
-The project ships no bus layout at all: there is no `.tres` anywhere under `CSVM/`, `project.godot`
-carries no `audio/` key, and `Launcher`'s own constant says so in as many words ("This project ships
-no bus layout, so Master is the only bus and everything (both audio paths) is on it by default",
-`CSVM/src/Session/Launcher.cs:49-51`).
+**The bus layout** is `CSVM/default_bus_layout.tres`, which `A1` added: Master, plus Music, Effects
+and Voice sending into it. Godot 4.7's `audio/buses/default_bus_layout` still defaults to
+`res://default_bus_layout.tres`, confirmed by the `audio-buses` suite reading four named buses out of
+`AudioServer` with no `audio/` key in `project.godot`, so no key was added. Before `A1` the project
+shipped no layout and Master was the only bus.
 
 ## Ground rules
 
@@ -150,7 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the mix
 
-1. ☐ The bus layout, and every player on a named bus
+1. ☑ The bus layout, and every player on a named bus
 2. ☐ Combat voice leaves the effects path
 3. ☐ The mix seam, and the music placeholder's deletion
 
@@ -172,6 +176,13 @@ field) and are the one pair in this plan that can run in parallel; give B5 `Orig
 give B4 `OptionsStore.cs`/`MenuExit.cs`, and neither touches the other's file. B6 needs both. B7
 verifies the whole ladder and runs last.
 
+**Wave B waits on the video plan.** The video plan's `B2` and five of its siblings are landed on
+branch `video-preferences` and not yet on `main`, and that branch's `OriginalShell.cs` already
+occupies the regions `B5` and `B6` need: `PreferencesPageKeys`, the shell's saved-setting fields and
+its choice properties. Wave A is clean against `main` and runs first; Wave B runs after
+`video-preferences` merges to `main` and that merge is pulled into this branch, so `B4` widens the
+record the video plan actually shipped rather than a second copy of it.
+
 **Cross-plan contention with `docs/PLAN-video-preferences.md`.** B4 and that plan's B2 both widen
 `OptionsDef`, `OptionsStore`'s validation and the `OptionsApplyExit` record, which is deliberately a
 closed hierarchy; two independent widenings of it will conflict textually and, worse, will each
@@ -184,15 +195,15 @@ Options, in case that plan already generalised the row shape.
 
 # Wave A — the mix
 
-## A1 ☐ The bus layout, and every player on a named bus
+## A1 ☑ The bus layout, and every player on a named bus
 
 **Goal.** The process runs four buses (Master, Music, Effects, Voice, the last three routed to
-Master), every one of the eleven player-construction sites names the bus its sound belongs to, and a
-suite fails if any live player is on Master. Nothing is audibly different yet: the three child buses
-sit at their resting gain.
+Master), every one of the fourteen player-construction sites names the bus its sound belongs to, and
+a suite fails if any live player is on Master. Nothing is audibly different yet: the three child
+buses sit at their resting gain.
 
 **Evidence (confidence: traced).** The survey above is the whole surface, read off the tree in this
-session: eleven `new AudioStreamPlayer`/`AudioStreamPlayer3D` sites, no bus layout anywhere, and
+session: fourteen `new AudioStreamPlayer`/`AudioStreamPlayer3D` sites, no bus layout anywhere, and
 `Launcher`'s constant naming Master as the only bus (`CSVM/src/Session/Launcher.cs:49-51`).
 `MenuAudioService`'s own comment states the current arrangement as a deliberate one ("On the Master
 bus by default, which is where `--volume=`/`audio.volume` already applies",
@@ -223,6 +234,8 @@ flight audio entirely and is not a bus concern; do not reimplement it as a bus m
 `Projectile`'s pool is built once and reused, so its bus is set at construction and never per shot.
 A suite that walks the tree sees only what a given session built, so run the guard in a session that
 has a world, a flown plane and the menu service up, or it passes by seeing nothing.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ Combat voice leaves the effects path
 
@@ -351,9 +364,10 @@ image and has no focus or pressed state to draw.
 shape rather than a second drag system: the row's hit box is the widened authored region
 (`Left 0, Top -10, Right 1, Bottom -10`), the value is the pointer's X mapped across the slot, and a
 sideways step moves it by a fixed increment, mirroring `StepGameOptionValue`'s wrap-free
-left/right handling on a dropdown. `<TODO: settle the keyboard step size. 1 is 100 presses end to
-end and 10 is coarse; the original is a mouse-only page and settles nothing, so this is a call at the
-controls.>` The thumb has one frame, so focus is drawn the way the page draws focus elsewhere rather
+left/right handling on a dropdown. The keyboard and pad step is 5, twenty presses end to end: fine
+enough to land on a considered level, coarse enough to cross the range without holding the key. The
+original is a mouse-only page and settles nothing here, so this is the author's call. The thumb has
+one frame, so focus is drawn the way the page draws focus elsewhere rather
 than by a strip frame.
 
 **Model recommendation.** high. This is the shell's first continuous control and every later
@@ -402,9 +416,8 @@ against the authored geometry, not design.
 **Verify.** Mint an `AudioAid` beside `GameOptionsAid` in `OriginalPresentation.cs` (`:36-45` holds
 the aid constants), add its `--menu=` name to `docs/cli.md`'s `--menu=` bullet, and take a
 `--screenshot` to compare against the original's page for row placement and the description column.
-`<TODO: confirm the reference shot's filename in OriginalScreenshots/; the video plan cites
-"Preferences Video.png" so "Preferences Audio.png" is the expected sibling, and the user should be
-asked if it is absent.>` Drive the door and both plaques through the Original menu suites the way
+The reference shot is `OriginalScreenshots/Preferences Audio.png`, beside the video plan's
+`Preferences Video.png`. Drive the door and both plaques through the Original menu suites the way
 `MenuOriginalSuites` already drives Game Options, asserting one `OptionsApplyExit` on Accept and none
 on Cancel. `.\RunTests.ps1` green.
 

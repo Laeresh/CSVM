@@ -238,6 +238,7 @@ public sealed partial class AiEngineAudio : Node3D
             MaxDistance = def.RangeMax,
             VolumeDb = -60f,
             AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            Bus = AudioBuses.Effects,
         };
         AddChild(player);
         return player;

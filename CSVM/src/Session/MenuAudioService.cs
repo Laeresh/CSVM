@@ -42,10 +42,12 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
 
     public override void _Ready()
     {
-        // On the Master bus by default, which is where --volume=/audio.volume already applies.
-        _narration = new AudioStreamPlayer { Name = "briefing_narration" };
+        // Two categories from one node: a briefing narration is a spoken line and a menu cue is a
+        // sound effect, so they take different buses. Master still reaches both, since every child
+        // bus sends into it and that is where --volume=/audio.volume applies.
+        _narration = new AudioStreamPlayer { Name = "briefing_narration", Bus = AudioBuses.Voice };
         AddChild(_narration);
-        _cuePlayer = new AudioStreamPlayer { Name = "menu_cue" };
+        _cuePlayer = new AudioStreamPlayer { Name = "menu_cue", Bus = AudioBuses.Effects };
         AddChild(_cuePlayer);
     }
 

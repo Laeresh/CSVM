@@ -172,6 +172,15 @@ file and renames it over the real one. Under `--run-tests`, `UserOptions()` read
 emptied per-process scratch directory (`DirectoryOverride`) instead, so no suite touches the
 player's file; `Launcher.ApplyOptions` is the only writer.
 
+## src/Utils/AudioBuses.cs
+The names of the four buses `CSVM/default_bus_layout.tres` ships: `Master`, and `Music`, `Effects`
+and `Voice` sending into it. A resource rather than an `AudioServer.AddBus` call at startup, so a
+bus exists before the first node enters the tree. Every site that builds an `AudioStreamPlayer` or
+`AudioStreamPlayer3D` sets `Bus` from here at construction, because Godot resolves an unknown or
+unset bus name to Master with no error and a misplaced player is therefore silent about it. Bus 0
+carries the developer `--volume=` gain and the focus mute (`Session/Launcher.cs`) and is not part of
+a player's mix. The `audio-buses` suite is what holds the placement.
+
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
 request → Built-in default, with the caller's availability check applied only after the request is

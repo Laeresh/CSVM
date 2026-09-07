@@ -86,7 +86,7 @@ public sealed partial class MusicPlayer : Node
     // per-family counter, so the two takes alternate from the first cue of a process.
     private readonly int[] _stingerTurn = new int[3];
 
-    private readonly AudioStreamPlayer _player = new();
+    private readonly AudioStreamPlayer _player = new() { Bus = AudioBuses.Music };
     private string _wav = string.Empty;
     private string _cue = string.Empty;
     private MusicState _state = MusicState.Silent;

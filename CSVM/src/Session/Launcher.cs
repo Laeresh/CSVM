@@ -46,8 +46,9 @@ public partial class Launcher : Node3D
     // log and short enough that a drop is placed within the sortie. TUNE.
     private const double RateWindowSeconds = 10;
 
-    // Master-bus index. This project ships no bus layout, so Master is the only bus
-    // and everything (both audio paths) is on it by default.
+    // Master-bus index. default_bus_layout.tres sends Music, Effects and Voice into Master, so a
+    // gain or a mute written here still reaches every sound while leaving a player's own mix on the
+    // three child buses alone.
     private const int MasterBus = 0;
 
     // Master output gain, linear, for a REPO run where neither `--volume=` nor the
