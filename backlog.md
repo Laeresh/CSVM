@@ -1710,6 +1710,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
   (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
+- `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
+  levels, so the mix is settable in the Original presentation alone.** *Evidence:*
+  `PLAN-audio-preferences` builds the AUDIO page for Original and puts four levels (Master, Music,
+  Effects, Voice) in the shared options store, which is where every setting both presentations show
+  already lives. Built-in's Options screen holds three steppers (difficulty, menu presentation,
+  graphics mode) and the Controls door, and its apply hands back every setting it does not show
+  untouched (`CSVM/src/UI/LaunchMenu.cs:181-191,1466-1560,2449-2456`), so once the page lands a
+  player on Built-in can hear the mix and not reach it. Blocked until the four levels exist in the
+  store, which is the whole of the dependency: nothing else about this item waits on that plan.
+  *Fix shape:* four rows on Built-in's Options screen reading and writing the same store fields the
+  AUDIO page does, in the screen's own stepper convention, applied through the same
+  `OptionsApplyExit` the three current rows leave by.
+  *⚠ Traps:* Built-in has no continuous control of any kind, so a 0 to 100 level is a stepper with a
+  chosen step rather than a slider, and the step size is a judgement the row has to make rather than
+  inherit. Do not add a second writer: `Launcher.ApplyOptions` is the options file's one writer and
+  both presentations reach it through the apply exit. Do not re-tune `MusicPlayer.ChannelLevel` on
+  the way past; `BL-455` deletes it.
+  *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`, `BL-783` (the same gap
+  for the display settings), `docs/menu-presentations.md`.
+
 ## Cameras & views
 
 - `BL-150` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **plan-sized — not a TUNE. Numpad camera views — the whole scheme needs a rebuild, not a
@@ -2719,6 +2739,57 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   button inside that rectangle, and check a line appears while held and goes on release.
   *Cross-refs:* `docs/org/menu-inventory.md` (the Credits row), `BL-775`'s landing
   (`git log --grep=BL-775`).
+
+- `BL-783` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen shows none of the four display
+  settings, so the monitor, the resolution, the display mode and V-Sync are settable in the Original
+  presentation alone.** *Evidence:* the VIDEO page landed for Original
+  (`CSVM/src/UI/Menu/Original/OriginalVideo.cs`, `PF_B_VIDEO` live) and widened the shared store, so
+  `OptionsDef`, `OptionsStore`'s validation and `OptionsApplyExit` all carry the four settings beside
+  the three vocabulary words. Built-in reads them into `_monitorChoice`, `_resolutionChoice`,
+  `_displayModeChoice` and `_vsyncChoice` purely to hand them back untouched, its own comment saying
+  the screen shows none of them (`CSVM/src/UI/LaunchMenu.cs:189-191,1557-1559`). A player who never
+  leaves Built-in cannot pick the screen the game opens on.
+  *Fix shape:* four rows over the same four settings and the same resolvers the VIDEO page reads
+  through (`CSVM/src/Utils/MonitorSetting.cs`, `ResolutionSetting.cs`, `DisplayModeSetting.cs`,
+  `VSyncSetting.cs`), stepped in Built-in's own convention and applied through the existing exit.
+  *⚠ Traps:* the resolution words are enumerated from the chosen screen rather than shipped as a
+  list, so a monitor change has to re-enumerate them exactly as the VIDEO page's row does, and a
+  fixed list would offer a size the screen cannot hold. The two forgiving reads are the feature and
+  not error paths to reinvent: a saved monitor index no screen answers to shows as the screen the
+  window already stands on, and a saved size the screen no longer offers shows as the project
+  default. Enhanced Graphics is not a fifth row here, Built-in's graphics stepper already being it.
+  *Cross-refs:* `git log --grep=BL-768` (what the VIDEO page settled, and why each row sits where it
+  does), `BL-782` (the same gap for the audio levels), `docs/org/menu-inventory.md`'s Video row.
+
+- `BL-784` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Game Options page drops the original's own Default View and
+  Auto Head Turn rows, and neither presentation offers either setting.** *Evidence:* the section
+  authors three option rows, Difficulty (`GO_D_DIFFICULTY`), Default View (`GO_T_VIEWTITLE` and
+  `GO_T_VIEWDESC` over the `GO_D_VIEW` dropdown) and Auto Head Turn (`GO_T_HEADTITLE` and
+  `GO_T_HEADDESC` over the `GO_B_HEADTURN` checkbox). The port's table carries Difficulty and the
+  remake-only Menu row alone, while `ReadGameOptionsPage` already reads both dropped rows' widgets
+  for the page's row shape (`CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`), so the geometry is
+  present and the options are not. Both settings exist in the engine with no way to them: autohead
+  runs behind the `headLook.autohead` config key, default off
+  (`CSVM/src/Utils/Config.cs:224-227`, `CSVM/src/Flight/FlightController.cs:3796-3806`), and the
+  opening view is `PilotViewMode.Chase` seeded only by `--view=`
+  (`CSVM/src/Flight/CameraController.cs:162-185`). Built-in's Options screen shows neither.
+  *Fix shape:* two entries in the `GameOptions` table with the store fields behind them, the same two
+  rows on Built-in's Options screen in its stepper convention, and each setting read where it is
+  decided, the autohead gate and the flight's opening view.
+  *⚠ Traps:* (a) **The plate holds three rows and the port already spends two.** A fourth row at the
+  authored 62-pixel pitch from the first row's Y 283 reaches the plaque row at Y 457, so this needs a
+  decision before it needs code: a taller plate (one image, so a stretched or tiled drawing is a
+  remake reading to record), paged rows, or a different home for the remake-only Menu row
+  (`docs/org/menu-inventory.md`'s GameOptions row). (b) **The Default View dropdown's words are not
+  decoded.** `docs/org/cameraViews.md` has the options menu labelling camera positions "external"
+  (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "default view" (`MSG_OPT_DEF_VIEW`),
+  which is a lead and not `GO_D_VIEW`'s item list, and this port's own views are Chase, Cockpit and
+  Nose. (c) A row does not settle autohead's port decision: its default is off because the original's
+  cockpit footage reads that way, and the sub-cap choice behind it is still unjudged at the controls
+  under `BL-436`(d).
+  *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
+  both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
+  `docs/org/cameraViews.md`.
 
 ## Splitscreen
 
