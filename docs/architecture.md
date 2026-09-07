@@ -371,7 +371,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Utils/AudioBuses.cs` — the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
-- `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three and bus 0 never written.
+- `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, and no level read under `--det`.
 - `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
 - `src/Utils/DisplayModeSetting.cs` — the window's display mode: the saved word against the shipped windowed default, and the one place the window mode is set.
@@ -384,7 +384,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/HoldToRepeat.cs` — tap-versus-hold timing for one button: an initial delay, then a repeat every interval until release.
 - `src/Utils/Log.cs` — the diagnostic log: a fixed category vocabulary over four levels, a filtered console and an always-complete file sink (`.scratch/logs/`, `logs/` in an exported build).
 - `src/Utils/MonitorSetting.cs` — the screen the window sits on: the machine's screens labelled, the saved index dropped where no screen answers to it, and the one place the window's screen is set.
-- `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options in `user://options.json`, written atomically.
+- `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
 - `src/Utils/PhysicsTickCost.cs` — the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
 - `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.

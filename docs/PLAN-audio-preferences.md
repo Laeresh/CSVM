@@ -162,7 +162,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the page
 
-4. ☐ The options carrier takes a level that is not a vocabulary word
+4. ☑ The options carrier takes a level that is not a vocabulary word
 5. ☐ The slider the shell has never had
 6. ☐ The AUDIO page opens from Preferences
 7. ☐ The precedence ladder, and the re-based mix judged at the controls
@@ -314,7 +314,7 @@ the half this project cannot verify itself. No headless measurement stands in fo
 
 # Wave B — the page
 
-## B4 ☐ The options carrier takes a level that is not a vocabulary word
+## B4 ☑ The options carrier takes a level that is not a vocabulary word
 
 **Goal.** `OptionsDef`, `OptionsStore` and `OptionsApplyExit` carry four volume levels with the same
 guarantees the three existing options have: one writer, validation that drops an out-of-range value
@@ -352,6 +352,15 @@ file, and a file at a wrong version is rejected whole. `.\RunTests.ps1` green.
 un-saveable. `OptionsLaunchSuites` (`CSVM/src/Testing/OptionsLaunchSuites.cs`) drives the saved
 difficulty through a real launch and is the pattern for the launch half of `B7`; do not duplicate it
 here.
+
+**The B6 seam.** `OptionsDef` carries `AudioMaster`, `AudioMusic`, `AudioEffects` and `AudioVoice`,
+each an `int?` on `AudioMix`'s 0..100 range. The shell's shared `ReadSavedOptions` already loads them
+into `_audioMaster`/`_audioMusic`/`_audioEffects`/`_audioVoice` (read back as `AudioMasterChoice` and
+its three siblings), and the shared `AppliedOptions()` already hands all eleven values back, so the
+AUDIO page's ACCEPT CHANGES returns `AppliedOptions()` exactly as Game Options and VIDEO do and needs
+to construct no exit of its own. A page writes only the fields its own rows touch.
+
+**Verified.** <pending orchestrator run>
 
 ## B5 ☐ The slider the shell has never had
 

@@ -109,14 +109,19 @@ public sealed partial class OriginalShell
         _resolution = saved?.Resolution;
         _displayMode = saved?.DisplayMode;
         _vsync = saved?.VSync;
+        _audioMaster = saved?.AudioMaster;
+        _audioMusic = saved?.AudioMusic;
+        _audioEffects = saved?.AudioEffects;
+        _audioVoice = saved?.AudioVoice;
     }
 
-    // The apply exit both option pages leave through, carrying every setting the store holds: a
+    // The apply exit every option page leaves through, carrying every setting the store holds: a
     // page writes the ones it shows and hands the rest back as ReadSavedOptions read them, which
     // is what keeps Launcher.ApplyOptions the options file's one writer.
     private OptionsApplyExit AppliedOptions() =>
         new(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty),
-            _monitorIndex, _resolution, _displayMode, _vsync);
+            _monitorIndex, _resolution, _displayMode, _vsync,
+            _audioMaster, _audioMusic, _audioEffects, _audioVoice);
 
     // The rows: an open list's items alone while one is open, else the option controls at their
     // authored rows and the two plaques under them, all one column. Without the section the

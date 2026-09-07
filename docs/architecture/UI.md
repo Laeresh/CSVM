@@ -588,11 +588,11 @@ handoff into a launching session. The host implementation is `MenuAudioService`
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the `PresentationId`, the graphics-mode and difficulty words, and the four display settings, null where never set).
-An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a
-screen hands back the settings it does not show; a custom plane rides it as a resolved `CustomPlaneDef`, never a store name.
-Presentations never construct sessions. The return side is `MenuReturnDestination`; the exit table
-and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
+`OptionsApplyExit` (the `PresentationId`, the graphics-mode and difficulty words, the four display settings and the four volume levels, null where never set).
+An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
+hands back the settings it does not show; none of the eleven is defaulted, so a page cannot hand back a null it never read. A custom
+plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Presentations never construct
+sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`
@@ -680,14 +680,14 @@ one seat's frame (pointer, typed text, cursor walk, accept and back) and `Compos
 as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalGameOptions.cs
-The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content
-is a table: per option a key, a title, a description, the control kind and how the store field is
-read and written, so a further option is one entry plus its field. Row one is the original's own
-Difficulty dropdown at its authored box over the three campaign tiers; under it the remake-only Menu
-row, the presentation as a dropdown over the registered tokens. The row shape is read off the
-section's widgets, so a layout that moves a row moves ours. ACCEPT CHANGES leaves as the
-`OptionsApplyExit`; only `Launcher.ApplyOptions` writes the store. The display settings stand on the
-VIDEO page instead. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
+The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content is a
+table: per option a key, a title, a description, the control kind and how the store field is read and
+written, so a further option is one entry plus its field. Row one is the original's own Difficulty dropdown
+at its authored box over the three campaign tiers; under it the remake-only Menu row, the presentation as a
+dropdown over the registered tokens. The row shape is read off the section's widgets, so a layout that moves
+a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
+`Launcher.ApplyOptions` writes the store. This file also holds the shell's shared `ReadSavedOptions`/`AppliedOptions`
+pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO and the volume levels on AUDIO. Rows: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalVideo.cs
 The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third

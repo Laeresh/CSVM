@@ -11,7 +11,9 @@ namespace CSVM.Tests;
 /// in a field is dropped without invalidating the file, a file written before a field existed
 /// still loads its other fields, and a save is atomic against an interrupted write. The two
 /// display settings that are not vocabulary words hold the same contract through a shape check
-/// instead of a word list, so a malformed size or screen index is dropped like an unknown word.</summary>
+/// instead of a word list, so a malformed size or screen index is dropped like an unknown word,
+/// and the four volume levels hold it through a range check, which is what lets a level of 0 mean
+/// a mute while a level of -1 means never set.</summary>
 public class OptionsStoreTests
 {
     [Fact]
@@ -334,13 +336,162 @@ public class OptionsStoreTests
         Assert.Equal("original", new OptionsStore(dir).Load().MenuPresentation);
     }
 
+    /// <summary>The four levels round-trip beside the seven fields already there, so an AUDIO page
+    /// and a page that shows no slider write the same file: the def that went in comes back field
+    /// for field.</summary>
+    [Fact]
+    public void RoundTrip_PreservesTheVolumeLevels()
+    {
+        var store = new OptionsStore(TestData.TempDir());
+        store.Save(new OptionsDef
+        {
+            MenuPresentation = "original",
+            Difficulty = "hard",
+            VSync = "144",
+            AudioMaster = 100,
+            AudioMusic = 40,
+            AudioEffects = 55,
+            AudioVoice = 70,
+        });
+        var def = store.Load();
+
+        Assert.Equal(100, def.AudioMaster);
+        Assert.Equal(40, def.AudioMusic);
+        Assert.Equal(55, def.AudioEffects);
+        Assert.Equal(70, def.AudioVoice);
+        Assert.Equal("original", def.MenuPresentation);
+        Assert.Equal("hard", def.Difficulty);
+        Assert.Equal("144", def.VSync);
+        Assert.Null(def.GraphicsMode);
+        Assert.Null(def.Resolution);
+    }
+
+    /// <summary>A level of 0 is the mute a player set, not a level they never set, and the two are
+    /// different answers: null takes the shipped default and 0 takes silence. This is why the
+    /// fields are <c>int?</c>; a plain <c>int</c> would make a saved mute unreachable.</summary>
+    [Fact]
+    public void RoundTrip_PreservesALevelOfZeroAsZeroAndNotAsNeverSet()
+    {
+        var store = new OptionsStore(TestData.TempDir());
+        store.Save(new OptionsDef { AudioMaster = 0, AudioMusic = 0, AudioEffects = 0, AudioVoice = 0 });
+        var def = store.Load();
+
+        Assert.NotNull(def.AudioMaster);
+        Assert.Equal(0, def.AudioMaster!.Value);
+        Assert.NotNull(def.AudioMusic);
+        Assert.Equal(0, def.AudioMusic!.Value);
+        Assert.NotNull(def.AudioEffects);
+        Assert.Equal(0, def.AudioEffects!.Value);
+        Assert.NotNull(def.AudioVoice);
+        Assert.Equal(0, def.AudioVoice!.Value);
+
+        // Both ends of the range, so the check above is the value surviving rather than the field
+        // being written as a constant.
+        store.Save(new OptionsDef { AudioMaster = AudioMix.MinLevel, AudioMusic = AudioMix.MaxLevel });
+        def = store.Load();
+        Assert.Equal(AudioMix.MinLevel, def.AudioMaster);
+        Assert.Equal(AudioMix.MaxLevel, def.AudioMusic);
+        Assert.Null(def.AudioEffects);
+    }
+
+    /// <summary>A level is validated by range rather than by membership, and one outside it is
+    /// dropped like an unknown word instead of invalidating the file. The good value at the end is
+    /// what makes the nulls evidence (verification.md METHOD-10).</summary>
+    [Fact]
+    public void Load_OutOfRangeLevel_DropsOnlyThatField()
+    {
+        var dir = TestData.TempDir();
+        foreach (string text in new[] { "-1", "101", "1000", "-2147483648", "2147483648" })
+        {
+            Assert.Null(LoadWithRaw(dir, "audioMusic", text).AudioMusic);
+            Assert.Equal("original", LoadWithRaw(dir, "audioMusic", text).MenuPresentation);
+        }
+
+        Assert.Equal(0, LoadWithRaw(dir, "audioMusic", "0").AudioMusic);
+        Assert.Equal(100, LoadWithRaw(dir, "audioMusic", "100").AudioMusic);
+    }
+
+    /// <summary>A level that is not a number at all: a quoted digit string, a word, a boolean, a
+    /// fraction, an explicit null and a container each read as never set. The store proves the JSON
+    /// kind as well as the range, so a hand-edited file cannot hand a bus something that is not a
+    /// level.</summary>
+    [Fact]
+    public void Load_LevelOfTheWrongKind_DropsOnlyThatField()
+    {
+        var dir = TestData.TempDir();
+        foreach (string text in new[] { "\"50\"", "\"loud\"", "true", "null", "50.5", "[50]", "{}", "\"\"" })
+        {
+            Assert.Null(LoadWithRaw(dir, "audioVoice", text).AudioVoice);
+            Assert.Equal("original", LoadWithRaw(dir, "audioVoice", text).MenuPresentation);
+        }
+
+        Assert.Equal(50, LoadWithRaw(dir, "audioVoice", "50").AudioVoice);
+    }
+
+    /// <summary>A file written before the levels existed: the version does not move for fields
+    /// added beside the others, so an older file still loads everything it carries and reads the
+    /// four it does not as never set.</summary>
+    [Fact]
+    public void Load_FileWithoutTheVolumeFields_KeepsTheFieldsItHas()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "options.json"),
+            "{\"version\": 1, \"menuPresentation\": \"original\", \"difficulty\": \"hard\", \"vsync\": \"144\"}",
+            new UTF8Encoding(false));
+        var def = new OptionsStore(dir).Load();
+
+        Assert.Equal("original", def.MenuPresentation);
+        Assert.Equal("hard", def.Difficulty);
+        Assert.Equal("144", def.VSync);
+        Assert.Null(def.AudioMaster);
+        Assert.Null(def.AudioMusic);
+        Assert.Null(def.AudioEffects);
+        Assert.Null(def.AudioVoice);
+    }
+
+    /// <summary>The version gate rejects the levels with the rest of the file: a well-shaped level
+    /// at an unknown version reads as never set rather than reaching a bus.</summary>
+    [Fact]
+    public void Load_UnknownVersion_RejectsTheVolumeLevelsToo()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "options.json"),
+            "{\"version\": 2, \"audioMaster\": 100, \"audioMusic\": 50, \"audioEffects\": 50, \"audioVoice\": 50}",
+            new UTF8Encoding(false));
+        var def = new OptionsStore(dir).Load();
+
+        Assert.Null(def.AudioMaster);
+        Assert.Null(def.AudioMusic);
+        Assert.Null(def.AudioEffects);
+        Assert.Null(def.AudioVoice);
+    }
+
+    /// <summary>A level is written as a JSON number and a never-set one as an explicit null, the
+    /// same contract the words hold: the file names every option the build knows, so a reader can
+    /// tell "not set" from "written by an older build" by eye.</summary>
+    [Fact]
+    public void Serialize_WritesALevelAsANumberAndANeverSetOneAsNull()
+    {
+        string json = OptionsStore.Serialize(new OptionsDef { AudioMaster = 0, AudioVoice = 100 });
+
+        Assert.Contains("\"audioMaster\": 0", json);
+        Assert.Contains("\"audioVoice\": 100", json);
+        Assert.Contains("\"audioMusic\": null", json);
+        Assert.Contains("\"audioEffects\": null", json);
+    }
+
     // One field's value written into an otherwise good file and loaded back. The presentation
     // beside it is the control: it says the reader read the file, so a null in the field under
     // test is that field being dropped rather than the whole file being thrown away.
-    private static OptionsDef LoadWith(string dir, string name, string value)
+    private static OptionsDef LoadWith(string dir, string name, string value) =>
+        LoadWithRaw(dir, name, $"\"{value}\"");
+
+    // The same, with the value written into the file exactly as given rather than quoted: a level
+    // is a JSON number, and quoting one would test the wrong rejection.
+    private static OptionsDef LoadWithRaw(string dir, string name, string json)
     {
         File.WriteAllText(Path.Combine(dir, "options.json"),
-            $"{{\"version\": 1, \"menuPresentation\": \"original\", \"{name}\": \"{value}\"}}",
+            $"{{\"version\": 1, \"menuPresentation\": \"original\", \"{name}\": {json}}}",
             new UTF8Encoding(false));
         return new OptionsStore(dir).Load();
     }

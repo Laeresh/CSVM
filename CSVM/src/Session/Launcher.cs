@@ -554,9 +554,10 @@ public partial class Launcher : Node3D
         // --dump-* wrappers are covered by the same gain an interactive launch gets.
         ApplyMasterVolume();
         // After it, so the two are read in the order they multiply: the developer gain on bus 0,
-        // then the player's mix on the three buses under it. The levels are the shipped defaults
-        // until the options file carries saved ones.
-        AudioMix.Apply();
+        // then the player's mix on the three buses under it. ⚠ --det reads no saved level, the same
+        // rule the saved graphics word below follows; SavedLevels owns that drop.
+        var savedMix = AudioMix.SavedLevels(_spec.Det);
+        AudioMix.Apply(savedMix.Master, savedMix.Music, savedMix.Effects, savedMix.Voice);
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;
@@ -1361,6 +1362,10 @@ public partial class Launcher : Node3D
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
+        options.AudioMaster = applied.AudioMaster;
+        options.AudioMusic = applied.AudioMusic;
+        options.AudioEffects = applied.AudioEffects;
+        options.AudioVoice = applied.AudioVoice;
         store.Save(options);
         // The display settings take effect now instead of at the next start, through the same calls
         // the startup path makes and in the order the window needs them: the screen it sits on, the
@@ -1369,6 +1374,9 @@ public partial class Launcher : Node3D
         DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
         ResolutionSetting.Apply(ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes()));
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, true)));
+        // The mix takes effect now too, through the same call the startup path makes. Apply is
+        // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
+        AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
         Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
         _menuHost.Deactivate();
         string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);

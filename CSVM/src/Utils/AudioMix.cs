@@ -3,6 +3,12 @@ using Godot;
 
 namespace CSVM.Utils;
 
+/// <summary>The four saved levels as one value, each null where the options file has never carried
+/// it. <see cref="AudioMix.Apply"/> takes them straight through, since it falls back to the shipped
+/// default per category, so nothing between the file and the mixer has to decide what a null
+/// means.</summary>
+public readonly record struct AudioLevels(int? Master, int? Music, int? Effects, int? Voice);
+
 /// <summary>
 /// The player's mix: four 0..100 levels turned into one gain per category bus and written there.
 /// Master multiplies the other three rather than being a level of its own, so the three child buses
@@ -51,6 +57,23 @@ public static class AudioMix
     /// negative infinity.</summary>
     public static float VolumeDb(int category, int master) =>
         Mathf.LinearToDb(Math.Max(Gain(category, master), Floor));
+
+    /// <summary>The saved levels a launch applies, or none at all under <paramref name="det"/>,
+    /// which then leaves every category on its shipped default.
+    /// ⚠ A deterministic run reads no saved option: <c>options.json</c> is one machine's state, and
+    /// a level saved at the controls reaching a scripted run would make its mix a function of who
+    /// ran it. This is the levels' one reader, so the drop is one place rather than one per
+    /// caller.</summary>
+    public static AudioLevels SavedLevels(bool det)
+    {
+        if (det)
+        {
+            return default;
+        }
+
+        var saved = OptionsStore.UserOptions().Load();
+        return new AudioLevels(saved.AudioMaster, saved.AudioMusic, saved.AudioEffects, saved.AudioVoice);
+    }
 
     /// <summary>Writes the three category buses, taking the shipped default for any level the
     /// caller has not saved. Safe to call at any time: this is both the startup apply and the live

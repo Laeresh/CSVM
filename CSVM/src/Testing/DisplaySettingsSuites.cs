@@ -27,7 +27,10 @@ internal static class DisplaySettingsSuites
     // Every field OptionsDef carries, with a value the store validates and whether it is a display
     // setting, which is what makes it something no deterministic run may read. The list is compared
     // against the def by reflection, so a field added there and not here fails display-det-guard.
-    private static readonly (string Property, string Sample, bool Display)[] SavedFields =
+    // The sample is typed as object rather than as string because a volume level is an int?: the
+    // table names what the store must keep, and the fields it names are no longer all words. The
+    // Master sample is 0 on purpose, the mute a plain int could not tell from "never set".
+    private static readonly (string Property, object Sample, bool Display)[] SavedFields =
     {
         ("MenuPresentation", "original", false),
         ("GraphicsMode", GraphicsMode.EnhancedWord, false),
@@ -36,6 +39,10 @@ internal static class DisplaySettingsSuites
         ("Resolution", "1920x1080", true),
         ("DisplayMode", DisplayWords.Borderless, true),
         ("VSync", "144", true),
+        ("AudioMaster", 0, false),
+        ("AudioMusic", 100, false),
+        ("AudioEffects", 50, false),
+        ("AudioVoice", 25, false),
     };
 
     [Suite("display-vsync",
@@ -346,13 +353,15 @@ internal static class DisplaySettingsSuites
     // store keeping the sample is the control: a sample its validation dropped would leave every
     // reader silent and read as a guard holding (docs/verification.md's METHOD-10).
     private static void OneField(TestContext ctx, PropertyInfo[] carried,
-        IReadOnlyList<(string Owner, Func<bool, string?> Read)> readers, (string Property, string Sample, bool Display) field)
+        IReadOnlyList<(string Owner, Func<bool, string?> Read)> readers, (string Property, object Sample, bool Display) field)
     {
         var property = carried.First(p => p.Name == field.Property);
         var def = new OptionsDef();
         property.SetValue(def, field.Sample);
         OptionsStore.UserOptions().Save(def);
-        ctx.Check(property.GetValue(OptionsStore.UserOptions().Load()) as string == field.Sample,
+        // Equals rather than a string compare, so the check reads a level back as the number it
+        // was saved as: an int? that came back null would otherwise pass as "two nulls match".
+        ctx.Check(Equals(property.GetValue(OptionsStore.UserOptions().Load()), field.Sample),
             $"the store keeps a {field.Property} of '{field.Sample}', so a silent reader below means a guard and not a dropped value");
 
         var plain = readers.Where(r => r.Read(false) != null).Select(r => r.Owner).ToList();

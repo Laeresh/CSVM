@@ -278,6 +278,12 @@ public sealed partial class OriginalShell
     private string? _resolution;
     private string? _displayMode;
     private string? _vsync;
+    // The four saved volume levels, carried for the same reason: the AUDIO page shows them and the
+    // other option pages do not, and every page's apply hands back the settings it does not show.
+    private int? _audioMaster;
+    private int? _audioMusic;
+    private int? _audioEffects;
+    private int? _audioVoice;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
@@ -435,6 +441,19 @@ public sealed partial class OriginalShell
     /// <summary>The V-Sync word (<see cref="CSVM.Utils.DisplayWords.VSyncChoices"/>) the VIDEO page
     /// would apply, or null while nothing has been saved and no row has been touched.</summary>
     public string? VSyncChoice => _vsync;
+
+    /// <summary>The Master level (<see cref="CSVM.Utils.AudioMix"/>'s 0..100) the AUDIO page would
+    /// apply, or null while nothing has been saved and no row has been touched.</summary>
+    public int? AudioMasterChoice => _audioMaster;
+
+    /// <summary>The Music level the AUDIO page would apply, or null while never set.</summary>
+    public int? AudioMusicChoice => _audioMusic;
+
+    /// <summary>The Effects level the AUDIO page would apply, or null while never set.</summary>
+    public int? AudioEffectsChoice => _audioEffects;
+
+    /// <summary>The Voice level the AUDIO page would apply, or null while never set.</summary>
+    public int? AudioVoiceChoice => _audioVoice;
 
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
     /// would apply.</summary>
