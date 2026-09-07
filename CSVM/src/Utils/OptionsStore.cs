@@ -42,7 +42,12 @@ public static class DisplayWords
 /// <summary>The process-wide options: the requested menu presentation, the requested graphics
 /// mode, the difficulty setting and the four display settings (the monitor, the window size, the
 /// display mode and the V-Sync choice). A missing field means "never set"; the caller, not this
-/// def, decides what that falls back to.</summary>
+/// def, decides what that falls back to.
+/// ⚠ A display field added here is read through a <c>SavedWord(bool det)</c> reader and nowhere
+/// else, and that reader returns null under <c>--det</c>: a golden shot is a deterministic run
+/// against the player's own options directory, so a saved size or mode that escaped the drop would
+/// move every golden in the repo. The <c>display-det-guard</c> suite compares this def against the
+/// readers by reflection and fails on a field that has none.</summary>
 public sealed class OptionsDef
 {
     public string? MenuPresentation { get; set; }

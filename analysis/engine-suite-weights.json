@@ -249,6 +249,7 @@
     "display-vsync": 0.05,
     "display-mode": 0.05,
     "display-resolution": 0.05,
+    "display-det-guard": 0.05,
     "menu-campaign-journey": 1.0,
     "campaign-layout-parity": 0.28,
     "perf-hud-layout": 0.009,

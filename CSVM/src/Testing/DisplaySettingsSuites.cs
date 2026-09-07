@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
@@ -8,9 +11,10 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>The display settings between the VIDEO page and the engine: the precedence the sources
-/// resolve in, and what the engine reads back once a choice is applied. The page is driven as a
-/// bare <see cref="OriginalShell"/> over the install's decoded layout, since the question here is
-/// the setting rather than the presentation boundary <see cref="MenuOriginalSuites"/> drives.
+/// resolve in, what the engine reads back once a choice is applied, and the <c>--det</c> drop that
+/// keeps a saved one out of a golden. The page is driven as a bare <see cref="OriginalShell"/> over
+/// the install's decoded layout, the question here being the setting rather than the presentation
+/// boundary <see cref="MenuOriginalSuites"/> drives.
 /// ⚠ The store is pointed at each suite's own scratch directory and the window's pacing is put
 /// back in a finally, so nothing here reads the options saved at this machine's controls or leaves
 /// the rest of the run on a frame cap. The window's mode and size are read and never set: a
@@ -20,6 +24,20 @@ namespace CSVM.Testing;
 /// which logs the line a run owes and moves nothing.</summary>
 internal static class DisplaySettingsSuites
 {
+    // Every field OptionsDef carries, with a value the store validates and whether it is a display
+    // setting, which is what makes it something no deterministic run may read. The list is compared
+    // against the def by reflection, so a field added there and not here fails display-det-guard.
+    private static readonly (string Property, string Sample, bool Display)[] SavedFields =
+    {
+        ("MenuPresentation", "original", false),
+        ("GraphicsMode", GraphicsMode.EnhancedWord, false),
+        ("Difficulty", Flight.Difficulty.Word(Flight.Difficulty.Hard), false),
+        ("MonitorIndex", "3", true),
+        ("Resolution", "1920x1080", true),
+        ("DisplayMode", DisplayWords.Borderless, true),
+        ("VSync", "144", true),
+    };
+
     [Suite("display-vsync",
         "The V-Sync setting: --no-vsync beats a saved cap, the saved word beats the display.vsync "
         + "config key, the key beats the default and the default is V-Sync on, a word the vocabulary "
@@ -277,6 +295,129 @@ internal static class DisplaySettingsSuites
         {
             OptionsStore.DirectoryOverride = previous;
         }
+    }
+
+    [Suite("display-det-guard",
+        "The --det drop as a guard rather than four assertions: every field OptionsDef carries is "
+        + "named in this suite's own table, every reader of a saved display setting has the shape "
+        + "SavedWord(det) and there are no more of them than there are display settings, each one "
+        + "returns its field on a plain launch and null under --det, and no other field is read "
+        + "through one. A display setting added to the def without the drop fails here rather than "
+        + "in the goldens, which cannot see the drop fail while Launcher's scripted-run guard "
+        + "stands in front of it (docs/verification.md's DET-14)")]
+    internal static void DisplayDetGuard(TestContext ctx)
+    {
+        var carried = typeof(OptionsDef).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var known = new HashSet<string>(SavedFields.Select(f => f.Property), StringComparer.Ordinal);
+        var actual = new HashSet<string>(carried.Select(p => p.Name), StringComparer.Ordinal);
+        ctx.Check(known.SetEquals(actual),
+            $"every field the options def carries is named in this suite's table (unnamed: {Join(actual.Except(known))}; gone: {Join(known.Except(actual))})");
+
+        var readers = SavedWordReaders();
+        int displays = SavedFields.Count(f => f.Display);
+        ctx.Check(readers.Count == displays,
+            $"and the Utils settings offer one SavedWord reader per display setting, {displays} of them ({Join(readers.Select(r => r.Owner))})");
+
+        string dir = Path.Combine(ctx.ScratchDir, "display-det-guard");
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        string? previous = OptionsStore.DirectoryOverride;
+        OptionsStore.DirectoryOverride = dir;
+        try
+        {
+            foreach (var field in SavedFields)
+            {
+                OneField(ctx, carried, readers, field);
+            }
+
+            EveryField(ctx, carried, readers);
+        }
+        finally
+        {
+            OptionsStore.DirectoryOverride = previous;
+        }
+    }
+
+    // One field saved alone, so which reader answers for it is measured rather than assumed. The
+    // store keeping the sample is the control: a sample its validation dropped would leave every
+    // reader silent and read as a guard holding (docs/verification.md's METHOD-10).
+    private static void OneField(TestContext ctx, PropertyInfo[] carried,
+        IReadOnlyList<(string Owner, Func<bool, string?> Read)> readers, (string Property, string Sample, bool Display) field)
+    {
+        var property = carried.First(p => p.Name == field.Property);
+        var def = new OptionsDef();
+        property.SetValue(def, field.Sample);
+        OptionsStore.UserOptions().Save(def);
+        ctx.Check(property.GetValue(OptionsStore.UserOptions().Load()) as string == field.Sample,
+            $"the store keeps a {field.Property} of '{field.Sample}', so a silent reader below means a guard and not a dropped value");
+
+        var plain = readers.Where(r => r.Read(false) != null).Select(r => r.Owner).ToList();
+        var det = readers.Where(r => r.Read(true) != null).Select(r => r.Owner).ToList();
+        if (field.Display)
+        {
+            ctx.Check(plain.Count == 1 && det.Count == 0,
+                $"{field.Property} is read by exactly one setting on a plain launch and by none under --det (plain: {Join(plain)}; det: {Join(det)})");
+        }
+        else
+        {
+            ctx.Check(plain.Count == 0,
+                $"{field.Property} is no display setting's to read, so its own guard is elsewhere (plain: {Join(plain)})");
+        }
+    }
+
+    // Every field set at once, the shape of a file written at the controls: what a golden shot's
+    // --det run reads out of it has to be nothing at all, while a plain launch reads every one.
+    private static void EveryField(TestContext ctx, PropertyInfo[] carried,
+        IReadOnlyList<(string Owner, Func<bool, string?> Read)> readers)
+    {
+        var def = new OptionsDef();
+        foreach (var field in SavedFields)
+        {
+            carried.First(p => p.Name == field.Property).SetValue(def, field.Sample);
+        }
+
+        OptionsStore.UserOptions().Save(def);
+        var det = readers.Where(r => r.Read(true) != null).Select(r => r.Owner).ToList();
+        ctx.Check(det.Count == 0,
+            $"a file carrying every option reaches no display setting under --det ({Join(det)})");
+        var plain = readers.Where(r => r.Read(false) != null).Select(r => r.Owner).ToList();
+        ctx.Check(plain.Count == readers.Count,
+            $"while a plain launch reads all {readers.Count} of them, so the drop above is the guard and not an empty file ({Join(plain)})");
+    }
+
+    // The saved-display readers, found by shape rather than by name: a public static string?
+    // SavedWord(bool) on a Utils type. Reflection is the point. A display setting added later is
+    // measured by this suite the moment it takes that shape, and named as missing when it does not.
+    private static IReadOnlyList<(string Owner, Func<bool, string?> Read)> SavedWordReaders()
+    {
+        var found = new List<(string Owner, Func<bool, string?> Read)>();
+        foreach (var type in typeof(OptionsStore).Assembly.GetTypes())
+        {
+            if (type.Namespace != typeof(OptionsStore).Namespace)
+            {
+                continue;
+            }
+
+            var method = type.GetMethod("SavedWord", BindingFlags.Public | BindingFlags.Static,
+                null, new[] { typeof(bool) }, null);
+            if (method != null && method.ReturnType == typeof(string))
+            {
+                found.Add((type.Name, det => (string?)method.Invoke(null, new object[] { det })));
+            }
+        }
+
+        found.Sort(static (a, b) => string.CompareOrdinal(a.Owner, b.Owner));
+        return found;
+    }
+
+    private static string Join(IEnumerable<string> names)
+    {
+        string joined = string.Join(" ", names);
+        return joined.Length == 0 ? "none" : joined;
     }
 
     // The monitor row driven: the page opens on the saved screen, draws that screen's own label and

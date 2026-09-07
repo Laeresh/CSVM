@@ -81,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ Display Mode
 5. ☑ Resolution
 6. ☑ Graphics, as the monitor pick
-7. ☐ The precedence ladder and the golden guard
+7. ☑ The precedence ladder and the golden guard
 
 ## Dependency and parallelism notes
 
@@ -455,7 +455,7 @@ changed=False`, and no scripted or golden log carries a `monitor=` line at all, 
 the window, re-applying the mode and size on the new screen, and the unplugged-monitor fallback are
 owed at the controls on a second machine.
 
-## B7 ☐ The precedence ladder and the golden guard
+## B7 ☑ The precedence ladder and the golden guard
 
 **Goal.** The four new settings sit in the same precedence ladder the existing options do, are
 ignored under `--det`, and are proven not to move a single golden.
@@ -490,3 +490,45 @@ move. Full 8-chapter `--freecam --chapter=<X>` regression with zero errors. `.\R
 them, which is why the deliberate failure is part of the verify and not optional. `--det` dropping
 the saved options is the guard, so test the guard rather than the symptom: a future setting added
 without reading this ladder is the failure this item exists to prevent.
+
+**Landed.** `display-det-guard` is the item's own suite, and it asserts no ladder: B3 through B6 each
+landed the ladder for their own setting as they went, so the four per-setting suites the Approach
+asks for were already standing when this item opened and a fifth copy of them would have proved
+nothing new. **What was missing is the check none of those four can write, the one that fails on a
+field they have never heard of**, so this suite compares `OptionsDef` against the settings by
+reflection instead: every property the def carries is named in a table beside its sample value, the
+`Utils` types are searched for readers of the shape `SavedWord(bool)`, and each display field must
+be answered by exactly one of them on a plain launch and by none under `--det`. A field added to the
+def and to neither list fails, a reader added without the drop fails, and the store keeping each
+sample is asserted first so a value the validation dropped cannot read as a guard holding
+(`docs/verification.md`'s METHOD-10). The prohibition itself sits on `OptionsDef`, the member it
+binds. **One claim in this item's own Evidence needed correcting**: `--det` is not "the whole of what
+stands between a saved display setting and every golden". The startup display block stands behind
+`!_spec.IsScripted` as well, and that is the guard that actually held: dropping the `--det` guard
+alone left all 18 goldens hash-identical, and only dropping both moved every shot to 1920x1080. The
+consequence is a rule rather than a repair, since two guards are what this wants: a golden sweep
+cannot see the `--det` drop fail while the second one stands in front of it (DET-14), which is the
+argument for testing the drop where it is written. `docs/cli.md`'s `--det` bullet now says every
+saved option is dropped and no display setting reaches a golden; its `--no-vsync` bullet already
+named the third source, so it is unchanged.
+
+**Verified.** Full `RunTests.ps1` on the merged plan tree: build 0 warnings, units 3486 passed / 0
+failed, engine 263 passed / 0 failed with engine errors clean over 4 shards, goldens 18 shots
+hash-identical, exit 0. `display-det-guard` is the 263rd suite, and it was seen to fail in all three
+shapes it exists to catch: a field added to `OptionsDef` and named nowhere, a reader losing its
+`--det` drop, and that same reader still answering under `--det` with every option saved at once.
+The golden guard was demonstrated rather than assumed. With a saved monitor, resolution, borderless
+mode and 144 cap in the player's own options file the 18 shots stayed hash-identical; dropping
+`ResolutionSetting`'s `--det` guard alone left them hash-identical still; dropping `Launcher`'s
+`!_spec.IsScripted` guard with it moved all 18 to `rendered 1920x1080, expected 1280x720`. That
+second step is the demonstration the item required, and the first is DET-14, the reason the suite
+tests the drop where it is written instead of by its pixels. Both breaks are reverted, with
+`Launcher.cs` and `ResolutionSetting.cs` clean and `analysis/goldens/manifest.json` unmodified. The
+options file was copied before the guard run and restored after, SHA-256 identical. The 8-chapter
+`--freecam --chapter=<X>` regression is exit 0 with zero ERROR lines on C1, C1B, C1C, C2, C2B, C3,
+C4 and C5, the remaining warnings being the pre-existing missing-texture fallbacks.
+**The monitor half of the guard is weaker than the other three.** This machine has one screen, so
+the only saved index that is not "never set" names the screen the window already stands on. That a
+saved index naming a different screen cannot reach a scripted run rests on the suite and on
+`!_spec.IsScripted`, not on a golden that had somewhere else to move to, and it is owed at the
+controls on a multi-monitor machine alongside B6's own owed monitor move.
