@@ -63,8 +63,8 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
 | Distinct art files `LAYOUT.CSV` names | **124** (122 present in the extraction, 2 absent) |
 | Distinct `IDS_*` symbols `LAYOUT.CSV` names | **152**, of which **149** resolve to text |
 | UI sound files | **8** |
-| Original screens in this plan's scope | **27** of the 34 single-player screens (23 built; the 4 remaining Preferences pages stand behind doors drawn disabled) |
-| Layout-stated navigation edges in the original | **46** (25 driven by Original, 2 realised as the wingman slot's row, 5 drawn disabled, 14 out of scope; see [Coverage](#coverage)) |
+| Original screens in this plan's scope | **28** of the 34 single-player screens (25 built; the 3 remaining Preferences pages stand behind doors drawn disabled) |
+| Layout-stated navigation edges in the original | **46** (30 driven by Original, 2 realised as the wingman slot's row, 3 drawn disabled, 11 out of scope; see [Coverage](#coverage)) |
 
 ## Part 1: Built-in as it stands
 
