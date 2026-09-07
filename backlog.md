@@ -2136,14 +2136,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   32:9, so extending it is a choice about a case the decode never covered, not a departure from it.
   (ii) The pinned 16:9 values 46.8 and 64.4 are asserted in tests and cited in the decode doc; a
   change to the law must keep them or re-pin both together. (iii) A 2-player splitscreen pane is
-  this same case exactly, never an analogy: `GameSession.cs:3293-3294` stacks 2 panes top/bottom, so
-  a 1280x720 window gives each pane 1280x360, an aspect of 3.5556, which is 32:9. One law serves
-  both and no aspect-conditional branch is wanted.
+  this same case exactly, never an analogy: a window under 2:1 still stacks its two panes
+  (`SplitScreen.SideBySide`), so a 1280x720 window gives each pane 1280x360, an aspect of 3.5556,
+  which is 32:9. One law serves both and no aspect-conditional branch is wanted.
   *Playtest after fix:* fly the Cockpit and Nose views at 32:9 and in a 2-player stacked pane, and
   confirm the panel and canopy read as they do at 16:9.
-  *Cross-refs:* `BL-777` (side-by-side panes on an ultrawide reduce how often this bites but do not
-  remove it, since single-player fullscreen is still 32:9), `BL-778` (the HUD half of the same
-  ultrawide exposure), `BL-420` (the per-view base FOV decode this law rests on).
+  *Cross-refs:* the split axis and the HUD's layout box, the other two items this exposure was
+  filed with, have both landed (`git log --grep=BL-777`, `git log --grep=BL-778`): a 2-player split
+  on a window 2:1 or wider now stands side by side, where each pane is 16:9 and this law is right,
+  which leaves single-player fullscreen and any stacked pane under 2:1 as the cases that still
+  read wrong. `BL-420` (the per-view base FOV decode this law rests on).
 
 ## HUD & UI
 
@@ -2646,29 +2648,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first and has to be drawn after it. *Cross-refs:* `BL-706` (the same dialog's placement),
   `BL-744`'s landing (`git log --grep=BL-744`).
 
-- `BL-778` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The flight HUD
-  anchors to the viewport's own edges, so on an ultrawide screen its elements sit at the far left
-  and right instead of within the reading area.**
-  *Evidence:* `HudMetrics` sizes every element off HEIGHT alone,
-  `windowH / ReferenceHeight` damped by the pane share (`CSVM/src/Flight/HudMetrics.cs:47-53`,
-  `ReferenceHeight = 1440`), so at 32:9 the elements are already the right SIZE and only their
-  horizontal placement is wrong. The class's own note says positions anchor to a pane edge rather
-  than the top-left (`:10-11`), so on a 5120x1440 screen a left-anchored and a right-anchored
-  element stand 5120 px apart, at the edges of peripheral vision.
-  *Fix shape:* give the HUD a 16:9 box centred in the viewport and anchor to that box's edges
-  rather than the viewport's. A layout-box change, not a scaling one: `HudMetrics.Scale` is already
-  correct and should not move.
-  *⚠ Traps:* (i) **Edge markers are the exception to check, not to assume.** `EdgeMarker` points at
-  targets that are off screen; clamped to a 16:9 box it would indicate a direction for a target
-  actually visible in the 32:9 area outside the box. Decide per element whether it belongs to the
-  reading box or to the true viewport edge, and judge it at the controls rather than by rule.
-  (ii) Do not fix this by scaling the HUD down: the size is right and shrinking it would hurt 16:9,
-  which is every machine that is not the ultrawide case.
-  *Playtest after fix:* fly at 32:9 and confirm the status text, gauges and target HUD sit within
-  comfortable reading width while off-screen target markers still point usefully.
-  *Cross-refs:* `BL-776` (the FOV half of the same ultrawide exposure), `BL-777` (a side-by-side
-  pane is 16:9 and does not show this).
-
 - `BL-779` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Original's
   credits screen draws ABOUT disabled, because the box it raises wants a widget set the shared
   messagebox chrome does not compose.**
@@ -2812,27 +2791,6 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-391` (base engine level,
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
-
-- `BL-777` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A 2-player split
-  is always stacked top and bottom, so on an ultrawide window each pane is far wider than it is
-  tall; the split should follow the window's aspect and stand the panes side by side.**
-  *Evidence:* `GameSession.cs:3293-3294` logs the layout as `count == 2 ? "stacked top/bottom" :
-  "2x2 grid"`, with no aspect input anywhere in the choice. On a 5120x1440 window that gives two
-  5120x720 panes, an aspect of 7.1 (64:9); side by side would give two 2560x1440 panes at exactly
-  16:9, the shape every HUD and FOV metric in the port is calibrated for.
-  *Fix shape:* pick the split axis from the window's aspect rather than the player count alone,
-  splitting along the longer axis; 4 players stay a 2x2 grid at every aspect.
-  *⚠ Traps:* (i) The pane share feeds `HudMetrics.PaneFactor`
-  (`CSVM/src/Flight/HudMetrics.cs:32-42`) through the HEIGHT ratio `paneH / windowH`, so a
-  side-by-side pane keeps full height and its factor becomes 1 rather than sqrt(1/2). That is
-  arguably correct, since the pane is no longer short, but it changes HUD size in 2-player
-  splitscreen on every aspect where the split flips, and it wants a look at the controls before it
-  is called done. (ii) Do not make this conditional on a hardcoded aspect threshold without saying
-  what the threshold means; splitting along the longer axis needs no threshold at all.
-  *Playtest after fix:* a 2-player session on an ultrawide window, confirming each pane reads as a
-  normal 16:9 view and the HUD sits correctly in both.
-  *Cross-refs:* `BL-776` (today's stacked pane is exactly the 32:9 case that item describes, so
-  this one reduces its reach without removing it), `BL-778` (the HUD's own ultrawide item).
 
 ## Missions, modes & campaign
 

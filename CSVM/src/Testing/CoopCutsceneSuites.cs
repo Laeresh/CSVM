@@ -100,7 +100,8 @@ internal static class CoopCutsceneSuites
     {
         for (int i = 0; i < panes.Rects.Count; i++)
         {
-            if (!panes.Rects[i].IsEqualApprox(SplitScreen.PaneRect(i, panes.Rects.Count, window)))
+            if (!panes.Rects[i].IsEqualApprox(
+                SplitScreen.PaneRect(i, panes.Rects.Count, window, SplitScreen.SideBySide(window))))
             {
                 return false;
             }
