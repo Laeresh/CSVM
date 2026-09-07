@@ -2642,34 +2642,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reading off the strip before its look is called wrong. *Cross-refs:* `BL-744`'s landing
   (`git log --grep=BL-744`), the same box's icon.
 
-- `BL-768` `[Feature]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Preferences'
-  VIDEO page is decoded and unbuilt, and Enhanced Graphics stands on Game Options instead of on
-  it.** *Decided:* the page carries five rows rather than the authored nine. Graphics becomes the
-  monitor pick with its description rewritten, Resolution, Display Mode and V-Sync are the other
-  three, and Enhanced Graphics moves on from Game Options. The five quality dropdowns and the
-  Clutter and Shadows checkboxes are left out: nothing behind them costs anything on modern
-  hardware, and Shadows would be a second switch on the shadow gate Enhanced Graphics already owns
-  (`Launcher.EnableSunShadows`). A frame limit rides the V-Sync row's off state rather than taking a
-  row of its own, since the simulation steps on the physics tick (`GameClock.ParentDriven`) and the
-  render rate never reaches the flight model. *Evidence:* reported at the controls over
-  `PLAN-M5-polish-13`'s closing sortie, "Move Enhanced Graphics into the not yet existing video
-  screen under Prefrences". `PF_B_VIDEO` draws disabled beside the other two unbuilt doors
-  (`CSVM/src/UI/Menu/Original/OriginalShell.cs:192-195`), while the `Video` section carries seven
-  dropdowns, the Clutter and Shadows checkboxes and a description per row
-  (`extracted/rof/menu_layout.json`); the graphics choice is the third row of our Game Options page
-  instead (`CSVM/src/UI/Menu/Original/OriginalGameOptions.cs:79-82`), a remake-only row on an
-  authored page. *Fix shape:* the page over its own artwork, with Enhanced Graphics moved on to it
-  and the four decided rows beside it. *⚠ Traps:* nothing in the port sets a window size, mode or
-  screen at runtime today, so the display rows are a new mechanism rather than a new page row.
-  `OptionsApplyExit` is a closed record carrying three words and `OptionsStore` validates every
-  field against a fixed vocabulary, so a resolution or a monitor index is the first option of
-  another shape; whatever moves keeps leaving through that exit, the options file's one writer. A
-  saved display setting has to lose to `--no-vsync` the way `display.vsync` does and be ignored
-  under `--det`, or a scripted run moves every golden. The graphics word still resolves once at
-  launch while the other rows apply live, so the page has to say which is which. *Cross-refs:*
-  `BL-696` (the same shape behind `PF_B_CONTROLS`), `BL-331` (why a Shadows row would have almost
-  nothing to switch), `OriginalScreenshots/Preferences Video.png`.
-
 - `BL-769` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The PLANE NAME
   screen's empty-name refusal stands as a line under the buttons instead of being raised as a
   message box when OK is pressed.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s
