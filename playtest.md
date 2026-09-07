@@ -750,6 +750,32 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The level itself is untunable
   in game (`BL-455`).
 
+### The VIDEO page · a second monitor plugged in
+
+```powershell
+./RunGame.ps1 --presentation=original --menu=video
+```
+
+- `PT-132` `[Own]` **The Monitor row actually moves the window, and a saved index naming a screen
+  that is gone falls back instead of opening nowhere.** The display settings landed on a
+  single-screen machine, so the enumerated list, the resolve and the precedence ladder are proved by
+  suite while the move itself has never been seen. ⚠ Launch without `--screenshot` or `--det`: the
+  startup display apply stands behind `!_spec.IsScripted` and a scripted run reads no saved display
+  setting at all, so either flag hides exactly what this item checks. *Look for:*
+  - (a) the Monitor row lists both screens, one label per screen, each naming an index and a size
+    that match the monitors actually attached;
+  - (b) picking the other screen and pressing ACCEPT CHANGES moves the window to it, and the page
+    redraws composed correctly at that screen's size rather than clipped or letterboxed;
+  - (c) with the window on the second screen, Display Mode and Resolution still apply there:
+    exclusive fullscreen fills the screen the window moved to, not the one it started on, and the
+    Resolution row now offers that screen's own modes;
+  - (d) the choice survives a restart, the window opening on the chosen screen with no arguments;
+  - (e) with that monitor then unplugged or disabled, the next launch comes up on the remaining
+    screen rather than erroring or opening off the desktop, since the saved index is the one
+    setting that can name something absent.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
+  and the apply order is in the landing commits (`git log --grep=BL-768`).
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own
