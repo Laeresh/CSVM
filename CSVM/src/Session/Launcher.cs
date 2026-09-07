@@ -1352,6 +1352,10 @@ public partial class Launcher : Node3D
         options.MenuPresentation = requested.Value;
         options.GraphicsMode = applied.Graphics;
         options.Difficulty = applied.Difficulty;
+        options.MonitorIndex = applied.MonitorIndex;
+        options.Resolution = applied.Resolution;
+        options.DisplayMode = applied.DisplayMode;
+        options.VSync = applied.VSync;
         store.Save(options);
         Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
         _menuHost.Deactivate();

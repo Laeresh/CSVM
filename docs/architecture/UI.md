@@ -588,11 +588,11 @@ handoff into a launching session. The host implementation is `MenuAudioService`
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the `PresentationId`, the graphics-mode word and the difficulty word an Options screen applied).
-An applied choice rides the exit rather than being saved by the screen that took it, so the
-options file keeps one writer; a custom plane rides it as a resolved `CustomPlaneDef`, never a
-store name. Presentations never construct sessions. The return side is `MenuReturnDestination`;
-the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
+`OptionsApplyExit` (the `PresentationId`, the graphics-mode and difficulty words, and the four display settings, null where never set).
+An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a
+screen hands back the settings it does not show; a custom plane rides it as a resolved `CustomPlaneDef`, never a store name.
+Presentations never construct sessions. The return side is `MenuReturnDestination`; the exit table
+and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`

@@ -1,14 +1,48 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
 
 namespace CSVM.Utils;
 
+/// <summary>The display settings' vocabularies: the words <see cref="OptionsDef.DisplayMode"/> and
+/// <see cref="OptionsDef.VSync"/> accept, in the order a picker offers them. Kept as strings for
+/// the reason the presentation and graphics words are: the resolved value is an argument to an
+/// engine call, owned by whichever module makes the call, not a type this store carries. The other
+/// two display settings have no word list, so <see cref="OptionsStore"/> validates their shape
+/// instead.</summary>
+public static class DisplayWords
+{
+    /// <summary>A bordered window, the mode the project ships in.</summary>
+    public const string Windowed = "windowed";
+
+    /// <summary>A borderless window filling the screen.</summary>
+    public const string Borderless = "borderless";
+
+    /// <summary>Exclusive fullscreen.</summary>
+    public const string Fullscreen = "fullscreen";
+
+    /// <summary>V-Sync on, which is the behaviour with no options file.</summary>
+    public const string VSyncOn = "on";
+
+    /// <summary>V-Sync off with no frame cap.</summary>
+    public const string VSyncOff = "off";
+
+    /// <summary>Every display-mode word.</summary>
+    public static readonly IReadOnlyList<string> DisplayModes = new[] { Windowed, Borderless, Fullscreen };
+
+    /// <summary>Every V-Sync word. A word that parses as an integer is a frame cap in frames per
+    /// second and means V-Sync off at that cap; <see cref="VSyncOn"/> and <see cref="VSyncOff"/>
+    /// are the two that do not parse, so one field carries both the choice and the cap.</summary>
+    public static readonly IReadOnlyList<string> VSyncChoices = new[] { VSyncOn, VSyncOff, "60", "120", "144" };
+}
+
 /// <summary>The process-wide options: the requested menu presentation, the requested graphics
-/// mode and the difficulty setting. A missing field means "never set"; the caller, not this def,
-/// decides what that falls back to.</summary>
+/// mode, the difficulty setting and the four display settings (the monitor, the window size, the
+/// display mode and the V-Sync choice). A missing field means "never set"; the caller, not this
+/// def, decides what that falls back to.</summary>
 public sealed class OptionsDef
 {
     public string? MenuPresentation { get; set; }
@@ -18,6 +52,25 @@ public sealed class OptionsDef
     /// <summary>The difficulty word (<see cref="Flight.Difficulty.Word"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
     public string? Difficulty { get; set; }
+
+    /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
+    /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
+    /// screen with that index is plugged in can only be answered by a caller holding an engine,
+    /// and that caller owns the fallback to the primary screen.</summary>
+    public string? MonitorIndex { get; set; }
+
+    /// <summary>The window size in the canonical <c>"1920x1080"</c> form
+    /// (<see cref="OptionsStore.FormatResolution"/>). Shape-validated like
+    /// <see cref="MonitorIndex"/>: whether the chosen screen offers the mode is the applying
+    /// caller's question, not this def's.</summary>
+    public string? Resolution { get; set; }
+
+    /// <summary>The window's display mode, one of <see cref="DisplayWords.DisplayModes"/>.</summary>
+    public string? DisplayMode { get; set; }
+
+    /// <summary>The frame pacing, one of <see cref="DisplayWords.VSyncChoices"/>: V-Sync on, off,
+    /// or off with the frame cap the word names.</summary>
+    public string? VSync { get; set; }
 }
 
 /// <summary>
@@ -37,6 +90,16 @@ public sealed class OptionsStore
     /// field intact. Bump it only when an existing field changes meaning or shape, which is the
     /// one case a reader cannot recover from by reading what is there.</summary>
     public const int Version = 1;
+
+    /// <summary>The largest width or height a saved resolution may name. A ceiling, not a mode
+    /// list: it keeps a hand-edited file from asking for a window no screen could hold, while the
+    /// modes a monitor actually offers stay the applying caller's question.</summary>
+    public const int MaxDimension = 32767;
+
+    /// <summary>The largest screen index a saved monitor may name, for the same reason
+    /// <see cref="MaxDimension"/> exists. A shaped index can still name a screen that is not
+    /// plugged in.</summary>
+    public const int MaxMonitorIndex = 63;
 
     private const string FileName = "options.json";
     private const string TempFileName = "options.json.tmp";
@@ -67,6 +130,13 @@ public sealed class OptionsStore
         Flight.Difficulty.Word(Flight.Difficulty.Hard),
         Flight.Difficulty.Word(Flight.Difficulty.Hardest),
     };
+
+    // The two display vocabularies, DisplayWords' own lists as sets. Held here rather than there
+    // for the same reason the three above are held here at all: the words a file may carry are
+    // this reader's business, and a file reads back only what an options screen writes.
+    private static readonly HashSet<string> ValidDisplayModes = new(DisplayWords.DisplayModes, StringComparer.Ordinal);
+
+    private static readonly HashSet<string> ValidVSyncChoices = new(DisplayWords.VSyncChoices, StringComparer.Ordinal);
 
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
@@ -106,6 +176,10 @@ public sealed class OptionsStore
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
             Write(w, "difficulty", def.Difficulty);
+            Write(w, "monitorIndex", def.MonitorIndex);
+            Write(w, "resolution", def.Resolution);
+            Write(w, "displayMode", def.DisplayMode);
+            Write(w, "vsync", def.VSync);
             w.WriteEndObject();
         }
 
@@ -138,12 +212,51 @@ public sealed class OptionsStore
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
+                MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
+                Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
+                DisplayMode = Read(root, "displayMode", ValidDisplayModes),
+                VSync = Read(root, "vsync", ValidVSyncChoices),
             };
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    /// <summary>The canonical text for a window size, the one spelling
+    /// <see cref="OptionsDef.Resolution"/> carries and <see cref="TryParseResolution"/> reads
+    /// back. Callers that build a resolution go through this rather than composing the string, so
+    /// the writing side and the validating side cannot drift apart.</summary>
+    public static string FormatResolution(int width, int height) =>
+        width.ToString(CultureInfo.InvariantCulture) + "x" + height.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The width and height a resolution string names, false when it is not the canonical
+    /// shape: two decimal numbers from 1 to <see cref="MaxDimension"/> around one <c>x</c>. False
+    /// is what makes <see cref="Deserialize"/> drop the field, so a hand-edited size that is not a
+    /// size reads as never set instead of reaching a window.</summary>
+    public static bool TryParseResolution(string? value, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (value == null)
+        {
+            return false;
+        }
+
+        int at = value.IndexOf('x', StringComparison.Ordinal);
+        return at > 0
+            && TryParseCanonical(value.AsSpan(0, at), 1, MaxDimension, out width)
+            && TryParseCanonical(value.AsSpan(at + 1), 1, MaxDimension, out height);
+    }
+
+    /// <summary>The screen index a monitor string names, false when it is not a plain decimal
+    /// index from 0 to <see cref="MaxMonitorIndex"/>. Shape only: a well-shaped index can still
+    /// name a screen that is not plugged in, and only a caller holding an engine can tell.</summary>
+    public static bool TryParseMonitorIndex(string? value, out int index)
+    {
+        index = 0;
+        return value != null && TryParseCanonical(value.AsSpan(), 0, MaxMonitorIndex, out index);
     }
 
     /// <summary>The stored options, or an empty <see cref="OptionsDef"/> when the file is absent,
@@ -193,10 +306,35 @@ public sealed class OptionsStore
         }
     }
 
+    // Digits alone in range, and no leading zero past a single digit: NumberStyles.None already
+    // refuses a sign, whitespace and separators, and refusing "01" as well leaves a value with one
+    // spelling, so two files that ask for the same screen or size read the same by eye.
+    private static bool TryParseCanonical(ReadOnlySpan<char> text, int min, int max, out int value)
+    {
+        value = 0;
+        if (text.Length == 0 || text.Length > 5 || (text.Length > 1 && text[0] == '0'))
+        {
+            return false;
+        }
+
+        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value)
+            && value >= min && value <= max;
+    }
+
     private static string? Read(JsonElement root, string name, HashSet<string> valid) =>
         root.TryGetProperty(name, out var field)
         && field.ValueKind == JsonValueKind.String
         && valid.Contains(field.GetString() ?? string.Empty)
+            ? field.GetString()
+            : null;
+
+    // The shape-validated read, the same drop-an-unknown-value contract as the vocabulary read
+    // above with a predicate in place of the set: a resolution and a monitor index have no word
+    // list to belong to, so what stands in for membership is the canonical form parsing back.
+    private static string? ReadShaped(JsonElement root, string name, Func<string, bool> valid) =>
+        root.TryGetProperty(name, out var field)
+        && field.ValueKind == JsonValueKind.String
+        && valid(field.GetString() ?? string.Empty)
             ? field.GetString()
             : null;
 }

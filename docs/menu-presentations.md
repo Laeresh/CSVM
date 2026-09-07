@@ -187,15 +187,21 @@ the window, so a scripted pose and a suite walk still pick by index whatever the
 `OptionsStore` (`CSVM/src/Utils/OptionsStore.cs`) is the one process-wide options file,
 `user://options.json`, independent of any profile: version-tolerant (an unknown version invalidates
 the file, an unknown value drops only that field, a field the file does not carry reads as never
-set), read as empty when missing or malformed, written atomically. Its fields are
-`menuPresentation` (`built-in`, `original`), `graphicsMode` (`original`, `enhanced`) and
-`difficulty` (`normal`, `hard`, `hardest`); a value outside a field's set reads as never set.
+set), read as empty when missing or malformed, written atomically. Its word-valued fields are
+`menuPresentation` (`built-in`, `original`), `graphicsMode` (`original`, `enhanced`), `difficulty`
+(`normal`, `hard`, `hardest`), `displayMode` (`windowed`, `borderless`, `fullscreen`) and `vsync`
+(`on`, `off`, `60`, `120`, `144`); a value outside a field's set reads as never set. Two fields are
+not words: `monitorIndex` is a screen index rendered decimal and `resolution` is a canonical
+`1920x1080`, both validated by shape, so a malformed one is dropped the same way an unknown word is.
+Shape is all the store can prove. Whether that screen is plugged in and whether it offers that mode
+are questions for the caller holding an engine, which owns the fallback.
 
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
-a nullable field on `OptionsDef` with its accepted-value set, the two writes in `Serialize` and
+a nullable field on `OptionsDef` with its accepted-value set (or its shape check, and the canonical
+form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
 `Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options
-page draws its rows from, a value on `OptionsApplyExit`, and the line in `Launcher.ApplyOptions`
-that saves it. The store's
+or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
+`Launcher.ApplyOptions` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
 written before the field existed loads with everything it does have, and the version gate is
 reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
@@ -271,7 +277,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the requested `PresentationId` and the graphics-mode word | save both, then the three-call switch one frame later |
+| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, and the four display settings | save every one of them, then the three-call switch one frame later |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build

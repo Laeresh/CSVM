@@ -35,9 +35,19 @@ public sealed record QuitExit : MenuExit;
 /// then ends the active presentation, re-selects on <paramref name="Presentation"/>, and shows it
 /// at its top level. <paramref name="Graphics"/> is a <see cref="Utils.GraphicsMode"/> word, saved
 /// and no more (the mode resolves once at launch); <paramref name="Difficulty"/> is a
-/// <see cref="Flight.Difficulty.Word"/> the next launch reads. ⚠ All three ride the exit rather than
-/// being saved by the screen, so the options file keeps one writer and no driven screen can write it.</summary>
-public sealed record OptionsApplyExit(PresentationId Presentation, string Graphics, string Difficulty) : MenuExit;
+/// <see cref="Flight.Difficulty.Word"/> the next launch reads. The four display values are
+/// <see cref="Utils.OptionsDef"/>'s own, null where never set; a screen that shows none of them
+/// hands back what it read, since the consumer writes every field it is given.
+/// ⚠ All seven ride the exit rather than being saved by the screen, so the options file keeps one
+/// writer and no driven screen can write it.</summary>
+public sealed record OptionsApplyExit(
+    PresentationId Presentation,
+    string Graphics,
+    string Difficulty,
+    string? MonitorIndex,
+    string? Resolution,
+    string? DisplayMode,
+    string? VSync) : MenuExit;
 
 /// <summary>A non-campaign launch: the chapter, one <see cref="MenuSeatChoice"/> per joined seat
 /// in seat order, the picked <see cref="MenuMode"/>, and, for Instant Action only, the wizard's

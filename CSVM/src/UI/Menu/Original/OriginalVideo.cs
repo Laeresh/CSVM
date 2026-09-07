@@ -155,14 +155,14 @@ public sealed partial class OriginalShell
     }
 
     // A press: a checkbox flips, ACCEPT CHANGES leaves as the apply exit carrying every saved
-    // choice (the two the Game Options page owns ride it unchanged, read back when this page
+    // choice (the settings this page does not show ride it unchanged, read back when the page
     // opened) and CANCEL CHANGES drops the edits and goes back.
     private MenuExit? ActivateVideo(OriginalRow row)
     {
         switch (row.Key)
         {
             case VideoAcceptKey:
-                return new OptionsApplyExit(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty));
+                return AppliedOptions();
             case VideoCancelKey:
                 BackToPreferences();
                 return null;

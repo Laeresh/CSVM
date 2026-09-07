@@ -96,16 +96,27 @@ public sealed partial class OriginalShell
 
     // The saved options either option page shows back: what was asked for, not what this process
     // resolved, since a flag or the config key can have decided either and the page still owes the
-    // player the words their own ACCEPT CHANGES saved. Both pages read all three, since each one's
-    // apply carries the other's choices unchanged. A page with no reader opens on the shipped
-    // defaults, which is what an engine-free test wants.
+    // player the words their own ACCEPT CHANGES saved. Both pages read every setting, since each
+    // one's apply carries the settings it does not show unchanged. A page with no reader opens on
+    // the shipped defaults, which is what an engine-free test wants.
     private void ReadSavedOptions()
     {
         var saved = _options?.Invoke();
         _choice = saved?.MenuPresentation ?? PresentationId.Original.Value;
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
         _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
+        _monitorIndex = saved?.MonitorIndex;
+        _resolution = saved?.Resolution;
+        _displayMode = saved?.DisplayMode;
+        _vsync = saved?.VSync;
     }
+
+    // The apply exit both option pages leave through, carrying every setting the store holds: a
+    // page writes the ones it shows and hands the rest back as ReadSavedOptions read them, which
+    // is what keeps Launcher.ApplyOptions the options file's one writer.
+    private OptionsApplyExit AppliedOptions() =>
+        new(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty),
+            _monitorIndex, _resolution, _displayMode, _vsync);
 
     // The rows: an open list's items alone while one is open, else the option controls at their
     // authored rows and the two plaques under them, all one column. Without the section the
@@ -232,7 +243,7 @@ public sealed partial class OriginalShell
         switch (row.Key)
         {
             case GameOptionsAcceptKey:
-                return new OptionsApplyExit(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty));
+                return AppliedOptions();
             case GameOptionsCancelKey:
                 BackToPreferences();
                 return null;

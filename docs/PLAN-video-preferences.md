@@ -76,7 +76,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the display settings
 
-2. ☐ The options carrier takes a setting that is not a vocabulary word
+2. ☑ The options carrier takes a setting that is not a vocabulary word
 3. ☐ V-Sync, with the frame limit on its off state
 4. ☐ Display Mode
 5. ☐ Resolution
@@ -159,7 +159,7 @@ driven through `MenuOriginalSuites`, asserting one `OptionsApplyExit` on Accept 
 
 # Wave B — the display settings
 
-## B2 ☐ The options carrier takes a setting that is not a vocabulary word
+## B2 ☑ The options carrier takes a setting that is not a vocabulary word
 
 **Goal.** `OptionsDef`, `OptionsStore` and `OptionsApplyExit` can carry a monitor index, a
 resolution, a display mode and a V-Sync choice, with the same guarantees the three existing options
@@ -199,6 +199,27 @@ and a file at a wrong version is rejected whole. `.\RunTests.ps1` green.
 proves the shape and the apply proves the screen exists; those are two different checks and the
 second cannot live in the store, which has no engine. Do not add a save call to the new page: the
 single-writer rule is the reason the exit carries values at all.
+
+**Landed.** `OptionsDef` carries four more nullable strings. `MonitorIndex` and `Resolution` are
+canonical text validated by shape: `OptionsStore.FormatResolution` writes the one spelling a size
+has and `TryParseResolution` / `TryParseMonitorIndex` are both the validation and the reader's way
+back, so the writing side and the validating side cannot drift apart, and a malformed one is
+dropped exactly as an unknown word is. `DisplayMode` and `VSync` are vocabularies in the new
+`DisplayWords`, whose V-Sync list holds the frame caps as words, so one field carries both the
+choice and the cap the decision table put on its off state. `OptionsApplyExit` widened to seven
+values in one edit, the four new ones required rather than defaulted so the compiler named every
+construction site. Both Original pages now leave through one `AppliedOptions()` on the shell and
+Built-in's Options screen reads the four on entry, because a screen that shows a setting it does
+not own must still hand it back or `Launcher.ApplyOptions`, still the file's one writer, would
+clear it. No row was added and nothing is applied to the engine; `OptionsStore.Version` does not
+move, for the reason its own comment gives.
+
+**Verified.** Full `RunTests.ps1` on the plan tree: build 0 warnings, units 3484 passed / 0 failed
+(the 3476 standing plus 8 new in `OptionsStoreTests`), engine 258 passed / 0 failed with engine
+errors clean over 4 shards, goldens 18 shots hash-identical, exit 0. Each drop-on-bad-value test
+ends by loading a well-shaped value through the same field and asserting it survives, so a field the
+reader never looks at fails the test rather than passing it (`docs/verification.md` METHOD-10), and
+the `menuPresentation` beside it in each fixture is the control saying the file itself was read.
 
 ## B3 ☐ V-Sync, with the frame limit on its off state
 

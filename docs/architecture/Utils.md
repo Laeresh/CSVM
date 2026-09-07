@@ -163,14 +163,14 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`, today the requested menu
-presentation, the requested graphics mode and the difficulty word: one file, `user://options.json`, independent of
-`Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version
-invalidates it, an unknown value drops only that field, and a field the file does not carry reads
-as never set, which is why adding a field does not bump `Version`. `Save` writes a sibling temp
-file and renames it over the real one. Under `--run-tests`, `UserOptions()` reads and writes an
-emptied per-process scratch directory (`DirectoryOverride`) instead, so no suite touches the
-player's file; `Launcher.ApplyOptions` is the only writer.
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, and
+the four display settings (monitor index, resolution, display mode, V-Sync). One file, `user://options.json`, independent of
+`Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an unknown
+value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
+`Version`. Five fields are checked against a word set (`DisplayWords` holds the two new vocabularies); the monitor index and the
+canonical `1920x1080` resolution have none, so `FormatResolution` and the `TryParse` pair check their shape and drop a bad one
+the same way. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
+directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` is the only writer.
 
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved

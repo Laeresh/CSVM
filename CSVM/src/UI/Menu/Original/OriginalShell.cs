@@ -257,6 +257,13 @@ public sealed partial class OriginalShell
     private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
     private int _difficulty = CSVM.Flight.Difficulty.Normal;
+    // The four display settings as they were saved. No page shows one yet, and a page that shows a
+    // setting still has to hand back the ones it does not, or the one writer's save would clear
+    // them; carrying them on the shell is what lets either page's apply do that.
+    private string? _monitorIndex;
+    private string? _resolution;
+    private string? _displayMode;
+    private string? _vsync;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
