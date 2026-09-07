@@ -77,5 +77,13 @@ internal static class MenuSuiteHost
         public void EndNarration()
         {
         }
+
+        public void PreviewMix(CSVM.Utils.AudioLevels levels, MenuMixLevel moved)
+        {
+        }
+
+        public void EndMixPreview()
+        {
+        }
     }
 }

@@ -33,11 +33,15 @@ internal sealed class FakeSortieFeature : IMenuFeature
     }
 }
 
-/// <summary>Records every cue and narration request, so a test can see what a presentation asked
-/// the shared service for.</summary>
+/// <summary>Records every cue, narration and mix-preview request, so a test can see what a
+/// presentation asked the shared service for.</summary>
 internal sealed class RecordingAudio : IMenuAudio
 {
     public List<string> Cues { get; } = new();
+
+    public List<(CSVM.Utils.AudioLevels Levels, MenuMixLevel Moved)> Mixes { get; } = new();
+
+    public int MixEnds { get; private set; }
 
     public string? Narration { get; private set; }
 
@@ -46,6 +50,10 @@ internal sealed class RecordingAudio : IMenuAudio
     public void BeginNarration(string wavName) => Narration = wavName;
 
     public void EndNarration() => Narration = null;
+
+    public void PreviewMix(CSVM.Utils.AudioLevels levels, MenuMixLevel moved) => Mixes.Add((levels, moved));
+
+    public void EndMixPreview() => MixEnds++;
 }
 
 /// <summary>One seat fed from a queue of scripted frames; an empty queue reads idle.</summary>

@@ -488,14 +488,14 @@ blocks instead of warning: true only when the stamp is present, carries a schema
 the caller asked for, so an unstamped or unreadable tree still runs.
 
 ## src/Session/MenuAudioService.cs
-The host's `IMenuAudio` over the process's playback: the music channel, the sound archive and the
-briefing narration player. `BeginNarration` ducks the music and restarts the player on the resolved
-stream; `EndNarration` lifts the duck and stops it, idempotent because the launchscreen calls it
-every frame no briefing is showing. `Cue` resolves a semantic name through `MenuCueTable` to a file
-under the cue directory the constructor was given, decodes it once and replays it from the start; an
-unknown name, a missing file or a failed decode is logged once and cached as silence. Narration is
-begun and ended by whichever presentation shows a briefing, so this service knows nothing of which
-screen is up.
+The host's `IMenuAudio` over the process's playback. `BeginNarration` ducks the music and restarts the narration player on
+the resolved stream; `EndNarration` lifts the duck and stops it, idempotent because the launchscreen calls it every frame
+no briefing shows. `Cue` resolves a semantic name through `MenuCueTable` to a file under the constructor's cue directory,
+decodes it once and replays it from the start; an unknown name, a missing file or a failed decode is logged once and
+cached as silence. `PreviewMix` applies a mix page's levels as they move and sounds the moved category over the original's
+`sfx_loop.wav`/`voice_loop.wav`, leaving a running clip alone so a drag is one clip and not one per frame; `EndMixPreview`
+puts back the captured gains, and previews are off unless the constructor says otherwise. Narration is begun and ended by
+whichever presentation shows a briefing, so this service knows nothing of which screen is up.
 
 ## src/Session/MenuCueTable.cs
 Which wav under the extracted sound directory a semantic menu cue name resolves to: the rollover,

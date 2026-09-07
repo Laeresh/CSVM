@@ -271,12 +271,25 @@ startup recovery is `--force-builtin`, which beats everything and rewrites nothi
 ## Audio
 
 `IMenuAudio` (`CSVM/src/UI/Menu/IMenuAudio.cs`): `Cue(MenuCue)` plays one semantic cue by name,
-`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music, and
-`EndNarration()` stops it, idempotent. The presentation chooses which cue to ask for and when; the
+`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music,
+`EndNarration()` stops it, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
+mix a page that sets one stands at. The presentation chooses which cue to ask for and when; the
 service (`MenuAudioService`, `CSVM/src/Session/MenuAudioService.cs`) owns lookup, decoding,
-playback, volume and the handoff into a launching session. A cue name the table lacks, a missing
-file or a failed decode is logged once and cached as silence; a presentation never learns whether a
-sound exists.
+playback, volume, the buses and the handoff into a launching session. A cue name the table lacks, a
+missing file or a failed decode is logged once and cached as silence; a presentation never learns
+whether a sound exists.
+
+**The mix preview.** While a page that sets the four volume levels is open, it states them every
+frame and names which one that frame moved (`MenuMixLevel`, the page's own rows and never a bus).
+The service applies them through `AudioMix` and sounds the moved category on a player of its own:
+Effects over `SFX_LOOP.WAV` and Voice over `VOICE_LOOP.WAV`, the two of the original's three preview
+clips this port needs, since Music and Master are already audible through the menu's own score. A
+clip that is still running is left to run, its loudness following the bus the level moved, so a drag
+sounds one clip rather than one per frame. `EndMixPreview` puts back the gains that stood when the
+page opened and is called on every door out of the page and on `Hide`, so a preview cannot survive
+the page; an accepted mix is written and reapplied by `Launcher.ApplyOptions`, which stays the
+options file's one writer. ⚠ Previews are off in any run that drives itself (`--det`,
+`--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
 
 The cue table (`MenuCueTable`, `CSVM/src/Session/MenuCueTable.cs`) resolves the four names the
 original's globals script binds: `menu.rollover`, `menu.click`, `menu.text`, `menu.text-error`, each

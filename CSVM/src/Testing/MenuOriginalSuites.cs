@@ -51,7 +51,9 @@ internal static class MenuOriginalSuites
         + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
         + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "
-        + "silence, its CANCEL CHANGES drops the edit with no exit and its ACCEPT CHANGES leaves as "
+        + "silence, the open page states its mix to the host every frame and names the level a "
+        + "frame moved only where one moved, its CANCEL CHANGES drops the edit with no exit and "
+        + "ends the preview, and its ACCEPT CHANGES leaves as "
         + "one more apply exit carrying the levels, the force flag recovers and a missing layout "
         + "falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
@@ -105,7 +107,7 @@ internal static class MenuOriginalSuites
             OriginalVideoRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits);
             // The AUDIO route needs a shell of its own for the same reason, the VIDEO route's
             // ACCEPT CHANGES having hidden the presentation the walk before it drove.
-            OriginalAudioRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits);
+            OriginalAudioRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits, audio);
             Recovery(ctx, host, registry, audio);
         }
         finally
@@ -603,9 +605,11 @@ internal static class MenuOriginalSuites
 
     // Original's AUDIO route over the install's decoded sections: the Preferences page's second door
     // opens the decoded page on its Master slider, the page draws a thumb per row, a sideways step
-    // moves a level and clamps at silence rather than wrapping to full, CANCEL CHANGES drops the
-    // edits without an exit, and ACCEPT CHANGES on a second visit leaves as one apply exit.
-    private static void OriginalAudioRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
+    // moves a level and clamps at silence rather than wrapping to full, the open page states its mix
+    // to the host every frame and names the level a frame moved only when one did, CANCEL CHANGES
+    // drops the edits without an exit and ends the preview, and ACCEPT CHANGES on a second visit
+    // leaves as one apply exit.
+    private static void OriginalAudioRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits, RecordingAudio audio)
     {
         if (shell == null)
         {
@@ -639,17 +643,34 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.AudioMasterChoice == null && shell.AudioMusicChoice == null
             && shell.AudioEffectsChoice == null && shell.AudioVoiceChoice == null,
             $"on a mix nothing has saved, every level reading as never set ({shell.AudioMasterChoice?.ToString() ?? "unset"})");
+        audio.Mixes.Clear();
         Press(host, seat, Right);
         ctx.Check(shell.AudioMasterChoice == null,
             $"a step off the top of the Master row moves nothing, so it writes nothing ({shell.AudioMasterChoice?.ToString() ?? "unset"})");
+        // A step at an end moves no level, so the frame states the mix and names no moved level:
+        // this is what keeps a host from sounding a category once per pointer frame of a drag.
+        ctx.Check(audio.Mixes.Count == 1 && audio.Mixes[0].Moved == MenuMixLevel.None
+            && audio.Mixes[0].Levels == new AudioLevels(
+                AudioMix.DefaultMaster, AudioMix.DefaultMusic, AudioMix.DefaultEffects, AudioMix.DefaultVoice),
+            $"the open page states the shipped mix to the host and names no moved level on a frame that moved none ({audio.Mixes.Count}, {(audio.Mixes.Count > 0 ? audio.Mixes[0].Moved : MenuMixLevel.None)})");
         WalkTo(host, seat, shell, OriginalShell.AudioMusicKey);
+        audio.Mixes.Clear();
         Press(host, seat, Left);
         ctx.Check(shell.AudioMusicChoice == AudioMix.DefaultMusic - SliderControl.KeyStep,
             $"a sideways step on the focused row moves that level by the control's own step ({shell.AudioMusicChoice?.ToString() ?? "unset"})");
+        ctx.Check(audio.Mixes.Count == 1 && audio.Mixes[0].Moved == MenuMixLevel.Music
+            && audio.Mixes[0].Levels.Music == AudioMix.DefaultMusic - SliderControl.KeyStep,
+            $"and names Music as the level that moved, carrying the level it moved to ({(audio.Mixes.Count > 0 ? audio.Mixes[0].Moved : MenuMixLevel.None)})");
+        int endsBefore = audio.MixEnds;
         WalkTo(host, seat, shell, OriginalShell.AudioCancelKey);
+        audio.Mixes.Clear();
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.AudioMusicChoice == null && exits.Count == before,
             $"CANCEL CHANGES lands back on Preferences with the edit dropped and no exit ({shell.Screen}, {shell.AudioMusicChoice?.ToString() ?? "unset"})");
+        // Off the page there is no mix to state, and the host is told to put back the one the page
+        // opened over, which is the half a player notices when it is wrong.
+        ctx.Check(audio.Mixes.Count == 0 && audio.MixEnds > endsBefore,
+            $"ending the preview and stating no mix off the page ({audio.Mixes.Count}, ends={audio.MixEnds - endsBefore})");
 
         WalkTo(host, seat, shell, OriginalShell.AudioDoorKey);
         Press(host, seat, Accept);
@@ -733,6 +754,12 @@ internal static class MenuOriginalSuites
     {
         public List<string> Cues { get; } = new();
 
+        // What a mix page stated this frame, and how often the preview was ended: the page names
+        // four levels and the one that moved, and a real service is what applies and sounds them.
+        public List<(AudioLevels Levels, MenuMixLevel Moved)> Mixes { get; } = new();
+
+        public int MixEnds { get; private set; }
+
         public void Cue(MenuCue cue) => Cues.Add(cue.Name);
 
         public void BeginNarration(string wavName)
@@ -742,6 +769,10 @@ internal static class MenuOriginalSuites
         public void EndNarration()
         {
         }
+
+        public void PreviewMix(AudioLevels levels, MenuMixLevel moved) => Mixes.Add((levels, moved));
+
+        public void EndMixPreview() => MixEnds++;
     }
 
     private sealed class ScriptedSeat : IMenuInputSource

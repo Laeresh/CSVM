@@ -6,6 +6,7 @@ using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.UI.Menu;
 using CSVM.Utils;
 using Godot;
 
@@ -38,8 +39,10 @@ internal static class AudioBusSuites
         + "and one-shot, and the projectile pool) builds its players on the bus its category names, "
         + "a walk of the whole live scene tree fails on any player left on Master, the four "
         + "levels reach the three child buses at startup and on a live change while bus 0, which "
-        + "carries the developer volume alone, is untouched by either, and a plain launch reads the "
-        + "saved levels while a --det one reads none and mixes the shipped defaults")]
+        + "carries the developer volume alone, is untouched by either, a plain launch reads the "
+        + "saved levels while a --det one reads none and mixes the shipped defaults, and a page's "
+        + "live preview moves all three buses from Master alone, sounds one clip over twenty-one "
+        + "level changes rather than twenty-one, and puts back the exact mix it opened over")]
     internal static void AudioBusPlacement(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -84,7 +87,10 @@ internal static class AudioBusSuites
             };
             ctx.Host.AddChild(radio);
 
-            menu = new MenuAudioService(null, name => Stream(archive, defs, name))
+            // With previews on, so the two preview players are built and swept like every other
+            // site; the launcher turns them off in exactly the runs this suite is one of.
+            menu = new MenuAudioService(null, name => Stream(archive, defs, name),
+                Path.Combine(ctx.DataRoot, "extracted", "rof", "ASSETS", "SOUNDS"), previews: true)
             {
                 Name = "GuardMenuAudio",
             };
@@ -122,8 +128,9 @@ internal static class AudioBusSuites
 
             CheckSite(ctx, music, "MusicPlayer._player", AudioBuses.Music, report);
             CheckSite(ctx, radio, "MissionRadio._player", AudioBuses.Voice, report);
-            CheckSite(ctx, menu, "MenuAudioService narration + cue", AudioBuses.Effects,
-                AudioBuses.Voice, report);
+            CheckSite(ctx, menu, "MenuAudioService narration + cue + the two preview players",
+                AudioBuses.Effects, AudioBuses.Voice, report);
+            CheckPreview(ctx, menu, report);
             CheckSite(ctx, flight, "FlightAudio's six", AudioBuses.Effects, report);
             CheckSite(ctx, aiEngine, "AiEngineAudio.MakeLoop", AudioBuses.Effects, report);
             CheckSite(ctx, world, "WorldSounds emitter + one-shot", AudioBuses.Effects, report);
@@ -263,6 +270,71 @@ internal static class AudioBusSuites
         finally
         {
             OptionsStore.DirectoryOverride = previous;
+            AudioMix.Apply();
+        }
+    }
+
+    // The preview half: the mix a page applies while it is open reaches all three child buses,
+    // Master moves every one of them at once, a level moved twenty times over sounds one clip rather
+    // than twenty, and ending the preview puts back exactly the gains that stood when it began.
+    // ⚠ The mix it opens over is nothing like the shipped defaults on purpose: a restore that merely
+    // reapplied the defaults would pass by coincidence against a shipped-default mix, which is the
+    // failure this whole check exists to catch.
+    private static void CheckPreview(TestContext ctx, MenuAudioService menu, StringBuilder report)
+    {
+        float developer = AudioServer.GetBusVolumeDb(0);
+        try
+        {
+            AudioMix.Apply(master: 33, music: 7, effects: 91, voice: 12);
+            var opened = AudioMix.Capture();
+            report.AppendLine($"preview opened over music={opened.Music:0.###} effects={opened.Effects:0.###} voice={opened.Voice:0.###}");
+
+            int starts = menu.MixPreviewStarts;
+            menu.PreviewMix(new AudioLevels(100, 100, 100, 100), MenuMixLevel.Effects);
+            CheckBus(ctx, AudioBuses.Music, 100, 100, report);
+            CheckBus(ctx, AudioBuses.Effects, 100, 100, report);
+            CheckBus(ctx, AudioBuses.Voice, 100, 100, report);
+
+            // Master is a multiplier, so moving it alone has to move all three and not one.
+            menu.PreviewMix(new AudioLevels(50, 100, 100, 100), MenuMixLevel.Master);
+            CheckBus(ctx, AudioBuses.Music, 100, 50, report);
+            CheckBus(ctx, AudioBuses.Effects, 100, 50, report);
+            CheckBus(ctx, AudioBuses.Voice, 100, 50, report);
+
+            for (int level = 0; level < 20; level++)
+            {
+                menu.PreviewMix(new AudioLevels(50, 100, 80 + level, 100), MenuMixLevel.Effects);
+            }
+
+            int fired = menu.MixPreviewStarts - starts;
+            report.AppendLine($"preview clips started over twenty-one Effects changes: {fired}");
+            string clip = Path.Combine(ctx.DataRoot, "extracted", "rof", "ASSETS", "SOUNDS", "SFX_LOOP.WAV");
+            if (File.Exists(clip))
+            {
+                ctx.Check(fired == 1,
+                    $"a level moved twenty-one times over sounds one preview clip, neither none nor one per change (started={fired})");
+            }
+            else
+            {
+                ctx.Check(fired == 0, $"a preview with no clip on disk sounds nothing (started={fired})");
+                ctx.Note($"no SFX_LOOP.WAV under the extracted rof tree, so this run could only see the silent half");
+            }
+
+            ctx.Check(Math.Abs(AudioServer.GetBusVolumeDb(0) - developer) <= DbSlack,
+                $"the preview left bus 0 alone db={AudioServer.GetBusVolumeDb(0):0.###} before={developer:0.###}");
+
+            menu.EndMixPreview();
+            var after = AudioMix.Capture();
+            report.AppendLine($"preview ended on music={after.Music:0.###} effects={after.Effects:0.###} voice={after.Voice:0.###}");
+            ctx.Check(after == opened,
+                $"ending the preview puts back the exact mix it opened over (music={after.Music:0.###}/{opened.Music:0.###} effects={after.Effects:0.###}/{opened.Effects:0.###} voice={after.Voice:0.###}/{opened.Voice:0.###})");
+            ctx.Check(Math.Abs(AudioServer.GetBusVolumeDb(0) - developer) <= DbSlack,
+                $"and left bus 0 alone through the restore db={AudioServer.GetBusVolumeDb(0):0.###} before={developer:0.###}");
+            ctx.Note($"preview clips started={fired} over twenty-one Effects changes");
+        }
+        finally
+        {
+            menu.EndMixPreview();
             AudioMix.Apply();
         }
     }

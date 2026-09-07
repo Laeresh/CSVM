@@ -588,10 +588,12 @@ since a claim is an identity. Read `MenuCommands.cs` for the seam and `PlayerSet
 the seats it is claimed by.
 
 ## src/UI/Menu/IMenuAudio.cs
-The shared menu audio contract: a presentation requests a `MenuCue` by semantic name and starts
-or stops narration at moments it owns; the service owns resolution, playback, volume and the
-handoff into a launching session. The host implementation is `MenuAudioService`
-(`src/Session/MenuAudioService.cs`); Built-in's one call site is the briefing narration.
+The shared menu audio contract: a presentation requests a `MenuCue` by semantic name, starts or
+stops narration at moments it owns, and states through `PreviewMix`/`EndMixPreview` the mix a page
+that sets one stands at and which `MenuMixLevel` a frame moved; the service owns resolution,
+playback, volume, the buses and the handoff into a launching session. The host implementation is
+`MenuAudioService` (`src/Session/MenuAudioService.cs`); Built-in's one call site is the briefing
+narration.
 
 ## src/UI/Menu/MenuExit.cs
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
@@ -709,13 +711,13 @@ pair, which every option page reads and hands back through, so a page carries th
 
 ## src/UI/Menu/Original/OriginalAudio.cs
 The AUDIO page, the shell's partial over the decoded `[@Audio@]` section, behind the Preferences page's second door. Four slider
-rows over `Utils/AudioMix.cs`'s 0..100, in the same table shape as VIDEO: per row a title, the authored title, slider and
-description widgets it stands on, a description, and how the store field is read and written, a never-set level reading as its
-shipped default. Each row's line is read off its own title widget, the authored pitch being 58, 57, 53 and 53 rather than one
-number. Master takes the In-Game Music row with the page's own title and description, its slider at the section's slider column
-and offset rather than at that row's checkbox corner, since a slider that reaches zero is that checkbox in one fewer widget;
-Sound Quality is left out. A slider answers no Accept, the level moving under the pointer or by a sideways step
-(`SliderControl.cs`); ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
+rows over `Utils/AudioMix.cs`'s 0..100 in VIDEO's table shape: per row the authored title, slider and description widgets it stands
+on, and how the store field is read and written, a never-set level reading as its shipped default. Each row's line is read off its
+own title widget, the authored pitch being 58, 57, 53 and 53 rather than one number. Master takes the In-Game Music row with the
+page's own words and its slider at the section's slider column, since a slider that reaches zero is that checkbox in one fewer
+widget; Sound Quality is left out. A slider answers no Accept (`SliderControl.cs`); ACCEPT CHANGES leaves as the `OptionsApplyExit`
+and CANCEL CHANGES drops the edits. `AudioPreviewMix` is the mix the open page stands at, null off it, and `TakeAudioMoved` the
+level a frame moved, taken once: the host is what applies and sounds them. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalVideo.cs
 The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third
@@ -787,14 +789,14 @@ cues and the dialogs are this file's. Read `src/UI/CampaignFlow.cs` for the page
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
-The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the
-board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do.
-`Activate` builds the shell and the device bookkeeping once, refreshes the roster from the
-saved-plane store on every call, stands the shell on the top level, maps the return destination
-onto it and applies the `--menu=` aid on the first show alone. `Tick` keeps the pads in step (seat
-0's claim while joining is closed, the join scan while the shell opens it), polls every seat, maps
-a window-pixel pointer into the authored space, steps the shell, requests its cues and drives the
-briefing's reveal. `Measure` reads a strip's size off its file once; `PaletteFor` is each screen's inks.
+The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding
+one `ComposedBoardView`, so every screen scales as the campaign boards do. `Activate` builds the shell and the device
+bookkeeping once, refreshes the roster from the saved-plane store on every call, stands the shell on the top level, maps
+the return destination onto it and applies the `--menu=` aid on the first show alone. `Tick` keeps the pads in step (seat
+0's claim while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer
+into the authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends
+the preview on every door out and on `Hide`, and drives the briefing's reveal. `Measure` reads a strip's size off its file
+once; `PaletteFor` is each screen's inks.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses

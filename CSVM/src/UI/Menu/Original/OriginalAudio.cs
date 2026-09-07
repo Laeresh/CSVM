@@ -11,8 +11,9 @@ namespace CSVM.UI.Menu.Original;
 /// plus the store field it reads. Master takes the In-Game Music checkbox's row and that row's
 /// title and description are the page's own, since a slider that reaches zero is that checkbox in
 /// one fewer widget; the three authored volume rows keep their words. Sound Quality is left out,
-/// its authored row tiering a mixer this port has no answer to. The decode and the readings are in
-/// <c>docs/org/menu-inventory.md</c>.
+/// its authored row tiering a mixer this port has no answer to. While the page is open it states
+/// the mix it stands at and which level a frame moved, and the host is what applies and sounds
+/// them. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -58,19 +59,19 @@ public sealed partial class OriginalShell
     // saves: the apply exit carries every choice and Launcher.ApplyOptions is the one writer.
     private static readonly AudioOption[] AudioOptions =
     {
-        new(AudioMasterKey, "Master", "AP_T_MusicTitle", null, "AP_T_MusicDesc",
+        new(AudioMasterKey, MenuMixLevel.Master, "Master", "AP_T_MusicTitle", null, "AP_T_MusicDesc",
             "Set the overall volume of all sounds.", 266f, 278f,
             s => s._audioMaster ?? CSVM.Utils.AudioMix.DefaultMaster,
             (s, v) => s._audioMaster = v),
-        new(AudioMusicKey, "Music Volume", "AP_T_MVolTitle", "AP_S_MVOLUME", "AP_T_MVolDesc",
+        new(AudioMusicKey, MenuMixLevel.Music, "Music Volume", "AP_T_MVolTitle", "AP_S_MVOLUME", "AP_T_MVolDesc",
             "Set the volume of the in-game music.", 324f, 332f,
             s => s._audioMusic ?? CSVM.Utils.AudioMix.DefaultMusic,
             (s, v) => s._audioMusic = v),
-        new(AudioEffectsKey, "Effects Volume", "AP_T_EVolTitle", "AP_S_EVOLUME", "AP_T_EVolDesc",
+        new(AudioEffectsKey, MenuMixLevel.Effects, "Effects Volume", "AP_T_EVolTitle", "AP_S_EVOLUME", "AP_T_EVolDesc",
             "Set the volume of the sound effects.", 381f, 387f,
             s => s._audioEffects ?? CSVM.Utils.AudioMix.DefaultEffects,
             (s, v) => s._audioEffects = v),
-        new(AudioVoiceKey, "Voice Volume", "AP_T_VVolTitle", "AP_S_VVOLUME", "AP_T_VVolDesc",
+        new(AudioVoiceKey, MenuMixLevel.Voice, "Voice Volume", "AP_T_VVolTitle", "AP_S_VVOLUME", "AP_T_VVolDesc",
             "Set the volume of the voices.", 434f, 442f,
             s => s._audioVoice ?? CSVM.Utils.AudioMix.DefaultVoice,
             (s, v) => s._audioVoice = v),
@@ -81,6 +82,32 @@ public sealed partial class OriginalShell
     // checkbox, which stands at another column and on the title's own line, so a Master slider
     // placed at that widget's corner would sit 122 pixels right of the three below it.
     private static readonly AudioOption AudioSliderRow = AudioOptions[1];
+
+    // Which level a row's slider moved, cleared by the host's read of it. The control writes only
+    // where the value actually changed, so this stands at None through every frame of a drag that
+    // held the thumb still, which is what keeps a preview off a pointer's frame rate.
+    private MenuMixLevel _audioMoved;
+
+    /// <summary>The mix the AUDIO page stands at while it is open, for the host to apply so a level
+    /// can be judged by ear as it moves, and null on every other screen, which is what makes leaving
+    /// this page by any door drop the preview. The shell states four levels and nothing more: which
+    /// bus each reaches, and whether a preview sounds at all, are the audio service's.</summary>
+    public CSVM.Utils.AudioLevels? AudioPreviewMix =>
+        _screen == OriginalScreen.Audio
+            ? new CSVM.Utils.AudioLevels(
+                AudioLevel(MenuMixLevel.Master), AudioLevel(MenuMixLevel.Music),
+                AudioLevel(MenuMixLevel.Effects), AudioLevel(MenuMixLevel.Voice))
+            : null;
+
+    /// <summary>Which level has moved since this was last asked, and <see cref="MenuMixLevel.None"/>
+    /// when none has. ⚠ Taken rather than read: the host sounds the moved category, so a caller that
+    /// saw one move twice would sound it twice.</summary>
+    public MenuMixLevel TakeAudioMoved()
+    {
+        var moved = _audioMoved;
+        _audioMoved = MenuMixLevel.None;
+        return moved;
+    }
 
     /// <summary>Opens the AUDIO page on the saved mix with its first row focused, which is what the
     /// Preferences page's AUDIO door and the screenshot aid both go through. The page is a form,
@@ -138,13 +165,38 @@ public sealed partial class OriginalShell
         {
             var place = PlaceAudioRow(screen, option);
             var control = option.ControlKey is { } key ? screen.Widget(key) : null;
+            // The moved level is recorded here rather than in the table's own write, because the
+            // control calls this only where the value actually changed: a drag that held the thumb
+            // on the same whole number records nothing, and the host sounds nothing for it.
             rows.Add(SliderRow(control, option.Key, place.SliderX, place.SliderY,
                 CSVM.Utils.AudioMix.MinLevel, CSVM.Utils.AudioMix.MaxLevel,
-                option.Read(this), v => option.Write(this, v)));
+                option.Read(this),
+                v =>
+                {
+                    option.Write(this, v);
+                    _audioMoved = option.Level;
+                }));
         }
 
         AddStrip(screen, rows, AudioAcceptKey, OriginalRowKind.Button, true, 0);
         AddStrip(screen, rows, AudioCancelKey, OriginalRowKind.Button, true, 0);
+    }
+
+    // The level a row stands at, found through its own table entry so a level and its shipped
+    // fallback keep one definition. Every member but None is in the table, so the last answer is
+    // unreachable; it is the resting level rather than silence, a preview being no place to invent
+    // a mute.
+    private int AudioLevel(MenuMixLevel level)
+    {
+        foreach (var option in AudioOptions)
+        {
+            if (option.Level == level)
+            {
+                return option.Read(this);
+            }
+        }
+
+        return CSVM.Utils.AudioMix.MaxLevel;
     }
 
     // One row's shape off the section's own widgets, each number falling back to the authored one
@@ -248,14 +300,15 @@ public sealed partial class OriginalShell
         }
     }
 
-    // One level of the page: its title, the authored widgets it composes over (the title, the
-    // slider and the description, the slider null on the row that has none), its description, the
-    // authored lines the title and the description fall back to, and how the store field is read
-    // and written. The description is a fixed string: unlike the VIDEO page's graphics row, no
-    // level says anything about its saved state that the thumb does not already show.
+    // One level of the page: its key, which of the mix's levels it is (for the host that hears one
+    // move), its title, the authored widgets it composes over (the title, the slider and the
+    // description, the slider null on the row that has none), its description, the authored lines
+    // the title and the description fall back to, and how the store field is read and written. The
+    // description is a fixed string: unlike the VIDEO page's graphics row, no level says anything
+    // about its saved state that the thumb does not already show.
     private sealed record AudioOption(
-        string Key, string Title, string TitleKey, string? ControlKey, string DescriptionKey,
-        string Description, float TitleY, float DescY,
+        string Key, MenuMixLevel Level, string Title, string TitleKey, string? ControlKey,
+        string DescriptionKey, string Description, float TitleY, float DescY,
         Func<OriginalShell, int> Read, Action<OriginalShell, int> Write);
 
     // One row's place in authored pixels: the title box, the corner its slider stands at where the

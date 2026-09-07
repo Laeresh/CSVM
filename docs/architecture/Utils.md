@@ -222,14 +222,14 @@ carries the developer `--volume=` gain and the focus mute (`Session/Launcher.cs`
 children carry the player's mix, written by `AudioMix`. The `audio-buses` suite holds both.
 
 ## src/Utils/AudioMix.cs
-The player's mix: four 0..100 levels (Master, Music, Effects, Voice) into one linear gain per category
-bus, `category/100 x master/100`, floored at -80 dB so a level of 0 is silence rather than negative
-infinity. Master multiplies the other three instead of being a level of its own, so `Apply` writes only
-the three child buses and refuses index 0, which keeps `--volume=0` silencing a scripted run whatever the
-levels say. `Apply` takes a nullable level per category and falls back to the shipped default, so a caller
-passes saved values straight through; it is the startup apply (`Session/Launcher.cs`), the live one, and
-idempotent. `SavedLevels(det)` is the levels' one reader and answers four nulls under `--det`, so a mix
-saved at one machine's controls never reaches a scripted run. The arithmetic is pure and unit-tested.
+The player's mix: four 0..100 levels (Master, Music, Effects, Voice) into one linear gain per category bus,
+`category/100 x master/100`, floored at -80 dB so a level of 0 is silence rather than negative infinity. Master multiplies
+the other three instead of being a level of its own, so `Apply` writes only the three child buses and refuses index 0,
+which keeps `--volume=0` silencing a scripted run whatever the levels say. `Apply` takes a nullable level per category
+and falls back to the shipped default; it is the startup apply (`Session/Launcher.cs`), the live one, and idempotent.
+`SavedLevels(det)` is the levels' one reader and answers four nulls under `--det`, so a mix saved at one machine's
+controls never reaches a scripted run. `Capture`/`Restore` take and put back the three child buses' gains verbatim, for
+the AUDIO page's preview, which owes back the mix it opened over. The arithmetic is pure and unit-tested.
 
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved

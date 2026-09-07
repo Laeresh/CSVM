@@ -1259,8 +1259,11 @@ public partial class Launcher : Node3D
     // availability is registration plus, for Original, OriginalAvailable below.
     private MenuHost BuildMenuHost()
     {
+        // ⚠ No live mix preview in a run that drives itself, or a scripted walk across the AUDIO page
+        // would make that run's mix a function of the walk; --no-det with a scripted flag is still
+        // such a run, which is why both halves are read rather than Det alone.
         _menuAudio = new MenuAudioService(_music, wav => _musicArchive?.Find(wav, false, warn: false),
-            Path.Combine(_rofPath, "ASSETS", "SOUNDS"));
+            Path.Combine(_rofPath, "ASSETS", "SOUNDS"), previews: !_spec.Det && _spec.ScriptedBy.Length == 0);
         AddChild(_menuAudio);
         var seatInput = new MenuInput { Keyboard = true };
         // Seat 0 is player 1, so it navigates on the menu keymap that player saved.

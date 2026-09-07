@@ -254,7 +254,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/IMenuFeature.cs` — the shared-feature contract: typed state and semantic operations; `Discard()` drops transient setup.
 - `src/UI/Menu/MenuFeatureSet.cs` — the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is what a switch drops.
 - `src/UI/Menu/MenuCommands.cs` — one seat's semantic commands plus `IMenuInputSource`, the device-neutral seam every device sits behind.
-- `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations ask for cues and narration, the service owns everything else.
+- `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations ask for cues, narration and a mix preview, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) each presentation maps into its own graph.
 - `src/UI/Menu/MenuChapters.cs` — the shared chapter roster: the eight chapter worlds, which carry Danger Zones, and the per-mode filter.
@@ -273,7 +273,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its seven partials below.
 - `src/UI/Menu/Original/SliderControl.cs` — the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
 - `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
-- `src/UI/Menu/Original/OriginalAudio.cs` — the shell's AUDIO page (a `partial`): the four volume levels as slider rows, each on its own authored line.
+- `src/UI/Menu/Original/OriginalAudio.cs` — the shell's AUDIO page (a `partial`): the four volume levels as slider rows on their own authored lines, stated to the host while the page is open.
 - `src/UI/Menu/Original/OriginalVideo.cs` — the shell's VIDEO page (a `partial`): the display settings as a table of authored rows, the resolution row's words enumerated per screen.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs` — the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
@@ -374,7 +374,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Utils/AudioBuses.cs` — the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
-- `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, and no level read under `--det`.
+- `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
 - `src/Utils/DisplayModeSetting.cs` — the window's display mode: the saved word against the shipped windowed default, and the one place the window mode is set.
@@ -430,7 +430,7 @@ clusters they delegate to.
 - `src/Session/GameSession.cs` — the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
 - `src/Session/SessionSimulation.cs` — the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
 - `src/Session/ExtractionStamp.cs` — reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read.
-- `src/Session/MenuAudioService.cs` — the menus' audio host: the music channel, the briefing narration player and the cue player behind `MenuCueTable`.
+- `src/Session/MenuAudioService.cs` — the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
 - `src/Session/LiveryResolver.cs` — each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
 - `src/Session/IFlightStarts.cs` — the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.

@@ -358,6 +358,55 @@ public class OriginalShellTests
         Assert.Null(shell.AudioMasterChoice);
     }
 
+    /// <summary>The AUDIO page's live preview as the shell states it: while the page is open it
+    /// names the four levels it stands at, off the page it names no mix at all, and it names the
+    /// level a frame moved only on the frames that actually moved one, so a host cannot sound a
+    /// category once per pointer frame of a drag.</summary>
+    [Fact]
+    public void TheAudioPageStatesItsMixWhileOpenAndNamesAMovedLevelOnlyWhenOneMoved()
+    {
+        var shell = Shell(out _);
+        Assert.Null(shell.AudioPreviewMix);
+        shell.OpenAudio();
+        Assert.Equal(
+            new AudioLevels(AudioMix.DefaultMaster, AudioMix.DefaultMusic, AudioMix.DefaultEffects, AudioMix.DefaultVoice),
+            shell.AudioPreviewMix);
+        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
+
+        // A sideways step on the Effects row names Effects, and names it once: the moved level is
+        // taken rather than read, so a second ask cannot sound the same move again.
+        shell.Step(Down);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.AudioEffectsKey, shell.FocusedKey);
+        shell.Step(Left);
+        Assert.Equal(MenuMixLevel.Effects, shell.TakeAudioMoved());
+        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
+        Assert.Equal(AudioMix.DefaultEffects - SliderControl.KeyStep, shell.AudioPreviewMix!.Value.Effects);
+
+        // A drag: the frame that takes hold moves the level and names it, a held frame at the same
+        // point moves nothing and names nothing, and the same holds at the far end of the track.
+        var row = shell.Rows.Single(r => r.Key == OriginalShell.AudioEffectsKey);
+        float left = row.X + 1f;
+        float right = row.X + row.Width - 1f;
+        shell.Step(Pointer(left, row.Y + 5f, pressed: true, clicked: true));
+        Assert.Equal(AudioMix.MinLevel, shell.AudioEffectsChoice);
+        Assert.Equal(MenuMixLevel.Effects, shell.TakeAudioMoved());
+        shell.Step(Pointer(left, row.Y + 5f, pressed: true));
+        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
+        shell.Step(Pointer(right, row.Y + 5f, pressed: true));
+        Assert.Equal(AudioMix.MaxLevel, shell.AudioEffectsChoice);
+        Assert.Equal(MenuMixLevel.Effects, shell.TakeAudioMoved());
+        shell.Step(Pointer(right, row.Y + 5f, pressed: true));
+        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
+        Assert.Equal(AudioMix.MaxLevel, shell.AudioPreviewMix!.Value.Effects);
+
+        // And off the page there is no mix to apply, which is what drops the preview whichever door
+        // the page was left by.
+        Assert.Null(shell.Step(Back).Exit);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        Assert.Null(shell.AudioPreviewMix);
+    }
+
     /// <summary>The AUDIO page over its own section: four sliders in the section's slider column,
     /// each on its own authored line (the pitch is uneven, so a first row and one pitch would
     /// misplace the rows below the second), the Master row on the In-Game Music line at the slider

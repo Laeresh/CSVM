@@ -452,6 +452,10 @@ public sealed class OriginalPresentation : IMenuPresentation
 
             if (step.Exit != null)
             {
+                // The exit ends this presentation, so a mix page's preview goes before the host acts
+                // on it: an accepted mix is applied by Launcher.ApplyOptions, and every other door
+                // owes back the mix the page opened over.
+                _host.Audio.EndMixPreview();
                 _host.Exit(step.Exit);
                 return;
             }
@@ -463,6 +467,18 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_shell.Screen != OriginalScreen.CampaignBriefing)
         {
             StopNarration();
+        }
+
+        // The AUDIO page's levels are heard while it is open and the mix it opened over goes back the
+        // moment it is left, by any door. Read off the shell rather than a seat's step: the page is
+        // seat 0's, and a guest's own step carries no mix, so its poll would end the preview.
+        if (_shell.AudioPreviewMix is { } mix)
+        {
+            _host.Audio.PreviewMix(mix, _shell.TakeAudioMoved());
+        }
+        else
+        {
+            _host.Audio.EndMixPreview();
         }
 
         // And again after the frame, so a screen change this frame is what the next poll reads.
@@ -489,6 +505,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         StopNarration();
+        // Off screen the AUDIO page's preview goes with it, the mix it opened over put back: a hide
+        // is a door out that no frame follows.
+        _host?.Audio.EndMixPreview();
         Input.MouseMode = Input.MouseModeEnum.Visible;
     }
 

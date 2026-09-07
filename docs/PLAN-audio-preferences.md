@@ -165,7 +165,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ The options carrier takes a level that is not a vocabulary word
 5. ☑ The slider the shell has never had
 6. ☑ The AUDIO page opens from Preferences
-8. ☐ A slider a player can hear while moving it
+8. ☑ A slider a player can hear while moving it
 7. ☐ The precedence ladder, and the re-based mix judged at the controls
 
 ## Dependency and parallelism notes
@@ -465,22 +465,26 @@ is now a slider at X=137; place it at the slider offset, not the checkbox's.
 
 **Verified.** <pending orchestrator run>
 
-## B8 ☐ A slider a player can hear while moving it
+## B8 ☑ A slider a player can hear while moving it
 
 **Goal.** While the AUDIO page is open, a level applies as it moves: the menu music follows Music and
 Master at once, and moving Effects or Voice fires a short sample on that bus so the level is
 audible. CANCEL CHANGES restores the mix that was saved before the page opened, and leaving by any
 other route does the same. Nothing here writes the options file.
 
-**Evidence (confidence: lead-only for the original, traced for the absence).** `playtest.md`'s
-`CAP-51` instructs "On Audio, move each of the three volume sliders and let the preview loop play"
-and names `BL-455` among the items it unblocks, so a preview was known about before this plan was
-written and no item carried it. ⚠ `CAP-51` is still unfilmed, so what the original actually plays,
-and whether it loops, is a claim in the record rather than a confirmed reading; this item builds a
-preview that serves the player, and the capture may later correct its shape. Traced: `AudioMix.Apply`
-has exactly two callers, `Launcher._Ready` and `Launcher.ApplyOptions`, so no level applies while the
-page is open. `MenuAudioService` already holds `_cuePlayer` on Effects and `_narration` on Voice, and
-`MusicPlayer` is on Music, so a player exists on all three category buses inside the menu.
+**Evidence (confidence: traced).** The original's own page script settles what `CAP-51` was filmed
+to answer. `extracted/rof/ASSETS/SCRIPTS/AUDIO.SCRIPT` builds three sound objects on `gui_create`,
+one per category over `music_loop.wav`, `sfx_loop.wav` and `voice_loop.wav`, each carrying its
+row's current level; a slider move sets that category's volume live (`case 10019`), CANCEL re-reads
+the saved settings and restores the volume from them (`case MA`), and `gui_destroy` stops all three.
+The three wavs ship, in `extracted/rof/ASSETS/SOUNDS` beside the four cue sounds. So the preview is
+the original's, the live apply is the original's, and so is the restore on cancel. ⚠ The one thing
+the script does not settle is how it sounds: the loops run for as long as the page is open, and this
+port sounds a clip on the level that moved instead, which is `B7`'s to judge at the controls.
+Traced in this tree: `AudioMix.Apply` had exactly two callers, `Launcher._Ready` and
+`Launcher.ApplyOptions`, so no level applied while the page was open. `MenuAudioService` already
+holds `_cuePlayer` on Effects and `_narration` on Voice, and `MusicPlayer` is on Music, so a player
+exists on all three category buses inside the menu.
 
 **Approach.** The three category sliders each get a sample the player can judge: Music needs none of
 its own, because the menu music is already playing on that bus, while Effects and Voice fire a short
@@ -508,6 +512,13 @@ Do not fire a cue under `--run-tests`, `--det` or `--screenshot`, and do not let
 options file. Master is a multiplier, so moving it alone must move all three buses and not just one.
 The preview is a menu affordance and must not survive the page: leaving it applied on cancel is the
 failure this item exists to avoid.
+
+⚠ **The at-the-controls half is owed and is `B7`'s.** Whether each slider is audible while it moves,
+and whether the page leaves the mix where it found it to the ear, is the author's at the controls;
+`docs/verification.md` places audio in the half this project cannot verify itself. The suites hold
+the bus gains and the clip count, which is not the same claim.
+
+**Verified.** <pending orchestrator run>
 
 ## B7 ☐ The precedence ladder, and the re-based mix judged at the controls
 
