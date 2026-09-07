@@ -445,6 +445,23 @@ reasons that have nothing to do with any of these checks.
   *Blocks:* `BL-289`. The splash height and timing curves are authored data rather than TUNE and are
   not on trial here.
 
+- `PT-133` `[Own]` **The HUD's reading box is the right width at the controls on a 32:9 screen.**
+  The dials, the SPD/ALT/THR block and the pause screen's objectives panel measure from a 16:9 box
+  centred in the pane rather than from the pane's own edges — that box is the frame every one of
+  those offsets was measured in (`HUD.png`, 2556x1440). Whether the width reads right on a
+  5120-wide screen, where the two columns end up 1280 px in from each edge, is a judgement no
+  instrument makes. Fly it with the window fullscreen (Options → VIDEO → Display Mode) so the pane
+  is the whole screen.
+  *Look for:*
+  - (a) the dials and the status block sit within comfortable reading width, neither out at the
+    edges of peripheral vision nor huddled into the middle;
+  - (b) an off-screen target's edge arrow still comes from the TRUE screen edge and points
+    usefully — that element deliberately keeps the pane, since the box is not where the target
+    left;
+  - (c) nothing has moved at 16:9: the same sortie windowed looks exactly as it did.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
+  one-pixel tolerance are in the landing commit (`git log --grep=BL-778`).
+
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
 ```powershell
@@ -473,6 +490,22 @@ reasons that have nothing to do with any of these checks.
   session: put P2 over the ground alone and have him rocket the terrain — P2's pane flashes
   white/violet and P1's, a few hundred metres off, does not; then fly the pair in together and both
   flash. A wash that still paints all panes, or one that paints none, is the failure.
+
+- `PT-134` `[Own]` **A 2-player split on an ultrawide window reads as two normal views, and the HUD
+  size the flip brings with it is right.** The split stands the panes side by side once each half
+  would still be at least as wide as it is tall, a window 2:1 or wider, so a 32:9 screen gives two
+  16:9 panes. The pane share reaches `HudMetrics.PaneFactor` through the HEIGHT ratio, so a
+  full-height pane's factor is 1 and the HUD draws at single-player size rather than the damped
+  splitscreen size. That size change is the part to judge; run it fullscreen on a 2:1-or-wider
+  screen.
+  *Look for:*
+  - (a) two panes side by side, each reading like an ordinary single-player view;
+  - (b) the full-size HUD in each pane reads as correct rather than oversized;
+  - (c) dragging the window back under 2:1 flips it to stacked while the sortie runs, and back;
+  - (d) the plane select before the sortie splits the same way the flight then does.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The threshold's reasoning is in the
+  landing commit (`git log --grep=BL-777`). ⚠ A cropped cockpit in a STACKED pane is `BL-776`, not
+  this: a 16:9 window still stacks, and each of its panes is still 32:9.
 
 ### C1 · two pilots — stunt race (splitscreen starting grid)
 
