@@ -183,7 +183,8 @@ public class MenuLayoutReaderTests
                 + "#define IDS_PF_VIDEO_DESC 253\n#define IDS_PF_CONTROLS_DESC 254\n"
                 + "#define IDS_GO_TITLE 260\n#define IDS_GO_DIFF_TITLE 261\n#define IDS_GO_VIEW_TITLE 262\n"
                 + "#define IDS_GO_HEAD_TITLE 263\n#define IDS_GO_DIFF_DESC 264\n#define IDS_GO_VIEW_DESC 265\n"
-                + "#define IDS_GO_HEAD_DESC 266\n",
+                + "#define IDS_GO_HEAD_DESC 266\n"
+                + "#define IDS_VP_TITLE 270\n#define IDS_VP_SHADOWS_TITLE 271\n#define IDS_VP_SHADOWS_DESC 272\n",
             Strings = new Dictionary<int, string>
             {
                 [100] = "OK",
@@ -203,6 +204,9 @@ public class MenuLayoutReaderTests
                 [264] = "Select the difficulty level for a solo campaign.",
                 [265] = "Select your default view.",
                 [266] = "Select to turn your head automatically as your aircraft turns.",
+                [270] = "VIDEO",
+                [271] = "Shadows",
+                [272] = "Select to see shadows.",
                 [222] = "PLANE NAME",
                 [223] = "Load Default Configuration",
                 [224] = "Airframe",
@@ -256,7 +260,7 @@ public class MenuLayoutReaderTests
                 "GRAPHICS/PH_B_Paper.png", "GRAPHICS/PH_Inventory.jpg", "GRAPHICS/PH_PlaneIcons.png", "GRAPHICS/PH_B_Done.png",
                 "GRAPHICS/PP_Back.png", "GRAPHICS/PP_B_GameOptions.png", "GRAPHICS/PP_B_Audio.png", "GRAPHICS/PP_B_Video.png",
                 "GRAPHICS/PP_B_Controls.png", "GRAPHICS/PP_B_ReturnMainMenu.png", "GRAPHICS/PP_B_ReturnToGame.png",
-                "GRAPHICS/PP_GoBack.png", "GRAPHICS/PP_B_Accept.png", "GRAPHICS/PP_B_Cancel.png",
+                "GRAPHICS/PP_GoBack.png", "GRAPHICS/PP_VpBack.png", "GRAPHICS/PP_B_Accept.png", "GRAPHICS/PP_B_Cancel.png",
                 "GRAPHICS/PP_B_Check8.png", "GRAPHICS/PP_B_ScrollBar.png", "GRAPHICS/PP_B_ScrollUp.png",
                 "GRAPHICS/PP_B_ScrollDown.png", "GRAPHICS/PP_B_DropUp.png", "GRAPHICS/PP_B_DropDown.png",
                 "GRAPHICS/PC_Back.jpg", "GRAPHICS/PC_B_Done.png",

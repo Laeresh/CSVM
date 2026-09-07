@@ -10,8 +10,9 @@ namespace CSVM.UI.Menu.Original;
 /// column, a control in the control column, a description in the description column, at the
 /// authored row pitch) and ACCEPT CHANGES and CANCEL CHANGES under them. The options are a table,
 /// so a further one is an entry plus the store field it reads. The first row is the original's own
-/// Difficulty dropdown at its authored place; remake-only are the two rows under it, their words and
-/// which control each takes. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
+/// Difficulty dropdown at its authored place; remake-only is the Menu row under it, its words and
+/// the control it takes. The display settings stand on the VIDEO page instead
+/// (<see cref="VideoSection"/>). The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -51,7 +52,7 @@ public sealed partial class OriginalShell
     private const float FallbackCheckSize = 24f;
 
     // The three IDS_DIFFICULTY rows as the campaign selector labels them, the two shipped
-    // presentation tokens as the dropdown's items, and the checkbox's two states.
+    // presentation tokens as the dropdown's items.
     private static readonly string[] DifficultyWords =
     {
         CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Normal),
@@ -60,7 +61,6 @@ public sealed partial class OriginalShell
     };
 
     private static readonly string[] PresentationWords = { "ORIGINAL", "BUILT-IN" };
-    private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
     // The page's options in their authored row order, each a title, a control, a description and
     // the words of the store field it reads and writes. A screen never saves: the apply exit
@@ -76,10 +76,6 @@ public sealed partial class OriginalShell
         new(PresentationKey, "Menu", _ => "Select the menu presentation.", OriginalRowKind.Dropdown, PresentationWords,
             s => s._choice == PresentationId.BuiltIn.Value ? 1 : 0,
             (s, i) => s._choice = i == 1 ? PresentationId.BuiltIn.Value : PresentationId.Original.Value),
-        new(GraphicsKey, "Enhanced Graphics", s => s.GraphicsDescription(),
-            OriginalRowKind.Radio, GraphicsWords,
-            s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
-            (s, i) => s._graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default),
     };
 
     private string? _goOpen;
@@ -98,22 +94,10 @@ public sealed partial class OriginalShell
         Open(OriginalScreen.GameOptions);
     }
 
-    // The graphics row's description says whether a restart is still owed. The mode is resolved
-    // once at launch, so a choice that differs from the running one reaches the world on the next
-    // start and nothing on the page can show it sooner; a player who saved it and came back
-    // otherwise sees the box checked and a world unchanged, and reads that as a failed switch.
-    private string GraphicsDescription()
-    {
-        bool running = CSVM.Utils.GraphicsMode.Enhanced;
-        bool chosen = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord;
-        return chosen == running
-            ? "Select the lit world. Takes effect on the next start."
-            : $"Select the lit world. This run is {(running ? "enhanced" : "original")}; restart to apply.";
-    }
-
-    // The saved options the page shows back: what was asked for, not what this process resolved,
-    // since a flag or the config key can have decided either and the page still owes the player
-    // the words their own ACCEPT CHANGES saved. A page with no reader opens on the shipped
+    // The saved options either option page shows back: what was asked for, not what this process
+    // resolved, since a flag or the config key can have decided either and the page still owes the
+    // player the words their own ACCEPT CHANGES saved. Both pages read all three, since each one's
+    // apply carries the other's choices unchanged. A page with no reader opens on the shipped
     // defaults, which is what an engine-free test wants.
     private void ReadSavedOptions()
     {
@@ -123,8 +107,8 @@ public sealed partial class OriginalShell
         _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
     }
 
-    // The rows: an open list's items alone while one is open, else the three option controls at
-    // their authored rows and the two plaques under them, all one column. Without the section the
+    // The rows: an open list's items alone while one is open, else the option controls at their
+    // authored rows and the two plaques under them, all one column. Without the section the
     // controls stand as text buttons so the page is still walkable.
     private void BuildGameOptionsRows(List<OriginalRow> rows)
     {

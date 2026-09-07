@@ -675,7 +675,7 @@ and the shared Free Flight, player-setup, Instant Action, hangar and campaign fe
 art measurer and the flight-devices answer injected. It owns the top level composed from
 `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
 Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the Game
-Options, Instant Action, loadout, campaign and hangar screens are its five partials, below. `Step` applies
+Options, VIDEO, Instant Action, loadout, campaign and hangar screens are its six partials, below. `Step` applies
 one seat's frame (pointer, typed text, cursor walk, accept and back) and `Compose` is the screen
 as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -683,11 +683,21 @@ as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-i
 The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content
 is a table: per option a key, a title, a description, the control kind and how the store field is
 read and written, so a further option is one entry plus its field. Row one is the original's own
-Difficulty dropdown at its authored box over the three campaign tiers; under it the two remake-only
-rows, the presentation as a dropdown over the registered tokens and the graphics mode as a checkbox
-off the section's own strip. The row shape is read off the section's widgets, so a layout that moves
-a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only `Launcher.ApplyOptions`
-writes the store. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
+Difficulty dropdown at its authored box over the three campaign tiers; under it the remake-only Menu
+row, the presentation as a dropdown over the registered tokens. The row shape is read off the
+section's widgets, so a layout that moves a row moves ours. ACCEPT CHANGES leaves as the
+`OptionsApplyExit`; only `Launcher.ApplyOptions` writes the store. The display settings stand on the
+VIDEO page instead. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalVideo.cs
+The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences
+page's third door. Same table as the Game Options page with one column more: each setting names the
+authored title, control and description widgets it stands on, so a row keeps its own geometry rather
+than a shared pitch. Enhanced Graphics is its one row, on the authored Shadows line, whose gate it
+owns; its description reports whether a restart is still owed. Two numbers are derived rather than
+read: a title box stops at the control beside it, and a description the section gives no width wraps
+at the plaque column. ACCEPT CHANGES leaves as the `OptionsApplyExit` carrying every saved choice,
+CANCEL CHANGES and Back drop the edit. Row by row: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the

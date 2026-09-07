@@ -251,18 +251,78 @@ public class OriginalShellTests
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
 
         shell.Step(Down);
-        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-        Assert.Equal(4 + 2, shell.Compose().Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
-
-        shell.Step(Down);
         Assert.Equal(OriginalShell.GameOptionsAcceptKey, shell.FocusedKey);
         var step = shell.Step(Accept);
         var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
         Assert.Equal(PresentationId.BuiltIn, exit.Presentation);
-        Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
+        // The graphics word rides this page's apply unchanged: it is the VIDEO page's row now, and
+        // the apply carries every saved choice whichever page sends it.
+        Assert.Equal(GraphicsMode.Default, exit.Graphics);
         Assert.Equal("hard", exit.Difficulty);
+    }
+
+    /// <summary>The VIDEO page behind the Preferences page's third door: it opens on the saved
+    /// words with its one row focused, the checkbox flips the graphics word, and ACCEPT CHANGES
+    /// leaves as the one apply exit carrying it beside the two choices the Game Options page
+    /// owns.</summary>
+    [Fact]
+    public void TheVideoPageFlipsEnhancedGraphicsAndAppliesItAsOneExit()
+    {
+        var shell = Shell(out _);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        // The AUDIO door between them is disabled, so one step down crosses it.
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.VideoDoorKey, shell.FocusedKey);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.Video, shell.Screen);
+        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
+        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
+
+        shell.Step(Accept);
+        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
+        Assert.Equal(4 + 2, shell.Compose().Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
+
+        // A sideways step takes the next word with wrap, as a Game Options row does.
+        shell.Step(Right);
+        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
+        shell.Step(Right);
+        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
+
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.VideoAcceptKey, shell.FocusedKey);
+        var step = shell.Step(Accept);
+        var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
+        Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
+        Assert.Equal(PresentationId.Original, exit.Presentation);
+        Assert.Equal("normal", exit.Difficulty);
+    }
+
+    /// <summary>CANCEL CHANGES and Back both leave the VIDEO page with the choice dropped, and
+    /// neither is an exit: the page's own plaques are its two doors back to Preferences.</summary>
+    [Fact]
+    public void TheVideoPageDropsTheChoiceOnCancelAndOnBack()
+    {
+        var shell = Shell(out _);
+        shell.OpenVideo();
+        shell.Step(Accept);
+        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
+        shell.Step(Down);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.VideoCancelKey, shell.FocusedKey);
+        Assert.Null(shell.Step(Accept).Exit);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
+
+        shell.OpenVideo();
+        shell.Step(Accept);
+        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
+        Assert.Null(shell.Step(Back).Exit);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
     }
 
     [Fact]
@@ -276,8 +336,6 @@ public class OriginalShellTests
         shell.Step(Right);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
 
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
         shell.Step(Down);
         shell.Step(Down);
         Assert.Equal(OriginalShell.GameOptionsCancelKey, shell.FocusedKey);
@@ -332,11 +390,11 @@ public class OriginalShellTests
     {
         var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
         var shell = Shell(out _, () => saved);
-        shell.OpenGameOptions();
+        shell.OpenVideo();
         string enhanced = shell.Compose().Lines.Single(l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)).Text;
 
         saved.GraphicsMode = GraphicsMode.Default;
-        shell.OpenGameOptions();
+        shell.OpenVideo();
         string original = shell.Compose().Lines.Single(l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)).Text;
 
         var owed = new[] { enhanced, original }.Where(t => t.EndsWith("restart to apply.", System.StringComparison.Ordinal)).ToList();
@@ -347,17 +405,17 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void TheOptionsScreenIsComposedOverThePreferencesChromeWithOnlyItsGameOptionsDoorLive()
+    public void TheOptionsScreenIsComposedOverThePreferencesChromeWithItsTwoBuiltDoorsLive()
     {
         var shell = Shell(out _);
         shell.Open(OriginalScreen.Options);
 
-        // The four decoded page doors at their authored corners, the first live and the other
-        // three disabled, then the section's own RETURN TO MAIN MENU.
+        // The four decoded page doors at their authored corners, the first and third live and the
+        // other two disabled, then the section's own RETURN TO MAIN MENU.
         Assert.Equal(
             new[] { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS", OriginalShell.OptionsBackKey },
             shell.Rows.Select(r => r.Key));
-        Assert.Equal(new[] { true, false, false, false, true }, shell.Rows.Select(r => r.Enabled));
+        Assert.Equal(new[] { true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
         var back = shell.Rows.Single(r => r.Key == OriginalShell.OptionsBackKey);
         Assert.Equal((460f, 500f, 240f, 50f), (back.X, back.Y, back.Width, back.Height));
 
@@ -387,14 +445,11 @@ public class OriginalShellTests
         shell.OpenGameOptions();
 
         // Row one's dropdown box at the authored Difficulty dropdown's corner and width, row two's
-        // one row down at the pitch, row three's checkbox at the head-turn box's offset from its
-        // own row, then the two decoded plaques.
+        // one row down at the pitch, then the two decoded plaques.
         var difficulty = shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey);
         Assert.Equal((135f, 295f, 144f, 17f), (difficulty.X, difficulty.Y, difficulty.Width, difficulty.Height));
         var menu = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
         Assert.Equal((135f, 355f, 144f, 17f), (menu.X, menu.Y, menu.Width, menu.Height));
-        var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
-        Assert.Equal((250f, 400f, 16f, 16f), (graphics.X, graphics.Y, graphics.Width, graphics.Height));
         var accept = shell.Rows.Single(r => r.Key == OriginalShell.GameOptionsAcceptKey);
         Assert.Equal((200f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
 
@@ -405,13 +460,37 @@ public class OriginalShellTests
         Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Menu" && l.X == 130f && l.Y == 340f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select the menu presentation." && l.X == 340f && l.Y == 350f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 400f && l.Width == 112f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal) && l.Y == 410f);
-        // The three authored rows are all taken: three titles, three descriptions and the page's
-        // own tab title.
-        Assert.Equal(7, board.Lines.Count(l => l.Row < 0));
-        // The checkbox draws unchecked and unfocused: the second of its eight frames.
-        Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
+        // The first two authored rows are taken: two titles, two descriptions and the page's own
+        // tab title.
+        Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
+    }
+
+    /// <summary>The VIDEO page over its own section: the checkbox at the authored Shadows box, its
+    /// title box stopped at that box and its description at the description column, wrapped at the
+    /// plaque column since the authored row carries no width of its own.</summary>
+    [Fact]
+    public void TheVideoPageIsComposedOverItsSectionsOwnRowShape()
+    {
+        var shell = Shell(out _);
+        shell.OpenVideo();
+
+        var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
+        Assert.Equal((260f, 420f, 16f, 16f), (graphics.X, graphics.Y, graphics.Width, graphics.Height));
+        var accept = shell.Rows.Single(r => r.Key == OriginalShell.VideoAcceptKey);
+        Assert.Equal((500f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
+        var cancel = shell.Rows.Single(r => r.Key == OriginalShell.VideoCancelKey);
+        Assert.Equal((500f, 520f, 240f, 50f), (cancel.X, cancel.Y, cancel.Width, cancel.Height));
+
+        var board = shell.Compose();
+        Assert.Equal(new[] { "PM_Logo.png", "PP_VpBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
+        Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
+        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 425f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 425f && l.Width == 160f);
+        Assert.Equal(3, board.Lines.Count(l => l.Row < 0));
+        // The checkbox draws unchecked and focused, the page opening on its one row: the third of
+        // its eight frames.
+        Assert.Equal(2, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
     }
 
     [Fact]

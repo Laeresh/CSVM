@@ -231,8 +231,10 @@ never re-selects.
 Every presentation exposes Options, since a player must be able to leave a presentation from inside
 it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
 page behind its Preferences page's first door (`--menu=game-options` under
-`--presentation=original`). Both offer the same saved options, read them from the store on entry,
-and leave through an `OptionsApplyExit` carrying every choice. Both presentation choosers offer the
+`--presentation=original`), with the graphics mode on the VIDEO page behind the third
+(`--menu=video`). Every one of them reads the saved options from the store on entry and leaves
+through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
+keeps its one writer. Both presentation choosers offer the
 two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
 below); both graphics choosers cover `original` and `enhanced` and say in their description that
 the choice takes effect on the next start, since the mode is resolved once at launch and applying
@@ -348,7 +350,9 @@ scan automatically; anything it adds to the shared namespace falls under the fir
 the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in's unless
 `--presentation=original` is set, in which case the same flag carries Original's own values
 (`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
-list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`, the
+list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
+`game-options` and `game-options:open` with its Difficulty list standing open, `video` and
+`video:checked` with its Enhanced Graphics box ticked, the
 `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
 poses, `campaign-delete`), and any other value opens that
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.

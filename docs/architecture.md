@@ -270,8 +270,9 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
 - `src/UI/Menu/FreeFlightFeature.cs` — Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs` — Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
-- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its six partials below.
+- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its seven partials below.
 - `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
+- `src/UI/Menu/Original/OriginalVideo.cs` — the shell's VIDEO page (a `partial`): the display settings as a table of authored rows.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs` — the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
 - `src/UI/Menu/Original/OriginalInstantAction.cs` — the shell's Instant Action screen (a `partial`): the contents list, dropdowns, enemy pages, the Build and Weapon Loadout doors.

@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the page
 
-1. ☐ The VIDEO page opens from Preferences, carrying Enhanced Graphics moved off Game Options
+1. ☑ The VIDEO page opens from Preferences, carrying Enhanced Graphics moved off Game Options
 
 ### Wave B — the display settings
 
@@ -98,7 +98,7 @@ them as a chain in one worktree. If any item does run in a parallel worktree, re
 
 # Wave A — the page
 
-## A1 ☐ The VIDEO page opens from Preferences, carrying Enhanced Graphics moved off Game Options
+## A1 ☑ The VIDEO page opens from Preferences, carrying Enhanced Graphics moved off Game Options
 
 **Goal.** Pressing VIDEO on Preferences opens a page composed over the `Video` section's own
 artwork, showing Enhanced Graphics as its one row. ACCEPT CHANGES saves and returns to Preferences;
@@ -139,6 +139,24 @@ move with the row rather than being rewritten as a static string. Game Options m
 its first row with `_goOpen` cleared (`OpenGameOptions`, `:94-99`); the new page needs the same
 open-on-first-row treatment, since a form is not a list.
 
+**Landed.** `OriginalVideo.cs` is the page, a shell partial mirroring `OriginalGameOptions.cs` with
+one column more in its row record: each setting names the authored title, control and description
+widgets it stands on, since the `Video` section gives every row its own line, control column and
+width and a shared pitch would put no row where the artwork draws it. Enhanced Graphics stands on
+the authored Shadows row, whose gate it owns and whose title box is wide enough for the name. Two
+numbers the section does not state are derived and commented at the member: a title box stops at the
+control beside it, and a description the section gives no width wraps at the plaque column. Both
+option pages read all three saved words on entry and each one's ACCEPT CHANGES carries all three, so
+`OptionsApplyExit` is unchanged and the store keeps its one writer. The `--menu=` name is `video`,
+with `video:checked` for the ticked pose; `game-options:checked` is gone with the row.
+
+**Verified.** Full `RunTests.ps1` on the plan tree: build 0 warnings, units 3476 passed / 0 failed,
+engine 258 passed / 0 failed with engine errors clean over 4 shards, goldens 18 shots hash-identical
+on the RTX 5080 / 1.4.351, exit 0. `--menu=video` composes the page over the `Video` section's own
+artwork, and against `OriginalScreenshots/Preferences Video.png` the plate, the VIDEO tab, the
+plaque column and the description column all land on the original's. The door and both plaques are
+driven through `MenuOriginalSuites`, asserting one `OptionsApplyExit` on Accept and none on Cancel.
+
 # Wave B — the display settings
 
 ## B2 ☐ The options carrier takes a setting that is not a vocabulary word
@@ -170,8 +188,9 @@ review. Do not bump `OptionsStore.Version`.
 contract is what keeps a bad file from bricking the options; widening both is the highest
 blast-radius edit in the plan.
 
-**Verify.** `<TODO: name the existing OptionsStore suite to extend, and whether it lives in
-CSVM/src/Testing or CSVM.Tests>`. The round-trip properties to assert are the ones the class already
+**Verify.** Extend `CSVM.Tests/OptionsStoreTests.cs`, the xunit suite that already asserts this
+contract per field and needs no engine, so the new fields are proven as units. The round-trip
+properties to assert are the ones the class already
 promises: a serialized def deserializes equal, a file missing the new fields loads with the old ones
 intact, an out-of-shape resolution or monitor index reads as null rather than invalidating the file,
 and a file at a wrong version is rejected whole. `.\RunTests.ps1` green.
@@ -204,8 +223,9 @@ third source below the flag. Default is V-Sync on, which reproduces today's beha
 **Model recommendation.** medium. The engine calls exist and are one line each; the care goes into
 the precedence, which is B7's to prove.
 
-**Verify.** `<TODO: settle whether the frame cap is observable in a suite, or only at the controls
-with --debug-fps>`. At the controls: `--debug-fps` shows the rate pinned at the refresh with V-Sync
+**Verify.** The cap is observable in-engine rather than at the controls alone: `Engine.MaxFps` and
+`DisplayServer.WindowGetVsyncMode()` read back what the apply set, so a `--run-tests` suite asserts
+both after driving the row. At the controls: `--debug-fps` shows the rate pinned at the refresh with V-Sync
 on and at the chosen cap with it off. `.\RunTests.ps1` green.
 
 **⚠ Traps.** `--no-vsync` must keep beating the saved choice, exactly as it beats `display.vsync`
@@ -230,8 +250,10 @@ over its authored geometry gets its first test at a size nobody has run it at.
 
 **Model recommendation.** medium.
 
-**Verify.** `<TODO: name the golden or screenshot surface that proves the menu composes correctly at
-a non-720p viewport>`. At the controls: switch modes on the page and confirm the page redraws
+**Verify.** The golden harness carries the size surface already: `analysis/goldens/manifest.json`
+pins `"size": "1280x720"` and `RunTests.ps1` fails any shot whose rendered size differs, naming both
+(`:1153`). The manifest holds one size for every shot, so a menu shot at a second viewport is a
+`--screenshot` probe compared by eye, not a pinned golden. At the controls: switch modes on the page and confirm the page redraws
 correctly in each, then leave and re-enter to confirm the choice persisted. `.\RunTests.ps1` green.
 
 **⚠ Traps.** Do not clear `no_focus` twice or re-request foreground on a mode change; the startup
@@ -253,8 +275,9 @@ mode the monitor refuses. Apply through the window size, and read the saved valu
 
 **Model recommendation.** medium.
 
-**Verify.** `<TODO: settle the golden baseline. A resolution that leaked into a scripted run would
-move every golden, so this needs a before-and-after golden run, not an assertion.>` At the controls:
+**Verify.** The baseline is the standing 18-shot manifest, and what catches a leak is the size
+assertion above rather than the hashes alone: a resolution that reached a scripted run fails its
+shot as "rendered WxH, manifest hashes are 1280x720" before a hash is compared. At the controls:
 pick a mode, confirm the window resizes and the menu recomposes, restart and confirm it came back.
 
 **⚠ Traps.** This is the item that can move every golden, and B7 is where that gets proved rather
@@ -278,8 +301,9 @@ falling back to the primary screen when the index names no screen.
 
 **Model recommendation.** medium.
 
-**Verify.** `<TODO: this needs a second monitor to verify at the controls; state whether the author
-has one, or the item verifies by log line alone on a single-screen machine.>` `.\RunTests.ps1` green.
+**Verify.** The development machine has one screen, so the item proves the enumerated screen list
+and the applied-screen log line here, and the monitor move itself is checked at the controls on a
+second machine. A single-screen pass is not a claim that the move works. `.\RunTests.ps1` green.
 
 **⚠ Traps.** The saved index is the one setting that can silently name something absent, so the
 fallback is part of the feature and not an error path. Apply the screen before the mode and the
@@ -295,7 +319,12 @@ ignored under `--det`, and are proven not to move a single golden.
 which beats the default, with the note that `--det` reads no saved option at all
 (`docs/cli.md:216`). `--det` pins a fixed-dt clock and drops `config.json` overrides so pixel output
 is a function of frame count (`docs/cli.md:165`). A saved resolution or display mode that reached a
-scripted run would change the rendered viewport, which is the one input every golden shares.
+scripted run would change the rendered viewport, which is the one input every golden shares. The
+guard to copy is already written one option down: the saved graphics word is read as
+`_spec.Det ? null : ...` (`CSVM/src/Session/Launcher.cs:593`). It has to be copied rather than
+assumed, because a golden shot is a `--det` run against the player's real options directory. Only
+`--run-tests` redirects the store to a scratch directory (`:570-582`), so `--det` is the whole of
+what stands between a saved display setting and every golden.
 
 **Approach.** Assert the ladder rather than describe it: a suite per setting proving the flag beats
 the file, the file beats the default, and `--det` reads none of them. Then take the golden run

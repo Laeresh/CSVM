@@ -34,7 +34,7 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "three rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
+        + "two rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
         + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
@@ -44,7 +44,9 @@ internal static class MenuOriginalSuites
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty and both other choices, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying them, the force flag recovers "
+        + "carrying them, Original's VIDEO door opens the decoded page whose Enhanced Graphics "
+        + "checkbox flips, whose CANCEL CHANGES drops it with no exit and whose ACCEPT CHANGES "
+        + "leaves as one more apply exit carrying it, the force flag recovers "
         + "and a missing layout falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
     {
@@ -91,7 +93,10 @@ internal static class MenuOriginalSuites
             OriginalOptionsRoute(ctx, host, seat, shell, exits);
             SwitchToBuiltIn(ctx, host, seat, shell);
             BuiltInOptionsRoute(ctx, host, seat, exits);
-            SwitchBackToOriginal(ctx, host);
+            // The VIDEO route runs on the shell the switch back creates, and last of the Original
+            // walks: its ACCEPT CHANGES hides the presentation for the launcher to act, so nothing
+            // after it can drive the same shell.
+            OriginalVideoRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits);
             Recovery(ctx, host, registry, audio);
         }
         finally
@@ -427,7 +432,7 @@ internal static class MenuOriginalSuites
     }
 
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose three rows take every choice
+    // Preferences page, its GAME OPTIONS door the decoded page, whose two rows take every choice
     // and whose CANCEL CHANGES drops them; the walk leaves the top level as it found it.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
@@ -442,17 +447,10 @@ internal static class MenuOriginalSuites
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" ? 1 : 0;
         }
 
-        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
-        bool box = false;
-        foreach (var plaque in board.Plaques)
-        {
-            box |= plaque.Art.Frames == 8;
-        }
-
-        ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        ctx.Check(titles == 3, $"drawing the section's own tab title over the two row titles ({titles} of 3)");
         Press(host, seat, Accept);
         ctx.Check(shell.OpenGameOption == OriginalShell.DifficultyKey && shell.Rows.Count == 3,
             $"Accept opens the dropdown over the three campaign tiers ({shell.OpenGameOption}, {shell.Rows.Count})");
@@ -468,15 +466,11 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.PresentationChoice == PresentationId.BuiltIn.Value,
             $"and picking the second closes it on the other token ({shell.PresentationChoice})");
-        Press(host, seat, Down);
-        Press(host, seat, Accept);
-        ctx.Check(shell.GraphicsChoice == GraphicsMode.EnhancedWord,
-            $"Accept on the checkbox under it flips the graphics word ({shell.GraphicsChoice})");
         WalkTo(host, seat, shell, OriginalShell.GameOptionsCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.PresentationChoice == PresentationId.Original.Value
-            && shell.GraphicsChoice == GraphicsMode.Default && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal,
-            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.GraphicsChoice}, {shell.DifficultyChoice})");
+            && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal,
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.DifficultyChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
@@ -493,7 +487,7 @@ internal static class MenuOriginalSuites
         }
     }
 
-    private static void SwitchBackToOriginal(TestContext ctx, MenuHost host)
+    private static OriginalShell? SwitchBackToOriginal(TestContext ctx, MenuHost host)
     {
         host.Deactivate();
         string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "original");
@@ -503,6 +497,58 @@ internal static class MenuOriginalSuites
             $"the saved request re-selects Original and Show creates a fresh instance ({host.Selected})");
         ctx.Check(shell is { Screen: OriginalScreen.TopLevel, PickedChapter: null, FocusedKey: OriginalShell.FreeFlightKey },
             $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.PickedChapter ?? "none"}, {shell?.FocusedKey})");
+        return shell;
+    }
+
+    // Original's VIDEO route over the install's decoded sections: the Preferences page's third door
+    // opens the decoded page on its one row, the checkbox flips the graphics word, CANCEL CHANGES
+    // drops it without an exit, and ACCEPT CHANGES on a second visit leaves as one apply exit
+    // carrying it.
+    private static void OriginalVideoRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
+    {
+        if (shell == null)
+        {
+            return;
+        }
+
+        int before = exits.Count;
+        WalkTo(host, seat, shell, "MM_B_PREFERENCES");
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.GraphicsKey,
+            $"VIDEO opens the decoded page on its Enhanced Graphics row, the one it carries ({shell.Screen}, {shell.FocusedKey})");
+        var board = shell.Compose();
+        int titles = 0;
+        foreach (var line in board.Lines)
+        {
+            titles += line.Text is "VIDEO" or "Enhanced Graphics" ? 1 : 0;
+        }
+
+        ctx.Check(titles == 2, $"drawing the section's own tab title over the row title ({titles} of 2)");
+        bool box = false;
+        foreach (var plaque in board.Plaques)
+        {
+            box |= plaque.Art.Frames == 8;
+        }
+
+        ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        Press(host, seat, Accept);
+        ctx.Check(shell.GraphicsChoice == GraphicsMode.EnhancedWord,
+            $"Accept on the checkbox flips the graphics word ({shell.GraphicsChoice})");
+        WalkTo(host, seat, shell, OriginalShell.VideoCancelKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Options && shell.GraphicsChoice == GraphicsMode.Default && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with the edit dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {exits.Count - before})");
+
+        WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
+        Press(host, seat, Accept);
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.VideoAcceptKey);
+        Press(host, seat, Accept);
+        ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit { Graphics: GraphicsMode.EnhancedWord },
+            $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying the word ({exits.Count - before}, {exits[^1].GetType().Name})");
+        ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
     }
 
     // Recovery: the force flag beats an Original override, and a registered Original whose layout
