@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
@@ -502,9 +503,9 @@ internal static class MenuOriginalSuites
     }
 
     // Original's VIDEO route over the install's decoded sections: the Preferences page's third door
-    // opens the decoded page on its display-mode dropdown, the V-Sync list under it picks a frame
-    // cap, the checkbox flips the graphics word, CANCEL CHANGES drops them all without an exit, and
-    // ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
+    // opens the decoded page on its resolution dropdown, the rows under it take a display mode and a
+    // frame cap, the checkbox flips the graphics word, CANCEL CHANGES drops them all without an
+    // exit, and ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
     private static void OriginalVideoRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
     {
         if (shell == null)
@@ -517,16 +518,16 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.DisplayModeKey,
-            $"VIDEO opens the decoded page on its Display Mode row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.ResolutionKey,
+            $"VIDEO opens the decoded page on its Resolution row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "VIDEO" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "VIDEO" or "Resolution" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
+        ctx.Check(titles == 5, $"drawing the section's own tab title over the four row titles ({titles} of 5)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {
@@ -534,6 +535,14 @@ internal static class MenuOriginalSuites
         }
 
         ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        Press(host, seat, Right);
+        // The row's own words are this machine's screen sizes, so what it steps to is read back off
+        // the shell rather than named: the claim is that the step lands on a size the screen offers
+        // and not on the project default it opened at.
+        ctx.Check(shell.ResolutionChoice != null && shell.ResolutionChoice != ResolutionSetting.Default
+            && shell.ResolutionWords.Contains(shell.ResolutionChoice),
+            $"a sideways step on the focused row takes the next size this screen offers ({shell.ResolutionChoice ?? "unset"} of {shell.ResolutionWords.Count})");
+        WalkTo(host, seat, shell, OriginalShell.DisplayModeKey);
         Press(host, seat, Right);
         ctx.Check(shell.DisplayModeChoice == DisplayWords.Borderless,
             $"a sideways step on the focused row takes the next display mode ({shell.DisplayModeChoice ?? "unset"})");
@@ -553,11 +562,13 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalShell.VideoCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.GraphicsChoice == GraphicsMode.Default
-            && shell.VSyncChoice == null && shell.DisplayModeChoice == null && exits.Count == before,
-            $"CANCEL CHANGES lands back on Preferences with all three edits dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {shell.VSyncChoice ?? "unset"}, {shell.DisplayModeChoice ?? "unset"})");
+            && shell.VSyncChoice == null && shell.DisplayModeChoice == null && shell.ResolutionChoice == null
+            && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with all four edits dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {shell.VSyncChoice ?? "unset"}, {shell.DisplayModeChoice ?? "unset"}, {shell.ResolutionChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
         Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.DisplayModeKey);
         Press(host, seat, Right);
         WalkTo(host, seat, shell, OriginalShell.VSyncKey);
         Press(host, seat, Right);

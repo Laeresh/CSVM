@@ -9,10 +9,10 @@ namespace CSVM.UI.Menu.Original;
 /// and title, the display settings in the section's own row shape (a title in the title column, a
 /// control beside it, a description in the description column) and ACCEPT CHANGES and CANCEL
 /// CHANGES beside them. The settings are a table in authored row order, so a further one is an
-/// entry plus the store field it reads and the authored row it stands on. Display Mode and V-Sync
-/// are dropdowns on the authored Viewing Range and Effects Level rows; Enhanced Graphics takes the
-/// checkbox row, Shadows, whose gate it owns. The decode and the readings are in
-/// <c>docs/org/menu-inventory.md</c>.
+/// entry plus the store field it reads and the authored row it stands on. Resolution keeps the
+/// authored row of that name; Display Mode and V-Sync are dropdowns on the authored Viewing Range
+/// and Effects Level rows, and Enhanced Graphics takes the checkbox row, Shadows, whose gate it
+/// owns. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -68,18 +68,23 @@ public sealed partial class OriginalShell
     // one writer.
     private static readonly VideoOption[] VideoOptions =
     {
+        new(ResolutionKey, "Resolution", "VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC",
+            _ => "Select the screen resolution.",
+            OriginalRowKind.Dropdown, s => s.ResolutionWords,
+            s => ResolutionIndex(s.ResolutionWords, s._resolution),
+            (s, i) => s._resolution = s.ResolutionWords[i]),
         new(DisplayModeKey, "Display Mode", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
             _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            OriginalRowKind.Dropdown, DisplayModeWords,
+            OriginalRowKind.Dropdown, _ => DisplayModeWords,
             s => WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode),
             (s, i) => s._displayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
         new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            OriginalRowKind.Dropdown, VSyncWords,
+            OriginalRowKind.Dropdown, _ => VSyncWords,
             s => WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
-            s => s.GraphicsDescription(), OriginalRowKind.Radio, GraphicsWords,
+            s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
             (s, i) => s._graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default),
     };
@@ -88,6 +93,12 @@ public sealed partial class OriginalShell
 
     /// <summary>The VIDEO page's open option list's key, or null when none is open.</summary>
     public string? OpenVideoOption => _vpOpen;
+
+    /// <summary>The sizes the resolution row offers, which is what the window's own screen can
+    /// hold. Every other row's words are a fixed vocabulary; this one's are enumerated per screen,
+    /// so a shell with no screen to ask offers every candidate size instead.</summary>
+    public IReadOnlyList<string> ResolutionWords =>
+        _screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.AllSizes;
 
     /// <summary>Opens the VIDEO page on the saved options with its first row focused, which is what
     /// the Preferences page's VIDEO door and the screenshot aid both go through. The page is a form,
@@ -111,7 +122,20 @@ public sealed partial class OriginalShell
     // Where a saved word sits among a row's own values, and every word row's default: a word the
     // vocabulary does not know, or none saved at all, shows as the first value, which each of these
     // vocabularies orders as the behaviour with no options file.
-    private static int WordIndex(IReadOnlyList<string> words, string? word)
+    private static int WordIndex(IReadOnlyList<string> words, string? word) => Math.Max(0, IndexOf(words, word));
+
+    // The resolution row's value. Its words are the screen's own sizes rather than a vocabulary, so
+    // the first of them is the smallest the monitor holds and not the behaviour with no options
+    // file; a size this screen does not offer shows as the project default, which every list holds.
+    // That is ResolutionSetting.Resolve's fallback rule, and the row has to agree with it or it
+    // would name a size the window is not standing at.
+    private static int ResolutionIndex(IReadOnlyList<string> words, string? saved)
+    {
+        int at = IndexOf(words, saved);
+        return at >= 0 ? at : Math.Max(0, IndexOf(words, CSVM.Utils.ResolutionSetting.Default));
+    }
+
+    private static int IndexOf(IReadOnlyList<string> words, string? word)
     {
         for (int i = 0; i < words.Count; i++)
         {
@@ -121,7 +145,7 @@ public sealed partial class OriginalShell
             }
         }
 
-        return 0;
+        return -1;
     }
 
     // The graphics row's description says whether a restart is still owed. The mode is resolved
@@ -148,7 +172,7 @@ public sealed partial class OriginalShell
             for (int i = 0; i < VideoOptions.Length; i++)
             {
                 var fallback = VideoOptions[i];
-                rows.Add(TextButton(fallback.Key, fallback.Words[fallback.Read(this)], OptionsX, OptionsTop + (i * OptionsPitch), true, 0));
+                rows.Add(TextButton(fallback.Key, fallback.Words(this)[fallback.Read(this)], OptionsX, OptionsTop + (i * OptionsPitch), true, 0));
             }
 
             rows.Add(TextButton(VideoAcceptKey, "ACCEPT CHANGES", OptionsX, OptionsTop + (VideoOptions.Length * OptionsPitch), true, 0));
@@ -159,9 +183,10 @@ public sealed partial class OriginalShell
         if (_vpOpen != null && VideoOptionFor(_vpOpen) is { } open)
         {
             var box = PlaceVideoRow(screen, open);
-            for (int i = 0; i < open.Words.Count; i++)
+            var words = open.Words(this);
+            for (int i = 0; i < words.Count; i++)
             {
-                rows.Add(new OriginalRow($"{_vpOpen}:{i}", open.Words[i], OriginalRowKind.ListRow,
+                rows.Add(new OriginalRow($"{_vpOpen}:{i}", words[i], OriginalRowKind.ListRow,
                     box.BoxX, box.BoxY + (box.BoxHeight * (i + 1)), box.BoxWidth, box.BoxHeight, true, 0, null));
             }
 
@@ -177,7 +202,7 @@ public sealed partial class OriginalShell
         {
             var place = PlaceVideoRow(screen, option);
             rows.Add(new OriginalRow(option.Key,
-                option.Kind == OriginalRowKind.Dropdown ? option.Words[option.Read(this)] : string.Empty,
+                option.Kind == OriginalRowKind.Dropdown ? option.Words(this)[option.Read(this)] : string.Empty,
                 option.Kind, place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight, true, 0, place.Box));
         }
 
@@ -292,7 +317,7 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        option.Write(this, (option.Read(this) + 1) % option.Words.Count);
+        option.Write(this, (option.Read(this) + 1) % option.Words(this).Count);
         return null;
     }
 
@@ -305,7 +330,7 @@ public sealed partial class OriginalShell
             return false;
         }
 
-        int count = option.Words.Count;
+        int count = option.Words(this).Count;
         option.Write(this, ((option.Read(this) + direction) % count + count) % count);
         FocusKey(option.Key);
         return true;
@@ -415,11 +440,13 @@ public sealed partial class OriginalShell
 
     // One setting of the page: its title, the authored widgets it composes over (the title, the
     // control and the description), its description (read off the shell, since a row can say
-    // something about its saved state), the control it takes, the words of the store field it
-    // shows, and how that field is read and written.
+    // something about its saved state), the control it takes, the words of the store field it shows,
+    // and how that field is read and written. The words come off the shell too, the resolution row's
+    // being enumerated per screen rather than a vocabulary the page could hold as an array.
     private sealed record VideoOption(
         string Key, string Title, string TitleKey, string ControlKey, string DescriptionKey,
-        Func<OriginalShell, string> Description, OriginalRowKind Kind, IReadOnlyList<string> Words,
+        Func<OriginalShell, string> Description, OriginalRowKind Kind,
+        Func<OriginalShell, IReadOnlyList<string>> Words,
         Func<OriginalShell, int> Read, Action<OriginalShell, int> Write);
 
     // One row's place in authored pixels: the title box, the control's own rectangle and strip, and

@@ -35,8 +35,8 @@ Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-
 editor check that gives an export its `logs\` and audible volume default, the `--dump-*`/`--run-tests`
 early quits, and what outlives a session (camera, sun, audio, music, the perf and hitch instruments).
 It owns the menu as one `MenuHost` built on the first show, the presentation resolution, the only
-options write, the frame pacing and window mode at startup and on an Options apply
-(`Utils/VSyncSetting.cs`, `Utils/DisplayModeSetting.cs`), and the sink every menu exit takes
+options write, the frame pacing and the window's mode and size at startup and on an Options apply
+(`Utils/VSyncSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`), and the sink every menu exit takes
 ([../menu-presentations.md](../menu-presentations.md)); with no extraction it shows
 `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and `BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on.
 

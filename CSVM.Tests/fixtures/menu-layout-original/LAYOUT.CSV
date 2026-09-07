@@ -59,8 +59,8 @@ GO_D_VIEW=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp
 
 ;The VIDEO page behind the Preferences page's third door: the shipped section's keys and both
 ;return edges on invented lines and art, with the rows the page carries on the authored Viewing
-;Range, Effects Level and Shadows lines, so each row's shape is read off the section rather than
-;hard-coded.
+;Range, Effects Level and Shadows lines and its own on the authored Resolution line, so each row's
+;shape is read off the section rather than hard-coded.
 [@Video@]
 V1=TCOLOR,0xFFFFDDC4
 VP_BACKGROUND=P,PP_VpBack.png,100,200,0,1,0,1,0
@@ -68,6 +68,9 @@ VP_B_ACCEPTCHANGES=B,PP_B_Accept.png,500,470,0,0,Preferences,0x1020,1,,,,,,
 VP_B_CANCELCHANGES=B,PP_B_Cancel.png,500,520,0,0,Preferences,0x1020,1,,,,,,
 VP_B_SHADOWS=B,PP_B_Check8.png,260,420,0,0,,0x1000,0,,,,,1,0
 VP_T_TITLE=T,IDS_VP_TITLE,120,220,50,200,28,0XFFC0BAAD,1
+VP_T_DisplayTitle=T,IDS_VP_DISPLAY_TITLE,130,290,50,162,20,<TCOLOR>,0
+VP_T_DisplayDESC=T,IDS_VP_DISPLAY_DESC,340,290,50,310,40,<TCOLOR>,0
+VP_D_Display=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,260,290,0,70,17,8
 VP_T_ViewTitle=T,IDS_VP_VIEW_TITLE,130,335,50,162,20,<TCOLOR>,0
 VP_T_ViewDESC=T,IDS_VP_VIEW_DESC,340,335,50,310,40,<TCOLOR>,0
 VP_D_View=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,260,335,0,70,17,4

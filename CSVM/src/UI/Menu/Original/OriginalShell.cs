@@ -187,7 +187,10 @@ public sealed partial class OriginalShell
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
-    /// <summary>The VIDEO page's display-mode dropdown, the page's first row.</summary>
+    /// <summary>The VIDEO page's resolution dropdown, the page's first row.</summary>
+    public const string ResolutionKey = "RESOLUTION";
+
+    /// <summary>The VIDEO page's display-mode dropdown.</summary>
     public const string DisplayModeKey = "DISPLAYMODE";
 
     /// <summary>The VIDEO page's V-Sync dropdown.</summary>
@@ -250,6 +253,7 @@ public sealed partial class OriginalShell
     private readonly BoardArt _activePointer;
     private readonly BoardArt _passivePointer;
     private readonly Func<CSVM.Utils.OptionsDef>? _options;
+    private readonly Func<IReadOnlyList<string>>? _screenSizes;
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -293,7 +297,10 @@ public sealed partial class OriginalShell
         string? dataRoot = null,
         // Reads the saved options the Options screen shows back; null opens it on the defaults,
         // which is what an engine-free test wants. The shell never writes them.
-        Func<CSVM.Utils.OptionsDef>? options = null)
+        Func<CSVM.Utils.OptionsDef>? options = null,
+        // Reads the sizes the window's own screen can hold, the resolution row's words; null offers
+        // every candidate size, there being no screen to ask without an engine.
+        Func<IReadOnlyList<string>>? screenSizes = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -309,6 +316,7 @@ public sealed partial class OriginalShell
         _stock = stock;
         _dataRoot = dataRoot;
         _options = options;
+        _screenSizes = screenSizes;
         _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
@@ -400,6 +408,11 @@ public sealed partial class OriginalShell
 
     /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The window size (<see cref="CSVM.Utils.OptionsStore.FormatResolution"/>'s spelling)
+    /// the VIDEO page would apply, or null while nothing has been saved and no row has been
+    /// touched.</summary>
+    public string? ResolutionChoice => _resolution;
 
     /// <summary>The display-mode word (<see cref="CSVM.Utils.DisplayWords.DisplayModes"/>) the
     /// VIDEO page would apply, or null while nothing has been saved and no row has been

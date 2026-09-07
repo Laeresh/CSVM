@@ -186,7 +186,8 @@ public class MenuLayoutReaderTests
                 + "#define IDS_GO_HEAD_DESC 266\n"
                 + "#define IDS_VP_TITLE 270\n#define IDS_VP_SHADOWS_TITLE 271\n#define IDS_VP_SHADOWS_DESC 272\n"
                 + "#define IDS_VP_EFFECTS_TITLE 273\n#define IDS_VP_EFFECTS_DESC 274\n"
-                + "#define IDS_VP_VIEW_TITLE 275\n#define IDS_VP_VIEW_DESC 276\n",
+                + "#define IDS_VP_VIEW_TITLE 275\n#define IDS_VP_VIEW_DESC 276\n"
+                + "#define IDS_VP_DISPLAY_TITLE 277\n#define IDS_VP_DISPLAY_DESC 278\n",
             Strings = new Dictionary<int, string>
             {
                 [100] = "OK",
@@ -213,6 +214,8 @@ public class MenuLayoutReaderTests
                 [274] = "Select the detail level of visual effects, such as explosions and smoke.",
                 [275] = "Viewing Range",
                 [276] = "Select how far you can see in the game.",
+                [277] = "Resolution",
+                [278] = "Select the screen resolution.",
                 [222] = "PLANE NAME",
                 [223] = "Load Default Configuration",
                 [224] = "Airframe",

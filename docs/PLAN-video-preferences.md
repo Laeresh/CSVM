@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ The options carrier takes a setting that is not a vocabulary word
 3. ☑ V-Sync, with the frame limit on its off state
 4. ☑ Display Mode
-5. ☐ Resolution
+5. ☑ Resolution
 6. ☐ Graphics, as the monitor pick
 7. ☐ The precedence ladder and the golden guard
 
@@ -342,7 +342,7 @@ persistence across a restart, and exclusive fullscreen on a second monitor are o
 a scripted run's window is hidden and its startup apply is skipped, so no headless run can prove
 them.
 
-## B5 ☐ Resolution
+## B5 ☑ Resolution
 
 **Goal.** A Resolution row listing the modes the chosen monitor supports, applied immediately in
 windowed and borderless modes and restored at the next launch.
@@ -365,6 +365,39 @@ pick a mode, confirm the window resizes and the menu recomposes, restart and con
 than assumed. A resolution list is per monitor, so the row's contents change when B6's row changes;
 decide whether an unsupported saved mode falls back to the nearest or to the project default, and
 say which in the code.
+
+**Landed.** `Utils/ResolutionSetting.cs` is the setting, `DisplayModeSetting`'s shape over sizes
+instead of words. **One claim this item started from needed correcting:** Godot 4.7's `DisplayServer`
+exposes no video-mode list at all (`ScreenGetSize`, `ScreenGetUsableRect` and `ScreenGetRefreshRate`
+are the whole screen surface), so "enumerate from the engine" is `Sizes`, which filters the standard
+desktop sizes by the screen's own reported size and adds that size and the project default, both
+always offerable. **An unsupported saved size falls back to the project default, never to the nearest
+offered one**, and the module says so at `Resolve`: every other option here falls through to its own
+default when the saved value is one the reader does not know, a nearest match would make this the one
+setting where a size nobody picked reaches the window, and it would need a distance over sizes with
+no right answer, since matching by area hands the player an aspect ratio they did not choose. The
+page's row agrees with that rule rather than restating it, `ResolutionIndex` showing the default where
+`WordIndex` would show the first value, since the first size a screen offers is its smallest and not
+the size a launch with no options file runs at. `Apply` is the only place `DisplayServer.WindowSetSize`
+is called; it skips a window the mode owns the size of, and re-centres one it did resize, a resize
+otherwise growing off the screen's bottom-right and taking the plaques with it. `Launcher` calls it
+after `DisplayModeSetting.Apply` in both places, the startup one inside the same
+`if (!_spec.IsScripted)` block. The row is the authored Resolution line, its own, keeping the authored
+description because that line describes what the row does here; it is first in the table, so
+`VideoOption.Words` became a reader off the shell, this being the one row whose words are enumerated
+rather than a vocabulary. The shell takes them through a `screenSizes` reader beside its `options`
+one, null offering every candidate size, which is what a shell composed without an engine wants.
+
+**Verified.** Full `RunTests.ps1` on the plan tree: build 0 warnings, units 3486 passed / 0 failed,
+engine 261 passed / 0 failed with engine errors clean over 4 shards, goldens 18 shots
+hash-identical, exit 0. The guard was proved by running rather than by argument, with the player's
+own options file backed up and restored byte-identical around it. A saved `"resolution":
+"1920x1080"` in the real options file leaves the goldens 18 hash-identical. The decisive isolation
+saved a resolution and a V-Sync cap together and took a scripted but non-deterministic shot: the
+launcher obeyed the saved V-Sync (`vsync off source=options.json max_fps=144`) while the saved
+resolution produced no line and the shot rendered `size=1280x720`. That separates the two guards and
+shows `!_spec.IsScripted` stops a size on its own, independently of `--det`, which the suite proves
+separately with `SavedWord(det:false)` as the control against `SavedWord(det:true)`.
 
 ## B6 ☐ Graphics, as the monitor pick
 

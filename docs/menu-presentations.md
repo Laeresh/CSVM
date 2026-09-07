@@ -213,13 +213,18 @@ parsed `--difficulty=` flag beats the saved word, a `--det` run reads no saved o
 default is `normal`. For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
 the saved word, which beats the `display.vsync` config key, which beats V-Sync on, and for the
 display mode `DisplayModeSetting.Resolve`, where the saved word beats the windowed default and
-there is no flag or config key above it. A display setting is also the case where the apply does
-more than save, since `Launcher.ApplyOptions` puts the chosen pacing and mode on the window there
-and then rather than at the next start. Those calls run in the order the window needs them: the
+there is no flag or config key above it. The window size is `ResolutionSetting.Resolve`, the same
+two layers over `project.godot`'s 1280x720, with the extra rule that the saved size has to be one
+the chosen screen offers: a size it does not offer falls back to that default rather than to the
+nearest, since every other option falls through to its own default and a nearest match would hand
+the player an aspect ratio they did not pick. A display setting is also the case where the apply does
+more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
+there and then rather than at the next start. Those calls run in the order the window needs them: the
 screen the window sits on first, since a mode applied before the move would fill the screen the
-window is leaving, then the mode, then the pacing. The startup half of the pair is not symmetric:
-the pacing is applied on every launch, the mode only on a session someone is at, a scripted run's
-window being hidden off screen with its capture compared against the viewport `project.godot` pins.
+window is leaving, then the mode, then the size, then the pacing. The startup half of the pair is not
+symmetric: the pacing is applied on every launch, the mode and the size only on a session someone is
+at, a scripted run's window being hidden off screen with its capture compared against the viewport
+`project.godot` pins.
 
 A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
 writer, so the options file has exactly one, and no test or suite that drives an Options screen

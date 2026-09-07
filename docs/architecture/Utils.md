@@ -177,6 +177,16 @@ names invert the reading: `Fullscreen` is the borderless window, `ExclusiveFulls
 Nothing here touches focus, which `Launcher._Ready` owns (`../verification.md`'s SHELL-13); that startup
 call is skipped for a scripted run, whose hidden window is captured against the pinned viewport.
 
+## src/Utils/ResolutionSetting.cs
+The window's size. Godot exposes no video-mode list, only a screen's own size, so `Sizes` builds the
+per-screen list as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that size
+and the project default, both always offerable. `Resolve` layers the saved `resolution` over the 1280x720
+`project.godot` ships. A saved size the screen does not offer falls back to that default and never to the
+nearest offered one, since every other option here falls through to its own default and a nearest match
+would hand the player an aspect ratio they did not pick. `SavedWord` holds the `--det` guard. `Apply` is
+the one place `DisplayServer.WindowSetSize` is called; it skips a window that is not windowed, whose size
+the mode owns, and re-centres one it resized, a resize otherwise growing off the screen's bottom-right.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`

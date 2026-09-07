@@ -691,13 +691,13 @@ VIDEO page instead. The remake rows' words and control kinds are recorded in [..
 
 ## src/UI/Menu/Original/OriginalVideo.cs
 The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's
-third door. Same table as the Game Options page with one column more: each setting names the authored
-title, control and description widgets it stands on, so a row keeps its own geometry, and the table is in
-authored row order because the cursor walks it. Display Mode and V-Sync are dropdowns on the Viewing Range
-and Effects Level rows over `DisplayWords`' two vocabularies; Enhanced Graphics takes the Shadows checkbox,
-whose gate it owns, and says whether a restart is still owed. A dropdown opens its list as
-`OriginalGameOptions.cs` does, sharing its `ComposeOptionList`; ACCEPT CHANGES leaves as the
-`OptionsApplyExit` and CANCEL CHANGES drops the edits. Row by row: [../org/menu-inventory.md](../org/menu-inventory.md).
+third door. Same table as Game Options with one column more: each setting names the authored title,
+control and description widgets it stands on, so a row keeps its geometry, and the table is in authored
+row order because the cursor walks it. Resolution keeps the authored row of that name, its words the sizes
+`Utils/ResolutionSetting.cs` enumerates per screen rather than a vocabulary the page could hold; Display
+Mode and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`; Enhanced Graphics
+takes the Shadows checkbox, whose gate it owns. A list opens as `OriginalGameOptions.cs` does, ACCEPT
+CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
