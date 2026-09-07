@@ -187,7 +187,8 @@ public class MenuLayoutReaderTests
                 + "#define IDS_VP_TITLE 270\n#define IDS_VP_SHADOWS_TITLE 271\n#define IDS_VP_SHADOWS_DESC 272\n"
                 + "#define IDS_VP_EFFECTS_TITLE 273\n#define IDS_VP_EFFECTS_DESC 274\n"
                 + "#define IDS_VP_VIEW_TITLE 275\n#define IDS_VP_VIEW_DESC 276\n"
-                + "#define IDS_VP_DISPLAY_TITLE 277\n#define IDS_VP_DISPLAY_DESC 278\n",
+                + "#define IDS_VP_DISPLAY_TITLE 277\n#define IDS_VP_DISPLAY_DESC 278\n"
+                + "#define IDS_VP_DEVICE_TITLE 279\n#define IDS_VP_DEVICE_DESC 280\n",
             Strings = new Dictionary<int, string>
             {
                 [100] = "OK",
@@ -216,6 +217,8 @@ public class MenuLayoutReaderTests
                 [276] = "Select how far you can see in the game.",
                 [277] = "Resolution",
                 [278] = "Select the screen resolution.",
+                [279] = "Graphics",
+                [280] = "Select a 3D card or Software mode.",
                 [222] = "PLANE NAME",
                 [223] = "Load Default Configuration",
                 [224] = "Airframe",

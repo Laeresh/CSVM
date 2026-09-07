@@ -10,9 +10,11 @@ namespace CSVM.UI.Menu.Original;
 /// control beside it, a description in the description column) and ACCEPT CHANGES and CANCEL
 /// CHANGES beside them. The settings are a table in authored row order, so a further one is an
 /// entry plus the store field it reads and the authored row it stands on. Resolution keeps the
-/// authored row of that name; Display Mode and V-Sync are dropdowns on the authored Viewing Range
-/// and Effects Level rows, and Enhanced Graphics takes the checkbox row, Shadows, whose gate it
-/// owns. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
+/// authored row of that name and the monitor takes the Graphics row above it, whose authored words
+/// name a 3D card this port has no answer to, so that row's title and description are the page's
+/// own; Display Mode and V-Sync are dropdowns on the authored Viewing Range and Effects Level rows,
+/// and Enhanced Graphics takes the checkbox row, Shadows, whose gate it owns. The decode and the
+/// readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -68,6 +70,11 @@ public sealed partial class OriginalShell
     // one writer.
     private static readonly VideoOption[] VideoOptions =
     {
+        new(MonitorKey, "Monitor", "VP_T_VideoTitle", "VP_D_Device", "VP_T_DEVICEDESC",
+            _ => "Select the monitor the game opens on.",
+            OriginalRowKind.Dropdown, s => s.MonitorWords,
+            s => CSVM.Utils.MonitorSetting.Resolve(s._monitorIndex, s.Screens).Screen,
+            (s, i) => s._monitorIndex = CSVM.Utils.MonitorSetting.Word(i)),
         new(ResolutionKey, "Resolution", "VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC",
             _ => "Select the screen resolution.",
             OriginalRowKind.Dropdown, s => s.ResolutionWords,
@@ -99,6 +106,17 @@ public sealed partial class OriginalShell
     /// so a shell with no screen to ask offers every candidate size instead.</summary>
     public IReadOnlyList<string> ResolutionWords =>
         _screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.AllSizes;
+
+    /// <summary>The screens the monitor row offers, one label per screen in index order. Enumerated
+    /// like the resolution row's sizes, so a shell with no engine to ask offers the one screen it
+    /// can name.</summary>
+    public IReadOnlyList<string> MonitorWords => Screens.Labels;
+
+    // The machine's screens and the one a saved index that names none falls back to. Read through
+    // the reader on every access, since a monitor can be plugged in while the page stands open. The
+    // row's value goes through MonitorSetting.Resolve over this, the same call the apply makes, so
+    // the row cannot show a screen the window would not be moved to.
+    private CSVM.Utils.ScreenList Screens => _screens?.Invoke() ?? CSVM.Utils.MonitorSetting.Unknown;
 
     /// <summary>Opens the VIDEO page on the saved options with its first row focused, which is what
     /// the Preferences page's VIDEO door and the screenshot aid both go through. The page is a form,
@@ -212,9 +230,9 @@ public sealed partial class OriginalShell
 
     // One row's shape off the section's own widgets, each number falling back to the authored one
     // when the row is not there. Two of them are derived rather than read: the title box stops at
-    // the control beside it, since every Video title is authored the same 162 wide whatever stands
-    // to its right, and a description the section gives no width wraps at the plaque column, the
-    // two widthless rows being the two the plaques stand beside.
+    // the control beside it, since every Video title but the Graphics one is authored the same 162
+    // wide whatever stands to its right, and a description the section gives no width wraps at the
+    // plaque column, the two widthless rows being the two the plaques stand beside.
     private VideoPlacement PlaceVideoRow(MenuLayoutScreen screen, VideoOption option)
     {
         var title = screen.Widget(option.TitleKey);

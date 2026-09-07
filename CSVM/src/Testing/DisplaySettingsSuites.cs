@@ -16,7 +16,8 @@ namespace CSVM.Testing;
 /// the rest of the run on a frame cap. The window's mode and size are read and never set: a
 /// scripted run's window is hidden off screen, putting it back would land it over whatever the
 /// machine is doing, and a resize would move the viewport every later shot in the process is
-/// captured from.</summary>
+/// captured from. The screen is applied only where it is the one the window already stands on,
+/// which logs the line a run owes and moves nothing.</summary>
 internal static class DisplaySettingsSuites
 {
     [Suite("display-vsync",
@@ -207,6 +208,98 @@ internal static class DisplaySettingsSuites
         }
     }
 
+    [Suite("display-monitor",
+        "The monitor setting: a saved index the machine has a screen for beats the fallback, an "
+        + "index no screen answers to falls back to the screen the window stands on rather than "
+        + "reaching the engine, a screen reads as its index and its size, this machine's own "
+        + "enumeration matches what the engine reports, a --det launch reads no saved index while a "
+        + "plain one does, and the VIDEO page opens on the saved screen and carries it on the apply")]
+    internal static void DisplayMonitor(TestContext ctx)
+    {
+        // Three screens with the second as the fallback. The development machine has one, so the
+        // list a multi-monitor machine would enumerate is built by hand: what it proves is the
+        // resolve rule, and the move itself is owed at the controls on a machine with two.
+        var many = new ScreenList(
+            new[] { MonitorSetting.Label(0, 1920, 1080), MonitorSetting.Label(1, 2560, 1440), MonitorSetting.Label(2, 1280, 1024) }, 1);
+        ctx.Check(many.Labels[1] == "Screen 1 (2560x1440)",
+            $"a screen reads as the index it is saved as and the size the engine reports ({many.Labels[1]})");
+        var saved = MonitorSetting.Resolve("2", many);
+        ctx.Check(saved is { Screen: 2, Word: "2", Source: "options.json" },
+            $"a saved index the machine has a screen for is the one applied ({Describe(saved)})");
+        var absent = MonitorSetting.Resolve("7", many);
+        ctx.Check(absent is { Screen: 1, Word: "1", Source: "default" },
+            $"an index past the last screen falls back to the screen the window stands on ({Describe(absent)})");
+        var none = MonitorSetting.Resolve(null, many);
+        ctx.Check(none.Screen == absent.Screen && none.Source == absent.Source,
+            $"and nothing saved reads the same way ({Describe(none)})");
+        var malformed = MonitorSetting.Resolve("01", many);
+        ctx.Check(malformed.Screen == absent.Screen,
+            $"as does an index that is not the canonical spelling of one ({Describe(malformed)})");
+
+        // This run's own screens are the control on the enumeration: one label per screen the engine
+        // counts, and a fallback that names one of them.
+        var here = MonitorSetting.Screens();
+        ctx.Check(here.Labels.Count == DisplayServer.GetScreenCount() && here.Fallback >= 0
+            && here.Fallback < here.Labels.Count,
+            $"this machine enumerates one label per screen with the window on {here.Fallback} ({string.Join(" ", here.Labels)})");
+        int standing = DisplayServer.WindowGetCurrentScreen();
+        MonitorSetting.Apply(MonitorSetting.Resolve(MonitorSetting.Word(standing), here));
+        ctx.Check(DisplayServer.WindowGetCurrentScreen() == standing,
+            $"and applying the screen it already stands on logs the line without moving it (screen {standing})");
+
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        string dir = Path.Combine(ctx.ScratchDir, "display-monitor");
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        string? previous = OptionsStore.DirectoryOverride;
+        OptionsStore.DirectoryOverride = dir;
+        try
+        {
+            OptionsStore.UserOptions().Save(new OptionsDef { MonitorIndex = MonitorSetting.Word(standing) });
+            ctx.Check(MonitorSetting.SavedWord(det: false) == MonitorSetting.Word(standing),
+                $"a plain launch reads the saved index ({MonitorSetting.SavedWord(det: false) ?? "unset"})");
+            ctx.Check(MonitorSetting.SavedWord(det: true) == null,
+                $"and a --det launch reads no saved display setting at all ({MonitorSetting.SavedWord(det: true) ?? "unset"})");
+            AppliedMonitorRow(ctx, layout, standing);
+        }
+        finally
+        {
+            OptionsStore.DirectoryOverride = previous;
+        }
+    }
+
+    // The monitor row driven: the page opens on the saved screen, draws that screen's own label and
+    // hands the index back on the exit, which is what Launcher.ApplyOptions resolves and applies
+    // before the mode and the size. The plan is asserted rather than applied to another screen; a
+    // scripted run's window is hidden off screen and moving it would put it over the desktop.
+    private static void AppliedMonitorRow(TestContext ctx, MenuLayout layout, int standing)
+    {
+        var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
+            _ => null, options: () => OptionsStore.UserOptions().Load(), screens: MonitorSetting.Screens);
+        shell.OpenVideo();
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.MonitorChoice == MonitorSetting.Word(standing),
+            $"the VIDEO page opens showing the saved screen ({shell.Screen}, {shell.MonitorChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalShell.MonitorKey) == MonitorSetting.Screens().Labels[standing],
+            $"with the row drawing that screen's label ({Label(shell, OriginalShell.MonitorKey)})");
+        var applied = Accept(shell);
+        ctx.Check(applied?.MonitorIndex == MonitorSetting.Word(standing),
+            $"ACCEPT CHANGES carries it on the apply exit ({applied?.MonitorIndex ?? "no exit"})");
+        var plan = MonitorSetting.Resolve(applied?.MonitorIndex, MonitorSetting.Screens());
+        ctx.Check(plan.Screen == standing && plan.Source == "options.json",
+            $"and the apply resolves that index to the screen the window would move to ({Describe(plan)})");
+    }
+
     // The resolution row driven: the page opens on the saved size and ACCEPT CHANGES hands it back on
     // the exit, which is the size Launcher.ApplyOptions resolves and applies. The plan is asserted
     // rather than applied; resizing a scripted run's window would move the viewport every later shot
@@ -218,8 +311,8 @@ internal static class DisplaySettingsSuites
         shell.OpenVideo();
         ctx.Check(shell.Screen == OriginalScreen.Video && shell.ResolutionChoice == "1024x768",
             $"the VIDEO page opens showing the saved size ({shell.Screen}, {shell.ResolutionChoice ?? "unset"})");
-        ctx.Check(shell.Rows.Count > 0 && shell.Rows[0].Label == "1024x768",
-            $"with the row drawing it, so the page and the apply name one size ({(shell.Rows.Count > 0 ? shell.Rows[0].Label : "no rows")})");
+        ctx.Check(Label(shell, OriginalShell.ResolutionKey) == "1024x768",
+            $"with the row drawing it, so the page and the apply name one size ({Label(shell, OriginalShell.ResolutionKey)})");
         var applied = Accept(shell);
         ctx.Check(applied?.Resolution == "1024x768",
             $"ACCEPT CHANGES carries it on the apply exit ({applied?.Resolution ?? "no exit"})");
@@ -289,6 +382,24 @@ internal static class DisplaySettingsSuites
 
         return shell.Step(new MenuCommands { Accept = true }).Exit as OptionsApplyExit;
     }
+
+    // What one row of the page draws, found by key rather than by position: the table stands in
+    // authored row order, so a row added above shifts every index under it.
+    private static string Label(OriginalShell shell, string key)
+    {
+        foreach (var row in shell.Rows)
+        {
+            if (row.Key == key)
+            {
+                return row.Label;
+            }
+        }
+
+        return "no such row";
+    }
+
+    private static string Describe(MonitorPlan plan) =>
+        $"screen {plan.Screen} word={plan.Word} source={plan.Source}";
 
     private static string Describe(ResolutionPlan plan) =>
         $"{plan.Width}x{plan.Height} word={plan.Word} source={plan.Source}";

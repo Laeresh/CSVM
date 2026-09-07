@@ -280,12 +280,14 @@ public class OriginalShellTests
         Assert.Equal(OriginalShell.VideoDoorKey, shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Video, shell.Screen);
-        Assert.Equal(OriginalShell.ResolutionKey, shell.FocusedKey);
+        Assert.Equal(OriginalShell.MonitorKey, shell.FocusedKey);
+        Assert.Null(shell.MonitorChoice);
         Assert.Null(shell.ResolutionChoice);
         Assert.Null(shell.DisplayModeChoice);
         Assert.Null(shell.VSyncChoice);
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
 
+        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
@@ -305,6 +307,7 @@ public class OriginalShellTests
         var step = shell.Step(Accept);
         var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
+        Assert.Null(exit.MonitorIndex);
         Assert.Null(exit.Resolution);
         Assert.Null(exit.DisplayMode);
         Assert.Null(exit.VSync);
@@ -388,6 +391,7 @@ public class OriginalShellTests
         var shell = Shell(out _);
         shell.OpenVideo();
         shell.Step(Down);
+        shell.Step(Down);
         shell.Step(Right);
         Assert.Equal(DisplayWords.Borderless, shell.DisplayModeChoice);
         shell.Step(Down);
@@ -406,6 +410,7 @@ public class OriginalShellTests
         Assert.Null(shell.VSyncChoice);
 
         shell.OpenVideo();
+        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
@@ -456,7 +461,7 @@ public class OriginalShellTests
         {
             GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value,
             Difficulty = "hardest", VSync = "120", DisplayMode = DisplayWords.Fullscreen,
-            Resolution = "1920x1080",
+            Resolution = "1920x1080", MonitorIndex = "0",
         };
         var shell = Shell(out _, () => saved);
         shell.OpenGameOptions();
@@ -473,16 +478,19 @@ public class OriginalShellTests
         Assert.Equal("Fullscreen", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
         Assert.Equal("1920x1080", shell.ResolutionChoice);
         Assert.Equal("1920x1080", shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey).Label);
+        Assert.Equal("0", shell.MonitorChoice);
+        Assert.Equal("Screen 0", shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey).Label);
 
-        // A file that never set the fields opens the rows on the shipped defaults. The resolution
-        // row's default is the project's own size rather than the first value it offers, that being
-        // the smallest size a screen holds rather than the one a launch with no file runs at.
+        // A file that never set the fields opens the rows on the shipped defaults: the project's own
+        // size rather than the smallest a screen holds, and the standing screen rather than an index
+        // no screen answers to, each row agreeing with the fallback rule its own setting applies.
         saved.GraphicsMode = null;
         saved.MenuPresentation = null;
         saved.Difficulty = null;
         saved.VSync = null;
         saved.DisplayMode = null;
         saved.Resolution = null;
+        saved.MonitorIndex = "9";
         shell.OpenGameOptions();
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
@@ -494,6 +502,8 @@ public class OriginalShellTests
         Assert.Equal("Windowed", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
         Assert.Null(shell.ResolutionChoice);
         Assert.Equal(ResolutionSetting.Default, shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey).Label);
+        Assert.Equal("9", shell.MonitorChoice);
+        Assert.Equal("Screen 0", shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey).Label);
     }
 
     /// <summary>The graphics row's description reads the choice against the running mode, so a
@@ -580,17 +590,20 @@ public class OriginalShellTests
         Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
     }
 
-    /// <summary>The VIDEO page over its own section: the dropdowns at the authored Resolution,
-    /// Viewing Range and Effects Level boxes and the checkbox at the authored Shadows box, each
-    /// title box stopped at the control beside it and each description at the description column,
-    /// the Shadows one wrapped at the plaque column since that authored row carries no width of its
-    /// own.</summary>
+    /// <summary>The VIDEO page over its own section: the dropdowns at the authored Graphics,
+    /// Resolution, Viewing Range and Effects Level boxes and the checkbox at the authored Shadows
+    /// box, each title box stopped at the control beside it and each description at the description
+    /// column, the Shadows one wrapped at the plaque column since that authored row carries no width
+    /// of its own. The Graphics title keeps its authored width, that row's title already stopping
+    /// before the control beside it.</summary>
     [Fact]
     public void TheVideoPageIsComposedOverItsSectionsOwnRowShape()
     {
         var shell = Shell(out _);
         shell.OpenVideo();
 
+        var monitor = shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey);
+        Assert.Equal((260f, 245f, 70f, 15f), (monitor.X, monitor.Y, monitor.Width, monitor.Height));
         var resolution = shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey);
         Assert.Equal((260f, 290f, 70f, 17f), (resolution.X, resolution.Y, resolution.Width, resolution.Height));
         var mode = shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey);
@@ -607,6 +620,9 @@ public class OriginalShellTests
         var board = shell.Compose();
         Assert.Equal(new[] { "PM_Logo.png", "PP_VpBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
         Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
+        Assert.Contains(board.Lines, l => l.Text == "Monitor" && l.X == 130f && l.Y == 245f && l.Width == 90f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the monitor", System.StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 245f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Resolution" && l.X == 130f && l.Y == 290f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text == "Select the screen resolution."
             && l.X == 340f && l.Y == 290f && l.Width == 310f);
@@ -619,8 +635,8 @@ public class OriginalShellTests
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 425f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)
             && l.X == 340f && l.Y == 425f && l.Width == 160f);
-        Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
-        // The checkbox draws unchecked and unfocused, the page opening on the resolution row three
+        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
+        // The checkbox draws unchecked and unfocused, the page opening on the monitor row four
         // above it: the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
     }

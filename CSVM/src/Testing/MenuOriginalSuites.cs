@@ -503,9 +503,9 @@ internal static class MenuOriginalSuites
     }
 
     // Original's VIDEO route over the install's decoded sections: the Preferences page's third door
-    // opens the decoded page on its resolution dropdown, the rows under it take a display mode and a
-    // frame cap, the checkbox flips the graphics word, CANCEL CHANGES drops them all without an
-    // exit, and ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
+    // opens the decoded page on its monitor dropdown, the rows under it take a screen, a size, a
+    // display mode and a frame cap, the checkbox flips the graphics word, CANCEL CHANGES drops them
+    // all without an exit, and ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
     private static void OriginalVideoRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
     {
         if (shell == null)
@@ -518,16 +518,16 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.ResolutionKey,
-            $"VIDEO opens the decoded page on its Resolution row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalShell.MonitorKey,
+            $"VIDEO opens the decoded page on its Monitor row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "VIDEO" or "Resolution" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "VIDEO" or "Monitor" or "Resolution" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 5, $"drawing the section's own tab title over the four row titles ({titles} of 5)");
+        ctx.Check(titles == 6, $"drawing the section's own tab title over the five row titles ({titles} of 6)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {
@@ -535,6 +535,15 @@ internal static class MenuOriginalSuites
         }
 
         ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        // The monitor row's words are this machine's screens, so the claim is the count rather than
+        // the labels: one per screen the engine reports, which is one on a single-screen machine.
+        ctx.Check(shell.MonitorWords.Count == Godot.DisplayServer.GetScreenCount(),
+            $"the monitor row offers one label per screen ({string.Join(" ", shell.MonitorWords)})");
+        Press(host, seat, Right);
+        ctx.Check(shell.MonitorChoice != null
+            && OptionsStore.TryParseMonitorIndex(shell.MonitorChoice, out int picked) && picked < shell.MonitorWords.Count,
+            $"and a sideways step on it takes a screen this machine has ({shell.MonitorChoice ?? "unset"} of {shell.MonitorWords.Count})");
+        WalkTo(host, seat, shell, OriginalShell.ResolutionKey);
         Press(host, seat, Right);
         // The row's own words are this machine's screen sizes, so what it steps to is read back off
         // the shell rather than named: the claim is that the step lands on a size the screen offers
@@ -563,8 +572,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.GraphicsChoice == GraphicsMode.Default
             && shell.VSyncChoice == null && shell.DisplayModeChoice == null && shell.ResolutionChoice == null
-            && exits.Count == before,
-            $"CANCEL CHANGES lands back on Preferences with all four edits dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {shell.VSyncChoice ?? "unset"}, {shell.DisplayModeChoice ?? "unset"}, {shell.ResolutionChoice ?? "unset"})");
+            && shell.MonitorChoice == null && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with all five edits dropped and no exit ({shell.Screen}, {shell.GraphicsChoice}, {shell.VSyncChoice ?? "unset"}, {shell.DisplayModeChoice ?? "unset"}, {shell.ResolutionChoice ?? "unset"}, {shell.MonitorChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalShell.VideoDoorKey);
         Press(host, seat, Accept);

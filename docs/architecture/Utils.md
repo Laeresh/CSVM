@@ -187,6 +187,16 @@ would hand the player an aspect ratio they did not pick. `SavedWord` holds the `
 the one place `DisplayServer.WindowSetSize` is called; it skips a window that is not windowed, whose size
 the mode owns, and re-centres one it resized, a resize otherwise growing off the screen's bottom-right.
 
+## src/Utils/MonitorSetting.cs
+The screen the window sits on. `Screens` labels the machine's screens one per index, "Screen 0 (1920x1080)"
+off the engine's own zero-based index so the page, the options file and the log line name a screen the same
+way, and carries the screen the window stands on as the fallback. `Resolve` layers the saved `monitorIndex`
+over that: this is the one display setting whose saved value can name something absent, so an index no
+screen answers to is dropped like an unknown word, and the standing screen (the primary on a launch that has
+moved nothing) leaves a window where the player is looking. `SavedWord` holds the `--det` guard. `Apply` is
+the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a window already there; both of
+`Launcher`'s call sites make it before the mode and the size, a mode applied first filling the old screen.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`

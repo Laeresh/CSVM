@@ -690,14 +690,14 @@ section's widgets, so a layout that moves a row moves ours. ACCEPT CHANGES leave
 VIDEO page instead. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalVideo.cs
-The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's
-third door. Same table as Game Options with one column more: each setting names the authored title,
-control and description widgets it stands on, so a row keeps its geometry, and the table is in authored
-row order because the cursor walks it. Resolution keeps the authored row of that name, its words the sizes
-`Utils/ResolutionSetting.cs` enumerates per screen rather than a vocabulary the page could hold; Display
-Mode and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`; Enhanced Graphics
-takes the Shadows checkbox, whose gate it owns. A list opens as `OriginalGameOptions.cs` does, ACCEPT
-CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
+The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third
+door. Same table as Game Options with one column more: each setting names the authored title, control and
+description widgets it stands on, so a row keeps its geometry, and the table is in authored row order because
+the cursor walks it. The monitor and Resolution keep the authored Graphics and Resolution rows, their words
+enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`; the Graphics row's title
+and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
+and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
+Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the

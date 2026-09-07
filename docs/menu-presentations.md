@@ -217,7 +217,10 @@ there is no flag or config key above it. The window size is `ResolutionSetting.R
 two layers over `project.godot`'s 1280x720, with the extra rule that the saved size has to be one
 the chosen screen offers: a size it does not offer falls back to that default rather than to the
 nearest, since every other option falls through to its own default and a nearest match would hand
-the player an aspect ratio they did not pick. A display setting is also the case where the apply does
+the player an aspect ratio they did not pick. The screen is `MonitorSetting.Resolve`, the one setting
+whose saved value can name something that is not there: an index no screen answers to is dropped like an
+unknown word and the window stays on the screen it already stands on, which is the primary on a launch
+that has moved nothing. A display setting is also the case where the apply does
 more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
 there and then rather than at the next start. Those calls run in the order the window needs them: the
 screen the window sits on first, since a mode applied before the move would fill the screen the

@@ -474,11 +474,12 @@ public partial class Launcher : Node3D
         bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, true);
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, VSyncSetting.SavedWord(_spec.Det), vsyncOnByConfig));
 
-        // The saved window mode then size, for a session someone is at only: a scripted run's window
-        // is hidden off screen and its capture compared against the viewport project.godot pins, so
-        // neither may reach one. Neither asks for focus; docs/architecture/Utils.md has the rest.
+        // The saved screen, then the mode, then the size, for a session someone is at only: a
+        // scripted run's window is hidden off screen and its capture compared against the viewport
+        // project.godot pins, so none may reach one. None asks for focus; docs/architecture/Utils.md.
         if (!_spec.IsScripted)
         {
+            MonitorSetting.Apply(MonitorSetting.Resolve(MonitorSetting.SavedWord(_spec.Det), MonitorSetting.Screens()));
             DisplayModeSetting.Apply(DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det)));
             ResolutionSetting.Apply(ResolutionSetting.Resolve(
                 ResolutionSetting.SavedWord(_spec.Det), ResolutionSetting.ScreenSizes()));
@@ -1359,6 +1360,7 @@ public partial class Launcher : Node3D
         // The display settings take effect now instead of at the next start, through the same calls
         // the startup path makes and in the order the window needs them: the screen it sits on, the
         // mode, the size, then the pacing, which --no-vsync still beats (docs/menu-presentations.md).
+        MonitorSetting.Apply(MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens()));
         DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
         ResolutionSetting.Apply(ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes()));
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, true)));

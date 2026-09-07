@@ -237,7 +237,8 @@ public sealed class OriginalPresentation : IMenuPresentation
                 stock: () => StockLoadouts.Load(),
                 dataRoot: _dataRoot,
                 options: () => OptionsStore.UserOptions().Load(),
-                screenSizes: ResolutionSetting.ScreenSizes);
+                screenSizes: ResolutionSetting.ScreenSizes,
+                screens: MonitorSetting.Screens);
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);

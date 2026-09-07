@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ V-Sync, with the frame limit on its off state
 4. ☑ Display Mode
 5. ☑ Resolution
-6. ☐ Graphics, as the monitor pick
+6. ☑ Graphics, as the monitor pick
 7. ☐ The precedence ladder and the golden guard
 
 ## Dependency and parallelism notes
@@ -399,7 +399,7 @@ resolution produced no line and the shot rendered `size=1280x720`. That separate
 shows `!_spec.IsScripted` stops a size on its own, independently of `--det`, which the suite proves
 separately with `SavedWord(det:false)` as the control against `SavedWord(det:true)`.
 
-## B6 ☐ Graphics, as the monitor pick
+## B6 ☑ Graphics, as the monitor pick
 
 **Goal.** The authored Graphics row picks which monitor the window opens on, with a rewritten
 description, applied immediately and restored at the next launch.
@@ -422,6 +422,38 @@ second machine. A single-screen pass is not a claim that the move works. `.\RunT
 **⚠ Traps.** The saved index is the one setting that can silently name something absent, so the
 fallback is part of the feature and not an error path. Apply the screen before the mode and the
 size, or an exclusive fullscreen re-applies on the old monitor.
+
+**Landed.** `Utils/MonitorSetting.cs` is the setting, `DisplayModeSetting`'s shape over screens
+instead of words. `Screens` enumerates the machine's screens into a `ScreenList`, one label per
+screen in index order so a label's position is the screen it names, and carries the screen the
+window stands on as the fallback. **The fallback is the standing screen rather than the primary
+outright**, which is the one place this item refined the plan's wording: on a launch that has moved
+no window the two are the same screen, and where they differ, resolving to the primary would move
+the window of a player who had dragged it elsewhere and then pressed ACCEPT CHANGES on a page they
+never touched. `Resolve` layers the saved index over that fallback and is engine-free, so the
+three-screen case a one-screen machine cannot show is proved by handing it a list. The row reads
+through that same `Resolve`, so the page cannot show a screen the apply would not move to.
+`Launcher` calls `Apply` immediately before `DisplayModeSetting.Apply` in both call sites, which is
+the whole of the re-apply: the mode and the size are applied after the move, `ScreenSizes()` reads
+`WindowGetCurrentScreen()` so the size list is the new screen's, and a size that screen cannot hold
+falls back to the project default. The row is the authored Graphics line, first on the page, a
+dropdown at `VP_D_Device`'s own 200-wide box over labels reading "Screen 0 (5120x1440)". **Its title
+and description are both the page's own** (decision 4): the authored pair names a 3D card and a
+software renderer, and a row titled "Graphics" beside Enhanced Graphics would name the wrong thing
+twice, so the title is "Monitor" and the description "Select the monitor the game opens on."
+
+**Verified.** Full `RunTests.ps1` on the plan tree: build 0 warnings, units 3486 passed / 0 failed,
+engine 262 passed / 0 failed with engine errors clean over 4 shards, goldens 18 shots
+hash-identical, exit 0. The goldens held while the player's real options file carried a saved
+resolution, display mode and V-Sync cap, which is the guard standing up against a file someone
+actually wrote rather than a fixture. The `display-monitor` suite proves the enumerated list, the
+fallback and the ladder, and `Resolve` is engine-free so the multi-screen case this machine cannot
+show is proved by handing it a list. The apply logs `monitor=0 source=options.json screens=1
+changed=False`, and no scripted or golden log carries a `monitor=` line at all, which is
+`!_spec.IsScripted` holding.
+**The monitor move itself is not verified and is not claimed.** This machine has one screen. Moving
+the window, re-applying the mode and size on the new screen, and the unplugged-monitor fallback are
+owed at the controls on a second machine.
 
 ## B7 ☐ The precedence ladder and the golden guard
 
