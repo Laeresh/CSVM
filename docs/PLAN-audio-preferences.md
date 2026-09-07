@@ -164,7 +164,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 4. ☑ The options carrier takes a level that is not a vocabulary word
 5. ☑ The slider the shell has never had
-6. ☐ The AUDIO page opens from Preferences
+6. ☑ The AUDIO page opens from Preferences
 7. ☐ The precedence ladder, and the re-based mix judged at the controls
 
 ## Dependency and parallelism notes
@@ -420,7 +420,7 @@ value, and must not reuse the shell's `_drag`.
 
 **Verified.** <pending orchestrator run>
 
-## B6 ☐ The AUDIO page opens from Preferences
+## B6 ☑ The AUDIO page opens from Preferences
 
 **Goal.** Pressing AUDIO on Preferences opens a page composed over the `Audio` section's own artwork,
 showing four slider rows. ACCEPT CHANGES saves and returns to Preferences; CANCEL CHANGES returns
@@ -461,6 +461,8 @@ is not uniform, so a `FirstY` plus a pitch (which is what Game Options reads) mi
 by up to 5 pixels each; read each title's own Y. Row 1's control sits at the title's own line while
 rows 2 to 4 sit about 26 pixels under theirs, because row 1 was authored for a checkbox at X=259 and
 is now a slider at X=137; place it at the slider offset, not the checkbox's.
+
+**Verified.** <pending orchestrator run>
 
 ## B7 ☐ The precedence ladder, and the re-based mix judged at the controls
 

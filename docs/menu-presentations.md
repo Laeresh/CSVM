@@ -193,14 +193,16 @@ set), read as empty when missing or malformed, written atomically. Its word-valu
 (`on`, `off`, `60`, `120`, `144`); a value outside a field's set reads as never set. Two fields are
 not words: `monitorIndex` is a screen index rendered decimal and `resolution` is a canonical
 `1920x1080`, both validated by shape, so a malformed one is dropped the same way an unknown word is.
+The four volume levels (`audioMaster`, `audioMusic`, `audioEffects`, `audioVoice`) are whole numbers
+on `AudioMix`'s 0..100 and are validated by range, dropped the same way again.
 Shape is all the store can prove. Whether that screen is plugged in and whether it offers that mode
 are questions for the caller holding an engine, which owns the fallback.
 
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set (or its shape check, and the canonical
 form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
-`Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options
-or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
+`Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options,
+AUDIO or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
 `Launcher.ApplyOptions` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
 written before the field existed loads with everything it does have, and the version gate is
@@ -255,7 +257,8 @@ Every presentation exposes Options, since a player must be able to leave a prese
 it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
 page behind its Preferences page's first door (`--menu=game-options` under
 `--presentation=original`), with the graphics mode on the VIDEO page behind the third
-(`--menu=video`). Every one of them reads the saved options from the store on entry and leaves
+(`--menu=video`) and the four volume levels on the AUDIO page behind the second
+(`--menu=audio`). Every one of them reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
 keeps its one writer. Both presentation choosers offer the
 two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
@@ -374,7 +377,8 @@ the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in'
 `--presentation=original` is set, in which case the same flag carries Original's own values
 (`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
 list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
-`game-options` and `game-options:open` with its Difficulty list standing open, `video` and
+`game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
+`audio:mixed` with its four sliders at four distinct levels, `video` and
 `video:checked` with its Enhanced Graphics box ticked, the
 `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
 poses, `campaign-delete`), and any other value opens that

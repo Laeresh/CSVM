@@ -26,6 +26,7 @@ internal static class MenuOriginalSuites
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
+    private static readonly MenuCommands Left = new() { MoveX = -1 };
     private static readonly MenuCommands Back = new() { Back = true };
 
     [Suite("menu-original-tracer",
@@ -48,7 +49,10 @@ internal static class MenuOriginalSuites
         + "carrying them, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "over the V-Sync one whose five words pick a frame cap and the Enhanced Graphics checkbox "
         + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
-        + "leaves as one more apply exit carrying them, the force flag recovers and a missing layout "
+        + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
+        + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "
+        + "silence, its CANCEL CHANGES drops the edit with no exit and its ACCEPT CHANGES leaves as "
+        + "one more apply exit carrying the levels, the force flag recovers and a missing layout "
         + "falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
     {
@@ -99,6 +103,9 @@ internal static class MenuOriginalSuites
             // walks: its ACCEPT CHANGES hides the presentation for the launcher to act, so nothing
             // after it can drive the same shell.
             OriginalVideoRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits);
+            // The AUDIO route needs a shell of its own for the same reason, the VIDEO route's
+            // ACCEPT CHANGES having hidden the presentation the walk before it drove.
+            OriginalAudioRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits);
             Recovery(ctx, host, registry, audio);
         }
         finally
@@ -591,6 +598,73 @@ internal static class MenuOriginalSuites
             DisplayMode: DisplayWords.Borderless,
         },
             $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all three words ({exits.Count - before}, {exits[^1].GetType().Name})");
+        ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
+    }
+
+    // Original's AUDIO route over the install's decoded sections: the Preferences page's second door
+    // opens the decoded page on its Master slider, the page draws a thumb per row, a sideways step
+    // moves a level and clamps at silence rather than wrapping to full, CANCEL CHANGES drops the
+    // edits without an exit, and ACCEPT CHANGES on a second visit leaves as one apply exit.
+    private static void OriginalAudioRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
+    {
+        if (shell == null)
+        {
+            return;
+        }
+
+        int before = exits.Count;
+        WalkTo(host, seat, shell, "MM_B_PREFERENCES");
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.AudioDoorKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Audio && shell.FocusedKey == OriginalShell.AudioMasterKey,
+            $"AUDIO opens the decoded page on its Master row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
+        var board = shell.Compose();
+        int titles = 0;
+        int thumbs = 0;
+        foreach (var line in board.Lines)
+        {
+            titles += line.Text is "AUDIO" or "Master" or "Music Volume" or "Effects Volume" or "Voice Volume" ? 1 : 0;
+        }
+
+        foreach (var picture in board.Pictures)
+        {
+            thumbs += picture.Art.Name == "PF_B_Slider.png" ? 1 : 0;
+        }
+
+        ctx.Check(titles == 5, $"drawing the section's own tab title over the four row titles ({titles} of 5)");
+        ctx.Check(thumbs == 4, $"with the authored thumb drawn once per row ({thumbs} of 4)");
+        // The store is a scratch one under --run-tests, so the page opens on the shipped mix: every
+        // level never set, each row standing at its own default.
+        ctx.Check(shell.AudioMasterChoice == null && shell.AudioMusicChoice == null
+            && shell.AudioEffectsChoice == null && shell.AudioVoiceChoice == null,
+            $"on a mix nothing has saved, every level reading as never set ({shell.AudioMasterChoice?.ToString() ?? "unset"})");
+        Press(host, seat, Right);
+        ctx.Check(shell.AudioMasterChoice == null,
+            $"a step off the top of the Master row moves nothing, so it writes nothing ({shell.AudioMasterChoice?.ToString() ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalShell.AudioMusicKey);
+        Press(host, seat, Left);
+        ctx.Check(shell.AudioMusicChoice == AudioMix.DefaultMusic - SliderControl.KeyStep,
+            $"a sideways step on the focused row moves that level by the control's own step ({shell.AudioMusicChoice?.ToString() ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalShell.AudioCancelKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Options && shell.AudioMusicChoice == null && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with the edit dropped and no exit ({shell.Screen}, {shell.AudioMusicChoice?.ToString() ?? "unset"})");
+
+        WalkTo(host, seat, shell, OriginalShell.AudioDoorKey);
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalShell.AudioVoiceKey);
+        for (int step = 0; step < 12; step++)
+        {
+            Press(host, seat, Left);
+        }
+
+        ctx.Check(shell.AudioVoiceChoice == AudioMix.MinLevel,
+            $"and stepping the Voice row past its floor clamps at silence rather than wrapping to full ({shell.AudioVoiceChoice?.ToString() ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalShell.AudioAcceptKey);
+        Press(host, seat, Accept);
+        ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit { AudioVoice: AudioMix.MinLevel, AudioMaster: null },
+            $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying the levels ({exits.Count - before}, {exits[^1].GetType().Name})");
         ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
     }
 

@@ -273,6 +273,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its seven partials below.
 - `src/UI/Menu/Original/SliderControl.cs` — the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
 - `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
+- `src/UI/Menu/Original/OriginalAudio.cs` — the shell's AUDIO page (a `partial`): the four volume levels as slider rows, each on its own authored line.
 - `src/UI/Menu/Original/OriginalVideo.cs` — the shell's VIDEO page (a `partial`): the display settings as a table of authored rows, the resolution row's words enumerated per screen.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs` — the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.

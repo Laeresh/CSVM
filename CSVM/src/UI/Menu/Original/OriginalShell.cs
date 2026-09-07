@@ -23,13 +23,17 @@ public enum OriginalScreen
     /// shape over the sortie roster, one joined seat picking at a time.</summary>
     SeatPlane,
 
-    /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS and
-    /// VIDEO doors live and its two other doors drawn disabled.</summary>
+    /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS,
+    /// AUDIO and VIDEO doors live and its CONTROLS door drawn disabled.</summary>
     Options,
 
     /// <summary>The decoded <c>[@GameOptions@]</c> page: the shared options in its authored row
     /// shape, with ACCEPT CHANGES and CANCEL CHANGES under them.</summary>
     GameOptions,
+
+    /// <summary>The decoded <c>[@Audio@]</c> page: the four volume levels as sliders in its
+    /// authored row shape, with ACCEPT CHANGES and CANCEL CHANGES under them.</summary>
+    Audio,
 
     /// <summary>The decoded <c>[@Video@]</c> page: the display settings in its authored row shape,
     /// with ACCEPT CHANGES and CANCEL CHANGES beside them.</summary>
@@ -170,7 +174,7 @@ public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutCol
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
 /// remake-only Free Flight and Dogfight doors, the sortie screens, the Options screen over the
-/// decoded Preferences chrome with the Game Options and VIDEO pages behind its two live doors, and the decoded
+/// decoded Preferences chrome with the Game Options, AUDIO and VIDEO pages behind its three live doors, and the decoded
 /// Instant Action, loadout, campaign and hangar screens over their shared features (each family
 /// its own partial file), driven by each seat's semantic commands and composed into a
 /// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat
@@ -199,6 +203,18 @@ public sealed partial class OriginalShell
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
+    /// <summary>The AUDIO page's Master slider, the page's first row.</summary>
+    public const string AudioMasterKey = "AUDIOMASTER";
+
+    /// <summary>The AUDIO page's Music Volume slider.</summary>
+    public const string AudioMusicKey = "AUDIOMUSIC";
+
+    /// <summary>The AUDIO page's Effects Volume slider.</summary>
+    public const string AudioEffectsKey = "AUDIOEFFECTS";
+
+    /// <summary>The AUDIO page's Voice Volume slider.</summary>
+    public const string AudioVoiceKey = "AUDIOVOICE";
+
     /// <summary>The VIDEO page's monitor dropdown, the page's first row.</summary>
     public const string MonitorKey = "MONITOR";
 
@@ -217,10 +233,10 @@ public sealed partial class OriginalShell
     /// <summary>The Options screen's way back, <c>[@Preferences@]</c>'s own RETURN TO MAIN MENU.</summary>
     public const string OptionsBackKey = "PF_B_MAINMENU";
 
-    /// <summary>The Preferences page's four page doors, in their authored order. The first opens
-    /// the Game Options page and the third the VIDEO page; the other two draw disabled, no shared
-    /// audio or controls option standing behind them.</summary>
-    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, "PF_B_AUDIO", VideoDoorKey, "PF_B_CONTROLS" };
+    /// <summary>The Preferences page's four page doors, in their authored order. The first three
+    /// open the Game Options, AUDIO and VIDEO pages; the fourth draws disabled, no shared controls
+    /// option standing behind it.</summary>
+    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, AudioDoorKey, VideoDoorKey, "PF_B_CONTROLS" };
 
     private const float PreferencesTitleFont = 20f;
     private const float PreferencesTextFont = 14f;
@@ -523,7 +539,7 @@ public sealed partial class OriginalShell
 
         _drag = null;
         _slider.LetGo();
-        if (screen is OriginalScreen.GameOptions or OriginalScreen.Video)
+        if (screen is OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video)
         {
             ReadSavedOptions();
         }
@@ -720,7 +736,7 @@ public sealed partial class OriginalShell
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
-            or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Video
+            or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video
             or OriginalScreen.SeatPlane
             || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
@@ -759,6 +775,9 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.GameOptions:
                 ComposeGameOptions(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
+                break;
+            case OriginalScreen.Audio:
+                ComposeAudio(screenRows, screenFocus, pictures, fills, lines, plaques);
                 break;
             case OriginalScreen.Video:
                 ComposeVideo(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
@@ -1174,6 +1193,9 @@ public sealed partial class OriginalShell
                     case GameOptionsDoorKey:
                         OpenGameOptions();
                         break;
+                    case AudioDoorKey:
+                        OpenAudio();
+                        break;
                     case VideoDoorKey:
                         OpenVideo();
                         break;
@@ -1186,6 +1208,8 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.GameOptions:
                 return ActivateGameOptions(row);
+            case OriginalScreen.Audio:
+                return ActivateAudio(row);
             case OriginalScreen.Video:
                 return ActivateVideo(row);
         }
@@ -1236,6 +1260,13 @@ public sealed partial class OriginalShell
         if (_screen == OriginalScreen.GameOptions)
         {
             BackGameOptions();
+            return null;
+        }
+
+        if (_screen == OriginalScreen.Audio)
+        {
+            // The AUDIO page carries no list to close first, so Back is its CANCEL CHANGES.
+            BackToPreferences();
             return null;
         }
 
@@ -1309,6 +1340,9 @@ public sealed partial class OriginalShell
             case OriginalScreen.GameOptions:
                 BuildGameOptionsRows(rows);
                 break;
+            case OriginalScreen.Audio:
+                BuildAudioRows(rows);
+                break;
             case OriginalScreen.Video:
                 BuildVideoRows(rows);
                 break;
@@ -1318,17 +1352,18 @@ public sealed partial class OriginalShell
     }
 
     // The Options screen over [@Preferences@]: the four page doors at their authored corners, the
-    // GAME OPTIONS and VIDEO doors live and the other two disabled since no shared audio or
-    // controls option stands behind them, and the section's own RETURN TO MAIN MENU. Without the
-    // section the two live doors stand alone with a BACK plaque, so the screen is still navigable.
+    // GAME OPTIONS, AUDIO and VIDEO doors live and CONTROLS disabled since no shared controls
+    // option stands behind it, and the section's own RETURN TO MAIN MENU. Without the section the
+    // three live doors stand alone with a BACK plaque, so the screen is still navigable.
     private void BuildOptionsRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(PreferencesSection);
         if (screen == null)
         {
             rows.Add(TextButton(GameOptionsDoorKey, "GAME OPTIONS", OptionsX, OptionsTop, true, 0));
-            rows.Add(TextButton(VideoDoorKey, "VIDEO", OptionsX, OptionsTop + OptionsPitch, true, 0));
-            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (2f * OptionsPitch), true, 0));
+            rows.Add(TextButton(AudioDoorKey, "AUDIO", OptionsX, OptionsTop + OptionsPitch, true, 0));
+            rows.Add(TextButton(VideoDoorKey, "VIDEO", OptionsX, OptionsTop + (2f * OptionsPitch), true, 0));
+            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (3f * OptionsPitch), true, 0));
             return;
         }
 
@@ -1336,7 +1371,7 @@ public sealed partial class OriginalShell
         {
             if (screen.Widget(key) is { } door)
             {
-                rows.Add(Button(door, key is GameOptionsDoorKey or VideoDoorKey));
+                rows.Add(Button(door, key is GameOptionsDoorKey or AudioDoorKey or VideoDoorKey));
             }
         }
 

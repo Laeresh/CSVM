@@ -683,8 +683,8 @@ The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free 
 and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the art
 measurer and the flight-devices answer injected. It owns the top level composed from `[MainMenu]`'s
 own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome,
-and the messagebox idiom every refusal and confirm goes through; the Game Options, VIDEO, Instant
-Action, loadout, campaign and hangar screens are its six partials, below. `Step` applies one seat's
+and the messagebox idiom every refusal and confirm goes through; the Game Options, AUDIO, VIDEO, Instant
+Action, loadout, campaign and hangar screens are its seven partials, below. `Step` applies one seat's
 frame (pointer, typed text, cursor walk, accept and back), `Compose` is the screen as a
 `ComposedBoard`, and the row kinds every page draws are here, `OriginalSlider` and the slider row's builder and drawing among them. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -705,7 +705,17 @@ at its authored box over the three campaign tiers; under it the remake-only Menu
 dropdown over the registered tokens. The row shape is read off the section's widgets, so a layout that moves
 a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
 `Launcher.ApplyOptions` writes the store. This file also holds the shell's shared `ReadSavedOptions`/`AppliedOptions`
-pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO and the volume levels on AUDIO. Rows: [../org/menu-inventory.md](../org/menu-inventory.md).
+pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO (`OriginalVideo.cs`) and the volume levels on AUDIO (`OriginalAudio.cs`). Rows: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalAudio.cs
+The AUDIO page, the shell's partial over the decoded `[@Audio@]` section, behind the Preferences page's second door. Four slider
+rows over `Utils/AudioMix.cs`'s 0..100, in the same table shape as VIDEO: per row a title, the authored title, slider and
+description widgets it stands on, a description, and how the store field is read and written, a never-set level reading as its
+shipped default. Each row's line is read off its own title widget, the authored pitch being 58, 57, 53 and 53 rather than one
+number. Master takes the In-Game Music row with the page's own title and description, its slider at the section's slider column
+and offset rather than at that row's checkbox corner, since a slider that reaches zero is that checkbox in one fewer widget;
+Sound Quality is left out. A slider answers no Accept, the level moving under the pointer or by a sideways step
+(`SliderControl.cs`); ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalVideo.cs
 The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third

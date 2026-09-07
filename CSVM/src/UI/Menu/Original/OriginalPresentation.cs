@@ -41,6 +41,12 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
+    /// <summary>The aid value that opens the AUDIO page behind the Preferences page's second door.</summary>
+    public const string AudioAid = "audio";
+
+    /// <summary>The AUDIO aid's argument that stands its four sliders at four distinct levels.</summary>
+    public const string AudioMixedAid = "mixed";
+
     /// <summary>The aid value that opens the VIDEO page behind the Preferences page's third door.</summary>
     public const string VideoAid = "video";
 
@@ -313,6 +319,15 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case GameOptionsAid:
                 case GameOptionsAid + ":" + GameOptionsOpenAid:
                     OpenGameOptionsAid(aid);
+                    break;
+                case AudioAid:
+                    _shell.OpenAudio();
+                    break;
+                case AudioAid + ":" + AudioMixedAid:
+                    // The four rows open on two levels between them, so a shot of the shipped mix
+                    // says nothing about where a thumb stands at a level it was moved to.
+                    _shell.OpenAudio();
+                    _shell.PoseAudioMix();
                     break;
                 case VideoAid:
                     _shell.OpenVideo();
@@ -666,11 +681,11 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_shell != null && _view != null)
         {
             // Paper pages write in authored black, the loadout in the ammo form's palette, the hub
-            // in its own inks, the two options pages in the Preferences page's, a campaign screen
+            // in its own inks, the three options pages in the Preferences page's, a campaign screen
             // in its shared board component's palette, and the rest in the file-wide inks.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
-                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Video ? _preferencesPalette
+                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;

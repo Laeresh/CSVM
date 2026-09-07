@@ -45,7 +45,7 @@ public class OriginalCoverageTests : IDisposable
     // the inventory's own list and are counted, not driven.
     private static readonly string[] InScopeSections =
     {
-        "MainMenu", "Preferences", "GameOptions", "Video", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
+        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
         "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
@@ -66,6 +66,8 @@ public class OriginalCoverageTests : IDisposable
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
             new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
+        new("audio", OriginalScreen.Audio, new[] { "MM_B_PREFERENCES", OriginalShell.AudioDoorKey },
+            new[] { OriginalShell.AudioCancelKey, OriginalShell.OptionsBackKey }),
         new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey },
             new[] { OriginalShell.VideoCancelKey, OriginalShell.OptionsBackKey }),
         new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
@@ -116,6 +118,9 @@ public class OriginalCoverageTests : IDisposable
                 OriginalShell.PresentationKey, OriginalShell.PresentationKey + ":1", OriginalShell.GameOptionsAcceptKey,
             },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
+        new("apply-audio", null,
+            new[] { "MM_B_PREFERENCES", OriginalShell.AudioDoorKey, OriginalShell.AudioAcceptKey },
+            Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("apply-video", null,
             new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey, OriginalShell.GraphicsKey, OriginalShell.VideoAcceptKey },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
@@ -138,7 +143,9 @@ public class OriginalCoverageTests : IDisposable
         ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Driven("game-options", OriginalShell.GameOptionsDoorKey),
         ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalShell.GameOptionsAcceptKey),
         ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalShell.GameOptionsCancelKey),
-        ["Preferences.PF_B_AUDIO"] = Edge.Disabled("PF_B_AUDIO", "no shared audio option stands behind the page", "options"),
+        ["Preferences.PF_B_AUDIO"] = Edge.Driven("audio", OriginalShell.AudioDoorKey),
+        ["Audio.AP_B_ACCEPTCHANGES"] = Edge.Driven("apply-audio", OriginalShell.AudioAcceptKey),
+        ["Audio.AP_B_CANCELCHANGES"] = Edge.Driven("audio", OriginalShell.AudioCancelKey),
         ["Preferences.PF_B_VIDEO"] = Edge.Driven("video", OriginalShell.VideoDoorKey),
         ["Video.VP_B_ACCEPTCHANGES"] = Edge.Driven("apply-video", OriginalShell.VideoAcceptKey),
         ["Video.VP_B_CANCELCHANGES"] = Edge.Driven("video", OriginalShell.VideoCancelKey),
@@ -237,6 +244,21 @@ public class OriginalCoverageTests : IDisposable
     }
 
     [Fact]
+    public void TheAudioRowsClearEachOtherAndTheirWordsOverTheFixture()
+    {
+        AudioRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
+    }
+
+    [ExtractedDataFact]
+    public void TheAudioRowsClearEachOtherAndTheirWordsOverTheInstall()
+    {
+        string dataRoot = TestData.DataRoot!;
+        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
+        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
+        AudioRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
+    }
+
+    [Fact]
     public void TheVideoRowsClearEachOtherAndTheirWordsOverTheFixture()
     {
         VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
@@ -268,6 +290,11 @@ public class OriginalCoverageTests : IDisposable
         "PH_B_Check8.png" => (16, 128),
         "PH_B_DropUp.png" or "PH_B_DropDown.png" or "PP_B_DropUp.png" or "PP_B_DropDown.png" => (15, 56),
         "PP_B_Check8.png" => (16, 128),
+        // The slider's two files at their shipped sizes, neither a strip: a slot three pixels tall
+        // and a thumb that stands well clear of it. The PF_ names are what a row with no slider
+        // widget of its own falls back to.
+        "PP_B_SliderSlot.png" or "PF_B_SliderSlot.png" => (171, 3),
+        "PP_B_Slider.png" or "PF_B_Slider.png" => (43, 21),
         "PH_Decals.tga" => (66, 3300),
         "PH_PlaneIcons.png" => (100, 1200),
         _ when art.StartsWith("PH_B_", StringComparison.Ordinal) => (200, 128),
@@ -663,6 +690,26 @@ public class OriginalCoverageTests : IDisposable
             },
             rows.Select(r => r.Key));
         RowsAreClearOfEachOther(shell, rows, "GAME OPTIONS", 4);
+    }
+
+    // The AUDIO page's rows, the same rule over its own plate. Its press regions are the widest of
+    // any option page (the authored slot grown ten pixels above and below), and the Master row's
+    // slider stands on a line the layout authors for a checkbox, so a row that took the checkbox's
+    // own corner would land in the title column beside the words rather than under them.
+    private void AudioRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
+    {
+        var shell = Fresh(layout, measure, dataRoot, out _, out _);
+        shell.OpenAudio();
+        var rows = shell.Rows.ToArray();
+        Assert.Equal(
+            new[]
+            {
+                OriginalShell.AudioMasterKey, OriginalShell.AudioMusicKey,
+                OriginalShell.AudioEffectsKey, OriginalShell.AudioVoiceKey,
+                OriginalShell.AudioAcceptKey, OriginalShell.AudioCancelKey,
+            },
+            rows.Select(r => r.Key));
+        RowsAreClearOfEachOther(shell, rows, "AUDIO", 8);
     }
 
     // The VIDEO page's rows, the same rule over its own plate: each control must stand clear of the

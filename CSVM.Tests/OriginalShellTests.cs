@@ -262,6 +262,147 @@ public class OriginalShellTests
         Assert.Equal("hard", exit.Difficulty);
     }
 
+    /// <summary>The AUDIO page behind the Preferences page's second door: it opens on the saved
+    /// mix with Master focused, a sideways step moves the focused level and clamps rather than
+    /// wrapping, and ACCEPT CHANGES leaves as the one apply exit carrying the four levels beside
+    /// the settings the page never showed.</summary>
+    [Fact]
+    public void TheAudioPageMovesALevelAndAppliesTheMixAsOneExit()
+    {
+        var saved = new OptionsDef
+        {
+            AudioMaster = 80, AudioMusic = 20, AudioEffects = 55, AudioVoice = 5,
+            Difficulty = "hard", VSync = "120",
+        };
+        var shell = Shell(out _, () => saved);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.AudioDoorKey, shell.FocusedKey);
+        shell.Step(Accept);
+
+        // The page opens on the saved mix, not on the shipped defaults.
+        Assert.Equal(OriginalScreen.Audio, shell.Screen);
+        Assert.Equal(OriginalShell.AudioMasterKey, shell.FocusedKey);
+        Assert.Equal(80, shell.AudioMasterChoice);
+        Assert.Equal(20, shell.AudioMusicChoice);
+        Assert.Equal(55, shell.AudioEffectsChoice);
+        Assert.Equal(5, shell.AudioVoiceChoice);
+
+        // A sideways step moves the focused level by the control's own step and clamps at silence
+        // instead of wrapping to full, which is what every other stepped row on this shell does.
+        shell.Step(Right);
+        Assert.Equal(85, shell.AudioMasterChoice);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.AudioVoiceKey, shell.FocusedKey);
+        shell.Step(Left);
+        Assert.Equal(0, shell.AudioVoiceChoice);
+        shell.Step(Left);
+        Assert.Equal(0, shell.AudioVoiceChoice);
+
+        // Accept on a slider is a no-op: the level moves under the pointer or by a step alone.
+        shell.Step(Accept);
+        Assert.Equal(0, shell.AudioVoiceChoice);
+
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.AudioAcceptKey, shell.FocusedKey);
+        var exit = Assert.IsType<OptionsApplyExit>(shell.Step(Accept).Exit);
+        Assert.Equal(85, exit.AudioMaster);
+        Assert.Equal(20, exit.AudioMusic);
+        Assert.Equal(55, exit.AudioEffects);
+        Assert.Equal(0, exit.AudioVoice);
+        // The settings this page never showed ride the apply unchanged, read back when it opened.
+        Assert.Equal("hard", exit.Difficulty);
+        Assert.Equal("120", exit.VSync);
+        Assert.Equal(PresentationId.Original, exit.Presentation);
+    }
+
+    /// <summary>A level the options file has never carried opens the row on the shipped default,
+    /// and CANCEL CHANGES and Back both leave with the edits dropped and no exit.</summary>
+    [Fact]
+    public void TheAudioPageOpensOnTheShippedDefaultsAndDropsAnEditOnCancelAndOnBack()
+    {
+        var shell = Shell(out _);
+        shell.OpenAudio();
+        Assert.Null(shell.AudioMasterChoice);
+        Assert.Equal(AudioMix.DefaultMaster, shell.Rows.Single(r => r.Key == OriginalShell.AudioMasterKey).Slider!.Value);
+        Assert.Equal(AudioMix.DefaultMusic, shell.Rows.Single(r => r.Key == OriginalShell.AudioMusicKey).Slider!.Value);
+        Assert.Equal(AudioMix.DefaultEffects, shell.Rows.Single(r => r.Key == OriginalShell.AudioEffectsKey).Slider!.Value);
+        Assert.Equal(AudioMix.DefaultVoice, shell.Rows.Single(r => r.Key == OriginalShell.AudioVoiceKey).Slider!.Value);
+
+        shell.Step(Down);
+        shell.Step(Left);
+        Assert.Equal(45, shell.AudioMusicChoice);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.AudioCancelKey, shell.FocusedKey);
+        Assert.Null(shell.Step(Accept).Exit);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        Assert.Null(shell.AudioMusicChoice);
+
+        shell.OpenAudio();
+        // A step at an end moves nothing, so it writes nothing and the level is still never set.
+        shell.Step(Right);
+        Assert.Null(shell.AudioMasterChoice);
+        shell.Step(Left);
+        Assert.Equal(95, shell.AudioMasterChoice);
+        Assert.Null(shell.Step(Back).Exit);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        Assert.Null(shell.AudioMasterChoice);
+    }
+
+    /// <summary>The AUDIO page over its own section: four sliders in the section's slider column,
+    /// each on its own authored line (the pitch is uneven, so a first row and one pitch would
+    /// misplace the rows below the second), the Master row on the In-Game Music line at the slider
+    /// offset rather than at that row's checkbox corner, and the two plaques under them.</summary>
+    [Fact]
+    public void TheAudioPageIsComposedOverItsSectionsOwnRowShape()
+    {
+        var shell = Shell(out _);
+        shell.OpenAudio();
+
+        // Each row is the authored slot inset by 0, -10, 1 and -10: 137 wide of press region over a
+        // three-pixel line, standing at the slider column and 26 pixels under its own title.
+        var master = shell.Rows.Single(r => r.Key == OriginalShell.AudioMasterKey);
+        Assert.Equal((130f, 266f, 170f, 23f), (master.X, master.Y, master.Width, master.Height));
+        var music = shell.Rows.Single(r => r.Key == OriginalShell.AudioMusicKey);
+        Assert.Equal((130f, 326f, 170f, 23f), (music.X, music.Y, music.Width, music.Height));
+        var effects = shell.Rows.Single(r => r.Key == OriginalShell.AudioEffectsKey);
+        Assert.Equal((130f, 381f, 170f, 23f), (effects.X, effects.Y, effects.Width, effects.Height));
+        var voice = shell.Rows.Single(r => r.Key == OriginalShell.AudioVoiceKey);
+        Assert.Equal((130f, 431f, 170f, 23f), (voice.X, voice.Y, voice.Width, voice.Height));
+        var accept = shell.Rows.Single(r => r.Key == OriginalShell.AudioAcceptKey);
+        Assert.Equal((200f, 500f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
+
+        var board = shell.Compose();
+        Assert.Equal(new[] { "PM_Logo.png", "PP_ApBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
+        Assert.Contains(board.Lines, l => l.Text == "AUDIO" && l.X == 120f && l.Justify == BoardJustify.Center);
+        Assert.Contains(board.Lines, l => l.Text == "Master" && l.X == 130f && l.Y == 250f && l.Width == 112f);
+        Assert.Contains(board.Lines, l => l.Text == "Set the overall volume of all sounds."
+            && l.X == 340f && l.Y == 260f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Music Volume" && l.X == 130f && l.Y == 310f && l.Width == 170f);
+        Assert.Contains(board.Lines, l => l.Text == "Effects Volume" && l.X == 130f && l.Y == 365f && l.Width == 170f);
+        Assert.Contains(board.Lines, l => l.Text == "Voice Volume" && l.X == 130f && l.Y == 415f && l.Width == 170f);
+        Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
+
+        // The slot is drawn at the track's corner, the thumb at the level's own place on it. The
+        // Master row authors no slider, so it takes the shipped art names as well as the sizes.
+        var masterSlot = board.Pictures.Single(p => p.Art.Name == "PF_B_SliderSlot.png");
+        Assert.Equal((130f, 276f), (masterSlot.X, masterSlot.Y));
+        var masterThumb = board.Pictures.Single(p => p.Art.Name == "PF_B_Slider.png");
+        Assert.Equal((258f, 267f), (masterThumb.X, masterThumb.Y));
+        // The music row stands at the shipped default of 50, which is half a run along its slot.
+        Assert.Equal(130f, board.Pictures.Single(p => p.Art.Name == "PP_B_SliderSlot.png" && p.Y == 336f).X);
+        Assert.Equal(194f, board.Pictures.Single(p => p.Art.Name == "PP_B_Slider.png" && p.Y == 327f).X);
+    }
+
     /// <summary>The VIDEO page behind the Preferences page's third door: it opens on the saved
     /// words with its first row focused, the checkbox under that flips the graphics word, and
     /// ACCEPT CHANGES leaves as the one apply exit carrying both display choices beside the two the
@@ -275,7 +416,8 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
-        // The AUDIO door between them is disabled, so one step down crosses it.
+        // The AUDIO door stands between them, so the VIDEO door is two steps down.
+        shell.Step(Down);
         shell.Step(Down);
         Assert.Equal(OriginalShell.VideoDoorKey, shell.FocusedKey);
         shell.Step(Accept);
@@ -565,17 +707,17 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void TheOptionsScreenIsComposedOverThePreferencesChromeWithItsTwoBuiltDoorsLive()
+    public void TheOptionsScreenIsComposedOverThePreferencesChromeWithItsThreeBuiltDoorsLive()
     {
         var shell = Shell(out _);
         shell.Open(OriginalScreen.Options);
 
-        // The four decoded page doors at their authored corners, the first and third live and the
-        // other two disabled, then the section's own RETURN TO MAIN MENU.
+        // The four decoded page doors at their authored corners, the first three live and CONTROLS
+        // disabled, then the section's own RETURN TO MAIN MENU.
         Assert.Equal(
             new[] { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS", OriginalShell.OptionsBackKey },
             shell.Rows.Select(r => r.Key));
-        Assert.Equal(new[] { true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
+        Assert.Equal(new[] { true, true, true, false, true }, shell.Rows.Select(r => r.Enabled));
         var back = shell.Rows.Single(r => r.Key == OriginalShell.OptionsBackKey);
         Assert.Equal((460f, 500f, 240f, 50f), (back.X, back.Y, back.Width, back.Height));
 
@@ -585,7 +727,8 @@ public class OriginalShellTests
         Assert.Contains(board.Lines, l => l.Text == "PREFERENCES" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Change the audio settings." && l.X == 340f && l.Y == 320f);
         Assert.Contains(board.Lines, l => l.Text == "Change the difficulty level and default views." && l.X == 340f);
-        Assert.Equal(0, board.Plaques.Single(p => p.Art.Name == "PP_B_Audio.png").Frame);
+        Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Audio.png").Frame);
+        Assert.Equal(0, board.Plaques.Single(p => p.Art.Name == "PP_B_Controls.png").Frame);
         Assert.Equal(2, board.Plaques.Single(p => p.Art.Name == "PP_B_GameOptions.png").Frame);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xDD, 0xC4), shell.PreferencesInks.Text);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xC0, 0xBA, 0xAD), shell.PreferencesInks.Title);
@@ -746,12 +889,16 @@ public class OriginalShellTests
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the paper plaque
     // 160x112 (four 28-pixel frames), the checkbox 16x128 (eight 16-pixel frames), the dropdown
-    // arrows 15x56, the panes unmeasured.
+    // arrows 15x56, the slider's slot and thumb at their shipped sizes, the panes unmeasured.
     private static (int Width, int Height)? Measure(string art) => art switch
     {
         "PM_B_Paper.png" => (160, 112),
         "PP_B_Check8.png" => (16, 128),
         "PP_B_DropUp.png" or "PP_B_DropDown.png" => (15, 56),
+        // The section's own slider art and the shipped names a row with no slider widget falls
+        // back to, both at the shipped sizes: a three-pixel slot and a thumb that clears it.
+        "PP_B_SliderSlot.png" or "PF_B_SliderSlot.png" => (171, 3),
+        "PP_B_Slider.png" or "PF_B_Slider.png" => (43, 21),
         _ when art.StartsWith("PM_B_", System.StringComparison.Ordinal) => (240, 200),
         _ when art.StartsWith("PP_B_", System.StringComparison.Ordinal) => (240, 200),
         _ => null,
