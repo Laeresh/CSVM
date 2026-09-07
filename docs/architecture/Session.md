@@ -390,9 +390,9 @@ world has a `WorldSounds` and ticked on the sim clock: each AI spawn is register
 its own `FlightController.Team`, each human rig as a damage source, and the wired sites are
 subscribed (the hit-path damage tiers, the death cries, the patrol-to-pursue call-out, the
 sixth-sense stun and the completed reaction). `RegisterAi` also mirrors `InPlay` into the speaker's
-liveness, which is the only place the engine-free dispatcher and a controller meet. Clips play
-through `WorldSounds.PlayOneShot` alone and every roll prints an `ai voice:` line. The wired and
-unwired table is [../formats/combat-voice.md](../formats/combat-voice.md).
+liveness, the only place the engine-free dispatcher and a controller meet. Clips play through
+`WorldSounds.PlayOneShot` alone, passing Voice where that path's other callers take its Effects
+default, and every roll prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending

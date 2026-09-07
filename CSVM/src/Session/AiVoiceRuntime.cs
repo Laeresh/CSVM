@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -10,7 +11,8 @@ namespace CSVM.Session;
 /// event sources on each registered aircraft, runs them through <see cref="AiVoiceDispatcher"/>,
 /// and plays every decision through <c>CombatVoice.PlayableFor</c> only, resolving the
 /// name, <c>WorldSounds.HasStream</c> answering availability, and the source-following
-/// <c>WorldSounds.PlayOneShot(name, Node3D, rng)</c> playing it from the speaker's own aircraft.
+/// <c>WorldSounds.PlayOneShot(name, Node3D, rng, Voice)</c> playing it from the speaker's own
+/// aircraft; that bus argument alone separates a callout from the Effects one-shots on that call.
 /// The wired/unwired dispatch-site table is docs/formats/combat-voice.md "The remake's dispatch
 /// sites". Speakers register on their real <see cref="FlightController.Team"/>; a broadcast
 /// elects among a caller's own side.
@@ -175,7 +177,10 @@ public sealed partial class AiVoiceRuntime : Node
         string tag = _bySpeaker.TryGetValue(speaker.Id, out var node) ? node.Name : $"#{speaker.Id}";
         if (decision.Clip is { } clip && node != null)
         {
-            string? resolved = _sounds.PlayOneShot(clip, node, _rng);
+            // The one Voice caller on the one-shot path: combat voice has no player of its own, so
+            // its category is named on the call while the destruction and impact callers that share
+            // the path keep the Effects default.
+            string? resolved = _sounds.PlayOneShot(clip, node, _rng, AudioBuses.Voice);
             GD.Print($"ai voice: {tag}: trigger #{decision.TriggerId} -> {clip}" +
                      (resolved != null && resolved != clip ? $" ({resolved})" : "") +
                      $" ({decision.Outcome})");

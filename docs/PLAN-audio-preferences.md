@@ -155,7 +155,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the mix
 
 1. ☑ The bus layout, and every player on a named bus
-2. ☐ Combat voice leaves the effects path
+2. ☑ Combat voice leaves the effects path
 3. ☐ The mix seam, and the music placeholder's deletion
 
 ### Wave B — the page
@@ -237,7 +237,7 @@ has a world, a flown plane and the menu service up, or it passes by seeing nothi
 
 **Verified.** <pending orchestrator run>
 
-## A2 ☐ Combat voice leaves the effects path
+## A2 ☑ Combat voice leaves the effects path
 
 **Goal.** A pilot's combat callout plays on the Voice bus while the destruction and impact one-shots
 that share its code path stay on Effects.
@@ -262,9 +262,15 @@ existing assertion that it played at all; `WorldSounds.OneShotsStarted` is the c
 exists for "a cue fired". Then at the controls, with Voice at 0 and Effects at 100 after `A3`, a
 dogfight is silent of callouts and loud with gunfire. `.\RunTests.ps1` green.
 
-**⚠ Traps.** The default must be Effects, not "whatever the caller last passed": a pooled player is
-reused across calls, so a player that carried Voice once and is handed back to a destruction sound
-would speak an explosion on the Voice bus. Set the bus on every play, not once at pool fill.
+**⚠ Traps.** The default must be Effects, not "whatever the caller last passed", so the bus is set
+on every play and never once at a fill point. `WorldSounds.Spawn` builds a fresh
+`AudioStreamPlayer3D` per one-shot and frees it when the clip ends, so no player crosses two calls
+and the leak is unreachable today; the pooling in this class is the `SOUND_NODE` emitter half, one
+player per live host. The rule is kept on the construction anyway, and the `ai-voice` suite replays
+one clip with the default argument after the Voice call, so a later pooling of these players cannot
+reintroduce it silently.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☐ The mix seam, and the music placeholder's deletion
 
