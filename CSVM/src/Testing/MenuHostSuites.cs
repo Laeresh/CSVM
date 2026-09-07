@@ -27,7 +27,8 @@ internal static class MenuHostSuites
     [Suite("menu-host-pointer",
         "Built-in's launchscreen under the mouse, through the host's frame: a motion over a row "
         + "moves the cursor onto it, a press and release on one row confirms it in one frame, a "
-        + "release after the pointer left the row confirms nothing, a wheel notch over the "
+        + "release after the pointer left the row confirms nothing, the right button goes back a "
+        + "screen on its press alone and quits nothing at the top level, a wheel notch over the "
         + "aircraft list steps the cursor either way and wraps, a pad step in the same frame as a "
         + "hover keeps the pad's row, and a click off the locked airframe is refused")]
     internal static void MenuHostPointer(TestContext ctx)
@@ -51,6 +52,7 @@ internal static class MenuHostSuites
             }
 
             HoverAndClick(ctx, host, menu);
+            RightBack(ctx, host, menu, exits);
             Wheel(ctx, host, seat, menu, exits);
         }
         finally
@@ -225,6 +227,32 @@ internal static class MenuHostSuites
             $"a press and release on the Free Flight row steps the cursor there and confirms it in one frame ({menu.ShownScreen})");
     }
 
+    // The right button, from the chapter list the click above reached: Back on a screen that has
+    // one, inert on the Mode screen where Back is the quit, and nothing on a release of its own.
+    // Leaves the cursor back on Chapter, which is where Wheel starts.
+    private static void RightBack(TestContext ctx, MenuHost host, LaunchMenu menu, List<MenuExit> exits)
+    {
+        Emit(menu.RowControl(0), Button(MouseButton.Right, pressed: false));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownScreen == "Chapter",
+            $"a right-button release with no press before it does nothing ({menu.ShownScreen})");
+
+        RightClick(menu.RowControl(0));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownScreen == "Mode" && exits.Count == 0,
+            $"a right click on the chapter list goes back a screen ({menu.ShownScreen}, {exits.Count} exit(s))");
+
+        RightClick(menu.RowControl(0));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownScreen == "Mode" && exits.Count == 0,
+            $"and a right click at the top level quits nothing ({menu.ShownScreen}, {exits.Count} exit(s))");
+
+        Click(menu.RowControl(0));
+        host.Tick(Dt);
+        ctx.Check(menu.ShownScreen == "Chapter",
+            $"the chapter list is back for the wheel checks ({menu.ShownScreen})");
+    }
+
     // The aircraft list: the wheel steps and wraps, the pad outranks a hover in the same frame,
     // and a click selects, is refused off the locked row, and confirms on it.
     private static void Wheel(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu, List<MenuExit> exits)
@@ -268,6 +296,13 @@ internal static class MenuHostSuites
     {
         Emit(row, Button(MouseButton.Left, pressed: true));
         Emit(row, Button(MouseButton.Left, pressed: false));
+    }
+
+    // Both halves, so a Back taken twice from one click would show up as a second screen step.
+    private static void RightClick(Control? row)
+    {
+        Emit(row, Button(MouseButton.Right, pressed: true));
+        Emit(row, Button(MouseButton.Right, pressed: false));
     }
 
     // Dispatched the way Godot's gui_input reaches a handler; a missing row is a failed check

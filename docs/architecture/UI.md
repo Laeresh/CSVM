@@ -12,9 +12,9 @@ Godot control behind it. Mode leads to Chapter and Plane for Free Flight and Dog
 Instant Action's own wizard; the Options, Controls, hangar and campaign doors hang off the same
 graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the screenshot key and
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
-step and Accept), and nothing else: rosters, seats, picks, gates and the typed exit are the host's
-features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign screens are
-`HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
+step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
+the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their

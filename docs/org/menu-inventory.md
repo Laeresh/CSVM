@@ -747,8 +747,10 @@ then the tab bar and steps a dropdown's value sideways, a remake equivalence).
   *usable* without the artwork, not that it does not use it. A3's fallback wording depends on which
   of the two the milestone means.
 - **Built-in plays no menu sounds.** The original has four UI wavs plus the splash track.
-- **Built-in takes no mouse input.** Every launchscreen `Control` is `MouseFilterEnum.Ignore`
-  (`BL-654`), where the original's layout gives every button a rollover and a depressed colour and
+- **Built-in's mouse reaches its own rows only.** The centred layout's rows are `Control`s that take
+  Godot's hit test, so a hover focuses a row, the left button confirms it, the wheel steps a list and
+  the right button is Back; the campaign boards under Built-in are one composed surface and stay on
+  the keys and pads. The original's layout gives every button a rollover and a depressed colour and
   its listboxes frame the row under the pointer.
 
 ## The decoded layout
