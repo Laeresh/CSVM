@@ -1042,10 +1042,16 @@ public sealed partial class OriginalShell
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
     }
 
+    // ⚠ <paramref name="boxOnFocus"/> is the painted-plate pages' dropdown, not everyone's. The
+    // paper pages draw the box on every frame in black, which reads as a printed form field and is
+    // the look they want. On the Preferences family's plates the same box is a hard black rectangle
+    // over paint, drawn permanently around rectangles the layout authors at differing widths, so it
+    // reads as chrome nobody chose; there the box is the focus mark instead, in the grey the slider
+    // row marks with, so one vocabulary covers every marked row on those pages.
     private void ComposeInstantActionRow(
         OriginalRow row, bool focused, bool pressed, int index,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures,
-        float itemFont = ItemFont)
+        float itemFont = ItemFont, bool boxOnFocus = false)
     {
         switch (row.Kind)
         {
@@ -1066,12 +1072,26 @@ public sealed partial class OriginalShell
                     focused ? BoardInk.RowFocused : BoardInk.Row, index));
                 break;
             case OriginalRowKind.Dropdown:
-                if (focused)
+                if (boxOnFocus)
                 {
-                    fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
+                    // No wash under this one. The dropdown's box encloses the plate's own recessed
+                    // groove and the value written in it, so it already has a region; the slider's
+                    // encloses flat paint and needs one. A wash that changes nothing is noise.
+                    if (focused)
+                    {
+                        fills.Add(FocusBox(row));
+                    }
+                }
+                else
+                {
+                    if (focused)
+                    {
+                        fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
+                    }
+
+                    fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 1f, Border: true));
                 }
 
-                fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 1f, Border: true));
                 float arrowWidth = 0f;
                 if (row.Art != null)
                 {

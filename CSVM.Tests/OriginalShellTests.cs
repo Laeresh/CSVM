@@ -434,7 +434,11 @@ public class OriginalShellTests
         Assert.Equal((200f, 500f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
 
         var board = shell.Compose();
-        Assert.Equal(new[] { "PM_Logo.png", "PP_ApBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
+        // The logo and the plate are the backdrop, not pictures. A board draws its fills between the
+        // two layers, so a plate among the pictures would paint over the focused row's own mark and
+        // the page would show no focus at all.
+        Assert.Equal(new[] { "PM_Logo.png", "PP_ApBack.png" }, board.Backdrop.Select(p => p.Art.Name));
+        Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_ApBack.png");
         Assert.Contains(board.Lines, l => l.Text == "AUDIO" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Master" && l.X == 130f && l.Y == 250f && l.Width == 112f);
         Assert.Contains(board.Lines, l => l.Text == "Set the overall volume of all sounds."
@@ -443,6 +447,26 @@ public class OriginalShellTests
         Assert.Contains(board.Lines, l => l.Text == "Effects Volume" && l.X == 130f && l.Y == 365f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Voice Volume" && l.X == 130f && l.Y == 415f && l.Width == 170f);
         Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
+
+        // The focused row is marked twice and the others not at all: an outline around the row the
+        // page opens on, and that row's title alone in the focused ink. Both halves are asserted
+        // because either alone is a mark a player at a pad reported not seeing.
+        Assert.Equal(
+            new[] { (130f, 266f, 170f, 23f) },
+            board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        Assert.Contains(board.Lines, l => l.Text == "Master" && l.Ink == BoardInk.RowFocused);
+        Assert.All(
+            new[] { "Music Volume", "Effects Volume", "Voice Volume" },
+            title => Assert.Contains(board.Lines, l => l.Text == title && l.Ink == BoardInk.Row));
+
+        // And the mark follows the cursor rather than sticking to the first row.
+        shell.Step(Down);
+        var moved = shell.Compose();
+        Assert.Equal(
+            new[] { (130f, 326f, 170f, 23f) },
+            moved.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        Assert.Contains(moved.Lines, l => l.Text == "Music Volume" && l.Ink == BoardInk.RowFocused);
+        Assert.Contains(moved.Lines, l => l.Text == "Master" && l.Ink == BoardInk.Row);
 
         // The slot is drawn at the track's corner, the thumb at the level's own place on it. The
         // Master row authors no slider, so it takes the shipped art names as well as the sizes.
@@ -809,7 +833,10 @@ public class OriginalShellTests
         Assert.Equal((200f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
 
         var board = shell.Compose();
-        Assert.Equal(new[] { "PM_Logo.png", "PP_GoBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
+        // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its
+        // fills between the two layers, so a plate among the pictures buries every focus mark.
+        Assert.Equal(new[] { "PM_Logo.png", "PP_GoBack.png" }, board.Backdrop.Select(p => p.Art.Name));
+        Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_GoBack.png");
         Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
@@ -818,6 +845,19 @@ public class OriginalShellTests
         // The first two authored rows are taken: two titles, two descriptions and the page's own
         // tab title.
         Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
+
+        // The box is the focus mark on this page's plate rather than standing chrome, so exactly one
+        // row carries it and it is the focused one. Drawn on every row it was a permanent hard box
+        // around rectangles the layout authors at differing widths, which nobody chose because the
+        // plate was burying it.
+        Assert.Equal(
+            new[] { (135f, 295f, 144f, 17f) },
+            board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        shell.Step(Down);
+        var moved = shell.Compose();
+        Assert.Equal(
+            new[] { (135f, 355f, 144f, 17f) },
+            moved.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
     }
 
     /// <summary>The VIDEO page over its own section: the dropdowns at the authored Graphics,
@@ -848,7 +888,10 @@ public class OriginalShellTests
         Assert.Equal((500f, 520f, 240f, 50f), (cancel.X, cancel.Y, cancel.Width, cancel.Height));
 
         var board = shell.Compose();
-        Assert.Equal(new[] { "PM_Logo.png", "PP_VpBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
+        // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its
+        // fills between the two layers, so a plate among the pictures buries every focus mark.
+        Assert.Equal(new[] { "PM_Logo.png", "PP_VpBack.png" }, board.Backdrop.Select(p => p.Art.Name));
+        Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_VpBack.png");
         Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Monitor" && l.X == 130f && l.Y == 245f && l.Width == 90f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the monitor", System.StringComparison.Ordinal)
@@ -869,6 +912,22 @@ public class OriginalShellTests
         // The checkbox draws unchecked and unfocused, the page opening on the monitor row four
         // above it: the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
+
+        // The box marks the focused dropdown and no other, and it follows the cursor. Four rows down
+        // the cursor stands on the checkbox, which is a plaque strip and takes no box at all, so the
+        // page draws none.
+        Assert.Equal(
+            new[] { (260f, 245f, 70f, 15f) },
+            board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        shell.Step(Down);
+        Assert.Equal(
+            new[] { (260f, 290f, 70f, 17f) },
+            shell.Compose().Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
+        Assert.Empty(shell.Compose().Fills.Where(f => f.Border));
     }
 
     [Fact]

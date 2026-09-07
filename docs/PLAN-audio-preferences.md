@@ -167,8 +167,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 5. ☑ The slider the shell has never had
 6. ☑ The AUDIO page opens from Preferences
 8. ☑ A slider a player can hear while moving it
-7. ◐ The precedence ladder, and the re-based mix judged at the controls (the ladder is asserted; the
-   mix is owed at the controls)
+7. ☑ The precedence ladder, and the re-based mix judged at the controls
+9. ☑ The focused slider, visible on a pad
 
 ## Dependency and parallelism notes
 
@@ -525,7 +525,7 @@ the bus gains and the clip count, which is not the same claim.
 
 **Verified.** <pending orchestrator run>
 
-## B7 ◐ The precedence ladder, and the re-based mix judged at the controls
+## B7 ☑ The precedence ladder, and the re-based mix judged at the controls
 
 **Goal.** The four levels sit in the same precedence ladder the existing options do, `--volume=` and
 `audio.volume` still beat them into silence in a repo run, `--det` reads none of them, and the mix
@@ -574,5 +574,67 @@ closure are done. What is owed is the author's ear on the re-based mix, which
 `docs/verification.md` places in the half this project cannot verify itself; no headless
 measurement stands in for it, and any level that changes as a result is TUNE and lands as the new
 default.
+
+**Verified.** The ladder is asserted from a parsed command line and both rungs were seen to fail
+before being restored. The mix was heard at the shipped defaults and accepted: the briefing reads a
+little quieter and is fine, a sortie carrying all three categories sounds right, and each slider is
+audible while it moves. The plan's central worry does not arise, because the briefing already ducks
+the music for its whole stay (`MusicPlayer.DuckLevel`), so the narration was never fighting a
+full-level score and the 6 dB re-base needed no compensation. No level changed, so the shipped
+defaults stand as authored. One defect came out of the pass and is `B9`.
+
+## B9 ☑ The focused slider, visible on a pad
+
+**Goal.** The focused slider is unmistakable on the page's own artwork, at the pad and at the
+keyboard, without obscuring the level the thumb is showing.
+
+**Evidence (confidence: traced to a proved cause, reported at the controls).** A pad walks the four
+rows and nothing on screen says which one it is on. `ComposeSlider` does draw focus, a black wash at
+0.10 alpha over the row's rectangle (`OriginalShell.cs`), copied from the `Dropdown` case of
+`ComposeInstantActionRow`. The wash is not faint, it is buried: `ComposedBoardView` paints
+`Backdrop`, then `Fills`, then `Pictures`, and the three options pages added their opaque plate to
+`Pictures`, so every fill a row composed was painted over by the plate. A solid red mark at alpha 1
+in place of the wash showed no pixel at all, and two shots at two different focused rows were
+byte-identical. The same burial hid the dropdown rows' own permanent borders on the Game Options and
+VIDEO pages, so the border was never the reason those read; their focused label ink was. No suite
+could see any of it: every assertion in `B5` and `B6` is about values, geometry and gains, none
+about legibility.
+
+**Decision (the author's).** The mark is the outline and the focused title together: an outline
+around the press region in the layout's own `DISABLED` grey over the 0.10 wash, and that row's title
+alone in the focused ink. The `Preferences` palette's focused ink is the file-wide `ACTIVE` rather
+than the page title's colour, which is duller than the description cream every unfocused row is
+written in and made a focused row read as the disabled one. `ACTIVE` is authored and is already
+every other Original screen's focused ink, which is why it is taken over a chosen near-white.
+
+The same call softened the dropdown on all three pages. Unburying the fills exposed a permanent
+hard-black box around every dropdown, drawn on rectangles the layout authors at differing widths, so
+the column read ragged and the boxes read as chrome; nobody had chosen that look because nobody
+could see it. Those rows now take the focused row's grey box and draw nothing when unfocused, so one
+vocabulary covers every marked row on these pages and an unfocused page is what it always was. The
+paper pages keep the permanent black box, which on a printed page reads as the form field it is.
+
+**Approach.** The treatment is the port's own. The original is a mouse-only page with no focused
+state to copy: the thumb art is a single frame with no rollover or depressed variant, and inventing
+art is out. Build the candidates against the real page and let the author pick from a montage rather
+than reasoning about contrast in the abstract. Whatever wins applies to the row kind, not to this
+page, since `B5`'s control is the shell's and any later page inherits it.
+
+**Model recommendation.** medium. The judgement is the author's; the work is composing candidates
+honestly against the shipped artwork.
+
+**Verify.** A `--screenshot` per candidate at the same level and the same focused row, and one
+showing focus moved to a different row, so the difference is what the shot shows rather than the
+treatment in isolation. The author picks. Then a suite asserts the chosen mark is composed for the
+focused row and absent from the others, which is the part that can be held mechanically once the
+look is settled. `.\RunTests.ps1` green.
+
+**⚠ Traps.** Do not reach for a strip frame the thumb does not have, and do not author new art. Do
+not move the authored geometry to make room for a mark; the row lines are decoded and `B6` placed
+them per row on purpose. A mark that covers the thumb hides the level the player is setting, which
+is the one thing the control exists to show. ⚠ A page's plate belongs in `Backdrop`: a board draws
+its fills between that layer and `Pictures`, so a plate among the pictures buries every focus mark
+under opaque art and no alpha, colour or shape reaches the screen. A mark that cannot be seen in a
+`--screenshot` is a layer question before it is a contrast question.
 
 **Verified.** <pending orchestrator run>

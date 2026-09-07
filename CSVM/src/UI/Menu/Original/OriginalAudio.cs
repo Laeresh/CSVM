@@ -254,13 +254,16 @@ public sealed partial class OriginalShell
     // The page as drawn: the Preferences page's logo (this section authors none and the original
     // keeps it standing), the page's background, its title, then each level's title and description
     // at their authored columns and the sliders and plaques over them.
+    // ⚠ The logo and the plate are backdrop, not pictures. A board draws every fill between the two
+    // layers, so a plate in the picture layer paints over each row's own focus mark: the page then
+    // shows no focused row at all, whatever the mark is, because the mark is under opaque art.
     private void ComposeAudio(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> pictures,
+        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
     {
         if (_layout.Screen(PreferencesSection)?.Widget("PF_LOGO") is { Art.Count: > 0 } logo)
         {
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], Math.Max(1, logo.Frames)),
+            backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], Math.Max(1, logo.Frames)),
                 logo.Int("X"), logo.Int("Y")));
         }
 
@@ -274,7 +277,7 @@ public sealed partial class OriginalShell
 
         if (screen.Widget("AP_BACKGROUND") is { Art.Count: > 0 } background)
         {
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, background.Art[0], Math.Max(1, background.Frames)),
+            backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, background.Art[0], Math.Max(1, background.Frames)),
                 background.Int("X"), background.Int("Y")));
         }
 
@@ -285,11 +288,15 @@ public sealed partial class OriginalShell
                 title.Int("Justify") == 1 ? BoardJustify.Center : BoardJustify.Left));
         }
 
-        foreach (var option in AudioOptions)
+        // The focused row's title in the focused ink, the mark a list row takes, so the cursor shows
+        // where the eye already reads the row's name. The rows are built from this table in this
+        // order, so a level's index is its row's.
+        for (int i = 0; i < AudioOptions.Length; i++)
         {
+            var option = AudioOptions[i];
             var place = PlaceAudioRow(screen, option);
             lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
-                AudioTitleFont, BoardInk.Row));
+                AudioTitleFont, i == focus ? BoardInk.RowFocused : BoardInk.Row));
             lines.Add(new BoardLine(option.Description, place.DescX, place.DescY, place.DescWidth,
                 AudioDescFont, BoardInk.Row));
         }

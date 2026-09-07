@@ -781,13 +781,13 @@ public sealed partial class OriginalShell
                 ComposeCredits(pictures);
                 break;
             case OriginalScreen.GameOptions:
-                ComposeGameOptions(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
+                ComposeGameOptions(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case OriginalScreen.Audio:
-                ComposeAudio(screenRows, screenFocus, pictures, fills, lines, plaques);
+                ComposeAudio(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques);
                 break;
             case OriginalScreen.Video:
-                ComposeVideo(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
+                ComposeVideo(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
         }
 
@@ -1435,8 +1435,22 @@ public sealed partial class OriginalShell
             Slider: new OriginalSlider(track, track.Clamp(value), setValue, slot));
     }
 
+    // The box that marks a focused row on the pages composed over a painted plate, shared by the
+    // slider row and by the dropdown rows that take boxOnFocus, so one outline covers every marked
+    // row on those pages. It is the layout's own DISABLED grey rather than the dropdown's authored
+    // black, which on dark paint is a dark line nobody sees, and it is a mark rather than standing
+    // chrome, so only the row the cursor is on ever carries it.
+    private BoardFill FocusBox(OriginalRow row)
+    {
+        var mark = Inks.Disabled;
+        return new BoardFill(row.X, row.Y, row.Width, row.Height, mark.R, mark.G, mark.B, 0.75f, Border: true);
+    }
+
     // A slider as drawn: the slot, then the thumb at the value's own place on it. The thumb is one
-    // frame with no focused or pressed state, so focus is the wash this page's other controls take.
+    // frame with no focused or pressed state, so focus is the focus box and the wash under it.
+    // ⚠ The box is the readable half, not the wash: the wash lands over a widened press region
+    // around a three-pixel slot, so on its own it is a faint band over mostly background. It stays
+    // because the box needs a region to enclose; without it the outline reads as four loose lines.
     // With neither art measurable both stand as rectangles, as a missing plaque leaves an outlined
     // label, so the control still shows its level.
     private void ComposeSlider(OriginalRow row, bool focused, List<BoardFill> fills, List<BoardPicture> pictures)
@@ -1450,6 +1464,7 @@ public sealed partial class OriginalShell
         if (focused)
         {
             fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
+            fills.Add(FocusBox(row));
         }
 
         float thumbX = track.ThumbX(slider.Value);

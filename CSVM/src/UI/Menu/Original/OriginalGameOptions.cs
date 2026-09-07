@@ -317,13 +317,16 @@ public sealed partial class OriginalShell
     // The page as drawn: the Preferences page's logo (this section authors none and the original
     // keeps it standing), the page's background, its title, then each option's title and
     // description at their authored columns, the controls, and an open list as the overlay.
+    // ⚠ The logo and the plate are backdrop, not pictures, for the reason ComposeAudio states: a
+    // board draws its fills between the two layers, so a plate among the pictures buries every
+    // focus mark the rows compose under opaque art.
     private void ComposeGameOptions(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> pictures,
+        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
     {
         if (_layout.Screen(PreferencesSection)?.Widget("PF_LOGO") is { Art.Count: > 0 } logo)
         {
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], Math.Max(1, logo.Frames)),
+            backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], Math.Max(1, logo.Frames)),
                 logo.Int("X"), logo.Int("Y")));
         }
 
@@ -337,7 +340,7 @@ public sealed partial class OriginalShell
 
         if (screen.Widget("GO_BACKGROUND") is { Art.Count: > 0 } background)
         {
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, background.Art[0], Math.Max(1, background.Frames)),
+            backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, background.Art[0], Math.Max(1, background.Frames)),
                 background.Int("X"), background.Int("Y")));
         }
 
@@ -394,7 +397,8 @@ public sealed partial class OriginalShell
                 continue;
             }
 
-            ComposeInstantActionRow(control, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures);
+            ComposeInstantActionRow(control, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures,
+                boxOnFocus: true);
         }
 
         if (_goOpen != null && rows.Count > 0)
