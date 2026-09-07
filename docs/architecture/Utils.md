@@ -178,8 +178,17 @@ and `Voice` sending into it. A resource rather than an `AudioServer.AddBus` call
 bus exists before the first node enters the tree. Every site that builds an `AudioStreamPlayer` or
 `AudioStreamPlayer3D` sets `Bus` from here at construction, because Godot resolves an unknown or
 unset bus name to Master with no error and a misplaced player is therefore silent about it. Bus 0
-carries the developer `--volume=` gain and the focus mute (`Session/Launcher.cs`) and is not part of
-a player's mix. The `audio-buses` suite is what holds the placement.
+carries the developer `--volume=` gain and the focus mute (`Session/Launcher.cs`); the three
+children carry the player's mix, written by `AudioMix`. The `audio-buses` suite holds both.
+
+## src/Utils/AudioMix.cs
+The player's mix: four 0..100 levels (Master, Music, Effects, Voice) into one linear gain per
+category bus, `category/100 x master/100`, floored at -80 dB so a level of 0 is silence rather than
+negative infinity. Master multiplies the other three instead of being a level of its own, so
+`Apply` writes only the three child buses and refuses index 0, which keeps `--volume=0` silencing a
+scripted run whatever the levels say. `Apply` takes a nullable level per category and falls back to
+the shipped default, so a caller passes saved values straight through; it is both the startup apply
+(`Session/Launcher.cs`) and the live one. The arithmetic is pure and unit-tested.
 
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved

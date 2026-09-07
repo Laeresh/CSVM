@@ -156,7 +156,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ The bus layout, and every player on a named bus
 2. ☑ Combat voice leaves the effects path
-3. ☐ The mix seam, and the music placeholder's deletion
+3. ☑ The mix seam, and the music placeholder's deletion
 
 ### Wave B — the page
 
@@ -272,7 +272,7 @@ reintroduce it silently.
 
 **Verified.** <pending orchestrator run>
 
-## A3 ☐ The mix seam, and the music placeholder's deletion
+## A3 ☑ The mix seam, and the music placeholder's deletion
 
 **Goal.** One module turns four 0..100 levels into three bus gains and applies them, live and at
 startup. `MusicPlayer.ChannelLevel` is deleted, and the music a player hears is the level the mix
@@ -309,6 +309,12 @@ under the slider; the backlog entry exists because it is a placeholder, and leav
 a player's 100 mean 0.2. If the narration does turn out to be buried, the fix is `DuckLevel` (which
 is TUNE and survives this plan by design) or the shipped defaults, and either is a decision for `B7`
 with the author at the controls, never a new constant multiplied into the music channel.
+
+⚠ **The briefing listen is owed and is `B7`'s.** The narration-over-music judgement this item's
+re-base makes due is the author's ear at the controls, and `docs/verification.md` places audio in
+the half this project cannot verify itself. No headless measurement stands in for it.
+
+**Verified.** <pending orchestrator run>
 
 # Wave B — the page
 

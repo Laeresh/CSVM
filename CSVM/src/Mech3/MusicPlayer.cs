@@ -56,18 +56,11 @@ public sealed partial class MusicPlayer : Node
     /// silent, from the shared sound object <c>GLOBALS.SCRIPT</c> creates.</summary>
     public const int MenuLoopCount = 5;
 
-    /// <summary>⚠ TUNE, and a stand-in for a control that does not exist yet. The music channel is
-    /// mixed this far below the master bus because at full gain it drowns the briefing narration at
-    /// the controls. The original mixes music against a user setting; until an options menu exists
-    /// there is nothing to read, so the level is fixed here. Remove it, do not re-tune it, once the
-    /// options menu can carry a music slider.</summary>
-    public const float ChannelLevel = 0.2f;
-
-    /// <summary>⚠ TUNE. The share of <see cref="ChannelLevel"/> the channel keeps while
-    /// <see cref="Ducked"/> is set. The briefing ducks for the whole of its stay, not just while a
-    /// line plays: its narration is one dry voice against a full-band track, and even at
-    /// ChannelLevel the words are hard to follow at the controls. This one survives an options
-    /// menu: a slider sets the level a duck is a share of.</summary>
+    /// <summary>⚠ TUNE. The share of its own gain the channel keeps while <see cref="Ducked"/> is
+    /// set. The briefing ducks for the whole of its stay, not just while a line plays: its narration
+    /// is one dry voice against a full-band track, and the words are hard to follow under it. The
+    /// level a duck is a share of is the player's Music level, applied on the Music bus by
+    /// <see cref="Utils.AudioMix"/>, so this is a ratio and never a mix level itself.</summary>
     public const float DuckLevel = 0.1f;
 
     /// <summary>Gain per second the duck moves at, so opening or leaving a ducking screen dips the
@@ -378,8 +371,9 @@ public sealed partial class MusicPlayer : Node
     private void SetGain(float gain)
     {
         // Gain stays the fade's own 0..1 value, so every assertion about the ramp reads what the
-        // decode describes; ChannelLevel and the duck are applied at the mixer alone.
+        // decode describes; the duck is applied at the mixer alone. The player's music level is the
+        // Music bus's own gain (Utils.AudioMix) and is never a factor here.
         _gain = gain;
-        _player.VolumeDb = Mathf.LinearToDb(Math.Max(gain * ChannelLevel * _duck, 0.0001f));
+        _player.VolumeDb = Mathf.LinearToDb(Math.Max(gain * _duck, 0.0001f));
     }
 }

@@ -22,13 +22,22 @@ internal static class AudioBusSuites
     // player count per site brittle. What every site must satisfy is "at least one, none on Master".
     private const int AtLeastOne = 1;
 
+    // The dB an inaudible bus sits at, AudioMix's floor expressed as a volume. A repo run resolves
+    // the developer volume to 0 and lands bus 0 here, which is what keeps a scripted run silent.
+    private const float SilenceDb = -80f;
+
+    // Slack for a dB comparison, well under the 6 dB a level step of that size moves a bus by.
+    private const float DbSlack = 0.01f;
+
     [Suite("audio-buses",
-        "the shipped bus layout and the placement of every player on it: Master carries Music, "
-        + "Effects and Voice as its children, and each of the fourteen player-construction sites "
-        + "(the music channel, the mission radio, the menu service's narration and cue, "
-        + "FlightAudio's six, AiEngineAudio's loop factory, WorldSounds' emitter and one-shot, and "
-        + "the projectile pool) builds its players on the bus its category names, with a walk of "
-        + "the whole live scene tree failing on any player left on Master")]
+        "the shipped bus layout, the mix written onto it, and the placement of every player: "
+        + "Master carries Music, Effects and Voice as its children, each of the fourteen "
+        + "player-construction sites (the music channel, the mission radio, the menu service's "
+        + "narration and cue, FlightAudio's six, AiEngineAudio's loop factory, WorldSounds' emitter "
+        + "and one-shot, and the projectile pool) builds its players on the bus its category names, "
+        + "a walk of the whole live scene tree fails on any player left on Master, and the four "
+        + "levels reach the three child buses at startup and on a live change while bus 0, which "
+        + "carries the developer volume alone, is untouched by either")]
     internal static void AudioBusPlacement(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -39,6 +48,7 @@ internal static class AudioBusSuites
 
         var report = new StringBuilder();
         CheckLayout(ctx, report);
+        CheckMix(ctx, report);
 
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
@@ -150,11 +160,76 @@ internal static class AudioBusSuites
             ctx.Check(name == expected[i], $"bus {i} is named {expected[i]} actual={name}");
             ctx.Check(i == 0 || send == AudioBuses.Master,
                 $"bus {i} ({name}) sends into Master actual={send}");
-            // Only the child buses: bus 0 carries the developer --volume=/audio.volume gain, which
-            // is -80 dB in a repo run and is not part of a player's mix.
-            ctx.Check(i == 0 || Mathf.IsZeroApprox(AudioServer.GetBusVolumeDb(i)),
-                $"bus {i} ({name}) sits at its resting gain db={AudioServer.GetBusVolumeDb(i):0.###}");
+            if (i == 0)
+            {
+                // Bus 0 carries the developer volume and never a level, so it has no expected gain
+                // to compare against; CheckMix is where it is held to being untouched.
+                continue;
+            }
+
+            // A child bus carries the startup mix rather than a resting gain, and under --run-tests
+            // that is the shipped defaults because OptionsStore reads an emptied scratch directory.
+            ctx.Check(Math.Abs(AudioServer.GetBusVolumeDb(i) - StartupDb(name)) <= DbSlack,
+                $"bus {i} ({name}) carries its shipped level db={AudioServer.GetBusVolumeDb(i):0.###} want={StartupDb(name):0.###}");
         }
+    }
+
+    // The gain the shipped defaults put a child bus at. Master is a multiplier over the other
+    // three, so it is never a bus of its own and answers the resting gain here.
+    private static float StartupDb(string bus) => bus switch
+    {
+        AudioBuses.Music => AudioMix.VolumeDb(AudioMix.DefaultMusic, AudioMix.DefaultMaster),
+        AudioBuses.Effects => AudioMix.VolumeDb(AudioMix.DefaultEffects, AudioMix.DefaultMaster),
+        AudioBuses.Voice => AudioMix.VolumeDb(AudioMix.DefaultVoice, AudioMix.DefaultMaster),
+        _ => 0f,
+    };
+
+    // The mix half: a live change reaches all three child buses, the loudest possible mix leaves
+    // every one of them at or below its resting gain, and bus 0 comes through both untouched. That
+    // last pair is what makes a saved level unable to un-silence a scripted run.
+    private static void CheckMix(TestContext ctx, StringBuilder report)
+    {
+        float developer = AudioServer.GetBusVolumeDb(0);
+        report.AppendLine($"developer volume on bus 0 db={developer:0.###}, outside the mix");
+        try
+        {
+            AudioMix.Apply(master: 50, music: 100, effects: 0, voice: 25);
+            CheckBus(ctx, AudioBuses.Music, 100, 50, report);
+            CheckBus(ctx, AudioBuses.Effects, 0, 50, report);
+            CheckBus(ctx, AudioBuses.Voice, 25, 50, report);
+
+            AudioMix.Apply(master: 100, music: 100, effects: 100, voice: 100);
+            foreach (string bus in new[] { AudioBuses.Music, AudioBuses.Effects, AudioBuses.Voice })
+            {
+                float db = AudioServer.GetBusVolumeDb(AudioServer.GetBusIndex(bus));
+                ctx.Check(db <= DbSlack, $"the loudest mix leaves {bus} at or below its resting gain db={db:0.###}");
+            }
+            float after = AudioServer.GetBusVolumeDb(0);
+            ctx.Check(Math.Abs(after - developer) <= DbSlack,
+                $"the mix left bus 0 alone db={after:0.###} before={developer:0.###}");
+            ctx.Check(developer > SilenceDb + DbSlack || after <= SilenceDb + DbSlack,
+                $"a run silenced by --volume= stays silent at full levels db={after:0.###}");
+            ctx.Note($"developer volume db={developer:0.###} unchanged by the mix");
+        }
+        finally
+        {
+            AudioMix.Apply();
+        }
+
+        CheckBus(ctx, AudioBuses.Music, AudioMix.DefaultMusic, AudioMix.DefaultMaster, report);
+        CheckBus(ctx, AudioBuses.Effects, AudioMix.DefaultEffects, AudioMix.DefaultMaster, report);
+        CheckBus(ctx, AudioBuses.Voice, AudioMix.DefaultVoice, AudioMix.DefaultMaster, report);
+    }
+
+    private static void CheckBus(TestContext ctx, string bus, int level, int master,
+        StringBuilder report)
+    {
+        int index = AudioServer.GetBusIndex(bus);
+        float db = index < 0 ? float.NaN : AudioServer.GetBusVolumeDb(index);
+        float want = AudioMix.VolumeDb(level, master);
+        report.AppendLine($"  {bus} level={level} master={master} db={db:0.###} want={want:0.###}");
+        ctx.Check(index > 0 && Math.Abs(db - want) <= DbSlack,
+            $"{bus} carries level {level} under master {master} db={db:0.###} want={want:0.###}");
     }
 
     private static void CheckSite(TestContext ctx, Node owner, string site, string bus,

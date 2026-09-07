@@ -562,8 +562,10 @@ The state-driven score: one non-positional streaming channel beside `WorldSounds
 emitters, so the menu, the cabin and the mission director all drive the same track. `Enter(state)`
 cues the sound-group or definition name the original's data names for that state; `Cue(name)` is
 the raw form for a name the data supplies directly. One track at a time, hard cuts, no crossfade;
-`NoteCombat` + `Tick` run the battle hold and its fade. The selection rules, the fade rates and the
-tracks that ship with no trigger are docs/org/music.md.
+`NoteCombat` + `Tick` run the battle hold and its fade. The channel's own volume is the fade gain
+times the duck and nothing else: the player's music level is the Music bus's gain
+(`Utils/AudioMix.cs`). The selection rules, the fade rates and the tracks that ship with no trigger
+are docs/org/music.md.
 
 ## src/Mech3/MissionRadio.cs
 The mission radio queue: the third playback channel, beside `MusicPlayer`'s streaming track and

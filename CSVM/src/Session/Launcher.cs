@@ -536,6 +536,10 @@ public partial class Launcher : Node3D
         // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
         // --dump-* wrappers are covered by the same gain an interactive launch gets.
         ApplyMasterVolume();
+        // After it, so the two are read in the order they multiply: the developer gain on bus 0,
+        // then the player's mix on the three buses under it. The levels are the shipped defaults
+        // until the options file carries saved ones.
+        AudioMix.Apply();
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;

@@ -370,6 +370,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Utils/AudioBuses.cs` — the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
+- `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three and bus 0 never written.
 - `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
 - `src/Utils/EffectPools.cs` — the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
