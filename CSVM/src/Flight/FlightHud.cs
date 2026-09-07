@@ -153,6 +153,7 @@ public sealed class FlightHud
     private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
     private bool _cockpitView;                   // the cockpit interior is on the screen this frame
     private float _paneFactor = 1f;              // last applied splitscreen shrink (1 = single player)
+    private float _textLeft = -1f;               // last applied reading-box left edge (0 at 16:9)
     private float _damageFlash;                  // s left on the impact line
     private string _damageFlashText = "";
     private float _reticleDist = ReticleDefaultSpeed * ReticleFlightTime; // m — the pipper's smoothed range
@@ -595,11 +596,16 @@ public sealed class FlightHud
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
         // (16,10) is untouched there; re-applied only when the factor actually changes.
         float paneFactor = HudMetrics.PaneFactor(_text);
-        if (!Mathf.IsEqualApprox(paneFactor, _paneFactor))
+        // ⚠ x measures from the reading box, not the pane: on a pane wider than the reference
+        // frame this block would otherwise stand at the far left, a screen away from the dials it
+        // belongs with. The box's left edge is 0 at 16:9 and under, so nothing moves there.
+        float left = HudMetrics.ReadingBox(_text).Position.X;
+        if (!Mathf.IsEqualApprox(paneFactor, _paneFactor) || !Mathf.IsEqualApprox(left, _textLeft))
         {
             _paneFactor = paneFactor;
+            _textLeft = left;
             _text.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(TextFontSize * paneFactor)));
-            _text.Position = new Vector2(TextMargin.X * paneFactor, TextMargin.Y * paneFactor);
+            _text.Position = new Vector2(left + (TextMargin.X * paneFactor), TextMargin.Y * paneFactor);
         }
         // A splitscreen pane is WIDER than tall, so a height-scaled line would run into the
         // top-centre compass tape — ComposeTextLines' wide flag splits the throttle off.

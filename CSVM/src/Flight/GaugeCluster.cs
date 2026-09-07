@@ -111,8 +111,8 @@ public sealed partial class GaugeCluster : Control
 
     // Screen metrics measured in OriginalScreenshots/HUD.png (2556×1440) via dark-span
     // scans of the bezel rings, scaled by viewport height like CompassTape. All three
-    // dials share one size (R 85); x anchors from the left edge except the speedometer
-    // (from the right, mirroring the altimeter's margin).
+    // dials share one size (R 85); x anchors from the reading box's left edge except the
+    // speedometer (from its right, mirroring the altimeter's margin).
     private const float AltRadius = 85f;
     private const float SpdCenterFromRight = 420f, SpdCenterY = 1108.5f, SpdRadius = 85f;
     private const float DmgRadius = 85f;
@@ -466,11 +466,15 @@ public sealed partial class GaugeCluster : Control
 
     public override void _Draw()
     {
-        var vp = GetViewportRect().Size;
+        // Every x here anchors to the READING BOX, not the pane: on a pane wider than the
+        // reference frame the two columns would otherwise stand a screen apart. The box is the
+        // pane itself at 16:9 and under, so this is the same arithmetic there as before.
+        var box = HudMetrics.ReadingBox(this);
+        float left = box.Position.X, right = box.End.X, bottom = box.End.Y;
         float s = HudMetrics.Scale(this);
 
         // altimeter: long needle 360°/1,000 ft, short 360°/10,000 ft, 0 at the top
-        var altC = new Vector2(AltCenter.X * s, FromBottom(AltCenter.Y, s, vp.Y));
+        var altC = new Vector2(left + (AltCenter.X * s), FromBottom(AltCenter.Y, s, bottom));
         float altR = AltRadius * s;
         foreach (var p in _altFace)
             DrawGaugePoly(p, altC, altR);
@@ -483,7 +487,7 @@ public sealed partial class GaugeCluster : Control
             DrawGaugePoly(_altHundreds, altC, altR, AltHundredsAngleDeg(AltitudeFt));
 
         // speedometer: 0.7199957°/mph, decoded (500 mph per revolution)
-        var spdC = new Vector2(vp.X - SpdCenterFromRight * s, FromBottom(SpdCenterY, s, vp.Y));
+        var spdC = new Vector2(right - (SpdCenterFromRight * s), FromBottom(SpdCenterY, s, bottom));
         float spdR = SpdRadius * s;
         foreach (var p in _spdFace)
             DrawGaugePoly(p, spdC, spdR);
@@ -495,7 +499,7 @@ public sealed partial class GaugeCluster : Control
 
         // damage display: face silhouette, then each zone's border bar + hatch fill
         // in its color; a freshly hit zone blinks (fill + border) for a few seconds
-        var dmgC = new Vector2(DmgCenter.X * s, FromBottom(DmgCenter.Y, s, vp.Y));
+        var dmgC = new Vector2(left + (DmgCenter.X * s), FromBottom(DmgCenter.Y, s, bottom));
         float dmgR = DmgRadius * s;
         foreach (var p in _dmgFace)
             DrawGaugePoly(p, dmgC, dmgR);
@@ -516,19 +520,19 @@ public sealed partial class GaugeCluster : Control
         // feeding it — hidden in the static viewer, which carries no loadout.
         if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
         {
-            var c = new Vector2(MissileCenter.X * s, FromBottom(MissileCenter.Y, s, vp.Y));
+            var c = new Vector2(left + (MissileCenter.X * s), FromBottom(MissileCenter.Y, s, bottom));
             DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s, isGun: false, _missileArrow.Angle);
         }
         if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
         {
-            var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
+            var c = new Vector2(right - (GunCenterFromRight * s), FromBottom(GunCenterY, s, bottom));
             DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true, _gunArrow.Angle);
         }
 
         // The nitro dial, only with the injector installed (the original hides the node otherwise).
         if (NitroInstalled && _nitroFace.Count > 0)
         {
-            var c = new Vector2(vp.X - NitroCenterFromRight * s, FromBottom(NitroCenterY, s, vp.Y));
+            var c = new Vector2(right - (NitroCenterFromRight * s), FromBottom(NitroCenterY, s, bottom));
             float r = NitroRadius * s;
             foreach (var p in _nitroFace)
                 DrawGaugePoly(p, c, r);
