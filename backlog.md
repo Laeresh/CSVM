@@ -2678,8 +2678,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* **the ABOUT button is the part that is not decoded, and it is not the same screen.**
   `CREDITS.SCRIPT` answers its press by setting `@globals@OR.UR = 0x1`, `XR = 1` and `WR = 0` and
   running `messagebox.script`, so ABOUT raises the one box in the game that asks for the skull
-  icon (`CSVM/src/UI/CampaignModal.cs:19-21`), and its text comes from `uiData` callback 2108,
-  which nothing here decodes. Build the screen without ABOUT rather than inventing that string.
+  icon (`CSVM/src/UI/CampaignModal.cs:19-21`), and its text comes from `uiData` callback 2108.
+  That callback is decoded: `0x0040a2cb` formats langui 1301 over the product id read from
+  `HKLM\SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`, value `PID`, falling back to `???`
+  (`docs/org/menu-inventory.md`, the Credits row). What ABOUT still lacks is the box, not the
+  string: `XR` switches the messagebox to the `ma_` widget set and the shared chrome composes the
+  `mb_` set alone.
   The screen also carries a right-button easter egg: `rbutton_update` activates a text widget at
   288,308 while the right button is held inside 287..353 by 313..333, and its line is built by
   shifting each character of an obfuscated literal down by three
