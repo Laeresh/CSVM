@@ -2415,17 +2415,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the Instant Action palette swallows the dark one, so keep a ground behind coloured text there.
   *Cross-refs:* `BL-703`'s landing (`git log --grep=BL-703`), which added the strip.
 
-- `BL-752` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Built-in takes the
-  mouse forwards but offers no way back with it.** *Evidence:* reported at the controls over
-  `PLAN-M5-polish-12`'s closing sortie, "mouse controls in Built-In dont have a way to go back
-  with mouse, only with the keyboard". `PointerEvent`
-  (`CSVM/src/UI/LaunchMenu.cs:1077-1100`) handles motion, the wheel and the left button only, so
-  every screen without a drawn BACK row is a one-way door for a mouse-only player. *Fix shape:*
-  the right button as Back in `PointerEvent`, matching what Esc and B already do on the standing
-  screen. *⚠ Traps:* the right button must not reach the flight HUD or the panes behind the rows;
-  the same `MouseFilter` care `BL-654` needed applies. A Back from the top level is an exit
-  prompt, not a silent quit. *Cross-refs:* `BL-654`'s landing (`git log --grep=BL-654`).
-
 - `BL-753` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Plane Construction's
   tab labels ride high enough on their strips to touch the element above.** *Evidence:* reported
   at the controls over `PLAN-M5-polish-12`'s closing sortie, "Plane Construction: move the text of

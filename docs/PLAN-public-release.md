@@ -1121,10 +1121,6 @@ Anything A2 or a later wave closes comes off this list.
 
 ## Menus, and playing with more than one person
 
-- **In the built-in menus the mouse moves forward through screens but cannot go back.** Press Esc
-  or the pad's B button, both of which go back from anywhere. (`BL-752`; the only commit naming it
-  is its filing, and `LaunchMenu.PointerEvent` still handles motion, the wheel and the left button
-  only.)
 - **A second pilot can pick an aeroplane but never a weapon loadout, Back on that screen removes
   them from the game instead of returning, and the first pad drives their screen as well as their
   own.** Press Start to rejoin after an accidental Back, and let the first player make the loadout
