@@ -665,19 +665,23 @@ public class OriginalCoverageTests : IDisposable
         RowsAreClearOfEachOther(shell, rows, "GAME OPTIONS", 4);
     }
 
-    // The VIDEO page's rows, the same rule over its own plate: the checkbox must stand clear of the
+    // The VIDEO page's rows, the same rule over its own plate: each control must stand clear of the
     // title beside it and the description must stop before the plaque column, which is what makes
     // the authored Shadows row carry a longer title and a longer description than it was written
-    // for.
+    // for. The rows come back in authored order, since that is the order the cursor walks.
     private void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
     {
         var shell = Fresh(layout, measure, dataRoot, out _, out _);
         shell.OpenVideo();
         var rows = shell.Rows.ToArray();
         Assert.Equal(
-            new[] { OriginalShell.GraphicsKey, OriginalShell.VideoAcceptKey, OriginalShell.VideoCancelKey },
+            new[]
+            {
+                OriginalShell.VSyncKey, OriginalShell.GraphicsKey,
+                OriginalShell.VideoAcceptKey, OriginalShell.VideoCancelKey,
+            },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "VIDEO", 2);
+        RowsAreClearOfEachOther(shell, rows, "VIDEO", 4);
     }
 
     // No row of an option page may overlap another, and no control may sit over a title or a

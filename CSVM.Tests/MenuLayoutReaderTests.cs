@@ -184,7 +184,8 @@ public class MenuLayoutReaderTests
                 + "#define IDS_GO_TITLE 260\n#define IDS_GO_DIFF_TITLE 261\n#define IDS_GO_VIEW_TITLE 262\n"
                 + "#define IDS_GO_HEAD_TITLE 263\n#define IDS_GO_DIFF_DESC 264\n#define IDS_GO_VIEW_DESC 265\n"
                 + "#define IDS_GO_HEAD_DESC 266\n"
-                + "#define IDS_VP_TITLE 270\n#define IDS_VP_SHADOWS_TITLE 271\n#define IDS_VP_SHADOWS_DESC 272\n",
+                + "#define IDS_VP_TITLE 270\n#define IDS_VP_SHADOWS_TITLE 271\n#define IDS_VP_SHADOWS_DESC 272\n"
+                + "#define IDS_VP_EFFECTS_TITLE 273\n#define IDS_VP_EFFECTS_DESC 274\n",
             Strings = new Dictionary<int, string>
             {
                 [100] = "OK",
@@ -207,6 +208,8 @@ public class MenuLayoutReaderTests
                 [270] = "VIDEO",
                 [271] = "Shadows",
                 [272] = "Select to see shadows.",
+                [273] = "Effects Level",
+                [274] = "Select the detail level of visual effects, such as explosions and smoke.",
                 [222] = "PLANE NAME",
                 [223] = "Load Default Configuration",
                 [224] = "Airframe",

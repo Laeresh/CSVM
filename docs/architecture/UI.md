@@ -692,12 +692,12 @@ VIDEO page instead. The remake rows' words and control kinds are recorded in [..
 ## src/UI/Menu/Original/OriginalVideo.cs
 The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences
 page's third door. Same table as the Game Options page with one column more: each setting names the
-authored title, control and description widgets it stands on, so a row keeps its own geometry rather
-than a shared pitch. Enhanced Graphics is its one row, on the authored Shadows line, whose gate it
-owns; its description reports whether a restart is still owed. Two numbers are derived rather than
-read: a title box stops at the control beside it, and a description the section gives no width wraps
-at the plaque column. ACCEPT CHANGES leaves as the `OptionsApplyExit` carrying every saved choice,
-CANCEL CHANGES and Back drop the edit. Row by row: [../org/menu-inventory.md](../org/menu-inventory.md).
+authored title, control and description widgets it stands on, so a row keeps its own geometry, and the
+table is in authored row order because the cursor walks it. V-Sync is a dropdown on the Effects Level
+row over `DisplayWords.VSyncChoices`; Enhanced Graphics takes the Shadows checkbox, whose gate it owns,
+and says whether a restart is still owed. A dropdown opens its list as `OriginalGameOptions.cs` does,
+sharing that page's `ComposeOptionList`. ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL
+CHANGES and Back drop the edits. Row by row: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the

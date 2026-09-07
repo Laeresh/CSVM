@@ -187,6 +187,9 @@ public sealed partial class OriginalShell
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
+    /// <summary>The VIDEO page's V-Sync dropdown, the page's first row.</summary>
+    public const string VSyncKey = "VSYNC";
+
     /// <summary>The Options screen's section in the layout, whose chrome it is composed over.</summary>
     public const string PreferencesSection = "Preferences";
 
@@ -394,6 +397,10 @@ public sealed partial class OriginalShell
 
     /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The V-Sync word (<see cref="CSVM.Utils.DisplayWords.VSyncChoices"/>) the VIDEO page
+    /// would apply, or null while nothing has been saved and no row has been touched.</summary>
+    public string? VSyncChoice => _vsync;
 
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
     /// would apply.</summary>
@@ -652,7 +659,7 @@ public sealed partial class OriginalShell
                 ComposeGameOptions(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
                 break;
             case OriginalScreen.Video:
-                ComposeVideo(screenRows, screenFocus, pictures, fills, lines, plaques);
+                ComposeVideo(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
                 break;
         }
 
@@ -1123,7 +1130,7 @@ public sealed partial class OriginalShell
 
         if (_screen == OriginalScreen.Video)
         {
-            BackToPreferences();
+            BackVideo();
             return null;
         }
 

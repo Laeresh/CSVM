@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -7,10 +8,10 @@ namespace CSVM.UI.Menu.Original;
 /// Original's VIDEO page, composed from the decoded <c>[@Video@]</c> rows: the page's background
 /// and title, the display settings in the section's own row shape (a title in the title column, a
 /// control beside it, a description in the description column) and ACCEPT CHANGES and CANCEL
-/// CHANGES beside them. The settings are a table, so a further one is an entry plus the store field
-/// it reads and the authored row it stands on. Enhanced Graphics is the one row so far; it takes
-/// the authored Shadows row, the checkbox row whose gate it owns, since sun shadows already ride
-/// it. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
+/// CHANGES beside them. The settings are a table in authored row order, so a further one is an
+/// entry plus the store field it reads and the authored row it stands on. V-Sync is a dropdown on
+/// the authored Effects Level row; Enhanced Graphics takes the checkbox row, Shadows, whose gate it
+/// owns. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -27,14 +28,17 @@ public sealed partial class OriginalShell
     public const string VideoCancelKey = "VP_B_CANCELCHANGES";
 
     // The page's authored row shape, used where a layout does not carry the section: the title
-    // column and the Shadows row's line, the checkbox's offset from that line, and the description
-    // column with the width the plaque column leaves it.
+    // column and the Shadows row's line, the checkbox's offset from its title, the dropdown column
+    // and box, and the description column with the width the plaque column leaves it.
     // docs/org/menu-inventory.md holds the decode these come from.
     private const float VideoTitleX = 18f;
     private const float VideoTitleWidth = 162f;
     private const float VideoShadowsY = 565f;
     private const float VideoCheckDx = 158f;
     private const float VideoCheckDy = -4f;
+    private const float VideoDropX = 186f;
+    private const float VideoDropWidth = 120f;
+    private const float VideoItemHeight = 17f;
     private const float VideoDescX = 325f;
     private const float VideoDescWidth = 244f;
     private const float VideoPlaqueX = 569f;
@@ -44,16 +48,34 @@ public sealed partial class OriginalShell
 
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
-    // The page's settings, each a title, the authored row it stands on, a description, a control
-    // and the words of the store field it reads and writes. A screen never saves: the apply exit
-    // carries every choice and Launcher.ApplyOptions is the options file's one writer.
+    // The V-Sync row's labels, one per DisplayWords.VSyncChoices entry and in that order, since the
+    // row reads and writes the store word by index. A word that parses as a number is a cap in
+    // frames per second with V-Sync off, which is why the caps read as rates rather than as bare
+    // numbers on the page.
+    private static readonly string[] VSyncWords = { "On", "Off", "60 FPS", "120 FPS", "144 FPS" };
+
+    // The page's settings, in the authored order of the rows they stand on, since the cursor walks
+    // the table and a form is read top to bottom. Each is a title, the authored row it stands on, a
+    // description, a control and the words of the store field it reads and writes. A screen never
+    // saves: the apply exit carries every choice and Launcher.ApplyOptions is the options file's
+    // one writer.
     private static readonly VideoOption[] VideoOptions =
     {
+        new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
+            _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            OriginalRowKind.Dropdown, VSyncWords,
+            s => VSyncIndex(s._vsync),
+            (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
             (s, i) => s._graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default),
     };
+
+    private string? _vpOpen;
+
+    /// <summary>The VIDEO page's open option list's key, or null when none is open.</summary>
+    public string? OpenVideoOption => _vpOpen;
 
     /// <summary>Opens the VIDEO page on the saved options with its first row focused, which is what
     /// the Preferences page's VIDEO door and the screenshot aid both go through. The page is a form,
@@ -61,8 +83,34 @@ public sealed partial class OriginalShell
     /// was last left.</summary>
     public void OpenVideo()
     {
+        _vpOpen = null;
         _focus[(int)OriginalScreen.Video] = -1;
         Open(OriginalScreen.Video);
+    }
+
+    /// <summary>Opens the VIDEO page with one named row focused rather than its first, the
+    /// screenshot aid's way onto a setting further down the page.</summary>
+    public void OpenVideoOn(string key)
+    {
+        OpenVideo();
+        FocusKey(key);
+    }
+
+    // Where a V-Sync word sits among the row's own values, and the row's default: a word this
+    // vocabulary does not know, or none saved at all, shows as V-Sync on, which is the behaviour
+    // with no options file.
+    private static int VSyncIndex(string? word)
+    {
+        var choices = CSVM.Utils.DisplayWords.VSyncChoices;
+        for (int i = 0; i < choices.Count; i++)
+        {
+            if (choices[i] == word)
+            {
+                return i;
+            }
+        }
+
+        return 0;
     }
 
     // The graphics row's description says whether a restart is still owed. The mode is resolved
@@ -78,8 +126,9 @@ public sealed partial class OriginalShell
             : $"Select the lit world. This run is {(running ? "enhanced" : "original")}; restart to apply.";
     }
 
-    // The rows: each setting's control on its authored row and the two plaques beside them, all one
-    // column. Without the section the controls stand as text buttons so the page is still walkable.
+    // The rows: an open list's items alone while one is open, else each setting's control on its
+    // authored row and the two plaques beside them, all one column. Without the section the
+    // controls stand as text buttons so the page is still walkable.
     private void BuildVideoRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(VideoSection);
@@ -96,11 +145,29 @@ public sealed partial class OriginalShell
             return;
         }
 
+        if (_vpOpen != null && VideoOptionFor(_vpOpen) is { } open)
+        {
+            var box = PlaceVideoRow(screen, open);
+            for (int i = 0; i < open.Words.Count; i++)
+            {
+                rows.Add(new OriginalRow($"{_vpOpen}:{i}", open.Words[i], OriginalRowKind.ListRow,
+                    box.BoxX, box.BoxY + (box.BoxHeight * (i + 1)), box.BoxWidth, box.BoxHeight, true, 0, null));
+            }
+
+            return;
+        }
+
+        BuildVideoControls(screen, rows);
+    }
+
+    private void BuildVideoControls(MenuLayoutScreen screen, List<OriginalRow> rows)
+    {
         foreach (var option in VideoOptions)
         {
             var place = PlaceVideoRow(screen, option);
-            rows.Add(new OriginalRow(option.Key, string.Empty, option.Kind,
-                place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight, true, 0, place.Box));
+            rows.Add(new OriginalRow(option.Key,
+                option.Kind == OriginalRowKind.Dropdown ? option.Words[option.Read(this)] : string.Empty,
+                option.Kind, place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight, true, 0, place.Box));
         }
 
         AddStrip(screen, rows, VideoAcceptKey, OriginalRowKind.Button, true, 0);
@@ -117,14 +184,32 @@ public sealed partial class OriginalShell
         var title = screen.Widget(option.TitleKey);
         var control = screen.Widget(option.ControlKey);
         var description = screen.Widget(option.DescriptionKey);
+        bool drop = option.Kind == OriginalRowKind.Dropdown;
         float titleX = title?.Int("X", (int)VideoTitleX) ?? VideoTitleX;
         float titleY = title?.Int("Y", (int)VideoShadowsY) ?? VideoShadowsY;
-        var box = StripArt(control?.Art ?? Array.Empty<string>(), 0, control?.Frames ?? 8);
-        var size = StripSize(box, FallbackCheckSize, FallbackCheckSize);
-        float boxX = control?.Int("X", (int)(VideoTitleX + VideoCheckDx)) ?? (VideoTitleX + VideoCheckDx);
-        float boxY = control?.Int("Y", (int)(VideoShadowsY + VideoCheckDy)) ?? (VideoShadowsY + VideoCheckDy);
+        var box = drop
+            ? StripArt(control?.Art ?? Array.Empty<string>(), 4)
+            : StripArt(control?.Art ?? Array.Empty<string>(), 0, control?.Frames ?? 8);
+        float fallbackX = drop ? VideoDropX : titleX + VideoCheckDx;
+        float fallbackY = drop ? titleY : titleY + VideoCheckDy;
+        float boxX = control?.Int("X", (int)fallbackX) ?? fallbackX;
+        float boxY = control?.Int("Y", (int)fallbackY) ?? fallbackY;
+        float boxWidth;
+        float boxHeight;
+        if (drop)
+        {
+            boxWidth = control?.Int("Width", (int)VideoDropWidth) ?? VideoDropWidth;
+            boxHeight = control?.Int("ItemHeight", (int)VideoItemHeight) ?? VideoItemHeight;
+        }
+        else
+        {
+            var size = StripSize(box, FallbackCheckSize, FallbackCheckSize);
+            boxWidth = size.Width;
+            boxHeight = size.Height;
+        }
+
         float descX = description?.Int("X", (int)VideoDescX) ?? VideoDescX;
-        float descY = description?.Int("Y", (int)VideoShadowsY) ?? VideoShadowsY;
+        float descY = description?.Int("Y", (int)titleY) ?? titleY;
         float plaqueX = screen.Widget(VideoAcceptKey)?.Int("X", (int)VideoPlaqueX) ?? VideoPlaqueX;
         int authoredDesc = description?.Int("Width") ?? 0;
         return new VideoPlacement(
@@ -133,32 +218,48 @@ public sealed partial class OriginalShell
             Math.Max(1f, Math.Min(title?.Int("Width", (int)VideoTitleWidth) ?? VideoTitleWidth, boxX - titleX)),
             boxX,
             boxY,
-            size.Width,
-            size.Height,
+            boxWidth,
+            boxHeight,
             descX,
             descY,
             authoredDesc > 0 ? authoredDesc : Math.Max(1f, plaqueX - descX),
             box);
     }
 
-    private VideoOption? VideoOptionFor(string key)
+    private int IndexOfVideoOption(string key)
     {
-        foreach (var option in VideoOptions)
+        for (int i = 0; i < VideoOptions.Length; i++)
         {
-            if (option.Key == key)
+            if (VideoOptions[i].Key == key)
             {
-                return option;
+                return i;
             }
         }
 
-        return null;
+        return -1;
     }
 
-    // A press: a checkbox flips, ACCEPT CHANGES leaves as the apply exit carrying every saved
-    // choice (the settings this page does not show ride it unchanged, read back when the page
-    // opened) and CANCEL CHANGES drops the edits and goes back.
+    private VideoOption? VideoOptionFor(string key)
+    {
+        int at = IndexOfVideoOption(key);
+        return at >= 0 ? VideoOptions[at] : null;
+    }
+
+    // A press: a list item picks and closes, a dropdown opens its list, a checkbox flips, ACCEPT
+    // CHANGES leaves as the apply exit carrying every saved choice (the settings this page does not
+    // show ride it unchanged, read back when the page opened) and CANCEL CHANGES drops the edits
+    // and goes back.
     private MenuExit? ActivateVideo(OriginalRow row)
     {
+        int colon = row.Key.IndexOf(':');
+        if (colon > 0 && VideoOptionFor(row.Key[..colon]) is { } picked)
+        {
+            picked.Write(this, int.Parse(row.Key[(colon + 1)..], CultureInfo.InvariantCulture));
+            _vpOpen = null;
+            FocusKey(picked.Key);
+            return null;
+        }
+
         switch (row.Key)
         {
             case VideoAcceptKey:
@@ -170,6 +271,13 @@ public sealed partial class OriginalShell
 
         if (VideoOptionFor(row.Key) is not { } option)
         {
+            return null;
+        }
+
+        if (option.Kind == OriginalRowKind.Dropdown && _layout.Screen(VideoSection) != null)
+        {
+            _vpOpen = option.Key;
+            _focus[(int)_screen] = Math.Max(0, option.Read(this));
             return null;
         }
 
@@ -192,12 +300,28 @@ public sealed partial class OriginalShell
         return true;
     }
 
+    // Back from the page: an open list closes first, then the page leaves the way CANCEL CHANGES
+    // does, since VP_B_CANCELCHANGES is the declining answer the layout gives the page.
+    private void BackVideo()
+    {
+        if (_vpOpen == null)
+        {
+            BackToPreferences();
+            return;
+        }
+
+        string key = _vpOpen;
+        _vpOpen = null;
+        FocusKey(key);
+    }
+
     // The page as drawn: the Preferences page's logo (this section authors none and the original
     // keeps it standing), the page's background, its title, then each setting's title and
-    // description at their authored columns and the controls over them.
+    // description at their authored columns, the controls over them, and an open list as the
+    // overlay.
     private void ComposeVideo(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
     {
         if (_layout.Screen(PreferencesSection)?.Widget("PF_LOGO") is { Art.Count: > 0 } logo)
         {
@@ -235,26 +359,46 @@ public sealed partial class OriginalShell
                 VideoDescFont, BoardInk.Row));
         }
 
-        ComposeVideoControls(rows, focus, fills, lines, plaques, pictures);
+        ComposeVideoControls(screen, rows, focus, fills, lines, plaques, pictures, overlays);
     }
 
+    // The controls in their states. With a list open the page under it is drawn from the closed
+    // controls with the open one focused, and the items become the overlay, as the Game Options
+    // page's own list does.
     private void ComposeVideoControls(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardFill> fills, List<BoardLine> lines,
-        List<BoardPlaque> plaques, List<BoardPicture> pictures)
+        MenuLayoutScreen screen, IReadOnlyList<OriginalRow> rows, int focus, List<BoardFill> fills,
+        List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures, List<BoardPanel> overlays)
     {
-        for (int i = 0; i < rows.Count; i++)
+        var controls = rows;
+        int controlFocus = focus;
+        int controlPressed = _pressed;
+        if (_vpOpen != null)
         {
-            var row = rows[i];
+            var closed = new List<OriginalRow>();
+            BuildVideoControls(screen, closed);
+            controls = closed;
+            controlFocus = IndexOfVideoOption(_vpOpen);
+            controlPressed = -1;
+        }
+
+        for (int i = 0; i < controls.Count; i++)
+        {
+            var row = controls[i];
             if (row.Kind == OriginalRowKind.Radio && row.Art != null)
             {
                 // An eight-state strip: the four button states unchecked, then the same four checked.
-                int state = row.Enabled ? (i == _pressed ? 3 : i == focus ? 2 : 1) : 0;
+                int state = row.Enabled ? (i == controlPressed ? 3 : i == controlFocus ? 2 : 1) : 0;
                 int frame = (VideoOptionFor(row.Key)?.Read(this) == 1 ? 4 : 0) + state;
                 plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, frame, string.Empty, BoardInk.LabelNormal));
                 continue;
             }
 
-            ComposeInstantActionRow(row, i == focus, i == _pressed, i, fills, lines, plaques, pictures);
+            ComposeInstantActionRow(row, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures);
+        }
+
+        if (_vpOpen != null && rows.Count > 0)
+        {
+            overlays.Add(ComposeOptionList(rows, focus));
         }
     }
 

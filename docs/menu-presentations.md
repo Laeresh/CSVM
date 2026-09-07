@@ -210,7 +210,10 @@ graphics mode that is `GraphicsMode.Resolve`, where the `--graphics=` flag beats
 which beats the `graphics.mode` config key (`docs/cli.md`); for the difficulty it is
 `SessionSpec.WithSavedDifficulty`, applied by `Launcher.LaunchSession` at every launch, where a
 parsed `--difficulty=` flag beats the saved word, a `--det` run reads no saved option, and the
-default is `normal`.
+default is `normal`. For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
+the saved word, which beats the `display.vsync` config key, which beats V-Sync on; a display
+setting is also the case where the apply does more than save, since `Launcher.ApplyOptions` puts
+the chosen pacing on the window there and then rather than at the next start.
 
 A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
 writer, so the options file has exactly one, and no test or suite that drives an Options screen

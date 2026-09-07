@@ -394,11 +394,13 @@ public sealed partial class OriginalShell
 
         if (_goOpen != null && rows.Count > 0)
         {
-            overlays.Add(ComposeGameOptionsList(rows, focus));
+            overlays.Add(ComposeOptionList(rows, focus));
         }
     }
 
-    private BoardPanel ComposeGameOptionsList(IReadOnlyList<OriginalRow> rows, int focus)
+    // An open option list as the overlay, drawn by both option pages: the items are already rows,
+    // so this is their panel and nothing more.
+    private BoardPanel ComposeOptionList(IReadOnlyList<OriginalRow> rows, int focus)
     {
         var panelFills = new List<BoardFill>();
         var panelLines = new List<BoardLine>();

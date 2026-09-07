@@ -316,7 +316,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.OpenVideo();
                     break;
                 case VideoAid + ":" + VideoCheckedAid:
-                    _shell.OpenVideo();
+                    // Onto the checkbox by name: the page opens on its first row, which is a
+                    // display setting rather than the graphics one this pose is about.
+                    _shell.OpenVideoOn(OriginalShell.GraphicsKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case InstantActionAid:

@@ -31,13 +31,13 @@ weather, lens flare, terrain extension and wall-time watches stay outside it, wi
 than a participant registry. Read `GameSession.cs` for who owns each phase.
 
 ## src/Session/Launcher.cs
-Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence,
-the editor check that gives an export its `logs\` and audible volume default, the
-`--dump-*`/`--run-tests` early quits, and what outlives a session (camera, sun, audio, music, the
-perf and hitch instruments). It owns the menu as one `MenuHost` built on the first show, the
-presentation resolution, the only options write, and the sink every menu exit takes
-([../menu-presentations.md](../menu-presentations.md)); with no extraction it shows
-`UI/NoGameDataScreen.cs` instead. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
+Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
+editor check that gives an export its `logs\` and audible volume default, the `--dump-*`/`--run-tests`
+early quits, and what outlives a session (camera, sun, audio, music, the perf and hitch instruments).
+It owns the menu as one `MenuHost` built on the first show, the presentation resolution, the only
+options write, the frame pacing at startup and on an Options apply (`Utils/VSyncSetting.cs`), and the
+sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no extraction
+it shows `UI/NoGameDataScreen.cs` instead. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
 `BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on.
 
 ## src/Session/LiveryResolver.cs

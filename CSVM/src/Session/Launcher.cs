@@ -451,22 +451,28 @@ public partial class Launcher : Node3D
         // would say so. Ahead of the vsync line, whose meaning rests on the refresh rate here.
         Log.Info("perf", $"gpu={Testing.GoldenShot.Adapter()} driver={RenderingServer.GetCurrentRenderingDriverName()} method={RenderingServer.GetCurrentRenderingMethod()} refresh_hz={DisplayServer.ScreenGetRefreshRate():0.#}");
 
-        // --no-vsync uncaps the frame loop so frame/fps/script report work done rather than a
-        // refresh cap, safe with the fixed clock since it steps one sim frame per rendered one.
-        // The config read stays unconditional so it self-registers — see Utils/Config.cs's entry.
-        bool vsyncOnByConfig = Config.GetBool("display.vsync", true);
-        bool vsyncOff = _spec.NoVsync || !vsyncOnByConfig;
-        if (vsyncOff)
+        // --run-tests must never read or write the player's options file, and this must be set
+        // before the first UserOptions() call, the vsync read below. One scratch directory per
+        // process: docs/architecture.md's OptionsStore entry has the shard race that settled it.
+        if (_spec.RunTests)
         {
-            DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
-            Engine.MaxFps = 0;
-            string source = _spec.NoVsync ? "--no-vsync" : "display.vsync";
-            Log.Info("perf", $"vsync off source={source} max_fps=0 — frame/fps/script report work done, not a refresh cap");
+            string scratchOptions = Path.Combine(Path.GetTempPath(), "CSVM", "run-tests-options",
+                System.Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (Directory.Exists(scratchOptions))
+            {
+                Directory.Delete(scratchOptions, recursive: true);
+            }
+
+            Directory.CreateDirectory(scratchOptions);
+            OptionsStore.DirectoryOverride = scratchOptions;
+            CSVM.Bindings.BindingStore.DirectoryOverride = scratchOptions;
         }
-        else
-        {
-            Log.Info("perf", $"vsync on — frame/fps/script are floored at the refresh interval");
-        }
+
+        // The pacing's three sources and both engine calls are VSyncSetting's; --no-vsync uncaps
+        // the loop so frame/fps/script report work done rather than a refresh cap. The config read
+        // stays unconditional so it self-registers — see Utils/Config.cs's entry.
+        bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, true);
+        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, VSyncSetting.SavedWord(_spec.Det), vsyncOnByConfig));
 
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
         // legacy spelling of their console filter; an explicit --log= is applied after it and can
@@ -565,23 +571,6 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
-        // --run-tests must never read or write the player's options file, and this must be set
-        // before the first UserOptions() call below. One scratch directory per process, never a
-        // shared one: docs/architecture.md's OptionsStore entry has the shard race that settled it.
-        if (_spec.RunTests)
-        {
-            string scratchOptions = Path.Combine(Path.GetTempPath(), "CSVM", "run-tests-options",
-                System.Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            if (Directory.Exists(scratchOptions))
-            {
-                Directory.Delete(scratchOptions, recursive: true);
-            }
-
-            Directory.CreateDirectory(scratchOptions);
-            OptionsStore.DirectoryOverride = scratchOptions;
-            CSVM.Bindings.BindingStore.DirectoryOverride = scratchOptions;
-        }
-
         // Which keymap a seat is built on, resolved before the first seat exists. Both flags close
         // the door for the same reason: a run whose result is compared against a committed golden
         // must not depend on the keymap saved at whoever's machine ran it (verification.md, DET-8).
@@ -1357,6 +1346,10 @@ public partial class Launcher : Node3D
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
         store.Save(options);
+        // The frame pacing is the one choice here that takes effect now instead of at the next
+        // start, through the same call the startup path makes. --no-vsync still beats it, so a
+        // measurement run keeps its uncapped loop whatever the player saved.
+        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, true)));
         Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
         _menuHost.Deactivate();
         string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);

@@ -77,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the display settings
 
 2. ☑ The options carrier takes a setting that is not a vocabulary word
-3. ☐ V-Sync, with the frame limit on its off state
+3. ☑ V-Sync, with the frame limit on its off state
 4. ☐ Display Mode
 5. ☐ Resolution
 6. ☐ Graphics, as the monitor pick
@@ -221,7 +221,7 @@ ends by loading a well-shaped value through the same field and asserting it surv
 reader never looks at fails the test rather than passing it (`docs/verification.md` METHOD-10), and
 the `menuPresentation` beside it in each fixture is the control saying the file itself was read.
 
-## B3 ☐ V-Sync, with the frame limit on its off state
+## B3 ☑ V-Sync, with the frame limit on its off state
 
 **Goal.** A V-Sync row on the VIDEO page takes effect immediately, survives a restart, and offers a
 frame cap that is meaningful only while V-Sync is off.
@@ -253,6 +253,28 @@ on and at the chosen cap with it off. `.\RunTests.ps1` green.
 today, and the log line naming the winning source has to learn the third source rather than
 silently reporting one of the two it knows. The startup path already logs whether vsync is on
 before the session builds, so the saved value has to be read early enough to reach it.
+
+**Landed.** `Utils/VSyncSetting.cs` is the setting: `Resolve` layers the three sources and `Apply`
+makes the two engine calls and logs which layer won, so the startup read and an Options apply
+cannot drift apart and the frame cap has one owner. `Launcher` calls it in both places, the startup
+one reading the saved word through `SavedWord`, which holds the `--det` guard the way
+`Launcher.cs:593` holds the graphics one. The `--run-tests` store redirect moved above the vsync
+block rather than the read moving down: the redirect's own rule is that it precedes the first
+`UserOptions()` call, and moving the block instead would have put the config read after `--det`
+dropped its overrides and changed what a deterministic run does with `display.vsync`. The page's
+row is a dropdown on the authored Effects Level line, leaving the three rows above it for the
+monitor, the resolution and the display mode in the order those read in; the table is now in
+authored row order, since the cursor walks it, and a dropdown opens its list through the Game
+Options page's own mechanism, whose overlay is now shared as `ComposeOptionList`. The
+`--menu=video:checked` aid names the graphics row rather than pressing the page's first.
+
+**Verified.** Full `RunTests.ps1` on the plan tree: build 0 warnings, units 3485 passed / 0 failed,
+engine 259 passed / 0 failed with engine errors clean over 4 shards, goldens 18 shots
+hash-identical, exit 0. The new `display-vsync` engine suite reads back `Engine.MaxFps == 144` and
+`WindowGetVsyncMode() == Disabled` after applying what ACCEPT CHANGES carried, then `Enabled` and 0
+for the On word, restoring the entry pacing in a `finally`. It proves the ladder and the `--det`
+guard with the non-det read as its control, so a guard that always returned null fails rather than
+passes (`docs/verification.md` METHOD-10).
 
 ## B4 ☐ Display Mode
 

@@ -157,6 +157,16 @@ warns and falls back. `--det` drops both machine-state layers and keeps only an 
 `--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
 itself is written up as a divergence in `docs/architecture/Root.md`.
 
+## src/Utils/VSyncSetting.cs
+The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
+runs to without it, since a cap only means anything with V-Sync off. `Resolve` layers the sources
+the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the `display.vsync`
+config key, then on; a word outside `DisplayWords.VSyncChoices` reads as never set. `SavedWord`
+holds the `--det` guard, so a deterministic run reads no saved display setting. `Apply` is the one
+place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are called, used by `Launcher`'s
+startup and by its Options apply, and it logs the source that won. The cap is a render rate and
+reaches no simulation. Read `Session/Launcher.cs` next for both call sites.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`
