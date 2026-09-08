@@ -1,8 +1,8 @@
 # Video
 
 The managed MPEG-1 decoder for the ten `.mpg` cinemas the retail install ships: the system-stream
-demultiplexer and the video decoder under it, plus the pure pieces they are built from. No type
-here touches the engine, which is what lets a plain unit test play a whole file.
+demultiplexer, the video and layer II audio decoders under it, and the pure pieces they are built
+from. No type here touches the engine, which is what lets a plain unit test play a whole file.
 
 One `## src/...` entry per module, body at most 8 lines.
 
@@ -12,20 +12,20 @@ per-file parameters and where the files are named from are in
 
 ## src/Video/MpegMovie.cs
 The surface a caller holds: `FromFile` or `FromBytes` opens one cinema, `Width`, `Height`,
-`FrameRate` and `PixelAspectRatio` report what that file's own headers declare, `NextFrame`
-hands out the next picture in display order, and `Rewind` restarts a looping one. `AudioPackets`
-is the demultiplexed audio elementary stream, timestamped and undecoded, which is where a layer
-II decoder attaches. It owns an `MpegSystemStream` and an `MpegVideoDecoder` and adds nothing of
-its own beyond joining them, so a caller that needs the packets or the picture stream separately
-can take either directly. Read `MpegSystemStream.cs` next.
+`FrameRate` and `PixelAspectRatio` report what that file's own headers declare, `NextFrame` and
+`NextAudioFrame` hand out the next picture and the next block of sound, and `Rewind` restarts
+both. `HasAudio`, `AudioSampleRate` and `AudioChannels` describe the sound track, opened on first
+use so a movie played silent never pays for it. It owns an `MpegSystemStream`, an
+`MpegVideoDecoder` and an `MpegAudioDecoder` and adds nothing beyond joining them, so a caller
+that needs one of the three separately can take it directly. Read `MpegSystemStream.cs` next.
 
 ## src/Video/MpegSystemStream.cs
 Walks a whole system stream in memory: packs, system headers, and the packets of each elementary
-stream, with each packet's presentation timestamp off the container's 90 kHz clock. The video
-packets are joined into one buffer because the video decoder reads across packet boundaries; the
-audio packets stay separate because a decoder for them needs each one's timestamp. `MpegPacket`
-is the packet as a window into the file's own bytes rather than a copy, so the file array stays
-alive as long as the packets do. Read `MpegVideoDecoder.cs` next.
+stream, with each packet's presentation timestamp off the container's 90 kHz clock. Each stream
+is joined into one buffer because both decoders read across packet boundaries, and the audio
+packets are kept alongside so a caller can see where the sound track's own clock starts.
+`MpegPacket` is the packet as a window into the file's own bytes rather than a copy, so the file
+array stays alive as long as the packets do. Read `MpegVideoDecoder.cs` next.
 
 ## src/Video/MpegVideoDecoder.cs
 The decoder proper: sequence header, picture, slice, macroblock and block, over an
@@ -35,6 +35,15 @@ precede it in display order; the last one falls out at the end of the stream. Fr
 picture's ordinal over the sequence's own rate, offset by the container's start time. Every
 parameter comes from the stream's own headers, because two of the ten files differ from the
 other eight. Read `DctBlock.cs` and `MotionCompensation.cs` next.
+
+## src/Video/MpegAudioDecoder.cs
+The layer II decoder: frame header, bit allocation, scale factors, requantisation and the twelve
+granules of subband samples, over an `MpegBitReader`. Each frame is taken at the offset the last
+one's declared size gives rather than by hunting for a sync word, so `ResyncCount` reports lost
+bytes instead of ordinary padding; nine of the ten cinemas end their sound track with a run of
+zeroes, which is the end of the stream and not a loss. Sample times are the frame's ordinal over
+the sample rate, offset by the container's audio start time, so sound and picture share a clock.
+Read `AudioLayer2Tables.cs` and `AudioSubbandSynthesis.cs` next.
 
 ## src/Video/MpegBitReader.cs
 The bit-level reader every symbol is read through: fixed-width fields, byte alignment, stuffing
@@ -51,12 +60,27 @@ bit at a time. `CSVM.Tests/VideoVlcTableTests.cs` checks individual codes agains
 own tables and checks each tree for reachability, which is the only defence against a table that
 is wrong by one and decodes to plausible rubbish.
 
+## src/Video/AudioLayer2Tables.cs
+The layer II tables of ISO 11172-3 as data: the sample and bit rates a frame header's indices
+name, the scale factor base, the four-step lookup that turns a bit rate and a sample rate into a
+bit allocation table and each subband's field width, and the seventeen quantisers those fields
+select. `Layer2Quantizer` is one quantiser, whose zero levels mean the subband carries nothing.
+Only the MPEG-1 rows are here, since the header parse rejects every other version first.
+`CSVM.Tests/AudioLayer2TableTests.cs` checks all of it against the standard's own tables.
+
 ## src/Video/DctBlock.cs
 The 8x8 block: the zig-zag scan order, the two default quantiser matrices, the per-coefficient
 scale factors the transform folds in, `Dequantize` and `InverseTransform`. The transform is the
 integer one decoders use in place of the standard's real-valued definition, and its scale factors
 are held to eight bits, so its output is within the mismatch the standard permits rather than
 exact. Read `MpegVideoDecoder.cs` for the caller.
+
+## src/Video/AudioSubbandSynthesis.cs
+One channel's polyphase synthesis filter bank: 32 subband samples in, 32 PCM samples out, over
+the 1024-sample history the standard's windowing runs across. The window is the standard's D
+coefficients scaled by 32768 with their sign rule folded in, laid down twice so the walk needs no
+wrap test. `Reset` clears the history, which is what makes a second pass over a stream produce
+the samples the first one did.
 
 ## src/Video/MotionCompensation.cs
 `Predict` fetches one macroblock of one plane from a reference picture and writes or averages it
@@ -69,3 +93,10 @@ One decoded picture: the three 4:2:0 planes padded out to whole macroblocks, the
 inside them, and the presentation time. `WriteRgba` and `ToRgba` are the BT.601 conversion a
 caller that wants pixels uses. The decoder hands out the same three frames over and over, so a
 frame is valid only until the next one is asked for.
+
+## src/Video/AudioFrame.cs
+One decoded sound frame: 1152 samples per channel as floats interleaved by channel, the rate and
+channel count they were decoded at, and the moment the first of them is heard on the container's
+clock. Samples are nominally within plus or minus one and loud material leaves one slightly
+outside, so a caller feeding fixed-point hardware clamps. The decoder hands out the same frame
+over and over, so it is valid only until the next one is asked for.

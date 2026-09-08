@@ -57,11 +57,15 @@ public sealed class MpegSystemStream
     private const int VideoStreamFirst = 0xE0;
     private const int VideoStreamLast = 0xEF;
 
+    private byte[]? _audioStream;
+
     private MpegSystemStream(byte[] videoStream, double videoStartTime, List<MpegPacket> audioPackets)
     {
         VideoStream = videoStream;
         VideoStartTime = videoStartTime;
         AudioPackets = audioPackets;
+        double startTime = audioPackets.Count == 0 ? NoTimestamp : audioPackets[0].Time;
+        AudioStartTime = startTime == NoTimestamp ? 0.0 : startTime;
     }
 
     /// <summary>The video elementary stream, every video packet's payload end to end.</summary>
@@ -74,6 +78,14 @@ public sealed class MpegSystemStream
     /// <summary>The audio packets in the order the container carried them, each with its own
     /// timestamp. Decoding them is the layer II decoder's job, not this one's.</summary>
     public IReadOnlyList<MpegPacket> AudioPackets { get; }
+
+    /// <summary>The first audio packet's presentation timestamp, or zero when none carried
+    /// one. It is the offset the layer II decoder puts its sample times on.</summary>
+    public double AudioStartTime { get; }
+
+    /// <summary>The audio elementary stream, every audio packet's payload end to end. Built on
+    /// first use and kept, because a movie played silent never needs it.</summary>
+    public byte[] AudioStream => _audioStream ??= Join(AudioPackets);
 
     /// <summary>Walks a whole system stream held in memory. Throws when the file holds no video
     /// packets at all, which is what a file that is not an MPEG-1 system stream looks like.</summary>
@@ -89,22 +101,29 @@ public sealed class MpegSystemStream
             throw new InvalidDataException("no MPEG-1 video packets in the system stream");
         }
 
-        int videoLength = 0;
-        foreach (var packet in video)
+        double startTime = video[0].Time;
+        return new MpegSystemStream(Join(video), startTime == NoTimestamp ? 0.0 : startTime, audio);
+    }
+
+    // One elementary stream's packets end to end. Both decoders read across packet boundaries,
+    // so neither can be handed the packets one at a time.
+    private static byte[] Join(IReadOnlyList<MpegPacket> packets)
+    {
+        int length = 0;
+        foreach (var packet in packets)
         {
-            videoLength += packet.Data.Length;
+            length += packet.Data.Length;
         }
 
-        var videoStream = new byte[videoLength];
+        var joined = new byte[length];
         int at = 0;
-        foreach (var packet in video)
+        foreach (var packet in packets)
         {
-            packet.Data.Span.CopyTo(videoStream.AsSpan(at));
+            packet.Data.Span.CopyTo(joined.AsSpan(at));
             at += packet.Data.Length;
         }
 
-        double startTime = video[0].Time;
-        return new MpegSystemStream(videoStream, startTime == NoTimestamp ? 0.0 : startTime, audio);
+        return joined;
     }
 
     private static void Walk(byte[] bytes, List<MpegPacket> video, List<MpegPacket> audio)

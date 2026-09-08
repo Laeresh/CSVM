@@ -504,18 +504,22 @@ both sit on top of these types.
 
 ### `src/Video/` — the MPEG-1 cinema decoder
 
-The managed decoder for the install's ten `.mpg` files, from the container down to pixels. It
-holds no engine type, so it runs in a plain unit test; formats and evidence are in
+The managed decoder for the install's ten `.mpg` files, from the container down to pixels and PCM.
+It holds no engine type, so it runs in a plain unit test; formats and evidence are in
 [`formats/cinemas.md`](formats/cinemas.md).
 
-- `src/Video/MpegMovie.cs` — one cinema opened from its own bytes: the file's declared parameters, the next frame, and its audio packets.
-- `src/Video/MpegSystemStream.cs` — the system-stream demultiplexer: the video stream joined into one buffer, the audio one kept as timestamped packets.
+- `src/Video/MpegMovie.cs` — one cinema opened from its own bytes: the file's declared parameters, the next picture and the next block of sound.
+- `src/Video/MpegSystemStream.cs` — the system-stream demultiplexer: each elementary stream joined into one buffer, with the audio packets and their timestamps kept.
 - `src/Video/MpegVideoDecoder.cs` — the video decoder: sequence, picture, slice and macroblock, yielding frames in display order on the container's clock.
+- `src/Video/MpegAudioDecoder.cs` — the layer II decoder: frame header, bit allocation, scale factors and requantisation, yielding 1152 samples per channel at a time.
 - `src/Video/MpegBitReader.cs` — the bit reader every symbol is read through: bit fields, alignment, start-code scanning, the variable-length code walk.
 - `src/Video/VideoVlcTables.cs` — the video variable-length code tables as data, each a flattened binary tree walked one bit at a time.
+- `src/Video/AudioLayer2Tables.cs` — the layer II tables as data: the header's rates, the four-step lookup to a bit allocation table, and the quantisers it selects.
 - `src/Video/DctBlock.cs` — the 8x8 block: scan order, the default quantiser matrices, dequantisation, and the integer inverse transform.
+- `src/Video/AudioSubbandSynthesis.cs` — one channel's polyphase synthesis filter bank: 32 subband samples in, 32 PCM samples out, over a 1024-sample history.
 - `src/Video/MotionCompensation.cs` — half-pel motion-compensated prediction of one macroblock of one plane, written or averaged into the current picture.
 - `src/Video/VideoFrame.cs` — one decoded picture: three 4:2:0 planes, its presentation time, and the BT.601 conversion to RGBA.
+- `src/Video/AudioFrame.cs` — one decoded sound frame: 1152 interleaved samples per channel as floats, and the moment the first of them is heard.
 
 ### Session root and tests
 
