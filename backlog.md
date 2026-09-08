@@ -509,22 +509,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
-- `BL-700` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A downed zeppelin's
-  hull comes to rest on the sea but its front and back sections still sink through it.** *Evidence:*
-  reported at the controls over water, on the build that landed `BL-668`. The upward ground-column
-  read that `BL-668` added holds the main hull at the surface and the gasbags with it, so the rest
-  answer is right for the piece it was measured on and wrong for the two end pieces.
-  *Fix shape:* find what the end sections rest against that the hull does not. The candidates in
-  order are a per-piece origin that sits outside the column the hull queries, a breakup piece that
-  never takes the rest path at all because it is spawned by a different route than the hull, and a
-  piece whose collision shape is authored around a centre the surface test does not use.
-  *⚠ Traps:* do not fix it by clamping every piece to sea level. `BL-668`'s record is explicit that
-  the column read is the mechanism and a height clamp is the fitted answer it replaced. The wreck
-  rest is also not the gasbag path: gasbags ride the hull and were confirmed resting in the same
-  sitting. *Playtest after fix:* a CM14 zeppelin killed over water, watched until every piece
-  settles, from outside. *Cross-refs:* `BL-668`'s closing commit (`git log --grep=BL-668`), which
-  carries the column decode and CM10's lifeboat.
-
 - `BL-733` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A killed installation whose death sequence switches its `dbase` node off is revived to full health by the pool sync.**
   *Evidence:* `AnimRuntime.SyncDestructiblePool` classifies a `dbase`-role node going inactive as
   the `destroyed`-role node going inactive, since `dbaseRole` implies `destroyedRole` there, and
@@ -869,28 +853,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-667`'s closing record in `PLAN-M5-polish-10` `A2`, `BL-517` and
   `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
 
-- `BL-714` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A zeppelin's own turrets fire
-  through its own hull.** *Evidence:* reported at the controls, in flight along the far flank of a
-  pirate zeppelin in an Instant Action Dogfight: a ring on the far side fires at the player through
-  the hull it is mounted on, sustained, not the single shot the cached verdict allows at the hull's
-  edge. The static probe does not reproduce it (`turret-hull-blocks-own-fire`,
-  `git log --grep=BL-714`): on a parked C1/M04 `piratezep`, fourteen of seventeen emplacements
-  confirm a hull-blocked bearing inside their own arc and every one holds fire and reads `Blocked`
-  over 8 s, and the two candidates it cleared stay cleared (the hull's colliders carry
-  `CollisionLayers.World` and exist by the time a ring steps). What a parked hull cannot show: a
-  hull moving on its net, where the collider the ray meets may trail the drawn hull by a physics
-  step, and `TurretController.WorldRayBlocked`'s 1 to 2 s cache carrying a clear verdict taken
-  while the hull stood elsewhere; a probe that sampled one point of the authored leg found no
-  in-arc self-obstruction there and so tested nothing. *Fix shape:* the moving-hull probe: drive
-  `piratezep` along its net with the player parked on the far flank inside a ring's arc, log the
-  ray's hit list per ring per step across several cache periods against the collider's pose and
-  the drawn hull's, and fix on the collision side (pose sync or the cache's sampling), never the
-  exclusion. *⚠ Traps:* do not make aircraft cover, the decode says world geometry only; do not
-  widen the exclusion to the vehicle, `PlatformOf`'s comment records that this is how rings shoot
-  through their own hull. *Playtest after fix:* Instant Action Dogfight against a pirate zeppelin,
-  along the far hull in motion. *Cross-refs:* `BL-735` (the multiplayer hulls' belly rings over no
-  collider at all), `BL-626`'s closing commit (`git log --grep=BL-626`, turret acquisition).
-
 - `BL-717` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The Pandora's turrets fire
   at the Balmoral the player is about to capture.** *Evidence:* reported at the controls on CM02
   (C3/M05): the player's own zeppelin's turrets shot at the last Balmoral, the bomber the mission
@@ -1018,28 +980,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   raise `max_physics_steps_per_frame`, which deepens the catch-up spiral rather than recovering
   lost steps. *Cross-refs:* `PLAN-M5-polish-6` C22, `BL-606` (the same per-sim-step
   suspects seen as an allocator), `docs/verification.md` PERF-21 and PERF-23.
-
-- `BL-698` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[CM14]` **The Gemini's front and back gasbags sink through the sea while the middle three
-  stay on it.** *Evidence (at the controls, on the breakup the retired `PT-103` flew; `git log
-  --grep=PT-103`):* after `all_gmzep_gasbags` plays, five sections separate; the author counts "the
-  middle three stayed above water, the front and back sank through it", and the three that stay
-  rest at visibly different depths. The sortie log has `geminizep` dying on `gasbag2`, `gasbag5`
-  and `gasbag4` (`survivors 2 < required 3`) and `death plays 'all_gmzep_gasbags'`, so this is the
-  authored breakup, not a stray fall. `BL-668` (closed) fixed the same sinking on `piratezep` with a
-  second, upward column ray in `MotionRuntime.TryGroundColumn`, and its own diagnosis explains why a
-  bag is missed: the crossing step is built from the bag's ballistic origin through the CURRENT
-  parent transform, and a bag that arrives outside the ray's reach is never lifted back. The Gemini
-  differs in the two ways that diagnosis is sensitive to: it has five bags, not six, and the end
-  bags sit farthest from the pitch pivot, so they carry the most vertical speed at the break. Read
-  where `gasbag1` and `gasbag5` are on the frame `break1`/`break5` starts, against `ColumnDepth`,
-  before changing anything.
-  *⚠ Traps:* `zeppelin-breakup` pins `piratezep` only and would pass green while this ship sinks,
-  so a fix owes this hull its own resting check. `gemini-gasbag-bays` does start `killgmzep` on
-  this ship, but over a collision-less world where nothing comes to rest, so it is no cover for
-  that check either. Do not clamp bags to y = 0: `BL-668` tuned no constant and the fix here should
-  not either.
-  *Cross-refs:* `BL-668`, `CAP-55` (a). The wreck no longer drowns a bay the mission needs:
-  the hull's own death demolishes every cannon bay before it sinks (`BL-694`'s landing commit).
 
 ## Environment & world
 
@@ -1591,27 +1531,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-079` `[Feature]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **Positional 3D audio for another aircraft's WEAPONS; its engine already has one.**
-  The original's IA traffic is clearly audible in the reference video.
-  ⚠ **The entry's original claim, that all sound is own-plane and non-positional, is false and was
-  corrected by `PLAN-public-release` A1's re-verification.** Every AI aircraft carries a positional
-  engine and damaged-engine loop with its own distance cull (`AiEngineAudio`, wired at
-  `CSVM/src/Flight/AiFlightAssembler.cs:210`), and world emitters are positional through
-  `WorldSounds`. What has no positional voice is another aircraft's weapons: `StartGunLoop` and the
-  one-shots sit on `FlightAudio`, the own-ship path
-  (`CSVM/src/Flight/FlightAudio.cs:59,143-166`), and `AiEngineAudio`'s own contract says it carries
-  the two engine slots and deliberately nothing else. That is what is left of this item.
-  ⚠ **The "with Doppler" half of that claim is now suspect and must not be built against.** This
-  entry originally read "clearly audible with Doppler"; that was an impression off a listen, never a
-  measurement. `CAP-09` measured the original's *world* emitters and found **no Doppler at all**
-  (the archived development log, 2026-08-04 entry, which closed `BL-160` and carries the full method): the police siren
-  plays at its source asset's pitch to within **0.008 %**, and at its source rate to within 0.14 %,
-  straight through a 250 mph overflight.
-  `CAP-09` contains no other aircraft, so it does not settle the IA-traffic case
-  on its own; but the engine that declines to pitch-shift a police siren is unlikely to pitch-shift a
-  passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
-  tonal component against the source WAV) before implementing it.
-
 - `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.
@@ -2093,23 +2012,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `PLAN-cockpit-view` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
 
-- `BL-649` `[Bug]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: trace]` **The outside vantages take the camera without giving the
-  airframe back, so a pilot pinned there from the cockpit view keeps the interior over that
-  camera.** *Evidence:* `FlightController.CameraOwned` silences the per-frame arm that re-asserts
-  the first-person visibility rules, so every caller that sets it owes the aircraft's visibility at
-  both edges through `FlightController.SetViewedFromOutside`. Three callers set it bare, leaving a
-  pilot in `PilotViewMode.Cockpit` on `Shown(Interior: true, Body: false)` for the vantage's whole
-  length: `--debug-spectate`, the weapon lab's free camera, and photo mode, which a player reaches
-  from a board and whose whole purpose is composing a shot. All three now call the seam, and the
-  obligation is stated on `CameraOwned` itself rather than restated per site. What is owed is the
-  flight: fly `--view=cockpit`, pause, enter photo mode, and check the aeroplane is in the shot
-  rather than hidden behind its own panel, then leave photo mode and confirm the cockpit comes back
-  over a world that is still halted. *⚠ Traps:* photo mode's hand-back cannot be left to the arm,
-  because it returns to the halted world the board froze and `halted` is its own no-write branch in
-  `_Process`. The debug callers are not covered by an automated check: all three sites are private
-  methods behind a live session, so the suites reach the seam but not its callers.
-  *Cross-refs:* `PT-122` (the flight that judges it), `git log --grep=BL-625` (the seam and why both edges belong to the caller).
-
 - `BL-702` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The chase camera's
   zoom range sits inside the original's rather than on it: the original starts at its closest and
   only zooms out, while ours starts mid-range and zooms both ways.** *Evidence:* reported at the
@@ -2306,65 +2208,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   centres to 0,0 either way, so it agrees with the rule without testing it; check the other sections'
   small panes before generalising. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7, `BL-769`
   (the same screen's refusal), `BL-759` (the name box on the hub behind it).
-
-- `BL-746` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Back on the per-seat
-  plane-selection screen unjoins the second pilot instead of returning to the screen they came
-  from.** *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "pressing
-  B should not remove the player but return to the previous screen; only a B on the main Instant
-  Action screen or a controller disconnect should remove the player". `BackSeatPlane`
-  (`CSVM/src/UI/Menu/Original/OriginalSeatPlane.cs:248-271`) undoes a selection while the seat is
-  locked and calls `_setup.Unjoin` while it is browsing, and `ActivateSeatPlane`'s CANCEL
-  SELECTIONS arm does the same (`:221-223`), so a seat that has not yet picked loses its place on
-  its first Back. *Fix shape:* Back on the per-seat screen leaves the walk and reopens
-  `_seatReturn` with every seat kept, the way seat 0's own Back already does through
-  `CancelSeatWalk` (`:171-179`); unjoining moves to Back on the Instant Action screen and to the
-  device-lost path. *⚠ Traps:* CANCEL SELECTIONS is the campaign board's own button and reads as
-  "unjoin" nowhere else; decide what it means here rather than leaving it wired to `Unjoin` while
-  Back stops doing so. A seat kept but unconfirmed still gates FLY, so the return must not leave
-  the sortie screen unlaunchable with no way back into the walk. *Cross-refs:* `BL-747` (the same
-  screen's input rule), `BL-704`'s landing (`git log --grep=BL-704`).
-
-- `BL-747` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The per-seat
-  plane-selection screen takes seat 0's controller as well as the picking seat's.** *Evidence:*
-  reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "P2 Plane Selection in
-  Instant Action should only be controlled by P2 controller or mouse". This is deliberate today:
-  `OriginalSeatPlane.cs:14-17` says seat 0's controller drives the screen "so one pad at the desk
-  can walk it", and `_steppingSeat` (`:31`, read at `:255`) exists only to tell seat 0's Back from
-  the picking seat's. *Fix shape:* the picking seat's device and the mouse drive the screen; seat
-  0's commands do nothing there unless seat 0 is the picking seat. *⚠ Traps:* seat 0's Back
-  currently leaves the walk (`:255-259`), so removing seat 0's reach needs another way out of a
-  walk whose second pad has gone quiet. Do not fix this by gating on device kind; the seat's own
-  `Source` is the identity that matters. *Cross-refs:* `BL-746` (Back on the same screen).
-
-- `BL-748` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A joined pilot
-  can pick an aircraft but never a weapon loadout, on Instant Action and on Free Flight alike.**
-  *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, twice: "P2 Plane
-  Selection cant select Weapon loadout" and "Free flight 2P: P2 cant select Weapon loadout here
-  too". The per-seat screen draws three rows only, the list, ACCEPT SELECTIONS and CANCEL
-  SELECTIONS (`OriginalSeatPlane.cs:473-491`), and Weapon Loadout is the Instant Action screen's
-  own strip over seat 0's `LoadoutChoice` or the feature's wingman fit
-  (`CSVM/src/UI/Menu/Original/OriginalLoadout.cs:9-11`, `:66-100`), reached from
-  `OriginalInstantAction.cs:437`. Free Flight's sortie screen has no loadout row at all
-  (`OriginalSeats.cs:192-226`). *Fix shape:* give the per-seat screen a Weapon Loadout row that
-  opens the existing loadout screen against the picking seat's own choice, and carry that choice
-  into the launch through `_setup.Choices`. *⚠ Traps:* the loadout screen is written against seat
-  0 and the wingman radio pair; a per-seat loadout needs its own storage rather than a fourth
-  reader of `LoadoutChoice`. Nothing here is decoded, the original has no second pilot.
-  *Cross-refs:* `BL-749` (the Free Flight walk this row would sit in).
-
-- `BL-749` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A two-pilot Free
-  Flight walk ends back on the Free Flight screen instead of launching.** *Evidence:* reported at
-  the controls over `PLAN-M5-polish-12`'s closing sortie, "Free Flight 2P should follow the same
-  rules: P1 selects map and aircraft, other players join with Start, on P1 pressing ready the P2
-  plane-selection screen, on P2 ready go to fly, not back to the Free Flight screen".
-  `FinishSeatWalk` (`OriginalSeatPlane.cs:156-167`) launches only when `_seatReturn` is
-  `InstantAction`; every other return reopens the sortie screen and waits for seat 0's FLY, which
-  is the screen's documented rule that FLY is seat 0's confirmation and the launch in one press
-  (`OriginalSeats.cs:11-14`). *Fix shape:* the last seat's confirm launches the sortie the way it
-  launches Instant Action, so seat 0's pick is the ready and the walk is the launch. *⚠ Traps:*
-  Dogfight shares the sortie path and additionally withholds the launch until a second seat has
-  joined; keep that gate. Seat 0 alone is the single-player case and must still reach FLY by
-  pressing it. *Cross-refs:* `BL-748`, `BL-704`'s landing (`git log --grep=BL-704`).
 
 - `BL-750` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Instant Action's list
   arrows and scrollbar thumb sit on the page background rather than clear of the list.**
@@ -2873,16 +2716,6 @@ usual.
   item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
   by installing nitro on every wingman, which would contradict the roster data.
 
-- `BL-545` `[Bug]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The fixed landing pose is owed a look at the controls.**
-  *Evidence:* the report was CM02's auto-land seen with no hook deployed, the aeroplane too high on
-  the trapeze, and a Balmoral's wings unfolded where the original folds them. **The fix landed**
-  (`git log --grep=BL-545`): the hookup definition now reaches the flown airframe's own subtree, so
-  its per-airframe hook extend and wing fold run instead of every `IF NODE_ACTIVE` arm reading
-  false, and the presence flag moved off the airframe node whose visibility is the ACTIVE bit those
-  arms test. What is owed is the same auto-land watched again, from outside, which `PT-130` now
-  carries with its three checks. *Cross-refs:* `PT-130` (the flight that judges it), `BL-544`;
-  the closing commit carries the three-fault diagnosis.
-
 - `BL-314` `[Feature]` `[Blocked: PT-45]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen
   stunt race now begins on one line, on one heading, at one altitude. What is still missing is the
@@ -3082,20 +2915,6 @@ usual.
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
 
-- `BL-565` `[Fidelity]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **`DEDG`'s decoded side effect, widening every counted member's engagement
-  volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
-  `FUN_00465850`: each tick an awake `DEDG` objective raises every live member of the watched
-  group to a 9,000 m activation radius and a ±9,000 m altitude band, so a watched group never
-  disengages by distance and comes to the player from anywhere on the map. CSVM's `DedgMet` only
-  counts; the members keep `AiModeMachine.ActivationRange` at the 2,000 m `min_ai_active_dist`
-  floor and drop back to patrol at "target lost" / "beyond return range", which is how a
-  survivor of a wave sits on its net 8 km away while the objective waits on it. *Fix shape:*
-  have `GroupLiveCount` (or a sibling the graph calls per awake DEDG) apply the widening to each
-  counted member's machine: `ActivationRange = max(ActivationRange, 9000)`, and the altitude bands
-  once they have a consumer. *⚠ Traps:* the widening is per awake objective per tick, so a
-  napped or killed `DEDG` stops widening but the original never shrinks the volume back; match
-  that (set, never reset). *Cross-refs:* `BL-523` (the patrol/pursue cycle).
-
 - `BL-653` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The plane selection screen's TOP SPEED and OFFENSE ratings have no decoded
   formula, and ship as a stand-in.** *Evidence:* `PS_T_TOPSPEEDP`/`PS_T_OFFENSEP` and their wingman
   twins are four text widgets fed one of langui 501-505 (`Poor`, `Fair`, `Average`, `Good`,
@@ -3110,43 +2929,6 @@ usual.
   Plane.png` alone. Two airframes reading `Average` is consistent with many formulas, and a
   stand-in that happens to match the four sampled aircraft is exactly what is already there.
   *Cross-refs:* the plane selection screen that draws them.
-
-- `BL-689` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[CM13]` **CM13's flight check hands one CHANGE PLANE answer to both crew slots, and the
-  mission's own aircraft is never granted.** *Evidence (traced):* reported at the controls as "in
-  CM13 i cant select a plane on replay". `CampaignFeature`'s change-plane answer is slot-less
-  (`CSVM/src/Session/CampaignFeature.cs:165-173`) and `CampaignFlightCheckPage.cs:385,389` hands the
-  same answer to the pilot and the wingman; the original's second rule, owned count minus one against
-  a floor of three, has no term in our code at all; and the mission's grant never happens.
-  *⚠ Traps:* **Half of what was seen is faithful, so do not fix it away.** The original also bars the
-  *pilot's* button outright on mission 13
-  ([`docs/formats/campaign-screens.md`](docs/formats/campaign-screens.md):283), and bars *both*
-  buttons when owned-minus-one falls below three (`:285-287`). Whether the wingman's button should
-  have been offered depends on how many aeroplanes that profile owns. The gaps are the three named
-  above, not "CM13 locks plane selection".
-  *Cross-refs:* [`docs/menu-presentations.md`](docs/menu-presentations.md) carries the campaign
-  screens' presentation contract; `PT-108`.
-
-- `BL-690` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM15]` **A staged cutscene aircraft is built with no painter, so CM15's Balmoral wears
-  the shipped skins where the aeroplane it stands in for wears its scheme.** *Evidence (traced):*
-  reported at the controls as "the balmoral in the cutscene should have fortune hunters livery not
-  the default". CM15 puts two different Balmoral models on screen for one aeroplane and only the
-  flyable one is painted: `AircraftStage` builds every staged subtree on one bare `SceneBuilder` with
-  no `textureSubstitute` hook and holds no `PaintScheme` (`CSVM/src/Session/AircraftStage.cs:142`,
-  `:171-178`), where `PlaneBuilder` passes
-  `textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex`
-  (`CSVM/src/Mech3/PlaneBuilder.cs:69-70`).
-  *Fix shape:* give the staged aeroplane its own `SceneBuilder` carrying the scheme the mission's own
-  rig resolved.
-  *⚠ Traps:* **Do not hardcode `player_fortune` into the stage** — take the scheme from the
-  `balmoral_1` rig, so the prop tracks the aeroplane it films rather than pinning a constant a
-  roster-authored pattern would contradict. **One `SceneBuilder` serves every staged subtree**, so a
-  substitution hook installed on it reaches `piratefighter`, `chuteman` and the wing-walk figures as
-  well. ⚠ **The data authors no livery for this block at all**, so "Fortune Hunters" rests on the
-  remake's default-pattern rule and on the report, not on a value in a file, and no CM15 footage
-  exists to settle what the original's drop Balmoral wears. The same gap covers the intro prop
-  `piratefighter`, whose `devastator`/`wingman` defs *do* author `paint_pattern player_fortune`,
-  which is the better-founded half of the same item.
-  *Cross-refs:* `BL-632`, `PT-112`.
 
 - `BL-695` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
   all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
