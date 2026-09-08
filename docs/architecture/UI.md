@@ -920,3 +920,11 @@ select and confirm an environment (which re-fits the mission type and loads the 
 def), the mission type, the lives, the four waves, the wingmen and both plane picks, and apply a
 preset. `Refusal`/`CanLaunch`, `BuildDef` and `BuildExit` are the gate and the launch, `Discard`
 resets every field, and the decode is [../formats/instant-action.md](../formats/instant-action.md).
+
+## src/UI/MovieSurface.cs
+A movie as something a composition can draw: a `CSVM.Video.MoviePlayback` and the `ImageTexture`
+its pixels are uploaded to, made once and updated in place. There is no node, so a caller hangs
+the texture where its own layout row puts it and this surface never learns which screen that is.
+`Open` answers null for a file that cannot be read or is not a movie, because a screen missing its
+background still has everything else on it. Every timing decision belongs to the playback, which
+holds no engine type, so this half is the upload alone. Read `src/Video/MoviePlayback.cs` next.

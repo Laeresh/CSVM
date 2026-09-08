@@ -340,6 +340,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignBoards.cs` — the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
 - `src/UI/CampaignLayout.cs` — the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
 - `src/UI/ComposedBoardView.cs` — the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art cache, the hint band.
+- `src/UI/MovieSurface.cs` — a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
 - `src/UI/LoadBoard.cs` — the load screen a session builds behind: the original's chart sheet for a campaign launch, its blackboard for everything else.
 - `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
@@ -526,6 +527,7 @@ It holds no engine type, so it runs in a plain unit test; formats and evidence a
 - `src/Video/MotionCompensation.cs` — half-pel motion-compensated prediction of one macroblock of one plane, written or averaged into the current picture.
 - `src/Video/VideoFrame.cs` — one decoded picture: three 4:2:0 planes, its presentation time, and the BT.601 conversion to RGBA.
 - `src/Video/AudioFrame.cs` — one decoded sound frame: 1152 interleaved samples per channel as floats, and the moment the first of them is heard.
+- `src/Video/MoviePlayback.cs` — a movie on a clock: the picture due now as RGBA, timed by the frames' own timestamps, looping endlessly on a play count of zero.
 
 ### Session root and tests
 

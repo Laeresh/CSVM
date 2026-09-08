@@ -100,3 +100,12 @@ channel count they were decoded at, and the moment the first of them is heard on
 clock. Samples are nominally within plus or minus one and loud material leaves one slightly
 outside, so a caller feeding fixed-point hardware clamps. The decoder hands out the same frame
 over and over, so it is valid only until the next one is asked for.
+
+## src/Video/MoviePlayback.cs
+A movie on a clock: it owns an `MpegMovie`, takes elapsed seconds from its caller, and keeps the
+picture due now as RGBA in a buffer it rewrites in place. Which picture that is comes from the
+frames' own presentation timestamps, so no rate is written down here and the two cinemas that
+differ from the other eight need no case of their own. A play count of zero plays endlessly, and
+every pass after the first restarts through `MpegMovie.Rewind`. A step longer than the cap counts
+as the cap, so a window that was not drawing comes back late instead of decoding pictures nobody
+saw. The texture side of this is `CSVM.UI.MovieSurface`.

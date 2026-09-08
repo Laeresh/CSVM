@@ -139,7 +139,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the flag background
 
-11. ☐ The frame surface: decoded frames as an `ImageTexture`, on a playback clock
+11. ☑ The frame surface: decoded frames as an `ImageTexture`, on a playback clock
 12. ☐ `CrimFlag.MPG` composed into `MainMenu` and `Preferences`
 
 ### Wave C — the cinema sequence
@@ -530,14 +530,65 @@ reader of it is found; a bumped number nothing reads is worse than no bump at al
 
 # Wave B — the flag background
 
-## B11 ☐ The frame surface: decoded frames as an `ImageTexture`, on a playback clock
+## B11 ☑ The frame surface: decoded frames as an `ImageTexture`, on a playback clock
+
+**Landed.** `MoviePlayback` in `CSVM.Video` owns the clock and the loop decision: an `MpegMovie`,
+the elapsed time it has been played for, and the picture due now as RGBA in a buffer it rewrites in
+place. Which picture is due comes from the frames' own presentation timestamps, so no rate is
+written down anywhere and the two files that break the otherwise uniform profile need no case of
+their own. A play count of zero plays endlessly, and every pass after the first restarts through
+`MpegMovie.Rewind` and nothing else. `MovieSurface` in `CSVM.UI` is the other half: one
+`ImageTexture` made once and updated in place, three engine calls, and `Open` answering null for a
+file that will not read, because a screen missing its background still has everything else on it.
+There is no node of any kind.
+
+**The seam is enforced rather than intended.** `VideoNamespaceDependencyTests` already checks
+`CSVM.Video`'s compiled metadata for engine types, so a clock placed below the boundary is
+Godot-free by a test and not by convention, and `CSVM.Tests` being engine-free means anything with
+a decision in it had to sit there to be testable at all. What is left above the seam is the upload.
+
+**⚠ A `VideoFrame` is valid only until the next `NextFrame`**, so catching up across several due
+pictures copies each one before pulling the next. That copy is the BT.601 conversion the texture
+needs anyway, which is why the playback owns an RGBA buffer rather than handing out a frame. It
+also reads one picture ahead, which is what lets it answer "not yet due" without consuming one.
+
+**The lazy audio open survives.** `MoviePlayback` never reads `HasAudio`, `AudioSampleRate` or
+`NextAudioFrame`, and `MpegMovie.Rewind` rewinds an audio decoder only when one was opened, so an
+endlessly looping silent flag never pays for the audio path. `AMovieWithNoSoundTrackStillPlays`
+pins that a movie with no audio packet at all still drives its clock.
+
+**The check the Verify TODO asked for.** `MoviePlaybackTests` pins the moment a picture becomes due
+from both sides. METHOD-1 rules out counting frames over a window, since 30000/1001 and 30 differ
+by 0.3 frames over ten seconds, so the check drives the clock in 0.1 ms steps and asserts the count
+either side of the boundary instead. The always-on synthetic rows put picture 300 at 11.96 s,
+9.9766 s and 9.9667 s for sequence rate codes 3, 4 and 5; the skipped-when-absent
+`TheCinemaClockRunsAtTheFilesOwnRate` shows `msopen1.mpg`'s sixteenth picture at 0.5005 s where
+`crimflag.mpg`'s arrives at 0.5 s.
+
+**Verified.** `.\RunTests.ps1` on the merged tree, run by the orchestrator rather than reported by
+the agent: PASS, exit 0, 217.0 s. Build 3.4 s with zero StyleCop warnings; units 21.7 s against a
+30 s budget (3761 passed, 0 failed, 1 skipped, the skip being `A3`'s opt-in whole-file walk);
+engine 150.5 s, 265 passed, errors clean; goldens 41.5 s, 18 shots hash-identical with
+`analysis/goldens/manifest.json` unmodified in `git diff` (GOLD-9). METHOD-9 exercised on the new
+check: replacing the timestamp comparison with a hardcoded `n/30.0` fails exactly the 25 fps row,
+the 30000/1001 synthetic row and `msopen1.mpg`, and leaves both 30 fps rows green.
+
+**⚠ Still over budget on the engine stage, and still not this plan's.** 150.5 s against 100 s,
+where `A1` measured 145.6 s and `A3` 126.7 s. Nothing in the engine constructs a `MovieSurface`.
+
+**⚠ The Godot half is unexercised by any automated check**, and cannot be one from here:
+`CSVM.Tests` is engine-free, and an in-engine suite would need a movie file the extraction does not
+yet hold. `Image.SetData` and `ImageTexture.Update` compile and nothing more is proven about them.
+`B12` is the first thing that runs them.
+
+### Original approach (kept for reference)
 
 **Goal.** A decoded stream drives a texture that updates at the file's own frame rate and loops
 endlessly when asked, with no Godot node beyond the texture itself.
 
 **Evidence (confidence: traced).** `ComposedBoard` resolves a screen into `Fills`, `Pictures` and
 `Lines` in the original's 800x600 space as `BoardPicture(art, x, y)`, and `BoardFit` maps that board
-onto the window with one uniform scale (`docs/architecture.md:335`, `src/UI/BoardFit.cs`). The
+onto the window with one uniform scale (`docs/architecture.md`, `src/UI/BoardFit.cs`). The
 layout's `Loops` field is a play count in which zero means endless.
 
 **Approach.** A surface that owns a decoder from A1, a clock and an `ImageTexture`, exposing the
@@ -546,8 +597,9 @@ screen it is on.
 
 **Model recommendation.** Opus.
 
-**Verify.** <TODO: name the headless check that proves the clock advances at the file's own rate,
-including the 29.97 fps file>
+**Verify.** A headless check that pins the moment a picture becomes due rather than counting frames
+over a window, so 30000/1001 is distinguishable from 30, with the synthetic rate codes always on
+and the two real files in the skipped-when-absent half.
 
 **⚠ Traps.** ⚠ The flag plays silent (Decision 5), so this surface must not assume an audio stream
 exists to drive its clock; the video timestamps are the clock for Wave B. `A2` made the decoder open
@@ -572,6 +624,27 @@ dialog's title mark "stands alone and the ground behind it stays plain". Both la
 **Approach.** Compose the movie as a `BoardPicture` at Z=0 fed by B11's texture, and remove the two
 `NotDrawn` entries. Take the position and scale from the layout row rather than hardcoding them, so
 the two screens that are not yet composed (`Save`, `Load`) need no second implementation.
+
+**⚠ That Approach is wrong about `BoardPicture`, and `B11` found it.** A `BoardPicture` carries a
+`BoardArt(BoardArtLibrary Library, string Name, int Frames)`, a name resolved through a library,
+and `ComposedBoard` is deliberately engine-free so it cannot hold a `Texture2D` at all. The
+resolution happens in `ComposedBoardView.Load(BoardArt)`, which maps library and name to a file
+path and caches `Texture2D?` by that path. The cheap seam is a fourth `BoardArtLibrary` member
+whose `Load` arm answers a live `MovieSurface.Texture`: the surface updates that same
+`ImageTexture` in place, so the path cache needs no invalidation and the picture animates without
+further work. This item still drives `MovieSurface.Advance` once a frame from wherever the view
+ticks.
+
+**⚠ The extraction has not been re-run since `A5` landed.**
+`extracted/rof/ASSETS/GRAPHICS/MPG/` holds no files, so the ten movies are reachable only at the
+install path, which is what the tests probe. This item resolves through `SessionPaths` and finds
+nothing until the extraction runs again; its own schema bump then refuses the extraction made
+before the copy step existed, which is the point of the bump.
+
+**Deterministic capture, for the golden trap below.** `FramesShown` is a pure function of the
+accumulated clock and `MoviePlayback` caps a single step at 0.25 s, so one enormous delta cannot
+decode a whole movie. A capture path that wants picture N steps the surface N times rather than
+passing one large delta.
 
 **⚠ This item owns the extraction schema bump `A5` deferred.** `A5` added a `movies` count to
 `VERSION.json` without moving the schema, because nothing read a movie file yet and a bump would
@@ -609,8 +682,14 @@ and 1.092. The flag playing silent is a property of the file, not only of the pr
 B needs no mute of its own and this item's scope is unchanged.
 
 **Approach.** Push A2's PCM to an `AudioStreamGenerator` and drive the video clock from the system
-stream's presentation timestamps. Route onto whatever bus `PLAN-audio-preferences` lands; today
-`Launcher.cs` touches only `MasterBus`.
+stream's presentation timestamps. Route onto the bus layout `PLAN-audio-preferences` landed, which
+is now on this branch: `CSVM/src/Utils/AudioBuses.cs` and `CSVM/default_bus_layout.tres` name the
+buses, so this item picks one rather than reaching `MasterBus` directly.
+
+**⚠ `B11`'s `MoviePlayback.Clock` has the video's origin, not the container's.** It is seconds into
+the current pass measured from the first video frame's own timestamp, on the same base as
+`VideoFrame.Time`, so this item takes `AudioStartTime` against `VideoStartTime` separately rather
+than assuming the two streams share an origin.
 
 **Model recommendation.** Opus.
 
