@@ -3432,6 +3432,26 @@ usual.
   empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
   term worth having (`docs/cli.md`, `git log --grep=BL-742`).
 
+- `BL-785` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TestData.TempDir()`
+  mints a GUID directory per call and nothing ever deletes one, so the unit suite leaks directories
+  into the OS temp tree until every run that touches it crawls.** *Evidence:*
+  `CSVM.Tests/TestData.cs:52-57` creates `%TEMP%\csvm-tests\<guid>` and returns it, with no disposal
+  on the test, no fixture teardown and no sweep anywhere; more than twenty test files call it.
+  `CleanScratch.ps1` does not mention `csvm-tests` and never has, so nothing in the repo removes
+  them. Measured on the author's machine: **377692 top-level directories**, the oldest created
+  2026-07-25, still growing on every run. An NTFS directory with that many entries makes each
+  create and each enumerate progressively slower, and the cost falls on `dotnet test` rather than
+  on the leak itself, so it reads as the suite getting slower for no reason. *Fix shape:* delete the
+  directory when the test that made it finishes, which means an `IDisposable` fixture or a
+  `TempDir` handle type rather than a bare string, and have `CleanScratch.ps1` sweep
+  `%TEMP%\csvm-tests` as a backstop for what escapes. *⚠ Traps:* renaming the directory and deleting
+  the rename afterwards is the only fast way to clear an accumulation this size; a recursive delete
+  in place takes far longer than the rename plus a background `rd /s /q`. Do not "fix" this by
+  pointing the tests at the repo's `.scratch/`, which is what `CleanScratch.ps1` already owns and
+  what would put test scratch inside a worktree. *Impact:* none on correctness. The suite passes
+  throughout; it just gets slower, and it made a routine item's verification take hours before the
+  cause was found.
+
 ## Misc
 
 - `BL-077` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade) — spawning mid-air

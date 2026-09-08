@@ -28,6 +28,10 @@
         <name>.png                 next to each custom .BM: its greyscale shading map
         <name>_mask.png            next to each custom .BM: the paint-region masks,
                                    R = paint slot 1, G = slot 2, B = slot 3
+        ASSETS\GRAPHICS\MPG\*.mpg  the ten cinema and menu movies, copied verbatim from the
+                                   install: they sit loose beside the archives rather than
+                                   inside one, and the archive's own MPG directory entry has
+                                   no members behind it. See docs\formats\cinemas.md.
 
     Also merges its own "rof" field into the shared version stamp <Dest>\..\VERSION.json
     (when -Dest follows the ...\extracted\rof layout) -- see ExtractAssets.ps1 for the
@@ -46,6 +50,7 @@
 
 .PARAMETER Raw
     Write archive members only: skip the .BM decoding, the string table and the menu layout.
+    The .mpg copy still runs, because it decodes nothing.
 
 .PARAMETER Force
     Re-extract even when the output is already newer than the source archive.
@@ -353,6 +358,63 @@ foreach ($r in $rofs) {
     $totalImages += [CsRof]::Images
 }
 
+# ---- cinema and menu movies -----------------------------------------------
+# The ten .mpg movies (the looping front-end flag, the two boot logos, the opening cinema,
+# the five chapter cinemas and the closing one) are not archive members: crimson.rof carries
+# ASSETS\GRAPHICS\MPG as a directory entry with nothing behind it, and the files themselves
+# sit loose in the install. They are copied byte for byte and never converted, because CSVM
+# decodes MPEG-1 at runtime and the shipped bytes are what plays. The install is only ever
+# read. Names are kept exactly as the install spells them: LAYOUT.CSV and fmv.zrd spell four
+# of them in a different case, and the runtime resolves that case-insensitively, so renaming
+# here would only move the problem to whichever spelling was picked.
+
+$mpgSource = Join-Path $Source "GRAPHICS\MPG"
+$mpgDest = Join-Path $Dest "ASSETS\GRAPHICS\MPG"
+
+# For the report only. The copy takes whatever the folder holds, under the name it holds it
+# under; this list is what a complete install has, so an install missing one is named rather
+# than passing as a silent success.
+$mpgExpected = @(
+    "chap0.mpg", "chap1.mpg", "chap2.mpg", "chap3.mpg", "chap4.mpg", "chap5.mpg",
+    "crimflag.mpg", "final.mpg", "msopen1.mpg", "zipper.mpg"
+)
+
+$mpgPresent = 0
+if (-not (Test-Path $mpgSource)) {
+    Write-Host "  SKIP GRAPHICS\MPG (not present at $mpgSource)" -ForegroundColor Yellow
+    Write-Host "       nothing will play behind the front end or before a chapter" -ForegroundColor Yellow
+} else {
+    New-Item -ItemType Directory -Path $mpgDest -Force | Out-Null
+    $mpgCopied = 0; $mpgCurrent = 0; $mpgBytes = 0
+    $mpgFound = @{}
+    foreach ($mpg in (Get-ChildItem -LiteralPath $mpgSource -Filter *.mpg -File)) {
+        $mpgFound[$mpg.Name] = $true
+        $target = Join-Path $mpgDest $mpg.Name
+        # Idempotent on length: this is 106 MB, and a verbatim copy that already ends at the
+        # source's length is the copy this step would make again.
+        if ((Test-Path -LiteralPath $target) -and
+            ((Get-Item -LiteralPath $target).Length -eq $mpg.Length)) {
+            $mpgCurrent++
+            continue
+        }
+        # -Force so a half-written or read-only leftover is replaced rather than throwing.
+        Copy-Item -LiteralPath $mpg.FullName -Destination $target -Force
+        $mpgCopied++
+        $mpgBytes += $mpg.Length
+    }
+    $mpgPresent = $mpgCopied + $mpgCurrent
+    Write-Host "  ->   GRAPHICS\MPG ($mpgCopied copied, $mpgCurrent already current)" -ForegroundColor Green
+    if ($mpgCopied -gt 0) {
+        Write-Host ("       {0:N0} MB copied verbatim" -f ($mpgBytes / 1MB))
+    }
+    $mpgMissing = @($mpgExpected | Where-Object { -not $mpgFound.ContainsKey($_) })
+    if ($mpgMissing.Count -gt 0) {
+        Write-Host ("       MISSING {0} of {1} movies: {2}" -f `
+            $mpgMissing.Count, $mpgExpected.Count, ($mpgMissing -join ", ")) -ForegroundColor Yellow
+        Write-Host "       those will not play; check the install is complete" -ForegroundColor Yellow
+    }
+}
+
 # ---- string table ---------------------------------------------------------
 
 if (-not $Raw) {
@@ -434,6 +496,7 @@ Write-Host "  files extracted: $totalFiles"
 if ((-not $Raw) -and $totalImages -gt 0) {
     Write-Host "  .BM decoded:     $totalImages (each -> .png + _mask.png)"
 }
+Write-Host "  movies copied:   $mpgPresent of $($mpgExpected.Count) (verbatim, no conversion)"
 if ($skipped -gt 0) { Write-Host "  up to date:      $skipped archive(s); pass -Force to redo" }
 
 # ---- version stamp --------------------------------------------------------
@@ -442,6 +505,13 @@ if ($skipped -gt 0) { Write-Host "  up to date:      $skipped archive(s); pass -
 # so ExtractAssets' fields survive; $StampSchema bumps together with ExtractAssets.ps1's
 # and ExtractionStamp.Schema, in the same commit as any reader change that invalidates
 # old extractions.
+#
+# The "movies" count records how many of the ten .mpg files the copy above left in the tree,
+# which is the first thing an inspection of a tree that plays no cinema asks. It deliberately
+# does not move $StampSchema: an added output invalidates nothing until a reader requires it
+# (docs\formats\menu-layout.md states that rule where the last bump obeyed it), and no build
+# opens a movie file yet, so a bump today would refuse every valid extraction on the strength
+# of a file nothing reads. The first reader that needs one bumps all three numbers together.
 if ($StampDestKnown) {
     $StampSchema = 2
     $stampPath = Join-Path (Split-Path $Dest -Parent) "VERSION.json"
@@ -459,6 +529,7 @@ if ($StampDestKnown) {
         script = "ExtractRof.ps1"
         date   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         raw    = [bool]$Raw
+        movies = $mpgPresent
     }
     $stamp | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $stampPath -Encoding UTF8
     Write-Host "  stamped:         $stampPath (schema $StampSchema)"

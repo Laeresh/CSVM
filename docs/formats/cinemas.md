@@ -55,6 +55,18 @@ assume one set of parameters:
 - `msopen1.mpg` is 29.97 fps and 1500 kbps; every other file is 30 fps at 856 to 889 kbps.
 - `crimflag.mpg` is mono at 64 kbps; every other file is stereo. `msopen1.mpg` is stereo at 64 kbps.
 
+Decoding the audio adds four facts the headers alone do not give. Every track runs at 44100 Hz; the
+nine stereo files are all plain stereo, never joint stereo and never dual channel, and no file sets
+the protection bit, so none carries a CRC. **`crimflag.mpg`'s track is digital silence**, every
+sample exactly zero across all 307 of its audio frames, where the other nine peak between 0.964 and
+1.092: the flag is silent in the data rather than only in the presentation. Five of the ten peak
+above 1.0, which is ordinary for layer II and means a player feeding fixed-point output has to
+clamp. Sound outlasts picture in every file, by 0.01 to 0.25 s, and the first audio packet carries a
+presentation timestamp in all ten, between roughly 0.04 and 0.22 s, so the two streams do not share
+an origin. Nine of the ten pad the tail of the sound track with zero bytes after the last complete
+frame; `msopen1.mpg` ends with non-header data instead. That padding is the end of the stream, not
+damage.
+
 ## Where the files are named from
 
 Three places name them, and none is a directory scan. The executable itself names none of them.

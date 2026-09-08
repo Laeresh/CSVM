@@ -67,8 +67,11 @@ prose below disagrees with itself.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A5, B11, B12, C22, C23, C24 | Confirm the trace against [`docs/formats/cinemas.md`](formats/cinemas.md), then implement. |
-| **Leads only — no mechanism yet** | A3, A4, C21 | Budget for investigation; C21's premise in particular rests on recall, not on a decode. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A5, B11, B12, C21, C22, C23, C24 | Confirm the trace against [`docs/formats/cinemas.md`](formats/cinemas.md), then implement. |
+| **Leads only — no mechanism yet** | A3, A4 | Budget for investigation. |
+
+C21 was a lead resting on the author's recall that the flag plays silent. `A2` decoded every track
+and measured `crimflag.mpg`'s as digital silence, so it is traced now.
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -128,10 +131,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the decoder, headless
 
 1. ☑ System-stream demux and MPEG-1 video decode, as a managed module with no Godot in it
-2. ☐ MPEG-1 audio layer II decode
+2. ☑ MPEG-1 audio layer II decode
 3. ☐ The test surface: spec vectors, and whole-file checks skipped when `extracted/` is absent
 4. ☑ The port's third-party notice
-5. ☐ The extraction copies the ten `.mpg` files into `extracted/`
+5. ☑ The extraction copies the ten `.mpg` files into `extracted/`
 
 ### Wave B — the flag background
 
@@ -245,7 +248,49 @@ declare, run against a real `extracted/` tree. `.\RunTests.ps1` green.
 ⚠ There is no reference decoder to check against, and there deliberately will not be one, so a
 subtly wrong VLC table produces plausible garbage rather than an error.
 
-## A2 ☐ MPEG-1 audio layer II decode
+## A2 ☑ MPEG-1 audio layer II decode
+
+**Landed.** Four modules added to `CSVM.Video`: `MpegAudioDecoder`, `AudioLayer2Tables` with
+`Layer2Quantizer`, `AudioSubbandSynthesis` for the polyphase filter bank, and `AudioFrame`.
+`MpegSystemStream` gained `AudioStream` and `AudioStartTime`, and `MpegMovie` gained `HasAudio`,
+`AudioSampleRate`, `AudioChannels`, `AudioFramesDecoded` and `NextAudioFrame()`, with `Rewind()`
+restarting both streams. The audio decoder opens lazily, so `B11`'s silent flag never pays for it.
+`AudioFrame.Samples` is float, channel-interleaved, 1152 per channel, carrying `SampleRate`,
+`Channels`, `Time` on the same 90 kHz clock as `VideoFrame.Time`, and `Duration`. Tables and the
+512-entry window were generated and checked by script against the reference, and
+`AudioLayer2TableTests` then checks them against ISO values spelled out in the test rather than read
+back from the module.
+
+**Verified.** `.\RunTests.ps1` PASS, exit 0, 244.3 s. Build 2.7 s with zero StyleCop warnings; units
+77.2 s, 3688 passed, 0 failed, 0 skipped, against A1's 3688-minus-49; engine 127.8 s, 263 passed,
+errors clean; goldens 36.7 s, 18 shots hash-identical. All ten files decode at 44100 Hz: nine plain
+stereo, `crimflag` mono, none joint stereo, none dual channel, and none setting the protection bit,
+so no file carries a CRC. Frame counts run from `crimflag`'s 307 to `chap0`'s 5549. The whole-file
+audio checks add about 1.5 s of wall time, measured back to back with and without them, because
+xunit overlaps them with A1's video decodes; that 1.5 s is the number `A3` should budget against,
+not the 7 s the ten audio decodes cost run alone. With the install unreachable the audio theory
+reports one skipped and 14 passed.
+
+**The A1 contract held, with one addition.** Concatenating the packet payloads does yield a
+well-formed elementary stream: every one of the ten begins with a frame header at byte 0 and every
+later frame lands exactly where the previous frame's declared size puts it, with zero skips across
+roughly 33000 frames. What the contract did not mention is that nine of the ten pad the tail of the
+sound track with zero bytes after the last complete frame, `msopen1` ending with non-header data
+instead. That is the end of the stream rather than damage, and a hunt that finds no further frame
+now costs no resync, which keeps `ResyncCount` meaningful as a damage signal.
+
+**Three defects found in `pl_mpeg`'s audio path**, none of which any of the ten files reaches, all
+three fixed here and fixture-tested. Its free-format bit rate reads outside the table: it computes
+`bitrate_index = read(4) - 1` and guards only `> 13`, so field value 0, the free format, gives -1
+and indexes two tables at -1. Its joint stereo scales the shared code words with channel 0's scale
+factor and copies the finished values to channel 1, where ISO 11172-3 transmits the code words once
+but the scale factors per channel and requantises per channel, which is the point of intensity
+stereo. And its rewind resets the buffer, time and sample count but not the filter bank's history,
+so a replay's opening frames carry about a thousand samples of the previous pass.
+
+**⚠ That third defect is `B11`'s, directly.** The flag loops endlessly, so it rewinds more than
+anything else in the plan. `Rewind` here clears both channels' filter history and
+`RewindDecodesTheSameSamplesAgain` fails against the reference behaviour.
 
 **Goal.** The audio elementary stream decodes to PCM with timestamps, in the same headless module.
 
@@ -277,8 +322,13 @@ stereo-only path breaks the first visible deliverable.
 **Goal.** `.\RunTests.ps1` gates the decoder on a machine with no game install, and gates it harder
 on a machine with one, without the landing gate costing five times what it did.
 
-**⚠ Inherited from A1: the unit stage is over budget.** The ten full decodes cost about 55 s, taking
-units from roughly 16 s to 84.6 s against a 30 s budget. Put the whole-file walk behind a switch, or
+**⚠ Inherited from A1: the unit stage is over budget.** The ten full video decodes cost about 55 s,
+taking units from roughly 16 s to the high seventies against a 30 s budget. **The cost is A1's video
+walk, not A2's audio walk**: measured back to back, A2's ten whole-file audio checks add about 1.5 s,
+because xunit overlaps them with the video decodes already running. Run alone they would cost about
+7 s. So a switch that gates the video walk buys nearly all of the time back, and gating the audio
+walk on its own buys almost nothing. `MpegAudioTests.EveryCinemaDecodesItsDeclaredSoundTrack` never
+decodes video and is cheap enough to leave on. Put the whole-file video walk behind a switch, or
 reduce it to a sample with the full ten opt-in. Do not resolve this by raising the budget in
 `analysis/verification-budgets.json`: the budget is the tripwire, and moving it hides the thing it
 was put there to show. `A1` also left `MovieDataFactAttribute`/`MovieDataTheoryAttribute` in
@@ -358,7 +408,35 @@ and the generated file contains the notice.
 **⚠ Traps.** ⚠ The notices file is version-locked and the export throws when the header disagrees
 with what it is packaging; a new section must not break that check.
 
-## A5 ☐ The extraction copies the ten `.mpg` files into `extracted/`
+## A5 ☑ The extraction copies the ten `.mpg` files into `extracted/`
+
+**Landed.** `ExtractRof.ps1` copies `GRAPHICS\MPG\*.mpg` from the install into
+`<Dest>\ASSETS\GRAPHICS\MPG`, verbatim, and records the count as a `movies` field in the `rof`
+section of `VERSION.json`. The copy runs under `-Raw` as well, because it decodes nothing. It is
+idempotent on length, it takes whatever the folder holds under the name the folder holds it under,
+and it names any of the ten that is missing rather than passing an incomplete install as a silent
+success. An absent `GRAPHICS\MPG` is a warning, not a throw, and says what the consequence is.
+`docs/formats/extraction.md` gains its row in the support matrix.
+
+**⚠ The schema bump this item's Approach called for was correctly refused.** The Approach said to
+bump `VERSION.json`'s schema and update every reader. The agent declined, on the rule that an added
+output invalidates nothing until a reader requires it, which is the rule the last bump obeyed and
+`docs/formats/menu-layout.md` states. No build opens a movie file yet, so bumping today would make
+every currently valid extraction refuse to load on the strength of a file nothing reads. The stamp
+stays at schema 2, `ExtractionStamp.cs` needs no change, and the first reader that actually requires
+a movie bumps all three numbers together. **`B12` is that reader**, so the bump belongs to it.
+
+**Verified.** Run against the real install into a scratch destination. First pass: 847 archive files
+and `GRAPHICS\MPG (10 copied, 0 already current)`, 106 MB copied verbatim, in 1.4 s. Second pass:
+`0 copied, 10 already current`, in 0.6 s, so the copy is idempotent and a re-extraction pays
+nothing. All ten compared against the source by SHA-256, byte for byte: `chap0` 18696196,
+`chap1` 16287748, `chap2` 15360004, `chap3` 11563012, `chap4` 17147908, `chap5` 11966468,
+`crimflag` 970756, `final` 13568004, `msopen1` 2664262, `zipper` 2535428, zero mismatches. The
+stamp reads `"schema": 2` with `"movies": 10`. The target sits under `/extracted/`, which is
+`.gitignore` line 4, so no `.mpg` can reach a commit. `.\RunTests.ps1` PASS, exit 0, 243.1 s: 3688
+units, 263 engine, 18 goldens hash-identical.
+
+### Original approach (kept for reference)
 
 **Goal.** After a recipient runs the extraction, the ten files sit under the data root where
 `SessionPaths` can reach them, so every later item can name a file instead of being handed bytes.
@@ -416,7 +494,13 @@ screen it is on.
 including the 29.97 fps file>
 
 **⚠ Traps.** ⚠ The flag plays silent (Decision 5), so this surface must not assume an audio stream
-exists to drive its clock; the video timestamps are the clock for Wave B.
+exists to drive its clock; the video timestamps are the clock for Wave B. `A2` made the decoder open
+lazily for exactly this reason, so a silent flag never pays for the audio path. ⚠ **This item
+rewinds more than anything else in the plan**, because the flag loops endlessly, and rewind is where
+`pl_mpeg` is broken: its own rewind resets the buffer, time and sample count but not the filter
+bank's history, so a replay's opening frames carry about a thousand samples of the previous pass.
+`A2` fixed that and pinned it with `RewindDecodesTheSameSamplesAgain`. Do not reintroduce it by
+adding a cheaper reset path here.
 
 ## B12 ☐ `CrimFlag.MPG` composed into `MainMenu` and `Preferences`
 
@@ -432,6 +516,14 @@ dialog's title mark "stands alone and the ground behind it stays plain". Both la
 **Approach.** Compose the movie as a `BoardPicture` at Z=0 fed by B11's texture, and remove the two
 `NotDrawn` entries. Take the position and scale from the layout row rather than hardcoding them, so
 the two screens that are not yet composed (`Save`, `Load`) need no second implementation.
+
+**⚠ This item owns the extraction schema bump `A5` deferred.** `A5` added a `movies` count to
+`VERSION.json` without moving the schema, because nothing read a movie file yet and a bump would
+have refused every valid extraction on the strength of an unread output. This item is the first
+reader. Bump `ExtractRof.ps1`'s `$StampSchema`, `ExtractAssets.ps1`'s and
+`CSVM/src/Session/ExtractionStamp.cs`'s `Schema` together, in this item's commit, so an extraction
+made before the movies were copied is refused rather than starting into a screen with no flag
+behind it.
 
 **Model recommendation.** Opus.
 
@@ -453,10 +545,12 @@ re-baselines. ⚠ Do not correct the softness. At 320x240 scaled 2.5x into the b
 **Goal.** A cinema plays with its audio in sync from the first frame to the last, on the project's
 audio bus.
 
-**Evidence (confidence: lead-only).** That the nine cinemas play their audio while the flag plays
-silent is the author's recall of the original, not a decode: the `movie` widget row has no audio
-field of any kind, and the engine side of the player was not traced. Every file does carry a layer
-II track, read from its frame headers, so the tracks exist regardless.
+**Evidence (confidence: traced, upgraded by `A2`).** The premise was the author's recall, since the
+`movie` widget row has no audio field of any kind and the engine side of the player was not traced.
+`A2` decoded all ten tracks and settled it from the data: **`crimflag.mpg`'s track is digital
+silence**, every sample exactly zero across all 307 frames, while the other nine peak between 0.964
+and 1.092. The flag playing silent is a property of the file, not only of the presentation, so Wave
+B needs no mute of its own and this item's scope is unchanged.
 
 **Approach.** Push A2's PCM to an `AudioStreamGenerator` and drive the video clock from the system
 stream's presentation timestamps. Route onto whatever bus `PLAN-audio-preferences` lands; today
@@ -469,7 +563,13 @@ end, which is the failure this item exists to prevent.
 
 **⚠ Traps.** ⚠ Drift accumulates, so a check on the first thirty seconds proves nothing; the
 verification is a whole file. ⚠ This item depends on `PLAN-audio-preferences`'s bus layout, which is
-in flight; do not invent a bus here.
+in flight; do not invent a bus here. ⚠ **Clamp the samples.** Five of the ten peak above 1.0, up to
+1.092, which is normal for layer II and will clip audibly if fixed-point output is fed unclamped.
+⚠ **Do not start both streams at zero.** The first audio packet carries a presentation timestamp in
+all ten files, so `AudioStartTime` is nonzero everywhere, between roughly 0.04 and 0.22 s; honour it
+against `VideoStartTime` rather than assuming a common origin. ⚠ Sound outlasts picture in every
+file, by 0.01 to 0.25 s, so a few frames of audio tail after the last picture is correct and is not
+a sync bug to chase.
 
 ## C22 ☐ The boot sequence on a bare launch, with the skip and `--skip-intro`
 
