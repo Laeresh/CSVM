@@ -373,9 +373,8 @@ public sealed partial class OriginalShell
     // keeps it standing), the page's background, its title, then each setting's title and
     // description at their authored columns, the controls over them, and an open list as the
     // overlay.
-    // ⚠ The logo and the plate are backdrop, not pictures, for the reason ComposeAudio states: a
-    // board draws its fills between the two layers, so a plate among the pictures buries every
-    // focus mark the rows compose under opaque art.
+    // ⚠ Add the logo and the plate to the backdrop, never to the pictures: a board draws its fills
+    // between the two layers, so a plate among the pictures buries every focus mark.
     private void ComposeVideo(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)

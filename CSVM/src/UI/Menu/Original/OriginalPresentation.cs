@@ -189,11 +189,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Options screen's palette: the Preferences page's authored description colour
     /// for its text, its title colour for the heading, the paper plaque's label tail for the
     /// chooser.
-    /// ⚠ The focused row takes the file-wide <c>ACTIVE</c>, not the page title's colour. The title
-    /// is a duller grey than the description cream every unfocused row is written in, so a focused
-    /// row inked with it reads as the disabled one; <c>ACTIVE</c> is what every other Original
-    /// screen already focuses with, so this family stops being the one that dims what it
-    /// highlights.</summary>
+    /// ⚠ Do not focus with the page's own title colour; the focused row takes the file-wide
+    /// <c>ACTIVE</c>. The reading is in <c>docs/org/menu-inventory.md</c>.</summary>
     public static BoardPalette PaletteFor(OriginalPreferencesInks inks, OriginalInks labels) => new(
         Row: ToColor(inks.Text),
         Focus: ToColor(labels.Active),

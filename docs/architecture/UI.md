@@ -688,8 +688,7 @@ art measurer and the flight-devices answer injected. It owns the top level compo
 Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
 screens are its ten partials, below. `Step` applies one seat's frame (pointer, typed text, cursor
 walk, accept and back), `Compose` is the screen as a `ComposedBoard`, and the row kinds every page
-draws are here, `OriginalSlider` and the slider row's builder and drawing among them.
-Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+draws are here. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the

@@ -847,9 +847,7 @@ public class OriginalShellTests
         Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
 
         // The box is the focus mark on this page's plate rather than standing chrome, so exactly one
-        // row carries it and it is the focused one. Drawn on every row it was a permanent hard box
-        // around rectangles the layout authors at differing widths, which nobody chose because the
-        // plate was burying it.
+        // row carries it and it is the focused one.
         Assert.Equal(
             new[] { (135f, 295f, 144f, 17f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));

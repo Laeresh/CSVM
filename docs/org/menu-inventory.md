@@ -40,6 +40,7 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
   - [Coverage](#coverage)
   - [In scope and out of scope](#in-scope-and-out-of-scope)
   - [Screen by screen](#screen-by-screen)
+  - [How the option pages ink and mark focus](#how-the-option-pages-ink-and-mark-focus)
   - [Menu audio](#menu-audio)
 - [Part 3: assets, required and optional](#part-3-assets-required-and-optional)
 - [Part 4: what the evidence does not cover](#part-4-what-the-evidence-does-not-cover)
@@ -511,6 +512,39 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 PlaneConstruction (its Options screen is Preferences' counterpart), and the original has no
 counterpart for Free Flight, Dogfight, the Chapter screen or the wave editor.** The two shells are
 not the same graph, which is what Decision 4 already allows; what this row adds is the size of it.
+
+### How the option pages ink and mark focus
+
+Remake-only readings shared by the Options family (the Preferences page and the Game Options, AUDIO
+and VIDEO pages behind its doors), each composed over a painted plate. The layout authors colours
+per screen and a button's rollover and depressed frames, but nothing that marks the row a keyboard
+or pad walk stands on, those pages being pointer-driven. The mark and the ink it takes are ours.
+
+**The palette.** `OriginalPresentation.PaletteFor` inks these pages from the Preferences page's
+authored description colour for row text and its title colour for the heading, the paper plaque's
+own label tail for the chooser, and the file-wide `ACTIVE` for the focused row rather than that
+title colour. The authored title is a duller grey than the description cream every unfocused row is
+written in, so a row focused in it reads as the disabled one, and `ACTIVE` is what every other
+Original screen already focuses with.
+
+**The focus box.** `OriginalShell.FocusBox` outlines the focused row, shared by the slider rows and
+by the dropdown rows that take `boxOnFocus`, so one outline covers every marked row on these pages.
+It is drawn in the layout's own `DISABLED` grey rather than the dropdown's authored black, which on
+dark paint is a dark line nobody sees. It is a mark rather than standing chrome: on every row at
+once it is a permanent hard box around rectangles the layout authors at differing widths, so only
+the row the cursor is on carries it.
+
+**The box and the wash on a slider row.** A slider thumb is one frame with no focused or pressed
+state, so a focused slider row is the box together with a wash under it. The box is the half that
+reads: the wash lands over a press region grown around a three-pixel slot, so on its own it is a
+faint band over mostly background. The wash stays because the box needs a region to enclose;
+without one the outline reads as four loose lines. When neither the slot nor the thumb art
+measures, both stand as rectangles instead, the way a missing plaque leaves an outlined label, so
+the control still shows its level.
+
+**Why the plate is backdrop.** A composed board draws its fills between the backdrop and the
+pictures, so a page that puts its logo and its background plate among the pictures buries every
+focus mark its rows compose under opaque art. Each option page adds both to the backdrop instead.
 
 ### Menu audio
 
