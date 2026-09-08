@@ -1448,11 +1448,9 @@ public sealed partial class OriginalShell
 
     // A slider as drawn: the slot, then the thumb at the value's own place on it. The thumb is one
     // frame with no focused or pressed state, so focus is the focus box and the wash under it.
-    // ⚠ The box is the readable half, not the wash: the wash lands over a widened press region
-    // around a three-pixel slot, so on its own it is a faint band over mostly background. It stays
-    // because the box needs a region to enclose; without it the outline reads as four loose lines.
-    // With neither art measurable both stand as rectangles, as a missing plaque leaves an outlined
-    // label, so the control still shows its level.
+    // ⚠ Do not drop the box and keep the wash alone; the box is the readable half, and the wash
+    // over a three-pixel slot's press region is a faint band. Why, and the unmeasurable-art case:
+    // docs/menu-presentations.md.
     private void ComposeSlider(OriginalRow row, bool focused, List<BoardFill> fills, List<BoardPicture> pictures)
     {
         if (row.Slider is not { } slider)
