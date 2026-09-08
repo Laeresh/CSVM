@@ -286,12 +286,12 @@ the wash-over-HUD ordering is a verification rule; the weather decode is [../org
 ## src/UI/SplitScreen.cs
 The splitscreen rig for two to four players (one player never constructs it): the black gutter
 backdrop, one `SubViewport` pane per player sharing the main `World3D`, and the player colour and
-tag table. Sharing the world means every pane shares the one sun and environment, so enhanced
-graphics reach every pane with no pane-local plumbing. **Every pane is a 3D audio listener**, or the
-session has none at all and every positional emitter goes silent: Godot takes the per-channel
-maximum over listener-enabled viewports, so an emitter is heard at its nearest pane's volume.
-`Fill(true)` gives pane 1 the whole window for a cutscene and lays the others back out afterwards,
-changing visibility and one rect rather than rebuilding. `NoteSkip` names a skipping player.
+tag table. Two panes stack, or stand side by side once each half would still be wider than it is
+tall (`SideBySide`, true from 2:1 out); three and four are the 2x2 grid. One world means one sun
+and environment per pane, so enhanced graphics need no pane-local plumbing. **Every pane is a 3D
+audio listener**, or nothing positional is audible at all: Godot takes the per-channel maximum
+over listener-enabled viewports. `Fill(true)` gives pane 1 the whole window for a cutscene, a
+visibility change and one rect rather than a rebuild. `NoteSkip` names a skipping player.
 
 ## src/UI/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp

@@ -56,7 +56,7 @@ the scene-object twin `FUN_0042dc20` mirrors it) to a per-mode placement, then h
 shared render-camera `FUN_0042ba70`. Only **modes `6` and `7` are first-person**, and only
 **mode `6` is 80°**.
 
-| Mode | Position dispatcher | View | FOV (H) | ~V @ 16:9 | Interior | Head-look |
+| Mode | Position dispatcher | View | FOV (H) | ~V @ 4:3 | Interior | Head-look |
 |---|---|---|---|---|---|---|
 | `0` | `FUN_0042c7f0` | **Chase / 3rd-person** (smoothed, `camparam` distance) | 60° | 46.8° | — | look-around, floor `−π/2` |
 | `1` | `FUN_0042ca50` | Chase behind (fixed world angle) | 60° | 46.8° | — | — |
@@ -191,18 +191,28 @@ tick `FUN_004a0220`; `FUN_0042b570` (frustum/projection setup) carries `0.523598
 radians via `0.017453292`.
 
 The two FOV functions aspect-correct the stored **horizontal** angle to the stored **vertical**
-value:
+value. The original ships 4:3 modes only (a 16:9 capture is dgVoodoo presenting that 4:3 render),
+so there is one aspect in play and the correction is the ordinary one at it:
 
 ```
-vertical = 2 · atan( tan(H/2) · (4/3) / liveAspect )
+vertical = 2 · atan( tan(H/2) / (4/3) )
 ```
 
-The multiplier is the engine's **assumed 4:3 reference OVER the live aspect** — at the 2560×1440
-capture's 16:9 that is `(4/3)/(16/9) ≈ 0.75`, not `(16:9)/(4:3)`: reproducing this page's own
-pinned numbers needs the smaller factor, since 46.8°/60° and 64.4°/80° are both below 1. Applying
-it: 60° H → **46.8° V**; 80° H → **64.4° V**. (The projection is built out of the horizontal
-half-angle, so the *base* number to store or port is horizontal; CSVM's own port of this law is
-`CameraController.HorizontalToVerticalFovDeg`.)
+Applying it: 60° H → **46.8° V**; 80° H → **64.4° V**. Those verticals are the **4:3** frustum's,
+not a 16:9 one's. The projection is built out of the horizontal half-angle, so the *base* number to
+store or port is horizontal.
+
+⚠ **The factor 0.75 has two readings and only one is real.** `1/(4:3)` and `(4/3)/(16/9)` are both
+exactly 0.75, so a live-aspect divisor fits the pinned numbers just as well as the plain conversion
+does and cannot be told apart by arithmetic. The 4:3-only mode list is what separates them: there
+was never a second aspect for the engine to divide by. Reading the coincidence the other way makes
+the horizontal angle invariant and the vertical shrink as a viewport widens, which is what CSVM
+shipped until `CameraController.HorizontalToVerticalFovDeg` dropped the live-aspect term.
+
+CSVM's port therefore takes these verticals as fixed and lets the horizontal grow with the viewport:
+80° across at 4:3, 96.4° at 16:9, 131.8° at 32:9, one law for a fullscreen window and a splitscreen
+pane alike. Aspects past 4:3 are outside anything the original ran, so this is the port's own choice
+about a case the decode does not cover, not a reading of the binary.
 
 ⚠ **The two `CAMERA_STATE` / `CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are
 animated/in-script FOV changes only** (`.ani` `H_FOV`/`V_FOV` events). They are not the base
@@ -314,7 +324,7 @@ the chase caller is `BL-435`, filed and not yet built.
 | | Original | CSVM today |
 |---|---|---|
 | Per-view base FOV | two horizontal constants: **60°** base and **80°** only for cockpit mode 6 | Cockpit/Nose use the decoded 60°/80° base (`CameraController.HorizontalToVerticalFovDeg`); every external view still assumes a single **62° vertical** (`GameSession.cs`, `docs/org/tracers.md:258` — migration tracked by `BL-420`) |
-| FOV axis | stored/ported as **horizontal** half-angle, aspect-corrected at runtime | matches for Cockpit/Nose; external views still store/assume vertical |
+| FOV axis | stored/ported as **horizontal** half-angle, converted at the 4:3 it ran | matches for Cockpit/Nose, whose vertical is then held at every viewport shape; external views still store/assume vertical |
 | First-person pair | modes 6/7 share the `cockpit_camera` position; differ in interior render, head-look, FOV | `PilotViewMode` implements Cockpit/Nose as camera modes |
 | Cockpit interior gate | drawer (`FUN_0049fb00`) draws `cockpit1` only in mode 6 | `CockpitVisibility` enforces the same mode gate |
 | **Flyby** ("Access Chase View") | world-fixed, re-siting camera (mode `9`): holds a world point, re-aims at the plane, re-sites on `camparam` flyby trigger | not represented (no world-fixed / re-siting camera concept) |

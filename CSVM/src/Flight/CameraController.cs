@@ -82,9 +82,11 @@ public sealed class CameraController
     private const float NoseHorizontalFovDeg = 60f;
     private const float CockpitHorizontalFovDeg = 80f;
 
-    // The engine's OWN reference aspect for the horizontal→vertical conversion (org/cameraViews.md:
-    // "the engine's assumed 4:3"). The live display/pane aspect is the other half of the formula,
-    // supplied per call so the result tracks the actual viewport, never a hardcoded 16:9.
+    // The original ran 4:3 only, so the bases above are its horizontal angles at 4:3
+    // (org/cameraViews.md, "FOV constants and aspect correction"). The verticals they convert to
+    // there are the angles every other aspect holds, so extra width buys world at the sides.
+    // ⚠ Do not divide by the live aspect; that pins the horizontal angle instead and crops a
+    // wide pane's canopy rails and panel.
     private const float AssumedAspect = 4f / 3f;
 
     // The offset the direction above works out to at unit... i.e. the length of (BaseBack, BaseUp),
@@ -329,42 +331,37 @@ public sealed class CameraController
     // Kept beside the instance method that calls it, for the same SA1204 reason as
     // FirstPersonPose above.
 #pragma warning disable SA1204
-    /// <summary>The decoded horizontal→vertical FOV law (org/cameraViews.md, "FOV constants and
-    /// aspect correction"): <c>vertical = atan(tan(H/2) · assumedAspect/liveAspect)</c>, doubled
-    /// for the FULL angle Godot's <see cref="Camera3D.Fov"/> expects (this project sets no
-    /// <c>keep_aspect</c> anywhere, so Fov is always the vertical angle). <paramref
-    /// name="liveAspect"/> is taken fresh every call, never assumed 16:9. At 16:9, 60°H → 46.8°V
-    /// and 80°H → 64.4°V, the plan's pinned values. Pure, so it unit-tests engine-free.</summary>
-    public static float HorizontalToVerticalFovDeg(float horizontalDeg, float liveAspect)
+    /// <summary>The horizontal→vertical FOV law (org/cameraViews.md, "FOV constants and aspect
+    /// correction"): <c>vertical = atan(tan(H/2) / assumedAspect)</c>, doubled for the FULL angle
+    /// Godot's <see cref="Camera3D.Fov"/> expects (this project sets no <c>keep_aspect</c>
+    /// anywhere, so Fov is always the vertical angle). 60°H → 46.8°V and 80°H → 64.4°V, the pinned
+    /// values, and every viewport shape holds them while its horizontal angle grows with its
+    /// width. Pure, so it unit-tests engine-free.</summary>
+    public static float HorizontalToVerticalFovDeg(float horizontalDeg)
     {
         float halfH = Mathf.DegToRad(horizontalDeg) * 0.5f;
-        float halfV = Mathf.Atan(Mathf.Tan(halfH) * (AssumedAspect / liveAspect));
+        float halfV = Mathf.Atan(Mathf.Tan(halfH) / AssumedAspect);
         return Mathf.RadToDeg(halfV) * 2f;
     }
 #pragma warning restore SA1204
 
-    /// <summary>Put the derived per-mode vertical FOV onto the owned camera, at ITS OWN
-    /// viewport's live aspect — the per-pane <c>SubViewport</c> in splitscreen, the window in
-    /// single-player, so each pilot's picture is correct independent of the others (Decision 5:
-    /// no splitscreen-specific code, the per-pilot camera already owns its own FOV value). Call
-    /// alongside every <see cref="FirstPersonView"/> site; <see cref="RestoreExternalFov"/> is the
-    /// undo for every other pose.</summary>
-    public void ApplyFirstPersonFov()
-    {
-        var size = _camera.GetViewport()?.GetVisibleRect().Size ?? new Vector2(16f, 9f);
-        float aspect = size.Y > 0f ? size.X / size.Y : 16f / 9f;
-        _camera.Fov = FirstPersonFovDeg(ViewMode, aspect);
-    }
+    /// <summary>Put the derived per-mode vertical FOV onto the owned camera. It does not depend on
+    /// the viewport's shape, so a splitscreen pane and a fullscreen window take the same angle and
+    /// each pilot's picture stays independent of the others (Decision 5: no splitscreen-specific
+    /// code, the per-pilot camera already owns its own FOV value). Call alongside every <see
+    /// cref="FirstPersonView"/> site; <see cref="RestoreExternalFov"/> is the undo for every other
+    /// pose.</summary>
+    public void ApplyFirstPersonFov() => _camera.Fov = FirstPersonFovDeg(ViewMode);
 
     // Beside its one caller for the same SA1204 reason as FirstPersonPose above.
 #pragma warning disable SA1204
-    /// <summary>The vertical FOV a first-person view takes at <paramref name="liveAspect"/>: the
-    /// per-mode horizontal base through <see cref="HorizontalToVerticalFovDeg"/>. Public because a
-    /// second camera drawing the same eye must take the same angle from the same table rather than
-    /// a copy of it (<see cref="CockpitOverlay"/>).</summary>
-    public static float FirstPersonFovDeg(PilotViewMode mode, float liveAspect) =>
+    /// <summary>The vertical FOV a first-person view takes: the per-mode horizontal base through
+    /// <see cref="HorizontalToVerticalFovDeg"/>. Public because a second camera drawing the same
+    /// eye must take the same angle from the same table rather than a copy of it (<see
+    /// cref="CockpitOverlay"/>).</summary>
+    public static float FirstPersonFovDeg(PilotViewMode mode) =>
         HorizontalToVerticalFovDeg(
-            mode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : NoseHorizontalFovDeg, liveAspect);
+            mode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : NoseHorizontalFovDeg);
 #pragma warning restore SA1204
 
     /// <summary>Put the camera back on the vertical FOV it carried at construction — GameSession's

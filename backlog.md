@@ -1699,6 +1699,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
   (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
+- `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
+  levels, so the mix is settable in the Original presentation alone.** *Evidence:*
+  `PLAN-audio-preferences` builds the AUDIO page for Original and puts four levels (Master, Music,
+  Effects, Voice) in the shared options store, which is where every setting both presentations show
+  already lives. Built-in's Options screen holds three steppers (difficulty, menu presentation,
+  graphics mode) and the Controls door, and its apply hands back every setting it does not show
+  untouched (`CSVM/src/UI/LaunchMenu.cs:181-191,1466-1560,2449-2456`), so once the page lands a
+  player on Built-in can hear the mix and not reach it. Blocked until the four levels exist in the
+  store, which is the whole of the dependency: nothing else about this item waits on that plan.
+  *Fix shape:* four rows on Built-in's Options screen reading and writing the same store fields the
+  AUDIO page does, in the screen's own stepper convention, applied through the same
+  `OptionsApplyExit` the three current rows leave by.
+  *⚠ Traps:* Built-in has no continuous control of any kind, so a 0 to 100 level is a stepper with a
+  chosen step rather than a slider, and the step size is a judgement the row has to make rather than
+  inherit. Do not add a second writer: `Launcher.ApplyOptions` is the options file's one writer and
+  both presentations reach it through the apply exit. Do not re-tune `MusicPlayer.ChannelLevel` on
+  the way past; `BL-455` deletes it.
+  *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`, `BL-783` (the same gap
+  for the display settings), `docs/menu-presentations.md`.
+
 ## Cameras & views
 
 - `BL-150` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **plan-sized — not a TUNE. Numpad camera views — the whole scheme needs a rebuild, not a
@@ -1986,7 +2006,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
   magnitude candidates coincide with authored constants — wire nothing on one coincidence (the
   caliber law stood because the candidates separated by an order of magnitude each way).
-- `BL-420` `[Research]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in hiding the interior/hull, keeping player head-look without autohead, and using 60°. The constants are **horizontal**; `FUN_006024d9`/`FUN_00602508` aspect-correct to stored vertical via `atan(tan(H/2) · (16:9)/(4:3))` → 60°→46.8° vertical, 80°→64.4° vertical. The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
+- `BL-420` `[Research]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in hiding the interior/hull, keeping player head-look without autohead, and using 60°. The constants are **horizontal**, and the correction `FUN_006024d9`/`FUN_00602508` apply is the plain one at the 4:3 the original ran: `atan(tan(H/2) / (4/3))` → 60°→46.8° vertical, 80°→64.4° vertical, both **4:3** figures rather than 16:9 ones. ⚠ The factor 0.75 reads equally as `1/(4:3)` and as `(4/3)/(16/9)`, so arithmetic cannot separate them and the 4:3-only mode list is what decides it (`docs/org/cameraViews.md`, "FOV constants and aspect correction"). The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
   *Evidence:* ghidra-mcp read of the open `crimson.exe` (`/crimson.exe`): `FUN_0049fb00` (player render; draws `cockpit1` `DAT_0071c314` only when mode==6 via `FUN_004cca30(x,1/0)` around the interior draw), `FUN_0042b660` (mode gate), `FUN_00602508` (60° H-FOV; writes `_DAT_00a1eff0`/`_DAT_00a1eff4`), `FUN_006024d9` (80° H-FOV, mode 6), `FUN_0042b570` (frustum/projection, contains `0.5235987755982` = 30° = 60°/2), plus the 60°/80°/50.0/2.5 constants side-by-side at the data table `0060409c`. FOV is stored in radians (anim loader `FUN_00502da0` converts degrees→radians via `0.017453292`). The `0x3f860a92` 60° literal is also used by `FUN_0049d940` (player aim camera) and `FUN_004a0220`. Camera object is `DAT_0064ef78`. Placing the camera: both first-person modes run the same placement `FUN_0042d980`, which sets the camera to `plane_pos + plane_rot · (DAT_0071c328,32c,330)`, i.e. the plane's `cockpit_camera` marker offset (bound in `FUN_00473480` from the `cockpit_camera` node; default fallback `DAT_0075d1b8/bc/c0` = `(0,0,0)`). Plane-model `cockpit_camera` node translations (decoded from `extracted/C1/... planes/nodes.json`) put the camera on the fuselage centerline a bit above the local origin — default fighter `player_pfighter`: `(0, +0.75, −0.2)` — with +Y up, ±X the wingspan (ailerons at ±63, elevators/tail at −Z ≈ −37), so +Z = nose/forward and the marker is centered, ~0.75 up, marginally aft of the origin. There is **no `nose_camera` node or per-mode offset** — mode 7 reuses the cockpit_camera point. The `cam_anim` ZAN cockpit sequence (`player-gi_1stperson`) carries no FOV (it shows the interior/hides the plane via `cockpit1`/`camera1`), so the base FOV is not authored in `.ani` data.
   *Fix shape:* **the decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18), and the mode-6/mode-7 first-person half of the model landed in code** (`PLAN-cockpit-view` A3): `CameraController.HorizontalToVerticalFovDeg` renders Cockpit at 80° H and Nose at 60° H, both aspect-corrected off the live viewport, deliberately scoped to those two new modes only (Decision 3, "new modes only") and never touching the engine's 62° global. **What remains is the EXTERNAL half.** `GameSession.cs:475`/`:2624` and `Launcher.cs:490` still write the single 62° vertical global to every chase/fixed-numpad/back/pad-look/crash camera. Migrating those three sites to the decoded 60° horizontal base (with the aspect-corrected 46.8° vertical this page already pins) is the remaining work, and it unsettles two judgements made against the current 62°: `PLAN-overcast-match` line 1463's overcast sky match and `docs/org/tracers.md:258`'s tracer calibration. Carry that warning into whichever session does the migration — both need re-judging after the base FOV moves, not just re-measuring against the same footage.
   *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events) — not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally** — mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view — ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~ — **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
@@ -2103,36 +2123,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   from it, not the reverse. *Playtest after fix:* chase view held at both ends of the clamp, and the
   pose the view opens on before any zoom input. *Cross-refs:* `BL-433`'s closing commit
   (`git log --grep=BL-433`), which carries the keybind decode.
-
-- `BL-776` `[Bug]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **The first-person
-  FOV law holds the horizontal angle constant and shrinks the vertical one as the viewport widens,
-  so an ultrawide screen shows no more world than a 16:9 one and crops the cockpit.**
-  *Evidence:* `CameraController.HorizontalToVerticalFovDeg`
-  (`CSVM/src/Flight/CameraController.cs:338-343`) computes
-  `halfV = atan(tan(H/2) * AssumedAspect / liveAspect)` with `AssumedAspect = 4/3` (`:88`) over the
-  per-mode bases `CockpitHorizontalFovDeg = 80` and `NoseHorizontalFovDeg = 60` (`:82-83`). Because
-  the live aspect divides, the horizontal half-angle `atan(tan(halfV) * liveAspect)` is invariant
-  and the vertical shrinks: cockpit vertical is 80.0 degrees at 4:3, 64.4 at 16:9 and 34.9 at 32:9,
-  with horizontal 96.4 throughout. At 32:9 the canopy rails and instrument panel fall outside the
-  view, which is what a player reads as a cropped cockpit. `ApplyFirstPersonFov` (`:352-357`) and
-  `CockpitOverlay` (`CSVM/src/Flight/CockpitOverlay.cs:106-108`) both take the angle from that one
-  table, so a change reaches the world camera and the cockpit pass together.
-  *Fix shape:* hold the vertical angle and let the horizontal grow with the aspect, so a wider
-  screen shows more world to the sides instead of less above and below.
-  *⚠ Traps:* (i) **This is a fidelity decision, not a defect with one right answer**, which is why
-  `Next` is `decide`. The law is decoded (`docs/org/cameraViews.md`, "FOV constants and aspect
-  correction") and reproduces the original at the aspects the original could run. It could not run
-  32:9, so extending it is a choice about a case the decode never covered, not a departure from it.
-  (ii) The pinned 16:9 values 46.8 and 64.4 are asserted in tests and cited in the decode doc; a
-  change to the law must keep them or re-pin both together. (iii) A 2-player splitscreen pane is
-  this same case exactly, never an analogy: `GameSession.cs:3293-3294` stacks 2 panes top/bottom, so
-  a 1280x720 window gives each pane 1280x360, an aspect of 3.5556, which is 32:9. One law serves
-  both and no aspect-conditional branch is wanted.
-  *Playtest after fix:* fly the Cockpit and Nose views at 32:9 and in a 2-player stacked pane, and
-  confirm the panel and canopy read as they do at 16:9.
-  *Cross-refs:* `BL-777` (side-by-side panes on an ultrawide reduce how often this bites but do not
-  remove it, since single-player fullscreen is still 32:9), `BL-778` (the HUD half of the same
-  ultrawide exposure), `BL-420` (the per-view base FOV decode this law rests on).
 
 ## HUD & UI
 
@@ -2635,29 +2625,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first and has to be drawn after it. *Cross-refs:* `BL-706` (the same dialog's placement),
   `BL-744`'s landing (`git log --grep=BL-744`).
 
-- `BL-778` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The flight HUD
-  anchors to the viewport's own edges, so on an ultrawide screen its elements sit at the far left
-  and right instead of within the reading area.**
-  *Evidence:* `HudMetrics` sizes every element off HEIGHT alone,
-  `windowH / ReferenceHeight` damped by the pane share (`CSVM/src/Flight/HudMetrics.cs:47-53`,
-  `ReferenceHeight = 1440`), so at 32:9 the elements are already the right SIZE and only their
-  horizontal placement is wrong. The class's own note says positions anchor to a pane edge rather
-  than the top-left (`:10-11`), so on a 5120x1440 screen a left-anchored and a right-anchored
-  element stand 5120 px apart, at the edges of peripheral vision.
-  *Fix shape:* give the HUD a 16:9 box centred in the viewport and anchor to that box's edges
-  rather than the viewport's. A layout-box change, not a scaling one: `HudMetrics.Scale` is already
-  correct and should not move.
-  *⚠ Traps:* (i) **Edge markers are the exception to check, not to assume.** `EdgeMarker` points at
-  targets that are off screen; clamped to a 16:9 box it would indicate a direction for a target
-  actually visible in the 32:9 area outside the box. Decide per element whether it belongs to the
-  reading box or to the true viewport edge, and judge it at the controls rather than by rule.
-  (ii) Do not fix this by scaling the HUD down: the size is right and shrinking it would hurt 16:9,
-  which is every machine that is not the ultrawide case.
-  *Playtest after fix:* fly at 32:9 and confirm the status text, gauges and target HUD sit within
-  comfortable reading width while off-screen target markers still point usefully.
-  *Cross-refs:* `BL-776` (the FOV half of the same ultrawide exposure), `BL-777` (a side-by-side
-  pane is 16:9 and does not show this).
-
 - `BL-779` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Original's
   credits screen draws ABOUT disabled, because the box it raises wants a widget set the shared
   messagebox chrome does not compose.**
@@ -2730,6 +2697,57 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/org/menu-inventory.md` (the Credits row), `BL-775`'s landing
   (`git log --grep=BL-775`).
 
+- `BL-783` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen shows none of the four display
+  settings, so the monitor, the resolution, the display mode and V-Sync are settable in the Original
+  presentation alone.** *Evidence:* the VIDEO page landed for Original
+  (`CSVM/src/UI/Menu/Original/OriginalVideo.cs`, `PF_B_VIDEO` live) and widened the shared store, so
+  `OptionsDef`, `OptionsStore`'s validation and `OptionsApplyExit` all carry the four settings beside
+  the three vocabulary words. Built-in reads them into `_monitorChoice`, `_resolutionChoice`,
+  `_displayModeChoice` and `_vsyncChoice` purely to hand them back untouched, its own comment saying
+  the screen shows none of them (`CSVM/src/UI/LaunchMenu.cs:189-191,1557-1559`). A player who never
+  leaves Built-in cannot pick the screen the game opens on.
+  *Fix shape:* four rows over the same four settings and the same resolvers the VIDEO page reads
+  through (`CSVM/src/Utils/MonitorSetting.cs`, `ResolutionSetting.cs`, `DisplayModeSetting.cs`,
+  `VSyncSetting.cs`), stepped in Built-in's own convention and applied through the existing exit.
+  *⚠ Traps:* the resolution words are enumerated from the chosen screen rather than shipped as a
+  list, so a monitor change has to re-enumerate them exactly as the VIDEO page's row does, and a
+  fixed list would offer a size the screen cannot hold. The two forgiving reads are the feature and
+  not error paths to reinvent: a saved monitor index no screen answers to shows as the screen the
+  window already stands on, and a saved size the screen no longer offers shows as the project
+  default. Enhanced Graphics is not a fifth row here, Built-in's graphics stepper already being it.
+  *Cross-refs:* `git log --grep=BL-768` (what the VIDEO page settled, and why each row sits where it
+  does), `BL-782` (the same gap for the audio levels), `docs/org/menu-inventory.md`'s Video row.
+
+- `BL-784` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Game Options page drops the original's own Default View and
+  Auto Head Turn rows, and neither presentation offers either setting.** *Evidence:* the section
+  authors three option rows, Difficulty (`GO_D_DIFFICULTY`), Default View (`GO_T_VIEWTITLE` and
+  `GO_T_VIEWDESC` over the `GO_D_VIEW` dropdown) and Auto Head Turn (`GO_T_HEADTITLE` and
+  `GO_T_HEADDESC` over the `GO_B_HEADTURN` checkbox). The port's table carries Difficulty and the
+  remake-only Menu row alone, while `ReadGameOptionsPage` already reads both dropped rows' widgets
+  for the page's row shape (`CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`), so the geometry is
+  present and the options are not. Both settings exist in the engine with no way to them: autohead
+  runs behind the `headLook.autohead` config key, default off
+  (`CSVM/src/Utils/Config.cs:224-227`, `CSVM/src/Flight/FlightController.cs:3796-3806`), and the
+  opening view is `PilotViewMode.Chase` seeded only by `--view=`
+  (`CSVM/src/Flight/CameraController.cs:162-185`). Built-in's Options screen shows neither.
+  *Fix shape:* two entries in the `GameOptions` table with the store fields behind them, the same two
+  rows on Built-in's Options screen in its stepper convention, and each setting read where it is
+  decided, the autohead gate and the flight's opening view.
+  *⚠ Traps:* (a) **The plate holds three rows and the port already spends two.** A fourth row at the
+  authored 62-pixel pitch from the first row's Y 283 reaches the plaque row at Y 457, so this needs a
+  decision before it needs code: a taller plate (one image, so a stretched or tiled drawing is a
+  remake reading to record), paged rows, or a different home for the remake-only Menu row
+  (`docs/org/menu-inventory.md`'s GameOptions row). (b) **The Default View dropdown's words are not
+  decoded.** `docs/org/cameraViews.md` has the options menu labelling camera positions "external"
+  (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "default view" (`MSG_OPT_DEF_VIEW`),
+  which is a lead and not `GO_D_VIEW`'s item list, and this port's own views are Chase, Cockpit and
+  Nose. (c) A row does not settle autohead's port decision: its default is off because the original's
+  cockpit footage reads that way, and the sub-cap choice behind it is still unjudged at the controls
+  under `BL-436`(d).
+  *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
+  both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
+  `docs/org/cameraViews.md`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2801,27 +2819,6 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-391` (base engine level,
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
-
-- `BL-777` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A 2-player split
-  is always stacked top and bottom, so on an ultrawide window each pane is far wider than it is
-  tall; the split should follow the window's aspect and stand the panes side by side.**
-  *Evidence:* `GameSession.cs:3293-3294` logs the layout as `count == 2 ? "stacked top/bottom" :
-  "2x2 grid"`, with no aspect input anywhere in the choice. On a 5120x1440 window that gives two
-  5120x720 panes, an aspect of 7.1 (64:9); side by side would give two 2560x1440 panes at exactly
-  16:9, the shape every HUD and FOV metric in the port is calibrated for.
-  *Fix shape:* pick the split axis from the window's aspect rather than the player count alone,
-  splitting along the longer axis; 4 players stay a 2x2 grid at every aspect.
-  *⚠ Traps:* (i) The pane share feeds `HudMetrics.PaneFactor`
-  (`CSVM/src/Flight/HudMetrics.cs:32-42`) through the HEIGHT ratio `paneH / windowH`, so a
-  side-by-side pane keeps full height and its factor becomes 1 rather than sqrt(1/2). That is
-  arguably correct, since the pane is no longer short, but it changes HUD size in 2-player
-  splitscreen on every aspect where the split flips, and it wants a look at the controls before it
-  is called done. (ii) Do not make this conditional on a hardcoded aspect threshold without saying
-  what the threshold means; splitting along the longer axis needs no threshold at all.
-  *Playtest after fix:* a 2-player session on an ultrawide window, confirming each pane reads as a
-  normal 16:9 view and the HUD sits correctly in both.
-  *Cross-refs:* `BL-776` (today's stacked pane is exactly the 32:9 case that item describes, so
-  this one reduces its reach without removing it), `BL-778` (the HUD's own ultrawide item).
 
 ## Missions, modes & campaign
 

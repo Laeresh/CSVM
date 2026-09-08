@@ -166,7 +166,10 @@ public sealed partial class ObjectivesHud : Node
 
         var lines = DrawnLines();
         float scale = WindowScale();
-        var signature = new StringBuilder().Append(scale.ToString("0.###"));
+        // The box's right edge joins the signature: a window that widens without changing height
+        // moves the panel, and the height ratio alone would report nothing to redraw.
+        var signature = new StringBuilder().Append(scale.ToString("0.###"))
+            .Append('|').Append(PanelRight().ToString("0.###"));
         foreach (var line in lines)
         {
             signature.Append(line.Completed ? "|1|" : "|0|").Append(line.Text);
@@ -221,8 +224,11 @@ public sealed partial class ObjectivesHud : Node
         _heading!.AddThemeFontSizeOverride("font_size", Mathf.Max(1, Mathf.RoundToInt(RefHeadingSize * scale)));
         _panel!.AddThemeStyleboxOverride("panel", PanelStyle(scale));
         _panel.Size = Vector2.Zero;      // a Control clamps up to its combined minimum size
+        // ⚠ The right edge is the reading box's, not the window's: on a window wider than the
+        // reference frame this panel would otherwise stand out at the far edge, away from the
+        // paused board it belongs with. The two edges are the same at 16:9 and under.
         _panel.Position = new Vector2(
-            Mathf.Max(0f, _root!.Size.X - ((RefPanelWidth + RefSideMargin) * scale)), RefTopMargin * scale);
+            Mathf.Max(0f, PanelRight() - ((RefPanelWidth + RefSideMargin) * scale)), RefTopMargin * scale);
     }
 
     private StyleBoxFlat PanelStyle(float scale) => new()
@@ -233,6 +239,10 @@ public sealed partial class ObjectivesHud : Node
         ContentMarginTop = 12f * scale,
         ContentMarginBottom = 12f * scale,
     };
+
+    // The edge this panel hangs from: the reading box's right, which is the window's own on any
+    // window 16:9 or narrower (Flight.HudMetrics.ReadingBox).
+    private float PanelRight() => Flight.HudMetrics.ReadingBox(_root!).End.X;
 
     // The window-height ratio, not HudMetrics.Scale's pane-damped form: this readout draws once
     // for the whole window regardless of splitscreen, the same reasoning PerfHud's own override
