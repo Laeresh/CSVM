@@ -152,6 +152,16 @@ public class VideoVlcTableTests
     public void DctCoefficientMatchesTheStandard(string code, int expected) =>
         Assert.Equal(expected, Decode(VideoVlcTables.DctCoefficient, code));
 
+    /// <summary>A bit pattern the standard leaves unassigned ends the walk and yields zero, so a
+    /// corrupt stream costs one wrong symbol rather than a decoder that never returns. Seven set
+    /// bits reach the luminance size table's unassigned leaf, one bit past its longest code.</summary>
+    [Fact]
+    public void AnUnassignedBitPatternEndsTheWalkInsteadOfLooping()
+    {
+        Assert.Equal(8, Decode(VideoVlcTables.DctSizeFor(0), "1111110"));
+        Assert.Equal(0, Decode(VideoVlcTables.DctSizeFor(0), "1111111"));
+    }
+
     [Fact]
     public void EveryTableIsATreeWithNoUnreachableEntry()
     {

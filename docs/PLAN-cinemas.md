@@ -68,10 +68,11 @@ prose below disagrees with itself.
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A5, B11, B12, C21, C22, C23, C24 | Confirm the trace against [`docs/formats/cinemas.md`](formats/cinemas.md), then implement. |
-| **Leads only — no mechanism yet** | A3, A4 | Budget for investigation. |
+| **Leads only — no mechanism yet** | none open | A3 and A4 were the two leads and both landed. |
 
 C21 was a lead resting on the author's recall that the flag plays silent. `A2` decoded every track
-and measured `crimflag.mpg`'s as digital silence, so it is traced now.
+and measured `crimflag.mpg`'s as digital silence, so it is traced now. With Wave A complete, every
+item still open rests on a mechanism read out of the data or the executable.
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -132,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ System-stream demux and MPEG-1 video decode, as a managed module with no Godot in it
 2. ☑ MPEG-1 audio layer II decode
-3. ☐ The test surface: spec vectors, and whole-file checks skipped when `extracted/` is absent
+3. ☑ The test surface: spec vectors, and whole-file checks skipped when `extracted/` is absent
 4. ☑ The port's third-party notice
 5. ☑ The extraction copies the ten `.mpg` files into `extracted/`
 
@@ -212,11 +213,13 @@ constant or a transposed pass still overshoots by an order of magnitude. If anyt
 ringy at the controls in `B12` or `C21`, this is the first thing to suspect and the cheapest to
 change.
 
-**⚠ The unit stage is now over budget.** The ten full decodes add about 55 s, taking units from
-roughly 16 s to 84.6 s against a 30 s budget, and the whole run to 275.5 s against 180 s. Both are
-awareness-only and the exit code is unchanged. `A3` owns the fix. The engine stage is separately
-over budget at 145.6 s against 100 s, measured with no concurrent load and with nothing in the
-engine referencing `CSVM.Video`, so that one is not this item's and not this plan's.
+**⚠ The unit stage went over budget here, and `A3` brought it back.** The ten full decodes took
+units from roughly 16 s to 84.6 s against a 30 s budget. `A3` split the walk rather than filtering
+it: the always-on theory still opens all ten files and decodes one group of pictures from each, and
+the exhaustive frame-count walk is opt-in behind `CSVM_MOVIE_WALK`. Units now run about 18 s. The
+engine stage is separately over budget at about 127 s against 100 s, measured with no concurrent
+load and with nothing in the engine referencing `CSVM.Video`, so that one is not this item's and
+not this plan's.
 
 ### Original approach (kept for reference)
 
@@ -317,7 +320,60 @@ green.
 **⚠ Traps.** ⚠ Mono is not the exception to ignore: `crimflag.mpg` is the file Wave B plays, so a
 stereo-only path breaks the first visible deliverable.
 
-## A3 ☐ The test surface: spec vectors, and whole-file checks skipped when `extracted/` is absent
+## A3 ☑ The test surface: spec vectors, and whole-file checks skipped when `extracted/` is absent
+
+**Landed.** The whole-file walk is split rather than filtered. An always-on theory opens all ten
+files and reads each one's declared shape, then decodes one group of pictures, 15 frames, from each,
+so a file whose profile changed still fails the gate. The exhaustive per-file frame-count walk moved
+behind `FullMovieWalkTheoryAttribute`, which reports **skipped with a reason naming the command**
+rather than quietly not existing. `CSVM.Tests/TestData.cs` gained `FullMovieWalk`,
+`NoFullWalkReason` and that attribute, which distinguishes a missing install from a missing opt-in
+and says which. `docs/verification.md` gains **LOG-20**. The full ten run with:
+
+```
+$env:CSVM_MOVIE_WALK=1; .\RunTests.ps1
+```
+
+No file under `CSVM/src` was touched: no test needed a seam that did not exist.
+
+**Verified.** Units **73.0 s before, 17.4 s after** as the agent measured it, and **18.2 s** on the
+orchestrator's own run, against a 30 s budget, with `analysis/verification-budgets.json` unmodified.
+Pre-A1 was 16.3 to 16.7 s, so the new coverage costs about a second. The opt-in walk costs 63 to
+66 s when asked for, and all ten counts pass. `.\RunTests.ps1` PASS, exit 0, 184.4 s: build 2.8 s,
+units 3721 passed with 1 skipped of 3722, engine 126.7 s with 263 passed and errors clean, goldens
+36.7 s with 18 shots hash-identical and `manifest.json` unmodified in the working tree (GOLD-9).
+`CheckCommentCaps.ps1`, `CheckDocEntries.ps1`, `CheckEncoding.ps1`, `CheckItemIds.ps1` and
+`CheckGoldenProse.ps1` all exit 0.
+
+**The corruption check ran, and the second one found a real gap.** Corrupting
+`VideoVlcTables.CodedBlockPatternData`'s leaf value 32 to 33 failed
+`CodedBlockPatternMatchesTheStandard` alone, 1 failed against 143 passed. Corrupting
+`AudioLayer2Tables.QuantizerIndexData` row 2 entry 9 to 8 failed only the **new**
+`EveryAllocationFieldValueSelectsTheStandardsQuantiser`, 1 failed against 50 passed, and that it
+failed nothing else is the evidence that row 2 was previously untested. Both restored, with
+`git diff -- CSVM/src` empty afterwards.
+
+**Skipped-when-absent, proved rather than asserted.** With `CSVM_DATA_ROOT` and `CSVM_MPG_ROOT` both
+pointed at an empty directory and no opt-in: 0 failed, 50 passed, 3 skipped of 53, in 31 ms, the
+three skips being exactly the install-dependent theories while 50 fixture-driven checks still gate.
+
+**⚠ Four gaps found in `A1`'s and `A2`'s own tests**, each now closed. `DctBlockTests` checked 3 of
+64 intra-matrix entries and 4 of 64 scan positions, and a permutation check cannot see a transposed
+pair, so both are exhaustive now and the scan is derived from the diagonal rule rather than
+transcribed. `AudioLayer2TableTests` reached 4 of the 5 internal quantiser rows and only the two
+ends of each, which is the gap the corruption landed in. The decoder's motion-vector
+*reconstruction*, the VLC, the `r_size` residual, the differential carry and the range wrap, was
+untested; only the sampling it feeds was. And `AVectorReachingOutsideThePlanePredictsNothing` used
+plus or minus 64, which `pl_mpeg`'s flat-offset guard rejects too, so it could not distinguish A1's
+row and column guard from the reference's: **a disproof taken in the one pose where the effect
+cannot occur** (METHOD-1). The edge-repeat half of that same divergence had no test at all.
+
+**⚠ Still over budget, and not this plan's.** The engine stage runs 126.7 s against 100 s, which
+carries the total to 184.4 s against 180 s. `A1` measured the same figure, disowned it because
+nothing in the engine references `CSVM.Video`, and `A3` reproduced it independently. It predates
+this work.
+
+### Original approach (kept for reference)
 
 **Goal.** `.\RunTests.ps1` gates the decoder on a machine with no game install, and gates it harder
 on a machine with one, without the landing gate costing five times what it did.

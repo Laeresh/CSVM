@@ -3439,18 +3439,25 @@ usual.
   on the test, no fixture teardown and no sweep anywhere; more than twenty test files call it.
   `CleanScratch.ps1` does not mention `csvm-tests` and never has, so nothing in the repo removes
   them. Measured on the author's machine: **377692 top-level directories**, the oldest created
-  2026-07-25, still growing on every run. An NTFS directory with that many entries makes each
-  create and each enumerate progressively slower, and the cost falls on `dotnet test` rather than
-  on the leak itself, so it reads as the suite getting slower for no reason. *Fix shape:* delete the
+  2026-07-25, growing by **452 per full `RunTests.ps1` run**, so about 835 runs over six weeks.
+  **No performance cost has been demonstrated and one was looked for:** the units stage ran 77.2 s
+  on 3688 tests with the accumulation present and 74.0 s on the same 3688 immediately after it was
+  cleared, a difference inside run-to-run noise. NTFS indexes directories as a B-tree, so a large
+  entry count is cheap to add to. Treat this as unbounded disk and inode waste with an unknown
+  ceiling, not as a live slowdown, and do not cite it as the cause of a slow run without measuring
+  that run both ways. *Fix shape:* delete the
   directory when the test that made it finishes, which means an `IDisposable` fixture or a
   `TempDir` handle type rather than a bare string, and have `CleanScratch.ps1` sweep
   `%TEMP%\csvm-tests` as a backstop for what escapes. *⚠ Traps:* renaming the directory and deleting
   the rename afterwards is the only fast way to clear an accumulation this size; a recursive delete
   in place takes far longer than the rename plus a background `rd /s /q`. Do not "fix" this by
   pointing the tests at the repo's `.scratch/`, which is what `CleanScratch.ps1` already owns and
-  what would put test scratch inside a worktree. *Impact:* none on correctness. The suite passes
-  throughout; it just gets slower, and it made a routine item's verification take hours before the
-  cause was found.
+  what would put test scratch inside a worktree. ⚠ **Do not repeat the misdiagnosis this entry was
+  first filed on.** A subagent that appeared to run for six hours was assumed to be crawling over
+  this accumulation; it had in fact been suspended along with an idle parent session, and its real
+  working time was under an hour. Wall clock since dispatch is not working time, and this leak was
+  not the cause. *Impact:* none on correctness and none measured on speed. The suite passes
+  throughout.
 
 ## Misc
 

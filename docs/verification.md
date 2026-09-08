@@ -303,6 +303,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   sibling agent's probe finishing mid-run kills your viewport; count the Godot processes naming
   another worktree before believing an error census.** The signature is a repeating per-frame
   `NullReferenceException`, a `global_shader_parameter_set` condition and two `viewport is null` lines.
+- **LOG-20** — **An ordinary `.\RunTests.ps1` decodes the opening frames of the ten `.mpg` cinemas,
+  not all of them; run `$env:CSVM_MOVIE_WALK=1; .\RunTests.ps1` for the whole-file walk and its
+  frame-count pins.** Ten whole decodes cost about 65 s against the unit stage's 30 s budget, so
+  what runs every time reads all ten files and decodes one group of pictures from each, and
+  `MpegMovieTests.EveryCinemaDecodesEveryFrameItCarries` reports skipped with that command in its
+  reason rather than passing silently.
 
 ## WORLD — world data and runtime traps
 

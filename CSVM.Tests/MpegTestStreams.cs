@@ -39,6 +39,19 @@ internal static class MpegTestStreams
     /// slice starts with.</summary>
     public const int ExpectedChroma = 128;
 
+    /// <summary>The sequence header's aspect ratio code for square pixels, which all ten
+    /// cinemas carry.</summary>
+    public const int SquarePixelCode = 1;
+
+    /// <summary>Luma samples of the first of the eight blocks
+    /// <see cref="IntraThenMotion"/> paints, before its own DC difference is applied. It is
+    /// the neutral 128 a slice starts predicting from.</summary>
+    public const int MotionFixtureBaseLuma = 128;
+
+    /// <summary>Macroblocks across the picture <see cref="IntraThenMotion"/> builds, which is
+    /// two of them side by side in one slice.</summary>
+    public const int MotionFixtureMacroblocks = 2;
+
     private const int SequenceHeaderCode = 0xB3;
     private const int SequenceEndCode = 0xB7;
     private const int PictureStartCode = 0x00;
@@ -76,12 +89,46 @@ internal static class MpegTestStreams
 
     /// <summary>A video elementary stream of intra pictures, all identical.</summary>
     public static byte[] IntraPictures(int width, int height, int frameRateCode, int pictureCount) =>
-        VideoStream(width, height, frameRateCode, pictureCount, false);
+        VideoStream(width, height, SquarePixelCode, frameRateCode, pictureCount, predict: false);
 
     /// <summary>A video elementary stream whose first picture is intra and whose others predict
     /// it with a zero motion vector, so all of them decode to the same samples.</summary>
     public static byte[] IntraThenPredicted(int width, int height, int frameRateCode, int pictureCount) =>
-        VideoStream(width, height, frameRateCode, pictureCount, true);
+        VideoStream(width, height, SquarePixelCode, frameRateCode, pictureCount, predict: true);
+
+    /// <summary>One intra picture whose sequence header carries those aspect ratio and frame
+    /// rate codes, for checking the two tables the header indexes. Both are the raw field
+    /// values, so zero and the reserved values can be built as well as the legal ones.</summary>
+    public static byte[] SequenceWithCodes(int aspectCode, int frameRateCode) =>
+        VideoStream(32, 16, aspectCode, frameRateCode, 1, predict: false);
+
+    /// <summary>A 32x16 stream of an intra picture and a predicted one, for checking how a motion
+    /// vector is reconstructed. Each of the eight luma blocks takes its own DC from
+    /// <paramref name="lumaDcDeltas"/>, whose entries are of magnitude 8 to 15 so that all eight
+    /// code in a four-bit field. Each macroblock's horizontal motion field is spelled out by the
+    /// caller in <paramref name="horizontalMotionBits"/>, the code then
+    /// <paramref name="fCode"/> - 1 residual bits; every vertical one is no change.</summary>
+    public static byte[] IntraThenMotion(int fCode, string[] horizontalMotionBits, int[] lumaDcDeltas)
+    {
+        var writer = new BitWriter();
+        writer.StartCode(SequenceHeaderCode);
+        writer.Write(32, 12);
+        writer.Write(16, 12);
+        writer.Write(SquarePixelCode, 4);
+        writer.Write(5, 4);
+        writer.Write(0x3ffff, 18);
+        writer.Write(1, 1);
+        writer.Write(0, 10);
+        writer.Write(0, 1);
+        writer.Write(0, 1);
+        writer.Write(0, 1);
+
+        WriteMotionFixtureIntraPicture(writer, lumaDcDeltas);
+        WriteMotionFixturePredictedPicture(writer, fCode, horizontalMotionBits);
+
+        writer.StartCode(SequenceEndCode);
+        return writer.ToArray();
+    }
 
     /// <summary>Wraps elementary streams in a system stream: one pack, one video packet and, when
     /// audio bytes are given, one audio packet. Timestamps are on the 90 kHz system clock.</summary>
@@ -125,14 +172,27 @@ internal static class MpegTestStreams
 
     /// <summary>An MPEG-1 audio layer II elementary stream of identical frames. Every subband is
     /// unallocated except, when <paramref name="excite"/> is set, the lowest one of the first
-    /// channel, which is allocated its coarsest quantiser and fed a constant code word.</summary>
+    /// channel, fed a constant code word under its coarsest quantiser. Its scale factors are
+    /// coded under <paramref name="scaleFactorSelect"/>, the selection information, and
+    /// <paramref name="scaleFactorIndices"/> holds exactly what that transmits: three for 0, two
+    /// for 1 and 3, one for 2. Null is the single index zero, the loudest scale.</summary>
     public static byte[] Layer2Stream(
-        int frameCount, int mode, int bitRateIndex, int sampleRateIndex, int modeExtension, bool excite)
+        int frameCount,
+        int mode,
+        int bitRateIndex,
+        int sampleRateIndex,
+        int modeExtension,
+        bool excite,
+        int scaleFactorSelect = 2,
+        int[]? scaleFactorIndices = null)
     {
+        int[] indices = scaleFactorIndices ?? new[] { 0 };
         var writer = new BitWriter();
         for (int frame = 0; frame < frameCount; frame++)
         {
-            WriteLayer2Frame(writer, mode, bitRateIndex, sampleRateIndex, modeExtension, excite);
+            WriteLayer2Frame(
+                writer, mode, bitRateIndex, sampleRateIndex, modeExtension, excite,
+                scaleFactorSelect, indices);
         }
 
         return writer.ToArray();
@@ -190,7 +250,14 @@ internal static class MpegTestStreams
     // selection and factors of whatever was allocated, then the twelve granules of samples.
     // Everything after that is the zero padding a frame is free to carry.
     private static void WriteLayer2Frame(
-        BitWriter writer, int mode, int bitRateIndex, int sampleRateIndex, int modeExtension, bool excite)
+        BitWriter writer,
+        int mode,
+        int bitRateIndex,
+        int sampleRateIndex,
+        int modeExtension,
+        bool excite,
+        int scaleFactorSelect,
+        int[] scaleFactorIndices)
     {
         int start = writer.ByteCount;
         writer.Write(0x7ff, 11);
@@ -226,8 +293,12 @@ internal static class MpegTestStreams
 
         if (excite)
         {
-            writer.Write(2, 2);
-            writer.Write(0, 6);
+            writer.Write(scaleFactorSelect, 2);
+            foreach (int index in scaleFactorIndices)
+            {
+                writer.Write(index, 6);
+            }
+
             for (int granule = 0; granule < 12; granule++)
             {
                 writer.Write(0, 5);
@@ -239,13 +310,75 @@ internal static class MpegTestStreams
 
     private static int AllocationWidth(int table, int subband) => AllocationBits[(table * 32) + subband];
 
-    private static byte[] VideoStream(int width, int height, int frameRateCode, int pictureCount, bool predict)
+    // One intra picture of two macroblocks, each luma block carrying its own DC difference in a
+    // four-bit field and each chroma block none. A negative difference is coded as the standard
+    // spells it: the field's top bit clear, and the value one less than the difference's
+    // distance below the field's own range.
+    private static void WriteMotionFixtureIntraPicture(BitWriter writer, int[] lumaDcDeltas)
+    {
+        writer.StartCode(PictureStartCode);
+        writer.Write(0, 10);
+        writer.Write(1, 3);
+        writer.Write(0xffff, 16);
+
+        writer.StartCode(FirstSliceCode);
+        writer.Write(8, 5);
+        writer.Write(0, 1);
+        for (int macroblock = 0; macroblock < MotionFixtureMacroblocks; macroblock++)
+        {
+            writer.Write(1, 1);
+            writer.Write(1, 1);
+            for (int block = 0; block < 4; block++)
+            {
+                int delta = lumaDcDeltas[(macroblock * 4) + block];
+                writer.Write(0x6, 3);
+                writer.Write(delta > 0 ? delta : delta + 15, 4);
+                writer.Write(0x2, 2);
+            }
+
+            for (int block = 0; block < 2; block++)
+            {
+                writer.Write(0x0, 2);
+                writer.Write(0x2, 2);
+            }
+        }
+    }
+
+    // One predicted picture whose macroblocks carry a forward vector and no coefficients. Type
+    // 0x08 is the "motion forward only" code of the predictive macroblock table.
+    private static void WriteMotionFixturePredictedPicture(BitWriter writer, int fCode, string[] horizontal)
+    {
+        writer.StartCode(PictureStartCode);
+        writer.Write(1, 10);
+        writer.Write(2, 3);
+        writer.Write(0xffff, 16);
+        writer.Write(0, 1);
+        writer.Write(fCode, 3);
+
+        writer.StartCode(FirstSliceCode);
+        writer.Write(8, 5);
+        writer.Write(0, 1);
+        for (int macroblock = 0; macroblock < MotionFixtureMacroblocks; macroblock++)
+        {
+            writer.Write(1, 1);
+            writer.Write(0x1, 3);
+            foreach (char bit in horizontal[macroblock])
+            {
+                writer.Write(bit == '1' ? 1 : 0, 1);
+            }
+
+            writer.Write(1, 1);
+        }
+    }
+
+    private static byte[] VideoStream(
+        int width, int height, int aspectCode, int frameRateCode, int pictureCount, bool predict)
     {
         var writer = new BitWriter();
         writer.StartCode(SequenceHeaderCode);
         writer.Write(width, 12);
         writer.Write(height, 12);
-        writer.Write(1, 4);
+        writer.Write(aspectCode, 4);
         writer.Write(frameRateCode, 4);
         writer.Write(0x3ffff, 18);
         writer.Write(1, 1);

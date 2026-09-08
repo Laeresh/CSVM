@@ -21,26 +21,56 @@ public class DctBlockTests
     private const int TransformTolerance = 2;
     private const double TransformRelativeTolerance = 0.2;
 
+    /// <summary>The scan is the standard's diagonal walk, derived here from the rule rather than
+    /// transcribed: each anti-diagonal is taken in turn, upward along one and downward along the
+    /// next, so a single transposed entry breaks it. Checking the whole permutation is what
+    /// catches a swap, which a spot check on the four corners cannot.</summary>
     [Fact]
-    public void TheScanOrderIsAPermutationOfTheBlock()
+    public void TheScanOrderIsTheStandardsDiagonalWalk()
     {
-        int[] order = DctBlock.ZigZag.ToArray().Select(value => (int)value).ToArray();
-        Assert.Equal(DctBlock.Size, order.Length);
-        Assert.Equal(Enumerable.Range(0, DctBlock.Size), order.OrderBy(value => value));
-        Assert.Equal(0, order[0]);
-        Assert.Equal(1, order[1]);
-        Assert.Equal(8, order[2]);
-        Assert.Equal(63, order[DctBlock.Size - 1]);
+        Assert.Equal(DctBlock.Size, DctBlock.ZigZag.Length);
+        var expected = new int[DctBlock.Size];
+        int at = 0;
+        for (int diagonal = 0; diagonal < 15; diagonal++)
+        {
+            int first = Math.Max(0, diagonal - 7);
+            int last = Math.Min(7, diagonal);
+            for (int step = first; step <= last; step++)
+            {
+                int x = (diagonal & 1) == 0 ? step : diagonal - step;
+                expected[at++] = ((diagonal - x) * 8) + x;
+            }
+        }
+
+        for (int index = 0; index < DctBlock.Size; index++)
+        {
+            Assert.Equal(expected[index], DctBlock.ZigZag[index]);
+        }
     }
 
+    /// <summary>Every entry of the two default quantiser matrices ISO 11172-2 tabulates, in
+    /// raster order. The intra matrix is not symmetric about its diagonal, so there is no rule to
+    /// derive it from and the standard's own numbers are written out here.</summary>
     [Fact]
     public void TheDefaultMatricesAreTheStandardsOwn()
     {
-        Assert.Equal(8, DctBlock.IntraQuantMatrix[0]);
-        Assert.Equal(16, DctBlock.IntraQuantMatrix[1]);
-        Assert.Equal(83, DctBlock.IntraQuantMatrix[DctBlock.Size - 1]);
-        Assert.All(DctBlock.NonIntraQuantMatrix.ToArray(), value => Assert.Equal(16, value));
-        Assert.Equal(32, DctBlock.Premultiplier[0]);
+        int[] intra =
+        {
+            8, 16, 19, 22, 26, 27, 29, 34,
+            16, 16, 22, 24, 27, 29, 34, 37,
+            19, 22, 26, 27, 29, 34, 34, 38,
+            22, 22, 26, 27, 29, 34, 37, 40,
+            22, 26, 27, 29, 32, 35, 40, 48,
+            26, 27, 29, 32, 35, 40, 48, 58,
+            26, 27, 29, 34, 38, 46, 56, 69,
+            27, 29, 35, 38, 46, 56, 69, 83,
+        };
+
+        for (int index = 0; index < DctBlock.Size; index++)
+        {
+            Assert.Equal(intra[index], DctBlock.IntraQuantMatrix[index]);
+            Assert.Equal(16, DctBlock.NonIntraQuantMatrix[index]);
+        }
     }
 
     // Every dequantised coefficient is odd, which is the standard's own mismatch control; the

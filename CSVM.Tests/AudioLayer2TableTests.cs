@@ -112,21 +112,30 @@ public class AudioLayer2TableTests
         }
     }
 
-    /// <summary>An allocation field of zero always means the subband carries no samples, and the
-    /// largest field value on each row always means the finest quantiser the row reaches.</summary>
-    [Theory]
-    [InlineData(0, 0, 4, 17)]
-    [InlineData(1, 0, 4, 17)]
-    [InlineData(1, 11, 3, 17)]
-    [InlineData(1, 23, 2, 17)]
-    public void TheAllocationFieldSelectsTheStandardsQuantiser(
-        int table, int subband, int width, int finest)
+    /// <summary>Every reachable allocation field value of both tables, against the level ladder
+    /// ISO 11172-3 gives its group of subbands. The four ladders differ from each other by which
+    /// quantisers they leave out, which is the thing a spot check on the ends cannot see: the
+    /// high-rate table's first three subbands skip the 5- and 15-level quantisers where the
+    /// eight above them keep both. A subband past the end of a table carries no field.</summary>
+    [Fact]
+    public void EveryAllocationFieldValueSelectsTheStandardsQuantiser()
     {
-        Assert.False(AudioLayer2Tables.QuantizerFor(table, subband, 0).IsAllocated);
-        Assert.Equal(
-            AudioLayer2Tables.Quantizer(finest).Levels,
-            AudioLayer2Tables.QuantizerFor(table, subband, (1 << width) - 1).Levels);
-        Assert.Equal(width, AudioLayer2Tables.AllocationBits(table, subband));
+        for (int table = 0; table < 2; table++)
+        {
+            for (int subband = 0; subband < 32; subband++)
+            {
+                (int width, int[] levels) = StandardRow(table, subband);
+                Assert.Equal(width, AudioLayer2Tables.AllocationBits(table, subband));
+                for (int allocation = 0; allocation < (1 << width); allocation++)
+                {
+                    Layer2Quantizer quantizer =
+                        AudioLayer2Tables.QuantizerFor(table, subband, allocation);
+
+                    Assert.Equal(levels[allocation], quantizer.Levels);
+                    Assert.Equal(allocation != 0, quantizer.IsAllocated);
+                }
+            }
+        }
     }
 
     /// <summary>The synthesis window is the standard's D coefficients multiplied by 32768, which
@@ -145,6 +154,43 @@ public class AudioLayer2TableTests
             Assert.Equal(window[index] * 2.0f, MathF.Round(window[index] * 2.0f));
             Assert.Equal(Math.Abs(window[index]), Math.Abs(window[512 - index]));
         }
+    }
+
+    // How wide a subband's allocation field is and what its values select, from ISO 11172-3's
+    // tables 3-B.2a (the high-rate table, row 1 here) and 3-B.2c (the low rate one, row 0),
+    // written as quantisation levels because that is the quantity the standard tabulates. Zero
+    // is the subband no bits were allocated to. Table 0 codes twelve subbands and table 1
+    // thirty; there is no field at all past those, which a width of zero says.
+    private static (int Width, int[] Levels) StandardRow(int table, int subband)
+    {
+        int[] lowRate =
+        {
+            0, 3, 5, 9, 15, 31, 63, 127, 255, 511, 1023, 2047, 4095, 8191, 16383, 65535,
+        };
+        int[] highRateFine =
+        {
+            0, 3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 4095, 8191, 16383, 32767, 65535,
+        };
+        int[] highRateMiddle =
+        {
+            0, 3, 5, 7, 9, 15, 31, 63, 127, 255, 511, 1023, 2047, 4095, 8191, 65535,
+        };
+        int[] highRateCoarse = { 0, 3, 5, 7, 9, 15, 31, 65535 };
+        int[] highRateCoarsest = { 0, 3, 5, 65535 };
+        int[] none = { 0 };
+
+        if (table == 0)
+        {
+            return subband < 2 ? (4, lowRate)
+                : subband < 12 ? (3, lowRate)
+                : (0, none);
+        }
+
+        return subband < 3 ? (4, highRateFine)
+            : subband < 11 ? (4, highRateMiddle)
+            : subband < 23 ? (3, highRateCoarse)
+            : subband < 30 ? (2, highRateCoarsest)
+            : (0, none);
     }
 
     // A run-length spelling of one allocation table's field widths: each pair is a width and how

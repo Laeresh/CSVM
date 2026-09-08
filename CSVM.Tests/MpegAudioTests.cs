@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Video;
 using Xunit;
 
@@ -15,6 +16,9 @@ public class MpegAudioTests
 {
     private const int SampleRate = 44100;
     private const int SamplesPerFrame = 1152;
+
+    // A frame is three parts, each with its own scale factor and each a third of the samples.
+    private const int PartSamples = SamplesPerFrame / 3;
 
     [Fact]
     public void AMonoStreamDecodesToOneChannelOfSilence()
@@ -137,6 +141,63 @@ public class MpegAudioTests
 
         decoder.Rewind();
         Assert.Equal(first, FirstFrameSamples(decoder));
+    }
+
+    /// <summary>ISO 11172-3's scale factors are a ladder each step of which is the one above it
+    /// divided by the cube root of two, so three steps down is exactly half and index 63 is
+    /// silence. The tables carry only the three bases that ladder is built from, and the shift
+    /// that reaches the other sixty is arithmetic no table can pin, so it is measured here at
+    /// the decoder's output where a wrong shift or a wrong base shows as the wrong
+    /// amplitude.</summary>
+    [Fact]
+    public void TheScaleFactorLadderHalvesEveryThreeSteps()
+    {
+        float loudest0 = Loudest(ScaledStream(0));
+        float loudest1 = Loudest(ScaledStream(1));
+        float loudest3 = Loudest(ScaledStream(3));
+        float loudest6 = Loudest(ScaledStream(6));
+
+        Assert.InRange(loudest0, 0.001f, 4.0f);
+        Assert.Equal(0.5, loudest3 / loudest0, 3);
+        Assert.Equal(0.25, loudest6 / loudest0, 3);
+        Assert.Equal(Math.Pow(2.0, -1.0 / 3.0), loudest1 / loudest0, 3);
+        Assert.Equal(0.0f, Loudest(ScaledStream(63)));
+    }
+
+    /// <summary>The selection information says which of a frame's three parts share a scale
+    /// factor and how many are transmitted: three for 0, the first two for 1, one for 2, and the
+    /// last two for 3. Each is checked by decoding it beside the spelled-out triple it stands
+    /// for, so the samples have to agree exactly rather than merely be plausible; the two indices
+    /// differ by nine steps, an eightfold change of level, so a part taking the wrong one of them
+    /// cannot pass.</summary>
+    [Theory]
+    [InlineData(1, new[] { 4, 13 }, new[] { 4, 4, 13 })]
+    [InlineData(2, new[] { 4 }, new[] { 4, 4, 4 })]
+    [InlineData(3, new[] { 4, 13 }, new[] { 4, 13, 13 })]
+    public void TheSelectionInformationSpreadsTheFactorsTheStandardsWay(
+        int select, int[] transmitted, int[] spelledOut)
+    {
+        float[] shared = AllSamples(ScaledStream(select, transmitted));
+        float[] explicitly = AllSamples(ScaledStream(0, spelledOut));
+
+        Assert.Equal(explicitly, shared);
+    }
+
+    /// <summary>The control for the equivalences above, which would hold just as well between
+    /// two frames that were scaled once each. A frame is three parts of 384 samples; changing
+    /// only the middle factor leaves the first part sample for sample identical, because nothing
+    /// before it can differ, and changes everything after it. Nothing here asserts by how much:
+    /// the filter bank carries sixteen blocks of history, which is longer than a part, so no
+    /// sample inside the middle part is at the settled level of its own factor.</summary>
+    [Fact]
+    public void TheThreePartsOfAFrameTakeTheirOwnScaleFactor()
+    {
+        float[] flat = AllSamples(ScaledStream(0, new[] { 4, 4, 4 }));
+        float[] dipped = AllSamples(ScaledStream(0, new[] { 4, 13, 4 }));
+
+        Assert.Equal(SamplesPerFrame, flat.Length);
+        Assert.Equal(flat.Take(PartSamples), dipped.Take(PartSamples));
+        Assert.NotEqual(flat.Skip(PartSamples), dipped.Skip(PartSamples));
     }
 
     /// <summary>Bit rate index zero is the free format and index 15 is forbidden. Neither names
@@ -287,6 +348,33 @@ public class MpegAudioTests
         MpegTestStreams.Layer2Stream(
             frameCount, MpegTestStreams.ModeMono, MpegTestStreams.BitRateIndex64,
             MpegTestStreams.SampleRateIndex44100, 0, excite);
+
+    // One mono frame whose single allocated subband carries the given scale factors under the
+    // given selection information. The default selection is the one that shares a single factor
+    // across the whole frame, which is what a plain amplitude check wants.
+    private static byte[] ScaledStream(int scaleFactorIndex) =>
+        ScaledStream(2, new[] { scaleFactorIndex });
+
+    private static byte[] ScaledStream(int select, int[] scaleFactorIndices) =>
+        MpegTestStreams.Layer2Stream(
+            1, MpegTestStreams.ModeMono, MpegTestStreams.BitRateIndex64,
+            MpegTestStreams.SampleRateIndex44100, 0, excite: true, select, scaleFactorIndices);
+
+    private static float[] AllSamples(byte[] stream) =>
+        (float[])Assert.IsType<AudioFrame>(new MpegAudioDecoder(stream).NextFrame()).Samples.Clone();
+
+    private static float Loudest(byte[] stream) => Loudest(AllSamples(stream), 0, SamplesPerFrame);
+
+    private static float Loudest(float[] samples, int at, int count)
+    {
+        float loudest = 0.0f;
+        for (int sample = at; sample < at + count; sample++)
+        {
+            loudest = Math.Max(loudest, Math.Abs(samples[sample]));
+        }
+
+        return loudest;
+    }
 
     private static float[] FirstFrameSamples(MpegAudioDecoder decoder) =>
         (float[])Assert.IsType<AudioFrame>(decoder.NextFrame()).Samples.Clone();

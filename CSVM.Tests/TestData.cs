@@ -24,6 +24,12 @@ public static class TestData
     public const string NoMoviesReason =
         "no cinema files: set CSVM_MPG_ROOT to the install's GOSDATA/ASSETS/GRAPHICS/MPG folder";
 
+    /// <summary>Printed by every skipped whole-file walk, so a run that decoded ten prefixes
+    /// instead of ten whole cinemas says so rather than reading as the stronger check.</summary>
+    public const string NoFullWalkReason =
+        "the whole-file video walk is opt-in and costs about a minute: run "
+        + "$env:CSVM_MOVIE_WALK=1; .\\RunTests.ps1";
+
     // Where the ten .mpg cinemas sit inside the retail install, relative to a data root.
     private static readonly string[] MoviePathParts =
         { "CrimsonSkiesGame", "GOSDATA", "ASSETS", "GRAPHICS", "MPG" };
@@ -34,6 +40,7 @@ public static class TestData
         ExtractedRoot = FindExtracted();
         DataRoot = ExtractedRoot == null ? null : Directory.GetParent(ExtractedRoot)?.FullName;
         MovieRoot = FindMovies();
+        FullMovieWalk = IsSet(Environment.GetEnvironmentVariable("CSVM_MOVIE_WALK"));
     }
 
     /// <summary>The repo checkout this assembly was built from.</summary>
@@ -50,6 +57,14 @@ public static class TestData
     /// <summary>The install folder holding the ten <c>.mpg</c> cinemas, or null when none is
     /// reachable.</summary>
     public static string? MovieRoot { get; }
+
+    /// <summary>Whether the whole-file video walk was asked for. Decoding all ten cinemas to the
+    /// last frame costs about a minute of the unit stage's 30 second budget, which is why it is
+    /// opt-in rather than on by default; what runs every time is the per-file header and prefix
+    /// check, which is what catches a file whose profile is not what this project thinks it is.
+    /// The opt-in is an environment variable rather than a test filter so that the ordinary
+    /// <c>.\RunTests.ps1</c> command still runs it once the caller has set the variable.</summary>
+    public static bool FullMovieWalk { get; }
 
     /// <summary>Path of a committed fixture, e.g. <c>Fixture("zrdr")</c>.</summary>
     public static string Fixture(params string[] parts)
@@ -153,6 +168,13 @@ public static class TestData
     // them, so its presence is what says this folder is the cinema folder.
     private static bool HasMovies(string dir) =>
         Directory.Exists(dir) && File.Exists(Path.Combine(dir, "crimflag.mpg"));
+
+    // An opt-in variable is on for any value but the two spellings of off, so that setting it to
+    // 1, to yes or to the path of the tree all mean the same thing.
+    private static bool IsSet(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && !string.Equals(value, "0", StringComparison.Ordinal)
+        && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -206,6 +228,26 @@ public sealed class MovieDataTheoryAttribute : TheoryAttribute
         if (TestData.MovieRoot == null)
         {
             Skip = TestData.NoMoviesReason;
+        }
+    }
+}
+
+/// <summary>A theory that decodes whole cinemas rather than their opening frames. It needs the
+/// install <see cref="MovieDataTheoryAttribute"/> needs and, on top of that,
+/// <see cref="TestData.FullMovieWalk"/>, because the ten walks cost more than twice the unit
+/// stage's whole wall-time budget. Skipping prints which of the two is missing, so a run that
+/// took the cheap path cannot be read as having taken the expensive one.</summary>
+public sealed class FullMovieWalkTheoryAttribute : TheoryAttribute
+{
+    public FullMovieWalkTheoryAttribute()
+    {
+        if (TestData.MovieRoot == null)
+        {
+            Skip = TestData.NoMoviesReason;
+        }
+        else if (!TestData.FullMovieWalk)
+        {
+            Skip = TestData.NoFullWalkReason;
         }
     }
 }
