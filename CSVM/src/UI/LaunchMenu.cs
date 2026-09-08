@@ -186,9 +186,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int _difficultyChoice = Difficulty.Normal;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
-    // The four display settings as saved. This screen shows none of them and hands them back
-    // untouched, so its apply cannot clear a setting the Original presentation's VIDEO page wrote.
+    // The four display settings and the four volume levels as saved. This screen shows none of the
+    // eight and hands them back untouched, so its apply cannot clear a setting the Original
+    // presentation's VIDEO or AUDIO page wrote.
     private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice;
+    private int? _audioMasterChoice, _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
     private int _presetCursor, _presetTop;
@@ -1556,7 +1558,8 @@ public sealed partial class LaunchMenu : CanvasLayer
                     // standing for the host to hide.
                     _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
-                        _displayModeChoice, _vsyncChoice));
+                        _displayModeChoice, _vsyncChoice, _audioMasterChoice, _audioMusicChoice,
+                        _audioEffectsChoice, _audioVoiceChoice));
                 }
 
                 break;
@@ -2457,6 +2460,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         _resolutionChoice = saved.Resolution;
         _displayModeChoice = saved.DisplayMode;
         _vsyncChoice = saved.VSync;
+        _audioMasterChoice = saved.AudioMaster;
+        _audioMusicChoice = saved.AudioMusic;
+        _audioEffectsChoice = saved.AudioEffects;
+        _audioVoiceChoice = saved.AudioVoice;
     }
 
     // Opens the rebinding screen on the joined seats' live keymaps. Joining is open here (ScanJoins)
@@ -2926,7 +2933,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         for (int i = 0; i < _slots.Count; i++)
         {
-            var rect = SplitScreen.PaneRect(i, _slots.Count, paneArea);
+            // ⚠ The axis comes from the WINDOW, not from `paneArea`: the bottom strip leaves this
+            // area proportionally wider than the flight's, and reading the axis off it would pick
+            // your aircraft in a left/right pane and then fly you in a top/bottom one.
+            var rect = SplitScreen.PaneRect(i, _slots.Count, paneArea, SplitScreen.SideBySide(size));
             var panel = new PanelContainer
             {
                 Position = rect.Position,

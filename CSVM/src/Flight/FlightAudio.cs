@@ -111,7 +111,7 @@ public partial class FlightAudio : Node
         }
         if (_crashSounds.Count > 0)
         {
-            _crash = new AudioStreamPlayer();
+            _crash = new AudioStreamPlayer { Bus = AudioBuses.Effects };
             AddChild(_crash);
         }
 
@@ -129,7 +129,7 @@ public partial class FlightAudio : Node
         {
             _warningShotGroup = warningGroup;
             _warningShotRng = Rng.NewSystemRandom(Rng.Weapons);
-            _warningShot = new AudioStreamPlayer();
+            _warningShot = new AudioStreamPlayer { Bus = AudioBuses.Effects };
             AddChild(_warningShot);
         }
         else
@@ -154,7 +154,7 @@ public partial class FlightAudio : Node
             // LOOPED flag (it is a sustained-fire cue).
             if (_defs.TryGetValue(sndName, out var def) && _archive.Find(def.WavName, looped: true) is { } stream)
             {
-                _gunLoop = new AudioStreamPlayer { Stream = stream };
+                _gunLoop = new AudioStreamPlayer { Stream = stream, Bus = AudioBuses.Effects };
                 AddChild(_gunLoop);
                 _gunLoopName = sndName;
                 _gunLoopVol = def.Volume;
@@ -177,7 +177,7 @@ public partial class FlightAudio : Node
             && _defs.TryGetValue("snd_nitro", out var def)
             && _archive.Find(def.WavName, looped: true) is { } stream)
         {
-            _nitroLoop = new AudioStreamPlayer { Stream = stream };
+            _nitroLoop = new AudioStreamPlayer { Stream = stream, Bus = AudioBuses.Effects };
             AddChild(_nitroLoop);
             _nitroLoopVol = def.Volume;
         }
@@ -415,7 +415,7 @@ public partial class FlightAudio : Node
         var stream = LoadStream(archive, defs, sndName, out baseVolume);
         if (stream == null)
             return null;
-        var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f };
+        var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f, Bus = AudioBuses.Effects };
         AddChild(player);
         return player;
     }
@@ -434,7 +434,7 @@ public partial class FlightAudio : Node
         if (stream == null)
             return null;
         baseVolume = def.Volume; // unscaled, same convention as MakeLoop above
-        var player = new AudioStreamPlayer { Stream = stream };
+        var player = new AudioStreamPlayer { Stream = stream, Bus = AudioBuses.Effects };
         AddChild(player);
         return player;
     }

@@ -141,7 +141,8 @@ The extraction shows:
 **Runtime (`CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
 `accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,
 which returns the `_random` group when authored, else the bare def; both feed
-`WorldSounds.PlayOneShot`, whose `Node3D` overload follows a moving speaker. Because a clip that
+`WorldSounds.PlayOneShot`, whose `Node3D` overload follows a moving speaker and whose bus argument
+puts the line on Voice rather than with the Effects one-shots sharing that call. Because a clip that
 was not prewarmed while the sound archive was open never plays, a flight session prewarms the
 mission roster's own accents (`CombatVoice.SessionPrewarmNames`, wired through
 `WorldSession.Options.VoiceClipNames`): median 24 clip defs per mission, worst case 457 (C2/M03),

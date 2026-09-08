@@ -336,9 +336,9 @@ internal static class WorldAndToolSuites
                 $"the camera looks at the interior from inside that same viewport");
             ctx.Check(view?.World3D != null && view.World3D != host.GetWindow()?.World3D,
                 $"the pass owns its World3D rather than sharing the main one");
-            // The same table the pilot's own camera reads, not a copy: 80° horizontal at 16:9.
-            ctx.Check(Mathf.Abs(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit, 16f / 9f)
-                    - CameraController.HorizontalToVerticalFovDeg(80f, 16f / 9f)) < 0.001f,
+            // The same table the pilot's own camera reads, not a copy: the cockpit's 80° base.
+            ctx.Check(Mathf.Abs(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit)
+                    - CameraController.HorizontalToVerticalFovDeg(80f)) < 0.001f,
                 $"the pass's FOV law is the camera's own per-mode law");
             // The wobble the interior inherited below the shake pivot has to reach the pass. The
             // mount's tilt is about X, so its Right axis is the witness: a Z roll of r turns it by

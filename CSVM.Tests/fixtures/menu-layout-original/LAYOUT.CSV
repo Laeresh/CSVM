@@ -57,6 +57,30 @@ GO_T_HEADDESC=T,IDS_GO_HEAD_DESC,340,410,50,310,40,<TCOLOR>,0
 GO_D_DIFFICULTY=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,135,295,0,144,17,4
 GO_D_VIEW=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,135,355,0,144,17,4
 
+;The AUDIO page behind the Preferences page's second door: the shipped section's keys and both
+;return edges on invented lines and art, at an uneven row pitch (60, 55, 50) so a page that read a
+;first row and one pitch would misplace the rows under the second, and with the In-Game Music
+;checkbox on its own column and its own line so the Master slider that takes that row has to be
+;placed by the slider column and offset rather than by the checkbox's corner.
+[@Audio@]
+V1=TCOLOR,0xFFFFDDC4
+AP_BACKGROUND=P,PP_ApBack.png,100,200,0,1,0,1,0
+AP_B_ACCEPTCHANGES=B,PP_B_Accept.png,200,500,0,0,Preferences,0x1020,1,,,,,,
+AP_B_CANCELCHANGES=B,PP_B_Cancel.png,450,500,0,0,Preferences,0x1020,1,,,,,,
+AP_B_MUSIC=B,PP_B_Check8.png,260,255,0,0,,0x1000,0,,,,,1,0
+AP_T_TITLE=T,IDS_AP_TITLE,120,220,50,200,28,0XFFC0BAAD,1
+AP_T_MusicTitle=T,IDS_AP_MUSIC_TITLE,130,250,50,112,40,<TCOLOR>,0
+AP_T_MusicDesc=T,IDS_AP_MUSIC_DESC,340,260,0,310,40,<TCOLOR>,0
+AP_T_MVolTitle=T,IDS_AP_MVOLUME_TITLE,130,310,50,170,20,<TCOLOR>,0
+AP_T_MVolDesc=T,IDS_AP_MVOLUME_DESC,340,320,0,310,40,<TCOLOR>,0
+AP_S_MVOLUME=Z,130,336,100,1,100,50,PP_B_SliderSlot.png,PP_B_Slider.png,0,-10,1,-10
+AP_T_EVolTitle=T,IDS_AP_EVOLUME_TITLE,130,365,50,170,20,<TCOLOR>,0
+AP_T_EVolDesc=T,IDS_AP_EVOLUME_DESC,340,375,0,310,40,<TCOLOR>,0
+AP_S_EVOLUME=Z,130,391,100,1,100,50,PP_B_SliderSlot.png,PP_B_Slider.png,0,-10,1,-10
+AP_T_VVolTitle=T,IDS_AP_VVOLUME_TITLE,130,415,50,170,20,<TCOLOR>,0
+AP_T_VVolDesc=T,IDS_AP_VVOLUME_DESC,340,425,0,310,40,<TCOLOR>,0
+AP_S_VVOLUME=Z,130,441,100,1,100,50,PP_B_SliderSlot.png,PP_B_Slider.png,0,-10,1,-10
+
 ;The VIDEO page behind the Preferences page's third door: the shipped section's keys and both
 ;return edges on invented lines and art, with the rows the page carries on the authored Viewing
 ;Range, Effects Level and Shadows lines and its own on the authored Resolution line, so each row's

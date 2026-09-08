@@ -194,14 +194,16 @@ set), read as empty when missing or malformed, written atomically. Its word-valu
 (`on`, `off`, `60`, `120`, `144`); a value outside a field's set reads as never set. Two fields are
 not words: `monitorIndex` is a screen index rendered decimal and `resolution` is a canonical
 `1920x1080`, both validated by shape, so a malformed one is dropped the same way an unknown word is.
+The four volume levels (`audioMaster`, `audioMusic`, `audioEffects`, `audioVoice`) are whole numbers
+on `AudioMix`'s 0..100 and are validated by range, dropped the same way again.
 Shape is all the store can prove. Whether that screen is plugged in and whether it offers that mode
 are questions for the caller holding an engine, which owns the fallback.
 
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set (or its shape check, and the canonical
 form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
-`Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options
-or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
+`Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options,
+AUDIO or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
 `Launcher.ApplyOptions` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
 written before the field existed loads with everything it does have, and the version gate is
@@ -256,7 +258,8 @@ Every presentation exposes Options, since a player must be able to leave a prese
 it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
 page behind its Preferences page's first door (`--menu=game-options` under
 `--presentation=original`), with the graphics mode on the VIDEO page behind the third
-(`--menu=video`). Every one of them reads the saved options from the store on entry and leaves
+(`--menu=video`) and the four volume levels on the AUDIO page behind the second
+(`--menu=audio`). Every one of them reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
 keeps its one writer. Both presentation choosers offer the
 two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
@@ -269,12 +272,54 @@ startup recovery is `--force-builtin`, which beats everything and rewrites nothi
 ## Audio
 
 `IMenuAudio` (`CSVM/src/UI/Menu/IMenuAudio.cs`): `Cue(MenuCue)` plays one semantic cue by name,
-`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music, and
-`EndNarration()` stops it, idempotent. The presentation chooses which cue to ask for and when; the
+`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music,
+`EndNarration()` stops it, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
+mix a page that sets one stands at. The presentation chooses which cue to ask for and when; the
 service (`MenuAudioService`, `CSVM/src/Session/MenuAudioService.cs`) owns lookup, decoding,
-playback, volume and the handoff into a launching session. A cue name the table lacks, a missing
-file or a failed decode is logged once and cached as silence; a presentation never learns whether a
-sound exists.
+playback, volume, the buses and the handoff into a launching session. A cue name the table lacks, a
+missing file or a failed decode is logged once and cached as silence; a presentation never learns
+whether a sound exists.
+
+**The bus model and the four levels.** The process runs four audio buses, shipped as
+`CSVM/default_bus_layout.tres`: Master, with Music, Effects and Voice sending into it. Every site
+that builds a player names its category at construction (`Utils/AudioBuses.cs`), because Godot
+resolves an unknown bus name to Master with no error and a misplaced player is otherwise silent
+about it; the `audio-buses` suite walks the live tree and fails on any player left on Master. The
+AUDIO page carries four levels on 0..100, Master, Music, Effects and Voice, and a fresh install
+opens on 100, 50, 50 and 50, the authored `CurrentValue` of the three category rows and full on the
+added one. `Utils/AudioMix.cs` turns them into one gain per category bus, `category/100 x
+master/100`, so Master is a multiplier over the other three rather than a level of its own.
+
+**Bus 0 is not part of that mix.** It carries the developer gain alone, `--volume=` over the
+`audio.volume` key over silence in a repo run (`Utils/MasterVolume.cs`), and `AudioMix` refuses to
+write index 0 by construction. The two gains therefore reach the output as a product: `--volume=0`
+still silences a scripted run whatever the saved levels say, a full-volume launch still leaves bus 0
+untouched, and a `--det` launch reads no saved level at all and mixes the shipped defaults. The
+`audio-levels-launch` suite drives that ladder from a parsed command line, since a screenshot proves
+nothing about audio and a golden sweep cannot see the `--det` drop fail
+([verification.md](verification.md)'s INSTR-45 and DET-14).
+
+**The mix preview.** While a page that sets the four volume levels is open, it states them every
+frame and names which one that frame moved (`MenuMixLevel`, the page's own rows and never a bus).
+The service applies them through `AudioMix` and sounds the moved category on a player of its own:
+Effects over `SFX_LOOP.WAV` and Voice over `VOICE_LOOP.WAV`, the two of the original's three preview
+clips this port needs, since Music and Master are already audible through the menu's own score. A
+clip that is still running is left to run, its loudness following the bus the level moved, so a drag
+sounds one clip rather than one per frame. `EndMixPreview` puts back the gains that stood when the
+page opened and is called on every door out of the page and on `Hide`, so a preview cannot survive
+the page; an accepted mix is written and reapplied by `Launcher.ApplyOptions`, which stays the
+options file's one writer. ⚠ Previews are off in any run that drives itself (`--det`,
+`--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
+
+**A clip on the move is a deliberate departure.** The original's own page
+(`extracted/rof/ASSETS/SCRIPTS/AUDIO.SCRIPT`) builds one sound object per category on `gui_create`,
+starts them there, sends only `setvolume` as a slider moves and stops all three on `gui_destroy`;
+no play message reaches a category's object on a move. This port fires a clip on the level that
+moved instead, so a slider is audible at the moment the player touches it rather than only while
+something happens to be running. Whether the original's clips loop or play once is undecodable from
+the script: `ZB = 0` stands on every `@ctl@SK` object the shipped scripts build, including
+`GLOBALS.SCRIPT`'s menu music, which plays on while the menu is up, so the field settles nothing.
+Film of the original is the only thing that would.
 
 The cue table (`MenuCueTable`, `CSVM/src/Session/MenuCueTable.cs`) resolves the four names the
 original's globals script binds: `menu.rollover`, `menu.click`, `menu.text`, `menu.text-error`, each
@@ -375,7 +420,8 @@ the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in'
 `--presentation=original` is set, in which case the same flag carries Original's own values
 (`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
 list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
-`game-options` and `game-options:open` with its Difficulty list standing open, `video` and
+`game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
+`audio:mixed` with its four sliders at four distinct levels, `video` and
 `video:checked` with its Enhanced Graphics box ticked, the
 `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
 poses, `campaign-delete`), and any other value opens that

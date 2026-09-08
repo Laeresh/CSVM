@@ -203,14 +203,43 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, and
-the four display settings (monitor index, resolution, display mode, V-Sync). One file, `user://options.json`, independent of
-`Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an unknown
-value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
-`Version`. Five fields are checked against a word set (`DisplayWords` holds the two new vocabularies); the monitor index and the
-canonical `1920x1080` resolution have none, so `FormatResolution` and the `TryParse` pair check their shape and drop a bad one
-the same way. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, the four
+display settings (monitor index, resolution, display mode, V-Sync) and the four volume levels. One file, `user://options.json`,
+independent of `Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
+unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
+`Version`. Three reads hold that one contract: a word set (`DisplayWords` holds the two display vocabularies), a shape predicate for the
+monitor index and the canonical `1920x1080` resolution, and `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
+distinct from never set. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
 directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` is the only writer.
+
+## src/Utils/AudioBuses.cs
+The names of the four buses `CSVM/default_bus_layout.tres` ships: `Master`, and `Music`, `Effects`
+and `Voice` sending into it. A resource rather than an `AudioServer.AddBus` call at startup, so a
+bus exists before the first node enters the tree. Every site that builds an `AudioStreamPlayer` or
+`AudioStreamPlayer3D` sets `Bus` from here at construction, because Godot resolves an unknown or
+unset bus name to Master with no error and a misplaced player is therefore silent about it. Bus 0
+carries the developer `--volume=` gain and the focus mute (`Session/Launcher.cs`); the three
+children carry the player's mix, written by `AudioMix`. The `audio-buses` suite holds both.
+
+## src/Utils/AudioMix.cs
+The player's mix: four 0..100 levels (Master, Music, Effects, Voice) into one linear gain per category bus,
+`category/100 x master/100`, floored at -80 dB so a level of 0 is silence rather than negative infinity. Master multiplies
+the other three instead of being a level of its own, so `Apply` writes only the three child buses and refuses index 0,
+which keeps `--volume=0` silencing a scripted run whatever the levels say. `Apply` takes a nullable level per category
+and falls back to the shipped default; it is the startup apply (`Session/Launcher.cs`), the live one, and idempotent.
+`SavedLevels(det)` is the levels' one reader and answers four nulls under `--det`, so a mix saved at one machine's
+controls never reaches a scripted run. `Capture`/`Restore` take and put back the three child buses' gains verbatim, for
+the AUDIO page's preview, which owes back the mix it opened over. The arithmetic is pure and unit-tested.
+
+## src/Utils/MasterVolume.cs
+The developer output gain, the whole of what bus 0 carries: `Resolve` takes the command line's `--volume=` over the
+`audio.volume` config key over a default that is silence in a repo run and the resting gain in an exported one, and
+`VolumeDb` converts it with the same -80 dB floor `AudioMix` uses. The config key is read even where the flag beats it,
+so it self-registers for `--dump-config`. Resolution only: `Session/Launcher.cs` is the one caller that writes the bus,
+and is where a launch resolving to the resting gain writes nothing at all, keeping a full-volume launch byte-identical
+in output and console log. ⚠ The player's four saved levels are no part of this gain. They multiply on the three child
+buses underneath it (`AudioMix`), so the two reach the output as a product and a level saved at the controls cannot
+un-silence a scripted run. The `audio-levels-launch` suite drives that whole ladder from a parsed command line.
 
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved

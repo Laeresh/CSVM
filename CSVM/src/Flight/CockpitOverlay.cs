@@ -103,9 +103,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitudeOnly, Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);
-        var size = _view.GetVisibleRect().Size;
-        _camera.Fov = CameraController.FirstPersonFovDeg(camera.ViewMode,
-            size.Y > 0f ? size.X / size.Y : 16f / 9f);
+        _camera.Fov = CameraController.FirstPersonFovDeg(camera.ViewMode);
         if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
         {
             _light.Basis = _sun.GlobalBasis;

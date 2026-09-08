@@ -527,7 +527,10 @@ The one place the flight HUD decides how big it draws: `Scale(control, reference
 window height over the reference, damped by `PaneFactor`, the square root of pane height over
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
 only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale.
-Every flight-HUD control routes through it, so a sizing change lands in one place.
+`ReadingBox` is the placement half: the reference frame's 16:9 at the pane's full height, centred,
+which a pane at or under that aspect equals exactly. Anchoring horizontally to it rather than to
+the pane keeps a column within reading width on an ultrawide screen and on a stacked 2-player
+pane, numerically the same case. One module, so a sizing or anchoring change lands in one place.
 
 ## src/Flight/HudFont.cs
 The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter
@@ -983,12 +986,12 @@ where a texture is missing, and the control re-anchors on resize. The heading it
 ## src/Flight/GaugeCluster.cs
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, the
 gun and missile weapon gauges and the nitro dial, all geometry extracted from the plane's own
-`gauges` subtree, drawn by data priority and bottom-anchored so splitscreen panes keep them on
-screen. `HeadingDeg` carries the nose heading `CompassTape` and `CockpitGauges` both read, so the
-heading is computed once. `DamageZoneColor` bands the damage dial off the combined armour and
-health fraction against thresholds mined from the data's own green, yellow and red `injure_anims`.
-The animated arrow sweep and stall lamp are plain nested structs needing no `Control`, so
-`CSVM.Tests` drives them directly. Structure and scales: [../formats/hud.md](../formats/hud.md).
+`gauges` subtree, drawn by data priority, bottom-anchored so splitscreen panes keep them on screen
+and side-anchored through `HudMetrics.ReadingBox`. `HeadingDeg` carries the nose heading
+`CompassTape` and `CockpitGauges` both read, computed once. `DamageZoneColor` bands the damage
+dial off the combined armour and health fraction against thresholds mined from the data's own
+green, yellow and red `injure_anims`. The arrow sweep and stall lamp are plain structs needing
+no `Control`, so `CSVM.Tests` drives them directly. Scales: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/CustomPlaneDef.cs
 A custom-built plane as a pure model: exactly the decoded 204-byte record's chosen fields

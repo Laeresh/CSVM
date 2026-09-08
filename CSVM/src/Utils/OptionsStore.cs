@@ -40,14 +40,15 @@ public static class DisplayWords
 }
 
 /// <summary>The process-wide options: the requested menu presentation, the requested graphics
-/// mode, the difficulty setting and the four display settings (the monitor, the window size, the
-/// display mode and the V-Sync choice). A missing field means "never set"; the caller, not this
-/// def, decides what that falls back to.
+/// mode, the difficulty setting, the four display settings (the monitor, the window size, the
+/// display mode and the V-Sync choice) and the four volume levels. A missing field means "never
+/// set"; the caller, not this def, decides what that falls back to.
 /// ⚠ A display field added here is read through a <c>SavedWord(bool det)</c> reader and nowhere
 /// else, and that reader returns null under <c>--det</c>: a golden shot is a deterministic run
 /// against the player's own options directory, so a saved size or mode that escaped the drop would
 /// move every golden in the repo. The <c>display-det-guard</c> suite compares this def against the
-/// readers by reflection and fails on a field that has none.</summary>
+/// readers by reflection and fails on a field that has none. The four levels take the same drop
+/// through <see cref="AudioMix.SavedLevels"/>, which is their one reader.</summary>
 public sealed class OptionsDef
 {
     public string? MenuPresentation { get; set; }
@@ -76,6 +77,23 @@ public sealed class OptionsDef
     /// <summary>The frame pacing, one of <see cref="DisplayWords.VSyncChoices"/>: V-Sync on, off,
     /// or off with the frame cap the word names.</summary>
     public string? VSync { get; set; }
+
+    /// <summary>The Master level, the multiplier over the three category levels
+    /// (<see cref="AudioMix"/>). No vocabulary and no spelling to parse, so the store proves the
+    /// range alone.
+    /// ⚠ Nullable because 0 is a player's mute and null is "never set", which takes the shipped
+    /// default: a plain <c>int</c> would fold the two together and make a mute unsaveable.</summary>
+    public int? AudioMaster { get; set; }
+
+    /// <summary>The Music level, <see cref="AudioMix.MinLevel"/> to
+    /// <see cref="AudioMix.MaxLevel"/>, null where never set.</summary>
+    public int? AudioMusic { get; set; }
+
+    /// <summary>The Effects level, on the same range as <see cref="AudioMusic"/>.</summary>
+    public int? AudioEffects { get; set; }
+
+    /// <summary>The Voice level, on the same range as <see cref="AudioMusic"/>.</summary>
+    public int? AudioVoice { get; set; }
 }
 
 /// <summary>
@@ -185,6 +203,10 @@ public sealed class OptionsStore
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
             Write(w, "vsync", def.VSync);
+            WriteLevel(w, "audioMaster", def.AudioMaster);
+            WriteLevel(w, "audioMusic", def.AudioMusic);
+            WriteLevel(w, "audioEffects", def.AudioEffects);
+            WriteLevel(w, "audioVoice", def.AudioVoice);
             w.WriteEndObject();
         }
 
@@ -221,6 +243,10 @@ public sealed class OptionsStore
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
                 VSync = Read(root, "vsync", ValidVSyncChoices),
+                AudioMaster = ReadLevel(root, "audioMaster"),
+                AudioMusic = ReadLevel(root, "audioMusic"),
+                AudioEffects = ReadLevel(root, "audioEffects"),
+                AudioVoice = ReadLevel(root, "audioVoice"),
             };
         }
         catch (JsonException)
@@ -311,6 +337,20 @@ public sealed class OptionsStore
         }
     }
 
+    // The numeric sibling of Write above, and null for the same reason: a level the build knows but
+    // the player has never set is named in the file rather than left out of it.
+    private static void WriteLevel(Utf8JsonWriter w, string name, int? value)
+    {
+        if (value is { } set)
+        {
+            w.WriteNumber(name, set);
+        }
+        else
+        {
+            w.WriteNull(name);
+        }
+    }
+
     // Digits alone in range, and no leading zero past a single digit: NumberStyles.None already
     // refuses a sign, whitespace and separators, and refusing "01" as well leaves a value with one
     // spelling, so two files that ask for the same screen or size read the same by eye.
@@ -331,6 +371,19 @@ public sealed class OptionsStore
         && field.ValueKind == JsonValueKind.String
         && valid.Contains(field.GetString() ?? string.Empty)
             ? field.GetString()
+            : null;
+
+    // The numeric read, the same drop-an-unknown-value contract as the reads either side of it with
+    // a range in place of the set: a level has no word list and no spelling, so what stands in for
+    // membership is the range the sliders take. A value out of range, of another JSON kind or not a
+    // whole number reads as never set, which keeps a hand-edited level from taking the file down
+    // with it.
+    private static int? ReadLevel(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var field)
+        && field.ValueKind == JsonValueKind.Number
+        && field.TryGetInt32(out int level)
+        && level >= AudioMix.MinLevel && level <= AudioMix.MaxLevel
+            ? level
             : null;
 
     // The shape-validated read, the same drop-an-unknown-value contract as the vocabulary read

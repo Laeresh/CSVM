@@ -188,7 +188,11 @@ public class MenuLayoutReaderTests
                 + "#define IDS_VP_EFFECTS_TITLE 273\n#define IDS_VP_EFFECTS_DESC 274\n"
                 + "#define IDS_VP_VIEW_TITLE 275\n#define IDS_VP_VIEW_DESC 276\n"
                 + "#define IDS_VP_DISPLAY_TITLE 277\n#define IDS_VP_DISPLAY_DESC 278\n"
-                + "#define IDS_VP_DEVICE_TITLE 279\n#define IDS_VP_DEVICE_DESC 280\n",
+                + "#define IDS_VP_DEVICE_TITLE 279\n#define IDS_VP_DEVICE_DESC 280\n"
+                + "#define IDS_AP_TITLE 290\n#define IDS_AP_MUSIC_TITLE 291\n#define IDS_AP_MUSIC_DESC 292\n"
+                + "#define IDS_AP_MVOLUME_TITLE 293\n#define IDS_AP_MVOLUME_DESC 294\n"
+                + "#define IDS_AP_EVOLUME_TITLE 295\n#define IDS_AP_EVOLUME_DESC 296\n"
+                + "#define IDS_AP_VVOLUME_TITLE 297\n#define IDS_AP_VVOLUME_DESC 298\n",
             Strings = new Dictionary<int, string>
             {
                 [100] = "OK",
@@ -219,6 +223,15 @@ public class MenuLayoutReaderTests
                 [278] = "Select the screen resolution.",
                 [279] = "Graphics",
                 [280] = "Select a 3D card or Software mode.",
+                [290] = "AUDIO",
+                [291] = "In-Game Music",
+                [292] = "Select to hear in-game music.",
+                [293] = "Music Volume",
+                [294] = "Set the volume of the in-game music.",
+                [295] = "Effects Volume",
+                [296] = "Set the volume of the sound effects.",
+                [297] = "Voice Volume",
+                [298] = "Set the volume of the voices.",
                 [222] = "PLANE NAME",
                 [223] = "Load Default Configuration",
                 [224] = "Airframe",
@@ -272,7 +285,9 @@ public class MenuLayoutReaderTests
                 "GRAPHICS/PH_B_Paper.png", "GRAPHICS/PH_Inventory.jpg", "GRAPHICS/PH_PlaneIcons.png", "GRAPHICS/PH_B_Done.png",
                 "GRAPHICS/PP_Back.png", "GRAPHICS/PP_B_GameOptions.png", "GRAPHICS/PP_B_Audio.png", "GRAPHICS/PP_B_Video.png",
                 "GRAPHICS/PP_B_Controls.png", "GRAPHICS/PP_B_ReturnMainMenu.png", "GRAPHICS/PP_B_ReturnToGame.png",
-                "GRAPHICS/PP_GoBack.png", "GRAPHICS/PP_VpBack.png", "GRAPHICS/PP_B_Accept.png", "GRAPHICS/PP_B_Cancel.png",
+                "GRAPHICS/PP_GoBack.png", "GRAPHICS/PP_VpBack.png", "GRAPHICS/PP_ApBack.png",
+                "GRAPHICS/PP_B_SliderSlot.png", "GRAPHICS/PP_B_Slider.png",
+                "GRAPHICS/PP_B_Accept.png", "GRAPHICS/PP_B_Cancel.png",
                 "GRAPHICS/PP_B_Check8.png", "GRAPHICS/PP_B_ScrollBar.png", "GRAPHICS/PP_B_ScrollUp.png",
                 "GRAPHICS/PP_B_ScrollDown.png", "GRAPHICS/PP_B_DropUp.png", "GRAPHICS/PP_B_DropDown.png",
                 "GRAPHICS/PC_Back.jpg", "GRAPHICS/PC_B_Done.png",

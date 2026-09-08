@@ -166,6 +166,15 @@ clamped; `ThumbYFor` places a thumb for a given window, and is the one rule ever
 thumb by. Each list widget builds one from its own geometry and the presentation that owns the
 pointer decides what a new top writes back, so the arrows and the keyboard keep their own rules.
 
+## src/UI/SliderTrack.cs
+A continuous control's track as a pointer sees it, the list window's opposite number: the slot a
+thumb slides along, the thumb's own size, and the whole numbers the slot spans. `ValueAt` reads a
+pointer's X as a value and `ThumbX` puts the thumb back where it read, so the drawn thumb sits under
+the finger that moved it; `Stepped` moves a value sideways. Every answer is clamped into the range
+and none wraps, which is what keeps a step away from an end from landing on the other one. Each
+slider widget builds one from its own geometry and the presentation that owns the pointer decides
+what a new value writes back. Driven by `Menu/Original/SliderControl.cs`.
+
 ## src/UI/BoardFit.cs
 How the original's fixed 800x600 campaign dialog space lands on an arbitrary window: one uniform
 scale on both axes, the board centred, the remainder letterboxed. A `record struct`, so every
@@ -277,12 +286,12 @@ the wash-over-HUD ordering is a verification rule; the weather decode is [../org
 ## src/UI/SplitScreen.cs
 The splitscreen rig for two to four players (one player never constructs it): the black gutter
 backdrop, one `SubViewport` pane per player sharing the main `World3D`, and the player colour and
-tag table. Sharing the world means every pane shares the one sun and environment, so enhanced
-graphics reach every pane with no pane-local plumbing. **Every pane is a 3D audio listener**, or the
-session has none at all and every positional emitter goes silent: Godot takes the per-channel
-maximum over listener-enabled viewports, so an emitter is heard at its nearest pane's volume.
-`Fill(true)` gives pane 1 the whole window for a cutscene and lays the others back out afterwards,
-changing visibility and one rect rather than rebuilding. `NoteSkip` names a skipping player.
+tag table. Two panes stack, or stand side by side once each half would still be wider than it is
+tall (`SideBySide`, true from 2:1 out); three and four are the 2x2 grid. One world means one sun
+and environment per pane, so enhanced graphics need no pane-local plumbing. **Every pane is a 3D
+audio listener**, or nothing positional is audible at all: Godot takes the per-channel maximum
+over listener-enabled viewports. `Fill(true)` gives pane 1 the whole window for a cutscene, a
+visibility change and one rect rather than a rebuild. `NoteSkip` names a skipping player.
 
 ## src/UI/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp
@@ -579,20 +588,22 @@ since a claim is an identity. Read `MenuCommands.cs` for the seam and `PlayerSet
 the seats it is claimed by.
 
 ## src/UI/Menu/IMenuAudio.cs
-The shared menu audio contract: a presentation requests a `MenuCue` by semantic name and starts
-or stops narration at moments it owns; the service owns resolution, playback, volume and the
-handoff into a launching session. The host implementation is `MenuAudioService`
-(`src/Session/MenuAudioService.cs`); Built-in's one call site is the briefing narration.
+The shared menu audio contract: a presentation requests a `MenuCue` by semantic name, starts or
+stops narration at moments it owns, and states through `PreviewMix`/`EndMixPreview` the mix a page
+that sets one stands at and which `MenuMixLevel` a frame moved; the service owns resolution,
+playback, volume, the buses and the handoff into a launching session. The host implementation is
+`MenuAudioService` (`src/Session/MenuAudioService.cs`); Built-in's one call site is the briefing
+narration.
 
 ## src/UI/Menu/MenuExit.cs
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the `PresentationId`, the graphics-mode and difficulty words, and the four display settings, null where never set).
-An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a
-screen hands back the settings it does not show; a custom plane rides it as a resolved `CustomPlaneDef`, never a store name.
-Presentations never construct sessions. The return side is `MenuReturnDestination`; the exit table
-and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
+`OptionsApplyExit` (the `PresentationId`, the graphics-mode and difficulty words, the four display settings and the four volume levels, null where never set).
+An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
+hands back the settings it does not show; none of the eleven is defaulted, so a page cannot hand back a null it never read. A custom
+plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Presentations never construct
+sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`
@@ -675,19 +686,39 @@ and the shared Free Flight, player-setup, Instant Action, hangar and campaign fe
 art measurer and the flight-devices answer injected. It owns the top level composed from
 `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
 Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
-screens are its nine partials, below. `Step` applies one seat's frame (pointer, typed text, cursor
-walk, accept and back) and `Compose` is the screen as a `ComposedBoard`.
+screens are its ten partials, below. `Step` applies one seat's frame (pointer, typed text, cursor
+walk, accept and back), `Compose` is the screen as a `ComposedBoard`, and the row kinds every page
+draws are here, `OriginalSlider` and the slider row's builder and drawing among them.
 Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
+## src/UI/Menu/Original/SliderControl.cs
+The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
+sideways step that moves one from the keyboard or the pad. It is the shell's second hold-and-move
+and keeps a hold of its own, the list thumb's being the first; the shell gives the thumb first
+refusal each frame and consults this one only when no list holds, so neither drag can be continued
+as the other. `Drive` reports a slider holding the pointer, which is how the shell knows a click was
+spent and activates nothing under it. A row declares its slider through `OriginalShell.cs`'s
+`OriginalSlider`; this class knows a track and a value and nothing about the setting behind them.
+
 ## src/UI/Menu/Original/OriginalGameOptions.cs
-The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content
-is a table: per option a key, a title, a description, the control kind and how the store field is
-read and written, so a further option is one entry plus its field. Row one is the original's own
-Difficulty dropdown at its authored box over the three campaign tiers; under it the remake-only Menu
-row, the presentation as a dropdown over the registered tokens. The row shape is read off the
-section's widgets, so a layout that moves a row moves ours. ACCEPT CHANGES leaves as the
-`OptionsApplyExit`; only `Launcher.ApplyOptions` writes the store. The display settings stand on the
-VIDEO page instead. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
+The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content is a
+table: per option a key, a title, a description, the control kind and how the store field is read and
+written, so a further option is one entry plus its field. Row one is the original's own Difficulty dropdown
+at its authored box over the three campaign tiers; under it the remake-only Menu row, the presentation as a
+dropdown over the registered tokens. The row shape is read off the section's widgets, so a layout that moves
+a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
+`Launcher.ApplyOptions` writes the store. This file also holds the shell's shared `ReadSavedOptions`/`AppliedOptions`
+pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO (`OriginalVideo.cs`) and the volume levels on AUDIO (`OriginalAudio.cs`). Rows: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalAudio.cs
+The AUDIO page, the shell's partial over the decoded `[@Audio@]` section, behind the Preferences page's second door. Four slider
+rows over `Utils/AudioMix.cs`'s 0..100 in VIDEO's table shape: per row the authored title, slider and description widgets it stands
+on, and how the store field is read and written, a never-set level reading as its shipped default. Each row's line is read off its
+own title widget, the authored pitch being 58, 57, 53 and 53 rather than one number. Master takes the In-Game Music row with the
+page's own words and its slider at the section's slider column, since a slider that reaches zero is that checkbox in one fewer
+widget; Sound Quality is left out. A slider answers no Accept (`SliderControl.cs`); ACCEPT CHANGES leaves as the `OptionsApplyExit`
+and CANCEL CHANGES drops the edits. `AudioPreviewMix` is the mix the open page stands at, null off it, and `TakeAudioMoved` the
+level a frame moved, taken once: the host is what applies and sounds them. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalVideo.cs
 The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third
@@ -769,14 +800,14 @@ cues and the dialogs are this file's. Read `src/UI/CampaignFlow.cs` for the page
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
-The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the
-board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do.
-`Activate` builds the shell and the device bookkeeping once, refreshes the roster from the
-saved-plane store on every call, stands the shell on the top level, maps the return destination
-onto it and applies the `--menu=` aid on the first show alone. `Tick` keeps the pads in step (seat
-0's claim while joining is closed, the join scan while the shell opens it), polls every seat, maps
-a window-pixel pointer into the authored space, steps the shell, requests its cues and drives the
-briefing's reveal. `Measure` reads a strip's size off its file once; `PaletteFor` is each screen's inks.
+The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding
+one `ComposedBoardView`, so every screen scales as the campaign boards do. `Activate` builds the shell and the device
+bookkeeping once, refreshes the roster from the saved-plane store on every call, stands the shell on the top level, maps
+the return destination onto it and applies the `--menu=` aid on the first show alone. `Tick` keeps the pads in step (seat
+0's claim while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer
+into the authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends
+the preview on every door out and on `Hide`, and drives the briefing's reveal. `Measure` reads a strip's size off its file
+once; `PaletteFor` is each screen's inks.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses

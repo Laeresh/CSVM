@@ -111,7 +111,7 @@ public sealed class OriginalAssetManifest
     /// <summary>The manifest schema. Bump it when the derivation changes what Original needs: the
     /// composed-section table, the rows Original does not draw, the script-named files, or what
     /// <see cref="Check"/> accepts as a readable file.</summary>
-    public const int Schema = 3;
+    public const int Schema = 4;
 
     /// <summary>The extraction stamp schema Original refuses to read a tree below: the loaders'
     /// own expectation, which the decoded menu layout's first reader raised, so a tree extracted
@@ -122,10 +122,10 @@ public sealed class OriginalAssetManifest
     /// optional, since nothing Original draws reads it.</summary>
     public static readonly IReadOnlyList<string> ComposedSections = new[]
     {
-        "MainMenu", "Preferences", "GameOptions", "Video", "Credits", "InstantAction", "Campaign", "PassengerCabin",
-        "FlightCheck", "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar",
-        "PlaneName", "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase",
-        "MessageBox",
+        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "Credits", "InstantAction", "Campaign",
+        "PassengerCabin", "FlightCheck", "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC",
+        "ScrapbookZoom", "Hangar", "PlaneName", "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns",
+        "HardPoints", "Paint", "Purchase", "MessageBox",
     };
 
     // The files the GUI scripts name outside the layout and Original draws anyway: the two pointer
@@ -144,6 +144,8 @@ public sealed class OriginalAssetManifest
         ["MainMenu.MOVIE"] = "the top level's backdrop movie is not in the extraction and no screen plays one",
         ["Preferences.MOVIE"] = "the page's backdrop movie is not in the extraction and no screen plays one",
         ["Preferences.PF_B_RETURNTOGAME"] = "the in-flight way back, which the menu's Preferences page never offers",
+        ["Audio.AP_B_MUSIC"] = "the In-Game Music checkbox, whose mute a slider that reaches zero already offers",
+        ["Audio.AP_D_SQuality"] = "the Sound Quality tier, which no mixer this port runs on has an equivalent of",
         ["PassengerCabin.PC_B_CHANGEMOMENTO"] = "the memento chooser the original does not ship",
         ["PassengerCabin.PC_B_SAVE"] = "SAVE GAME, deactivated in the original and never drawn",
         ["MessageBox.MP_P_BACKGROUND"] = "the multiplayer error box, which has no local counterpart",

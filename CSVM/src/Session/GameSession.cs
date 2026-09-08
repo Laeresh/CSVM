@@ -3291,7 +3291,7 @@ public partial class GameSession : Node3D
             });
         }
         GD.Print($"splitscreen: {count} panes sharing one world " +
-                 $"({(count == 2 ? "stacked top/bottom" : "2×2 grid")})");
+                 $"({SplitScreen.LayoutName(count, GetViewport().GetVisibleRect().Size)})");
     }
 
     // One interior render pass per rig, on that player's own HUD parent, so splitscreen gets a

@@ -46,25 +46,10 @@ public partial class Launcher : Node3D
     // log and short enough that a drop is placed within the sortie. TUNE.
     private const double RateWindowSeconds = 10;
 
-    // Master-bus index. This project ships no bus layout, so Master is the only bus
-    // and everything (both audio paths) is on it by default.
+    // Master-bus index. default_bus_layout.tres sends Music, Effects and Voice into Master, so a
+    // gain or a mute written here still reaches every sound while leaving a player's own mix on the
+    // three child buses alone.
     private const int MasterBus = 0;
-
-    // Master output gain, linear, for a REPO run where neither `--volume=` nor the
-    // `audio.volume` config key says otherwise. 0: launches are silent
-    // unless someone asks for sound (the Run scripts pass `--volume=1.0`), so a scripted
-    // or agent run never sounds by accident. An exported build defaults to the resting gain
-    // below instead — see ApplyMasterVolume.
-    private const float MasterVolumeDefault = 0f;
-
-    // The bus's own resting gain (0 dB). A launch resolving to this leaves the bus
-    // untouched, keeping it byte-identical in output and console log to a launch that never
-    // had a volume path at all.
-    private const float MasterVolumeUnattenuated = 1f;
-
-    // Gain floor for the dB conversion, since `LinearToDb(0)` is negative infinity.
-    // -80 dB is inaudible, which is the whole point of `--volume=0`.
-    private const float MasterVolumeFloor = 0.0001f;
 
     // TUNE, and the FALLBACK only: a flown mission overwrites this per zone from its own pushed-out
     // fog near (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze ramp
@@ -552,6 +537,11 @@ public partial class Launcher : Node3D
         // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
         // --dump-* wrappers are covered by the same gain an interactive launch gets.
         ApplyMasterVolume();
+        // After it, so the two are read in the order they multiply: the developer gain on bus 0,
+        // then the player's mix on the three buses under it. ⚠ --det reads no saved level, the same
+        // rule the saved graphics word below follows; SavedLevels owns that drop.
+        var savedMix = AudioMix.SavedLevels(_spec.Det);
+        AudioMix.Apply(savedMix.Master, savedMix.Music, savedMix.Effects, savedMix.Voice);
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;
@@ -1253,8 +1243,11 @@ public partial class Launcher : Node3D
     // availability is registration plus, for Original, OriginalAvailable below.
     private MenuHost BuildMenuHost()
     {
+        // ⚠ No live mix preview in a run that drives itself, or a scripted walk across the AUDIO page
+        // would make that run's mix a function of the walk; --no-det with a scripted flag is still
+        // such a run, which is why both halves are read rather than Det alone.
         _menuAudio = new MenuAudioService(_music, wav => _musicArchive?.Find(wav, false, warn: false),
-            Path.Combine(_rofPath, "ASSETS", "SOUNDS"));
+            Path.Combine(_rofPath, "ASSETS", "SOUNDS"), previews: !_spec.Det && _spec.ScriptedBy.Length == 0);
         AddChild(_menuAudio);
         var seatInput = new MenuInput { Keyboard = true };
         // Seat 0 is player 1, so it navigates on the menu keymap that player saved.
@@ -1356,6 +1349,10 @@ public partial class Launcher : Node3D
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
+        options.AudioMaster = applied.AudioMaster;
+        options.AudioMusic = applied.AudioMusic;
+        options.AudioEffects = applied.AudioEffects;
+        options.AudioVoice = applied.AudioVoice;
         store.Save(options);
         // The display settings take effect now instead of at the next start, through the same calls
         // the startup path makes and in the order the window needs them: the screen it sits on, the
@@ -1364,6 +1361,9 @@ public partial class Launcher : Node3D
         DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
         ResolutionSetting.Apply(ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes()));
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, true)));
+        // The mix takes effect now too, through the same call the startup path makes. Apply is
+        // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
+        AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
         Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
         _menuHost.Deactivate();
         string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
@@ -1602,32 +1602,25 @@ public partial class Launcher : Node3D
         ShowMenu(destination);
     }
 
-    // Settles the master output gain: --volume= if given, else audio.volume, else silent in a
-    // repo run and full in an exported one.
+    // Writes the master output gain Utils/MasterVolume.cs resolves, and is its only caller.
     // Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so
     // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one —
-    // see this file's docs/architecture.md entry, which also covers why the config read stays
-    // unconditional so it self-registers for --dump-config.
+    // see this file's docs/architecture.md entry. ⚠ Bus 0 alone: the player's four levels are
+    // written on the three buses under it by Utils/AudioMix.cs, so neither gain can stand in for
+    // the other and a saved level cannot lift a run this silenced.
     private void ApplyMasterVolume()
     {
-        // An exported build defaults to audible, on the switch that settles the log directory.
-        // The silent default keeps agent and golden runs quiet, and a recipient who starts the
-        // exe passes no flag and has no config file to write one into.
-        float fallback = _exported ? MasterVolumeUnattenuated : MasterVolumeDefault;
-        float volume = Config.GetFloat("audio.volume", fallback);
-        string source = "config";
-        if (_spec.Volume is { } asked)
-        {
-            volume = asked;
-            source = "--volume";
-        }
+        // The exported switch is the one that settles the log directory, so an export's audible
+        // default and its logs\ folder are decided together.
+        float volume = MasterVolume.Resolve(_spec.Volume, _exported);
+        string source = _spec.Volume.HasValue ? "--volume" : "config";
         // Full volume is the bus's own resting state, so leaving it alone keeps a full-volume
         // launch byte-identical in both output and console log.
-        if (Mathf.IsEqualApprox(volume, MasterVolumeUnattenuated))
+        if (Mathf.IsEqualApprox(volume, MasterVolume.Unattenuated))
         {
             return;
         }
-        AudioServer.SetBusVolumeDb(MasterBus, Mathf.LinearToDb(Mathf.Max(volume, MasterVolumeFloor)));
+        AudioServer.SetBusVolumeDb(MasterBus, MasterVolume.VolumeDb(volume));
         string note = volume <= 0f ? " — sounds still load, play, count and log" : "";
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }

@@ -4,6 +4,7 @@ using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -2313,7 +2314,8 @@ internal static class AiSuites
     [Suite("ai-voice",
         "the E16 trigger dispatch on a live AI plane against the real archive: a projectile "
         + "hit crossing a DI threshold plays exactly ONE source-following line the pilot's "
-        + "accent owns (the 15 s slot cooldown swallowing the follow-up hits), and the kill "
+        + "accent owns (the 15 s slot cooldown swallowing the follow-up hits) on the Voice bus, "
+        + "the same clip replayed through the default bus lands on Effects instead, and the kill "
         + "plays the dead pilot's own death cry through the force flag while an unforced "
         + "dispatch on the same dead speaker stays silent")]
     internal static void AiVoice(TestContext ctx)
@@ -2419,6 +2421,19 @@ internal static class AiSuites
             var oneShot = LastOneShotPlayer(sounds);
             ctx.Check(oneShot != null && oneShot.GlobalPosition.DistanceTo(ai.WorldPosition) < 1f,
                 $"…as a source-following one-shot at the aircraft pos={oneShot?.GlobalPosition}");
+            ctx.Check(oneShot != null && oneShot.Bus.ToString() == AudioBuses.Voice,
+                $"…on the Voice bus, not with the destruction one-shots actual={oneShot?.Bus}");
+
+            // The Voice argument must not survive the call it was passed on: the SAME clip replayed
+            // with the default argument has to come back on Effects, or a destruction sound handed
+            // a player that once carried a callout would speak an explosion through the voice mix.
+            int startedBefore = sounds.OneShotsStarted;
+            string? replay = sounds.PlayOneShot(played[0].Clip, ai.WorldPosition, new System.Random(7));
+            var defaultPlayer = LastOneShotPlayer(sounds);
+            ctx.Check(replay != null && sounds.OneShotsStarted == startedBefore + 1,
+                $"the same clip replays through the default bus resolved={replay}");
+            ctx.Check(defaultPlayer != null && defaultPlayer.Bus.ToString() == AudioBuses.Effects,
+                $"…and lands on Effects, so the bus is decided per play actual={defaultPlayer?.Bus}");
 
             // Follow-up hits in the same tier stay silent: the slot cooldown swallowed them
             // (armed by the PLAY here; the failed-roll arming is the unit suite's,

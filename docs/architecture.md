@@ -70,7 +70,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
 - `src/Mech3/AnimProgram.cs` — merges the compiled + reader defs for one mission, holds `startanims`, resolves SI-script slots.
 - `src/Mech3/TextureCycler.cs` — runs the gamez material `cycle` flipbooks (water, surf, wakes) by swapping `albedo_tex`.
-- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot` for destruction/impact audio.
+- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot` for destruction/impact audio and, on its bus argument, combat voice.
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
@@ -254,7 +254,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/IMenuFeature.cs` — the shared-feature contract: typed state and semantic operations; `Discard()` drops transient setup.
 - `src/UI/Menu/MenuFeatureSet.cs` — the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is what a switch drops.
 - `src/UI/Menu/MenuCommands.cs` — one seat's semantic commands plus `IMenuInputSource`, the device-neutral seam every device sits behind.
-- `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations ask for cues and narration, the service owns everything else.
+- `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations ask for cues, narration and a mix preview, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) each presentation maps into its own graph.
 - `src/UI/Menu/MenuChapters.cs` — the shared chapter roster: the eight chapter worlds, which carry Danger Zones, and the per-mode filter.
@@ -270,8 +270,10 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
 - `src/UI/Menu/FreeFlightFeature.cs` — Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs` — Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
-- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its nine partials below.
+- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its ten partials below.
+- `src/UI/Menu/Original/SliderControl.cs` — the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
 - `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
+- `src/UI/Menu/Original/OriginalAudio.cs` — the shell's AUDIO page (a `partial`): the four volume levels as slider rows on their own authored lines, stated to the host while the page is open.
 - `src/UI/Menu/Original/OriginalVideo.cs` — the shell's VIDEO page (a `partial`): the display settings as a table of authored rows, the resolution row's words enumerated per screen.
 - `src/UI/Menu/Original/OriginalCredits.cs` — the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
@@ -332,6 +334,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.
 - `src/UI/CampaignAidScript.cs` — the input script a `--menu=` colon argument spells: counted moves, confirms and button words a campaign aid replays.
 - `src/UI/ListWindow.cs` — a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
+- `src/UI/SliderTrack.cs` — a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
 - `src/UI/BoardFit.cs` — how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
 - `src/UI/ComposedBoard.cs` — what a composed campaign screen is made of: backdrop, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
 - `src/UI/CampaignBoards.cs` — the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
@@ -371,6 +374,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 The things every subsystem depends on: the clock, the log, the seed. Changing one of these changes
 determinism repo-wide; read `docs/verification.md` first.
 
+- `src/Utils/AudioBuses.cs` — the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
+- `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
 - `src/Utils/DisplayModeSetting.cs` — the window's display mode: the saved word against the shipped windowed default, and the one place the window mode is set.
@@ -382,8 +387,9 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it to one `[perf] hitch` line plus one JSON sidecar line.
 - `src/Utils/HoldToRepeat.cs` — tap-versus-hold timing for one button: an initial delay, then a repeat every interval until release.
 - `src/Utils/Log.cs` — the diagnostic log: a fixed category vocabulary over four levels, a filtered console and an always-complete file sink (`.scratch/logs/`, `logs/` in an exported build).
+- `src/Utils/MasterVolume.cs` — the developer gain on bus 0: `--volume=` over the `audio.volume` key over silence in a repo run, resolution only, with the player's mix a separate product underneath it.
 - `src/Utils/MonitorSetting.cs` — the screen the window sits on: the machine's screens labelled, the saved index dropped where no screen answers to it, and the one place the window's screen is set.
-- `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options in `user://options.json`, written atomically.
+- `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
 - `src/Utils/PhysicsTickCost.cs` — the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
 - `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
@@ -426,7 +432,7 @@ clusters they delegate to.
 - `src/Session/GameSession.cs` — the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
 - `src/Session/SessionSimulation.cs` — the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
 - `src/Session/ExtractionStamp.cs` — reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read.
-- `src/Session/MenuAudioService.cs` — the menus' audio host: the music channel, the briefing narration player and the cue player behind `MenuCueTable`.
+- `src/Session/MenuAudioService.cs` — the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
 - `src/Session/LiveryResolver.cs` — each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
 - `src/Session/IFlightStarts.cs` — the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.
@@ -454,7 +460,7 @@ clusters they delegate to.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin) to a live position, so an anchored net rides its target.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (`--generators`): the load drops, the cycle stepping, each launch's spawn or release.
-- `src/Session/AiVoiceRuntime.cs` — wires the combat-voice dispatcher into a session: the speakers, the damage sources and the sites each clip plays from.
+- `src/Session/AiVoiceRuntime.cs` — wires the combat-voice dispatcher into a session: the speakers, the damage sources, the sites each clip plays from and the Voice bus it plays on.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (`--zeppelins`): the placement, the net flight, the per-part damage and kill, the script's arms.
 - `src/Session/ZeppelinRuntime.Cannons.cs` — the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.

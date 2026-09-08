@@ -819,6 +819,16 @@ internal static class MenuOriginalCampaignSuites
         }
 
         public void EndNarration() => Ends++;
+
+        // No campaign screen sets a mix, so this walk expects none; the AUDIO page's preview is
+        // driven and asserted by the menu-original tracer.
+        public void PreviewMix(CSVM.Utils.AudioLevels levels, MenuMixLevel moved)
+        {
+        }
+
+        public void EndMixPreview()
+        {
+        }
     }
 
     private sealed class ScriptedSeat : IMenuInputSource

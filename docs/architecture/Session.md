@@ -32,13 +32,13 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 
 ## src/Session/Launcher.cs
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
-editor check that gives an export its `logs\` and audible volume default, the `--dump-*`/`--run-tests`
-early quits, and what outlives a session (camera, sun, audio, music, the perf and hitch instruments).
-It owns the menu as one `MenuHost` built on the first show, the presentation resolution, the only
-options write, the frame pacing and the window's screen, mode and size at startup and on an Options apply
-(`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`), and the sink every menu exit takes
-([../menu-presentations.md](../menu-presentations.md)); with no extraction it shows
-`UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and `BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on.
+editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits,
+and what outlives a session (camera, sun, audio, music, the perf and hitch instruments). It owns the
+menu as one `MenuHost` built on the first show, the presentation resolution, the only options write,
+the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`),
+and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
+extraction it shows `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
+`BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on.
 
 ## src/Session/LiveryResolver.cs
 Resolves which livery each player flies: the shipped paint catalog and the per-pattern
@@ -390,9 +390,9 @@ world has a `WorldSounds` and ticked on the sim clock: each AI spawn is register
 its own `FlightController.Team`, each human rig as a damage source, and the wired sites are
 subscribed (the hit-path damage tiers, the death cries, the patrol-to-pursue call-out, the
 sixth-sense stun and the completed reaction). `RegisterAi` also mirrors `InPlay` into the speaker's
-liveness, which is the only place the engine-free dispatcher and a controller meet. Clips play
-through `WorldSounds.PlayOneShot` alone and every roll prints an `ai voice:` line. The wired and
-unwired table is [../formats/combat-voice.md](../formats/combat-voice.md).
+liveness, the only place the engine-free dispatcher and a controller meet. Clips play through
+`WorldSounds.PlayOneShot` alone, passing Voice where that path's other callers take its Effects
+default, and every roll prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending
@@ -488,14 +488,14 @@ blocks instead of warning: true only when the stamp is present, carries a schema
 the caller asked for, so an unstamped or unreadable tree still runs.
 
 ## src/Session/MenuAudioService.cs
-The host's `IMenuAudio` over the process's playback: the music channel, the sound archive and the
-briefing narration player. `BeginNarration` ducks the music and restarts the player on the resolved
-stream; `EndNarration` lifts the duck and stops it, idempotent because the launchscreen calls it
-every frame no briefing is showing. `Cue` resolves a semantic name through `MenuCueTable` to a file
-under the cue directory the constructor was given, decodes it once and replays it from the start; an
-unknown name, a missing file or a failed decode is logged once and cached as silence. Narration is
-begun and ended by whichever presentation shows a briefing, so this service knows nothing of which
-screen is up.
+The host's `IMenuAudio` over the process's playback. `BeginNarration` ducks the music and restarts the narration player on
+the resolved stream; `EndNarration` lifts the duck and stops it, idempotent because the launchscreen calls it every frame
+no briefing shows. `Cue` resolves a semantic name through `MenuCueTable` to a file under the constructor's cue directory,
+decodes it once and replays it from the start; an unknown name, a missing file or a failed decode is logged once and
+cached as silence. `PreviewMix` applies a mix page's levels as they move and sounds the moved category over the original's
+`sfx_loop.wav`/`voice_loop.wav`, leaving a running clip alone so a drag is one clip and not one per frame; `EndMixPreview`
+puts back the captured gains, and previews are off unless the constructor says otherwise. Narration is begun and ended by
+whichever presentation shows a briefing, so this service knows nothing of which screen is up.
 
 ## src/Session/MenuCueTable.cs
 Which wav under the extracted sound directory a semantic menu cue name resolves to: the rollover,

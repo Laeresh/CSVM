@@ -188,6 +188,7 @@ public sealed partial class WorldSounds : Node3D
             MaxDistance = def.RangeMax,
             VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
             AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            Bus = AudioBuses.Effects,
         };
         AddChild(player);
         var emitter = new Emitter { Name = name, Player = player, Looped = def.Looped };
@@ -198,23 +199,26 @@ public sealed partial class WorldSounds : Node3D
     /// <summary>Fires a one-shot <c>SOUND</c> at a world point: fire-and-forget destruction/impact
     /// audio, a player that frees itself when the clip ends. When <paramref name="name"/> is a
     /// <see cref="SoundGroup"/> it resolves to one member by weight through <paramref name="rng"/>
-    /// first. Returns the resolved definition name, or null when unknown or never prewarmed (see
-    /// <see cref="Prewarm"/>).</summary>
-    public string? PlayOneShot(string name, Vector3 worldPos, Random rng) =>
-        Spawn(name, worldPos, null, rng);
+    /// first. <paramref name="bus"/> is this one call's mix category, defaulted so every
+    /// destruction and impact caller stays on Effects and combat voice alone asks for Voice.
+    /// Returns the resolved name, or null when unknown or never prewarmed (<see cref="Prewarm"/>).</summary>
+    public string? PlayOneShot(string name, Vector3 worldPos, Random rng,
+        string bus = AudioBuses.Effects) =>
+        Spawn(name, worldPos, null, rng, bus);
 
-    /// <summary>The source-following variant of <see cref="PlayOneShot(string, Vector3, Random)"/>:
+    /// <summary>The source-following variant of <see cref="PlayOneShot(string, Vector3, Random, string)"/>:
     /// the one-shot rides <paramref name="source"/>'s world pose each <see cref="Tick"/>. For a
     /// voice line from a moving aircraft, where a once-written position would fall behind within a
     /// second. When the source is freed mid-clip the sound holds its last position and finishes
     /// there. Who hears it is the pinned per-pane listener model (<c>UI.SplitScreen</c>): the
     /// nearest pane's volume wins, and following the source only keeps the range honest.</summary>
-    public string? PlayOneShot(string name, Node3D source, Random rng)
+    public string? PlayOneShot(string name, Node3D source, Random rng,
+        string bus = AudioBuses.Effects)
     {
         var pos = IsInstanceValid(source) && source.IsInsideTree()
             ? source.GlobalPosition
             : Vector3.Zero;
-        return Spawn(name, pos, source, rng);
+        return Spawn(name, pos, source, rng, bus);
     }
 
     /// <summary>Attaches an emitter to the world node that gives it its position — the reader's
@@ -361,7 +365,7 @@ public sealed partial class WorldSounds : Node3D
         return (best, which);
     }
 
-    private string? Spawn(string name, Vector3 worldPos, Node3D? source, Random rng)
+    private string? Spawn(string name, Vector3 worldPos, Node3D? source, Random rng, string bus)
     {
         string resolved = _groups.TryGetValue(name, out var group)
             ? group.Pick(rng) ?? name
@@ -387,6 +391,9 @@ public sealed partial class WorldSounds : Node3D
             return null;
         }
 
+        // The bus comes from this call, since one call site serves two mix categories. A fresh
+        // player per one-shot makes that per-play by construction; keep the assignment here, or a
+        // later pooling of these players would speak an explosion through the Voice bus.
         var player = new AudioStreamPlayer3D
         {
             Stream = stream,
@@ -394,6 +401,7 @@ public sealed partial class WorldSounds : Node3D
             MaxDistance = def.RangeMax,
             VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
             AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            Bus = bus,
         };
         AddChild(player);
         player.GlobalPosition = worldPos;

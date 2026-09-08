@@ -41,6 +41,12 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
+    /// <summary>The aid value that opens the AUDIO page behind the Preferences page's second door.</summary>
+    public const string AudioAid = "audio";
+
+    /// <summary>The AUDIO aid's argument that stands its four sliders at four distinct levels.</summary>
+    public const string AudioMixedAid = "mixed";
+
     /// <summary>The aid value that opens the VIDEO page behind the Preferences page's third door.</summary>
     public const string VideoAid = "video";
 
@@ -182,10 +188,15 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The Options screen's palette: the Preferences page's authored description colour
     /// for its text, its title colour for the heading, the paper plaque's label tail for the
-    /// chooser.</summary>
+    /// chooser.
+    /// ⚠ The focused row takes the file-wide <c>ACTIVE</c>, not the page title's colour. The title
+    /// is a duller grey than the description cream every unfocused row is written in, so a focused
+    /// row inked with it reads as the disabled one; <c>ACTIVE</c> is what every other Original
+    /// screen already focuses with, so this family stops being the one that dims what it
+    /// highlights.</summary>
     public static BoardPalette PaletteFor(OriginalPreferencesInks inks, OriginalInks labels) => new(
         Row: ToColor(inks.Text),
-        Focus: ToColor(inks.Title),
+        Focus: ToColor(labels.Active),
         Heading: ToColor(inks.Title),
         Detail: ToColor(inks.Text),
         LabelNormal: ToColor(labels.LabelNormal),
@@ -317,6 +328,15 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case GameOptionsAid + ":" + GameOptionsOpenAid:
                     OpenGameOptionsAid(aid);
                     break;
+                case AudioAid:
+                    _shell.OpenAudio();
+                    break;
+                case AudioAid + ":" + AudioMixedAid:
+                    // The four rows open on two levels between them, so a shot of the shipped mix
+                    // says nothing about where a thumb stands at a level it was moved to.
+                    _shell.OpenAudio();
+                    _shell.PoseAudioMix();
+                    break;
                 case VideoAid:
                     _shell.OpenVideo();
                     break;
@@ -443,6 +463,10 @@ public sealed class OriginalPresentation : IMenuPresentation
 
             if (step.Exit != null)
             {
+                // The exit ends this presentation, so a mix page's preview goes before the host acts
+                // on it: an accepted mix is applied by Launcher.ApplyOptions, and every other door
+                // owes back the mix the page opened over.
+                _host.Audio.EndMixPreview();
                 _host.Exit(step.Exit);
                 return;
             }
@@ -454,6 +478,18 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_shell.Screen != OriginalScreen.CampaignBriefing)
         {
             StopNarration();
+        }
+
+        // The AUDIO page's levels are heard while it is open and the mix it opened over goes back the
+        // moment it is left, by any door. Read off the shell rather than a seat's step: the page is
+        // seat 0's, and a guest's own step carries no mix, so its poll would end the preview.
+        if (_shell.AudioPreviewMix is { } mix)
+        {
+            _host.Audio.PreviewMix(mix, _shell.TakeAudioMoved());
+        }
+        else
+        {
+            _host.Audio.EndMixPreview();
         }
 
         // And again after the frame, so a screen change this frame is what the next poll reads.
@@ -480,6 +516,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         StopNarration();
+        // Off screen the AUDIO page's preview goes with it, the mix it opened over put back: a hide
+        // is a door out that no frame follows.
+        _host?.Audio.EndMixPreview();
         Input.MouseMode = Input.MouseModeEnum.Visible;
     }
 
@@ -672,11 +711,11 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_shell != null && _view != null)
         {
             // Paper pages write in authored black, the loadout in the ammo form's palette, the hub
-            // in its own inks, the two options pages in the Preferences page's, a campaign screen
+            // in its own inks, the three options pages in the Preferences page's, a campaign screen
             // in its shared board component's palette, and the rest in the file-wide inks.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
-                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Video ? _preferencesPalette
+                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;

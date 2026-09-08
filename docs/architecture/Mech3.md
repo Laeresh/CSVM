@@ -382,13 +382,13 @@ unchanged. Two entries exist install-wide (`fire1.flt` 12@10, `fire2.flt` 6@5).
 
 ## src/Mech3/WorldSounds.cs
 `SOUND_NODE` ambient looping 3D emitters: one pooled `AudioStreamPlayer3D` per live emitter,
-following its host's pose each frame. `PlayOneShot(name, worldPos, rng)` is the one-shot `SOUND`
-half, fire-and-forget destruction and impact audio that resolves a `SOUND_GROUPS` name to a member
-first; the overload taking a `Node3D` rides that source's pose per Tick instead. `HasStream`
-answers clip availability after the prewarm, which a definition alone cannot. `OneShotsStarted`
-counts every one-shot that actually started a player, so a suite can assert a cue fired by counting
-rather than grepping a log line. Who hears an emitter is the pinned per-pane listener model
-(`UI/SplitScreen.cs`); `SetListeners` feeds the `--debug-anim` log alone. Read `SoundArchive.cs` next.
+following its host's pose each frame. `PlayOneShot(name, worldPos, rng, bus)` is the one-shot
+`SOUND` half, fire-and-forget destruction and impact audio resolving a `SOUND_GROUPS` name to a
+member first; the overload taking a `Node3D` rides that source's pose per Tick instead. `bus`
+defaults to Effects and is read per play, because combat voice (`Session/AiVoiceRuntime.cs`) is
+the one caller passing Voice on a path those one-shots share. `HasStream` answers availability
+after the prewarm; `OneShotsStarted` asserts a cue fired without a log grep. Who hears an emitter
+is `UI/SplitScreen.cs`'s per-pane model; `SetListeners` feeds `--debug-anim`. Next: `SoundArchive.cs`.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
@@ -562,8 +562,10 @@ The state-driven score: one non-positional streaming channel beside `WorldSounds
 emitters, so the menu, the cabin and the mission director all drive the same track. `Enter(state)`
 cues the sound-group or definition name the original's data names for that state; `Cue(name)` is
 the raw form for a name the data supplies directly. One track at a time, hard cuts, no crossfade;
-`NoteCombat` + `Tick` run the battle hold and its fade. The selection rules, the fade rates and the
-tracks that ship with no trigger are docs/org/music.md.
+`NoteCombat` + `Tick` run the battle hold and its fade. The channel's own volume is the fade gain
+times the duck and nothing else: the player's music level is the Music bus's gain
+(`Utils/AudioMix.cs`). The selection rules, the fade rates and the tracks that ship with no trigger
+are docs/org/music.md.
 
 ## src/Mech3/MissionRadio.cs
 The mission radio queue: the third playback channel, beside `MusicPlayer`'s streaming track and
