@@ -84,6 +84,25 @@ public class CampaignProgressionTests
         Assert.Equal(61000, result.Latest.TimeMs);
     }
 
+    /// <summary>The plane is replaced by an attempt beating the best single attempt's own mask,
+    /// which the OR-ed mask cannot answer: it only grows, so by the third win it holds four bits
+    /// and would refuse the four-bit attempt the original accepts.</summary>
+    [Fact]
+    public void ThePlaneFollowsTheBestAttemptsMaskNotTheOr()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, new MissionAttempt(0, 0b0011, 45000, 10, 5, 5, "Gypsy Magic"));
+        CampaignProgression.Record(profile, new MissionAttempt(0, 0b1101, 46000, 10, 5, 3, "The Knave"));
+
+        CampaignProgression.Record(profile, new MissionAttempt(0, 0b1110001, 47000, 10, 5, 7, "Sky Ranger"));
+
+        var result = Assert.Single(profile.MissionResults);
+        Assert.Equal(0b1111111, result.Best.CompletedMask); // the OR, already four bits before this run
+        Assert.Equal(0b1110001, result.Best.BestAttemptMask);
+        Assert.Equal(7, result.Best.Airframe);
+        Assert.Equal("Sky Ranger", result.Best.PlaneName);
+    }
+
     /// <summary>The award is marked per airframe, so the second flight of the same mission grants
     /// nothing however it is reached.</summary>
     [Fact]

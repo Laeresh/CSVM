@@ -1940,6 +1940,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // where that matters, never a _dest suffix (docs/formats/destructibles.md).
     private static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
 
+    // Does this event come from the definition's RESET_STATE rather than one of its sequences?
+    // Reference identity on the authored event, since a baseline and a death name the same roles.
+    private static bool AuthoredInResetState(AnimDefinition def, AnimEvent ev) =>
+        def.ResetState is { } reset && reset.Events.Contains(ev);
+
     // The name of def's own healthy-role node, for DestructibleKilled: the node an OBJECT_ACTIVE_
     // STATE switches off in def's own Initial sequences (the visible-death case), or else the one
     // RESET_STATE holds ACTIVE (the RESET-derived swap ApplyDeathSwap plays instead). Null for a
@@ -3704,6 +3709,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         bool destroyedRole = dbaseRole
             || name.Contains("destroyed", StringComparison.OrdinalIgnoreCase);
         bool healthyRole = name.Contains("healthy", StringComparison.OrdinalIgnoreCase);
+        // A RESET_STATE is the baseline of a whole object, so a `dbase` switched on there is the
+        // ground under it and never half a death.
+        if (active && dbaseRole && AuthoredInResetState(def, ev))
+            return;
         if (active && dbaseRole && HealthyRootStands(inst))
             return;
         if ((active && destroyedRole) || (!active && healthyRole))

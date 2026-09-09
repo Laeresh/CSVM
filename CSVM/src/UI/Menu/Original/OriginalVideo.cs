@@ -370,11 +370,10 @@ public sealed partial class OriginalShell
     }
 
     // The page as drawn: the Preferences page's logo (this section authors none and the original
-    // keeps it standing), the page's background, its title, then each setting's title and
-    // description at their authored columns, the controls over them, and an open list as the
-    // overlay.
-    // ⚠ Add the logo and the plate to the backdrop, never to the pictures: a board draws its fills
-    // between the two layers, so a plate among the pictures buries every focus mark.
+    // keeps it standing), the background, the title, each setting's title and description at their
+    // authored columns, the controls over them, and an open list as the overlay.
+    // ⚠ Keep the logo and the plate in the backdrop, never among the pictures, for the reason
+    // ComposeAudio states: art there buries every focus mark the rows compose.
     private void ComposeVideo(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)

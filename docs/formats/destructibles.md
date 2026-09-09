@@ -162,12 +162,18 @@ authored to start destroyed in its `RESET_STATE` reaches the same sync; no shipp
 install uses that shape, so it is verified structurally rather than against authored data.
 Regression: the `start-state-swap-pool` suite (`CSVM/src/Testing/DestroyChoreographySuites.cs`).
 
-⚠ `dbase` ON is only half a death, and never a death while the pool's own healthy-role root is
-still showing. The two 8-inch cannons (`8igun01` in C3, `8igun99` in C4, the mansion gun) are the
-install's only defs whose `RESET_STATE` switches `dbase` ON beside `healthy` ACTIVE: there the
-node is the concrete plinth a live gun stands on. Every genuine death that touches `dbase`
-switches a healthy-role node OFF in the same block, so the death still reads through that switch.
-Regression: the `destructible-census` suite asserts both cannons boot standing.
+⚠ `dbase` ON is only half a death, and never a death in a `RESET_STATE`, which states what
+stands rather than what has fallen. A sweep of every def in all eight chapters' mission programs
+finds `dbase` switched ON in a `RESET_STATE` for three defs only: the two 8-inch cannons
+(`8igun01` in C3, `8igun99` in C4, the mansion gun), where the node is the concrete plinth a live
+gun stands on beside `healthy` ACTIVE, and C3's `susp_bridge`, whose baseline names no
+healthy-role node at all. Every other `dbase` activation in the install is in a sequence or a
+death slot, across 128 sequences. Three of those families carry no other destroyed-role switch in
+the block (`litemast*`, `sboxes*`, `tugandbarge0*`), so the `dbase` rule cannot be dropped, only
+kept out of the baseline. The one sequence-side activation that is not a death is the Barracuda's
+`sub_movement`, which raises `dbase` with the hull as the submarine surfaces; it carries no
+`HEALTH` and drives no pool, so the rule never reaches it. Regression: the `destructible-census`
+suite asserts both cannons boot standing, and `called-death-chain` asserts the bridge does.
 
 The cross-mission state log is the other way an object starts destroyed. The original opens a
 later mission of the chapter on the carried state itself, a destroyed pose (the `PERSIST_LOG`

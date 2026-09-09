@@ -186,11 +186,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         LabelActivate: ToColor(inks.LabelDepressed),
         Hint: ToColor(inks.Disabled));
 
-    /// <summary>The Options screen's palette: the Preferences page's authored description colour
-    /// for its text, its title colour for the heading, the paper plaque's label tail for the
-    /// chooser.
-    /// ⚠ Do not focus with the page's own title colour; the focused row takes the file-wide
-    /// <c>ACTIVE</c>. The reading is in <c>docs/org/menu-inventory.md</c>.</summary>
+    /// <summary>The Options screen's palette, taken from the Preferences page's authored inks.
+    /// ⚠ Do not focus with the page title's colour; the focused row takes the file-wide
+    /// <c>ACTIVE</c>. The title is duller than the description cream, so it dims what it
+    /// highlights (<c>docs/menu-presentations.md</c>, <c>docs/org/menu-inventory.md</c>).</summary>
     public static BoardPalette PaletteFor(OriginalPreferencesInks inks, OriginalInks labels) => new(
         Row: ToColor(inks.Text),
         Focus: ToColor(labels.Active),

@@ -71,14 +71,14 @@ public static class CampaignScrapbookResults
     /// mission-result array").</summary>
     public static string TabTitle(bool bestToDate) => bestToDate ? "Best to Date" : "Most Recent";
 
-    /// <summary>Whether the outcome line reads Mission Completed. ⚠ The original's
-    /// <c>0x0040a7e6</c> does not read the selected half's completed-objective mask for the Best
-    /// to Date tab: it reads <c>+0x24</c> inside the half instead, a slot the completion merge
-    /// (<c>FUN_00405ce0</c>) never writes, so it always reads 0. The Best to Date tab therefore
-    /// always shows Mission Failed in the shipped game, whatever the merged record's own mask
-    /// says; only Most Recent reads the real mask. Reproduced here rather than "fixed".</summary>
+    /// <summary>Whether the outcome line reads Mission Completed: the selected half's mask
+    /// carries the primary bit. The original's <c>0x0040a7e6</c> reads it from <c>+0x00</c> for
+    /// Most Recent and from <c>+0x24</c> for Best to Date. Both hold the bit under the same
+    /// condition, so <see cref="MissionRun.BestAttemptMask"/> is not read here, which keeps a
+    /// profile written before that field reading correctly.</summary>
     public static bool Won(MissionResult result, bool bestToDate) =>
-        !bestToDate && (result.Latest.CompletedMask & CampaignProgression.PrimaryObjectiveMask) != 0;
+        ((bestToDate ? result.Best : result.Latest).CompletedMask
+            & CampaignProgression.PrimaryObjectiveMask) != 0;
 
     /// <summary>The sum of both per-airframe kill arrays over their eleven slots, truncated to
     /// sixteen bits the way <c>0x0040a8df</c> does. There is no stored total field, so this always

@@ -284,8 +284,20 @@ each field's merge rule is what identifies it:
 | `+0x14` | `+0x68` | per-index maximum | twelve more single-byte counters on the same indexing: the same eleven airframes' ace kills |
 | `+0x20` | `+0x74` | keep the pair with the larger second/first ratio | a `ushort` pair, shots and hits |
 | `+0x28` | `+0x7c` | accumulate | money paid for this mission, the same amount added to funds |
-| `+0x2c` | `+0x80` | copied when the attempt completed more objectives | airframe id of the plane flown |
+| `+0x2c` | `+0x80` | copied when the attempt beats the best-attempt mask below | airframe id of the plane flown |
 | `+0x30` | `+0x84` | copied with the airframe id | name of the plane flown, 36 bytes |
+
+The merged half carries one more field with no attempt-half counterpart: `+0x24` inside the half,
+`+0x78` in the record, holding the **best attempt's own objective mask**. `FUN_00405ce0` writes it
+under the same condition it copies the airframe id and plane name under, and in the same block: the
+attempt's mask has more bits set than this slot's. The three move together because they describe one
+attempt, the one that completed the most objectives, which the OR at `+0x54` does not.
+
+⚠ **The scrapbook's outcome line reads `+0x24`, not the merged mask.** `0x0040a7e6` picks the half
+from the tab, then takes bit 0 from `+0x00` for Most Recent and from `+0x24` for Best to Date. The
+two agree on that bit: the merge runs only when the attempt set bit 0, and the first such attempt
+always beats a zeroed slot's bit count, so `+0x24` is non-zero exactly when `+0x54` is. They agree on
+nothing else, since one is a single attempt's mask and the other every winning attempt's.
 
 Eleven sources feed twelve slots through an identity lookup, so eleven bytes of each array are
 written and the twelfth is a never-taken fall-through slot. The two arrays are per-airframe kill

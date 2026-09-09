@@ -39,6 +39,12 @@ public sealed class MissionRun
 {
     /// <summary>Completed-objective bitmask; bit 0 is the primary objective.</summary>
     public int CompletedMask { get; set; }
+
+    /// <summary>The objective mask of the attempt this run's airframe and plane name came from:
+    /// the original's <c>+0x24</c> inside the merged half (<c>docs/formats/saved-games.md</c>,
+    /// "The mission-result array"). Written on the merged half only. A later attempt must beat
+    /// its bit count, not the OR-ed <see cref="CompletedMask"/>, to replace the plane.</summary>
+    public int BestAttemptMask { get; set; }
     public int TimeMs { get; set; }
     public int Shots { get; set; }
     public int Hits { get; set; }
@@ -536,6 +542,7 @@ public sealed class CampaignProfileStore
     {
         w.WriteStartObject(key);
         w.WriteNumber("completedMask", run.CompletedMask);
+        w.WriteNumber("bestAttemptMask", run.BestAttemptMask);
         w.WriteNumber("timeMs", run.TimeMs);
         w.WriteNumber("shots", run.Shots);
         w.WriteNumber("hits", run.Hits);
@@ -557,6 +564,7 @@ public sealed class CampaignProfileStore
         var run = new MissionRun
         {
             CompletedMask = ReadInt(r, "completedMask", 0),
+            BestAttemptMask = ReadInt(r, "bestAttemptMask", 0),
             TimeMs = ReadInt(r, "timeMs", 0),
             Shots = ReadInt(r, "shots", 0),
             Hits = ReadInt(r, "hits", 0),

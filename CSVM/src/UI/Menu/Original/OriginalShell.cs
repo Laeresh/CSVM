@@ -1481,9 +1481,9 @@ public sealed partial class OriginalShell
 
     // A slider as drawn: the slot, then the thumb at the value's own place on it. The thumb is one
     // frame with no focused or pressed state, so focus is the focus box and the wash under it.
-    // ⚠ Do not drop either half of that pair, and do not drop the unmeasured-art rectangles: the
-    // box is what reads, the wash is the region it encloses, and the rectangles are how the level
-    // still shows. docs/org/menu-inventory.md holds the readings.
+    // ⚠ Do not drop either half of that pair, nor the unmeasured-art rectangles. The box is the
+    // readable half, the wash is the region it encloses, and the rectangles are how the level
+    // still shows. docs/menu-presentations.md and docs/org/menu-inventory.md hold the readings.
     private void ComposeSlider(OriginalRow row, bool focused, List<BoardFill> fills, List<BoardPicture> pictures)
     {
         if (row.Slider is not { } slider)

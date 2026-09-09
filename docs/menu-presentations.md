@@ -269,6 +269,26 @@ it rebuilds nothing; while the choice differs from the running mode the descript
 running mode and says a restart is still owed, read off `GraphicsMode.Enhanced`. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
+**What an Options page focuses with, and what it draws focus as.** Two choices on these pages are
+not derivable from the layout, because the authored data offers a plausible wrong answer for each.
+
+The focused row takes the file-wide `ACTIVE`, not the page title's colour. The Preferences page
+authors a title colour that is a duller grey than the description cream every unfocused row is
+written in, so a row focused with the title colour reads as the disabled one, inverting the page.
+`ACTIVE` is what every other Original screen already focuses with, so taking it keeps this family
+from being the one that dims what it highlights. The rest of the palette does come from the page:
+the description colour for row text, the title colour for the heading, and the paper plaque's label
+tail for the chooser.
+
+A slider's focus is the focus box and the wash under it, because the thumb art carries one frame
+with no focused or pressed state. The box is the readable half. The wash lands over a widened press
+region around a three-pixel slot, so on its own it is a faint band over mostly background; it stays
+only because the box needs a region to enclose, and without it the outline reads as four loose
+lines. Where neither piece of art is measurable both stand as rectangles, the way a missing plaque
+leaves an outlined label, so the control still shows its level. The box is a focus mark rather than
+standing chrome, so exactly one row carries it: drawn on every row it becomes a permanent hard box
+around rectangles the layout authors at differing widths.
+
 ## Audio
 
 `IMenuAudio` (`CSVM/src/UI/Menu/IMenuAudio.cs`): `Cue(MenuCue)` plays one semantic cue by name,
