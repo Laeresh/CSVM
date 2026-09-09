@@ -411,6 +411,25 @@ matching the archive's ACTIVE state, rebased the same way, but drawn nowhere unt
 root directly, the way `piratefighter` is, finds the node the drop needs but also draws an idle
 Balmoral at the archive's build origin in every other mission that stages an aircraft.
 
+### What a staged prop is painted in
+
+A staged prop is a second model of an aeroplane the mission already flies, so it wears that
+aeroplane's livery rather than the archive's shipped skins. Two of the staged nodes carry aircraft
+skins at all, which is what a livery needs: `balmoral` (prefix `bal`) and `piratefighter` (`dev`).
+`chuteman`, `rope_ladder`, `pickup_cpilot`, `anim_bloodhawk` and `bloodhawk_gear` carry no decal
+placeholder to read a prefix off, so no scheme can reach them.
+
+Where each of the two takes its scheme from differs, and only one of them rests on authored data:
+
+| staged node | stands in for | what decides the livery |
+|---|---|---|
+| `balmoral` | CM15's `balmoral_1` roster block, Tex's bomber, the aeroplane `drop_paratroopers` is filmed around | the block's own spawned rig. Its def chain (`balmoral` → `basic_airplane`) authors **no** `paint_pattern`, and the block itself authors no livery slots (it ships 66 fields, short of slot 68), so the rig wears CSVM's default pattern rather than a value read out of a file |
+| `piratefighter` | no roster block: an intro prop the SI scripts fly | the `devastator` def, whose own `nodename` **is** `piratefighter` and which authors `paint_pattern player_fortune`; `wingman` derives from it and repeats the same pattern |
+
+Both therefore come out Fortune Hunters in the shipped campaign, but for different reasons, and a
+mission whose stand-in block flies for another militia would take that militia's skins instead. A
+staged node whose stand-in the mission never spawns keeps the shipped skins.
+
 ## `CALLBACK`: the dispatch chain
 
 | stage | where | what happens |

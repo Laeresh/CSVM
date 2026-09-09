@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — The campaign's own screens and props
 
 21. ☑ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
-22. ☐ `BL-690` A staged cutscene aeroplane wears its scheme
+22. ☑ `BL-690` A staged cutscene aeroplane wears its scheme
 
 ### Wave D — What another aeroplane sounds like
 
@@ -605,7 +605,31 @@ per-slot lines are `:441` and `:445`, not `:385,389`. Gap 2's floor of three was
 tree (`(Profile?.Planes.Count ?? 0) >= 3`); what had no term was the minus-one on the two grant
 missions. Gap 1 and gap 3 were exactly as stated.
 
-## C22 ☐ `BL-690` A staged cutscene aeroplane wears its scheme
+## C22 ☑ `BL-690` A staged cutscene aeroplane wears its scheme
+
+**Landed.** A staged prop is now built on a `SceneBuilder` of its own and painted in the livery of
+the aeroplane it stands in for, on one route that serves every staged node carrying aircraft skins.
+
+- `AircraftStage` gives a subtree its own builder, with the same `textureSubstitute` hook
+  `PlaneBuilder` carries, only when that subtree's materials name a skin prefix. Two of the seven
+  do: `balmoral` (`bal`) and `piratefighter` (`dev`). `chuteman`, the wing-walk figures and the two
+  hangar Bloodhawk props name none, so no substitution can reach them and the shared bare builder
+  still serves them.
+- `AircraftStage.Paint` installs a `PlanePainter` on one staged subtree and re-resolves its
+  materials, the way `PlaneBuilder.Repaint` does. `StandIns` is the table of where each prop's
+  livery comes from: a roster block for `balmoral` (`balmoral_1`), a vehicle def for
+  `piratefighter` (`devastator`).
+- `GameSession.PaintStagedAircraft` runs after the roster build, since a stand-in's scheme is the
+  one its own rig resolved and no rig exists earlier. A block that did not fly, or that flew in the
+  shipped skins, leaves its prop in the shipped skins; nothing draws a default pattern of its own
+  here and nothing touches the paint RNG.
+- CM15 now resolves `player_fortune` for both Balmoral models off the same `balmoral_1` rig
+  (`[world] aircraft stage paint: 'balmoral' player_fortune (5 skin(s)), 'piratefighter'
+  player_fortune (5 skin(s))`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** CM15's staged Balmoral wears the scheme of the aeroplane it stands in for, rather than the
 shipped skins, and the same route serves every staged prop that has a scheme.
@@ -636,6 +660,15 @@ Hunters" rests on the remake's default-pattern rule and on the report, not on a 
 no CM15 footage exists to settle what the original's drop Balmoral wears. The intro prop
 `piratefighter`, whose `devastator`/`wingman` defs do author `paint_pattern player_fortune`, is the
 better-founded half of the same item.
+
+**Corrections to the item as written.** The livery trap holds and is now measured: `balmoral_1`
+ships 66 fields, short of the livery slots at 68, and its def chain (`balmoral` → `basic_airplane`)
+authors no `paint_pattern`, so Fortune Hunters on the drop Balmoral is the default-pattern rule's
+answer through the block's own rig, which flies on the player's team. The prop half is firmer than
+the item states: `devastator`'s own `nodename` **is** `piratefighter`, so the def that authors
+`player_fortune` is the def of that exact model, and `wingman` derives from it. The Verify line
+conflates two cutscenes: the drop Balmoral is `drop_paratroopers`, a range-gated mid-mission
+cutscene, not the intro, and no CLI flag plays one, so it cannot be brought on screen headlessly.
 
 ---
 
