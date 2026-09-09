@@ -15,6 +15,9 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class PngImage
 {
+    /// <summary>The gamma all UI textures are normalized to before their pixels enter a raw RGBA8 path.</summary>
+    public const uint UiGamma = 45454;
+
     private static readonly byte[] Signature = { 137, 80, 78, 71, 13, 10, 26, 10 };
 
     /// <summary>Reads and decodes one file, or null when it is absent or outside the coverage
@@ -24,6 +27,23 @@ public static class PngImage
         try
         {
             return File.Exists(path) ? Decode(File.ReadAllBytes(path)) : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Reads a PNG's <c>gAMA</c> value, or null when it is absent or the file is not a PNG.</summary>
+    public static uint? TryReadGamma(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? ReadGamma(File.ReadAllBytes(path)) : null;
         }
         catch (IOException)
         {
@@ -52,6 +72,7 @@ public static class PngImage
         }
 
         int width = 0, height = 0, channels = 0;
+        uint gamma = 0;
         var idat = new MemoryStream();
         int at = Signature.Length;
         while (at + 8 <= png.Length)
@@ -75,6 +96,10 @@ public static class PngImage
             {
                 idat.Write(png, body, length);
             }
+            else if (type == "gAMA" && length == 4)
+            {
+                gamma = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(body, length));
+            }
             else if (type == "IEND")
             {
                 break;
@@ -83,7 +108,43 @@ public static class PngImage
             at = body + length + 4;
         }
 
-        return channels == 0 ? null : Unfilter(Inflate(idat), width, height, channels);
+        return channels == 0 ? null : Unfilter(Inflate(idat), width, height, channels, gamma);
+    }
+
+    private static uint? ReadGamma(byte[] png)
+    {
+        if (png.Length < Signature.Length + 12)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < Signature.Length; i++)
+        {
+            if (png[i] != Signature[i])
+            {
+                return null;
+            }
+        }
+
+        for (int at = Signature.Length; at + 12 <= png.Length;)
+        {
+            int length = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(at));
+            int body = at + 8;
+            if (length < 0 || body + length + 4 > png.Length)
+            {
+                return null;
+            }
+
+            string type = System.Text.Encoding.ASCII.GetString(png, at + 4, 4);
+            if (type == "gAMA" && length == 4)
+            {
+                return BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(body, length));
+            }
+
+            at = body + length + 4;
+        }
+
+        return null;
     }
 
     // IHDR: the five bytes after the dimensions are bit depth, colour type, compression, filter
@@ -127,7 +188,7 @@ public static class PngImage
 
     // Each row is one filter byte then its pixels; the five filters all predict a byte from the
     // one before it in the row (a), the one above (b) and the one above-left (c).
-    private static TgaImage? Unfilter(byte[]? raw, int width, int height, int channels)
+    private static TgaImage? Unfilter(byte[]? raw, int width, int height, int channels, uint gamma)
     {
         int stride = width * channels;
         if (raw == null || raw.Length < (long)height * (stride + 1))
@@ -177,7 +238,28 @@ public static class PngImage
             Array.Copy(row, previous, stride);
         }
 
+        NormalizeGamma(rgba, gamma);
         return TgaImage.FromRgba(width, height, rgba);
+    }
+
+    // Godot's Image.LoadFromFile drops PNG gAMA. Board textures instead carry the UI's 0.45454
+    // transfer curve, so normalize a file's RGB samples before creating an RGBA8 texture.
+    private static void NormalizeGamma(byte[] rgba, uint gamma)
+    {
+        if (gamma == 0 || gamma == UiGamma)
+        {
+            return;
+        }
+
+        double exponent = gamma / (double)UiGamma;
+        for (int p = 0; p < rgba.Length; p += 4)
+        {
+            for (int channel = 0; channel < 3; channel++)
+            {
+                rgba[p + channel] = (byte)Math.Min(255,
+                    (int)Math.Round(Math.Pow(rgba[p + channel] / 255d, exponent) * 255d));
+            }
+        }
     }
 
     private static int Paeth(int a, int b, int c)

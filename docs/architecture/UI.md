@@ -686,9 +686,9 @@ and the shared Free Flight, player-setup, Instant Action, hangar and campaign fe
 art measurer and the flight-devices answer injected. It owns the top level composed from
 `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
 Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
-screens are its ten partials, below. `Step` applies one seat's frame (pointer, typed text, cursor
-walk, accept and back), `Compose` is the screen as a `ComposedBoard`, and the row kinds every page
-draws are here, `OriginalSlider` and the slider row's builder and drawing among them. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+screens are its ten partials, below. `Step` applies one seat's frame, `Compose` is the screen as a
+`ComposedBoard`, and every page's row kinds live here, `OriginalSlider` among them.
+Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the

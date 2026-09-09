@@ -46,6 +46,18 @@ public class PngImageTests
     }
 
     [Fact]
+    public void ItNormalizesAnImagesGammaToTheUiGamma()
+    {
+        var image = PngImage.Decode(Png(3, 1, colourType: 2,
+            rows: new byte[] { 0, 64, 128, 255, 64, 128, 255, 64, 128, 255 }, gamma: 22727));
+
+        Assert.NotNull(image);
+        Assert.Equal(new byte[] { 128, 181, 255, 255 }, Pixel(image!, 0, 0));
+        Assert.Equal(new byte[] { 128, 181, 255, 255 }, Pixel(image, 1, 0));
+        Assert.Equal(new byte[] { 128, 181, 255, 255 }, Pixel(image, 2, 0));
+    }
+
+    [Fact]
     public void SomethingThatIsNotAPngDecodesAsNullRatherThanThrowing()
     {
         Assert.Null(PngImage.Decode(new byte[] { 1, 2, 3, 4 }));
@@ -103,7 +115,7 @@ public class PngImageTests
 
     // A minimal PNG: signature, IHDR, one IDAT holding the zlib-compressed filtered rows, IEND.
     // The chunk CRCs are written as zeros, which the decoder under test skips.
-    private static byte[] Png(int width, int height, byte colourType, byte[] rows)
+    private static byte[] Png(int width, int height, byte colourType, byte[] rows, int? gamma = null)
     {
         var png = new List<byte> { 137, 80, 78, 71, 13, 10, 26, 10 };
         var ihdr = new List<byte>();
@@ -111,6 +123,10 @@ public class PngImageTests
         ihdr.AddRange(BigEndian(height));
         ihdr.AddRange(new byte[] { 8, colourType, 0, 0, 0 });
         png.AddRange(Chunk("IHDR", ihdr.ToArray()));
+        if (gamma is { } value)
+        {
+            png.AddRange(Chunk("gAMA", BigEndian(value)));
+        }
         png.AddRange(Chunk("IDAT", Deflate(rows)));
         png.AddRange(Chunk("IEND", Array.Empty<byte>()));
         return png.ToArray();

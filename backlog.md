@@ -3189,6 +3189,24 @@ usual.
   empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
   term worth having (`docs/cli.md`, `git log --grep=BL-742`).
 
+- `BL-786` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The content
+  gate's PreToolUse hook never fires for `git -C <tree> commit`, which is the form `CLAUDE.md`
+  prescribes for naming the tree a commit writes to.** *Evidence:* the hook's trigger in
+  `.claude/settings.json` is `if ($c -notmatch 'git\s+commit') { exit 0 }`, which requires
+  `commit` to follow `git` directly, so any `git -C <path> commit`, `git --work-tree=… commit` or
+  `git -c <k>=<v> commit` skips `CheckCommitContent.ps1` silently. Measured: four comment-cap
+  violations and one over-cap doc entry rode into `main` through `050c4538` and the
+  `0768507e` merge and sat there across several commits; two agents on separate worktrees hit all
+  five, and running the scripts by hand confirmed every one. `FormatBeforeTests.ps1` has the
+  matching exposure on its own trigger. *Fix shape:* match the subcommand rather than the literal
+  adjacency, allowing git's own global options between `git` and `commit`; the target-tree
+  resolution downstream already reads `git -C`, so only the trigger is wrong. *⚠ Traps:* do not
+  widen the trigger to any command merely containing the word `commit`, which would fire on
+  `git log --grep=commit` and on every `git commit` quoted inside a message file's path. The gate
+  is only as good as its trigger, so this wants `CheckCommitContent.ps1 -SelfTest` extended with a
+  `git -C` case rather than a one-line regex change trusted on inspection.
+  *Cross-refs:* `CLAUDE.md`'s hook section, which documents `git -C` as the way to name a tree.
+
 ## Misc
 
 - `BL-077` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade) — spawning mid-air
