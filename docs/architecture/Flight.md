@@ -112,8 +112,8 @@ per matched `NODES` pattern node, ticked by `Session/TurretEmplacementRuntime`).
 the nearest hostile out of the vehicle list and then the mission structures in the decoded pass
 order, solves the lead through `AimAssist.TryIntercept`, slews the PARTS nodes inside the authored
 arcs, and runs the fire gates: activation, the attack window, the barrel-on-solution cone, a cached
-line of sight and the `FIRE_RATE` redraw. Aliveness, the team space and a platform's exclusion
-from its own fire state their rules at their members: [../org/targeting.md](../org/targeting.md).
+line of sight and the `FIRE_RATE` redraw. Aliveness, teams, and what a gun's own mount is to its
+sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`

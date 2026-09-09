@@ -8,11 +8,14 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>BL-714: whether a zeppelin ring holds fire on a target its own hull stands between,
+/// <summary>Whether a PARKED zeppelin ring holds fire on a target its own hull stands between,
 /// over C1/M04's real <c>piratezep</c>. For every emplacement, maps its own authored yaw/pitch
-/// envelope against a <c>WorldRayBlocked</c>-shaped cast (world layer, own mount excluded) to find
-/// a direction the hull itself should block, then parks a hostile plane there and reads whether
-/// the ring holds fire across several of the cached line-of-sight's 1-2 s windows.</summary>
+/// envelope against the shipped emplacement sight-line rule to find the first direction the hull
+/// blocks, then parks a hostile plane there and reads whether the ring holds fire across several
+/// of the cached line-of-sight's 1-2 s windows.
+/// ⚠ First-direction, so it cannot see a shot ACROSS the hull: that is
+/// <c>turret-moving-hull-blocks-own-fire</c>'s deepest-crossing sweep
+/// (docs/verification.md INSTR-48).</summary>
 internal static class TurretHullBlockSuites
 {
     private const float Dt = 1f / 60f;
@@ -22,10 +25,10 @@ internal static class TurretHullBlockSuites
     private const float ProbeSeconds = 8f;
 
     [Suite("turret-hull-blocks-own-fire",
-        "a zeppelin ring holds fire on a hostile plane its own hull stands between, over several " +
-        "of the cached line-of-sight's 1-2s windows (BL-714): every emplacement on C1/M04's real " +
-        "piratezep is gimbal-swept for a direction its own hull blocks (world layer, own mount " +
-        "excluded), then probed live at that direction")]
+        "a PARKED zeppelin ring holds fire on a hostile plane its own hull stands between, over " +
+        "several of the cached line-of-sight's 1-2s windows: every emplacement on C1/M04's real " +
+        "piratezep is gimbal-swept with the shipped sight-line rule for the first direction its " +
+        "own hull blocks, then probed live at that direction on a stepping clock")]
     internal static void TurretHullBlocksOwnFire(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -44,6 +47,7 @@ internal static class TurretHullBlockSuites
             ProjectilePool? pool = null;
             FlightController? plane = null;
             TurretEmplacementRuntime? emplacements = null;
+            var savedClock = Utils.GameClock.Current;
             try
             {
                 var live = new ProjectilePool(textures, null, null) { DamageSink = world.Runtime.DamageAt };
@@ -76,6 +80,11 @@ internal static class TurretHullBlockSuites
 
                 var space = ctx.Host.GetWorld3D().DirectSpaceState;
 
+                // ⚠ Keep the clock stepping. Without it GameClock.Current?.Time never moves, the
+                // 1-2 s line-of-sight cache never expires, and the 8 s below rides ONE cast per
+                // ring rather than the several it claims (docs/verification.md INSTR-49).
+                Utils.GameClock.Current = new Utils.GameClock { Mode = Utils.GameClock.RunMode.FixedStep };
+
                 var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
                 var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
                 var rig = new FlightController
@@ -95,8 +104,8 @@ internal static class TurretHullBlockSuites
                 plane = rig;
 
                 // Every ring's gimbal envelope, mapped before any SimStep moves a PitchNode off the
-                // rest pose BaseBasis reads: per (yaw, pitch), whether a WorldRayBlocked-shaped cast
-                // (world layer, own section excluded) meets the hull inside DETECTION_RANGE.
+                // rest pose BaseBasis reads: per (yaw, pitch), whether the shipped sight-line rule
+                // meets the hull inside DETECTION_RANGE.
                 var candidates = new List<(TurretController Ring, Vector3 Dir, float Fraction)>();
                 foreach (var ring in rings)
                 {
@@ -104,7 +113,6 @@ internal static class TurretHullBlockSuites
                     var anchor = ring.YawNode ?? ring.PitchNode;
                     var parentBasis = (anchor.GetParent() as Node3D)?.GlobalBasis ?? Basis.Identity;
                     var baseBasis = (parentBasis * anchor.Transform.Basis).Orthonormalized();
-                    var excluded = ring.PlatformColliderRids();
                     float yawMin = ring.Def.YawRestricted ? ring.Def.YawMinDeg!.Value : -180f;
                     float yawMax = ring.Def.YawRestricted ? ring.Def.YawMaxDeg!.Value : 180f;
                     float pitchMin = ring.Def.PitchRestricted ? ring.Def.PitchMinDeg!.Value : -80f;
@@ -118,8 +126,10 @@ internal static class TurretHullBlockSuites
                         {
                             var dir = baseBasis * TurretController.LocalDir(yaw, pitch);
                             var to = ringPos + dir * ring.Def.DetectionRange;
+                            var span = to - ringPos;
                             var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                                ringPos, to, CollisionLayers.World, excluded));
+                                ringPos + span * (TurretController.MountSkirtM / span.Length()),
+                                to, CollisionLayers.World));
                             if (hit.Count > 0)
                             {
                                 blockedDir = dir;
@@ -135,7 +145,7 @@ internal static class TurretHullBlockSuites
                     {
                         candidates.Add((ring, dirFound, blockedFraction));
                     }
-                    report.AppendLine($"{ring.Label} excluded={excluded.Count} sweep-hit={blockedName} at {blockedFraction:0.00} of DETECTION_RANGE");
+                    report.AppendLine($"{ring.Label} sweep-hit={blockedName} at {blockedFraction:0.00} of DETECTION_RANGE");
                 }
                 ctx.Check(candidates.Count > 0,
                     $"piratezep's own gimbal sweep finds at least one ring with an in-arc, hull-blocked direction (found {candidates.Count} of {rings.Count})");
@@ -159,20 +169,18 @@ internal static class TurretHullBlockSuites
                     var ringPos = ring.WorldPosition;
                     var anchorNode = (Node3D)(ring.YawNode ?? ring.PitchNode);
                     var ringSpace = anchorNode.GetWorld3D()?.DirectSpaceState;
-                    var probeExcluded = ring.PlatformColliderRids();
 
                     // WorldPosition sits meters off the raw PlaceHeld pose, so a fixed distance guess
                     // can clip a thin panel's edge; confirmed instead against increasing fractions
-                    // past the sweep's own hit point, with WorldRayBlocked's own exact call shape.
+                    // past the sweep's own hit point, with the shipped sight-line rule itself.
                     Vector3? confirmedPos = null;
                     for (float extra = 0.15f; extra <= 0.6f; extra += 0.1f)
                     {
                         var tryPos = ringPos + dir * (ring.Def.DetectionRange * Mathf.Min(0.97f, fraction + extra));
                         rig.PlaceHeld(tryPos, ringPos);
                         var checkTo = rig.WorldPosition + Vector3.Up * 0.2f;
-                        var checkHit = ringSpace?.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                            ring.WorldPosition, checkTo, CollisionLayers.World, probeExcluded));
-                        if (checkHit is { Count: > 0 })
+                        if (ringSpace != null && TurretController.WorldBlocksEmplacementLine(
+                            ringSpace, ring.WorldPosition, checkTo))
                         {
                             confirmedPos = tryPos;
                             break;
@@ -194,6 +202,7 @@ internal static class TurretHullBlockSuites
                     int frames = (int)(ProbeSeconds / Dt);
                     for (int i = 0; i < frames; i++)
                     {
+                        Utils.GameClock.Current?.BeginFrame(Dt);
                         ring.SimStep(Dt);
                         live.SimStep(Dt);
                         if (ring.Gate == TurretGate.Blocked)
@@ -224,6 +233,7 @@ internal static class TurretHullBlockSuites
             }
             finally
             {
+                Utils.GameClock.Current = savedClock;
                 plane?.Free();
                 emplacements?.Free();
                 pool?.Free();

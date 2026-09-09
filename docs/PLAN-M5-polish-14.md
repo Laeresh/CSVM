@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Wrecks, hulls and reach over the mission map
 
 11. ☑ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
-12. ☐ `BL-714` A moving hull blocks its own rings' fire
+12. ☑ `BL-714` A moving hull blocks its own rings' fire
 13. ☐ `BL-565` An awake DEDG widens its members' engagement volume
 
 ### Wave C — The campaign's own screens and props
@@ -347,7 +347,36 @@ but over a collision-less world where nothing comes to rest, so neither suite co
 check. Gasbags ride the hull and were confirmed resting in the same sitting, so on the pirate ship
 this is not the gasbag path.
 
-## B12 ☐ `BL-714` A moving hull blocks its own rings' fire
+## B12 ☑ `BL-714` A moving hull blocks its own rings' fire
+
+**Landed.** The hull's motion is not the mechanism. A ring's line-of-sight ray excluded every
+collider of its own *mounting section*, and on `piratezep` a section is a large piece of the hull:
+the belly rings `ctur1` to `ctur3` hang off `underneath`, whose 33 bodies include `g375`, the very
+skin standing between them and a plane on the far flank. Across the seventeen rings, **422 of 517**
+in-arc bearings that cross 120 m or more of the hull's own body read clear under that rule, and the
+belly rings fired 7 rounds in 6 s docked and 27 flying straight through 162 to 255 m of their own
+hull. The rule now reads the world layer with no exclusion at all, blind only to the first
+`TurretController.MountSkirtM` = 1.5 m off the muzzle, which is where a ring's own bodies stop (`g21`
+and `gun` answer at 0 to 1 m) and below where a hull skin stands over one (2 m). That leaves 172 of
+the 517 clear, mostly hull carrying no collider, and every ring keeps 54 % to 79 % of its in-arc
+field of fire. The mounting section is still what a round the gun fires owns, for the hit ray and
+the splash; only the sight line stopped reading it.
+
+The new `turret-moving-hull-blocks-own-fire` holds each ring's target at a station fixed in the
+HULL's frame, so the hull's motion is the only variable between a docked leg and a flying one, and
+probes successive rings at successive points of the net. Both legs are green, and both were red on
+the unchanged rule. Two instrument faults found beside it, both now rules in `docs/verification.md`:
+a first-obstruction sweep tests the geometry nearest the instrument rather than the shot in the
+report (INSTR-48), and a suite with no clock of its own freezes every time-expiring cache on its
+first verdict, which is why `turret-hull-blocks-own-fire`'s "8 s over several 1-2 s windows" was one
+cast per ring and why `turret-self-fire` read every bearing off bearing 0 (INSTR-49). Both suites now
+step a clock. The collider's own pose lag was measured directly off the physics server at **0.25 m**
+on the net (INSTR-50): real, but it only flips a verdict grazing a body 6 m off, and it is left
+unfixed.
+
+**Verified.** <pending orchestrator run>
+
+### Original approach (kept for reference)
 
 **Goal.** A zeppelin's rings hold fire on a bearing its own hull blocks while that hull is moving
 along its net, as they already do while it is parked.

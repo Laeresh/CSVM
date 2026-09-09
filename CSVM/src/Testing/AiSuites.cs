@@ -570,9 +570,9 @@ internal static class AiSuites
         "the --wake-turrets stand-in wakes it, then acquires and fires under its own " +
         "enemy-default team), take the Instant Action builder's subtree-scoped ACTIVATED " +
         "write on the objective zeppelin (14 rings armed and shooting back, nothing outside " +
-        "the hull touched, the same call with the flag cleared stowing them again), keep " +
-        "their own mounting SECTION out of their own sight line while the rest of the hull " +
-        "stays cover, skip same-team targets, join the aim-assist candidate list, and go permanently quiet " +
+        "the hull touched, the same call with the flag cleared stowing them again), own their " +
+        "mounting SECTION as the set their own rounds may not strike, " +
+        "skip same-team targets, join the aim-assist candidate list, and go permanently quiet " +
         "when the emplacement's own destructible dies")]
     internal static void WorldTurrets(TestContext ctx)
     {
@@ -741,23 +741,23 @@ internal static class AiSuites
                     ctx.Check(!aagun.Activated && mp2Rings.All(t => !t.Activated),
                         $"…and nothing outside that subtree woke with it");
 
-                    // A ring's own MOUNTING SECTION is out of its sight line, because the ray starts inside that
-                    // geometry; the rest of the hull stays in. ⚠ Do not assert that through ray outcomes here: every
-                    // unplaced vehicle loads at the map corner, so other zeppelins sit inside this one and block a line.
+                    // A ring's own MOUNTING SECTION is what a round it fires owns, so its flak
+                    // neither strikes nor splashes its mount. ⚠ Nothing to do with the sight line,
+                    // which reads geometry by distance off the muzzle (TurretController).
                     var ring = mp1Rings[0];
                     var section = TurretController.PlatformOf(ring.Site, world.Runtime.WorldRoot);
                     ctx.Check(section != null && section != mp1[0] && mp1[0].IsAncestorOf(section)
                               && section.IsAncestorOf(ring.Site!),
                         $"a ring's mounting section is a piece OF the hull ('{section?.Name}'), never the whole hull and never just its own rig");
-                    var excluded = ring.PlatformColliderRids();
+                    var owned = ring.PlatformColliderRids();
                     var ownMount = ring.Site!.FindChildren("*", "CollisionObject3D", true, false)
                         .OfType<CollisionObject3D>().ToList();
                     var hullBodies = mp1[0].FindChildren("*", "CollisionObject3D", true, false)
                         .OfType<CollisionObject3D>().ToList();
-                    ctx.Check(ownMount.Count > 0 && ownMount.All(b => excluded.Contains(b.GetRid())),
-                        $"the gun's own mount is out of its sight line: {ownMount.Count} body/bodies, the ones the ray starts inside");
-                    ctx.Check(excluded.Count > ownMount.Count && excluded.Count < hullBodies.Count,
-                        $"…with its own section but NOT the whole hull: {excluded.Count} excluded of the hull's {hullBodies.Count}");
+                    ctx.Check(ownMount.Count > 0 && ownMount.All(b => owned.Contains(b.GetRid())),
+                        $"a round it fires owns its own mount: {ownMount.Count} body/bodies, the ones the muzzle sits in");
+                    ctx.Check(owned.Count > ownMount.Count && owned.Count < hullBodies.Count,
+                        $"…and its own section but NOT the whole hull: {owned.Count} owned of the hull's {hullBodies.Count}");
 
                     // What the player actually feels: an armed hull shoots back, on its own rig so its rounds do not
                     // touch the aagun figures. ⚠ Show the hull first, exactly as the Instant Action builder does:
@@ -1007,6 +1007,7 @@ internal static class AiSuites
             ProjectilePool? pool = null;
             FlightController? target = null;
             Session.TurretEmplacementRuntime? emplacements = null;
+            var savedClock = Utils.GameClock.Current;
             try
             {
                 var hits = new List<(string Victim, float Damage, Node? Struck)>();
@@ -1050,11 +1051,16 @@ internal static class AiSuites
                 {
                     for (int i = 0; i < frames; i++)
                     {
+                        Utils.GameClock.Current?.BeginFrame(1f / 60f);
                         runtime.SimStep(1f / 60f);
                         live.SimStep(1f / 60f);
                     }
                 }
 
+                // ⚠ Keep the clock stepping. Without it GameClock.Current?.Time never moves, the
+                // gunner's 1-2 s line-of-sight cache never expires, and every bearing below rides
+                // the ONE verdict the first of them took (docs/verification.md INSTR-49).
+                Utils.GameClock.Current = new Utils.GameClock { Mode = Utils.GameClock.RunMode.FixedStep };
                 var space = ctx.Host.GetWorld3D().DirectSpaceState;
                 int selfHits = 0, neighbourHits = 0, totalShots = 0;
                 foreach (var gun in guns)
@@ -1129,6 +1135,7 @@ internal static class AiSuites
             }
             finally
             {
+                Utils.GameClock.Current = savedClock;
                 pool?.Free();
                 target?.Free();
                 emplacements?.Free();
