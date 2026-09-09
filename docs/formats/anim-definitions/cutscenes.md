@@ -720,6 +720,28 @@ body verbatim, then `FUN_00455800(0)` (chrome off) and sets the player's `+0x91d
 and only then calls `FUN_0046c370(StartAnims.zrd, NEW_GAME_START)`. The intro's authored
 notifications restate a state the engine has already entered.
 
+**That park belongs to the mission start, not to the intro, and not to a mission type.** The other
+`StartAnims` section is reached the same way: `FUN_00464680`, the mission-data load, runs the same
+four calls in the same order, and the savegame path `FUN_0046c140` calls it (through
+`FUN_00465370`) before dispatching `FUN_0046c370(StartAnims.zrd, LOAD_GAME_START)`. Those two are
+the only sites in the exe that dispatch a `StartAnims` section, and in each the park and the
+dispatch sit in straight-line code with no branch between them. Neither reads the mission type.
+The type is the mission object's `+0x700`, written by the constructor `FUN_004636a0` and by the
+savegame restore and read by `FUN_00463a50` to pick the mission directory (1 gives `m01` to `m05`,
+2 gives `mp1` to `mp5`, 3 gives `ia1`) and by the predicates `FUN_004639a0`, `FUN_004639c0` and
+`FUN_004639b0`. An Instant Action sortie sets it to 3 in `FUN_004174d0` and a campaign mission sets
+it to 1 in `FUN_00417090`, and both then reach `FUN_00416f40` and `FUN_004654e0`. So every mission
+of every type opens in the same state, with the AI parked, the chrome off and the player's `+0x91d`
+cutscene flag set, before its own start list runs, and an Instant Action bootstrap is parked exactly
+as a story intro's is. The roster is standing at that moment rather than empty: `FUN_004735b0`
+builds the mission's vehicles through `FUN_0047c210` earlier in the same function.
+
+⚠ **What lifts that park is not read.** The unpark `FUN_0041f2e0` is reached only from the
+mission-script host's code 914 and from the console command table, and a `StartAnims` definition
+carries no host, so no start list can raise it. Do not read the park as evidence that a mission
+whose start list has no movie holds its AI down into gameplay; read it as the state the start
+enters, with the release undecoded.
+
 For a remake this matters in one direction only: **the codes are still the authoritative
 description of the cutscene's shape** (what is hidden, when the simulation stops, when control
 returns), which is what a cutscene player has to reproduce. They are not a set of messages that
@@ -1014,13 +1036,25 @@ authored value.
 
 ### ⚠ The codes do not identify a cutscene
 
-`camera1-player_setup` authors **the same nine codes** (1, 10, 914, 20, 2, 11, 14, 913 plus the
-`RESET_STATE` ordering), and every Instant Action mission bootstraps it out of its own
-`startanims.zrd`; C1/M04 lists it under `LOAD_GAME_START`. What the original does with it is
-undecoded, and it is not one of the 13 story-mission intros the `generic_intro` /
-`mission_intro_animation` census counts. **A consumer that decides "this is a cutscene" from the
-authored codes therefore gives every mission in the install a letterbox and a suspended world.**
-Ask by definition name.
+`camera1-player_setup` authors **the same nine codes**, 1, 10 and 914 in `RESET_STATE` and 20, 2,
+11, 14 and 913 in `callback_sequence`, and it is not one of the 13 story-mission intros the
+`generic_intro` / `mission_intro_animation` census counts. **A consumer that decides "this is a
+cutscene" from the authored codes therefore gives every mission in the install a letterbox and a
+suspended world.** Ask by definition name.
+
+It is also not an Instant Action definition. It is the bootstrap of a mission that opens without a
+movie, and of a mission resumed from a save. All eight `ia1` missions list it under
+`NEW_GAME_START`, and so do the ten story missions with no opening film (C1/M02, C2/M01, C2/M02,
+C2/M03, C2/M05, C3/M04, C4/M03, C4/M05, C5/M02 and C5/M03); all 24 story missions list it under
+`LOAD_GAME_START`, which the `ia1` and `mp` missions leave null. The multiplayer counterpart is
+`multiplayer_setup`, which every `mp` mission bootstraps in its place.
+
+What it does is its two `OBJECT_ACTIVE_STATE` events, since its nine codes reach no host like every
+other start list definition's: `RESET_STATE` switches the `player` node **ACTIVE** and calls
+`speed_cue`, and `callback_sequence` switches `player` **INACTIVE**. `ACTIVATION` is `ON_CALL`,
+`AUTO_ADD_TO_WORLD` is `OFF` and `RESET_TIME` is `[0, -1]`. The AI park a reader might expect from
+its 913 is real but comes from the engine, which parks before any start list of any mission type
+runs ([above](#the-intro-defs-run-without-a-host)).
 
 Reading the eight as a pair of state transitions:
 
@@ -1101,9 +1135,10 @@ beat deactivating it; the smooth phase between them is
 
 - Geometry, material and node flags read from `extracted/<Cx>/gamez/{nodes,models,materials}.json`
   for all eight chapters; the `letterbox` subtree is identical in each.
-- Reader values read from `extracted/zrdr/{letterbox,generic_intro}.zrd.json`,
+- Reader values read from `extracted/zrdr/{letterbox,generic_intro,player_setup}.zrd.json`,
   `extracted/<Cx>/zrdr/landings.zrd.json`, `extracted/C1/M02/zrdr/pickups.zrd.json` and `extracted/C1/M04/zrdr/{intro,scenes,mis_anim,
-  startanims}.zrd.json`. Counts are over every `*.zrd.json` in the extraction.
+  startanims}.zrd.json`. Counts are over every `*.zrd.json` in the extraction; the section census
+  behind the bootstrap claims is over every `*/zrdr/startanims.zrd.json` in it, all 53.
 - Exe claims name the function they came from. The registration census is complete: `FUN_004ee160`
   is the only writer of the host pointer at `anim+0x74` on an animation instance, and its 13 call
   sites were each read.
@@ -1127,8 +1162,11 @@ beat deactivating it; the smooth phase between them is
   numbers; no exe site that computes it was traced, and no chapter's node count lands exactly on a
   multiple of 2500, so whether the rounding is strict or inclusive is undetermined. Resolve these
   names by name rather than by arithmetic on the pointer.
-- **Undecoded: what `camera1-player_setup` is for.** It carries the whole cutscene vocabulary and
-  every Instant Action mission starts it; nothing establishes what the original shows while it runs.
+- **`camera1-player_setup` is the bootstrap of a mission that opens without a movie**, and of a
+  mission resumed from a save, not an Instant Action definition. Its nine codes are unhosted no-ops
+  and its own work is the two `player` active-state events (above, "The codes do not identify a
+  cutscene"). **Undecoded: what the original shows while it runs**, and what lifts the engine's
+  mission-start AI park when no hosted definition raises 914.
 - **Undecoded: how the original draws a parentless active root.** `gwNodeSetActive`
   (`FUN_004cca30`) only flips the node's active bit; the traversal that reaches `letterbox` without
   it being anyone's child was not traced.

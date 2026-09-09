@@ -3002,18 +3002,6 @@ usual.
   the bay launch stamps it onto the aircraft like any roster spawn.
   *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`.
 
-- `BL-736` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Whether an Instant Action bootstrap parks the AI the way the imperative 913 parks it before a story intro.**
-  *Evidence:* `FUN_004654e0` runs code 913's body before any mission's `StartAnims` start, so
-  every story intro parks the AI whatever its own data authors, and `CutsceneController` now does
-  the same for an intro (`git log --grep=BL-719`). `camera1-player_setup` authors the same nine
-  codes outside a story mission (`docs/formats/anim-definitions/cutscenes.md`, "The codes do not
-  identify a cutscene"), and whether the Instant Action path runs the same imperative park before
-  it, or whether an Instant Action's AI is even alive at that moment, is not read. *Fix shape:*
-  read the Instant Action start path in the decompile for the same four calls, and if they are
-  there, extend the forced park to `player_setup`'s bootstrap with a suite over an Instant Action
-  wave. *⚠ Traps:* an Instant Action wave spawns after the bootstrap in CSVM, so a headless run
-  may show nothing to park; read the original first. *Cross-refs:* `BL-719`'s closing commit.
-
 - `BL-739` `[Bug]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **A mission that ends inside a
   docking film cuts back to the pilot's own view for the leaving hold, and the fade to black runs
   over that instead of over the film.** *Evidence:* reported at the controls on a successful
