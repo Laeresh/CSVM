@@ -57,6 +57,16 @@ sets), 35 sets named `id<N>` carry the combat-voice clips: `snd_id<N>_<TYPE>` �
 announcer id without defs) are [combat-voice.md](combat-voice.md); the reader is
 `CSVM/src/Mech3/CombatVoice.cs`.
 
+⚠ **An aircraft's weapon cues are in the positional class, not the cockpit one.** Every caliber's
+`LOOPED_SOUND_NAME` (`snd_30cal` through `snd_70cal`, plus `snd_turretgun` and `snd_chaingun`)
+carries `3D` + `LOOPED` + `RANGE`, and so does the `NO_AMMO_WARNING` cue `snd_emptyclip`. So a gun
+loop is a point in the world, which is what the remake plays it as: the pilot's own guns stay flat
+because that is what the pilot hears, and every other aircraft's come from its own position, culled
+at the definition's own audible distance. Those distances are short, 150 m for a 30-cal against 800 m
+for the dry cue, so traffic firing 300 m off is inaudible by the data's own numbers. ⚠ Nothing here
+authorises a pitch term: `RANGE` is a gain model, and `CAP-09` measured no Doppler on the original's
+world emitters at all.
+
 Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_sound`
 (see [vehicle.md](vehicle.md)) — e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
 `damaged_engine_sound` is an array of swap candidates for that same slot (`snd_damagedengine`

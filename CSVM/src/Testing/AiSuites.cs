@@ -2641,6 +2641,163 @@ internal static class AiSuites
         }
     }
 
+    // D31 (BL-079): another aircraft's guns are heard from where that aircraft is, as its engine
+    // already is. The count and the position are asserted together because either alone passes a
+    // broken build: one shared voice has the right count at the wrong place, and a voice pinned to
+    // the listener has the right place for every aircraft at once.
+    [Suite("ai-weapon-emitters",
+        "every firing AI aircraft carries its OWN positional weapon voice (D31): each of two "
+        + "spawned planes builds one gun-loop emitter and one dry-cue emitter on 3D players, both "
+        + "riding that aircraft's world position rather than the origin, the listener or each "
+        + "other, both taking the definition's own RANGE pair as their distance model rather than "
+        + "the reader default, neither rig carrying the own-ship FlightAudio, every emitter on the "
+        + "Effects bus at its source asset's own pitch with Doppler tracking off (CAP-09 measured "
+        + "none in the original), and the loop silencing past the cue's own authored audible "
+        + "distance and sounding again inside it, with a `sound` log transition either way")]
+    internal static void AiWeaponEmitters(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var textures = new TextureArchive(texturesPath);
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        ProjectilePool? pool = null;
+        FlightController? a = null, b = null;
+        try
+        {
+            var live = new ProjectilePool(textures, archive, soundDefs, soundGroups: soundGroups);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new AircraftAssemblyResources
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = weaponDefs,
+                Textures = textures,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            // The listener sits abeam both spawns, inside a gun loop's 150 m authored range but off
+            // either aircraft, so an emitter pinned to the listener would fail the position check;
+            // the two spawns are 90 m apart, so one shared voice could not pass for two either.
+            var ears = new List<Vector3> { new(45f, 500f, -30f) };
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs,
+                new FlightWorldBindings
+                {
+                    Projectiles = live,
+                    Gamez = planesGamez,
+                    Sounds = archive,
+                    SoundDefs = soundDefs,
+                    SoundGroups = soundGroups,
+                    HumanPositions = () => ears,
+                },
+                new HumanRosterBindings());
+
+            var posA = new Vector3(0f, 500f, 0f);
+            var posB = new Vector3(90f, 500f, 0f);
+            a = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, posA, posA + Vector3.Forward,
+                AiPilot.HoldingCourse(posA, posA + Vector3.Forward), Team: InstantActionRuntime.EnemyTeam));
+            b = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, posB, posB + Vector3.Forward,
+                AiPilot.HoldingCourse(posB, posB + Vector3.Forward), Team: InstantActionRuntime.EnemyTeam));
+
+            ctx.Check(a.Audio == null && b.Audio == null,
+                $"neither AI rig carries the own-ship FlightAudio, which is what left their guns silent");
+            ctx.Check(a.WeaponAudio != null && b.WeaponAudio != null,
+                $"both AI aircraft built a positional weapon voice (a={a.WeaponAudio != null} b={b.WeaponAudio != null})");
+            if (a.WeaponAudio is not { } weaponA || b.WeaponAudio is not { } weaponB)
+            {
+                return;
+            }
+
+            var culls = new List<string>();
+            string[] lines = System.Array.Empty<string>();
+            bool wasDebug = Utils.Log.ConsoleShows("sound", Utils.Log.Level.Debug);
+            try
+            {
+                Utils.Log.Configure("sound:debug");
+                using var sink = Utils.Log.PushConsoleSink(line =>
+                {
+                    if (line.Contains("ai weapons ") && (line.Contains(" culled ") || line.Contains(" audible ")))
+                        culls.Add(line);
+                });
+
+                // Hold both triggers down and step: the loop is started from ApplyFireOutcome, so
+                // nothing here reaches into the audio component to fake a burst.
+                foreach (var rig in new[] { a, b })
+                {
+                    rig.AutoFire = true;
+                    rig.InfiniteAmmo = true;
+                }
+                const float dt = 1f / 60f;
+                for (int i = 0; i < 30; i++)
+                {
+                    a.SimStep(dt);
+                    b.SimStep(dt);
+                }
+
+                CheckWeaponVoice(ctx, a, weaponA, weaponDefs, soundDefs);
+                CheckWeaponVoice(ctx, b, weaponB, weaponDefs, soundDefs);
+                var here = weaponA.Emitters();
+                var there = weaponB.Emitters();
+                ctx.Check(here.Count > 0 && there.Count > 0
+                    && here[0].Position.DistanceTo(there[0].Position) > 50f,
+                    $"the two aircraft's loops are {(here.Count > 0 && there.Count > 0 ? here[0].Position.DistanceTo(there[0].Position) : 0f):0} m apart, so this is one voice per plane");
+                ctx.Check(here.Count > 0 && there.Count > 0
+                    && here[0].Position.DistanceTo(ears[0]) > 20f
+                    && there[0].Position.DistanceTo(ears[0]) > 20f,
+                    $"…and neither sits on the listener, which is what a voice pinned to the ear would do");
+                ctx.Check(culls.Count(l => l.Contains(" audible ")) == 2,
+                    $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" audible "))})");
+
+                // The cull, driven from the listener rather than by moving the aeroplane: past the
+                // cue's own audible distance the loop stops, and inside it starts again.
+                var abeam = ears[0];
+                float cull = here.Count > 0 ? here[0].RangeMax : 0f;
+                ears[0] = abeam + new Vector3(cull * 4f, 0f, 0f);
+                a.SimStep(dt);
+                ctx.Check(!weaponA.LoopSounding,
+                    $"a burst {a.GlobalPosition.DistanceTo(ears[0]):0} m off, past the {cull:0} m the definition calls audible, is silent");
+                ears[0] = abeam;
+                a.SimStep(dt);
+                ctx.Check(weaponA.LoopSounding,
+                    $"…and sounds again from {a.GlobalPosition.DistanceTo(abeam):0} m, inside it");
+                ctx.Check(culls.Count(l => l.Contains(" culled ")) >= 1,
+                    $"the `sound` log carries the cull transition, the pairing INSTR-45 asks for (lines={culls.Count})");
+                // ⚠ Snapshot before noting: ctx.Note echoes each line to the console, which the sink
+                // above would match and append to the very list being walked.
+                lines = culls.ToArray();
+            }
+            finally
+            {
+                Utils.Log.Configure(wasDebug ? "sound:debug" : "sound:info");
+            }
+            foreach (string line in lines)
+            {
+                ctx.Note($"{line}");
+            }
+        }
+        finally
+        {
+            a?.Free();
+            b?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The most recent one-shot player under a WorldSounds node.
     internal static AudioStreamPlayer3D? LastOneShotPlayer(WorldSounds sounds)
     {
@@ -2788,6 +2945,50 @@ internal static class AiSuites
             ai?.Free();
             textures.Dispose();
         }
+    }
+
+    // One aircraft's weapon voice: the emitters it holds, where they are, and whose distance model
+    // they took. The position is compared against the CONTROLLER, not against the spawn point, since
+    // a stepped rig has flown since it spawned.
+    private static void CheckWeaponVoice(TestContext ctx, FlightController rig, AiWeaponAudio audio,
+        WeaponDefs weapons, IReadOnlyDictionary<string, SoundDef> defs)
+    {
+        var emitters = audio.Emitters();
+        string name = rig.Name.ToString();
+        ctx.Check(emitters.Count == 2,
+            $"{name} holds one gun loop and one dry cue (got {emitters.Count}: {string.Join(", ", emitters.Select(e => e.Name))})");
+        var at = rig.GlobalPosition;
+        foreach (var (cue, pos, rangeMax) in emitters)
+        {
+            ctx.Check(pos.DistanceTo(at) < 1f,
+                $"{name}'s {cue} plays from the aircraft at ({pos.X:0},{pos.Y:0},{pos.Z:0}), not the origin (plane at ({at.X:0},{at.Y:0},{at.Z:0}))");
+            ctx.Check(defs.TryGetValue(cue, out var def) && Mathf.IsEqualApprox(rangeMax, def!.RangeMax),
+                $"…and takes {cue}'s own RANGE audible distance {rangeMax:0} m");
+        }
+        // ⚠ The pitch guard is the D31 trap made a check, not a formality: CAP-09 measured no Doppler
+        // at all on the original's world emitters, and Godot's 3D player would take a shift from its
+        // own tracking mode without a line of ours asking for one.
+        int players = 0;
+        foreach (var child in audio.GetChildren())
+        {
+            if (child is not AudioStreamPlayer3D player)
+            {
+                continue;
+            }
+            players++;
+            ctx.Check(player.DopplerTracking == AudioStreamPlayer3D.DopplerTrackingEnum.Disabled,
+                $"{name}'s emitter {players} carries no Doppler tracking (got {player.DopplerTracking})");
+            ctx.Check(Mathf.IsEqualApprox(player.PitchScale, 1f),
+                $"…and plays its source asset's own pitch, {player.PitchScale:0.000}");
+            ctx.Check(player.Bus.ToString() == AudioBuses.Effects,
+                $"…on the {AudioBuses.Effects} bus, not Master (got {player.Bus})");
+        }
+        ctx.Check(players == emitters.Count, $"{name}'s emitter roll-call matches the live players ({players})");
+        ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}) — {string.Join(", ", emitters.Select(e => $"{e.Name} cull {e.RangeMax:0} m"))}");
+        ctx.Check(emitters.Any(e => e.Name == WeaponAudioCues.EmptyClipDef),
+            $"…including the dry-trigger cue {WeaponAudioCues.EmptyClipDef}");
+        ctx.Check(emitters.Any(e => weapons.All.Any(w => w.LoopedSoundName == e.Name)),
+            $"…and a loop this catalogue actually binds to a caliber");
     }
 
     private sealed class FixedFlightStarts : IFlightStarts

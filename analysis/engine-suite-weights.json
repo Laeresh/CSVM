@@ -64,6 +64,7 @@
     "voice-runtime": 0.693,
     "ai-voice": 0.488,
     "ai-engine-rearm": 1.1,
+    "ai-weapon-emitters": 1.5,
     "ai-net-follow": 0.510,
     "zeppelin-motion": 0.157,
     "zeppelin-pandora-dead-end": 2.046,

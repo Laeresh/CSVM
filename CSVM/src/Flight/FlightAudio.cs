@@ -78,8 +78,9 @@ public partial class FlightAudio : Node
         _stats = stats;
         _archive = archive;
         _defs = defs;
-        // The shared empty-clip cue (weapons.json NO_AMMO_WARNING = snd_emptyclip).
-        _emptyClip = MakeOneShot(archive, defs, "snd_emptyclip", out _emptyClipVol);
+        // The shared empty-clip cue (weapons.json NO_AMMO_WARNING), named by the selection both
+        // weapon paths read so this and AiWeaponAudio cannot come to play different definitions.
+        _emptyClip = MakeOneShot(archive, defs, WeaponAudioCues.EmptyClipDef, out _emptyClipVol);
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _engineStream = _engine?.Stream as AudioStreamWav;
         // Not built as a player of its own: this stream replaces the engine's on the one slot, so a
@@ -139,10 +140,12 @@ public partial class FlightAudio : Node
     }
 
     /// <summary>Start (or keep playing) the gun firing loop for the given <c>LOOPED_SOUND_NAME</c>.
-    /// Rebuilds the player only when the sound changes (a different caliber group starts firing).</summary>
+    /// Rebuilds the player only when the sound changes (a different caliber group starts firing).
+    /// The cue itself comes from <see cref="WeaponAudioCues"/>, which <see cref="AiWeaponAudio"/>
+    /// reads too; this path stays flat, since it is what the pilot hears.</summary>
     public void StartGunLoop(string? sndName)
     {
-        if (string.IsNullOrEmpty(sndName) || _archive == null || _defs == null)
+        if (string.IsNullOrEmpty(sndName))
         {
             return;
         }
@@ -150,14 +153,12 @@ public partial class FlightAudio : Node
         {
             _gunLoop?.Stop();
             _gunLoop = null;
-            // Forward-loop the firing sound while the trigger is held, regardless of the def's own
-            // LOOPED flag (it is a sustained-fire cue).
-            if (_defs.TryGetValue(sndName, out var def) && _archive.Find(def.WavName, looped: true) is { } stream)
+            if (WeaponAudioCues.GunLoop(_archive, _defs, sndName) is { } cue)
             {
-                _gunLoop = new AudioStreamPlayer { Stream = stream, Bus = AudioBuses.Effects };
+                _gunLoop = new AudioStreamPlayer { Stream = cue.Stream, Bus = AudioBuses.Effects };
                 AddChild(_gunLoop);
                 _gunLoopName = sndName;
-                _gunLoopVol = def.Volume;
+                _gunLoopVol = cue.Volume;
             }
         }
         if (_gunLoop is { Playing: false })

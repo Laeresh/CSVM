@@ -95,7 +95,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — What another aeroplane sounds like
 
-31. ☐ `BL-079` Another aircraft's weapons have a position
+31. ☑ `BL-079` Another aircraft's weapons have a position
 
 ### Wave E — The closing sortie
 
@@ -622,7 +622,31 @@ better-founded half of the same item.
 
 # Wave D — What another aeroplane sounds like
 
-## D31 ☐ `BL-079` Another aircraft's weapons have a position
+## D31 ☑ `BL-079` Another aircraft's weapons have a position
+
+**Landed.** An AI-flown aircraft now carries `AiWeaponAudio` beside its `AiEngineAudio`: the gun
+loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding the aeroplane, each culled at its own
+definition's authored audible distance. `WeaponAudioCues` is the selection seam both audio paths read,
+so the own-ship path and the world path cannot come to play different definitions. Baseline, a C1
+sortie flown past two `--ai-attack` Bloodhawks with `--volume=0`: both fired (`gun group 1 … firing
+on ai1_player_bhawk`, `ai2_player_bhawk`), both carried a positional engine voice
+(`cull=2000 m`, audible at 269 m and 275 m), and **zero** positional weapon emitters existed, no line
+of any kind. After, the same sortie: **two** aircraft each build **two** positional weapon emitters,
+`snd_30cal` culled at 150 m and `snd_emptyclip` at 800 m, logged as `ai weapons ai1_player_bhawk:
+loop=snd_30cal(ok) cull=150 m` plus a verdict per aircraft (`culled at 570 m`, `culled at 1024 m`).
+Flown into the traffic with `--hold`, one voice crosses into earshot and back out:
+`ai weapons ai2_player_bhawk audible at 150 m (cull 150 m)` then `culled at 715 m`. The gun-loop
+definitions settle the design rather than a judgement doing it: every caliber's `LOOPED_SOUND_NAME`
+and `snd_emptyclip` carry `3D` + `RANGE`, so they were always world sounds in the data. The
+`ai-weapon-emitters` suite is the red/green proof: it fails on `both AI aircraft built a positional
+weapon voice (a=False b=False)` with the voice unattached. No pitch term was written, and Doppler on
+Instant Action traffic stays unmeasured. What the suite does settle is that nothing introduces one by
+default: every emitter is asserted at `DopplerTracking` Disabled and `PitchScale` 1.000, so a changed
+engine default or a copied line cannot add a shift without failing.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Another aircraft's gun loop and weapon one-shots play from that aircraft's position with
 their own distance cull, as its engine already does.

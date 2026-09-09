@@ -700,8 +700,9 @@ one-shots a crash, a ground or water explosion, a survivable graze and an engine
 drawing the sound the chosen crash or touchdown definition itself authors rather than a fixed
 name. `OnWarningShot` draws a near-miss variant from the group player.json names; the rate limits
 live on `FlightController`, not here. The engine is one voice on one slot whose pitch, gain and
-definition all come from `EngineAudioCurves`, and `MixGain` is the only own-ship scale left, for
-splitscreen. `AiEngineAudio` is the positional twin an AI aircraft carries instead of this.
+definition all come from `EngineAudioCurves`, and the gun loop and dry cue from `WeaponAudioCues`;
+`MixGain` is the only own-ship scale left, for splitscreen. `AiEngineAudio` and `AiWeaponAudio` are
+the positional pair an AI aircraft carries instead of this.
 
 ## src/Flight/EngineAudioCurves.cs
 The engine-audio slot maths both audio paths read: whether an airframe counts as damaged, which
@@ -714,14 +715,33 @@ separately from a plain evaluation. `AdvanceDamagedRearm` is the pure re-arm tim
 `AiEngineAudio` reaches. Decode: [../formats/vehicle.md](../formats/vehicle.md).
 
 ## src/Flight/AiEngineAudio.cs
-The positional twin of `FlightAudio` that an AI-flown aircraft carries instead of it: the same two
-engine slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `EngineAudioCurves`'
-cull distance and starts them again inside it. `Attach` is the whole spawner-side surface. It
-deliberately carries no own-ship concept, since an AI kill is audible from its crash animation's
-own authored sound events. The `sound` log carries the whole observable: what each slot resolved
-to at build, then one line per cull transition and one per damaged-engine swap. The healthy to
-damaged edge waits out the shared re-arm timer on `PlaneStats.DamagedTimer`; the other direction
-is immediate.
+The positional twin of `FlightAudio` an AI-flown aircraft carries instead of it: the same two engine
+slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `EngineAudioCurves`' cull
+distance and starts them again inside it. `Attach` is the whole spawner-side surface. It carries no
+own-ship concept, since an AI kill is audible from its crash animation's own sound events. The
+`sound` log carries the whole observable: what each slot resolved to at build, then one line per cull
+transition and one per damaged-engine swap. The healthy to damaged edge waits out the shared re-arm
+timer on `PlaneStats.DamagedTimer`; the other is immediate. `AiWeaponAudio` is its weapon-side
+sibling, separate because this component's contract is the engine slots alone.
+
+## src/Flight/AiWeaponAudio.cs
+The weapon half of the positional pair an AI-flown aircraft carries instead of `FlightAudio`: the
+sustained-fire gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding this node, so
+another aircraft's guns are heard from where that aircraft is. `Attach` is the whole spawner-side
+surface and `WeaponAudioCues` is where the cues come from. The cull is each cue's own authored
+audible distance, and it rides `StartGunLoop`, which the fire path already calls every frame the
+loop is wanted; the listeners are the human pilots, the seam `ProjectilePool` also measures against.
+A definition without the `3D` flag gets no world player, since the data gives it no distance model.
+The `sound` log carries the observable: what resolved, then the loop's verdict and every transition.
+
+## src/Flight/WeaponAudioCues.cs
+The weapon-sound selection both audio paths read, `EngineAudioCurves`' counterpart for guns: a
+definition name to a `WeaponSoundCue` carrying the stream, the definition's unscaled `VOLUME`, its
+`RANGE` pair and its `3D` flag. The range travels with the cue so a positional player's `UnitSize`,
+`MaxDistance` and cull threshold cannot disagree with the definition it came from. It selects and
+nothing else, which is what keeps own-ship concepts out of the world path. A firing loop is decoded
+`LOOPED` whatever its definition says, and that flag is also the prewarm key
+(`WeaponDefs.SoundCues`). Definitions: [../formats/sounds.md](../formats/sounds.md).
 
 ## src/Flight/SpectatorCamera.cs
 The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look, wheel speed and

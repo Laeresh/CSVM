@@ -421,13 +421,13 @@ it in place first. `Drop` is the rollback path and `Discard` the membership clea
 
 ## src/Session/AiFlightAssembler.cs
 `FlightRoster`'s private AI assembly path: authored or fallback pilot skills and maneuvers, then the
-model, controller, livery, loadout and ordnance, damage visuals and optional crash runtime, then the
-finished node placed. The crash runtime is OPENED rather than built wherever the caller supplied a
-queue, so the launch frame carries no rig and the prop choreography plays from the queue's
-completion hook. It chains the roster's durability override ahead of the enemy scale and the spawn
-jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the
-readout's title, stamps the block's objective marker (flag and both label halves) onto the aeroplane
-it builds, and owns the one AI skills cache the voice adapter borrows. Read `FlightRoster.cs` next.
+model, controller, livery, loadout and ordnance, damage visuals, the positional engine and weapon
+voices that stand in for the own-ship `FlightAudio`, the optional crash runtime, then the node
+placed. That runtime is OPENED rather than built wherever the caller supplied a queue, so the launch
+frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the
+durability override ahead of the enemy scale and the spawn jitter, the engine's own order
+([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's title, stamps the
+block's objective marker, and owns the AI skills cache. Read `FlightRoster.cs` next.
 
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,
