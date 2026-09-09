@@ -351,6 +351,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   set; compare UV scale and vertex colour before assuming duality.** C5's flagged `cblock1/2/3`
   overlay differs from its unflagged `cblock4/5/6` base only in resolution and brightness, sharing
   an identical 256 m UV scale, y-plane and all-white vertex colours.
+- **WORLD-35** — **A suite world built with `collision: false` runs both `OBJECT_MOTION` contact
+  tiers structurally off, so it can play a whole breakup and say nothing about where any piece comes
+  to rest.** `gemini-gasbag-bays` drives `killgmzep` end to end over such a world while C2B/M04's
+  `gasbag1` and `gasbag4` were resting 13.1 m and 26.9 m under the sea.
 
 ## SHELL — Windows, PowerShell, and processes
 
@@ -550,6 +554,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   per lookup and cannot be closed under itself, while a zip-backed one holds a handle that can,
   which threw `ObjectDisposedException` out of `SessionSimulation.Step` for every sound the
   prewarm had missed.
+- **INSTR-47** — **A body's net world displacement is zero for as long as something is holding it in
+  place, so it cannot answer "is this body still travelling"; read the velocity of the frame it is
+  solved in.** Held on the sea by its own column read, C2B/M04's `gasbag4` measured 0.01 m of world
+  step a frame while the wreck carrying it fell 3.44 m a frame.
 
 ## SRC — sources and documents
 

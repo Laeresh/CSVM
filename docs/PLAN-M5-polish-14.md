@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Wrecks, hulls and reach over the mission map
 
-11. ☐ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
+11. ☑ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
 12. ☐ `BL-714` A moving hull blocks its own rings' fire
 13. ☐ `BL-565` An awake DEDG widens its members' engagement volume
 
@@ -267,7 +267,49 @@ has to change in it, before the row is drawn.>`
 
 # Wave B — Wrecks, hulls and reach over the mission map
 
-## B11 ☐ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
+## B11 ☑ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
+
+**Landed.** The cause is neither of the three candidates below. Every piece takes the column tier,
+every piece reaches the sea, and every origin is inside the column the hull queries. What decides
+where a piece stops is WHEN it lands: the wreck is still descending at about 104 m/s when the first
+sections reach the water, the solve is in the wreck's own frame, and the energy test that ends a
+body reads only the body's velocity IN that frame, which is a metre or two a second. So a section
+that touches the sea early is rested at the surface, frozen in the wreck's frame, and then carried
+down by every metre the wreck still has to fall. Measured on C2B/M04 before the fix, a section's
+final depth is exactly minus the wreck's height at the frame it landed: `gasbag4` landed with the
+hull at 26.96 m and rested at −26.94, `gasbag1` landed with it at 13.14 m and rested at −13.12,
+while `gasbag2`, `gasbag3` and `gasbag5` landed at or after the hull's own rest and stopped on the
+water. The same shape was already visible on `piratezep`, where `zeppelin-breakup` recorded rest
+heights of −0.2 to −5.6 m under a 10 m band that passed them all.
+
+The fix reads the ARRIVING speed rather than the local one: the body's own velocity taken into
+world, plus the velocity of the frame it is solved in, taken from that frame's own step. A section
+carried through the surface therefore fails the energy test's "the contact is survivable" arm no
+longer, is lifted back onto the water each frame it is carried under it, and comes to rest there
+once the wreck stops. A contact the body did not approach under its own power charges the 15 s
+watchdog instead of the contact cap, because how many frames a wreck takes to settle is a
+frame-rate figure and spending the cap on it would make the resting height depend on the frame
+rate. Nothing is clamped, no constant is tuned, and a body under a parent that stands still is
+untouched: the two readings agree exactly there.
+
+Measured after, on the new `gemini-breakup-rest` suite: all five Gemini sections rest at −0.2 to
++0.1 m against a sea at 0, each on `col_water`, and the wreck at 0.0. On `piratezep` all six move
+to −0.2 to 0.0 from −0.2 to −5.6. Both suites, `ground-contact` and `campaign-balloon-death` pass.
+
+`gemini-breakup-rest` is the resting check the Gemini hull owed: C2B/M04 with collision wired, the
+hull killed through its gasbag zones, and the wreck and all five sections asserted against the sea.
+It was red on the unfixed tree at 3 of 5 sections afloat and is green at 5 of 5.
+
+**Verified.** <pending orchestrator run>
+
+**Follow-up found and not fixed here.** Two of the five sections dispatch no `hit_waterN` splash,
+the two that land last, and this predates the fix. `MotionSet.OwesBounce` can only hold a def
+instance open once a bounce is already recorded, and a body records one at its landing, so a body
+still in the air holds nothing and `killgmzep` has already gone INVALID by the time it lands. The
+pirate hull hides it because all six of its sections land inside the wreck's own descent. Needs its
+own id.
+
+**Original approach (kept for reference).**
 
 **Goal.** A zeppelin killed over water comes to rest on the sea in every one of its pieces: the
 pirate zeppelin's front and back hull sections, and the Gemini's `gasbag1` and `gasbag5`, settle
