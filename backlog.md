@@ -1313,6 +1313,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-796` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM01]` **The two hangar hand-over props cannot take the player's livery: their subtrees carry no decal placeholder.**
+  *Evidence:* `anim_bloodhawk`, the Bloodhawk standing on the hangar floor in CM01's drop, and
+  `bloodhawk_gear`, the undercarriage the flown aeroplane wears on the lift, are both the player's own
+  aeroplane and should wear the player's skins. `BL-690` built the route that dresses a staged prop in
+  its aeroplane's livery, and it cannot reach these two: `PlanePainter.PrefixFor` reads the skin prefix
+  off a subtree's own materials, and measured across the staged set only `balmoral` (`bal`) and
+  `piratefighter` (`dev`) carry one. *Fix shape:* resolve the prefix some other way for these two, a
+  node-name to prefix mapping or a read off the airframe the prop stands for, then hand them through
+  the same `AircraftStage.Paint`. *⚠ Traps:* judge it at the controls first. The gear rides a painted
+  aeroplane and the wrong-livery gear may not read on screen at all, in which case the mapping is
+  not worth carrying. Do not invent a prefix for a subtree that has none: check what its materials
+  actually name before mapping anything. *Cross-refs:* `BL-690`'s closing commit,
+  `docs/formats/anim-definitions/cutscenes.md` "What a staged prop is painted in".
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
   during its scripted entrance.** *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
   sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
