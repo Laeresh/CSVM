@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
 12. ☑ `BL-714` A moving hull blocks its own rings' fire
-13. ☐ `BL-565` An awake DEDG widens its members' engagement volume
+13. ☑ `BL-565` An awake DEDG widens its members' engagement volume
 
 ### Wave C — The campaign's own screens and props
 
@@ -454,7 +454,43 @@ shoot through their own hull. A probe that samples one point of the authored leg
 self-obstruction there and so tested nothing; sample across the leg. `BL-735`, the multiplayer
 hulls' belly rings over no collider at all, is a separate change and stays separate.
 
-## B13 ☐ `BL-565` An awake DEDG widens its members' engagement volume
+## B13 ☑ `BL-565` An awake DEDG widens its members' engagement volume
+
+**Landed.** An awake `DEDG` now raises every live member of the group it watches to a 9,000 m
+activation radius on the tick it is tested, and never narrows it again.
+
+- The decode was re-read before implementing and says what the plan said. `FUN_004658d0` walks the
+  vehicle list for one group and calls `FUN_00465850` per entry, which, for a member whose dead byte
+  `+0x91d` is clear and whose group `+0x388` matches, raises `+0x318` to 8.1e7 (9,000 m squared),
+  `+0x31c` to −9,000 and `+0x320` to +9,000, each only when the field is narrower, and counts it.
+  The count and the widening are therefore one pass, and `FUN_00465910` is the only caller: the
+  widening exists nowhere but a `DEDG` test, sits behind the awake-and-not-complete gate at
+  `FUN_0046a490`, and returns before the walk when the group is not positive or the max is negative.
+- `IObjectiveWorld.WidenGroupEngagement(group)` is the new seam, called from `DedgMet` on the same
+  tick as the count for a positive group. `CampaignDirector.World` implements it over the same
+  liveness test `GroupLiveCount` uses, and `CampaignRosterPlan.WidenForDedg` is the single write,
+  `Max(ActivationRange, 9000)`. The altitude bands still have no consumer, as in `ApplyVolumes`.
+- Measured over C3/M05, whose OBJECTIVE5 (`DEDG [1, 0]`) and OBJECTIVE22 (`DEDG [5, 0]`) are its
+  two clauses awake from the first tick. Baseline: all 14 spawned members sit at the 2,000 m
+  `min_ai_active_dist` floor and stay there over a driven tick. After: the five live members of
+  groups 1 and 5 read 9,000 m, a member pre-set to 12,000 m keeps 12,000, and the eight others
+  (group 0, plus the deactivated group-2/4 blocks behind dormant clauses) keep 2,000.
+- The player-visible consequence, measured on the widened machine: with the target 3,000 m off and
+  the aircraft 1,700 m from its pursuit anchor (return range 1,200 m), a floored member reads
+  "beyond return range" and drops back to patrol while the widened one stays in pursuit. ⚠ The
+  pursue ENTRY gate is `min(activation, attack)` and no `DEDG` widens the 2,000 m attack radius, so
+  this keeps an engaged survivor engaged rather than making a patrolling one set off from 8 km.
+- ⚠ One divergence this exposes, left open on purpose and owed a `BL-` of its own: the only reader of
+  the vehicle's activation triple in the executable is the AI flight state update `FUN_004897c0`,
+  while the target-ranking cylinder `FUN_00421ad0` reads `+0x328`/`+0x32c`/`+0x330`, which the net and
+  roster writes assign to the ATTACK volume. CSVM gates acquisition on `ActivationRange` instead
+  (`FlightController.SelectRankedTarget`, `AiTargetRanking.Score`), so a widened member here also
+  acquires out to 9,000 m where the original would still gate acquisition at its attack cylinder.
+  Both volumes ship at 2,000 m, which is why the mapping never showed before.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Each tick an awake DEDG objective raises every live member of the watched group to a
 9,000 m activation radius, so a watched group never disengages by distance and comes to the player
