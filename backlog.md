@@ -2854,6 +2854,24 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `PLAN-M5-campaign` Decision 3.
 
+- `BL-789` `[Research]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]` **Which vehicle volume gates AI target admission: CSVM reads the activation radius where the original reads the attack cylinder.**
+  *Evidence:* `FlightController.cs:3344` hands `AiModeMachine.ActivationRange` to
+  `AiTargetRanking.Score`, which refuses a candidate beyond it (`AiTargetRanking.cs:156`), while the
+  original admits candidates on the cylinder `FUN_00421ad0` reads at
+  `+0x328`/`+0x32c`/`+0x330`, the fields the roster map assigns to the ATTACK volume; the activation
+  triple `+0x318` to `+0x320` is read by the AI state update `FUN_004897c0`. Both volumes ship at
+  2,000 m, so the mapping never showed until `BL-565` landed the `DEDG` widening: a watched member
+  now admits candidates out to 9,000 m where the original would still admit only inside its attack
+  cylinder. Engaging is unchanged, `AiModeMachine.cs:321` gating that on
+  `min(ActivationRange, AttackRange)`, so what is at stake is selection and pursuit range, not
+  firing range. *Fix shape:* settle which volume each consumer should read, then align the consumer;
+  the answer decides whether `BL-565`'s widening should reach acquisition at all.
+  *⚠ Traps:* the negative half of this decode is the weak half. `FUN_00421ad0` was read as the only
+  admission path and `FUN_004897c0` as the only reader of the activation triple; re-read both writers
+  and map their offsets before acting, since a second reader would change the answer.
+  `docs/org/aiPilot.md` has been corrected on the field identity, but no code moved on it.
+  *Cross-refs:* `BL-565`'s closing commit, which found this and left it; `BL-523`, the mode cycle
+  this range feeds.
 - `BL-523` `[Bug]` `[L]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
   and CM09's enemies fly up to 80 km away.** *Evidence:* three
@@ -3090,6 +3108,20 @@ usual.
 
 ## Tooling, platform & docs
 
+- `BL-790` `[Bug]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **The menu-layout census pin fails on a refreshed extraction: `artMissing` expects 2 where the install now reports 0.**
+  *Evidence:* `MenuLayoutDecoderTests.TheInstallsOwnLayoutDecodesToItsDocumentedCensus` asserts
+  `counts["artMissing"] == 2` and reads 0, so the complete `.\RunTests.ps1` exits 1 on every tree
+  while every other one of its 3,500-odd units passes. The extraction agrees with the code, not with
+  the pin: `extracted/rof/menu_layout.json` records `artMissing: 0` with an empty `missingArt` list
+  and all 124 art references resolving. The decoder is untouched, and three independent agents in one
+  session reported it against three separate worktrees. *Fix shape:* re-derive the census against the
+  current extraction and record what changed, or make the art-missing count tolerant of an install
+  whose patch overlay supplies the two files. *⚠ Traps:* do not re-pin the number blind. The two
+  references becoming present is itself the fact to explain, most likely through the `_crimptch`
+  overlay the extraction now applies, and a census that silently tracks whatever the local install
+  produces stops being a census. It is a red landing gate for everyone until it is settled, which is
+  the argument for settling it soon rather than the argument for changing the number.
+  *Cross-refs:* main's `ad2dba00`, which records the same failure in its own message.
 - `BL-675` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **A `--campaign=<profile>:<n>` run launched through `RunProbe.ps1` from an
   agent worktree reported no such profile, though the profile exists.** *Evidence:* a probe run
   answered `--campaign=Gab: no such profile, flying without a mission` from
