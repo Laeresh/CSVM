@@ -316,11 +316,11 @@ not take a screen down. `FromRgba` wraps an already-decoded buffer as one of the
 `PngImage.cs` reaches the same art path. Read `ArtImage.cs` next.
 
 ## src/Mech3/PngImage.cs
-The engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` so both decoders
-feed one seam: 8 bits per channel, non-interlaced, truecolour with (colour type 6) or without
-(type 2) an alpha channel, all five row filters. That is every file the extraction ships; a
-palette, a 16-bit channel, an Adam7 file or a malformed one decodes as null rather than throwing.
-Read `ArtImage.cs` next.
+The engine-free PNG decoder behind menu art, returning a `TgaImage` so both decoders feed one seam:
+8 bits per channel, non-interlaced, truecolour with (colour type 6) or without (type 2) alpha, all
+five row filters, and the `gAMA` transfer curve normalized to the UI baseline. `TryReadGamma` is
+the metadata half the runtime board renderer needs while retaining Godot's native loader. A palette,
+16-bit channel, Adam7 file or malformed input decodes as null rather than throwing. Read `ArtImage.cs` next.
 
 ## src/Mech3/ArtImage.cs
 The one door menu art is loaded through: a path in, a decoded `TgaImage` or null out, with the

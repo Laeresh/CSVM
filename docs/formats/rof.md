@@ -109,6 +109,15 @@ per-type field orders and the decoded `menu_layout.json` extraction emits are in
 
 ## Bitmap textures
 
+### PNG colour transfer
+
+The screen-chrome PNGs are 8-bit RGBA but do **not** share one file gamma. For example,
+`MM_B_CAMPAIGN.PNG` declares `gAMA = 0.45454`, while `MM_B_INSTANTACTION.PNG` declares
+`0.22727`. Consumers that create a raw RGBA8 texture must normalize RGB to the UI's 0.45454
+curve first; the latter requires a square-root conversion. Alpha is not colour data and stays
+verbatim. `ComposedBoardView` applies this normalization after Godot decodes the file and before it
+creates the texture; `PngImage` applies the same rule on its engine-free path.
+
 The 184 `.BM` files are the per-pattern aircraft skins, in `ASSETS/GRAPHICS/<PATTERN>/`.
 Fourteen pattern folders exist — the twelve `paint_pattern` names from [paint.md](paint.md)
 plus `BROADWAY` and `ITSTAXI`. Filenames are the aircraft skin names (`BLO_WING.BM`,
