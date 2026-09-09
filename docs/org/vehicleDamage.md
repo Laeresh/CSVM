@@ -46,7 +46,7 @@ consumed (`init_health`, the four zone pairs, `armor`).
 | `FUN_004b3800` | The def-level `injure_anims` driver, keyed on the **whole-vehicle** health fraction |
 | `FUN_004b3d70` | The per-part `injure_anims` driver, keyed on **that part's** fraction |
 | `FUN_004b1790` | The low-health test that arms the damage-state call (`FUN_004b1690`) |
-| `FUN_004b1690` | The disabled-systems setter at `+0x2dc`: sets or clears one bit, and re-points the engine slot on the mask's edges |
+| `FUN_004b1690` | The disabled-systems setter at `+0x2dc`: sets or clears one bit, re-points the engine sound slot when the whole mask changes state, and swaps the propeller anims on bit `0x2`'s own edges |
 | `FUN_00478a00` | The vehicle-def constructor, which is where every def field with no parser token gets its value |
 | `FUN_00477b70` | The `kind_of` copy constructor: a child def starts as a field-by-field copy of its parent |
 | `FUN_004b82d0` | Death: plays the def's destroy anim, and everything that follows from being dead |
@@ -97,9 +97,11 @@ A part record (`0x58` bytes, `FUN_00476250` fills it, `FUN_0041c470` prints it):
 A vehicle carries a **disabled-systems mask** at `+0x2dc`, a dword of independent bits, and a timer
 beside it at `+0x2e0`. `FUN_004b1690` is its only setter: it ORs a bit in, ANDs it out, or (for the
 value 4) writes the mask outright, and it is the mask's *edges* that do work. On bit `0x2` it runs
-the engine stop `FUN_004b15c0` or the restart `FUN_004b1630`; on the whole mask leaving zero it
-stops the engine sound handle and re-runs the audio routine, and on the mask returning to zero it
-puts `engine_sound` back on the slot and re-runs it. Twelve instructions in the image reference
+`FUN_004b15c0` or `FUN_004b1630`, which swap the vehicle's `spin_props_anim` for its
+`stop_props_anim` and back ([ordnanceTypes.md](ordnanceTypes.md#what-the-masks-bit-2-edges-run));
+on the whole mask leaving zero it stops the engine sound handle and re-runs the audio routine, and on
+the mask returning to zero it puts `engine_sound` back on the slot and re-runs it. Twelve
+instructions in the image reference
 `+0x2dc`, all in the flight-model and damage ranges.
 
 | Bit | Meaning | Raised by |

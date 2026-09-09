@@ -1061,8 +1061,8 @@ The engine-dead duration is not the authored pair read straight off. `FUN_004b9b
 
 and passes it to `FUN_004b1690`, which sets bit `2` of the victim's disabled-systems mask at `+0x2dc`
 and raises the timer at `+0x2e0` to that duration if it is longer than what is already running. The
-mask's rising edge calls `FUN_004b15c0` and its falling edge `FUN_004b1630`, the engine stop and
-restart.
+mask's rising edge calls `FUN_004b15c0` and its falling edge `FUN_004b1630`, which swap the
+propeller presentation ("What the mask's bit-2 edges run", below).
 
 ⚠ **The units here do not match, and that is what the code does.** The numerator is a squared
 distance from `FUN_00538880`, while `TANGLER`'s `RADIUS` is stored raw by `FUN_004ba6f0` (unlike
@@ -1102,6 +1102,58 @@ creates the cloud, not who it catches). The direct-hit callback `FUN_004b9770` r
 branch on the struck aircraft with its origin distance, so a direct hit chokes on the impact frame
 and the cloud carries on from there. CSVM: `ProjectilePool.SpawnTanglerCloud`/`StepTanglerClouds`,
 the timer through `FlightController.TryChokeEngine`, `CollectTanglerClouds` for a suite.
+
+### What the mask's bit-2 edges run
+
+`FUN_004b15c0` and `FUN_004b1630` are propeller functions, not engine ones. Each vehicle holds two
+anim-instance slots, `+0x6c8` for the spinning prop and `+0x6cc` for the stopped one, and the pair
+swaps one for the other on the `+0x38c` node handle the def's `start_anims` are also started on.
+
+`FUN_004b15c0` releases whatever `+0x6c8` holds (`FUN_004ebbb0`), zeroes the slot, and, if `+0x6cc`
+is empty and the airframe def carries `stop_props_anim` at `def+0x190`, starts that definition
+(`FUN_004edda0`) into `+0x6cc` and installs `LAB_00480820` as its completion callback
+(`FUN_004ee160`). That callback is four instructions: on event code 0, the code the anim runtime's
+own release emits, it writes zero back into the vehicle's `+0x6cc`, so a finished wind-down leaves no
+stale handle behind. `FUN_004b1630` is the mirror without a callback: release `+0x6cc`, and if
+`+0x6c8` is empty and `def+0x18c` (`spin_props_anim`) is set, start that into `+0x6c8`. Both keys are
+authored, parsed by `FUN_00479240` at `0x0047b13c` and `0x0047b163` from the strings at `0x006280dc`
+and `0x006280ec` and resolved by name through `FUN_00523820`. Twenty-three defs author the pair: 21
+name `spinprops`, the two autogyro chains name `agyro_rotors`, and all 23 name `stopprops`.
+
+**A choke therefore sounds and looks like more than a definition swap.** `stopprops`
+(`plane_props.zrd.json`) is a one-shot: a `SOUND` event on `snd_propstop`, `staticprop1` through
+`staticprop3` activated and faded from 0 to 1 opacity over 2.0 s, and `prop1`/`prop1b` through
+`prop3`/`prop3b` faded from 1 to 0 over 1.5 s and then deactivated. `snd_propstop` is
+`propstop.wav`, `PURGEABLE` (not looped), `3D`, range 200 to 420, so
+it plays positionally at the choked aircraft whoever is flying it. The blur discs cross-fade to a
+still blade over a second and a half while the engine loop is already carrying `snd_damagedengine` at
+its drawn pitch ([formats/vehicle.md](../formats/vehicle.md), "What makes an airframe damaged").
+
+**The restart is silent and instant.** `spinprops` carries no `SOUND` event and no opacity ramp: it
+activates `propN`/`propNb`, deactivates `staticpropN` and `nitropropN`, and starts an endless
+`XYZ_ROTATION` of `0,0,-220` on each `propN` and `0,0,60` on each `propNb`. The install's
+`startprops`, which does carry `snd_propstart` and a three-stage spin-up ramp, is named by no def and
+appears as no string in the image, so nothing in the retail game plays it.
+
+**Neither function touches thrust, particles or the engine loop.** The thrust cut is the flight
+model's own read of the mask bit (`0x0048fdd0`, [flightModel.md](flightModel.md)), the loop swap is
+`FUN_004b18a0`'s, and the nitro refusal is `FUN_004b2110`'s. The name "engine stop" describes when
+these two run, not what they do.
+
+**They run on death and at spawn too.** `FUN_004b15c0` has a second caller, the death routine
+`FUN_004b82d0`, which calls it unconditionally after setting the dead byte at `+0x91d` and before
+playing the def's destroy anim, so a killed aircraft's props wind down through the same `stopprops`.
+`FUN_004b1630`'s second caller is the spawn/reset `FUN_0047b790`, which starts the def's `start_anims`
+list from `def+0x170` and then calls it, so a fresh airframe's discs come on through `spinprops`. The
+teardown `FUN_004b1580` releases both slots without playing anything, and the anim teardown
+`FUN_0047b9c0` reaches it.
+
+**CSVM has the machinery and does not run it on the choke.** `FlightController` already plays
+`stopprops` through `CrashRuntime` at Destroy and at Crash and `startprops` at spawn, the same call
+shape the nitro edges use, and `PlaneBuilder` keeps `staticpropN` in the flight build for it. What is
+missing is the pair on the choke's own edges, and the restart side has a conflict to settle first:
+`PropAnimator` turns the discs procedurally at the same `-220`/`60` rates, so playing `spinprops`
+would put a second writer on the same node transforms. `BL-797` carries the port.
 
 ## Two answers this routine gives to other items
 
@@ -1238,8 +1290,13 @@ engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
 - `FUN_00538ca0` (bearing), `FUN_0053e56d` (the intercept solve), `FUN_00538d70` (slerp) and
   `FUN_004c7630` (the terrain probe) were not opened; their roles are inferred from arguments and
   from the arithmetic around the call.
-- `FUN_0042c070`, `FUN_0048f5e0`, `FUN_004b8ce0`, `FUN_004b15c0` and `FUN_004b1630` were not opened;
-  their roles above are inferred from their arguments and call sites, and are labelled as such.
+- `FUN_0042c070`, `FUN_0048f5e0` and `FUN_004b8ce0` were not opened; their roles above are inferred
+  from their arguments and call sites, and are labelled as such. `FUN_004b15c0` and `FUN_004b1630`
+  **were** opened, along with the callback `LAB_00480820`, the release `FUN_004ebbb0`, the callback
+  installer `FUN_004ee160`, the death routine `FUN_004b82d0`, the spawn/reset `FUN_0047b790` and the
+  slot teardown `FUN_004b1580`; their two def keys were traced from the parse sites at `0x0047b13c`
+  and `0x0047b163` to the authored `spinprops`/`stopprops`/`agyro_rotors` names in the shipped data,
+  so "What the mask's bit-2 edges run" is decoded rather than inferred from the names.
   `FUN_005aef40` **was** opened for the speed-cap seeding, and `FUN_005389a0` with it: it is
   `out = a + b * scale`, which is what makes the motion step's velocity rebuild
   `inherited + heading * speed`.

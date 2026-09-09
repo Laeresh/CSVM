@@ -1529,6 +1529,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   separate model. *Playtest after fix:* CM19 to the first warning, watch the hook. *Cross-refs:*
   `docs/formats/anim-definitions/cutscenes.md` (801 to 803), `BL-730`'s closing commit.
 
+- `BL-797` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
+  *Evidence:* the disabled-systems mask's bit-`0x2` edges call `FUN_004b15c0` and `FUN_004b1630`,
+  which swap the airframe def's `stop_props_anim` and `spin_props_anim` on two anim slots at
+  vehicle `+0x6c8`/`+0x6cc` (decode: `docs/org/ordnanceTypes.md`, "What the mask's bit-2 edges
+  run"). `stopprops` fires the `snd_propstop` one-shot, activates `staticprop1`..`3` and fades them
+  in over 2.0 s, and fades `prop1`..`prop3b` out over 1.5 s before deactivating them; `spinprops`
+  reverses it silently and instantly. CSVM plays `stopprops` at Destroy and at Crash and
+  `startprops` at spawn (`Flight/FlightController.cs`, `Session/HumanFlightAdapter.cs`,
+  `Session/AiFlightAssembler.cs`) but runs neither on the choke, so a choked aircraft's blur discs
+  turn on at full rate with no cue. *Fix shape:* play `stopprops` through `CrashRuntime` on
+  `TryChokeEngine`'s rising edge and reverse it when `EngineDead` clears, the same call shape the
+  nitro edges already use, on the human rig and the AI one alike, with a suite that asserts the
+  slot state across both edges. *⚠ Traps:* the restart side is the decision this item is waiting
+  on. `PropAnimator` turns the discs procedurally at the same authored `-220`/`60` rates, so
+  playing `spinprops` puts a second writer on the same node transforms; either suppress its
+  `OBJECT_MOTION` and keep `PropAnimator`, or hand the spin to the anim runtime for the whole
+  flight. Do not reach for `startprops` on the restart: it carries `snd_propstart`, and the
+  original's restart is silent. Do not double the death-time `stopprops` when a choked aircraft
+  then crashes. *Playtest after fix:* fly into a `TANGLER` cloud and watch and listen to the prop
+  through the choke and the recovery. *Cross-refs:* `docs/formats/vehicle.md`
+  (`spin_props_anim`/`stop_props_anim`), `docs/org/vehicleDamage.md` (the mask), `BL-406` (the
+  choke itself), `BL-285` (the engine loop's start/stop inputs).
+
 ## Audio
 
 - `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
@@ -1601,22 +1624,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `engine_sound` mix level (or the detuned dual-voice stack's combined gain, `EngineDetuneRatio`)
   read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
   the same method `BL-269` already used for this signal chain.
-
-- `BL-424` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **What else a choked engine does besides swap its loop.** The swap itself is
-  decoded and ported: the choker raises bit `0x2` of the disabled-systems mask, the engine-audio
-  routine tests the whole mask for nonzero, so a choked aircraft plays `snd_damagedengine` at a
-  drawn pitch exactly as a badly hurt one does (`docs/formats/vehicle.md`, "What makes an airframe
-  damaged"). Both the own-ship and the AI arm read the same gate. What is left is the pair of
-  functions the mask's bit-`0x2` edges call, `FUN_004b15c0` and `FUN_004b1630`, which
-  `docs/org/ordnanceTypes.md` names the engine stop and restart without either having been opened:
-  if they also cut a prop loop or fire a one-shot, a choke sounds like more than a definition swap.
-  *Fix shape:* open both functions, then port whatever they do beyond the swap.
-  ⚠ Traps: do not re-decode the swap, and do not read "engine stop" as an audio call on the
-  strength of its name, since it sits on the thrust path's flag and may touch no sound at all.
-  Rejected: gating the loop on `FlightController`'s engine-dead timer as a bespoke rule; the timer
-  reaches the audio through the decoded mask test and needs no second path.
-  *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
-  (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
 - `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*
