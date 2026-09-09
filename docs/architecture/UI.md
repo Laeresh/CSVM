@@ -753,11 +753,11 @@ shipping no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
 The remake-only per-seat aircraft screen, a shell partial: once seat 0 has picked on a sortie
 screen, or pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in
 player order picks here before the walk ends. `SeatPlanePage` is an `ICampaignPage` over the sortie
-roster, so `CampaignBoards.For` draws it in the campaign plane-selection board's shape: the list
-field, the silhouette, the ratings and weapon column, ACCEPT and CANCEL SELECTIONS, with the seat
-strip over it. Accept selects and a second Accept confirms; Back and CANCEL SELECTIONS each drop a
-selection, and Back over the open list leaves the walk with every seat kept, unjoining nowhere. The
-walk ends on the sortie screen with FLY live, or as the Instant Action launch. Nothing here is decoded: [../menu-presentations.md](../menu-presentations.md).
+roster, so `CampaignBoards.For` draws it in the campaign plane-selection board's shape (its list
+field, ACCEPT and CANCEL SELECTIONS), the seat strip over it. The picking seat's own device drives
+it, and the mouse riding seat 0's source, nothing else of seat 0's. Accept selects, a second Accept
+confirms, and Back and CANCEL SELECTIONS drop a selection then leave the walk, every seat kept and
+nothing unjoined. It ends on the sortie screen with FLY live, or as the launch: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`

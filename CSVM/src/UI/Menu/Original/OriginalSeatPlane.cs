@@ -11,11 +11,11 @@ namespace CSVM.UI.Menu.Original;
 /// order picks its own aircraft here, on the campaign plane-selection board's shape (its list
 /// field, silhouette, ratings and weapon column, ACCEPT and CANCEL SELECTIONS) over the sortie
 /// roster. The list stands open while the seat browses; Accept selects and closes it, Accept
-/// again confirms and hands the screen to the next unconfirmed seat. Back drops a selection and
-/// reopens the list, as CANCEL SELECTIONS does, and over the open list leaves the walk with every
-/// seat kept; nothing here unjoins. Seat 0's controller drives the screen too, so one pad at the
-/// desk can walk it. The walk ends back on the sortie screen with FLY live, or on Instant Action
-/// as the launch itself. Nothing here is decoded.
+/// again confirms and hands the screen to the next unconfirmed seat. Back and CANCEL SELECTIONS
+/// each drop a selection and reopen the list, and over the open list each leaves the walk with
+/// every seat kept; nothing here unjoins. The picking seat's own device drives the screen, and the
+/// mouse, which rides seat 0's source; nothing else of seat 0's reaches it. The walk ends on the
+/// sortie screen with FLY live, or on Instant Action as the launch itself. Nothing is decoded here.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -25,10 +25,6 @@ public sealed partial class OriginalShell
     private SeatPlanePage? _seatPage;
     private PlayerSeat? _pickingSeat;
     private OriginalScreen _seatReturn = OriginalScreen.FreeFlight;
-
-    // Which seat's frame Step is applying: 0 unless StepSeat is routing a later seat's frame
-    // through it, which is how Back tells seat 0's press from the picking seat's.
-    private int _steppingSeat;
 
     /// <summary>The seat picking on the per-seat screen, as its index, or -1 off that screen.</summary>
     public int PickingSeat => _screen == OriginalScreen.SeatPlane && _pickingSeat is { } seat ? SeatIndex(seat) : -1;
@@ -60,6 +56,15 @@ public sealed partial class OriginalShell
 
         BeginSeatWalkIfDue();
     }
+
+    // Seat 0's frame as the screen showing takes it: whole, except on the per-seat screen while
+    // another seat is picking, where only the pointer is kept. ⚠ Keep the pointer. The mouse rides
+    // seat 0's source, so dropping the whole frame would take the one device a pilot without a pad
+    // of their own can pick with; the seat's identity, never the device kind, is what decides here.
+    private MenuCommands SeatZeroFrame(MenuCommands commands) =>
+        _screen == OriginalScreen.SeatPlane && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)
+            ? new MenuCommands { Pointer = commands.Pointer }
+            : commands;
 
     private int SeatIndex(PlayerSeat seat)
     {
@@ -223,7 +228,18 @@ public sealed partial class OriginalShell
                 TakeSeatPick(page, seat);
                 return null;
             case nameof(BoardButton.CancelSelections):
-                ReopenSeatList(page, seat);
+                // The pointer's Back, in the picking seat's own two stages: the selection goes
+                // first, then the walk. ⚠ Keep the second stage; a mouse has no other way off this
+                // screen, Back being the picking seat's device alone.
+                if (seat.Locked)
+                {
+                    ReopenSeatList(page, seat);
+                }
+                else
+                {
+                    CancelSeatWalk();
+                }
+
                 return null;
             default:
                 return null;
@@ -256,10 +272,10 @@ public sealed partial class OriginalShell
         _focus[(int)OriginalScreen.SeatPlane] = 0;
     }
 
-    // Back on the per-seat screen: the picking seat's takes back a selection first and leaves the
-    // walk from the open list, so two presses at most reach the screen the walk came from; seat
-    // 0's leaves at once. Neither unjoins, a pilot leaving the sortie only on the Instant Action
-    // screen or with their device.
+    // Back on the per-seat screen, which only the picking seat's device can press: it takes back a
+    // selection first and leaves the walk from the open list, so two presses at most reach the
+    // screen the walk came from. Neither unjoins, a pilot leaving the sortie only on the Instant
+    // Action screen or with their device.
     private MenuExit? BackSeatPlane()
     {
         if (_seatPage is not { } page || _pickingSeat is not { } seat)
@@ -267,7 +283,7 @@ public sealed partial class OriginalShell
             return AdvanceSeatWalk();
         }
 
-        if (_steppingSeat != 0 && seat.Locked)
+        if (seat.Locked)
         {
             ReopenSeatList(page, seat);
             return null;

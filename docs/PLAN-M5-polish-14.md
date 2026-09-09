@@ -78,7 +78,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — The second pilot's walk
 
 1. ☑ `BL-746` Back on the per-seat screen returns instead of unjoining
-2. ☐ `BL-747` Only the picking seat's device drives the per-seat screen
+2. ☑ `BL-747` Only the picking seat's device drives the per-seat screen
 3. ☐ `BL-749` A two-pilot Free Flight walk launches on the last confirm
 4. ☐ `BL-748` A joined pilot picks a weapon loadout
 
@@ -190,7 +190,33 @@ sortie screen is reachable after a Back at every point in it. Decision 6 settles
 so do not leave that arm calling `_setup.Unjoin` on the ground that Back no longer does; both
 changes belong to this item.
 
-## A2 ☐ `BL-747` Only the picking seat's device drives the per-seat screen
+## A2 ☑ `BL-747` Only the picking seat's device drives the per-seat screen
+
+**Landed.** The mechanism was one frame-routing decision, not a device check. `StepSeat` handed seat
+0's whole frame to the shell on every screen, so the per-seat screen took seat 0's cursor, Accept and
+Back as if they were the picking seat's. The screen now answers to the seat that is picking: seat 0's
+frame is reduced to its pointer alone while another seat picks (`SeatZeroFrame`), and the public
+`Step` became the seat-0 entry over a private `ApplyFrame`, so no caller can drive a screen it does
+not own by skipping `StepSeat`. The pointer is kept deliberately, since the mouse rides seat 0's
+source and is the one device a pilot without a pad of their own can pick with; the identity that
+decides is the seat, never the device kind. `_steppingSeat` is gone with the last reader it had:
+`BackSeatPlane` now branches on the picking seat's own state, which is also what makes the walk
+behave the same when seat 0 is itself the picking seat.
+
+**Decided: the mouse keeps an exit, through CANCEL SELECTIONS.** A1 handed A2 the question, and the
+answer is that a mouse-only pilot could not leave the walk once seat 0's reach was removed. On
+Instant Action the only remaining way off the screen would have been to complete the walk, which
+launches the mission, so the desk had no way back at all whenever the picking seat's pad was not to
+hand (a sleeping wireless pad, a `--debug-join` seat with no device). Of A1's two candidate fixes the
+smaller landed: CANCEL SELECTIONS drops the selection standing, exactly as Decision 6 says, and with
+none left to drop the same press leaves the walk. That makes it the pointer's Back, in the two stages
+the picking seat's Back already takes, and it adds no row to a screen authored with two buttons. The
+BACK plaque was not taken, because A4 adds a Weapon Loadout row to this screen and a fourth plaque is
+better judged with that row's layout in hand.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The picking seat's device and the mouse drive the per-seat plane-selection screen. Seat
 0's commands do nothing there unless seat 0 is the picking seat.

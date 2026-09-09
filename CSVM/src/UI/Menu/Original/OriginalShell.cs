@@ -549,9 +549,14 @@ public sealed partial class OriginalShell
         }
     }
 
-    /// <summary>Applies one frame of one seat's commands. The pointer, when present, is in
-    /// authored pixels.</summary>
-    public OriginalStep Step(MenuCommands commands)
+    /// <summary>Applies one frame of seat 0's commands, under the rule <see cref="StepSeat"/>
+    /// applies to it: on the per-seat aircraft screen picking for another seat, only its pointer
+    /// counts. The pointer, when present, is in authored pixels.</summary>
+    public OriginalStep Step(MenuCommands commands) => StepSeat(0, commands);
+
+    // One seat's frame applied to the screen showing, the seat's own right to drive it already
+    // settled by StepSeat.
+    private OriginalStep ApplyFrame(MenuCommands commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
         var cues = new List<string>();
@@ -720,6 +725,7 @@ public sealed partial class OriginalShell
         return new OriginalStep(cues, exit, changed);
     }
 
+#pragma warning disable SA1202 // ApplyFrame above stays beside the Step that delegates to it.
     /// <summary>The screen as a composed board in the authored space, a standing dialog over it
     /// and the pointer drawn last.</summary>
     public ComposedBoard Compose()
@@ -813,6 +819,7 @@ public sealed partial class OriginalShell
         return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
+#pragma warning restore SA1202
 
     private static OriginalPreferencesInks ReadPreferencesInks(MenuLayout layout, OriginalInks inks)
     {

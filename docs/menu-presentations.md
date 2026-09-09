@@ -158,12 +158,16 @@ Under Original a seat picks its aircraft on a screen of its own, not down a list
 Seat 0 picks on the sortie screen or in the Instant Action Pilot Plane row; then each joined seat in
 player order gets the per-seat aircraft screen (`OriginalSeatPlane.cs`), the campaign plane-selection
 board's shape over the sortie roster, where Accept selects and a second Accept confirms. Back and
-CANCEL SELECTIONS each take back a selection, and Back over the open list leaves the walk for the
+CANCEL SELECTIONS each take back a selection, and over the open list each leaves the walk for the
 screen it came from with every seat kept, so no press on that screen unjoins: a pilot leaves the
 sortie with Back on the Instant Action screen or with their device. Joining stays closed on that
 screen. The walk ends on the sortie screen with FLY live, or as the Instant Action launch, and FLY
-goes live only when every joined seat is Confirmed. Seat 0's own controller drives the screen too,
-so one pad at the desk can walk it. Nothing on that screen is decoded.
+goes live only when every joined seat is Confirmed. The picking seat's own device drives that screen,
+and the mouse, which rides seat 0's source and is the one device a pilot without a pad of their own
+can pick with; seat 0's stick, buttons and keyboard move nothing there, `StepSeat` reducing seat 0's
+frame to its pointer while another seat picks. CANCEL SELECTIONS is therefore the pointer's own Back,
+its second press leaving the walk once there is no selection left to drop. Nothing on that screen is
+decoded.
 
 The wheel and the thumb reach the lists through one seam. `OriginalShell.Lists` answers the screen's
 scrolling lists as `OriginalList` records, topmost first, each a key, a `ListWindow`
