@@ -145,7 +145,14 @@ fixes are a second CANCEL SELECTIONS press leaving when there is no selection le
 BACK plaque on the screen; neither was taken here, because Decision 6 says this button stays in the
 walk and A2 owns who drives the screen.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying A1, B11, B12 and C21:
+build clean, 268 of 268 engine suites pass with engine errors clean, 18 goldens hash-identical,
+units 3,518 of 3,519. `menu-player-setup-seats` covers this item's whole sequence, and the
+`OriginalSeats` and `OriginalCoverage` unit cases pass. The one unit failure is the `MenuLayout`
+census pin (`artMissing` expects 2 where this install's extraction reports 0), which predates the
+wave and is recorded on main; it touches nothing any item here changed. Still owed at the controls,
+on E41's sortie: two pads on Instant Action, Back on the per-seat screen returning to the sortie
+screen with both seats listed, and Back on the Instant Action screen still unjoining.
 
 **Original approach (kept for reference).**
 
@@ -300,7 +307,13 @@ to −0.2 to 0.0 from −0.2 to −5.6. Both suites, `ground-contact` and `campa
 hull killed through its gasbag zones, and the wreck and all five sections asserted against the sea.
 It was red on the unfixed tree at 3 of 5 sections afloat and is green at 5 of 5.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree: build clean, 268 of 268 engine
+suites pass with engine errors clean, 18 goldens hash-identical, units 3,518 of 3,519, the one
+failure being the pre-existing `MenuLayout` census pin recorded under A1. `gemini-breakup-rest`
+reports the C2B/M04 wreck resting at y = 0.0 with 5 of 5 sections on the sea, and `ground-contact`,
+`gemini-gasbag-bays`, `zeppelin-breakup` and `campaign-balloon-death` pass beside it. Still owed at
+the controls, on E41's sortie: a CM14 Gemini and a pirate zeppelin each killed over water and
+watched from outside until every piece settles.
 
 **Follow-up found and not fixed here.** Two of the five sections dispatch no `hit_waterN` splash,
 the two that land last, and this predates the fix. `MotionSet.OwesBounce` can only hold a def
@@ -374,7 +387,13 @@ step a clock. The collider's own pose lag was measured directly off the physics 
 on the net (INSTR-50): real, but it only flips a verdict grazing a body 6 m off, and it is left
 unfixed.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree: build clean, 268 of 268 engine
+suites pass with engine errors clean, 18 goldens hash-identical, units 3,518 of 3,519, the one
+failure being the pre-existing `MenuLayout` census pin recorded under A1. The new
+`turret-moving-hull-blocks-own-fire` passes on both legs, `turret-hull-blocks-own-fire` now confirms
+16 of 17 rings against the 14 it read before, and `turret-self-fire` and `surface-vehicle-guns`
+pass on the widened rule. Still owed at the controls, on E41's sortie: an Instant Action Dogfight
+against a pirate zeppelin, flown along the far hull while it moves.
 
 ### Original approach (kept for reference)
 
@@ -459,7 +478,15 @@ but the original never shrinks the volume back. Match that: set, never reset.
 - `CampaignFlightCheckPage` holds the two answers separately in `FlightCheckState` and hands each
   slot its own. A guest's own check is unchanged: neither script rule is about a guest's aircraft.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree: build clean, 268 of 268 engine
+suites pass with engine errors clean, 18 goldens hash-identical, units 3,518 of 3,519, the one
+failure being the pre-existing `MenuLayout` census pin recorded under A1. The new
+`campaign-flight-check-plane-change` runs a two-plane profile (granted the aircraft, neither button
+offered), a three-plane one (the wingman's button alone, the pilot's barred by the mission), a
+profile already carrying the award (granted nothing a second time, the plane re-selected) and the
+neighbouring mission (both buttons, the selection kept); `campaign-layout-parity` and
+`menu-campaign-journey` pass beside it. Still owed at the controls, on E41's sortie: CM13 replayed
+on a profile on each side of the floor of three.
 
 **Original approach (kept for reference).**
 
