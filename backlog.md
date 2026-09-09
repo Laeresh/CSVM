@@ -1543,6 +1543,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
+- `BL-792` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **One AI aircraft answers two listener models: its weapon voice culls against the nearest human, its engine voice against a viewport camera.**
+  *Evidence:* `AiWeaponAudio` is attached with `_world.HumanPositions`, the nearest-human seam
+  `ProjectilePool` measures its weapon one-shots against; `AiEngineAudio` is attached with
+  `listeners: null` and falls back to the node's own viewport camera. In splitscreen those two
+  answers differ, so the same aeroplane can be audible on one measure and culled on the other, and
+  which pane hears it depends on which voice you ask. *Fix shape:* wire the engine voice to the same
+  seam, so one aircraft has one listener model. *⚠ Traps:* this changes existing cull behaviour on the
+  engine voice, which is why `BL-079` left it alone rather than folding it in; expect the engine
+  voice's audible set to move, and check a 2-pane and a 4-pane session, not just a lone camera.
+  *Cross-refs:* `BL-079`'s closing commit, `docs/architecture/Flight.md`'s `AiEngineAudio` and
+  `AiWeaponAudio` entries.
+- `BL-793` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **No turret has a gun voice: a carried gunner, a zeppelin ring and a ground mount all fire silently.**
+  *Evidence:* `snd_turretgun` and `snd_chaingun` both carry `3D`, `LOOPED` and a `RANGE` pair in
+  `sounds.zrd.json`, so the data authors them as world sounds, and no turret path plays a loop at all.
+  `BL-079` built the positional per-aircraft voice and stopped at aircraft, that item being another
+  aeroplane's weapons. *Fix shape:* a carried AI turret gunner can take `AiWeaponAudio` as it stands;
+  a world mount (a ring, a ground emplacement) needs its own emitter under `WorldSounds`, since it has
+  no `FlightController` to hang under. *⚠ Traps:* the cull is the cue's own `RANGE` audible distance,
+  not `EngineAudioCurves.CullDistance`; a zeppelin carries seventeen rings on one hull, so decide
+  whether they share a voice before giving each one an emitter. *Cross-refs:* `BL-079`'s closing
+  commit, `docs/formats/sounds.md`'s channel section.
+- `BL-794` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Two small debts in the new weapon-audio seam: the dry cue's name is a constant beside the data read, and the loop plays from the aircraft node rather than the muzzle.**
+  *Evidence:* both audio paths take `WeaponAudioCues.EmptyClipDef`, a `snd_emptyclip` literal, while
+  `WeaponDefs.EmptyClipSound` is the actual `NO_AMMO_WARNING` read; they agree in the shipped data and
+  should be one read. Separately, `AiWeaponAudio`'s players ride the aircraft node, a couple of metres
+  from the muzzle against a 20 m full-volume radius, and where the original places a firing emitter is
+  unverified. *Fix shape:* resolve the dry cue through `WeaponDefs`, and settle the emitter's origin
+  against the executable before moving it. *⚠ Traps:* the muzzle half is not worth a fitted answer:
+  measure what the original does, or leave it, since at these distances the difference may be
+  inaudible. *Cross-refs:* `BL-079`'s closing commit.
 - `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.
