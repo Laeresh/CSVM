@@ -2070,6 +2070,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-795` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A sortie screen with the aircraft picked but no map still tells the pilot to pick an aircraft.**
+  *Evidence:* `OriginalShell.SortieHint` tests the chapter first and returns "Pick a map, then an
+  aircraft" whenever no map is picked, however far the rest of the screen has got, so with seat 0's
+  aircraft chosen and every joined seat confirmed the hint names the one thing already done and not
+  the press that is missing. The wording predates `BL-749`, which made it reachable in a new place: a
+  walk whose FLY gate is unmet now drops the pilots back on this screen, where the hint should read
+  "Pick a map, then FLY". *Fix shape:* order `SortieHint`'s branches by what is actually outstanding,
+  and name FLY when only the press is left. *⚠ Traps:* the hint is remake-only text on a remake-only
+  screen, so there is nothing to decode and nothing to match; keep it one short line, as the other
+  arms are. *Cross-refs:* `BL-749`'s closing commit.
 - `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
   does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
   block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
