@@ -428,6 +428,50 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- one death calls another destructible's own death -----------------------------------------
+
+    // C3's suspension bridge is the install's chain reaction: the fuel truck parked on it
+    // (`bridge_truck01`) runs `chainreaction`, which CALL_ANIMATIONs the bridge's own death anim
+    // `rope1burn`, and `KillCalledDestructible` turns that call into the bridge's kill.
+    // ⚠ Assert the bridge boots standing as well as dying. The call is refused outright on a pool
+    // already destroyed, so a baseline misread as a death leaves the bridge whole and silent with
+    // the truck still exploding on it, and only the second check tells the two apart.
+    [Suite("called-death-chain",
+        "C3/M01's fuel truck kills the suspension bridge through its CALL_ANIMATION of the bridge's own death anim, and the bridge boots standing for that call to reach")]
+    internal static void CalledDeathChain(TestContext ctx)
+    {
+        ctx.WithWorld("C3", collision: false, mission: "M01", world =>
+        {
+            var runtime = world.Runtime;
+            var bridge = runtime.Destructibles.All.FirstOrDefault(i =>
+                i.Def.Name.Equals("susp_bridge", System.StringComparison.OrdinalIgnoreCase));
+            var truck = runtime.Destructibles.All.FirstOrDefault(i =>
+                i.Def.Name.Equals("bridge_truck01", System.StringComparison.OrdinalIgnoreCase));
+            ctx.Check(bridge != null && truck != null,
+                $"C3/M01 ships both pools bridge={bridge?.Def.Name ?? "-"} truck={truck?.Def.Name ?? "-"}");
+            if (bridge is not { } span || truck is not { } fuel)
+            {
+                return;
+            }
+
+            ctx.Check(span.Status == DestructibleRegistry.State.Healthy && span.Health == span.MaxHealth,
+                $"the bridge boots standing hp={span.Health}/{span.MaxHealth} state={span.Status}");
+
+            // Two seconds, because `chainreaction` staggers its calls on EVENT_OFFSET and the
+            // bridge's is several steps down the list.
+            runtime.DamageAt(fuel.Anchor, fuel.MaxHealth + 1f);
+            for (int i = 0; i < 120; i++)
+            {
+                runtime.Advance(1f / 60f);
+            }
+
+            ctx.Check(fuel.Status == DestructibleRegistry.State.Destroyed,
+                $"the fuel truck dies status={fuel.Status}");
+            ctx.Check(span.Status == DestructibleRegistry.State.Destroyed && span.Health <= 0f,
+                $"…and its chain reaction takes the bridge with it status={span.Status} hp={span.Health:0.##}");
+        });
+    }
+
     // ---- a carried state lands silently, on the pool and the pose ------------------------------
 
     // The persist log opens a later mission on the pose a death ends in, never on a replayed death:

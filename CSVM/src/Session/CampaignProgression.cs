@@ -299,7 +299,8 @@ public static class CampaignProgression
     // The merge rules are the original's own, one per field (docs/formats/saved-games.md, "The
     // mission-result array"): OR the mask, keep the faster time ignoring 0, keep the pair with the
     // better hit ratio, accumulate the money, take the plane of a run that completed more, and
-    // merge both kill tallies per index by maximum.
+    // merge both kill tallies per index by maximum. "Completed more" is measured against the best
+    // attempt's own mask, never the OR, which only grows and would freeze the plane after a few wins.
     private static void MergeBest(MissionRun best, MissionAttempt attempt, int money)
     {
         if (attempt.TimeMs > 0 && (best.TimeMs == 0 || attempt.TimeMs < best.TimeMs))
@@ -313,8 +314,9 @@ public static class CampaignProgression
             best.Hits = attempt.Hits;
         }
 
-        if (Bits(attempt.CompletedMask) > Bits(best.CompletedMask))
+        if (Bits(attempt.CompletedMask) > Bits(best.BestAttemptMask))
         {
+            best.BestAttemptMask = attempt.CompletedMask;
             best.Airframe = attempt.Airframe;
             best.PlaneName = attempt.PlaneName;
         }

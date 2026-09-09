@@ -46,6 +46,7 @@ public class CampaignProfileStoreTests
             Best = new MissionRun
             {
                 CompletedMask = 1,
+                BestAttemptMask = 1,
                 TimeMs = 45000,
                 Shots = 120,
                 Hits = 30,
@@ -68,6 +69,7 @@ public class CampaignProfileStoreTests
         Assert.Equal(0, result.Seq);
         Assert.Equal(3, result.Attempts);
         Assert.Equal(1, result.Best.CompletedMask);
+        Assert.Equal(1, result.Best.BestAttemptMask);
         Assert.Equal(45000, result.Best.TimeMs);
         Assert.Equal(120, result.Best.Shots);
         Assert.Equal("Gypsy Magic", result.Latest.PlaneName);

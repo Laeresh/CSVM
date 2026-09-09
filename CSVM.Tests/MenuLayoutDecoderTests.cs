@@ -271,7 +271,12 @@ public class MenuLayoutDecoderTests
         Assert.Equal(0, counts["macrosUnresolved"]);
         Assert.Equal(46, counts["navigationEdges"]);
         Assert.Equal(124, counts["artReferences"]);
-        Assert.Equal(2, counts["artMissing"]);
+        // The archive carries no backdrop movie: the two the layout names sit loose in the install
+        // and reach the tree only when the extraction copies them in, so this count is whichever
+        // of them is still absent, 2 before that step and 0 after it.
+        string mpg = Path.Combine(rof, "ASSETS", "GRAPHICS", "MPG");
+        string[] movies = { "CrimFlag.MPG", "Final.MPG" };
+        Assert.Equal(movies.Count(m => !File.Exists(Path.Combine(mpg, m))), counts["artMissing"]);
         Assert.Equal(152, counts["stringSymbols"]);
         Assert.Equal(461, counts["scrapbookEntries"]);
     }
