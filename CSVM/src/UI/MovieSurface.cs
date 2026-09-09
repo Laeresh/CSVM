@@ -57,16 +57,17 @@ public sealed class MovieSurface
         }
     }
 
-    /// <summary>Advances the clock by that many seconds, uploading only when the picture
-    /// changed.</summary>
-    public void Advance(double elapsedSeconds)
+    /// <summary>Advances the clock by that many seconds, uploading only when the picture changed,
+    /// and answering whether it did so a caller can repaint on the frames that need it.</summary>
+    public bool Advance(double elapsedSeconds)
     {
         if (!_playback.Advance(elapsedSeconds))
         {
-            return;
+            return false;
         }
 
         _image.SetData(_playback.Width, _playback.Height, false, Image.Format.Rgba8, _playback.Pixels);
         Texture.Update(_image);
+        return true;
     }
 }

@@ -140,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the flag background
 
 11. ☑ The frame surface: decoded frames as an `ImageTexture`, on a playback clock
-12. ☐ `CrimFlag.MPG` composed into `MainMenu` and `Preferences`
+12. ☑ `CrimFlag.MPG` composed into `MainMenu` and `Preferences`
 
 ### Wave C — the cinema sequence
 
@@ -610,7 +610,65 @@ bank's history, so a replay's opening frames carry about a thousand samples of t
 `A2` fixed that and pinned it with `RewindDecodesTheSameSamplesAgain`. Do not reintroduce it by
 adding a cheaper reset path here.
 
-## B12 ☐ `CrimFlag.MPG` composed into `MainMenu` and `Preferences`
+## B12 ☑ `CrimFlag.MPG` composed into `MainMenu` and `Preferences`
+
+**Landed.** `BoardArtLibrary` gained a fourth member, `Movie`, whose name carries its extension and
+resolves under `extracted/rof/ASSETS/GRAPHICS/MPG/`, so a background film reaches `ComposedBoard`
+without an engine type entering the engine-free half. The resolution happens where every other
+library's does, in `ComposedBoardView.Load`: a movie opens one `MovieSurface`, the texture cache
+holds that surface's single `ImageTexture`, and the surface rewrites its pixels in place, so the
+picture animates with nothing invalidated and a file that will not open caches a null and is tried
+once. `OriginalShell.ComposeMovie` puts the row at the bottom of the backdrop for the two screens
+whose section authors one, taking the corner from the row's `X` and `Y` and the size from the
+measurer's answer scaled by the row's own `ScaleX`/`ScaleY`, so neither 320x240 nor 250 is written
+down anywhere. `OriginalPresentation.Measure` answers a movie's size from its sequence header
+through a throwaway `MpegMovie`, since no bitmap loader can read one, and its `Tick` runs
+`AdvanceMovies` off the step the host was given, repainting on the frames a new picture arrived on
+and recomposing on none of them.
+
+**The manifest learned a third class of row.** `MainMenu.MOVIE` and `Preferences.MOVIE` were listed
+as not drawn, and they are drawn now while staying optional, which `NotDrawn` cannot express. A
+`Degrades` table beside it holds a row Original draws whose file the screen survives the absence of,
+and the two movies sit there: a top level with no film behind it is the screen it always was on a
+plain ground. `OriginalAvailability.RelativeArtPath` puts a `.mpg` one directory deeper than the
+bitmaps the same rows name, which is the base `FUN_004a7c70` resolves every movie name under, and
+the manifest records that path per entry rather than assembling one of its own. Manifest schema 5.
+The layout decode's `artMissing` count is 0 where it was 2, because the two names the archive does
+not carry are these files and the extraction now copies them in.
+
+**⚠ The capture had to stop reading the wall clock, and the harness had to stop reading `sim_frame`.**
+A menu screen has no session, so a movie behind one advanced on `_Process`'s own delta and the
+picture a shot landed on was a property of this machine's frame times (DET-7). `Launcher.MenuStep`
+hands the menus `GameClock.FixedDt` under `--det` and the frame delta otherwise, which makes a
+capture's picture a function of the frame count. The saved-shot line now carries
+`frame=N clock=<sim|render>`: a run with a session reports its sim clock, a screen without one
+reports the rendered frames its countdown waited, read off `Engine.GetProcessFrames` rather than off
+the countdown it would otherwise only ever agree with itself about. `RunTests.ps1` compares that one
+number against the manifest's `frame` and names the counter in the failure.
+
+**The schema bump `A5` deferred landed here, with a test in place of three comments.**
+`ExtractionStamp.Schema`, `ExtractRof.ps1`'s `$StampSchema` and `ExtractAssets.ps1`'s all moved from
+2 to 3 in this item's commit, so a tree extracted before the copy step is refused with the
+re-extract instruction rather than opened on a main menu with nothing running behind it.
+`CSVM.Tests/ExtractionStampTests.cs` reads the number out of all three and fails a bump that moves
+fewer than all of them.
+
+**Verified.** The flag was judged at the controls on both screens and passed, which is the check
+Decision 7 puts with the author and no instrument here replaces. `.\RunTests.ps1` on the plan tree,
+run by the orchestrator rather than reported by the agent: PASS, exit 0, 212.6 s. Build 3.3 s with
+zero StyleCop warnings; units 20.7 s against a 30 s budget (3766 passed, 0 failed, 1 skipped of
+3767, the skip being `A3`'s opt-in whole-file walk); engine 149.0 s, 265 passed, errors clean;
+goldens 39.7 s, **20** shots hash-identical, the two new ones among them. Those two were pinned in
+one process set and reproduced in another, so the render clock's frame 120 is the same picture
+twice. `analysis/goldens/manifest.json` carries the two added entries and nothing rewritten after
+the run, which is the GOLD-9 read that a hash-identical report is worth anything at all. The layout
+decode's own counts move only where the movies are: `artMissing` 2 to 0, every other number in
+`MenuLayoutDecoderTests` untouched.
+
+**⚠ Still over budget on the engine stage, and still not this plan's.** 149.0 s against 100 s,
+where `A1` measured 145.6 s, `A3` 126.7 s and `B11` 150.5 s. Nothing in the engine plays a movie.
+
+### Original approach (kept for reference)
 
 **Goal.** The animated flag runs behind the main menu and the preferences page, at the position and
 scale the layout gives, under everything else on the screen.

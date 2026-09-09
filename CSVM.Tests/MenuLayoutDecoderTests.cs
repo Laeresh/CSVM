@@ -271,7 +271,9 @@ public class MenuLayoutDecoderTests
         Assert.Equal(0, counts["macrosUnresolved"]);
         Assert.Equal(46, counts["navigationEdges"]);
         Assert.Equal(124, counts["artReferences"]);
-        Assert.Equal(2, counts["artMissing"]);
+        // Nothing is absent once the extraction has run: the two names the archive does not carry
+        // are the movies, which the copy step puts in GRAPHICS\MPG beside everything else.
+        Assert.Equal(0, counts["artMissing"]);
         Assert.Equal(152, counts["stringSymbols"]);
         Assert.Equal(461, counts["scrapbookEntries"]);
     }

@@ -280,8 +280,9 @@ carry its own copy of the field table.
 
 **The census, from the retail install.** 34 screens over 61 scripts; 636 widget rows in 10 types;
 186 macro definitions (29 file-wide, 157 per screen), all resolving; 46 navigation edges; 124
-distinct art references of which 2 are absent (`CrimFlag.MPG` and `Final.MPG`, whose folder ships
-empty); 152 `IDS_*` symbols of which 149 resolve; 403 script-created keys of which 4 have no layout
+distinct art references, all present once the extraction has run (the two that are not in the
+archive are `CrimFlag.MPG` and `Final.MPG`, which the extraction copies in from the install's loose
+`GRAPHICS\MPG`); 152 `IDS_*` symbols of which 149 resolve; 403 script-created keys of which 4 have no layout
 row; 124 script-named external asset entries covering 50 distinct complete names and 8 name
 fragments; 461 scrapbook rows; 1 warning (the stray line above).
 
@@ -317,12 +318,15 @@ per-section `V<n>` definitions (`[@FlightCheck@]` gives `GX,553`, `V2,132`, `V3,
 `V4,FC_B_PaperButton.Png`; `[@Campaign@]` gives `Y,547`), and the file's values agree with the
 screenshot measurements to within a pixel, which is a useful cross-check of both.
 
-**The extraction stamp is schema 2 because runtime reads this artifact.** Adding an output does
-not invalidate an existing extraction until a reader requires it; the runtime reader
-(`CSVM/src/UI/Menu/MenuLayout.cs`) does, so `$StampSchema` in `ExtractAssets.ps1` and
-`ExtractRof.ps1` and `ExtractionStamp.Schema` moved to 2 together, and a tree extracted before this
-decode is reported as stale at boot rather than read as an empty menu. The reader itself treats a
-missing or unreadable file as a reason to fall back, never as a layout with no screens.
+**The extraction stamp is schema 3, and each bump waited for a reader.** Adding an output does not
+invalidate an existing extraction until a reader requires it. Schema 2 is this artifact: the runtime
+reader (`CSVM/src/UI/Menu/MenuLayout.cs`) requires it, so a tree extracted before the decode is
+reported as stale at boot rather than read as an empty menu. Schema 3 is the ten `.mpg` files: the
+copy step that puts them in the tree shipped first and moved nothing, and the number moved when the
+front end began playing one. `$StampSchema` in `ExtractAssets.ps1` and `ExtractRof.ps1` and
+`ExtractionStamp.Schema` are one number in three places, which
+`CSVM.Tests/ExtractionStampTests.cs` reads all of. The layout reader itself treats a missing or
+unreadable file as a reason to fall back, never as a layout with no screens.
 
 **Reader-side notes.** The reader keeps values as strings and types them on demand through
 `widgetTypes[].fields[].kind`, so a field is only ever read as the kind the artifact declares; a

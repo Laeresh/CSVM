@@ -18,6 +18,11 @@ public enum BoardArtLibrary
     /// scrapbook capture, which lives in the profile's own directory and is the one thing the book
     /// draws that no asset library holds.</summary>
     Loose,
+
+    /// <summary>A movie, <c>extracted/rof/ASSETS/GRAPHICS/MPG/&lt;name&gt;</c>, named with its
+    /// extension: the picture playing now rather than a bitmap. The renderer plays it endlessly,
+    /// which is what every <c>movie</c> row on a screen it composes authors.</summary>
+    Movie,
 }
 
 /// <summary>How a piece of board text is inked. The authored colours are per widget and mostly

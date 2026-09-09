@@ -15,9 +15,20 @@ public static class OriginalAvailability
     /// <summary>The main-menu section's name in the layout.</summary>
     public const string MainMenuSection = "MainMenu";
 
-    /// <summary>Where a layout art name resolves under a data root.</summary>
+    /// <summary>Where a layout art name resolves under a data root. A movie sits one directory
+    /// deeper, which is the base <c>FUN_004a7c70</c> resolves every movie name under and where the
+    /// extraction copies the files (<c>docs/formats/cinemas.md</c>).</summary>
     public static string ArtPath(string dataRoot, string name) =>
-        Path.Combine(dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", name);
+        Path.Combine(dataRoot, "extracted", "rof", RelativeArtPath(name).Replace('/', Path.DirectorySeparatorChar));
+
+    /// <summary>The same place as a path relative to the <c>rof</c> extraction, which is what the
+    /// asset manifest records per entry.</summary>
+    public static string RelativeArtPath(string name) =>
+        IsMovie(name) ? "ASSETS/GRAPHICS/MPG/" + name : "ASSETS/GRAPHICS/" + name;
+
+    /// <summary>Whether a layout art name is one of the movies rather than a bitmap.</summary>
+    public static bool IsMovie(string name) =>
+        name != null && name.EndsWith(".mpg", System.StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Loads the layout and checks the manifest over <paramref name="dataRoot"/>. Returns
     /// the layout when Original can run, else null with the reason.</summary>

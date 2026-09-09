@@ -284,7 +284,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalCampaign.cs` — the shell's campaign (a `partial`): the nine decoded screens over the shared board component.
 - `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView`, seats polled.
 - `src/UI/Menu/Original/OriginalAvailability.cs` — Original's availability answer before entry: a refusal reason, or the loaded layout.
-- `src/UI/Menu/Original/OriginalAssetManifest.cs` — the required/optional file manifest derived from the layout, and the check over a tree.
+- `src/UI/Menu/Original/OriginalAssetManifest.cs` — the required/optional file manifest derived from the layout, the backdrop movies among the optional, and the check over a tree.
 - `src/UI/Menu/Original/OriginalRosters.cs` — the Original sortie screens' chapter labels and the eleven stock airframes with their nodes.
 - `src/UI/Menu/Original/OriginalCues.cs` — the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
 - `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
@@ -336,10 +336,10 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ListWindow.cs` — a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
 - `src/UI/SliderTrack.cs` — a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
 - `src/UI/BoardFit.cs` — how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
-- `src/UI/ComposedBoard.cs` — what a composed campaign screen is made of: backdrop, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
+- `src/UI/ComposedBoard.cs` — what a composed screen is made of: a backdrop that may be a movie, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
 - `src/UI/CampaignBoards.cs` — the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
 - `src/UI/CampaignLayout.cs` — the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
-- `src/UI/ComposedBoardView.cs` — the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art cache, the hint band.
+- `src/UI/ComposedBoardView.cs` — the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
 - `src/UI/MovieSurface.cs` — a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
 - `src/UI/LoadBoard.cs` — the load screen a session builds behind: the original's chart sheet for a campaign launch, its blackboard for everything else.
@@ -432,7 +432,7 @@ clusters they delegate to.
 - `src/Session/Launcher.cs` — Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
 - `src/Session/GameSession.cs` — the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
 - `src/Session/SessionSimulation.cs` — the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
-- `src/Session/ExtractionStamp.cs` — reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read.
+- `src/Session/ExtractionStamp.cs` — reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 - `src/Session/MenuAudioService.cs` — the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
 - `src/Session/LiveryResolver.cs` — each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.

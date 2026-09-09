@@ -507,13 +507,12 @@ if ($skipped -gt 0) { Write-Host "  up to date:      $skipped archive(s); pass -
 # old extractions.
 #
 # The "movies" count records how many of the ten .mpg files the copy above left in the tree,
-# which is the first thing an inspection of a tree that plays no cinema asks. It deliberately
-# does not move $StampSchema: an added output invalidates nothing until a reader requires it
-# (docs\formats\menu-layout.md states that rule where the last bump obeyed it), and no build
-# opens a movie file yet, so a bump today would refuse every valid extraction on the strength
-# of a file nothing reads. The first reader that needs one bumps all three numbers together.
+# which is the first thing an inspection of a tree that plays no cinema asks. $StampSchema is 3
+# because the front end now plays one: a tree extracted before the copy step existed has no
+# GRAPHICS\MPG in it, and the schema is what turns that into a refusal naming the re-extraction
+# instead of a main menu with nothing running behind it.
 if ($StampDestKnown) {
-    $StampSchema = 2
+    $StampSchema = 3
     $stampPath = Join-Path (Split-Path $Dest -Parent) "VERSION.json"
     $stamp = [ordered]@{}
     if (Test-Path $stampPath) {

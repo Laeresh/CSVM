@@ -899,8 +899,14 @@ public partial class Launcher : Node3D
         // After everything above, which is where the launchscreen's own process callback ran when
         // it was a child ticking itself: the capture director reads the menu as it stood before
         // this frame's presses, as it always did.
-        _menuHost?.Tick((float)delta);
+        _menuHost?.Tick(MenuStep(delta));
     }
+
+    // The step the menus advance on. A deterministic run gives them the sim's own, for the reason
+    // the sim takes it: what a capture shows must be a function of the frame count and nothing
+    // else, and the screens that animate (the briefing's reveal, a board's background movie)
+    // otherwise land wherever this machine's frame times put them.
+    private float MenuStep(double delta) => _spec.Det ? GameClock.FixedDt : (float)delta;
 
     // The process's one music channel and the archive it streams from. Everything here is
     // optional: an install without soundsh or without a readable sounds.json leaves the game

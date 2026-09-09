@@ -104,6 +104,13 @@ public class OriginalManifestTests : IDisposable
         Assert.Null(manifest.Find("langui.dll"));
         Assert.Equal("MainMenu", manifest.Find("FX_Logo.png")!.Section);
         Assert.Contains("in-flight", manifest.Find("FX_B_ReturnToGame.png")!.Note);
+
+        // The backdrop movie is drawn now and optional all the same, and it resolves one directory
+        // deeper than every bitmap the same rows name.
+        var movie = manifest.Find("FX_Movie.MPG")!;
+        Assert.Equal(OriginalAssetNeed.Optional, movie.Need);
+        Assert.Equal("ASSETS/GRAPHICS/MPG/FX_Movie.MPG", movie.RelativePath);
+        Assert.Contains("drawing whole without it", movie.Note);
     }
 
     [Fact]

@@ -189,7 +189,8 @@ plaques and flowed list widgets, each in draw order. The backdrop is a layer of 
 can sit over the painted background and still stay under the page's pictures, which is where a
 list's selection bar goes. `BoardNote` is a widget's entries plus its wrap box, flowed by a caller
 that can measure text. `PlaqueFrame` and `PlaqueInk` are the two state rules a plaque draws by.
-`BoardArt` names a bitmap and its frame count; the renderer resolves it to a file.
+`BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries
+is a movie, which is how a background film reaches the backdrop with no engine type entering here.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -214,10 +215,11 @@ keys: [../formats/menu-layout.md](../formats/menu-layout.md).
 The Godot half of the campaign boards: draws one `ComposedBoard` over the whole window through
 `BoardFit`, with texture filtering pinned to Nearest so the authored pixel grid stays hard. Owns the
 texture cache and the only art resolution there is, mission art and screen chrome under their own
-extraction roots, and caches a miss so an absent extraction is probed once per name. Supplies the
-font metric a flowed `BoardNote` cannot take for itself. Carries the one piece of chrome that is not
-the original's, a two-line hint band with the focused row's description and the controls line,
-because the original said both with a mouse pointer and a pad has none.
+extraction roots, and caches a miss so an absent extraction is probed once per name. A movie
+resolves to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place,
+so the picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's
+own step and says whether to repaint. Supplies the font metric a flowed `BoardNote` cannot take for
+itself, and the one piece of chrome that is not the original's, the two-line hint band a pad needs.
 
 ## src/UI/BoardPalette.cs
 The ink a campaign board writes in, one palette per background family, because the screens are
@@ -681,14 +683,14 @@ missions with every objective bit set, plus the scratch build store the export a
 `user://Profiles` or `user://Planes`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
-The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout`
-and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the
-art measurer and the flight-devices answer injected. It owns the top level composed from
-`[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
-Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
-screens are its ten partials, below. `Step` applies one seat's frame (pointer, typed text, cursor
-walk, accept and back), `Compose` is the screen as a `ComposedBoard`, and the row kinds every page
-draws are here. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and
+the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the art
+measurer and the flight-devices answer injected. It owns the top level composed from `[MainMenu]`'s
+own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome,
+and the messagebox idiom every refusal and confirm goes through; the other screens are its ten
+partials, below. `Step` applies one seat's frame (pointer, typed text, cursor walk, accept and back)
+and `Compose` is the screen as a `ComposedBoard`, a section that authors a `movie` row taking it as
+the backdrop's bottom. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -799,14 +801,14 @@ cues and the dialogs are this file's. Read `src/UI/CampaignFlow.cs` for the page
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
-The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding
-one `ComposedBoardView`, so every screen scales as the campaign boards do. `Activate` builds the shell and the device
-bookkeeping once, refreshes the roster from the saved-plane store on every call, stands the shell on the top level, maps
-the return destination onto it and applies the `--menu=` aid on the first show alone. `Tick` keeps the pads in step (seat
-0's claim while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer
-into the authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends
-the preview on every door out and on `Hide`, and drives the briefing's reveal. `Measure` reads a strip's size off its file
-once; `PaletteFor` is each screen's inks.
+The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding one
+`ComposedBoardView`, so every screen scales as the campaign boards do. `Activate` builds the shell and the device
+bookkeeping once, refreshes the roster from the saved-plane store on every call, stands the shell on the top level, maps the
+return destination onto it and applies the `--menu=` aid on the first show. `Tick` keeps the pads in step (seat 0's claim
+while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer into the
+authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends the
+preview on every door out and on `Hide`, drives the briefing's reveal, and runs the board's movies on the step the host was
+given. `Measure` reads a strip's size off its file once and a movie's off its sequence header; `PaletteFor` is the inks.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses
@@ -814,18 +816,19 @@ a tree stamped below `OriginalAssetManifest.StampSchema` (`ExtractionStamp.Behin
 layout through `MenuLayout`, requires a `[MainMenu]` section in it, and then checks the manifest
 derived from that layout. Returns the loaded layout when Original can run, else null and the one
 reason, which the host appends to its fallback reason; `degraded` is the optional half, for the
-caller to log once. `ArtPath` is where a layout art name resolves, used by the presentation's own
-size read too. Off-engine coverage: `CSVM.Tests/OriginalManifestTests.cs`.
+caller to log once. `ArtPath` and `RelativeArtPath` are where a layout art name resolves, the
+presentation's size read going through the first; `IsMovie` puts the movies one directory deeper,
+under `MPG`, where the executable resolves them. Coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
 ## src/UI/Menu/Original/OriginalAssetManifest.cs
 The versioned required/optional asset manifest, derived from the decoded layout rather than
-hand-listed. `Derive` classes the art of the sections Original composes required, minus a short
-table of rows it does not draw, everything else optional, and the five files the scripts name and
-Original draws anyway required. `Check` reads no bitmap: existence plus the PNG signature and IHDR
-size for a required entry, existence alone for an optional one, and one report naming every fault
-with its section, row and file. `Schema` carries the rule for its own bumps. The classification is
-reconciled against what the screens draw by `CSVM.Tests/OriginalCoverageTests.cs`. The asset
-policy: [../menu-presentations.md](../menu-presentations.md).
+hand-listed. `Derive` classes the art of the sections Original composes required, less two short
+tables (rows it does not draw, and rows it draws whose file the screen survives the absence of,
+which is where the background movies sit), everything else optional, and the five files the scripts
+name and Original draws anyway required. `Check` reads no bitmap: existence plus the PNG signature
+and IHDR size for a required entry, existence alone for an optional one, and one report naming every
+fault with its section, row and file. `Schema` carries the rule for its own bumps; the asset policy
+and the reconciliation against what the screens draw are [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalRosters.cs
 The two rosters the Original sortie screens list. `Chapters` is the shared `MenuChapters` roster
@@ -926,5 +929,7 @@ A movie as something a composition can draw: a `CSVM.Video.MoviePlayback` and th
 its pixels are uploaded to, made once and updated in place. There is no node, so a caller hangs
 the texture where its own layout row puts it and this surface never learns which screen that is.
 `Open` answers null for a file that cannot be read or is not a movie, because a screen missing its
-background still has everything else on it. Every timing decision belongs to the playback, which
-holds no engine type, so this half is the upload alone. Read `src/Video/MoviePlayback.cs` next.
+background still has everything else on it. `Advance` says whether the picture changed, so a caller
+repaints on the frames that need it and no others. Every timing decision belongs to the playback,
+which holds no engine type, so this half is the upload alone. Read `src/Video/MoviePlayback.cs`
+next.

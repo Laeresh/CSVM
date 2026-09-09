@@ -956,6 +956,43 @@ public class OriginalShellTests
     }
 
     [Fact]
+    public void TheFlagIsTheBottomLayerOfBothScreensThatAuthorItAtTheRowsOwnCornerAndScale()
+    {
+        var shell = Shell(out _);
+
+        var flag = Assert.Single(shell.Compose().Backdrop);
+        Assert.Equal(BoardArtLibrary.Movie, flag.Art.Library);
+        Assert.Equal("PM_Flag.MPG", flag.Art.Name);
+        // The row's own 250 percent of the picture's 320x240, at the row's own corner, which fills
+        // the authored space exactly. Nothing here writes either number down.
+        Assert.Equal((0f, 0f, 800f, 600f), (flag.X, flag.Y, flag.Width, flag.Height));
+
+        shell.Open(OriginalScreen.Options);
+        Assert.Equal("PM_Flag.MPG", Assert.Single(shell.Compose().Backdrop).Art.Name);
+
+        // A screen whose section authors no movie row composes none, however deep in the front end.
+        shell.Open(OriginalScreen.Credits);
+        Assert.Empty(shell.Compose().Backdrop);
+    }
+
+    [Fact]
+    public void AFlagTheMeasurerCannotReadComposesNothingAndLeavesTheRestOfTheScreenWhole()
+    {
+        var free = new FreeFlightFeature();
+        var setup = new PlayerSetupFeature();
+        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+        setup.Join(new ScriptedMenuSeat());
+        var shell = new OriginalShell(
+            MenuLayoutReaderTests.OriginalLayout(), free, setup,
+            art => art == "PM_Flag.MPG" ? null : Measure(art));
+
+        var board = shell.Compose();
+        Assert.Empty(board.Backdrop);
+        Assert.Equal(new[] { "PM_Logo.png", "PM_Frame.png" }, board.Pictures.Select(p => p.Art.Name));
+        Assert.Equal(8, board.Plaques.Count);
+    }
+
+    [Fact]
     public void TheInksComeOffTheLayoutsGlobalsAndThePaperPlaquesOwnTail()
     {
         var shell = Shell(out _);
@@ -1001,6 +1038,8 @@ public class OriginalShellTests
     // arrows 15x56, the slider's slot and thumb at their shipped sizes, the panes unmeasured.
     private static (int Width, int Height)? Measure(string art) => art switch
     {
+        // The fixture's movie at the shipped files' own picture size, which the layout row scales.
+        "PM_Flag.MPG" => (320, 240),
         "PM_B_Paper.png" => (160, 112),
         "PP_B_Check8.png" => (16, 128),
         "PP_B_DropUp.png" or "PP_B_DropDown.png" => (15, 56),

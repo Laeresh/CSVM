@@ -164,6 +164,14 @@ anything. A mismatch leaves the actual PNG and that shot's log in
 `manifest.json` in place, byte-identically apart from the hash lines that moved; GOLD-1 says when
 that is the right answer.
 
+**A shot's `frame` is checked before its hash**, off the capture's own `frame=N clock=<sim|render>`
+field, because a shot that photographed a different moment is a clock regression and reads as
+neither a pass nor a pixel change once it is folded into the hash compare. The capture names the
+counter, never the harness: a run with a session reports its sim clock, which under `--det` advances
+one step per rendered frame, and a screen with no session reports the rendered frames its countdown
+waited, read off Godot's own counter rather than off the countdown itself. Both answer the same
+question, so one manifest number covers a flight shot and a menu shot alike.
+
 **Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4)**, in
 registry-order batches, each with its own watchdog, process, log and PNG. The default is
 the fastest worker count that stayed bit-identical on the one machine measured, and
@@ -180,7 +188,8 @@ its evidence is never taken beside another stage's load (LOG-13, PERF-12/13/14).
 
 **A duration here is a count of SIM frames, never wall seconds.** Each scenario runs
 `--det --perf --no-vsync --mute` plus `--frames=N --screenshot=`, and the saved-shot line prints
-`sim_frame=N` so the count is proved rather than assumed. `--perf` reports
+`sim_frame=N` so the count is proved rather than assumed (every perf scenario runs a session, so
+its captures are always sim-clocked). `--perf` reports
 a `[perf] window …` line per 60 rendered frames and a `[perf] startup …` line that closes
 arithmetically over the build; the script parses both.
 

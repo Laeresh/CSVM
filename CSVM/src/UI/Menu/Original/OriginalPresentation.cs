@@ -491,9 +491,16 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         // And again after the frame, so a screen change this frame is what the next poll reads.
         _host.Seats[0].CapturingText = _shell.CapturingText;
+        // The board's own movies run on the step the host was given. A new picture repaints without
+        // recomposing: nothing about the screen changed, only the pixels behind it.
+        bool picture = _view.AdvanceMovies(dt);
         if (changed)
         {
             Redraw();
+        }
+        else if (picture)
+        {
+            _view.QueueRedraw();
         }
     }
 
@@ -535,6 +542,28 @@ public sealed class OriginalPresentation : IMenuPresentation
     }
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
+
+    // A movie's picture size, which its sequence header carries and no bitmap loader can read.
+    // Opened for the header alone and dropped; the surface the board draws from opens it again,
+    // once, and that copy is the one that decodes.
+    private static (int Width, int Height)? MovieSize(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var movie = CSVM.Video.MpegMovie.FromFile(path);
+            return (movie.Width, movie.Height);
+        }
+        catch (Exception e)
+            when (e is IOException or InvalidDataException or ArgumentException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the
     // page can only be put in from outside: Accept on the opening focus stands the Difficulty
@@ -731,7 +760,11 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         (int Width, int Height)? size = null;
         string path = OriginalAvailability.ArtPath(_dataRoot, art);
-        if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
+        if (OriginalAvailability.IsMovie(art))
+        {
+            size = MovieSize(path);
+        }
+        else if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
         {
             size = (image.GetWidth(), image.GetHeight());
         }

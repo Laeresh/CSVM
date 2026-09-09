@@ -124,7 +124,7 @@
 
 .PARAMETER GoldenWorkers
     How many golden shots launch at once. Default 4: an A/B of 1/2/3/4 workers, three repeats each,
-    found the complete 16-shot manifest bit-identical (raw-pixel hash, sim_frame, size, adapter) at
+    found the complete 16-shot manifest bit-identical (raw-pixel hash, captured frame, size, adapter) at
     every count with no GPU/driver contention observed on the machine measured, and 4 was the
     fastest of them (~29s against ~87s serial). Shots run in registry-order batches of this size;
     a shot's own process, log, .out/.err and PNG stay exactly as unique as the serial path, and the
@@ -1042,18 +1042,21 @@ if ($SkipGoldensNow) {
             return
         }
         $hasPng = Test-Path $State.Png
-        $hash = ""; $size = ""; $gpu = ""; $simFrame = -1
+        $hash = ""; $size = ""; $gpu = ""; $frame = -1; $clock = ""
         if ($hasPng -and (Test-Path $State.Log)) {
             foreach ($line in (Get-Content -Path $State.Log)) {
                 if ($line -match 'shot pixmd5=(\w+) size=(\S+) gpu=(.*)$') {
                     $hash = $Matches[1]; $size = $Matches[2]; $gpu = $Matches[3].Trim()
                 }
-                if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
-                    $simFrame = [int]$Matches[1]
+                # The capture's own answer to which frame it landed on, and to what counted it: a
+                # session's sim clock, or the rendered frames a screen with no session waited. The
+                # leading \s keeps this off the sim_frame= field later in the same line.
+                if ($line -match 'screenshot saved: .*\sframe=(\d+) clock=(\w+)') {
+                    $frame = [int]$Matches[1]; $clock = $Matches[2]
                 }
             }
         }
-        $State.Hash = $hash; $State.Size = $size; $State.Gpu = $gpu; $State.SimFrame = $simFrame
+        $State.Hash = $hash; $State.Size = $size; $State.Gpu = $gpu; $State.Frame = $frame; $State.Clock = $clock
 
         # BL-039: a golden shot exiting nonzero with no PNG at all, silently, is the unreproduced
         # symptom this item exists for -- not the instant concurrent-run collision (LOG-13,
@@ -1088,7 +1091,7 @@ if ($SkipGoldensNow) {
         $states += [pscustomobject]@{
             Shot = $shot; Png = $png; Log = $shotLog
             Attempt = 1; ShotCode = -1; Launch = $null; NeedsRetry = $false; TimedOut = $false
-            Hash = ""; Size = ""; Gpu = ""; SimFrame = -1
+            Hash = ""; Size = ""; Gpu = ""; Frame = -1; Clock = ""
         }
     }
 
@@ -1143,11 +1146,15 @@ if ($SkipGoldensNow) {
             continue
         }
         $adapters[$state.Gpu] = 1
-        # A shot that photographed a different sim frame is a clock regression, not a pixel one,
-        # and reads as neither if it is folded into the hash compare.
-        if ($state.SimFrame -ne [int]$shot.frame) {
-            $broken += "$($shot.name): captured sim_frame=$($state.SimFrame), manifest says $([int]$shot.frame)"
-            Write-Host "  FAIL $($shot.name): sim_frame=$($state.SimFrame), expected $([int]$shot.frame)" -ForegroundColor Red
+        # A shot that photographed a different frame is a clock regression, not a pixel one, and
+        # reads as neither if it is folded into the hash compare. Which counter names the frame is
+        # the capture's own answer and never this loop's: a session reports its sim clock, a screen
+        # with no session the rendered frames it waited, and both are compared the same way against
+        # the one number the manifest carries.
+        if ($state.Frame -ne [int]$shot.frame) {
+            $counter = if ($state.Clock) { "$($state.Clock) clock" } else { "no frame line" }
+            $broken += "$($shot.name): captured frame=$($state.Frame) on the $counter, manifest says $([int]$shot.frame)"
+            Write-Host "  FAIL $($shot.name): frame=$($state.Frame) ($counter), expected $([int]$shot.frame)" -ForegroundColor Red
             continue
         }
         if ($state.Size -ne $manifest.size) {

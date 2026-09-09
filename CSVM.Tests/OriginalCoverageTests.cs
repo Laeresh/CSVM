@@ -643,6 +643,9 @@ public class OriginalCoverageTests : IDisposable
         return _drawn.Count;
     }
 
+    // The screen chrome alone. A movie is deliberately drawn and optional, which the check above
+    // would otherwise read as a contradiction: the screen behind a background film draws whole
+    // without it, so its absence is a degrade rather than a reason to refuse Original.
     private void Collect(ComposedBoard board)
     {
         foreach (var picture in board.Backdrop.Concat(board.Pictures).Concat(board.Overlays.SelectMany(o => o.Pictures)))

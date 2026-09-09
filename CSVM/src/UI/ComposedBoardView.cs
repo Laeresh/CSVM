@@ -23,12 +23,23 @@ public sealed partial class ComposedBoardView : Control
     // The band's own height in authored pixels: two lines and a little air.
     private const float HintBand = 32f;
 
+    // The play count a board's movie takes. Every movie row on a screen composed here authors
+    // Loops 0, the layout's own spelling of a background that never ends (docs/formats/cinemas.md);
+    // the two rows that play a fixed number of times are cinema screens, which are a flow rather
+    // than a picture under one.
+    private const int EndlessPlays = 0;
+
     // How far a synthetic italic leans, as the shear of one em. The extraction ships no italic
     // face, so a slanted draw of the board's own face is the stand-in for the original's; the
     // value is chosen to read like the reference screenshot's note, not decoded from anything.
     private const float Slant = 0.25f;
 
     private readonly Dictionary<string, Texture2D?> _textures = new();
+
+    // The movies behind the boards, one per file, kept beside the texture cache rather than in it
+    // because a picture is drawn from the same ImageTexture forever and only the surface knows when
+    // that texture's pixels changed. A file that does not open caches a null so it is tried once.
+    private readonly Dictionary<string, MovieSurface?> _movies = new();
 
     private FontVariation? _slanted;
 
@@ -63,6 +74,24 @@ public sealed partial class ComposedBoardView : Control
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(note.Size)));
         return (text, width) => font.GetMultilineStringSize(
             text, HorizontalAlignment.Left, fit.Length(width), points).Y / fit.Scale;
+    }
+
+    /// <summary>Advances every movie this view has opened by that many seconds, answering whether
+    /// any of them put a new picture in its texture. ⚠ Hand it a step that does not come from the
+    /// wall clock on a deterministic run, or the picture a capture lands on is a property of the
+    /// machine rather than of the frame count (<c>docs/verification.md</c>'s DET-7).</summary>
+    public bool AdvanceMovies(double elapsedSeconds)
+    {
+        bool changed = false;
+        foreach (var movie in _movies.Values)
+        {
+            if (movie != null)
+            {
+                changed |= movie.Advance(elapsedSeconds);
+            }
+        }
+
+        return changed;
     }
 
     /// <summary>Puts a composed board on screen, with the two lines the shell adds under it.</summary>
@@ -369,6 +398,8 @@ public sealed partial class ComposedBoardView : Control
             BoardArtLibrary.Rimage =>
                 Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png"),
             BoardArtLibrary.Loose => art.Name,
+            BoardArtLibrary.Movie => Path.Combine(
+                _dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", "MPG", art.Name),
             _ => Path.Combine(_dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", art.Name),
         };
         if (_textures.TryGetValue(path, out var cached))
@@ -377,7 +408,15 @@ public sealed partial class ComposedBoardView : Control
         }
 
         Texture2D? texture = null;
-        if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
+        if (art.Library == BoardArtLibrary.Movie)
+        {
+            // The surface rewrites this one texture in place for the life of the view, so the cache
+            // above needs no invalidation and the picture animates with nothing else done to it.
+            var movie = MovieSurface.Open(path, EndlessPlays);
+            _movies[path] = movie;
+            texture = movie?.Texture;
+        }
+        else if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
         {
             texture = ImageTexture.CreateFromImage(image);
         }

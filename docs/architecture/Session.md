@@ -485,7 +485,8 @@ line, exe hash, fork commit, schema integer) and compares its schema against thi
 boot, each naming the fix, which is to re-run the extraction. Warn rather than block, because a dev
 tree holds valid extractions older than the stamp. `Behind` is the same read for a caller that
 blocks instead of warning: true only when the stamp is present, carries a schema and is under what
-the caller asked for, so an unstamped or unreadable tree still runs.
+the caller asked for, so an unstamped or unreadable tree still runs. `Schema` also lives in both
+extraction scripts, and `CSVM.Tests/ExtractionStampTests.cs` refuses a bump that moves fewer than all three.
 
 ## src/Session/MenuAudioService.cs
 The host's `IMenuAudio` over the process's playback. `BeginNarration` ducks the music and restarts the narration player on

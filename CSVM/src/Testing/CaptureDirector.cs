@@ -12,7 +12,8 @@ namespace CSVM.Testing;
 /// placement print and ad-hoc save: constructed once in `_Ready` from the launch spec (a
 /// --screenshot burst is a process-scoped capture, never re-armed by a menu relaunch), then
 /// `Tick()`ed from the tail of `_Process`. Reads camera/orbit/rigs — passed in per call, no
-/// back-reference to the host node.</summary>
+/// back-reference to the host node. The saved line reports the frame the shot landed on and which
+/// counter named it; `docs/tooling.md` holds the contract the golden harness reads it under.</summary>
 public sealed class CaptureDirector
 {
     // The capture still owed, taken from the spec at launch and cleared once written — a --shots=
@@ -22,6 +23,13 @@ public sealed class CaptureDirector
     private int _shotIndex;            // 0-based index of the shot being written
     private Transform3D? _shotBaseXform;  // camera pose captured at the first burst frame
     private Vector3 _shotPivot;           // micro-orbit centre (keeps the subject framed)
+
+    // Godot's own rendered-frame counter at the frame the countdown began on, and whether it has
+    // begun. The engine's counter rather than a second count of this class's own: a capture that
+    // reports a number it derived from the same field it counts down only ever agrees with itself,
+    // and the frame a shot landed on is the one thing about it that has to be independently true.
+    private ulong _countdownFrom;
+    private bool _counting;
 
     public CaptureDirector(SessionSpec spec)
     {
@@ -86,6 +94,11 @@ public sealed class CaptureDirector
         {
             return;
         }
+        if (!_counting)
+        {
+            _counting = true;
+            _countdownFrom = Engine.GetProcessFrames();
+        }
         // --frames=N is a SIM coordinate, not a wall-clock delay: this decrement must run exactly
         // once per _Process call, here and nowhere else, or a golden lands on a different sim frame.
         if (--_shotDelay > 0)
@@ -105,18 +118,21 @@ public sealed class CaptureDirector
         }
         var path = spec.ScreenshotShots > 1 ? IndexedShotPath(_pendingShot, _shotIndex) : _pendingShot;
         var saveErr = img.SavePng(path);
-        // The sim frame is part of what the capture IS: under the fixed clock one rendered frame is
-        // exactly one sim step, so this number pins the moment the shot shows.
+        // The frame the capture landed on, and what counted it: a session's sim clock, or the
+        // rendered frames a screen with no session waited. docs/tooling.md holds why those are one
+        // question, and why the render count is read off the engine rather than off the countdown.
         long simFrame = clock?.Frame ?? 0;
         double simTime = clock?.Time ?? 0.0;
+        long frame = clock != null ? simFrame : (long)(Engine.GetProcessFrames() - _countdownFrom) + 1;
+        string counter = clock != null ? "sim" : "render";
         if (saveErr == Error.Ok)
         {
-            Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
+            Log.Info("core", $"screenshot saved: {path} frame={frame} clock={counter} sim_frame={simFrame} sim_time={simTime:0.###}");
         }
         else
         {
             // A missing parent directory fails SavePng silently — say so instead of "saved".
-            Log.Error("core", $"screenshot save FAILED ({saveErr}): {path} sim_frame={simFrame}");
+            Log.Error("core", $"screenshot save FAILED ({saveErr}): {path} frame={frame} clock={counter} sim_frame={simFrame}");
         }
         // The golden-image tripwire's whole input: a hash of the RAW pixels (never the PNG, whose
         // encoded bytes differ between identical images), the size that hash is only valid at, and

@@ -33,11 +33,12 @@ Nine of the ten are cinemas in the ordinary sense, played once for the player to
 backmost layer, which is why it is a tenth the size of the others and the only one authored in mono.
 
 They sit loose in the install under `GOSDATA\ASSETS\GRAPHICS\MPG\`, outside the `.rof` archive that
-holds the rest of the front end's art. The archive does carry an `ASSETS/GRAPHICS/MPG` directory
-entry, so an extraction produces that folder with nothing in it, and no extraction script names the
-files. `SessionPaths` resolves paths only under `dataRoot/extracted/`, so a player wanting these
-bytes has to be given them there; the extraction copying them across is `A5` of
-[`PLAN-cinemas.md`](../PLAN-cinemas.md).
+holds the rest of the front end's art. The archive carries an `ASSETS/GRAPHICS/MPG` directory entry
+with nothing behind it, so `ExtractRof.ps1` copies the ten files in verbatim and every runtime
+lookup resolves under `extracted/rof/ASSETS/GRAPHICS/MPG/`, one directory deeper than every bitmap
+the same layout rows name. A tree extracted before that copy step existed is refused by the
+extraction stamp's schema rather than opened on a screen with nothing running behind it
+([menu-layout.md](menu-layout.md) has the rule each bump obeys).
 
 ## Container and codecs
 
