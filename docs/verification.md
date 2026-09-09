@@ -550,6 +550,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   per lookup and cannot be closed under itself, while a zip-backed one holds a handle that can,
   which threw `ObjectDisposedException` out of `SessionSimulation.Step` for every sound the
   prewarm had missed.
+- **INSTR-47** — **A gate is only as good as its trigger, and the trigger belongs to the gate, not
+  to each harness that calls it: a passing self-test says nothing about a harness that exits before
+  the script runs.** Three `PreToolUse` copies of `git\s+commit` required the two words to be
+  adjacent, so `git -C <tree> commit`, the form `CLAUDE.md` prescribes for naming a tree, skipped
+  `CheckCommitContent.ps1` silently while all 21 of its rows passed; four comment-cap violations and
+  an over-cap doc entry reached `main`. Drive the harness's own command text with a crafted payload
+  against a fixture carrying a known fault.
 
 ## SRC — sources and documents
 

@@ -14,7 +14,7 @@
 # So the target is the tree that command will write to: the named tree, else the directory it
 # changes to first, else the tree the hook stands in. ONE tree, never a sweep of all of them.
 #
-# ⚠ Do not widen this back to every worktree. A sweep blocks a commit on a file in a tree the
+# DO NOT WIDEN THIS BACK TO EVERY WORKTREE. A sweep blocks a commit on a file in a tree the
 # session cannot fix, which with a dozen live worktrees means another session's UNCOMMITTED work
 # stops yours, and the only way past is the escape hatch, so the gate ends up teaching people to
 # skip it. Content arriving by merge or pull is still caught: it lands in the tree that merged it,
@@ -51,6 +51,24 @@ $checks = @(
     @{ Name = 'comment caps';    Script = 'CheckCommentCaps.ps1' },
     @{ Name = 'doc entries';     Script = 'CheckDocEntries.ps1' }
 )
+
+# THE GATE IS ONLY AS GOOD AS ITS TRIGGER. What follows is what a git commit INVOCATION looks like
+# on a command line, and it is deliberately not "git" followed by "commit": the very form CLAUDE.md
+# prescribes for naming the tree a commit writes to, "git -C <tree> commit", puts a global option
+# between the two words, so a trigger testing for that adjacency waves every worktree-scoped commit
+# through with no check run at all. Four comment-cap violations and an over-cap doc entry reached
+# main that way.
+#
+# Only git's OWN globals are allowed in the gap, and the match must begin at a statement boundary.
+# Both narrowings are the point. Allowing arbitrary tokens there would make
+# "git log --grep='a git commit'" a commit; matching the bare word would make "git log --grep=commit"
+# one; and starting anywhere would make a commit quoted inside another command's argument one.
+$q = [char]39
+$anyToken = '(?:"[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s]+)'
+$gitGlobal = '(?:-[Cc]\s+' + $anyToken +
+    '|--(?:git-dir|work-tree|namespace|exec-path|super-prefix|config-env)(?:=|\s+)' + $anyToken +
+    '|--[a-z][a-z-]*|-[a-zA-Z])'
+$commitInvocation = '(?:^|[\r\n;|&{(])\s*&?\s*git(?:\s+' + $gitGlobal + ')*\s+commit(?:\s|$)'
 
 # A path as written on the command line, minus the quoting.
 function Get-UnquotedPath {
@@ -105,7 +123,7 @@ function Resolve-Toplevel {
 # the last such change wins because that is the directory the commit runs in.
 function Get-ChangedDirectory {
     param([string]$CommandLine)
-    $commit = [regex]::Match($CommandLine, '(?:^|[\s;|&])git(?:\s+\S+)*?\s+commit(?:\s|$)')
+    $commit = [regex]::Match($CommandLine, $commitInvocation)
     $upTo = if ($commit.Success) { $CommandLine.Substring(0, $commit.Index) } else { $CommandLine }
     $q = [char]39
     $pathGroup = '("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s;|&]+)'
@@ -338,6 +356,44 @@ function Invoke-SelfTest {
         Assert-Row 'guard  a -C-scoped commit is checked end to end' ($LASTEXITCODE -eq 2)
         & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command 'git log --grep=commit' | Out-Null
         Assert-Row 'guard  a subcommand merely naming commit is not one' ($LASTEXITCODE -eq 0)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command (
+            'git --work-tree=' + $wt + ' commit -m x') | Out-Null
+        Assert-Row 'guard  a --work-tree-scoped commit is checked end to end' ($LASTEXITCODE -eq 2)
+
+        # The trigger itself. It is the single point of failure for the whole gate: every harness
+        # calls this script unconditionally and this pattern decides whether anything runs, so the
+        # forms git accepts between "git" and its subcommand are enumerated here rather than
+        # trusted on inspection.
+        function Assert-Trigger {
+            param([string]$Name, [string]$CommandLine, [bool]$Expected)
+            Assert-Row $Name (($CommandLine -match $commitInvocation) -eq $Expected)
+        }
+        Assert-Trigger 'trigger  a bare commit' 'git commit -m x' $true
+        Assert-Trigger 'trigger  git -C <tree> commit' 'git -C Z:\wt commit -m x' $true
+        Assert-Trigger 'trigger  git -C with a quoted path holding a space' (
+            'git -C "Z:\a b\wt" commit -m x') $true
+        Assert-Trigger 'trigger  git --work-tree= and --git-dir= commit' (
+            'git --work-tree=Z:\wt --git-dir=Z:\wt\.git commit -m x') $true
+        Assert-Trigger 'trigger  a spaced --work-tree value' 'git --work-tree Z:\wt commit -m x' $true
+        Assert-Trigger 'trigger  git -c k=v commit' 'git -c user.email=x commit -m x' $true
+        Assert-Trigger 'trigger  a valueless global before the subcommand' (
+            'git --no-pager -C Z:\wt commit -F msg.txt') $true
+        Assert-Trigger 'trigger  a commit after another statement' 'git add -A; git commit -m x' $true
+        Assert-Trigger 'trigger  a commit after &&' 'git add -A && git commit -m x' $true
+        Assert-Trigger 'trigger  a commit after a Set-Location' 'Set-Location Z:\wt; git commit -m x' $true
+        Assert-Trigger 'trigger  a commit through the call operator' '& git commit -m x' $true
+        Assert-Trigger 'trigger  a commit inside a braced block' 'if ($ok) { git commit -m x }' $true
+        Assert-Trigger 'trigger  git log --grep=commit is not a commit' 'git log --grep=commit' $false
+        Assert-Trigger 'trigger  a commit quoted inside another git command is not one' (
+            'git log --grep="a git commit here"') $false
+        Assert-Trigger 'trigger  a commit quoted inside a message is not an invocation' (
+            'Write-Host "git commit -m x"') $false
+        Assert-Trigger 'trigger  a path merely naming the runner is not a commit' (
+            'Get-Content Z:\CSVM\CheckCommitContent.ps1') $false
+        Assert-Trigger 'trigger  commit-tree is a different subcommand' (
+            'git commit-tree HEAD -m x') $false
+        Assert-Trigger 'trigger  a non-global token before commit is not a commit' (
+            'git log commit') $false
     }
     finally {
         if (Test-Path -LiteralPath $wt) { git -C $main worktree remove --force $wt 2>&1 | Out-Null }
@@ -368,9 +424,10 @@ if ($ShowRoots) {
 
 if (-not $Root) {
     if (-not $Command) { exit 0 }
-    # A commit names its tree BEFORE the subcommand, as "git -C <tree> commit", so testing for a
-    # bare "git commit" waves every worktree-scoped commit through with no check run at all.
-    if ($Command -notmatch '(?:^|[\s;|&])git(?:\s+\S+)*?\s+commit(?:\s|$)') { exit 0 }
+    # The one trigger every harness relies on; see $commitInvocation above for why it is shaped
+    # the way it is. No harness carries a trigger of its own, because three that did all carried
+    # the same wrong one.
+    if ($Command -notmatch $commitInvocation) { exit 0 }
     if ($env:CSVM_SKIP_CONTENT_CHECKS) {
         [Console]::Error.WriteLine('CSVM_SKIP_CONTENT_CHECKS is set: content checks skipped.')
         exit 0
