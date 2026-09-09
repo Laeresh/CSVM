@@ -38,8 +38,7 @@ public class CampaignScrapbookPageTests
 
     /// <summary>The two tabs are the whole of the selection: the one showing is a plaque over the
     /// card, the other a picture under it, and switching moves the card's own frame with them. The
-    /// Best to Date tab keeps the original's decoded outcome bug, reading
-    /// Mission Failed off an offset the merge never writes.</summary>
+    /// merged half this completed mission carries reads Mission Completed under either tab.</summary>
     [Fact]
     public void TheTabsSwitchWhichHalfTheResultsBlockReads()
     {
@@ -62,7 +61,7 @@ public class CampaignScrapbookPageTests
         Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.BestTab)); // now it is the plaque
         Assert.Equal(-1, RowOf(flow.Page, BoardButton.MostTab));
         Assert.Equal(0, flow.Page.Pictures[1].Frame); // the card's Best to Date frame
-        Assert.Contains(flow.Page.Captions, l => l.Text == "Mission Failed"); // the decoded bug
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Mission Completed");
     }
 
     /// <summary>Every row the page offers names one thing a pointer can be aimed at: an authored

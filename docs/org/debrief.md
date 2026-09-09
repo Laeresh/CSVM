@@ -242,8 +242,11 @@ show four. This is the same shape as the Instant Action wrap-up's own dead row, 
 **The two tabs are the record's two halves.** Langui 1159 `Best to Date` selects the merged half at
 `+0x54` and 1160 `Most Recent` the attempt half at `+0x00`, which is the same two-halves layout the
 format page reaches from the merge rules. ⚠ The outcome line is the one row that does not read the
-same offset in both: `0x0040a7e6` takes the mask from the half's `+0x00` for one tab and from its
-`+0x24` for the other. Every other row and both kill arrays are read at the same offset in whichever
+same offset in both: `0x0040a7e6` takes the mask from the half's `+0x00` for Most Recent and from its
+`+0x24`, the best attempt's own mask, for Best to Date
+([`formats/saved-games.md`](../formats/saved-games.md#the-mission-result-array)). Both hold bit 0
+under exactly the same condition, so the line reads Mission Completed on either tab once the mission
+has been won. Every other row and both kill arrays are read at the same offset in whichever
 half the tab picked. Langui 1200 `Current Mission` is the third tab the
 scrapbook carries when it is opened from the cabin rather than from a mission end, and 1217 to 1219
 (`Starting My Career`, `Above the clouds`, `Not yet flown `) are what an unflown mission's page
@@ -447,8 +450,7 @@ merge, not its author, and the two run in the same mission-end pass.
   `CampaignScrapbookZoomPage` the scrap detail view; the split is the section above.
 - **The results block is computed (C15).** `CampaignScrapbookResults`, in
   `CampaignPreviousMissionsPage.cs`, renders the outcome line and the four drawn rows off one
-  `MissionResult` and either tab, including the Best to Date tab's own bug: it always reads Mission
-  Failed, since `0x0040a7e6` never reads the merged mask for that tab.
+  `MissionResult` and either tab, each tab off its own half's completed-objective mask.
 - **The kill stamps are computed (C16).** The same class's `Stamps` walks the plain tally then the
   ace tally in ascending airframe order, skipping zeros, filling the eleven `SB_KILL`/`SB_KILLTEXT`
   slots densely; `StampPictures`/`StampLabels` place the strip frame and count at each slot's own

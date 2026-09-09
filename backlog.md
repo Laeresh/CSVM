@@ -2278,22 +2278,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   they say. An empty pane is the fallback finding nothing armed, not a missing pane.
   *Cross-refs:* `BL-658`'s landing (`git log --grep=BL-658`), which filled the lower pane.
 
-- `BL-756` `[Research]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The
-  scrapbook's Best to Date tab always reads Mission Failed, which is the original's own defect
-  reproduced on purpose.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing
-  sortie, "The Best to Date shows Failed instead of Completed". The original's `0x0040a7e6` does not
-  read the selected half's completed-objective mask for that tab: it reads `+0x24` inside the half,
-  a slot the completion merge (`FUN_00405ce0`) never writes, so it is always 0 and the tab always
-  says failed. `CampaignPreviousMissionsPage.Won`
-  (`CSVM/src/UI/CampaignPreviousMissionsPage.cs:74-81`) reproduces that verbatim and says so.
-  *Fix shape:* a decision, not code. Keeping it is fidelity; reading the merged record's real mask
-  is a deliberate divergence of the kind Built-in already carries. Whichever way it goes, the losing
-  reading leaves the summary so the member states one rule. *⚠ Traps:* **the Most Recent tab is
-  correct and has to stay correct**; it reads the real mask, so a fix that gives both tabs one path
-  must not take that away. This is not a save-file defect: the merged half's mask is written and
-  readable. *Cross-refs:* `docs/formats/saved-games.md` ("The mission-result array"), `BL-705`'s
-  landing (`git log --grep=BL-705`), which made the tab clickable.
-
 - `BL-757` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Switching the menu
   presentation shows Godot's procedural sky between the old menu and the new one.** *Evidence:*
   reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "On switching from built-in to

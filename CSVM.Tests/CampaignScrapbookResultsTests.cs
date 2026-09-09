@@ -70,11 +70,11 @@ public class CampaignScrapbookResultsTests
         Assert.Equal(10, rows.Count); // outcome + heading + four (title, value) pairs
     }
 
-    /// <summary>⚠ The original's <c>0x0040a7e6</c> reads a never-written offset for the Best to
-    /// Date tab instead of the merged mask, so that tab always shows Mission Failed even for a
-    /// completed, merged mission. Most Recent reads the real mask.</summary>
+    /// <summary>Both tabs read their own half's mask. The merged half is written only by an
+    /// attempt that won, so a merged record carries the primary bit and Best to Date reads
+    /// Mission Completed.</summary>
     [Fact]
-    public void BestToDateAlwaysReadsAsMissionFailed()
+    public void BothTabsReadTheirOwnHalfsMask()
     {
         var result = new MissionResult
         {
@@ -83,6 +83,23 @@ public class CampaignScrapbookResultsTests
         };
 
         Assert.True(CampaignScrapbookResults.Won(result, bestToDate: false));
+        Assert.True(CampaignScrapbookResults.Won(result, bestToDate: true));
+
+        var rows = CampaignScrapbookResults.Rows(result, bestToDate: true);
+        Assert.Contains(rows, l => l.Text == "Mission Completed");
+    }
+
+    /// <summary>A mission attempted but never completed: the merged half is all zero, so Best to
+    /// Date reads Mission Failed while Most Recent reports the failed attempt.</summary>
+    [Fact]
+    public void BestToDateReadsFailedForANeverCompletedMission()
+    {
+        var result = new MissionResult
+        {
+            Latest = Run(mask: 2, timeMs: 1000, shots: 1, hits: 1, money: 0),
+        };
+
+        Assert.False(CampaignScrapbookResults.Won(result, bestToDate: false));
         Assert.False(CampaignScrapbookResults.Won(result, bestToDate: true));
 
         var rows = CampaignScrapbookResults.Rows(result, bestToDate: true);
