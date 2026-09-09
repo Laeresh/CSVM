@@ -26,6 +26,7 @@ internal static class MenuPlayerSetupSuites
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
+    private static readonly MenuCommands Left = new() { MoveX = -1 };
 
     [Suite("menu-player-setup-journey",
         "Built-in's player setup pinned on the real launchscreen: a lone seat's two-stage pick with "
@@ -68,8 +69,10 @@ internal static class MenuPlayerSetupSuites
         + "move nothing, Back leaves the walk with "
         + "the seat kept and seat 0's pick undone, seat 0 picking again reopens it at the same "
         + "seat, CANCEL SELECTIONS and Back over a closed list each drop the selection without "
-        + "leaving, and two Accepts select and confirm, FLY leaves as a Dogfight launch for both "
-        + "seats, Free Flight launches both too, and a guest's Back unjoins from the top level")]
+        + "leaving, two Accepts select and confirm, and that last confirm is the Dogfight launch for "
+        + "both seats; on Free Flight with no map picked it launches nothing and leaves FLY dark "
+        + "until the map is picked, when seat 0's own press flies both, and a guest's Back unjoins "
+        + "from the top level")]
     internal static void MenuPlayerSetupSeats(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -505,11 +508,8 @@ internal static class MenuPlayerSetupSuites
             Press(host, s2, Accept);
             ctx.Check(setup.Seats[1].Confirmed && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight,
                 $"Accept again confirms it and the Dogfight screen returns ({shell.Screen})");
-            Press(host, seat0, Up);
-            ctx.Check(shell.FocusedKey == CSVM.UI.Menu.Original.OriginalShell.FlyKey, $"Up from the first airframe now wraps onto the live FLY ({shell.FocusedKey})");
-            Press(host, seat0, Accept);
             ctx.Check(exits.Count == 1 && exits[0] is LaunchExit { Mode: MenuMode.Versus, Seats.Count: 2 },
-                $"FLY leaves as one Dogfight LaunchExit for both seats ({exits.Count}, {(exits.Count > 0 ? exits[0].GetType().Name : "")})");
+                $"and that last confirm is the launch, one Dogfight LaunchExit for both seats ({exits.Count}, {(exits.Count > 0 ? exits[0].GetType().Name : "")})");
             if (exits.Count == 1 && exits[0] is LaunchExit dogfight)
             {
                 ctx.Check(dogfight.Chapter == "C1" && dogfight.Seats[0].PlaneNode == "player_autogyro" && dogfight.Seats[1].PlaneNode == "player_avenger",
@@ -522,15 +522,23 @@ internal static class MenuPlayerSetupSuites
             Press(host, seat0, Up);
             Press(host, seat0, Accept);
             ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.FreeFlight, $"Up onto the Free Flight door and Accept opens Free Flight ({shell.Screen})");
-            Press(host, seat0, Accept);
             Press(host, seat0, Right);
             Press(host, seat0, Accept);
             Press(host, s2, Accept);
             Press(host, s2, Accept);
+            ctx.Check(exits.Count == 1 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.FreeFlight
+                && Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: false },
+                $"with no map picked the last confirm launches nothing and leaves FLY dark ({exits.Count}, {shell.Screen})");
+            Press(host, seat0, Left);
+            Press(host, seat0, Accept);
+            ctx.Check(Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: true },
+                $"the map picked, FLY stands with every seat ready");
+            Press(host, seat0, Right);
             Press(host, seat0, Up);
+            ctx.Check(shell.FocusedKey == CSVM.UI.Menu.Original.OriginalShell.FlyKey, $"Up from the first airframe wraps onto it ({shell.FocusedKey})");
             Press(host, seat0, Accept);
             ctx.Check(exits.Count == 2 && exits[1] is LaunchExit { Mode: MenuMode.Free, Seats.Count: 2 },
-                $"Free Flight launches both seats through its feature ({exits.Count})");
+                $"and its press launches both seats through the Free Flight feature ({exits.Count})");
 
             host.Show(MenuReturnDestination.TopLevel);
             var s3 = new ScriptedSeat();

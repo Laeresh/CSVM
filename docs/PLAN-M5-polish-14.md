@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-746` Back on the per-seat screen returns instead of unjoining
 2. ☑ `BL-747` Only the picking seat's device drives the per-seat screen
-3. ☐ `BL-749` A two-pilot Free Flight walk launches on the last confirm
+3. ☑ `BL-749` A two-pilot Free Flight walk launches on the last confirm
 4. ☐ `BL-748` A joined pilot picks a weapon loadout
 
 ### Wave B — Wrecks, hulls and reach over the mission map
@@ -241,7 +241,26 @@ walk with seat 0 as the picking seat, where its own device must drive it. Comple
 **⚠ Traps.** Do not fix this by gating on device kind; the seat's own `Source` is the identity that
 matters.
 
-## A3 ☐ `BL-749` A two-pilot Free Flight walk launches on the last confirm
+## A3 ☑ `BL-749` A two-pilot Free Flight walk launches on the last confirm
+
+**Landed.** The mechanism was one branch in `FinishSeatWalk`, which treated the return screen as the
+question. Instant Action was the only return that launched; every other return reopened the screen
+the walk came from and left seat 0 to press FLY, which a second pilot's confirm has already earned.
+The walk's completion now reaches the launch whatever screen it returns to: `InstantAction` keeps its
+own exit, and a sortie return goes through `Fly()`, the same press FLY makes, so Free Flight and
+Dogfight launch from the last seat's confirm with each seat's aircraft and devices. Routing it
+through `Fly()` rather than a second launch path is what keeps both gates: the screen is opened
+before the call, so the launch reads that screen's own chapter and mode, and `FlyEnabled` still
+withholds a Dogfight without a second seat and a sortie with no map picked. Where a gate is unmet the
+screen returns with FLY dark, exactly as before, and picking the map then lights it for seat 0's own
+press, so nothing became unreachable. The interaction with A1 needed no new code: a walk left by Back
+unwinds seat 0 to browsing, so the sortie screen does not reopen the walk, and a re-entry after
+seat 0 picks again ends in the launch instead of a second wait. The launch also cannot race the
+walk's reopening, since `ApplyFrame` reads `BeginSeatWalkIfDue` only when the frame produced no exit.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The last seat's confirm launches the sortie, on Free Flight as it already does on Instant
 Action, so seat 0's pick is the ready and the walk is the launch.

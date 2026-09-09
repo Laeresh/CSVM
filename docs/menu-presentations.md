@@ -161,8 +161,11 @@ board's shape over the sortie roster, where Accept selects and a second Accept c
 CANCEL SELECTIONS each take back a selection, and over the open list each leaves the walk for the
 screen it came from with every seat kept, so no press on that screen unjoins: a pilot leaves the
 sortie with Back on the Instant Action screen or with their device. Joining stays closed on that
-screen. The walk ends on the sortie screen with FLY live, or as the Instant Action launch, and FLY
-goes live only when every joined seat is Confirmed. The picking seat's own device drives that screen,
+screen. The last seat's confirm is the launch, on either sortie screen as on Instant Action, so seat
+0's pick is the ready and the walk is the launch; where FLY's own gate is unmet (Dogfight without a
+second seat, a sortie with no map picked) the screen the walk came from returns instead with FLY to
+press, FLY going live only when every joined seat is Confirmed. The picking seat's own device drives
+that screen,
 and the mouse, which rides seat 0's source and is the one device a pilot without a pad of their own
 can pick with; seat 0's stick, buttons and keyboard move nothing there, `StepSeat` reducing seat 0's
 frame to its pointer while another seat picks. CANCEL SELECTIONS is therefore the pointer's own Back,

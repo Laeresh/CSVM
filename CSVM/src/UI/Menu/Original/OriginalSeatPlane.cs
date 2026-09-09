@@ -8,14 +8,14 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// The remake-only per-seat aircraft screen: once seat 0 has picked on a sortie screen, or has
 /// pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in player
-/// order picks its own aircraft here, on the campaign plane-selection board's shape (its list
-/// field, silhouette, ratings and weapon column, ACCEPT and CANCEL SELECTIONS) over the sortie
-/// roster. The list stands open while the seat browses; Accept selects and closes it, Accept
-/// again confirms and hands the screen to the next unconfirmed seat. Back and CANCEL SELECTIONS
-/// each drop a selection and reopen the list, and over the open list each leaves the walk with
-/// every seat kept; nothing here unjoins. The picking seat's own device drives the screen, and the
-/// mouse, which rides seat 0's source; nothing else of seat 0's reaches it. The walk ends on the
-/// sortie screen with FLY live, or on Instant Action as the launch itself. Nothing is decoded here.
+/// order picks its own aircraft here, on the campaign plane-selection board's shape (its list field,
+/// ratings and weapon column, ACCEPT and CANCEL SELECTIONS) over the sortie roster. The list stands
+/// open while the seat browses; Accept selects and closes it, Accept again confirms and hands the
+/// screen to the next unconfirmed seat. Back and CANCEL SELECTIONS each drop a selection and reopen
+/// the list, and over the open list each leaves the walk with every seat kept; nothing here unjoins.
+/// The picking seat's own device drives the screen, and the mouse, which rides seat 0's source;
+/// nothing else of seat 0's reaches it. The last seat's confirm is the launch, on a sortie screen as
+/// on Instant Action, or the return of a screen whose FLY gate is unmet. Nothing is decoded here.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -156,13 +156,21 @@ public sealed partial class OriginalShell
         return FinishSeatWalk();
     }
 
-    // Every seat confirmed: back to the sortie screen, where FLY now stands, or the Instant Action
-    // launch with every seat's choice, seat 0's confirmation being FLY MISSION's own press.
+    // Every seat confirmed: the launch, whichever screen the walk came from, the last seat's
+    // confirm standing in for seat 0's press there. The screen it returns to opens first, so a
+    // sortie launch reads that screen's own chapter and mode. ⚠ Leave the gate to FLY's own rule:
+    // Dogfight without a second seat, or a sortie with no map picked, must return the screen with
+    // FLY to press rather than fly.
     private MenuExit? FinishSeatWalk()
     {
         var back = _seatReturn;
         Open(back);
-        if (back != OriginalScreen.InstantAction || Seat0 is not { } seat)
+        if (back != OriginalScreen.InstantAction)
+        {
+            return IsSortie ? Fly() : null;
+        }
+
+        if (Seat0 is not { } seat)
         {
             return null;
         }

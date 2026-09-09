@@ -13,9 +13,10 @@ namespace CSVM.Tests;
 /// The Original shell's sortie screens over the shared player setup, on the hand-authored layout
 /// fixture: the Dogfight door and its gate, seat 0's pick opening the per-seat aircraft screen
 /// for each joined seat in turn (its plane-selection shape, the list open while browsing, the
-/// picking seat's device and the mouse driving it and seat 0's stick nothing), FLY as seat
-/// 0's confirmation and the launch, Instant Action's FLY MISSION walking a joined seat before its
-/// launch, the hint at each stage, and the aircraft window over a roster with saved customs.
+/// picking seat's device and the mouse driving it and seat 0's stick nothing), the last seat's
+/// confirm as the launch on both sortie screens and on Instant Action, the sortie screen returning
+/// with FLY to press when FLY's own gate is unmet, the hint at each stage, and the aircraft window
+/// over a roster with saved customs.
 /// </summary>
 public class OriginalSeatsTests
 {
@@ -59,7 +60,7 @@ public class OriginalSeatsTests
     }
 
     [Fact]
-    public void ASecondSeatPicksOnItsOwnScreenAndFlyLaunchesTheDogfightForBoth()
+    public void ASecondSeatPicksOnItsOwnScreenAndItsConfirmLaunchesTheDogfightForBoth()
     {
         PlayerSetupFeature setup = null!;
         var shell = Shell(out setup, out _, seat => ReferenceEquals(seat, setup.Seats[1]) ? new[] { 3 } : Array.Empty<int>());
@@ -98,27 +99,24 @@ public class OriginalSeatsTests
         Assert.Contains(shell.Compose().Lines, l => l.Text == "P2  scripted   A again to confirm, B to change");
         Assert.Contains(shell.Compose().Lines, l => l.Text.StartsWith("AGILITY:", StringComparison.Ordinal));
 
-        shell.StepSeat(1, Accept);
+        // The last seat's confirm is the launch: the Dogfight screen returns behind it with both
+        // seats confirmed, so nobody has to reach FLY.
+        var step = shell.StepSeat(1, Accept);
         Assert.True(second.Confirmed);
         Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
         Assert.Equal(-1, shell.PickingSeat);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "P2  scripted   Hellhound  READY");
-        Assert.True(Fly(shell).Enabled);
-
-        shell.Step(Up);
-        Assert.Equal(OriginalShell.FlyKey, shell.FocusedKey);
-        var step = shell.Step(Accept);
         var launch = Assert.IsType<LaunchExit>(step.Exit);
         Assert.Equal(MenuMode.Versus, launch.Mode);
         Assert.Equal("C1", launch.Chapter);
         Assert.Equal(new[] { "player_autogyro", "player_avenger" }, launch.Seats.Select(s => s.PlaneNode));
         Assert.Empty(launch.Seats[0].Pads);
         Assert.Equal(new[] { 3 }, launch.Seats[1].Pads);
-        Assert.Contains(OriginalCues.Click, step.Cues);
+        Assert.True(setup.Seats[0].Confirmed);
     }
 
     [Fact]
-    public void FlyOnFreeFlightConfirmsSeatZeroAndLeavesThroughTheFeatureWithEverySeat()
+    public void TheLastSeatsConfirmLaunchesTwoPilotFreeFlightThroughTheFeature()
     {
         var shell = Shell(out var setup, out var free);
         shell.Step(Accept);
@@ -132,20 +130,47 @@ public class OriginalSeatsTests
         shell.StepSeat(1, Down);
         shell.StepSeat(1, Down);
         shell.StepSeat(1, Accept);
-        shell.StepSeat(1, Accept);
+
+        var launch = Assert.IsType<LaunchExit>(shell.StepSeat(1, Accept).Exit);
+
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
-        shell.Step(Up);
-        shell.Step(Up);
-        Assert.Equal(OriginalShell.FlyKey, shell.FocusedKey);
-
-        var launch = Assert.IsType<LaunchExit>(shell.Step(Accept).Exit);
-
         Assert.Equal(MenuMode.Free, launch.Mode);
         Assert.Equal("C1B", launch.Chapter);
         Assert.Equal("C1B", free.Chapter?.Code);
         Assert.Equal(new[] { "player_avenger", "player_balmoral" }, launch.Seats.Select(s => s.PlaneNode));
         Assert.True(setup.Seats[0].Confirmed);
         Assert.Equal(2, second.Cursor);
+    }
+
+    [Fact]
+    public void AWalkEndingWithNoMapPickedReturnsTheSortieScreenWithFlyToPress()
+    {
+        var shell = Shell(out var setup, out _);
+        shell.Open(OriginalScreen.FreeFlight);
+        var first = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
+        shell.Step(Pointer(first.X + 4f, first.Y + 4f, pressed: true, clicked: true));
+        Assert.Null(shell.PickedChapter);
+        var second = setup.Join(new ScriptedMenuSeat())!;
+        shell.Step(None);
+        Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
+
+        // Every seat confirmed but FLY's own gate unmet: the screen returns, nothing launches.
+        shell.StepSeat(1, Accept);
+        Assert.Null(shell.StepSeat(1, Accept).Exit);
+        Assert.True(second.Confirmed);
+        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
+        Assert.False(Fly(shell).Enabled);
+        Assert.False(setup.Seats[0].Confirmed);
+
+        // The map picked, FLY stands and seat 0's own press is the launch.
+        var map = shell.Rows.Single(r => r.Key == "C1");
+        shell.Step(Pointer(map.X + 4f, map.Y + 4f, pressed: true, clicked: true));
+        var fly = Fly(shell);
+        Assert.True(fly.Enabled);
+        var launch = Assert.IsType<LaunchExit>(
+            shell.Step(Pointer(fly.X + 4f, fly.Y + 4f, pressed: true, clicked: true)).Exit);
+        Assert.Equal("C1", launch.Chapter);
+        Assert.Equal(2, launch.Seats.Count);
     }
 
     [Fact]
@@ -187,8 +212,12 @@ public class OriginalSeatsTests
         Assert.True(third.Locked);
         Assert.Equal(2, third.Cursor);
         var accept = shell.Rows.Single(r => r.Key == "AcceptSelections");
-        shell.Step(Pointer(accept.X + 4f, accept.Y + 4f, pressed: true, clicked: true));
+        var last = shell.Step(Pointer(accept.X + 4f, accept.Y + 4f, pressed: true, clicked: true));
         Assert.True(third.Confirmed);
+
+        // The last seat confirmed, so that press is the launch for all three, whichever device it
+        // came from, and the Free Flight screen returns behind it.
+        Assert.Equal(3, Assert.IsType<LaunchExit>(last.Exit).Seats.Count);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.True(Fly(shell).Enabled);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready, or press START on a free pad to join");

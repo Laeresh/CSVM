@@ -744,20 +744,20 @@ The shell's two sortie screens, Free Flight and Dogfight, over the shared player
 seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
 the setup's roster (an eleven-row sliding window) and FLY. Seat 0 alone drives these screens; each
 joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enabled once the mode's
-gate is met and leaves as the mode's own typed exit. `JoiningOpen` is the per-screen joining rule
-the presentation reads, and `CampaignSeatPanel` the seat strip the campaign boards and the Instant
-Action screen take as an overlay once a second seat has joined. Remake-only by design, the original
-shipping no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
+gate is met and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
+`JoiningOpen` is the per-screen joining rule the presentation reads, and `CampaignSeatPanel` the
+seat strip the campaign boards and the Instant Action screen take as an overlay once a second seat
+has joined. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeatPlane.cs
 The remake-only per-seat aircraft screen, a shell partial: once seat 0 has picked on a sortie
 screen, or pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in
-player order picks here before the walk ends. `SeatPlanePage` is an `ICampaignPage` over the sortie
-roster, so `CampaignBoards.For` draws it in the campaign plane-selection board's shape (its list
-field, ACCEPT and CANCEL SELECTIONS), the seat strip over it. The picking seat's own device drives
-it, and the mouse riding seat 0's source, nothing else of seat 0's. Accept selects, a second Accept
-confirms, and Back and CANCEL SELECTIONS drop a selection then leave the walk, every seat kept and
-nothing unjoined. It ends on the sortie screen with FLY live, or as the launch: [../menu-presentations.md](../menu-presentations.md).
+player order picks here. `SeatPlanePage` is an `ICampaignPage` over the sortie roster, so
+`CampaignBoards.For` draws it in the campaign plane-selection board's shape (its list field, ACCEPT
+and CANCEL SELECTIONS), the seat strip over it. The picking seat's own device drives it, and the
+mouse riding seat 0's source, nothing else of seat 0's. Accept selects, a second Accept confirms,
+and Back and CANCEL SELECTIONS drop a selection then leave the walk, every seat kept and nothing
+unjoined. The last seat's confirm is the launch: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`

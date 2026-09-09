@@ -63,9 +63,9 @@ public class OriginalCoverageTests : IDisposable
         new("free-flight", OriginalScreen.FreeFlight, new[] { OriginalShell.FreeFlightKey }, new[] { OriginalShell.BackKey }),
         new("dogfight", OriginalScreen.Dogfight, new[] { OriginalShell.DogfightKey }, new[] { OriginalShell.BackKey }),
         // ⚠ The cursor families walk this screen as the picking seat, not as seat 0, which drives
-        // nothing here; only the pointer stays seat 0's. The way off by row is the walk's
-        // completion, CANCEL SELECTIONS leaving only once there is no selection left to drop.
-        new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, "C1", OriginalShell.AirframeKey(0) },
+        // nothing here; only the pointer stays seat 0's. ⚠ Leave the map unpicked: the way off by
+        // row is the walk's completion, which is the launch itself once FLY's gate is met.
+        new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, OriginalShell.AirframeKey(0) },
             new[] { OriginalShell.SeatPlaneFieldKey, "AcceptSelections", OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },

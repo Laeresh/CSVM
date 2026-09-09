@@ -5,15 +5,15 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original shell's two sortie screens, Free Flight and the remake-only Dogfight, over the
-/// shared player setup: the chapter column, the aircraft column as a window onto the shared
-/// roster (the stock airframes, then the saved customs), the seat strip, the join hint, BACK and
-/// FLY. Seat 0 alone drives the screen: the focus, the pointer, the chapter, its aircraft and
-/// FLY. Once seat 0 has picked, each joined seat picks in turn on the per-seat screen
-/// (<c>OriginalSeatPlane.cs</c>); on the sortie screen itself a later seat can only leave with
-/// Back. FLY is seat 0's confirmation and the launch in one press, so it stands only once every
-/// other seat has confirmed and, for Dogfight, a second seat has joined. Also the joining rule
-/// the presentation reads (<see cref="JoiningOpen"/>) and the same seat strip over the campaign
-/// boards and the Instant Action screen once a second seat has joined. Nothing here is decoded.
+/// shared player setup: the chapter column, the aircraft column as a window onto the shared roster
+/// (the stock airframes, then the saved customs), the seat strip, the join hint, BACK and FLY. Seat 0
+/// alone drives the screen: the focus, the pointer, the chapter, its aircraft and FLY. Once seat 0 has
+/// picked, each joined seat picks in turn on the per-seat screen (<c>OriginalSeatPlane.cs</c>); on the
+/// sortie screen itself a later seat can only leave with Back. FLY is seat 0's confirmation and the
+/// launch in one press, so it stands only once every other seat has confirmed and, for Dogfight, a
+/// second seat has joined; the walk's last confirm takes that press for it. Also the joining rule the
+/// presentation reads (<see cref="JoiningOpen"/>) and the same seat strip over the campaign boards
+/// and the Instant Action screen once a second seat has joined. Nothing here is decoded.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -333,9 +333,9 @@ public sealed partial class OriginalShell
         return null;
     }
 
-    // FLY: seat 0's confirmation and the launch. Free Flight leaves through its feature with the
-    // chapter handed over; Dogfight, the remake's own mode with no feature of its own, leaves
-    // through the setup's exit.
+    // FLY: seat 0's confirmation and the launch, reached by its own press and by the per-seat
+    // walk's last confirm. Free Flight leaves through its feature with the chapter handed over;
+    // Dogfight, the remake's own mode with no feature of its own, leaves through the setup's exit.
     private MenuExit? Fly()
     {
         if (!FlyEnabled() || Seat0 is not { } seat)
