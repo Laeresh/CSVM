@@ -136,8 +136,9 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   `0.4` at `00603538` and `0.3` at `006034ac`; the deadline is `now + half_period`, written at
   `00453a78` in `FUN_004539f0` and recomputed from the current frame's value at each toggle, so it
   does not catch up. **The half-period is bounded to (0.100, 0.400] s by construction**, since
-  `s` lies in (0, 1]. A separate flag at `plane+0x384` forces the lamp off entirely; what state it
-  represents is not decoded, but it also switches the throttle clamp from `[0, 1]` to `[−5, +5]`.
+  `s` lies in (0, 1]. A separate flag at `plane+0x384` forces the lamp off entirely; it is the `-fd`
+  developer switch (`docs/org/flightModel.md`, "`+0x384` is a developer switch"), never set by
+  gameplay, and it also switches the throttle clamp from `[0, 1]` to `[−5, +5]`.
   Because lift goes as v², an equivalent speed form is that the lamp lights below `1.533 × v₁g`,
   but that holds only while the AoA cap is not binding, which is exactly the condition a
   speed-fraction port drops.

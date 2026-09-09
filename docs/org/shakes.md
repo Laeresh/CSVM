@@ -154,7 +154,10 @@ collision-damage function, computes it per contact at `0x0048d3cc`–`0x0048d409
 airspeed `obj+0x934`, the severity cosine the sweep returned, the literal `0.03` at `0x006080c4`
 (the same literal the player's contact push-out uses) and a ceiling `0.15` at `0x006036a8`. Two
 guards stand over the kick and nothing else does: the object is the player (`0x0048d3c4`) and its
-crashed flag `obj+0x384` is clear (`0x0048d3aa`).
+`fd` switch `obj+0x384` is clear (`0x0048d3aa`). The second guard never fires in play: `obj+0x384`
+is the `-fd` developer switch, written only by the command line, the debug console and the vehicle
+constructor's zero (`flightModel.md`, "`+0x384` is a developer switch"), so a wreck's contact kicks
+the camera exactly as a live airframe's does.
 
 **Every resolved contact kicks it, a graze included.** The caller gates `FUN_0048d2c0` on a positive
 severity cosine and on nothing else (`0x48ed79` guarding the call at `0x48ed8b`,

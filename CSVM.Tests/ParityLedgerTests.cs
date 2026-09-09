@@ -64,6 +64,8 @@ public class ParityLedgerTests
             "FUN_004b27e0 / FUN_004b2a40 / FUN_004b2ca0, smoothing FUN_00460490"),
         ("contact placement, normal impulse and angular deposit", Decoded, "FUN_0048d7f0, 0x48e4bc"),
         ("collision damage, armour before health", Decoded, "FUN_0048d2c0"),
+        ("the per-contact camera shake", Decoded,
+            "FUN_0048d2c0's block-5 kick at 0x48d409, min(speed*s*0.03, 0.15)"),
         ("the every-other-frame contact sweep", Decoded, "the parity gate at 0x48ed79"),
         ("the nitro tank and its state machine", Decoded, "FUN_004aff80, FUN_004b2110"),
         ("engine torque: none exists", Decoded, "every write to FUN_0048c470's angular accumulator"),
@@ -73,6 +75,9 @@ public class ParityLedgerTests
             "0x48c821-0x48c852 builds n as a vector length, so FUN_0041abd0 is never handed a negative C_L"),
         ("a dead AI's throttle and surfaces freeze at their last commanded values", Decoded,
             "FUN_004b82d0 zeroes neither +0x124 nor the surface deflections; StepWreckFall steps _lastInput unchanged"),
+        ("a wreck flies the near-field plant", Decoded,
+            "obj+0x384's only writers are the -fd switch, the console's fd / ifon and the constructor's zero, "
+            + "so no crash ever takes the 0x48c4ba arm"),
 
         ("far-field range is measured to the NEAREST human pilot", Exception,
             "plan Decision 3; the original presumes one player"),
@@ -80,14 +85,11 @@ public class ParityLedgerTests
             "plan Decision 3; the original's guard is the single player"),
         ("the Fury's rudder animates", Exception,
             "CSVM also matches l_rudder_rotate and a digitless l_elevator, which the %d lookups miss"),
-        ("a wreck flies the near-field plant", Exception,
-            "the crashed-flag far arm at 0x48c4ba is not ported; its writers are undecoded"),
 
         ("the G ramp reads the SAME tick's delivered lift", Unsupported,
             "0x48c883 writes it before 0x48ca1e; Step rotates before it translates, so CSVM is one step late"),
         ("the level_off_rate auto-level torque", Unsupported,
             "0x48cedc / 0x48cf76; decoded, and no shipped data authors the rate"),
-        ("the per-contact camera shake", Unsupported, "FUN_0048d2c0's block-5 kick at 0x48d409"),
         ("the AI's medium_aishake on a nitro engage", Unsupported, "FUN_00473430(1)"),
         ("the AI's positional snd_nitro blip", Unsupported, "the 0.1 s blip plus one second after"),
         ("a live producer for an AI's nitro injector", Unsupported,

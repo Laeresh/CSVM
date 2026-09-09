@@ -948,11 +948,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   constant on the ceiling: the height above the edge is bought with the climb and has no term of its
   own. *How you'd know it worked:* the plateau moves toward 163 mph and `altitude-ceiling` falls
   toward the ~7,000 ft the original reaches at the controls.
-- `BL-456` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
-  decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
-  severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
-  so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
-  whom it is set so the wreck can fly the decoded arm.
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 45 to 51 ms in flight and
   about 124 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
   instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 82
