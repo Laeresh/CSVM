@@ -62,8 +62,10 @@ public class OriginalCoverageTests : IDisposable
     {
         new("free-flight", OriginalScreen.FreeFlight, new[] { OriginalShell.FreeFlightKey }, new[] { OriginalShell.BackKey }),
         new("dogfight", OriginalScreen.Dogfight, new[] { OriginalShell.DogfightKey }, new[] { OriginalShell.BackKey }),
+        // ⚠ The way off the per-seat screen by row is its completion, not a cancel: Back leaves the
+        // walk and CANCEL SELECTIONS only reopens the list, so no row of this screen cancels it.
         new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, "C1", OriginalShell.AirframeKey(0) },
-            new[] { OriginalShell.SeatPlaneFieldKey, "CancelSelections", OriginalShell.BackKey }),
+            new[] { OriginalShell.SeatPlaneFieldKey, "AcceptSelections", OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
             new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),

@@ -688,8 +688,7 @@ art measurer and the flight-devices answer injected. It owns the top level compo
 Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
 screens are its ten partials, below. `Step` applies one seat's frame (pointer, typed text, cursor
 walk, accept and back), `Compose` is the screen as a `ComposedBoard`, and the row kinds every page
-draws are here, `OriginalSlider` and the slider row's builder and drawing among them.
-Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+draws are here, `OriginalSlider` and the slider row's builder and drawing among them. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -756,9 +755,9 @@ screen, or pressed FLY MISSION on Instant Action with a second pilot joined, eac
 player order picks here before the walk ends. `SeatPlanePage` is an `ICampaignPage` over the sortie
 roster, so `CampaignBoards.For` draws it in the campaign plane-selection board's shape: the list
 field, the silhouette, the ratings and weapon column, ACCEPT and CANCEL SELECTIONS, with the seat
-strip over it. Accept selects and a second Accept confirms; Back undoes a selection, unjoins while
-browsing, or, from seat 0's own controller, cancels the walk. The walk ends on the sortie screen
-with FLY live, or as the Instant Action launch. Nothing here is decoded: [../menu-presentations.md](../menu-presentations.md).
+strip over it. Accept selects and a second Accept confirms; Back and CANCEL SELECTIONS each drop a
+selection, and Back over the open list leaves the walk with every seat kept, unjoining nowhere. The
+walk ends on the sortie screen with FLY live, or as the Instant Action launch. Nothing here is decoded: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`

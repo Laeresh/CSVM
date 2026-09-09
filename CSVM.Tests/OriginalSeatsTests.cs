@@ -250,7 +250,7 @@ public class OriginalSeatsTests
     }
 
     [Fact]
-    public void ALaterSeatsBackUnselectsThenUnjoinsOnItsScreenAndUnjoinsFromAnyOtherScreenAtOnce()
+    public void ALaterSeatsBackUnselectsThenLeavesTheWalkAndUnjoinsFromAnyOtherScreenAtOnce()
     {
         var shell = Shell(out var setup, out _);
         var pad = new ScriptedMenuSeat();
@@ -275,28 +275,32 @@ public class OriginalSeatsTests
         Assert.True(second.Joined);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.True(shell.Rows.Count > 3);
-        shell.StepSeat(1, Back);
-        Assert.False(second.Joined);
-        Assert.Single(setup.Seats);
-        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
-        Assert.True(Fly(shell).Enabled);
 
-        // Dogfight's FLY stays dark once the only other seat has left.
-        shell.Step(Back);
-        shell.Step(Back);
-        shell.Step(Down);
+        // Over the open list Back leaves the walk with both seats kept, seat 0's pick going with
+        // it so the sortie screen does not put the walk straight back up.
+        shell.StepSeat(1, Back);
+        Assert.True(second.Joined);
+        Assert.Equal(2, setup.Seats.Count);
+        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
+        Assert.Null(shell.PickedAirframe);
+        Assert.False(Fly(shell).Enabled);
+
+        // Seat 0 picking again reopens the walk at the same seat, so the return is not a dead end.
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
-        setup.Join(pad);
-        shell.Step(None);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
+        Assert.Equal(1, shell.PickingSeat);
+
+        // CANCEL SELECTIONS drops the selection and reopens the list, leaving neither the walk nor
+        // the sortie.
+        shell.StepSeat(1, Accept);
+        Assert.True(second.Locked);
         var cancel = shell.Rows.Single(r => r.Key == "CancelSelections");
         shell.Step(Pointer(cancel.X + 4f, cancel.Y + 4f, pressed: true, clicked: true));
-        Assert.Single(setup.Seats);
-        Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
-        Assert.False(Fly(shell).Enabled);
+        Assert.False(second.Locked);
+        Assert.True(second.Joined);
+        Assert.Equal(2, setup.Seats.Count);
+        Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
+        Assert.True(shell.Rows.Count > 3);
     }
 
     [Fact]

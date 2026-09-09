@@ -64,8 +64,10 @@ internal static class MenuPlayerSetupSuites
         + "a guest's Back unjoins, four seats close the join and a fifth is refused, a lock and an "
         + "unjoin land on one frame, and Deactivate discards every seat but the first; in Original "
         + "the Dogfight door opens the Dogfight screen, FLY waits for a second seat with the hint "
-        + "naming it, a joined seat gets its own aircraft screen where Back unjoins it and leaves "
-        + "FLY dark and two Accepts select and confirm, FLY leaves as a Dogfight launch for both "
+        + "naming it, a joined seat gets its own aircraft screen where Back leaves the walk with "
+        + "the seat kept and seat 0's pick undone, seat 0 picking again reopens it at the same "
+        + "seat, CANCEL SELECTIONS and Back over a closed list each drop the selection without "
+        + "leaving, and two Accepts select and confirm, FLY leaves as a Dogfight launch for both "
         + "seats, Free Flight launches both too, and a guest's Back unjoins from the top level")]
     internal static void MenuPlayerSetupSeats(TestContext ctx)
     {
@@ -468,15 +470,31 @@ internal static class MenuPlayerSetupSuites
             ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && shell.PickingSeat == 1,
                 $"seat 0's pick standing, the join opens the second seat's own aircraft screen ({shell.Screen}, picking {shell.PickingSeat})");
             Press(host, s2, Back);
-            ctx.Check(host.Seats.Count == 1 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight
+            ctx.Check(host.Seats.Count == 2 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight
                 && Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: false },
-                $"its Back there unjoins it, the Dogfight screen returns and FLY stays dark ({host.Seats.Count}, {shell.Screen})");
-            setup.Join(s2);
-            host.Tick(Dt);
+                $"its Back there keeps the seat, returns to the Dogfight screen and leaves FLY dark ({host.Seats.Count}, {shell.Screen})");
+            ctx.Check(!setup.Seats[0].Locked,
+                $"seat 0's own pick going with it, so the screen does not put the walk straight back up");
+            Press(host, seat0, Accept);
+            ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && shell.PickingSeat == 1,
+                $"and seat 0 picking again reopens the walk at the same seat ({shell.Screen}, picking {shell.PickingSeat})");
             Press(host, s2, Down);
             Press(host, s2, Accept);
             ctx.Check(setup.Seats[1].Locked && setup.Seats[1].Cursor == 1,
                 $"the seat's frames reach the shell through the presentation: one row down and selected ({setup.Seats[1].Cursor})");
+            Press(host, s2, Down);
+            Press(host, s2, Down);
+            Press(host, s2, Accept);
+            ctx.Check(host.Seats.Count == 2 && !setup.Seats[1].Locked
+                && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane,
+                $"CANCEL SELECTIONS drops the selection and leaves the seat on its screen ({host.Seats.Count}, locked={setup.Seats[1].Locked})");
+            Press(host, s2, Accept);
+            Press(host, s2, Back);
+            ctx.Check(host.Seats.Count == 2 && !setup.Seats[1].Locked
+                && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane,
+                $"as does Back over the closed list, the reopened list standing on the same row ({shell.Screen}, locked={setup.Seats[1].Locked})");
+            Press(host, s2, Accept);
+            ctx.Check(setup.Seats[1].Cursor == 1, $"so Accept selects that row again ({setup.Seats[1].Cursor})");
             Press(host, s2, Accept);
             ctx.Check(setup.Seats[1].Confirmed && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight,
                 $"Accept again confirms it and the Dogfight screen returns ({shell.Screen})");

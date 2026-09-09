@@ -77,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The second pilot's walk
 
-1. ☐ `BL-746` Back on the per-seat screen returns instead of unjoining
+1. ☑ `BL-746` Back on the per-seat screen returns instead of unjoining
 2. ☐ `BL-747` Only the picking seat's device drives the per-seat screen
 3. ☐ `BL-749` A two-pilot Free Flight walk launches on the last confirm
 4. ☐ `BL-748` A joined pilot picks a weapon loadout
@@ -120,7 +120,34 @@ it is the author's sitting, not an agent's.
 
 # Wave A — The second pilot's walk
 
-## A1 ☐ `BL-746` Back on the per-seat screen returns instead of unjoining
+## A1 ☑ `BL-746` Back on the per-seat screen returns instead of unjoining
+
+**Landed.** No press on the per-seat screen unjoins any more. `BackSeatPlane` keeps one arm for the
+picking seat with a selection standing, which takes that selection back and reopens the list, and
+every other press of Back, the picking seat's over the open list and seat 0's, goes through
+`CancelSeatWalk`. CANCEL SELECTIONS now shares the first arm through a new `ReopenSeatList`, so
+Decision 6 lands with the rest of the item: the button drops the seat's selection and reopens the
+list without leaving the walk or the sortie. `CancelSeatWalk` unwinds seat 0 to browsing in a loop
+rather than one stage, because a sortie screen reopens the walk on every frame seat 0's pick still
+stands and a single stage back could put the walk straight up again. The walk is therefore
+re-enterable from every state it can be left in: on a sortie screen seat 0 picks an aircraft again
+and the walk reopens at the same seat, and on Instant Action FLY MISSION is unconditionally live and
+starts it again. Unjoining survives at `StepSeat`'s guest arm (a seat's Back away from its own
+screen) and on the device-lost path through `Step`, which is what the report asked for.
+
+**One thing Decision 6 costs, for A2 to weigh.** The per-seat screen's three rows are the list,
+ACCEPT SELECTIONS and CANCEL SELECTIONS, and with CANCEL SELECTIONS no longer leaving, no row of
+that screen leaves the walk: the only way out is Esc or B. That is fine for a pad or a keyboard and
+it removes the mouse's one exit, which matters because A2's goal keeps the mouse driving this
+screen. `OriginalCoverageTests`' `seat-plane` journey now walks out by completing the walk (the
+field, then ACCEPT SELECTIONS) rather than by cancelling it, with the reason on the journey. The two
+fixes are a second CANCEL SELECTIONS press leaving when there is no selection left to drop, or a
+BACK plaque on the screen; neither was taken here, because Decision 6 says this button stays in the
+walk and A2 owns who drives the screen.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** On the per-seat plane-selection screen, Back leaves the walk and reopens the screen the
 walk came from with every joined seat kept. A pilot leaves the sortie only by pressing Back on the

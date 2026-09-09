@@ -11,11 +11,11 @@ namespace CSVM.UI.Menu.Original;
 /// order picks its own aircraft here, on the campaign plane-selection board's shape (its list
 /// field, silhouette, ratings and weapon column, ACCEPT and CANCEL SELECTIONS) over the sortie
 /// roster. The list stands open while the seat browses; Accept selects and closes it, Accept
-/// again confirms and hands the screen to the next unconfirmed seat; Back undoes a selection
-/// or, while browsing, unjoins, as CANCEL SELECTIONS does. Seat 0's controller drives the screen
-/// as well, so one pad at the desk can walk it, and seat 0's own Back undoes its pick and returns
-/// to the screen it came from with every seat kept. The walk ends back on the sortie screen with
-/// FLY live, or on Instant Action as the launch itself. Nothing here is decoded.
+/// again confirms and hands the screen to the next unconfirmed seat. Back drops a selection and
+/// reopens the list, as CANCEL SELECTIONS does, and over the open list leaves the walk with every
+/// seat kept; nothing here unjoins. Seat 0's controller drives the screen too, so one pad at the
+/// desk can walk it. The walk ends back on the sortie screen with FLY live, or on Instant Action
+/// as the launch itself. Nothing here is decoded.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -166,13 +166,17 @@ public sealed partial class OriginalShell
         return _instantAction.BuildExit(_setup.Choices(_flightDevices));
     }
 
-    // Seat 0's Back: its own pick is undone and the screen it came from returns, the seats kept,
-    // so a pick made again walks them again.
+    // Back's one way out of the walk, whoever pressed it: the screen it came from returns with
+    // every seat kept, so a pick made again walks them again. ⚠ Unwind seat 0 all the way to
+    // browsing; a sortie screen reopens the walk every frame seat 0's pick still stands, so a
+    // single stage back would put the walk straight up again and Back would have no exit.
     private void CancelSeatWalk()
     {
         if (Seat0 is { } seat)
         {
-            _setup.Back(seat);
+            while (_setup.Back(seat) != SeatBack.Browsing)
+            {
+            }
         }
 
         Open(_seatReturn);
@@ -219,8 +223,8 @@ public sealed partial class OriginalShell
                 TakeSeatPick(page, seat);
                 return null;
             case nameof(BoardButton.CancelSelections):
-                _setup.Unjoin(seat);
-                return AdvanceSeatWalk();
+                ReopenSeatList(page, seat);
+                return null;
             default:
                 return null;
         }
@@ -243,8 +247,19 @@ public sealed partial class OriginalShell
         return AdvanceSeatWalk();
     }
 
-    // Back on the per-seat screen: seat 0's undoes its own pick and leaves the walk; the picking
-    // seat's undoes its selection (the list reopening) or, browsing, unjoins it.
+    // The picking seat's undo, taken by Back over a closed list and by CANCEL SELECTIONS: the
+    // selection goes and the list reopens over it, the seat keeping its place in the walk.
+    private void ReopenSeatList(SeatPlanePage page, PlayerSeat seat)
+    {
+        _setup.Back(seat);
+        page.List.Expand();
+        _focus[(int)OriginalScreen.SeatPlane] = 0;
+    }
+
+    // Back on the per-seat screen: the picking seat's takes back a selection first and leaves the
+    // walk from the open list, so two presses at most reach the screen the walk came from; seat
+    // 0's leaves at once. Neither unjoins, a pilot leaving the sortie only on the Instant Action
+    // screen or with their device.
     private MenuExit? BackSeatPlane()
     {
         if (_seatPage is not { } page || _pickingSeat is not { } seat)
@@ -252,22 +267,14 @@ public sealed partial class OriginalShell
             return AdvanceSeatWalk();
         }
 
-        if (_steppingSeat == 0)
+        if (_steppingSeat != 0 && seat.Locked)
         {
-            CancelSeatWalk();
+            ReopenSeatList(page, seat);
             return null;
         }
 
-        if (seat.Locked)
-        {
-            _setup.Back(seat);
-            page.List.Expand();
-            _focus[(int)OriginalScreen.SeatPlane] = 0;
-            return null;
-        }
-
-        _setup.Unjoin(seat);
-        return AdvanceSeatWalk();
+        CancelSeatWalk();
+        return null;
     }
 
     // The screen as the shared board component composes it over the seat's page, with the seat
