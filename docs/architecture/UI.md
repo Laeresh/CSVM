@@ -626,14 +626,14 @@ line, the would-be cost behind the mark on an over-priced row, the name rules, a
 drops the build and touches nothing saved. Economy and strings: [../org/hangar.md](../org/hangar.md).
 
 ## src/UI/Menu/CampaignFeature.cs
-The campaign as a shared engine-free feature in the host's feature set: the state and the
-operations both presentations read and write, with neither one's screen shell in it. `Open` opens
-a campaign over a `CampaignProfileStore`, each further dependency optional and degrading rather
-than failing. The roster operations create, seat, delete and record the last-played player in the
-original's own words; the mission operations settle which `cm_sequence` entry the screens after
-the cabin are about, with its briefing, its wingman flag and its change-plane rules; the writes
-save the loadout, the planes, an exported build and the mission exit. How a presentation offers
-them, cursors and working copies included, stays the presentation's. Read `CampaignFlow.cs` next.
+The campaign as a shared engine-free feature in the host's feature set: the state and the operations
+both presentations read and write, with neither one's screen shell in it. `Open` opens a campaign
+over a `CampaignProfileStore`, each further dependency optional. The roster operations create,
+seat, delete and record the last-played player in the original's own words; the mission operations
+settle which `cm_sequence` entry the screens after the cabin are about, with its briefing, its
+wingman flag, its per-slot change-plane rules and the story aircraft its flight check grants;
+the writes save the loadout, the planes, an exported build and the mission exit. How a presentation
+offers them, cursors and working copies included, is its own. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs
 The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,

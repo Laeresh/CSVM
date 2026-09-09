@@ -90,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The campaign's own screens and props
 
-21. ☐ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
+21. ☑ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
 22. ☐ `BL-690` A staged cutscene aeroplane wears its scheme
 
 ### Wave D — What another aeroplane sounds like
@@ -442,7 +442,26 @@ but the original never shrinks the volume back. Match that: set, never reset.
 
 # Wave C — The campaign's own screens and props
 
-## C21 ☐ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
+## C21 ☑ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
+
+**Landed.** The flight check now answers CHANGE PLANE per crew slot, reads the owned count the way
+`uiData` 2018 reports it, and grants the mission's story aircraft on entry.
+
+- `CampaignFeature.ChangePlaneAllowed` is a method over the crew slot, not a slot-less property.
+  The pilot's answer alone carries `FLIGHTCHECK.SCRIPT`'s outright bar on the two grant missions;
+  both answers carry the floor of three.
+- `ChangePlaneCount` is `uiData` 2018's own answer, the owned count less one on missions 13 and 17,
+  which is the term the tree had no expression for. The floor itself was already there.
+- `CampaignFeature.GrantMissionAircraft` is `uiData` 2021: it takes the mission reward table's
+  ungated entry, adds the aircraft the first time with the table's own name and the class-2 marker,
+  and makes it the pilot's plane on every entry. `CampaignFlow.Entered` runs it as the flight check
+  opens, before the page composes, so both presentations get it through the one flow.
+- `CampaignFlightCheckPage` holds the two answers separately in `FlightCheckState` and hands each
+  slot its own. A guest's own check is unchanged: neither script rule is about a guest's aircraft.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** CM13's flight check answers CHANGE PLANE per crew slot rather than once for both, applies
 the original's second rule, and grants the mission's own aircraft.
@@ -470,6 +489,13 @@ rule, and the mission's aircraft is granted. Complete `.\RunTests.ps1`.
 buttons when owned-minus-one falls below three (`:285-287`). Whether the wingman's button should
 have been offered at all depends on how many aeroplanes that profile owns. The gaps are the three
 named above, not "CM13 locks plane selection".
+
+**Corrections to the item as written.** Two of the three gaps were stated slightly wrong and one
+path was wrong. The files are `CSVM/src/UI/Menu/CampaignFeature.cs` and
+`CSVM/src/UI/CampaignFlightCheckPage.cs`, not the `Session/` and `Menu/Original/` paths cited; the
+per-slot lines are `:441` and `:445`, not `:385,389`. Gap 2's floor of three was already in the
+tree (`(Profile?.Planes.Count ?? 0) >= 3`); what had no term was the minus-one on the two grant
+missions. Gap 1 and gap 3 were exactly as stated.
 
 ## C22 ☐ `BL-690` A staged cutscene aeroplane wears its scheme
 

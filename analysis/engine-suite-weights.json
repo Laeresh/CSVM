@@ -256,6 +256,7 @@
     "display-det-guard": 0.05,
     "menu-campaign-journey": 1.0,
     "campaign-layout-parity": 0.28,
+    "campaign-flight-check-plane-change": 0.05,
     "perf-hud-layout": 0.009,
     "campaign-briefing-note": 0.161,
     "campaign-capture-group": 5.66,

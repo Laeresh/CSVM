@@ -30,10 +30,15 @@ public sealed class CampaignFeature : IMenuFeature
     /// 32-character name plus its terminator (docs/formats/campaign-screens.md).</summary>
     public const int MaxNameLength = 32;
 
-    // The two missions on which FLIGHTCHECK.SCRIPT bars CHANGE PLANE outright, as 1-based ordinals
-    // (docs/formats/campaign-screens.md, "Plane change"): the two story-aircraft-grant missions.
+    // The two missions on which FLIGHTCHECK.SCRIPT bars the PILOT's CHANGE PLANE outright, as
+    // 1-based ordinals (docs/formats/campaign-screens.md, "Plane change"): the two missions whose
+    // reward-table entry is ungated, which the screen grants on entry through uiData 2021.
     private const int FirstGrantOrdinal = 13;
     private const int SecondGrantOrdinal = 17;
+
+    // The owned-plane count both CHANGE PLANE buttons need, uiData 2018 against the script's own
+    // floor (docs/formats/campaign-screens.md, "Plane change").
+    private const int ChangePlaneFloor = 3;
 
     private readonly Func<int, string> _nodeOfAirframe;
 
@@ -159,18 +164,13 @@ public sealed class CampaignFeature : IMenuFeature
     /// <summary>Whether the seated profile has finished the campaign, which disables Next Mission.</summary>
     public bool CampaignComplete => Profile is { } profile && CampaignProgression.Complete(profile);
 
-    /// <summary>Whether the flight check may offer CHANGE PLANE for <see cref="MissionSeq"/>: the
-    /// two rules <c>FLIGHTCHECK.SCRIPT</c> applies, barred outright on the two story-aircraft-grant
-    /// missions and while the profile owns fewer than three planes.</summary>
-    public bool ChangePlaneAllowed
-    {
-        get
-        {
-            int ordinal = MissionSeq + 1;
-            return ordinal != FirstGrantOrdinal && ordinal != SecondGrantOrdinal
-                && (Profile?.Planes.Count ?? 0) >= 3;
-        }
-    }
+    // Whether MissionSeq is one of the two missions the flight check calls uiData 2021 on, which
+    // is also what makes uiData 2018 report one plane fewer than the profile owns.
+    private bool GrantMission =>
+        MissionSeq + 1 == FirstGrantOrdinal || MissionSeq + 1 == SecondGrantOrdinal;
+
+    // uiData 2018's answer: the owned count, less one on the two grant missions.
+    private int ChangePlaneCount => (Profile?.Planes.Count ?? 0) - (GrantMission ? 1 : 0);
 
     /// <summary>Whether one character may be typed into a player name: the original's
     /// alphanumeric-and-space rule (langui 707). Restricting the alphabet this far is also what
@@ -318,6 +318,51 @@ public sealed class CampaignFeature : IMenuFeature
 
     /// <summary>Which crew slot's CHANGE PLANE press opened the plane selection.</summary>
     public void SetPlaneSlot(int slot) => PlaneSlot = slot;
+
+    /// <summary>Whether the flight check may offer CHANGE PLANE for crew slot
+    /// <paramref name="slot"/>, 0 the pilot's and 1 the wingman's: the two rules
+    /// <c>FLIGHTCHECK.SCRIPT</c> applies, the pilot's alone barred outright on the two grant
+    /// missions, and both barred while <see cref="ChangePlaneCount"/> is under the floor.</summary>
+    public bool ChangePlaneAllowed(int slot) =>
+        (slot != 0 || !GrantMission) && ChangePlaneCount >= ChangePlaneFloor;
+
+    /// <summary>The flight check's own <c>uiData</c> 2021 on entry: on the two missions whose
+    /// reward-table entry is ungated, the story aircraft joins the profile the first time and
+    /// becomes the pilot's plane on every entry (<c>docs/formats/campaign-screens.md</c>, "Plane
+    /// change"). Returns whether the profile was written; every other mission grants nothing.</summary>
+    public bool GrantMissionAircraft()
+    {
+        if (!GrantMission || Profile is not { } profile || AwardDue(profile) is not { } reward)
+        {
+            return false;
+        }
+
+        int at = AwardIndex(profile, reward);
+        if (at < 0)
+        {
+            if (profile.GrantedAircraft.Contains(reward.Airframe))
+            {
+                return false;
+            }
+
+            profile.GrantedAircraft.Add(reward.Airframe);
+            profile.Planes.Add(new OwnedPlane
+            {
+                Name = reward.Name,
+                Airframe = reward.Airframe,
+                Special = true,
+            });
+            at = profile.Planes.Count - 1;
+        }
+        else if (profile.SelectedPlane == at)
+        {
+            return false;
+        }
+
+        profile.SelectedPlane = at;
+        Store?.Save(profile);
+        return true;
+    }
 
     /// <summary>Names the scrap a zoom view opens on.</summary>
     public void SetScrapbookZoom(int mission, int spread, int item) => ZoomTarget = (mission, spread, item);
@@ -494,6 +539,28 @@ public sealed class CampaignFeature : IMenuFeature
         Field.Rewind();
     }
 
+    // Where the profile already keeps this award, or -1: the reward table's own name first, then a
+    // granted airframe, since the grant is what wrote that name onto the record.
+    private static int AwardIndex(CampaignProfileDef profile, MissionReward reward)
+    {
+        int byAirframe = -1;
+        for (int i = 0; i < profile.Planes.Count; i++)
+        {
+            var plane = profile.Planes[i];
+            if (plane.Name == reward.Name)
+            {
+                return i;
+            }
+
+            if (byAirframe < 0 && plane.Special && plane.Airframe == reward.Airframe)
+            {
+                byAirframe = i;
+            }
+        }
+
+        return byAirframe;
+    }
+
     // Which refusal a rejected name earns: too long has its own string (langui 212), anything else
     // is the character rule (707). Both are the original's, and both fall back to their own words.
     private string NameRefusal(string name)
@@ -508,6 +575,25 @@ public sealed class CampaignFeature : IMenuFeature
         return limit.Length > 0
             ? limit
             : $"Your player name is limited to {MaxNameLength} characters.";
+    }
+
+    // The reward-table entry uiData 2021 would grant on MissionSeq, or null when the mission has
+    // none, its record awards no aircraft, or its objective gate is unmet. An objective field of 0
+    // is the table's "no gate", which is what makes the two grant missions unconditional.
+    private MissionReward? AwardDue(CampaignProfileDef profile)
+    {
+        foreach (var reward in CampaignProgression.MissionRewards)
+        {
+            if (reward.Ordinal != MissionSeq + 1 || !reward.AwardsAircraft)
+            {
+                continue;
+            }
+
+            int met = CampaignProgression.ResultOf(profile, MissionSeq)?.Best.CompletedMask ?? 0;
+            return reward.ObjectiveBit == 0 || (met & (1 << reward.ObjectiveBit)) != 0 ? reward : null;
+        }
+
+        return null;
     }
 
     private CustomPlaneDef StockBuild(OwnedPlane plane)
