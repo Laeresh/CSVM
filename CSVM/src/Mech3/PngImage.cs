@@ -15,9 +15,10 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class PngImage
 {
-    private static readonly byte[] Signature = { 137, 80, 78, 71, 13, 10, 26, 10 };
     /// <summary>The gamma all UI textures are normalized to before their pixels enter a raw RGBA8 path.</summary>
     public const uint UiGamma = 45454;
+
+    private static readonly byte[] Signature = { 137, 80, 78, 71, 13, 10, 26, 10 };
 
     /// <summary>Reads and decodes one file, or null when it is absent or outside the coverage
     /// above. The path is the caller's business (absolute, under the session's data root).</summary>

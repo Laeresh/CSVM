@@ -169,6 +169,24 @@ public sealed partial class ComposedBoardView : Control
         return new Rect2(0f, top, size.X, height);
     }
 
+    // Keep Godot's loader and texture color-space handling; only the uncommon PNG transfer curve
+    // needs correcting in its decoded pixels.
+    private static void NormalizeGamma(Image image, uint gamma)
+    {
+        float exponent = gamma / (float)PngImage.UiGamma;
+        for (int y = 0; y < image.GetHeight(); y++)
+        {
+            for (int x = 0; x < image.GetWidth(); x++)
+            {
+                var colour = image.GetPixel(x, y);
+                colour.R = Mathf.Pow(colour.R, exponent);
+                colour.G = Mathf.Pow(colour.G, exponent);
+                colour.B = Mathf.Pow(colour.B, exponent);
+                image.SetPixel(x, y, colour);
+            }
+        }
+    }
+
     // The palette a piece of text takes. A plaque's label is the one place the state is in the ink
     // rather than in the art, which is what the original's three label fonts are.
     private Color InkOf(BoardInk ink) => ink switch
@@ -390,23 +408,5 @@ public sealed partial class ComposedBoardView : Control
 
         _textures[path] = texture;
         return texture;
-    }
-
-    // Keep Godot's loader and texture color-space handling; only the uncommon PNG transfer curve
-    // needs correcting in its decoded pixels.
-    private static void NormalizeGamma(Image image, uint gamma)
-    {
-        float exponent = gamma / (float)PngImage.UiGamma;
-        for (int y = 0; y < image.GetHeight(); y++)
-        {
-            for (int x = 0; x < image.GetWidth(); x++)
-            {
-                var colour = image.GetPixel(x, y);
-                colour.R = Mathf.Pow(colour.R, exponent);
-                colour.G = Mathf.Pow(colour.G, exponent);
-                colour.B = Mathf.Pow(colour.B, exponent);
-                image.SetPixel(x, y, colour);
-            }
-        }
     }
 }
