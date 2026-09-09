@@ -3092,20 +3092,6 @@ usual.
 
 ## Tooling, platform & docs
 
-- `BL-790` `[Bug]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **The menu-layout census pin fails on a refreshed extraction: `artMissing` expects 2 where the install now reports 0.**
-  *Evidence:* `MenuLayoutDecoderTests.TheInstallsOwnLayoutDecodesToItsDocumentedCensus` asserts
-  `counts["artMissing"] == 2` and reads 0, so the complete `.\RunTests.ps1` exits 1 on every tree
-  while every other one of its 3,500-odd units passes. The extraction agrees with the code, not with
-  the pin: `extracted/rof/menu_layout.json` records `artMissing: 0` with an empty `missingArt` list
-  and all 124 art references resolving. The decoder is untouched, and three independent agents in one
-  session reported it against three separate worktrees. *Fix shape:* re-derive the census against the
-  current extraction and record what changed, or make the art-missing count tolerant of an install
-  whose patch overlay supplies the two files. *⚠ Traps:* do not re-pin the number blind. The two
-  references becoming present is itself the fact to explain, most likely through the `_crimptch`
-  overlay the extraction now applies, and a census that silently tracks whatever the local install
-  produces stops being a census. It is a red landing gate for everyone until it is settled, which is
-  the argument for settling it soon rather than the argument for changing the number.
-  *Cross-refs:* main's `ad2dba00`, which records the same failure in its own message.
 - `BL-675` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **A `--campaign=<profile>:<n>` run launched through `RunProbe.ps1` from an
   agent worktree reported no such profile, though the profile exists.** *Evidence:* a probe run
   answered `--campaign=Gab: no such profile, flying without a mission` from
