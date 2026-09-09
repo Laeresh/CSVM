@@ -221,6 +221,15 @@ so the picture animates with nothing invalidated; `AdvanceMovies` runs their clo
 own step and says whether to repaint. Supplies the font metric a flowed `BoardNote` cannot take for
 itself, and the one piece of chrome that is not the original's, the two-line hint band a pad needs.
 
+## src/UI/CinemaScreen.cs
+One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
+`AudioStreamGenerator` its samples are pushed to on the Voice bus, a cinema being a narrated film
+rather than score or world sound. The picture fills the same 800x600 rectangle `BoardFit` maps a
+board into, so a cinema and the screen it hands off to own one area of the window. `Open` answers
+null for a file that will not read, `Ended` is how a flow learns it stopped, and `CinemaSkip` is
+which presses end it early, the per-cinema differences there being the original's own. It mounts
+itself on `HudLayers.Cinema` and frees itself; `Session/Launcher.cs`'s `PlayCinema` is the seam.
+
 ## src/UI/BoardPalette.cs
 The ink a campaign board writes in, one palette per background family, because the screens are
 painted art and the grey the flight check's forms use is invisible on the cabin's dark hangar. The

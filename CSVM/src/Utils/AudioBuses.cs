@@ -18,6 +18,7 @@ public static class AudioBuses
     /// emitters, and the menu's own cues.</summary>
     public const string Effects = "Effects";
 
-    /// <summary>Spoken lines: the mission radio, the briefing narration, and combat callouts.</summary>
+    /// <summary>Spoken lines: the mission radio, the briefing narration, combat callouts, and the
+    /// cinemas' own soundtracks, which are narrated films rather than score or world sound.</summary>
     public const string Voice = "Voice";
 }

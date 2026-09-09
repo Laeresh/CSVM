@@ -60,13 +60,30 @@ Decoding the audio adds four facts the headers alone do not give. Every track ru
 nine stereo files are all plain stereo, never joint stereo and never dual channel, and no file sets
 the protection bit, so none carries a CRC. **`crimflag.mpg`'s track is digital silence**, every
 sample exactly zero across all 307 of its audio frames, where the other nine peak between 0.964 and
-1.092: the flag is silent in the data rather than only in the presentation. Five of the ten peak
+1.092: the flag is silent in the data rather than only in the presentation. Six of the ten peak
 above 1.0, which is ordinary for layer II and means a player feeding fixed-point output has to
-clamp. Sound outlasts picture in every file, by 0.01 to 0.25 s, and the first audio packet carries a
-presentation timestamp in all ten, between roughly 0.04 and 0.22 s, so the two streams do not share
-an origin. Nine of the ten pad the tail of the sound track with zero bytes after the last complete
-frame; `msopen1.mpg` ends with non-header data instead. That padding is the end of the stream, not
-damage.
+clamp. Sound is still sounding when the last picture is put up in every file, by 0.018 to 0.054 s,
+and it runs out before that picture's own display interval expires in `chap0.mpg` and
+`msopen1.mpg`, so a player whose clock is the sound alone never reaches the end of those two. Nine
+of the ten pad the tail of the sound track with zero bytes after the last complete frame;
+`msopen1.mpg` ends with non-header data instead. That padding is the end of the stream, not damage.
+
+### The two streams' start times
+
+Both streams carry a presentation timestamp on their first packet, between 0.0583 and 0.2844 s, and
+in nine of the ten files the two are the same value to the tick, so those nine share an origin
+after all. `msopen1.mpg` is the exception and the only one either way: its sound starts at 0.2177 s
+against its picture's 0.2844 s, **0.0667 s earlier**. A player therefore reads both start times and
+subtracts, and it does not read the audio one as an offset in itself.
+
+| File | Video start | Audio start | Audio minus video |
+|---|---|---|---|
+| `chap0.mpg` | 0.0583 | 0.0583 | 0 |
+| `chap1.mpg` to `chap5.mpg` | 0.0591 | 0.0591 | 0 |
+| `crimflag.mpg` | 0.1121 | 0.1121 | 0 |
+| `final.mpg` | 0.0593 | 0.0593 | 0 |
+| `msopen1.mpg` | 0.2844 | 0.2177 | −0.0667 |
+| `zipper.mpg` | 0.0591 | 0.0591 | 0 |
 
 ## Where the files are named from
 

@@ -580,6 +580,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   there; confirm a negative by reading the control flow around the site.** `FUN_004b6820` computes
   `(weaponFlags >> 6) & 1` once at the top of each station loop and keeps it in a register, so
   searching it for the immediate `0x40` reads as an unfiltered fire counter.
+- **SRC-10** — **A stream's own start timestamp is not an offset between streams; read both and
+  subtract.** Nine of the ten cinemas carry the identical presentation timestamp on their first
+  video and first audio packet, and only `msopen1.mpg` differs, its sound starting 0.0667 s before
+  its picture (`formats/cinemas.md`).
 
 ## What this project cannot verify itself
 

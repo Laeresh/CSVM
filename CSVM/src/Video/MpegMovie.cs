@@ -42,6 +42,14 @@ public sealed class MpegMovie
     /// <summary>The audio packets, in container order, each with its presentation timestamp.</summary>
     public IReadOnlyList<MpegPacket> AudioPackets => _stream.AudioPackets;
 
+    /// <summary>When the first picture is shown, in seconds on the container's clock.</summary>
+    public double VideoStartTime => _stream.VideoStartTime;
+
+    /// <summary>When the first sample is heard, in seconds on the same clock. ⚠ Take it against
+    /// <see cref="VideoStartTime"/> and never as an offset in itself: nine of the ten cinemas
+    /// carry the same value in both, and the tenth starts its sound track first.</summary>
+    public double AudioStartTime => _stream.AudioStartTime;
+
     /// <summary>Whether the movie carries a sound track this decoder can read.</summary>
     public bool HasAudio => Audio != null;
 

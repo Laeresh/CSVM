@@ -148,6 +148,13 @@ public sealed record SessionSpec
     public bool ForceMenu { get; private set; }
     public string MenuStartScreen { get; private set; } = "";
 
+    /// <summary><c>--movie=</c>: play that one cinema and quit, with no world and no menu behind
+    /// it. Null when the flag is absent. The name is resolved without regard to case
+    /// (<see cref="SessionPaths.Cinema"/>) and needs no <c>.mpg</c>. ⚠ It does not imply the
+    /// determinism bundle, unlike the other flags that end a run by themselves: the clock a cinema
+    /// runs on is the audio device's, so a fixed-step sim clock would say nothing about it.</summary>
+    public string? MovieName { get; private set; }
+
     /// <summary><c>--presentation=</c>: a session-only menu presentation override, never persisted.
     /// <see cref="Utils.PresentationResolution"/> ranks it above the saved request and below
     /// <see cref="ForceBuiltInPresentation"/>. Null when the flag is absent.</summary>
@@ -178,6 +185,7 @@ public sealed record SessionSpec
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
         : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid ? "dump"
+        : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
         : Versus ? "vs"
@@ -852,6 +860,7 @@ public sealed record SessionSpec
             else if (arg == "--perf") { s.Perf = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
+            else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }
             else if (arg == "--menu") { s.ForceMenu = true; }
             else if (arg.StartsWith("--menu=")) { s.ForceMenu = true; s.MenuStartScreen = arg["--menu=".Length..]; }
             else if (arg.StartsWith("--presentation=")) { s.PresentationOverride = arg["--presentation=".Length..]; }

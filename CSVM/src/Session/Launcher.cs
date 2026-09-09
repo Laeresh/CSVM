@@ -716,6 +716,14 @@ public partial class Launcher : Node3D
         // wiring contract, step 1).
         BuildMusic();
 
+        // --movie=: one cinema, then quit. No world, no menu, and no session behind it, which is
+        // what makes the audio sync judgeable at the controls before any flow plays a cinema.
+        if (_spec.MovieName is { } cinemaName)
+        {
+            PlayCinema(cinemaName, () => GetTree().Quit());
+            return;
+        }
+
         // No content-selecting arg (or explicit --menu): show the launchscreen. Its selection
         // derives the session spec and calls LaunchSession, so there is one downstream build
         // path; Esc from a menu-launched flight returns here (ReturnToMenu).
@@ -900,6 +908,32 @@ public partial class Launcher : Node3D
         // it was a child ticking itself: the capture director reads the menu as it stood before
         // this frame's presses, as it always did.
         _menuHost?.Tick(MenuStep(delta));
+    }
+
+    /// <summary>Plays one cinema over the whole window and runs <paramref name="then"/> on the
+    /// frame it stops, whether it played out or was skipped. A name that resolves to no readable
+    /// file runs the continuation straight away, so a flow costs a screen rather than stalling on
+    /// a cinema this install does not carry. This is the seam every movie sequence goes
+    /// through.</summary>
+    public void PlayCinema(string name, System.Action then, UI.CinemaSkip skip = UI.CinemaScreen.BootKeys)
+    {
+        if (UI.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
+        {
+            Log.Warn("ui", $"cinema {name} not played; looked under {SessionPaths.CinemaFolder(_dataRoot)}");
+            then();
+            return;
+        }
+
+        // A repo run's developer gain defaults to zero, and a cinema whose whole point is its
+        // sound track is the one place that reads as a defect rather than as a quiet run.
+        if (MasterVolume.Resolve(_spec.Volume, _exported) <= 0f)
+        {
+            Log.Warn("sound", $"cinema {name} is playing at master volume 0 — pass --volume=1.0 to hear it");
+        }
+
+        Log.Info("ui", $"cinema {name} playing skip={skip}");
+        cinema.Ended = then;
+        AddChild(cinema);
     }
 
     // The step the menus advance on. A deterministic run gives them the sim's own, for the reason

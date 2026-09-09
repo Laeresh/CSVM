@@ -109,3 +109,12 @@ differ from the other eight need no case of their own. A play count of zero play
 every pass after the first restarts through `MpegMovie.Rewind`. A step longer than the cap counts
 as the cap, so a window that was not drawing comes back late instead of decoding pictures nobody
 saw. The texture side of this is `CSVM.UI.MovieSurface`.
+
+## src/Video/CinemaPlayback.cs
+A cinema playing with its sound: a `MoviePlayback` for the picture, the movie's own track handed
+out as clamped PCM, and the two kept together. The clock is the sound the device has actually
+played, since a device consumes at exactly the rate it was opened at where a frame callback does
+not, so a long file cannot drift away from its own sound. The two streams' container start times
+are taken against each other here, as leading silence or as a lagged picture clock, and neither
+arm discards a sample. Past the last sample the picture runs on the caller's own step instead,
+because two of the ten cinemas end their sound first. The engine half is `CSVM.UI.CinemaScreen`.

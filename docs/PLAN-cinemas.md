@@ -144,7 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the cinema sequence
 
-21. ☐ Audio playback and A/V sync from the stream's presentation timestamps
+21. ☑ Audio playback and A/V sync from the stream's presentation timestamps
 22. ☐ The boot sequence on a bare launch, with the skip and `--skip-intro`
 23. ☐ The chapter cinema and its passenger-cabin handoff
 24. ☐ The closing cinema, its gate and its scrapbook handoff
@@ -727,7 +727,99 @@ re-baselines. ⚠ Do not correct the softness. At 320x240 scaled 2.5x into the b
 
 # Wave C — the cinema sequence
 
-## C21 ☐ Audio playback and A/V sync from the stream's presentation timestamps
+**The seam `C21` left for `C22`, `C23` and `C24`.** One call plays a named cinema and tells you when
+it stopped:
+
+```csharp
+launcher.PlayCinema("chap3", () => /* hand off here */, CinemaScreen.ChapterKeys);
+```
+
+`Launcher.PlayCinema(string name, Action then, CinemaSkip skip)` resolves the name case-blind under
+`extracted/rof/ASSETS/GRAPHICS/MPG/` (`.mpg` supplied when none is spelled), mounts one
+`UI.CinemaScreen` on `HudLayers.Cinema` over whatever is on screen, and runs `then` on the frame the
+cinema stops, played out or skipped. A file that will not read logs a warning and runs `then` at
+once, so a flow never stalls on a cinema an install does not carry, and a sequence of movies is
+those calls chained. `CinemaScreen.BootKeys`, `.ChapterKeys` and `.ClosingKeys` are the three
+authored skip sets (`C22`, `C23`, `C24` in that order); `CinemaSkip` is the flags type behind them
+and the per-cinema differences are the original's, not an oversight to unify. `CinemaScreen.Stop()`
+ends one from outside, `Finished` and `FramesShown` are what a suite reads, and `--movie=<name>`
+plays one from the command line through the same call.
+
+## C21 ☑ Audio playback and A/V sync from the stream's presentation timestamps
+
+**Landed.** `CinemaPlayback` in `CSVM.Video` is the sync, engine-free and unit-tested: it owns a
+`MoviePlayback` for the picture and hands the movie's own track out as clamped PCM, and **the clock
+is the sound the device has actually played**, not the frame delta. A device consumes at exactly the
+rate it was opened at where a frame callback does not, so the picture cannot drift away from the
+sound however long the file runs; `Advance(elapsedSeconds, soundFramesPlayed)` is the whole seam,
+and the wall step drives the picture only for a movie carrying no track and for the tail past the
+last sample. `CinemaScreen` in `CSVM.UI` is the engine half: the `ImageTexture` the pictures upload
+into, the `AudioStreamGenerator` the samples are pushed to, the skip, and nothing else. The picture
+fills the same 800x600 rectangle `BoardFit` maps every board into, so a cinema and the screen it
+hands off to own one area of the window.
+
+**The bus is `Voice`.** The nine cinemas are narrated films rather than score or world sound, and
+`AudioBuses.Voice` is already the briefing narration's channel, which is the closest thing the mix
+has to a non-diegetic narrated presentation. `Music` is documented as `MusicPlayer`'s one player and
+nothing else, and `Effects` is what the world and the aircraft make; neither describes a cinema.
+
+**`--movie=<name>` is the way in, and the seam C22 to C24 reuse.** It plays one cinema over the
+whole window and quits, with no world, no menu and no session behind it. The name resolves
+case-blind through `SessionPaths.Cinema` and takes `.mpg` when none is spelled, so `--movie=zipper`
+and `--movie=CrimFlag.MPG` both work; `ComposedBoardView` now resolves `B12`'s flag through that
+same member rather than assembling a path of its own. It deliberately does **not** imply `--det`:
+the clock is the audio device's, so a fixed-step sim clock would say nothing about what this flag
+exists to show.
+
+**⚠ The Approach's second trap is wrong, and the data says so.** It reads "`AudioStartTime` is
+nonzero in all ten files (roughly 0.04 to 0.22 s)" as an offset to honour. It is not one:
+`VideoStartTime` carries **the same value to the tick in nine of the ten**, so those nine share an
+origin, and the tenth goes the other way. `msopen1.mpg` starts its sound at 0.2177 s against its
+picture's 0.2844 s, 0.0667 s **earlier**, so the correction there is a lagged picture clock and not
+a silence pad. Both directions are implemented and neither discards a sample; the table is in
+[`docs/formats/cinemas.md`](formats/cinemas.md) and the transferable rule is **SRC-10**.
+
+**⚠ Two of the ten run their sound out before the picture, so the sound cannot be the only clock.**
+`chap0.mpg`'s track ends 0.013 s and `msopen1.mpg`'s 0.015 s before their last picture's own display
+interval expires. A clock that stopped with the sound would leave those two never finishing, so past
+the last sample the picture runs on the caller's step. The Approach's fifth trap says sound outlasts
+picture in every file by 0.01 to 0.25 s; measured against the moment the last picture is **put up**
+that holds, at 0.018 to 0.054 s, and measured against the moment that picture's interval **expires**
+it fails for those two. `ACinemaWhoseSoundEndsFirstStillFinishes` pins it.
+
+**The other three traps held.** Six of the ten peak above 1.0 rather than five, up to `chap3.mpg`'s
+1.0924, and `ReadSound` clamps; the synthetic fixture peaks at 1.3524 through the decoder alone, so
+`EverySampleIsClamped` can fail (METHOD-9). `MoviePlayback.Clock` is indeed the video's own origin,
+which is why the offset is taken here. And drift is checked over whole files rather than over a
+window: `APlayedCinemaTracksItsSoundToTheLastPicture` plays `crimflag.mpg` and `zipper.mpg` end to
+end under `CSVM_MOVIE_WALK`, and the worst gap between the picture's clock and the sound handed over
+is under a millisecond across both.
+
+**Verified.** `.\RunTests.ps1` on the plan tree, run by the orchestrator rather than reported by the
+agent: PASS, exit 0, 280.1 s. Build 3.8 s with zero StyleCop warnings; units 3774 passed, 0 failed,
+2 skipped of 3776, against `B12`'s 3766/0/1 of 3767, the second skip being this item's own opt-in
+whole-file walk; engine 265 passed, errors clean; goldens 20 shots hash-identical with
+`analysis/goldens/manifest.json` unmodified in `git diff` afterwards (GOLD-9), the two flag shots
+among them, which is what clears the resolver this item rerouted `B12`'s flag through. The agent's
+three live runs reproduce: `--movie=CrimFlag.MPG` ends itself at `frames=240 clock=8.008s`,
+`--movie=zipper` at `frames=608 clock=20.274s`, and `--movie=nosuchfilm` warns and exits 0.
+
+**The new tests cost nothing measurable, which was measured rather than assumed.** That battery run
+put every stage over budget, units at 35.0 s against 30 s where `B12` measured 20.7 s, so the
+question was whether this item's eight checks did it. Run back to back on one build, the unit stage
+is **24 s with them filtered out and 22 s with them in** (3767 tests against 3776), so they overlap
+with the decodes A1's walk already pays for, the way `A2`'s audio walk did. Four other worktrees were
+under load on the same machine during the battery, and the engine and golden stages moved with it in
+the same direction; the per-item measurement is the one that answers this item's question, and it
+answers it no.
+
+**⚠ What no instrument here can answer.** Whether the sound is in step with the picture at the
+controls is the user's judgement and Decision 7 puts it there. Run
+`.\RunGame.ps1 -- --movie=chap1 --volume=1.0`, or `RunProbe.ps1` with `--volume=1.0`, and watch a
+whole file: `chap0` is the longest at 145 s and `chap3` the shortest of the chapter set at 93 s.
+A check on the first thirty seconds proves nothing.
+
+### Original approach (kept for reference)
 
 **Goal.** A cinema plays with its audio in sync from the first frame to the last, on the project's
 audio bus.
