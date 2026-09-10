@@ -506,13 +506,13 @@ pooled copy; that filter and its limits are on the members. Decode:
 
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,
-`TakeNextSlot`, `RootsFor`, `AssignCallerSlot`), template placement (`PlaceAt`/`PlaceOn`, and
-`PlaceFollowing` for a copy that must keep riding a moving call site, re-placed each frame by
-`FollowSites`), the copy-identity questions (`IsAt`, `RootsOf`, `SharedWithLiveInstance`), the
-pooled-copy staging entry `IndexPooledCopy`, and the reveal/retire/sweep ritual. The three template
-policy flags (`Pooled`, `Shown`, `Places`) are sealed constructor state. Generic like
-`NameResolver<TNode>`, with the runtime-dependent hooks late-bound through `Wire`; the off-engine
-charter is `CSVM.Tests/TemplateStageTests.cs`. Read `AnimRuntime.cs` for the checkout reset.
+`TakeNextSlot`, `RootsFor`, `AssignCallerSlot`), placement (`PlaceAt`/`PlaceOn`, plus the
+`PlaceFollowing`/`FollowSites` a moving call site needs), the copy-identity questions (`IsAt`,
+`RootsOf`, `SharedWithLiveInstance`), the pooled-copy staging entry `IndexPooledCopy`, and the
+reveal/retire/sweep ritual. `Pooled`/`Shown`/`Places` are sealed constructor state. Its two
+node-identity maps keep a freed call site as a KEY: `DropFreed` rebuilds them, `FreedKeys` counts
+what one leaves, on `NameResolver`'s terms above. Generic, hooks late-bound via `Wire`; charter
+`CSVM.Tests/TemplateStageTests.cs`; `AnimRuntime.cs` has the reset and `RetireFreedNodes`.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam.

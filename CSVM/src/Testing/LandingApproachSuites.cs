@@ -724,6 +724,10 @@ internal static class LandingApproachSuites
         // ancestry walk hashes a row's node, so a stale row throws for some later query.
         ctx.Same(0, world.Runtime.FreedNodeRows(),
             $"and the stage that put it there left no row naming a freed node behind");
+        // The template stage keys two maps of its own on the same node identity and is retired by
+        // the same sweep, so the airframe this one replaced is asked after on both sides.
+        ctx.Same(0, world.Runtime.FreedStageKeys(),
+            $"nor any template-stage key naming one");
         ctx.Check(hook != null,
             $"and carries its own '{branch.HookAnim}' hook group rather than a skipped subtree");
         ctx.Check(hook is not { Visible: true }, $"which starts retracted");

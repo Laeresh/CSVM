@@ -1163,9 +1163,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// generic node names must not re-pose it.</summary>
     public void IndexRebasedStage(Node3D subtree, int indexOffset)
     {
-        // ⚠ Retire first, and only here: this is the one stage that puts a subtree in over one
-        // its caller may have freed, an airframe swapped for another on the same rig.
-        DropFreedNodes();
+        // ⚠ Retire first: this is the one stage that puts a subtree in over one its caller may
+        // have freed, an airframe swapped for another on the same rig.
+        RetireFreedNodes();
         IndexWorld(subtree, indexOffset: indexOffset);
         _resolver.ClearFindCache();
     }
@@ -1175,6 +1175,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// assert that, because the fault a stale row causes needs a hash collision and so shows on
     /// some runs only.</summary>
     public int FreedNodeRows() => _resolver.FreedRows();
+
+    /// <summary>How many keys of the template stage's identity-keyed maps name a node that has
+    /// since been freed, the same reading <see cref="FreedNodeRows"/> gives for the node table.
+    /// The stage guards the node a call hands it and never the keys it already holds, so a suite
+    /// reads this rather than re-running until a collision throws.</summary>
+    public int FreedStageKeys() => _templateStage.FreedKeys();
+
+    /// <summary>Retires every node-table row and every template-stage key naming a node that has
+    /// been freed, and returns how many went. The two staging entries call it before they grow
+    /// their tables; a caller that frees a subtree this runtime resolved against and stages nothing
+    /// in its place calls it itself, since the free is the only event either table gets.</summary>
+    // ⚠ Both halves REBUILD; a Remove hashes the dead key it is handed, which is the dereference
+    // being avoided. Why a dead key throws at all: docs/architecture/Mech3.md.
+    public int RetireFreedNodes()
+    {
+        int rows = _resolver.DropFreed();
+        int keys = _templateStage.DropFreed();
+        if (rows > 0 || keys > 0)
+            Log.Info("anim", $"anim: retired {rows} node-table row(s) and {keys} template-stage key(s) naming freed node(s)");
+        return rows + keys;
+    }
 
     /// <summary>Parks a flown airframe's docking hook where its own <c>&lt;x&gt;_hook_retract</c>
     /// RESET_STATE puts it, scoped to a <see cref="PlaneBuilder.IsDockingHook"/> group inside this
@@ -1761,6 +1782,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// resolves against itself as long as it is passed as the anchor.</summary>
     internal void IndexPooledCopy(Node3D subtree)
     {
+        // ⚠ Retire first, as IndexRebasedStage does: a copy is built mid-session, so the maps it
+        // joins may already key a call-site anchor the world has freed since the last one.
+        RetireFreedNodes();
         _templateStage.IndexPooledCopy(subtree);
         PrimeRest(subtree);
         _stagedCopies.Add(subtree);
@@ -2407,16 +2431,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     Walk(c, n);
         }
         Walk(worldRoot, worldRoot.GetParent() as Node3D);
-    }
-
-    // Retires every row naming a node freed since the last stage, before this stage's own queries
-    // meet one. Nothing tells the resolver a node has gone, and its ancestry walk hashes each step
-    // of a chain. A dead key then throws for whatever later query lands in its bucket.
-    private void DropFreedNodes()
-    {
-        int dropped = _resolver.DropFreed();
-        if (dropped > 0)
-            Log.Info("anim", $"anim: node table retired {dropped} row(s) naming freed node(s)");
     }
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors

@@ -1437,23 +1437,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) (the
   prerequisite's census and both parse paths).
 
-- `BL-682` `[Bug]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TemplateStage` keeps freed nodes as dictionary KEYS in two identity-keyed
-  maps, the same shape of fault the name resolver had.** *Evidence (traced):* `_slotOfNode`
-  (`TemplateStage.cs:144`, filled by `SlotOf` for every anchor it is asked about) and the inner
-  dictionaries of `_callerSlots` (`:228`) are keyed by the same `Node3DIdentity` comparer. Both
-  guard the ARGUMENT with `_isValid` and never the stored keys, and nothing sweeps them, so a freed
-  call-site anchor on a pooled runtime leaves a dead key. The pooled runtimes are the world-effects
-  stage and the per-player crash rigs. *Fix shape:* the sweep `NameResolver.DropFreed` already
-  implements, applied wherever a staged subtree is freed: rebuild the maps rather than removing
-  from them, since a `Remove` hashes the dead key that is the dereference being avoided.
-  *⚠ Traps:* **no failure is observed yet**, so this is a traced lead and not a symptom, and it must
-  not be "confirmed" by re-running a suite until it throws. Read a stale-row count directly, the way
-  `AnimRuntime.FreedNodeRows` does, because a fault needing a hash collision fires on a minority of
-  runs ([`docs/verification.md`](docs/verification.md) `INSTR-38`). Do not guard the comparer's
-  `Equals` with a liveness check and call it fixed: that turns a loud exception into a later lookup
-  answering with the wrong node. *Cross-refs:* `BL-679`'s closing record in
-  `PLAN-M5-polish-10` `C24`, `PLAN-template-stage`.
-
 - `BL-720` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[CM24]` **The Dante's engine-explosion
   puffers drift between the engines, and some sit at the wrong place.** *Evidence:* reported at the
   controls on CM24 (C5/M04): "puffers moving between engine explosions of dante" and "some puffers

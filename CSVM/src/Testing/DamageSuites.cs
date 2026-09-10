@@ -143,6 +143,101 @@ internal static class DamageSuites
         });
     }
 
+    // ---- a freed call site must leave the pooled stage's identity-keyed maps ---------------------
+
+    // The stage memoizes each node's pool slot and keeps a sticky caller-slot claim, both keyed on
+    // node identity, and both guard only the node a call hands them. A freed call site therefore
+    // stays a KEY, and the engine comparer dereferences a key to answer whatever later lookup hashes
+    // into its bucket, so the throw lands in an unrelated query on the runs where the hash collides.
+    // Read the stale count instead (docs/verification.md INSTR-38): it is there on every run.
+    [Suite("damage-template-freed-anchor",
+        "a freed panel leaves no key behind in the crash rig's pooled template stage: the stale count "
+        + "is read directly rather than waited on, the sweep clears it, and the next panel's tear still "
+        + "takes its own copy through the rebuilt maps")]
+    internal static void DamageTemplateFreedAnchor(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var stage = new Node3D { Name = "FreedAnchorStage" };
+            var pdp5 = PoolAnchorNode("pdp5", new Vector3(-10, 0, 0));
+            var pdp4 = PoolAnchorNode("pdp4", new Vector3(10, 0, 0));
+            stage.AddChild(pdp5);
+            stage.AddChild(pdp4);
+            var copies = new List<Node3D>();
+            for (int slot = 0; slot < 2; slot++)
+            {
+                var pool = new Node3D { Name = $"pool{slot}" };
+                pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+                stage.AddChild(pool);
+                Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                foreach (var child in pool.GetChildren())
+                {
+                    if (child is Node3D copy)
+                    {
+                        copies.Add(copy);
+                    }
+                }
+            }
+
+            var runtime = new AnimRuntime(Session.WorldEffectsFactory.NewCrashTemplateStage())
+            {
+                AutoStart = false,
+                ManualAdvance = true,
+                SoundHandledElsewhere = true,
+                EmitterFactory = new CountingEmitterFactory(),
+                NameResolveFallback = true,
+            };
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
+                runtime.Play("pdpanel5", stage, applyReset: false);
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(copies.Exists(c => AtPoolSite(c, pdp5)),
+                    $"pdpanel5's tear placed a planeflakes copy at pdp5, which is what keys the stage on it");
+                ctx.Same(0, runtime.FreedStageKeys(), $"nothing is freed yet, so no key names a freed node");
+
+                // The panel goes the way a rig's own node does when its holder is torn down. Its
+                // instance is stopped first: an instance left running on a freed anchor is
+                // AnimRuntime's own concern and not what this suite reads.
+                runtime.Stop("pdpanel5");
+                stage.RemoveChild(pdp5);
+                pdp5.Free();
+
+                int stale = runtime.FreedStageKeys();
+                ctx.Note($"stale template-stage keys after the panel was freed: {stale}");
+                ctx.Check(stale > 0,
+                    $"the freed panel is still a KEY in the stage's maps ({stale}), which is the state a later lookup dereferences");
+                ctx.Check(runtime.RetireFreedNodes() > 0, $"and the sweep retires it");
+                ctx.Same(0, runtime.FreedStageKeys(), $"leaving no key naming a freed node");
+                ctx.Same(0, runtime.FreedNodeRows(), $"nor any node-table row naming one");
+
+                // The rebuilt maps still answer: a sweep that dropped the live claims, or one that
+                // removed a dead key by hashing it, fails here rather than silently.
+                runtime.Play("pdpanel4", stage, applyReset: false);
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(copies.Exists(c => AtPoolSite(c, pdp4)),
+                    $"pdpanel4's tear placed its own copy at pdp4 through the rebuilt maps");
+                ctx.Same(0, runtime.FreedStageKeys(), $"and left no new stale key");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
     // A flat named call-site node for DamageTemplatePool — name meta set
     // the way the crash rig's own anchor scaffold sets it, so resolution finds it.
     internal static Node3D PoolAnchorNode(string name, Vector3 at)
