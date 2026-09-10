@@ -108,6 +108,7 @@
     "lens-flare-gates": 1.385,
     "sun-orientation": 0.036,
     "sun-energy": 0.18,
+    "cockpit-sun-bearing": 0.09,
     "tex-dropin": 0.008,
     "texture-alpha-class": 0.040,
     "gltf-export": 0.571,

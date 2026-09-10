@@ -1266,18 +1266,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is landed and works; only the ambient half is inert. *Cross-refs:* `BL-332`'s closing record in
   `PLAN-M5-polish-10` `B13`, `CAP-54`.
 
-- `BL-684` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The cockpit pass's light copies the sun's energy and colour but never its
-  bearing, so the interior is lit from Godot's default direction in every mission.** *Evidence
-  (traced):* `CockpitOverlay.NewOverlay` clones the session sun's `LightEnergy`, `LightColor` and
-  shadow settings, and `WeatherRig.RegisterExtraLighting` mirrors the per-zone energies onto that
-  clone, but neither copies `Rotation`. The zone apply points the session sun at the mission's
-  `SUNLIGHT_ORIENTATION` and the clone keeps the launcher default, in both graphics modes.
-  *Fix shape:* mirror the bearing wherever the energies are already mirrored, so the interior and
-  the airframe agree about where the sun is. *⚠ Traps:* the interior draws in its own
-  origin-relative pass, so check the bearing in that pass's own basis rather than assuming the
-  world rotation transfers unchanged. Pre-existing and found while wiring the energy mirror, so it
-  is not a regression of that work. *Cross-refs:* `BL-332`'s closing record, `docs/org/weather.md`.
-
 - `BL-735` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` **The multiplayer zeppelins' belly rings stand over no hull collider in six of the eight chapter worlds.**
   *Evidence:* on `multiplayer1zep` and `multiplayer2zep`, a plain unrestricted
   `CollisionLayers.World` ray cast straight up from the `WorldPosition` of `ctur1`, `ctur2` and
@@ -3162,6 +3150,20 @@ usual.
   `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `BL-617` (the same misreading, on `script_ms`); the
   empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
   term worth having (`docs/cli.md`, `git log --grep=BL-742`).
+
+- `BL-798` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **No golden shot renders the cockpit pass, so the shipped first-person view has no pixel tripwire.**
+  *Evidence:* none of the 18 shots in `analysis/goldens/manifest.json` passes `--view=cockpit` or
+  `--view=nose`, and a flight shot defaults to the chase camera, so the `SubViewport` the interior
+  draws in (`Flight/CockpitOverlay`) is absent from every pinned image. Cutting the bearing mirror
+  in `CockpitOverlay.Sync` moved a `--view=cockpit` C1/IA1 capture's pixel md5 from `50b5fcf1` to
+  `274ed29c` while leaving all 18 goldens byte-identical, which is the size of the gap.
+  *Fix shape:* one further manifest row, a `--chapter=C1 --plane=player_bhawk --view=cockpit`
+  flight beside `c1-flight`. *⚠ Traps:* the pass composites over the main view under the HUD, so
+  such a shot is pinned by the world behind the panel as much as by the panel, and a moved hash
+  will need reading against `c1-flight` before it is read as a cockpit change. `--no-cockpit-pass`
+  draws the same panel through the other path, so one shot pins one path only.
+  *Cross-refs:* the `cockpit-overlay-pass` and `cockpit-sun-bearing` suites, which assert the
+  pass's transforms and its light without rendering either.
 
 ## Misc
 

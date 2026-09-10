@@ -557,6 +557,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   `CheckCommitContent.ps1` silently while all 21 of its rows passed; four comment-cap violations and
   an over-cap doc entry reached `main`. Drive the harness's own command text with a crafted payload
   against a fixture carrying a known fault.
+- **INSTR-48** — **Reading the two writers you expected does not prove a property is never
+  written: grep every assignment of the member before filing "it is never copied".** The cockpit
+  pass's cloned sun takes no bearing in `CockpitOverlay.NewOverlay` or
+  `WeatherRig.RegisterExtraLighting` and is aimed from the world sun in `CockpitOverlay.Sync`
+  every frame, which a C1/IA1 cockpit shot proves by moving pixel md5 `50b5fcf1` to `274ed29c`
+  when that third writer alone is cut.
 
 ## SRC — sources and documents
 

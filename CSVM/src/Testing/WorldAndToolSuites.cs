@@ -1132,6 +1132,98 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The interior pass's own sun is AIMED where the mission points the session sun, and keeps
+    // following it across a zone change. The pass holds the world's orientation, so the aim is the
+    // world basis verbatim. Able to fail: a clone aimed once at build and left there, a clone
+    // re-based into the interior's frame (which would swing the sun with the airframe), and a zone
+    // change that moves the session sun alone.
+    [Suite("cockpit-sun-bearing",
+        "the cockpit pass's own sun is aimed where the mission's SUNLIGHT_ORIENTATION points, in the pass's world basis, and follows the session sun across a zone change (BL-684)")]
+    internal static void CockpitSunBearing(TestContext ctx)
+    {
+        string litZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
+        ctx.RequireData(litZrdr, $"C1/IA1 mission zrdr");
+        ctx.RequireData(crossZrdr, $"C2/MP2 mission zrdr");
+
+        var sun = new DirectionalLight3D { Name = "cockpit-bearing-sun" };
+        var camera = new Camera3D { Name = "cockpit-bearing-camera" };
+        var panel = new Node3D { Name = "cockpit-bearing-panel" };
+        ctx.Host.AddChild(sun);
+        ctx.Host.AddChild(camera);
+        ctx.Host.AddChild(panel);
+        CockpitOverlay? pass = null;
+        try
+        {
+            var env = new Godot.Environment();
+            var litSpec = SessionSpec.Parse(
+                new[] { "--chapter=C1", "--mission=IA1", "--sky-zone=zone1" });
+            var litRig = new WeatherRig(litSpec, ctx.Host, sun, env: env);
+            litRig.Build(litZrdr, System.Array.Empty<PlayerRig>(),
+                System.Array.Empty<HorizonZone>(), _ => { });
+            pass = CockpitOverlay.Build(ctx.Host, panel, sun, env);
+            if (pass?.Sun is not { } clone)
+            {
+                ctx.Check(false, $"the pass clones the session sun");
+                return;
+            }
+            litRig.RegisterExtraLighting(clone, pass.Env);
+            var cam = new CameraController(camera, new CamParams(), _ => false, -1,
+                PilotViewMode.Cockpit);
+
+            pass.Sync(Basis.Identity, cam, 0f);
+            var world = -sun.GlobalBasis.Z;
+            var beam = -clone.GlobalBasis.Z;
+            // C1's ZONE1 authors -25° pitch / 90° yaw, and the expected beam is the binary's own
+            // euler→direction law rather than the reader's, so a wrong reader cannot agree with it.
+            var authored = SunBeam(Mathf.DegToRad(-25f), Mathf.DegToRad(90f));
+            ctx.Note($"C1/IA1 zone1: session sun {world}, interior sun {beam}");
+            ctx.Check(world.AngleTo(authored) < 0.001f,
+                $"the session sun takes C1's authored -25°/90° bearing off={world.AngleTo(authored):0.0000} rad");
+            ctx.Check(beam.AngleTo(world) < 0.001f,
+                $"the interior's own sun is aimed the same way off={beam.AngleTo(world):0.0000} rad");
+            ctx.Check(beam.AngleTo(Vector3.Forward) > 0.5f,
+                $"and is not left at Godot's default -Z off={beam.AngleTo(Vector3.Forward):0.000} rad");
+            // The pass keeps the world's orientation, so a banked plane must not carry the sun
+            // round with it: a mirror re-based into the interior's frame would swing by the yaw.
+            pass.Sync(new Basis(Vector3.Up, Mathf.Pi / 2f), cam, 0f);
+            ctx.Check((-clone.GlobalBasis.Z).AngleTo(world) < 0.001f,
+                $"a yawed airframe leaves the interior's sun where the world has it");
+
+            // The other half: a bearing written once at build is not one that follows the camera.
+            // C2's MP2 and MP3 are the only shipped missions whose two zones disagree about the
+            // bearing, -65°/90° below the band against -25°/90° inside it.
+            var rigs = new List<PlayerRig>
+                { new PlayerRig { Index = 0, Camera = camera, HudParent = ctx.Host } };
+            var crossSpec = SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" });
+            var crossRig = new WeatherRig(crossSpec, ctx.Host, sun, env: env);
+            crossRig.Build(crossZrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
+            crossRig.RegisterExtraLighting(clone, pass.Env);
+            var below = CrossedBeam(crossRig, pass, cam, rigs, Vector3.Zero, clone, sun);
+            var inside = CrossedBeam(crossRig, pass, cam, rigs, new Vector3(0f, 25000f, 0f),
+                clone, sun);
+            ctx.Same(1, below.State, $"a camera under C2/MP2's 19,024-20,124 m band is in weather state 1");
+            ctx.Same(2, inside.State, $"and one at 25,000 m is in state 2");
+            ctx.Note($"C2/MP2 below band {below.Beam}, inside band {inside.Beam}");
+            ctx.Check(below.Beam.AngleTo(SunBeam(Mathf.DegToRad(-65f), Mathf.DegToRad(90f))) < 0.001f,
+                $"below the band the interior wears ZONE1's -65°/90°");
+            ctx.Check(inside.Beam.AngleTo(SunBeam(Mathf.DegToRad(-25f), Mathf.DegToRad(90f))) < 0.001f,
+                $"inside it the interior wears ZONE2's -25°/90°");
+            ctx.Check(below.Beam.AngleTo(inside.Beam) > 0.6f,
+                $"the crossing moved the bearing by {Mathf.RadToDeg(below.Beam.AngleTo(inside.Beam)):0.#}°");
+            ctx.Check(below.Off < 0.001f && inside.Off < 0.001f,
+                $"and the interior tracked the session sun through both states");
+        }
+        finally
+        {
+            if (pass == null)
+                panel.QueueFree();
+            pass?.QueueFree();
+            camera.QueueFree();
+            sun.QueueFree();
+        }
+    }
+
     // The lens flare's gating, chapter by chapter. ⚠ Gate it on chapter data, never on a chapter
     // name: it reads a gamez sun node in the horizon subtree and init.gw's LensFlareTexture slot
     // registrations, both true of C2 and C3 and of nothing else. Both directions are asserted, because
@@ -1402,6 +1494,28 @@ internal static class WorldAndToolSuites
             ctx.Host.RemoveChild(omniParent);
             omniParent.Free();
         }
+    }
+
+    // SUNLIGHT_ORIENTATION's euler pair as a direction, written out from the binary's own law
+    // (docs/org/weather.md) so a suite's expectation does not come from the reader under test.
+    private static Vector3 SunBeam(float pitchRad, float yawRad) => new Vector3(
+        -Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
+        Mathf.Sin(pitchRad),
+        -Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
+
+    // Moves the camera, lets the rig resolve the new weather state, then draws one frame of the
+    // interior pass: the beam the panel is lit by, how far it sits off the session sun, and the
+    // state that produced it. The Sync is what a flown frame does, so the mirror under test is the
+    // shipped one rather than a probe of its own.
+    private static (Vector3 Beam, float Off, int State) CrossedBeam(WeatherRig rig,
+        CockpitOverlay pass, CameraController cam, IReadOnlyList<PlayerRig> rigs, Vector3 at,
+        DirectionalLight3D clone, DirectionalLight3D sun)
+    {
+        rigs[0].Camera.Position = at;
+        rig.Tick(rigs);
+        pass.Sync(Basis.Identity, cam, 0f);
+        var beam = -clone.GlobalBasis.Z;
+        return (beam, beam.AngleTo(-sun.GlobalBasis.Z), rigs[0].CameraWeatherState);
     }
 
     // One mission's ZONE1 energies, off a rig of its own so the two missions cannot share state.
