@@ -301,6 +301,13 @@ public sealed class WorldSession
             BuildCutsceneRoots(root, gamez, builder, animProgram);
         }
 
+        // Not gated on cutscenes: a staged prop is ordinary mission content, and its definitions run
+        // out of the mission's startanims in every mode that builds the whole world.
+        if (o.NodeSubtree == null)
+        {
+            BuildStagedProps(root, gamez, builder, animProgram);
+        }
+
         // ⚠ Every cutscene, not an intro alone: a mid-mission definition poses the flown aeroplane
         // on the same `player` marker, and with no stage the pilot is held undrawn throughout.
         // Before the bind, like the roots above (docs/architecture.md).
@@ -557,6 +564,51 @@ public sealed class WorldSession
                     // origin (docs/org/objectMotion.md, "The re-home rule").
                     frame.TopLevel = true;
                     Log.Info("anim", $"anim: composition frame '{node.Name}' (gamez {node.Index}) stood up for a cutscene reparent");
+                }
+            }
+        }
+    }
+
+    // The staged props this program hangs onto placed world content: an unplaced, model-bearing
+    // gamez root that ships switched off, named as an OBJECT_ADD_CHILD child. CM19's launch hook is
+    // the case: three place definitions park a display aeroplane on the hook's `bmhookpoint` at
+    // NEW_GAME_START and the launch definition switches one on for its ride down, so a world with no
+    // such node flies an empty hook (docs/formats/mission-entities/enemy-generators.md).
+    private static void BuildStagedProps(Node3D root, GameZ gamez, WorldBuilder builder,
+        AnimProgram program)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in program.Defs)
+        {
+            foreach (var sequence in Blocks(def))
+            {
+                foreach (var ev in sequence.Events)
+                {
+                    // The parent must be placed: a prop whose host is itself off the world walk has
+                    // nowhere to land, and building it would only add a hidden node.
+                    if (!string.Equals(ev.Kind, "ObjectAddChild", StringComparison.Ordinal)
+                        || ev.Data.Str("child") is not { } child
+                        || ev.Data.Str("parent") is not { } parent
+                        || gamez.FindByName(child) is not { } node
+                        || !gamez.IsStagedProp(node)
+                        || gamez.FindByName(parent) is not { } host
+                        || !gamez.IsPlaced(host)
+                        || !seen.Add(child))
+                    {
+                        continue;
+                    }
+
+                    if (builder.Scene.BuildSubtree(node, collisionSkip: _ => true) is not { } built)
+                    {
+                        continue;
+                    }
+
+                    // ⚠ Build it switched off, whatever the shipped flag says about its parts: the
+                    // definition that parks it here is also what reveals it, and a prop visible at
+                    // its authored rest hangs an aeroplane at the map origin until then.
+                    AnimRuntime.SetSubtreeActive(built, false);
+                    root.AddChild(built);
+                    Log.Info("anim", $"anim: staged prop '{node.Name}' (gamez {node.Index}) stood up for a reparent onto '{host.Name}'");
                 }
             }
         }

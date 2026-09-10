@@ -14,9 +14,9 @@ namespace CSVM.Testing;
 /// twelve Black Hat blocks ship deactivated and no objective names one: the objectives wake
 /// <c>launch_warhawk</c>, the definition flies the hook and raises one <c>CALLBACK</c>, and that
 /// code is what reactivates the next member of the family. Drives the mission's own objectives
-/// over its BUILT world. ⚠ <c>campaign-squad-wakeup</c> covers the <c>WAKEUP_ENEMIES</c> arm of
-/// roster dormancy; a launch hook names no aircraft at all and neither suite stands in for the
-/// other.</summary>
+/// over its BUILT world, and separately the staged display aeroplanes the hooks carry.
+/// ⚠ <c>campaign-squad-wakeup</c> covers the <c>WAKEUP_ENEMIES</c> arm of roster dormancy; a launch
+/// hook names no aircraft at all and neither suite stands in for the other.</summary>
 internal static class CampaignLaunchHookSuites
 {
     private const string Chapter = "C4";
@@ -34,6 +34,15 @@ internal static class CampaignLaunchHookSuites
     private const int WarhawkCallback = 801;
     private const int BrigandCallback = 802;
     private const int WarhawkCount = 6;
+
+    // The display aeroplanes the place definitions park on the hooks, and the hook each belongs to.
+    // Three nodes in C4's gamez are called `bmhookpoint`, so a prop on the wrong hook would read as
+    // a pass on a bare name match.
+    private const string LaunchHook = "warlaunchhook";
+    private const string PlayerHook = "warhawk_bmhook";
+    private const string HookPoint = "bmhookpoint";
+    private const string LaunchProp = "anim2_warhawk";
+    private const string PlayerProp = "anim_warhawk";
 
     // The hook's own sequence runs a motion script before its callback, so the launch is not
     // instantaneous; this is the ceiling the step loop below gives it, not a measured latency.
@@ -76,6 +85,19 @@ internal static class CampaignLaunchHookSuites
         ctx.Note($"{Chapter}/{Mission}: a Black Hat leaves the hook on its launch definition's own CALLBACK");
     }
 
+    [Suite("campaign-launch-hook-prop",
+        "CM19's staged launch-hook aeroplanes over C4/M04's own BUILT world: anim2_warhawk and "
+        + "anim_warhawk ship unplaced and switched off, the mission's NEW_GAME_START place "
+        + "definitions park each on its OWN hook's bmhookpoint (three nodes carry that name), the "
+        + "launch hook and its Black Hat ride hidden until launch_warhawk switches both on, and the "
+        + "Black Swan's own hook keeps its aeroplane visible from the first frame")]
+    internal static void CampaignLaunchHookProp(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
+        ctx.WithWorld(Chapter, collision: false, Mission, world => DriveProps(ctx, world));
+    }
+
     // The authored shape this suite consumes, read off the shipped files rather than restated: the
     // family ships deactivated, the objectives carry the WAKE_ANIM, and nothing names an aircraft.
     private static void CheckAuthored(TestContext ctx, ObjectiveScript script,
@@ -112,6 +134,78 @@ internal static class CampaignLaunchHookSuites
             $"OBJECTIVE{BrigandObjective} wakes '{BrigandAnim}', the second family's own hook");
         report.AppendLine($"authored: {wakes} '{WarhawkAnim}' wakes, {deactivated} deactivated Warhawk blocks, {named} named in WAKEUP_ENEMIES");
     }
+
+    private static void DriveProps(TestContext ctx, TestWorld world)
+    {
+        var runtime = world.Runtime;
+        var launchHook = Only(runtime, LaunchHook);
+        var playerHook = Only(runtime, PlayerHook);
+        ctx.Check(launchHook != null && playerHook != null,
+            $"C4/M04 builds both hooks, '{LaunchHook}' and '{PlayerHook}'");
+        if (launchHook == null || playerHook == null)
+        {
+            return;
+        }
+
+        ctx.Same(3, runtime.FindNodes(HookPoint).Count,
+            $"three nodes are called '{HookPoint}', so a prop's parent has to be the right one");
+
+        var launchPoint = Only(runtime, HookPoint, launchHook);
+        var playerPoint = Only(runtime, HookPoint, playerHook);
+        var launchProp = Only(runtime, LaunchProp);
+        var playerProp = Only(runtime, PlayerProp);
+        ctx.Check(launchProp != null, $"the launch hook's display aeroplane '{LaunchProp}' is built");
+        ctx.Check(playerProp != null, $"the Black Swan hook's display aeroplane '{PlayerProp}' is built");
+        if (launchProp == null || playerProp == null || launchPoint == null || playerPoint == null)
+        {
+            return;
+        }
+
+        ctx.Check(launchPoint.IsAncestorOf(launchProp),
+            $"'{LaunchProp}' hangs under the LAUNCH hook's own '{HookPoint}'");
+        ctx.Check(playerPoint.IsAncestorOf(playerProp),
+            $"'{PlayerProp}' hangs under the Black Swan hook's own '{HookPoint}'");
+
+        ctx.Check(!Shown(launchProp), $"'{LaunchProp}' rides switched off before a launch");
+        ctx.Check(!Shown(launchHook), $"…and so does the launch hook itself");
+        ctx.Check(Shown(playerProp),
+            $"'{PlayerProp}' is visible on the Black Swan's hook from the first frame");
+
+        // The definition's own timeline is what reveals the pair, so drive it rather than assert on
+        // the events: a revealed prop is the whole of what the empty hook was missing.
+        runtime.Play(WarhawkAnim);
+        bool propShown = false, hookShown = false;
+        float shownAt = -1f;
+        for (float t = 0f; t < LaunchLimitS && !propShown; t += StepDt)
+        {
+            runtime.Advance(StepDt);
+            propShown = Shown(launchProp);
+            hookShown |= Shown(launchHook);
+            shownAt = propShown ? t : shownAt;
+        }
+
+        ctx.Check(propShown, $"'{WarhawkAnim}' puts '{LaunchProp}' on the hook, {shownAt:0.00} s in");
+        ctx.Check(hookShown, $"…and switches the hook itself on for the ride");
+        var seat = launchProp.GlobalTransform.Origin;
+        ctx.Note($"{Chapter}/{Mission}: the launch hook carries a staged aeroplane rather than flying empty, seated at ({seat.X:0}, {seat.Y:0}, {seat.Z:0})");
+    }
+
+    // Visible in the world, not merely switched on: a prop under a hidden hook draws nothing, and
+    // the parent's state is half of what the reparent decides.
+    private static bool Shown(Node3D node)
+    {
+        for (Node3D? n = node; n != null; n = n.GetParent() as Node3D)
+        {
+            if (!n.Visible)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Node3D? Only(AnimRuntime runtime, string name, Node3D? scope = null) =>
+        runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null;
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,

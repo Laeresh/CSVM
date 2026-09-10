@@ -1361,20 +1361,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   external view. *Cross-refs:* `BL-121` (the `trail-world-anchor` suite), `BL-700` (the same
   zeppelin family's wreck rest).
 
-- `BL-734` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` `[CM19]` **CM19's launch hook shows no aircraft on it before a Black Hat launches.**
-  *Evidence:* `ai_warhawk_place` (`extracted/C4/M04/mis_anim/warlaunchhook-*.json`) parents the
-  display node `anim2_warhawk` under `bmhookpoint` and translates it, and `launch_warhawk`
-  switches that node on, runs the hook's SI script and switches it off again around raising 801.
-  No CM19 objective wakes the place definition and `launch_warhawk` never calls it, so the display
-  node is never under the hook, and the mission build still lists `ObjectAddChild` among the event
-  kinds not acted on. The launch itself is landed (`git log --grep=BL-730`); this is the hook's
-  appearance. *Fix shape:* read what starts `ai_warhawk_place` and `ai_brigand_place` in the
-  original (a startup pass, an anchored reset, or the hook's own bootstrap), act on
-  `ObjectAddChild` for a display node, and pin the node's parent before the first launch.
-  *⚠ Traps:* do not spawn the roster aircraft on the hook to fake it; the display node is a
-  separate model. *Playtest after fix:* CM19 to the first warning, watch the hook. *Cross-refs:*
-  `docs/formats/anim-definitions/cutscenes.md` (801 to 803), `BL-730`'s closing commit.
-
 - `BL-797` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
   *Evidence:* the disabled-systems mask's bit-`0x2` edges call `FUN_004b15c0` and `FUN_004b1630`,
   which swap the airframe def's `stop_props_anim` and `spin_props_anim` on two anim slots at

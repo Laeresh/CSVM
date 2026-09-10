@@ -187,6 +187,27 @@ public sealed class GameZ
         return node.Kind == "Object3d" && node.Active && !_placed!.Contains(node.Index);
     }
 
+    /// <summary>Is <paramref name="node"/> a staged PROP: unplaced <c>Object3d</c> content carrying
+    /// geometry that ships switched OFF, which a definition hangs onto placed world content and
+    /// switches on? <see cref="IsLibraryRoot"/> refuses these on its <c>Active</c> test, and they
+    /// are addressed by name rather than instanced per call. Decode: docs/formats/mission-entities/
+    /// enemy-generators.md, "The launch hook carries a staged aircraft".</summary>
+    public bool IsStagedProp(GameZNode node)
+    {
+        EnsurePlaced();
+        return node.Kind == "Object3d" && !node.Active && !_placed!.Contains(node.Index)
+               && (node.Children.Count > 0 || node.MeshIndex >= 0);
+    }
+
+    /// <summary>Is <paramref name="node"/> placed world content, meaning someone's child or a
+    /// <c>World</c> node's partition reference? The complement of the two staging tests above,
+    /// and what an <c>OBJECT_ADD_CHILD</c> parent must be for its child to reach the world.</summary>
+    public bool IsPlaced(GameZNode node)
+    {
+        EnsurePlaced();
+        return _placed!.Contains(node.Index);
+    }
+
     /// <summary>The team a node carries in the numbered mission: its own ownership slot, or the
     /// nearest ancestor's where it authors none, or neutral where no ancestor does either. The
     /// engine's own resolution for a world object, so a part inherits the group it hangs under.

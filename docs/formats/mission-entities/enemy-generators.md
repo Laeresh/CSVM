@@ -292,6 +292,51 @@ free the crews". Before that the mission's only allied aircraft is the Black Swa
 (`bswingman_1`). Instant Action's `zeppelin_run` credits per wave the same way: nothing launches
 before the first credit, and one wave's worth may launch after it.
 
+## The launch hook carries a staged aircraft
+
+Codes 801 to 803 belong to CM19's launch hook rather than to a generator, and the hook is the one
+mechanism in the shipped data that puts an aircraft into the air off a definition. What rides the
+hook down is not the roster aeroplane the code wakes: it is a **staged prop**, a separate display
+model the mission parks on the hook before the first launch.
+
+Four such props exist in the install, all in C4: `anim2_warhawk`, `anim2_brigand` and
+`anim2_autogyro` for the launch hook, and `anim_warhawk` for the Black Swan's own hook. Each is an
+`Object3d` node with its `active` bit **clear**, no parent, and a model subtree, so the `world1`
+walk never reaches it and it draws nothing until a definition moves it.
+
+`startanims.zrd`'s `NEW_GAME_START` list is what wakes them: it names `bm_warhawk_state`,
+`ai_warhawk_state`, `ai_brigand_state` and `ai_autogyro_state`, each anchored on its own prop. A
+state definition switches the prop (off for the three launch-hook ones, on for `anim_warhawk`),
+calls the matching `*_hook_startup` on it, and calls its `*_place` definition. A place definition
+is two or three events:
+
+```
+OBJECT_ADD_CHILD        [bmhookpoint, anim2_warhawk]
+OBJECT_TRANSLATE_STATE  [anim2_warhawk, (0, -2.8, 0.2)]
+OBJECT_ACTIVE_STATE     [warlaunchhook, INACTIVE]
+```
+
+Three nodes in C4's gamez are called `bmhookpoint`, one under each of `warhawk_bmhook`,
+`player_bmhook` and `warlaunchhook`, so a name match alone picks the wrong hook two times in three.
+The definition's own symbol table is what decides: the original binds every node reference once at
+load and looks it up by index at run time, with no name comparison on the event path
+([sequences.md](../../org/sequences.md)).
+
+**The add-child is a plain relink.** Dispatch slot 15, `004eab20` in the 47-slot table at
+`DAT_00727de0`, reads the parent and child node pointers out of the instance's own table, returns
+without doing anything when the child already stands among the parent's children, and otherwise
+calls `FUN_004cd500`. It tests neither the child's active bit nor whether the node is placed, so
+moving an unplaced, switched-off root into the visible tree is ordinary rather than a special case.
+
+`launch_warhawk` is then the whole of the launch's appearance: it switches the prop on, switches
+`warlaunchhook` on, fades the hook in over 0.75 s, runs the hook's first SI script for the ride
+down, switches the prop off, raises `CALLBACK 801`, and 2 s later runs the second script and
+switches the hook off again. So **the hook and the aeroplane on it are visible only during a
+launch**, and the roster Black Hat that 801 wakes takes over from the prop at the bottom of the
+ride. The Black Swan's own hook is the exception: `bm_warhawk_place` leaves `warhawk_bmhook`
+switched on and `bm_warhawk_state` switches `anim_warhawk` on, so that display aeroplane hangs
+there from the first frame of the mission.
+
 ## CSVM handling
 
 CSVM resolves a surface host's take-off path at load, drops the generator when it is shorter than
@@ -325,3 +370,14 @@ playing up to the objective. Codes 801 to 803 are no generator's: they belong to
 hook, and `CampaignDirector` answers them from its own link ahead of this one
 ([cutscenes.md](../anim-definitions/cutscenes.md)). Pinned by the `generator-callback-credit`
 suite over C4/M03 and `GeneratorCycleTests`.
+
+**CSVM stands the staged props up at world build.** The remake's world walk builds placed content
+only, so a prop no walk reaches has no node for the place definition's `OBJECT_ADD_CHILD` to move
+and the hook flies empty. `WorldSession.BuildStagedProps` builds each one beside the cutscene
+composition frames and switches it off, leaving the definitions to park and reveal it;
+`GameZ.IsStagedProp` is the test (an unplaced `Object3d` with its active bit clear and geometry
+under it) and the event's parent must be placed content. Install-wide the rule fires on the four
+C4 nodes above and nothing else, since an unplaced root that ships **switched on** is a call
+template served by the library-root pool instead. Pinned by the `campaign-launch-hook-prop` suite,
+which reads which of the three `bmhookpoint` nodes each prop landed under and drives
+`launch_warhawk` for the reveal.
