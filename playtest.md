@@ -736,6 +736,15 @@ is a judgement on our own remake.
     hull death should already have taken it.
   *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
   state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
+- `PT-137` `[Own]` **A docking that wins the mission fades to black over the film's last frame,
+  never over the cockpit or chase view.** The original's code 13 parks the flying state before it
+  can present again, so the fade copies the film's frame; the episode now keeps its camera and
+  framing through the leaving hold once the result lands inside it (`git log --grep=BL-739`).
+  Dock with the objectives complete. *Look for:* the film's framing holding still through the
+  whole fade, with no flash of the pilot's own view between the film's last frame and black. A
+  loss taken under a film should fade that film the same way; a win in free flight fades the
+  pilot's own view as before. A visible cut to the cockpit before the fade mints a new `BL`.
+  *Blocks:* nothing.
 
 
 ### The exported package · a recipient's first run, no arguments
