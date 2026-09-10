@@ -1435,18 +1435,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   so the per-sim-step query objects cost measurable physics time even though C21 showed they are
   1.6 % of allocation), `PLAN-perf-hitches`.
 
-- `BL-614` `[Perf]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`WorldCollision._fadedRoots`'s ancestor walk degrades globally once any two
-  faded objects overlap anywhere in the world.** *Evidence (traced):* found while measuring
-  `BL-535`. `WorldCollision.SetFaded` re-derives colliders through `SyncSubtree` and `FadedAbove`,
-  and `FadedAbove` walks ancestors against a process-wide `_fadedRoots` set rather than against the
-  subtree the fade belongs to, so its cost is a function of how many faded objects exist anywhere
-  rather than of the one effect being reset. *Fix shape:* bound the walk to the fading subtree, or
-  key `_fadedRoots` so an unrelated fade elsewhere in the world cannot lengthen it. *⚠ Traps:* the
-  fade contract itself is what keeps a collider from surviving its hidden geometry, so any bound
-  must be checked against the suites that pin it, not only against timings. This is a separate
-  question from which half of the reset dominates, which is `BL-535`'s. *Cross-refs:* `BL-535`
-  (the measurement this came out of), `PoseChannel.ApplyOpacity`, the `effect-pool-reset` suite.
-
 - `BL-652` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: data]` **Why an authored fork's sensor nodes start inactive is not traced to a
   rule, so a fork placed away from the world origin may start open.** *Evidence:* found while
   verifying the node-active `ACTIVATION_PREREQUISITE` gate over C1C/M01 (`git log --grep=BL-525`).

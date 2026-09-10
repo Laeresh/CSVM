@@ -22,6 +22,10 @@ internal static class WorldCollision
     // perf hint: a world freed mid-fade leaves it high, which costs a walk and nothing else.
     private static int _fadedRoots;
 
+    // Ancestor links the fade walk has followed. The instrument behind the bound the
+    // fade-walk-bound suite pins; nothing else reads it and nothing branches on it.
+    private static long _walkSteps;
+
     /// <summary>Binds <paramref name="owner"/>'s colliders to its own visibility. Called once per
     /// collider-bearing node as it is built. Both signals are needed: <c>VisibilityChanged</c>
     /// fires on every descendant when an ancestor toggles (Godot propagates it down), and
@@ -66,28 +70,48 @@ internal static class WorldCollision
         body.HasMeta(SceneBuilder.SurfaceIdMeta) && body.GetParent() is { } parent ? parent : body;
 
     /// <summary>Re-derives every tracked collider under <paramref name="node"/>. Used by the fade
-    /// channel, which changes an ancestor state Godot emits no signal for.</summary>
-    public static void SyncSubtree(Node node)
+    /// channel, which changes an ancestor state Godot emits no signal for.
+    /// ⚠ Do not answer <see cref="FadedAbove"/> per node here; carry it down instead. What is above
+    /// the subtree cannot change during the descent, so a climb per node multiplies one effect's
+    /// reset by the world's depth, and any fade anywhere clears the fast path that hid it.</summary>
+    public static void SyncSubtree(Node node) => SyncSubtree(node, FadedAbove(node.GetParent()));
+
+    /// <summary>The ancestor links the fade walk has followed since this was last called, and
+    /// clears the tally. The suite pinning the walk's bound is the only reader.</summary>
+    internal static long TakeWalkSteps()
     {
+        long steps = _walkSteps;
+        _walkSteps = 0;
+        return steps;
+    }
+
+    // Descends with the answer the caller already climbed for, adding each node's own mark on the
+    // way down: a node is faded exactly when it or anything above it is.
+    private static void SyncSubtree(Node node, bool fadedAbove)
+    {
+        bool faded = fadedAbove || node.HasMeta(FadedMeta);
         if (node is Node3D n3d)
         {
-            Sync(n3d);
+            Sync(n3d, faded);
         }
         foreach (var child in node.GetChildren())
         {
-            SyncSubtree(child);
+            SyncSubtree(child, faded);
         }
     }
 
+    // The signal path, where nothing has climbed for this node yet.
+    private static void Sync(Node3D owner) => Sync(owner, FadedAbove(owner));
+
     // The owner's own bodies only — every other collider-bearing node is tracked in its own
     // right and gets its own signal, so a subtree is never walked twice for one toggle.
-    private static void Sync(Node3D owner)
+    private static void Sync(Node3D owner, bool fadedAbove)
     {
         if (!owner.IsInsideTree())
         {
             return; // resolved for real when the built world joins the tree
         }
-        bool enabled = owner.IsVisibleInTree() && !FadedAbove(owner);
+        bool enabled = owner.IsVisibleInTree() && !fadedAbove;
         foreach (var child in owner.GetChildren())
         {
             if (child is not StaticBody3D body)
@@ -104,7 +128,7 @@ internal static class WorldCollision
         }
     }
 
-    private static bool FadedAbove(Node3D owner)
+    private static bool FadedAbove(Node? owner)
     {
         if (_fadedRoots == 0)
         {
@@ -112,6 +136,7 @@ internal static class WorldCollision
         }
         for (Node? n = owner; n != null; n = n.GetParent())
         {
+            _walkSteps++;
             if (n.HasMeta(FadedMeta))
             {
                 return true;

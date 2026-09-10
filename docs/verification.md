@@ -279,6 +279,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   its own first.** Splitting CM18's `cargozep1` crash rig one `effect_pools.json` slot a step took
   one 35 ms frame to a dozen of about 3 ms, leaving `AnimRuntime.PrewarmEmitters` at 15 to 103 ms.
 
+- **PERF-26** — **A process-wide "nothing to do" guard is not a fast path in a real session; read
+  its state at the moment you measure, not at process start.** `WorldCollision`'s live-faded-root
+  count never returns to zero once a world is freed with an effect resting at opacity 0, so the
+  `fade-walk-bound` suite's no-fade baseline reads 0 ancestor steps run alone and 44 once
+  `effect-pool-reset` has run in the same process.
+
 ## LOG — logs, error censuses, and exit codes
 
 - **LOG-1** — **An empty report may mean the mode did not build the feature.**

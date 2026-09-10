@@ -1518,6 +1518,109 @@ internal static class WorldAndToolSuites
         return (beam, beam.AngleTo(-sun.GlobalBasis.Z), rigs[0].CameraWeatherState);
     }
 
+    // ---- the fade re-derive's ancestor walk ------------------------------------------------------
+
+    // A synthetic tree rather than a chapter's, because what is measured is the shape of the walk
+    // and not any world's contents: a deep chain, a wide collider-bearing subtree at the bottom of
+    // it, and faded roots elsewhere that the subtree shares no ancestor with.
+    [Suite("fade-walk-bound",
+        "WorldCollision's fade re-derive climbs the ancestors once per subtree, not once per node: "
+        + "with unrelated faded roots elsewhere in the world, fading and un-fading a 200-body "
+        + "subtree each cost exactly the subtree root's own ancestor count in walk steps, and the "
+        + "derived collider state still answers a faded ancestor and a faded descendant")]
+    internal static void FadeWalkBound(TestContext ctx)
+    {
+        const int ChainDepth = 40;
+        const int Bodies = 200;
+        const int Unrelated = 32;
+
+        var stage = new Node3D { Name = "fade-walk-stage" };
+        ctx.Host.AddChild(stage);
+        var faded = new List<Node3D>();
+        try
+        {
+            var chain = new List<Node3D>();
+            var deepest = stage;
+            for (int i = 0; i < ChainDepth; i++)
+            {
+                var link = new Node3D { Name = $"link{i}" };
+                deepest.AddChild(link);
+                chain.Add(link);
+                deepest = link;
+            }
+            var effectRoot = new Node3D { Name = "effect-root" };
+            deepest.AddChild(effectRoot);
+            var shapes = new List<CollisionShape3D>();
+            var owners = new List<Node3D>();
+            for (int i = 0; i < Bodies; i++)
+                shapes.Add(TrackedBody(effectRoot, $"body{i}", owners));
+
+            int rootAncestors = AncestorCount(effectRoot);
+            long perNode = PerNodeWalkCost(effectRoot);
+
+            // The same cycle before anything unrelated is faded, which is the comparison the
+            // process-wide fast path used to turn on: reported, not asserted, since a suite that
+            // ran earlier in this process may already have left a faded root of its own behind.
+            WorldCollision.TakeWalkSteps();
+            Fade(effectRoot, faded);
+            long lonelyFade = WorldCollision.TakeWalkSteps();
+            Unfade(effectRoot, faded);
+            long lonelyUnfade = WorldCollision.TakeWalkSteps();
+
+            for (int i = 0; i < Unrelated; i++)
+            {
+                var other = new Node3D { Name = $"other{i}" };
+                stage.AddChild(other);
+                Fade(other, faded);
+            }
+
+            WorldCollision.TakeWalkSteps();
+            Fade(effectRoot, faded);
+            long fadeSteps = WorldCollision.TakeWalkSteps();
+            ctx.Same(0, EnabledCount(shapes), $"the faded subtree's colliders are all off");
+            Unfade(effectRoot, faded);
+            long unfadeSteps = WorldCollision.TakeWalkSteps();
+            ctx.Same(shapes.Count, EnabledCount(shapes), $"un-fading the subtree brings them all back");
+
+            ctx.Same(rootAncestors, fadeSteps, $"fading a {Bodies}-body subtree costs one climb from its root");
+            ctx.Same(rootAncestors, unfadeSteps, $"un-fading it costs one climb, with {Unrelated} unrelated faded roots elsewhere");
+            ctx.Check(unfadeSteps * 100 < perNode,
+                $"ABLE-TO-FAIL CONTROL: a climb per node would cost {perNode} steps, over 100x the {unfadeSteps} measured");
+            ctx.Check(lonelyFade <= rootAncestors && lonelyUnfade <= rootAncestors,
+                $"the same cycle with nothing unrelated faded costs no more: {lonelyFade} to fade, {lonelyUnfade} to un-fade");
+            ctx.Note($"fade walk: {fadeSteps} steps to fade and {unfadeSteps} to un-fade a {Bodies}-body subtree {rootAncestors} deep with {Unrelated} unrelated faded roots present, {lonelyFade}/{lonelyUnfade} with none, against {perNode} for a climb per node");
+
+            // The climb is what carries a fade above the subtree into it, so a subtree re-derived
+            // under a still-faded ancestor must not switch its colliders back on.
+            var ancestor = chain[ChainDepth / 2];
+            Fade(ancestor, faded);
+            ctx.Same(0, EnabledCount(shapes), $"a faded ancestor takes the subtree's colliders off");
+            Fade(effectRoot, faded);
+            Unfade(effectRoot, faded);
+            ctx.Same(0, EnabledCount(shapes), $"re-deriving the subtree leaves them off while the ancestor is faded");
+            Unfade(ancestor, faded);
+            ctx.Same(shapes.Count, EnabledCount(shapes), $"un-fading the ancestor brings them back");
+
+            // And the descending flag must pick up each node's own mark, or a fade INSIDE the
+            // subtree is lost the moment anything above it is re-derived.
+            Fade(owners[0], faded);
+            Fade(effectRoot, faded);
+            Unfade(effectRoot, faded);
+            ctx.Same(shapes.Count - 1, EnabledCount(shapes), $"a descendant faded on its own stays off when the subtree above it is re-derived");
+            Unfade(owners[0], faded);
+            ctx.Same(shapes.Count, EnabledCount(shapes), $"un-fading that descendant is the last collider back");
+        }
+        finally
+        {
+            // Whatever this left faded would cost every later suite the guard's fast path, since
+            // the count of live faded roots outlives the nodes it counted.
+            for (int i = faded.Count - 1; i >= 0; i--)
+                WorldCollision.SetFaded(faded[i], false);
+            ctx.Host.RemoveChild(stage);
+            stage.Free();
+        }
+    }
+
     // One mission's ZONE1 energies, off a rig of its own so the two missions cannot share state.
     // The Environment is a bare one: what is asserted is the value the zone apply wrote.
     // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
@@ -1540,5 +1643,58 @@ internal static class WorldAndToolSuites
         {
             sun.QueueFree();
         }
+    }
+
+    // The shape SceneBuilder builds and tracks: an owner node carrying one body carrying one shape.
+    private static CollisionShape3D TrackedBody(Node3D parent, string name, List<Node3D> owners)
+    {
+        var owner = new Node3D { Name = name };
+        var body = new StaticBody3D { Name = $"{name}-body" };
+        var shape = new CollisionShape3D { Name = $"{name}-shape", Shape = new BoxShape3D() };
+        parent.AddChild(owner);
+        owner.AddChild(body);
+        body.AddChild(shape);
+        owners.Add(owner);
+        WorldCollision.Track(owner);
+        return shape;
+    }
+
+    private static void Fade(Node3D node, List<Node3D> faded)
+    {
+        WorldCollision.SetFaded(node, true);
+        faded.Add(node);
+    }
+
+    private static void Unfade(Node3D node, List<Node3D> faded)
+    {
+        WorldCollision.SetFaded(node, false);
+        faded.Remove(node);
+    }
+
+    private static int EnabledCount(List<CollisionShape3D> shapes)
+    {
+        int enabled = 0;
+        foreach (var shape in shapes)
+            if (!shape.Disabled)
+                enabled++;
+        return enabled;
+    }
+
+    private static int AncestorCount(Node node)
+    {
+        int count = 0;
+        for (Node? n = node.GetParent(); n != null; n = n.GetParent())
+            count++;
+        return count;
+    }
+
+    // What the subtree's re-derive costs when every node answers "is an ancestor faded" with a
+    // climb of its own: each walks itself and every ancestor, to the scene root.
+    private static long PerNodeWalkCost(Node node)
+    {
+        long cost = node is Node3D ? AncestorCount(node) + 1 : 0;
+        foreach (var child in node.GetChildren())
+            cost += PerNodeWalkCost(child);
+        return cost;
     }
 }
