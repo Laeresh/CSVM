@@ -792,6 +792,23 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
+### Any mission · the chase camera's rest pose and its outward-only zoom
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-138` `[Own]` **The chase view opens at its nearest distance and numpad minus is the only zoom
+  that moves it.** The decode put the external camera's distance under the airframe's authored
+  clamp pair with a flat 10 m of zoom added outward from the near bound, and the key sense the
+  earlier port had inverted is corrected (`git log --grep=BL-702`). Fly any aircraft in chase
+  view. *Look for:* the view opening close behind the aircraft, numpad plus held from that pose
+  doing nothing, numpad minus held to the stop backing off by roughly one fuselage length and
+  no more, the look-behind view sitting at its own distance untouched by the zoom, and the
+  Kestrel opening noticeably closer than the Balmoral. A rest pose that sits mid-range, a plus
+  key that moves the view from rest, or a zoom that runs past ten metres mints a new `BL`.
+  *Blocks:* nothing.
+
 ### Any campaign mission · enemy skill under the difficulty offset
 
 ```powershell
