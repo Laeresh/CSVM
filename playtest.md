@@ -786,6 +786,24 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
+### Any campaign mission · enemy skill under the difficulty offset
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-135` `[Own]` **Ordinary enemies fly to their authored ratings minus the difficulty offset,
+  and aces to their ratings as authored.** The decode of the aiv `ace` flag landed the offset the
+  original adds to every one of a hostile pilot's nine ratings before interpolation (-2 at the
+  easiest tier, 0 at Normal's neighbour, +2 at the hardest) and the ace's exemption from it
+  (`git log --grep=BL-496`); every suite reads the numbers, none judges the feel. Fly a mission
+  with ordinary enemies and one that spawns an ace (CM02's Black Hat lead is one of the 26 flagged
+  blocks) at the default tier. *Look for:* ordinary enemies turn, aim and evade a little worse than
+  before the landing, an ace noticeably better than its wingmen, and a neutral (team 0) roster
+  block, where one exists, unchanged either way. Enemies that feel wrong at the default tier, or an
+  ace that feels no different from the rest, mean the offset or the exemption is mis-wired, since
+  the ratings themselves are the roster's own. *Blocks:* nothing; a fail mints a new `BL`.
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own
