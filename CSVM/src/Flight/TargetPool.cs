@@ -128,14 +128,36 @@ public sealed class TargetPool
         _ => "",
     };
 
-    /// <summary>The name of the entity a candidate is a PART of, or null where it is a whole thing
-    /// in its own right. Only a zeppelin zone has one today. Kept beside <see cref="NameOf"/> so the
-    /// ranker's <c>rating_biases</c> match has one source-type switch, not two.</summary>
-    internal static string? OwnerOf(object? source) => source switch
+    /// <summary>Every name a candidate ALSO answers to, nearest first, appended to
+    /// <paramref name="into"/>: a zeppelin zone's owning airship, then each node above the pool's
+    /// anchor in the world tree. Nothing is appended for a whole thing in its own right.
+    /// ⚠ The tree half is a docked mission structure's only reach: its engines and guns are pools
+    /// named for themselves and no owner is fanned onto them, so the airship's own node name
+    /// appears nowhere but above them (docs/org/aiPilot.md).</summary>
+    internal static void CollectOwners(object? source, List<string> into)
     {
-        DestructibleRegistry.Instance inst => inst.Owner,
-        _ => null,
-    };
+        if (source is not DestructibleRegistry.Instance inst)
+        {
+            return;
+        }
+
+        if (inst.Owner is { Length: > 0 } owner)
+        {
+            into.Add(owner);
+        }
+
+        if (!GodotObject.IsInstanceValid(inst.Anchor))
+        {
+            return;
+        }
+
+        // The gamez tree, by the node's ORIGINAL name: Godot sanitizes and de-duplicates Name, and
+        // an authored pattern names the node the mission data named.
+        for (var n = inst.Anchor.GetParent(); n is Node3D up; n = n.GetParent())
+        {
+            into.Add(AnimRuntime.NameOf(up));
+        }
+    }
 
     /// <summary>Whether a turret candidate stands in the world rather than being carried by an
     /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in

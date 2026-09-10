@@ -414,6 +414,13 @@ target), `≤ −1.0` returning the `1e21` exclusion (**never** target), and a t
 `+37.5` on top of every arm, including the no-match case. So an authored `−1.0` is a hard
 exclusion, not a penalty.
 
+⚠ **A pattern naming a mission structure is matched against the candidate's PARENT CHAIN too.**
+Only a `TargetVehicle` is matched on its own node name alone; a turret or a structure part climbs
+its parents and re-walks the whole bias list at each level, so `["cargozep1", -1.0]` reaches an
+engine pool called `leng31` that no pattern names. The restart per level is what makes a
+candidate's own name beat an owner's entry standing earlier in the list
+([`../org/aiPilot.md`](../org/aiPilot.md), "The parent walk").
+
 ⚠ **The ±0.2 terms are aircraft-only.** There are two scorers, chosen on the *scoring* vehicle's
 `mode`: `jet` and `wingman` take all three, and every other mode scores on base weight and the two
 class terms alone.

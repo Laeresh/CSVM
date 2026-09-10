@@ -541,7 +541,7 @@ internal static class CampaignSquadWakeSuites
         // The other arm of the same list, which cannot land in this mission for a reason that is
         // not the bias: the pattern reaches a zone the hull owns, but C3/M05's record authors no
         // team, so its pools fall through to neutral and are refused as candidates outright.
-        float owned = AiTargetRanking.ObjectiveBiasFor("gasbag1", PirateZep, authored);
+        float owned = AiTargetRanking.ObjectiveBiasFor("gasbag1", new[] { PirateZep }, authored);
         // Rank is minimised, so a positive term is the penalty and a hard exclusion is NotRanked.
         ctx.Check(owned > 0f && owned < AiTargetRanking.NotRanked,
             $"the '{PirateZep}' arm reaches a zone that hull owns as a penalty rather than an exclusion: {owned:0.##}");

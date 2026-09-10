@@ -197,6 +197,39 @@ public class AiTargetRankingTests
     }
 
     [Fact]
+    public void AStructurePartAnswersToEveryNameAboveIt()
+    {
+        // C4/M03's shape: the Black Swan escort excludes the cargo zeppelin by name, and the
+        // Black Hat Warhawks make it their always-target. Neither pattern names a part, because
+        // the parts are damage pools called leng31 and rtur1 and the mission names the airship.
+        var escort = new List<AiRatingBias> { new("bhatbrigand_5", -1f, null), new("cargozep1", -1f, null) };
+        var warhawk = new List<AiRatingBias> { new("bswingman_1", -1f, null), new("cargozep1", 1f, null) };
+        var chain = new[] { "cargozep1", "world" };
+        Assert.Equal(AiTargetRanking.NotRanked,
+            AiTargetRanking.ObjectiveBiasFor("leng31", chain, escort), 1);
+        Assert.Equal(AiTargetRanking.AlwaysTarget,
+            AiTargetRanking.ObjectiveBiasFor("leng31", chain, warhawk), 1);
+        // The part alone, with nothing above it, is what the pools used to be offered as.
+        Assert.Equal(0f, AiTargetRanking.ObjectiveBiasFor("leng31", null, escort), 1);
+        // And a part of something the list does not name is unaffected either way.
+        Assert.Equal(0f,
+            AiTargetRanking.ObjectiveBiasFor("leng31", new[] { "piratezep" }, escort), 1);
+    }
+
+    [Fact]
+    public void TheBiasListIsWalkedOncePerNameNotOncePerEntry()
+    {
+        // The decoded lookup restarts the whole list at each level of the chain, so the
+        // candidate's own name beats an owner's entry standing earlier in authored order.
+        var biases = new List<AiRatingBias> { new("cargozep1", -1f, null), new("leng31", 0.4f, null) };
+        Assert.Equal(-300f, AiTargetRanking.ObjectiveBiasFor("leng31", new[] { "cargozep1" }, biases), 1);
+        // …and the nearer owner beats a further one for the same reason.
+        var nested = new List<AiRatingBias> { new("world", 1f, null), new("cargozep1", -1f, null) };
+        Assert.Equal(AiTargetRanking.NotRanked,
+            AiTargetRanking.ObjectiveBiasFor("leng31", new[] { "cargozep1", "world" }, nested), 1);
+    }
+
+    [Fact]
     public void TurretCandidateCarriesTheFlatHandicapOnEveryArm()
     {
         // D36 (BL-363): a turret's decoded +37.5 rides on top of every arm, including no match.

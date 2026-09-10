@@ -207,8 +207,9 @@ activation volume alone ([../formats/objectives.md](../formats/objectives.md)).
 ### `rating_biases` returns rank units directly
 
 `FUN_0041ae40` walks the bias list at scorer `+0x8a4`, entries of 0x14 bytes with the bias float at
-`+0x10`, matching through `FUN_0041add0` and, for a turret, walking the parent chain at `+0x54` /
-`+0x58`. It returns a value added raw to `weight × 1200 + distance`:
+`+0x10`, matching through `FUN_0041add0` and, for every candidate that is not a `TargetVehicle`,
+walking the parent chain at `+0x54` / `+0x58` (below). It returns a value added raw to
+`weight × 1200 + distance`:
 
 | Authored bias | `TargetVehicle` | `TargetTurret` |
 |---|---|---|
@@ -219,6 +220,32 @@ activation volume alone ([../formats/objectives.md](../formats/objectives.md)).
 
 ⚠ **An authored `−1.0` is a hard exclusion, not a penalty.** The turret column is uniformly the
 vehicle column plus 37.5, so a turret carries a flat 37.5 m handicap against an aircraft.
+
+#### The parent walk belongs to every non-vehicle candidate, and it restarts the list
+
+The name matched is `*(*(target + 4) + 0xc)`, the candidate object's world node, whose name is
+inline at the node's own offset 0. `FUN_0041ae40` forks on one `__RTDynamicCast` to
+`TargetVehicle`: an aircraft or a hull gets a single pass over the bias list and nothing more,
+while **everything the cast rejects** takes the outer `do … while` that climbs `+0x54` (parent
+count) / `+0x58` (parent array) and walks the whole list again at each level. So a `TargetStruct`
+climbs the same chain a `TargetTurret` does; the flat `+37.5` is what the turret cast alone adds
+afterwards. The loop restarts the list per level rather than trying two names per entry, so a
+candidate's own name beats an owner's entry standing earlier in the authored order.
+
+A struct-list member is **one object per mission-structure node**: the loader at `FUN_004a2e00`
+walks `DAT_0071d35c`–`DAT_0071d360`, builds a 0x94-byte object per entry (`FUN_004a2570`), reads
+the gasbag flag `+0x65` from node word `+0x28` bit 22 and sets the acquisition admission byte
+`+0x8d`. Its second loop, over `DAT_0071d34c`–`DAT_0071d350`, is the `targets.zrd` table and
+leaves `+0x8d` alone, so the curated player cycle is not the AI's pool. A docked airship therefore
+reaches the AI as one candidate per part, each named `leng31` or `rturN`, and the only place its
+own `cargozep1` appears is above them. That is why C4/M03's `bswingman_1` exclusion and the Black
+Hat Warhawks' `["cargozep1", 1.0]` both work in the original and needed the chain here.
+
+CSVM ports the chain as `TargetPool.CollectOwners`: a zeppelin record's fanned `Owner` first, then
+each world-tree node above the pool's anchor by its original gamez name, handed to
+`AiTargetRanking.ObjectiveBiasFor`, which restarts the bias list per name. C4/M03's `cargozep1`
+carries 21 damage pools, and the `structure-part-bias` suite reads the exclusion and the
+always-target off every one of them.
 
 ### The gasbag gate is ordnance, checked at admission
 

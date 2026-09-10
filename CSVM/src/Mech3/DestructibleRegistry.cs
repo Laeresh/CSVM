@@ -246,9 +246,9 @@ public sealed class DestructibleRegistry
 
         /// <summary>The name of the mission entity this pool is a PART of, where one owns it — a
         /// zeppelin record's node name on each of its zones. Null for scenery, which belongs to
-        /// nothing. A zone's own anchor is named `gasbag1`/`leng11`, so this is the only identity a
-        /// `rating_biases` pattern naming the airship can match
-        /// (<see cref="Flight.AiTargetRanking.ObjectiveBiasFor"/>).</summary>
+        /// nothing. A zone's own anchor is named `gasbag1`/`leng11`, so a `rating_biases` pattern
+        /// naming the airship reaches it through this or through the world tree above it
+        /// (<c>TargetPool.CollectOwners</c>).</summary>
         public string? Owner { get; set; }
 
         /// <summary>How many of the DAMAGE_SEQUENCE's descending health thresholds this instance

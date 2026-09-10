@@ -18,6 +18,13 @@ internal static class ZeppelinIdentitySuites
     private const string AllyZep = "multiplayer2zep";
     private const string PlainZep = "multiplayer1zep";
 
+    // C4/M03's docked cargo zeppelin is a targets.zrd mission structure, so its engines and guns
+    // are damage pools named for themselves. Two blocks name the airship from opposite ends: the
+    // Black Swan escort excludes it outright, the Black Hat Warhawks make it always-target.
+    private const string DockedZep = "cargozep1";
+    private const string EscortBlock = "bswingman_1";
+    private const string HunterBlock = "bhatwarhawk_7";
+
     [Suite("zeppelin-identity",
         "the owning-zeppelin identity a zone and a gun carry (BL-476): C5/M03's authored "
         + "cargozep* exclusion reaches a gasbag only through its hull's name and not through "
@@ -31,6 +38,86 @@ internal static class ZeppelinIdentitySuites
         CheckTurretFan(ctx);
     }
 
+    [Suite("structure-part-bias",
+        "the reach a rating_biases pattern naming a DOCKED mission structure has over C4/M03's "
+        + "built world: every damage pool standing under 'cargozep1' takes the Black Swan escort's "
+        + "authored -1.0 exclusion and the Black Hat Warhawks' authored 1.0 always-target through "
+        + "the node name above it, while a pool standing elsewhere takes neither")]
+    internal static void StructurePartBias(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "M03");
+        ctx.RequireData(missionZrdr, $"C4/M03 zrdr");
+        var escort = BlockBiases(missionZrdr, EscortBlock);
+        var hunter = BlockBiases(missionZrdr, HunterBlock);
+        ctx.Check(Names(escort, DockedZep, b => b <= -1f),
+            $"'{EscortBlock}' authors the hard exclusion naming '{DockedZep}' ({escort.Count} entries)");
+        ctx.Check(Names(hunter, DockedZep, b => b >= 1f),
+            $"…and '{HunterBlock}' authors the always-target naming the same structure ({hunter.Count} entries)");
+
+        ctx.WithWorld("C4", collision: false, "M03", world =>
+        {
+            var registry = world.Runtime.Destructibles;
+            ctx.Check(registry is { Count: > 0 },
+                $"C4/M03's world registers damage pools at all ({registry?.Count ?? 0})");
+            if (world.Runtime.FindNodes(DockedZep, null) is not { Count: > 0 } hits || registry == null)
+            {
+                ctx.Check(false, $"C4/M03's world holds the '{DockedZep}' node this reads");
+                return;
+            }
+
+            var root = hits[0];
+            var under = new List<DestructibleRegistry.Instance>();
+            var elsewhere = new List<DestructibleRegistry.Instance>();
+            foreach (var inst in registry.All)
+            {
+                if (!GodotObject.IsInstanceValid(inst.Anchor))
+                {
+                    continue;
+                }
+                (ReferenceEquals(inst.Anchor, root) || root.IsAncestorOf(inst.Anchor)
+                    ? under : elsewhere).Add(inst);
+            }
+
+            ctx.Check(under.Count > 0 && elsewhere.Count > 0,
+                $"the docked structure carries pools of its own and the world carries others ({under.Count} under '{DockedZep}', {elsewhere.Count} elsewhere)");
+            int excluded = 0, wanted = 0;
+            string named = string.Empty;
+            foreach (var inst in under)
+            {
+                string name = TargetPool.NameOf(inst);
+                var owners = new List<string>();
+                TargetPool.CollectOwners(inst, owners);
+                excluded += AiTargetRanking.ObjectiveBiasFor(name, owners, escort)
+                    >= AiTargetRanking.NotRanked ? 1 : 0;
+                wanted += AiTargetRanking.ObjectiveBiasFor(name, owners, hunter)
+                    <= AiTargetRanking.AlwaysTarget ? 1 : 0;
+                if (named.Length == 0 && !name.Equals(DockedZep, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    named = name;
+                }
+            }
+
+            ctx.Same(under.Count, excluded,
+                $"'{EscortBlock}' ranks no pool of the docked structure at all, '{named}' included ({excluded}/{under.Count})");
+            ctx.Same(under.Count, wanted,
+                $"…and '{HunterBlock}' takes every one of them as its always-target ({wanted}/{under.Count})");
+
+            int stray = 0;
+            foreach (var inst in elsewhere)
+            {
+                var owners = new List<string>();
+                TargetPool.CollectOwners(inst, owners);
+                stray += AiTargetRanking.ObjectiveBiasFor(TargetPool.NameOf(inst), owners, escort) != 0f
+                    ? 1 : 0;
+            }
+
+            ctx.Same(0, stray,
+                $"…while the same list reaches none of the {elsewhere.Count} pools standing outside it");
+            ctx.Note($"C4/M03: {under.Count} pool(s) under '{DockedZep}', first part '{named}'");
+        });
+    }
+
+    // One roster block's authored rating_biases, empty where the mission names no such block.
     // The bias half, tree-free: a zone answers to its own anchor name AND to the airship that owns
     // it, which is the only way an authored pattern naming the hull can reach a gasbag.
     private static void CheckBiasReach(TestContext ctx)
@@ -56,8 +143,8 @@ internal static class ZeppelinIdentitySuites
         }
 
         float bare = AiTargetRanking.ObjectiveBiasFor("gasbag1", null, biases);
-        float owned = AiTargetRanking.ObjectiveBiasFor("gasbag1", "cargozep2", biases);
-        float other = AiTargetRanking.ObjectiveBiasFor("gasbag1", "beowulfzep", biases);
+        float owned = AiTargetRanking.ObjectiveBiasFor("gasbag1", new[] { "cargozep2" }, biases);
+        float other = AiTargetRanking.ObjectiveBiasFor("gasbag1", new[] { "beowulfzep" }, biases);
         ctx.Check(bare == 0f,
             $"a zone offered under its own anchor name alone matches nothing — the zone is 'gasbag1', the pattern names the hull (bias={bare})");
         ctx.Check(owned == AiTargetRanking.NotRanked,
@@ -136,6 +223,22 @@ internal static class ZeppelinIdentitySuites
             }
         });
     }
+
+    private static List<AiRatingBias> BlockBiases(string missionZrdr, string block)
+    {
+        foreach (var (name, fields) in AiSkills.LoadRoster(missionZrdr))
+        {
+            if (name.Equals(block, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return AiSkills.RosterRatingBiases(fields);
+            }
+        }
+        return new List<AiRatingBias>();
+    }
+
+    private static bool Names(List<AiRatingBias> biases, string pattern, System.Func<float, bool> weight) =>
+        biases.Any(b => b.Pattern.Equals(pattern, System.StringComparison.OrdinalIgnoreCase)
+            && weight(b.Bias));
 
     private static ZeppelinDef Record(IReadOnlyList<ZeppelinDef> defs, string node) =>
         defs.First(d => d.Node == node);

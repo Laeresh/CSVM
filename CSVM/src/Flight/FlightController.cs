@@ -452,6 +452,9 @@ public partial class FlightController : Node3D
     // …and their sources, by index: a FlightController, a TurretController or a
     // DestructibleRegistry.Instance (the D36 widening, BL-363's decoded turret/structure pools).
     private readonly List<object?> _rankSources = new();
+    // The names one non-aircraft candidate also answers to, refilled per candidate by
+    // TargetPool.CollectOwners. A field, not a fresh list: the acquisition walks every pool.
+    private readonly List<string> _biasOwners = new();
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
     private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
@@ -3486,6 +3489,12 @@ public partial class FlightController : Node3D
             bool gasbag = c.Source is DestructibleRegistry.Instance { Gasbag: true };
             if (gasbag && !gasbagsAdmitted)
                 continue;
+            // A part answers to every name above it, which is what carries a roster's exclusion
+            // naming a mission structure down onto the structure's own engines and guns. Skipped
+            // outright with no list to match against, since the walk is then unread work.
+            _biasOwners.Clear();
+            if (gunner.RatingBiases is { Count: > 0 })
+                TargetPool.CollectOwners(c.Source, _biasOwners);
 
             int attackers = 0;
             foreach (var a in _gunnerScan.Vehicles)
@@ -3503,7 +3512,7 @@ public partial class FlightController : Node3D
                 IsPlayer = false,
                 IsGasbag = gasbag,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
-                    TargetPool.NameOf(c.Source), TargetPool.OwnerOf(c.Source),
+                    TargetPool.NameOf(c.Source), _biasOwners,
                     gunner.RatingBiases, isTurret),
                 AlliedAttackers = attackers,
             });

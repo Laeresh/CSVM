@@ -225,20 +225,38 @@ public static class AiTargetRanking
     public static float ObjectiveBiasFor(string name, IReadOnlyList<AiRatingBias>? biases,
         bool isTurret = false) => ObjectiveBiasFor(name, null, biases, isTurret);
 
-    /// <summary>The same term for a candidate that is PART of a larger named entity: a zeppelin
-    /// zone answers to its own anchor name and to <paramref name="owner"/>, the airship's node name,
-    /// so C3/M01's authored <c>["piratezep", -1.0]</c> reaches every gasbag of that hull. The
-    /// first-matching-entry rule is the list's, not the name's: entries are still walked in authored
-    /// order and the first one either name matches wins.</summary>
-    public static float ObjectiveBiasFor(string name, string? owner,
+    /// <summary>The same term for a candidate that is PART of larger named entities:
+    /// <paramref name="owners"/> is the chain of names it ALSO answers to, nearest first (a
+    /// zeppelin zone's airship, then the tree above a mission structure's damage pool).
+    /// ⚠ The list is walked ONCE PER NAME, not once with every name tried per entry: the decode
+    /// re-walks it whole at each level, so a candidate's OWN name beats an owner's entry standing
+    /// earlier in authored order (docs/org/aiPilot.md).</summary>
+    public static float ObjectiveBiasFor(string name, IReadOnlyList<string>? owners,
         IReadOnlyList<AiRatingBias>? biases, bool isTurret = false)
     {
         float flat = isTurret ? TurretBiasFlat : 0f;
         if (biases == null)
             return flat;
+        if (MatchedBias(name, biases, flat) is { } own)
+            return own;
+        if (owners == null)
+            return flat;
+        foreach (var owner in owners)
+        {
+            if (owner is { Length: > 0 } && MatchedBias(owner, biases, flat) is { } above)
+                return above;
+        }
+
+        return flat;
+    }
+
+    // One level of the chain: the first entry this one name matches, in rank units, or null when
+    // the whole list passes the name over and the next name up takes its own pass.
+    private static float? MatchedBias(string name, IReadOnlyList<AiRatingBias> biases, float flat)
+    {
         foreach (var b in biases)
         {
-            if (!b.Matches(name) && !(owner != null && b.Matches(owner)))
+            if (!b.Matches(name))
                 continue;
             if (b.Bias >= 1f)
                 return AlwaysTarget + flat;
@@ -247,6 +265,6 @@ public static class AiTargetRanking
             return b.Bias * BiasScale + flat;
         }
 
-        return flat;
+        return null;
     }
 }
