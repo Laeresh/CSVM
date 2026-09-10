@@ -1166,6 +1166,167 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // The three arms of an engage that only an AI takes, on the rig a session builds: the shake
+    // def a person never gets, the keyed loop sound, and the decay lockout. The maneuver is forced
+    // by handing the mode machine a one-entry library, so the engage arrives through the same
+    // `Maneuver.Nitro` test the live chooser reaches it by.
+    [Suite("nitro-ai-edges",
+        "an AI's nitro engage on a session-built rig: medium_aishake rocks the aircraft's own healthy node where a person gets the camera shake, the positional snd_nitro loop is a 0.1 s blip at the engage and about a second more after the maneuver rather than a sustain, and the decay lockout lasts exactly as long as the nitro_decay INSTANCE the runtime holds")]
+    internal static void NitroAiEdges(TestContext ctx)
+    {
+        const string model = "player_warhawk";
+        const float Dt = 1f / 60f;
+        const int Frames = 900;
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+            using var sounds = new SoundArchive(ctx.SoundsPath);
+            FlightController? ai = null;
+            try
+            {
+                var factory = new Session.WorldEffectsFactory(
+                    SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+                var spawn = new Vector3(0f, 500f, 0f);
+                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = builder.Build(model);
+                var nitroEvade = Maneuvers.Load(ctx.ZrdrPath).FirstOrDefault(m => m.Nitro);
+                if (nitroEvade == null)
+                {
+                    ctx.Check(false, $"the shipped maneuver library carries a nitro-flagged maneuver");
+                    return;
+                }
+
+                // One-entry library, so the chooser's own weighted draw can only return the
+                // nitro-flagged maneuver: the subject here is the engage, not the selection.
+                var machine = new AiModeMachine(new System.Random(11))
+                {
+                    SteadyHandChance = 1f,
+                    NaturalTouch = 9,
+                    Library = new[] { nitroEvade },
+                };
+                var pilot = AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward);
+                pilot.Machine = machine;
+                ai = new FlightController
+                {
+                    PlaneModel = planeModel,
+                    Collider = PlaneCollider.Build(planeModel),
+                    PlayerIndex = FlightRoster.ShooterIdBase,
+                    IsHumanPiloted = false,
+                    Pilot = pilot,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                    Damage = PlaneDamage.For(stats),
+                };
+                ai.AddChild(planeModel);
+                ai.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
+                    spawn, spawn + Vector3.Forward);
+                ctx.Host.AddChild(ai);
+                ai.Nitro.Installed = true;
+                // The listener rides the aircraft, so the distance cull cannot stand in for a loop
+                // this suite claims is silent.
+                ai.EngineAudio = AiEngineAudio.Attach(ai, sounds, soundDefs, stats,
+                    () => new[] { ai!.WorldPosition });
+                factory.BuildFlightCrashRuntime(ai, builder, model, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
+                if (ai.CrashRuntime is not { } rig)
+                {
+                    ctx.Check(false, $"{model}: the session rig built a crash runtime");
+                    return;
+                }
+                rig.ManualAdvance = true;
+
+                machine.NotifyDamage(10f, Vector3.Forward);
+                bool armed = machine.Executor is { Maneuver.Nitro: true };
+                ctx.Check(armed,
+                    $"the mode machine is flying '{machine.Executor?.Maneuver.Name ?? "-"}', a nitro-flagged maneuver");
+
+                var healthy = Find(planeModel, "healthy");
+                int engagedAt = -1, releasedAt = -1, shakeFrom = -1, shakeTo = -1;
+                int loopFrames = 0, lastLoopFrame = -1, firstSilentAfterEngage = -1;
+                int lockoutFrames = 0, decayRunningFrames = 0, lockoutOutlivedDecay = 0;
+                float maxShakeDeg = 0f;
+                for (int i = 0; i < Frames; i++)
+                {
+                    ai.SimStep(Dt);
+                    rig.Advance(Dt);
+                    if (ai.Nitro.EngagedThisTick && engagedAt < 0)
+                        engagedAt = i;
+                    if (ai.Nitro.ReleasedThisTick && releasedAt < 0)
+                        releasedAt = i;
+                    bool shaking = rig.AnimStateOf(Session.EffectCatalogue.AiShakeAnim) == 2;
+                    if (shaking)
+                    {
+                        if (shakeFrom < 0)
+                            shakeFrom = i;
+                        shakeTo = i;
+                        if (healthy != null)
+                            maxShakeDeg = Mathf.Max(maxShakeDeg, RotationMagnitudeDeg(healthy));
+                    }
+                    if (ai.EngineAudio is { NitroSounding: true })
+                    {
+                        loopFrames++;
+                        lastLoopFrame = i;
+                    }
+                    else if (engagedAt >= 0 && firstSilentAfterEngage < 0)
+                    {
+                        firstSilentAfterEngage = i;
+                    }
+
+                    bool decayRunning = rig.AnimStateOf("nitro_decay") == 2;
+                    decayRunningFrames += decayRunning ? 1 : 0;
+                    if (ai.Nitro.DecayAnimPlaying)
+                    {
+                        lockoutFrames++;
+                        if (!decayRunning && releasedAt >= 0 && i > releasedAt)
+                            lockoutOutlivedDecay++;
+                    }
+                }
+
+                ctx.Note($"engaged frame {engagedAt}, released {releasedAt}; shake instance frames {shakeFrom}..{shakeTo} peak {maxShakeDeg:0.00}°; loop sounding {loopFrames} frame(s), first silence at {firstSilentAfterEngage}, last at {lastLoopFrame}; decay instance {decayRunningFrames} frame(s), lockout {lockoutFrames}");
+
+                ctx.Check(engagedAt == 0,
+                    $"{model}: the nitro-flagged maneuver engaged the boost on its first step engagedAt={engagedAt}");
+                // The shake: an aircraft nobody is sitting in gets the plane-rocking def instead of
+                // the camera shake, on its own node, and it is a finite three-loop wobble.
+                ctx.Check(shakeFrom == engagedAt,
+                    $"{model}: {Session.EffectCatalogue.AiShakeAnim} starts on the engaging frame shakeFrom={shakeFrom}");
+                ctx.Check(shakeTo > shakeFrom && shakeTo < Frames - 1,
+                    $"{model}: …and ends with the def rather than running on shakeTo={shakeTo}");
+                ctx.Check(healthy != null && maxShakeDeg > 0.5f,
+                    $"{model}: …having rocked the aircraft's own healthy node peak={maxShakeDeg:0.00}°");
+
+                // The loop: keyed, so its cadence is the state machine's call pattern. A sustain
+                // would sound for every frame of the burn instead.
+                ctx.Check(loopFrames > 0 && firstSilentAfterEngage is > 0 and <= 12,
+                    $"{model}: the loop is a blip at the engage, silent again by frame {firstSilentAfterEngage}");
+                ctx.Check(releasedAt > 0 && lastLoopFrame >= releasedAt - 3 && lastLoopFrame <= releasedAt + 12,
+                    $"{model}: …and sounds again through the release calls that follow the maneuver lastLoop={lastLoopFrame} released={releasedAt}");
+                ctx.Check(loopFrames < Frames / 2,
+                    $"{model}: …never as a sustain over the whole burn loopFrames={loopFrames} of {Frames}");
+
+                // ⚠ One step of lag is the mechanism, not slack: the step polls the runtime once,
+                // so the instance always ends first. The shipped def runs the same second a fixed
+                // clock would, so what this measures is the END it tracks, not the length.
+                ctx.Check(decayRunningFrames > 0,
+                    $"{model}: the release started a nitro_decay instance decayFrames={decayRunningFrames}");
+                ctx.Check(lockoutOutlivedDecay <= 1,
+                    $"{model}: …and the re-engage lockout ends with it, not on a clock of its own (outlived it by {lockoutOutlivedDecay} frame(s))");
+            }
+            finally
+            {
+                ai?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
     // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
     // crash and a panel tear reach the factory for no emitter, the claims count as built, and
     // respawn keeps the emitters so the next crash builds nothing either.
@@ -1641,6 +1802,11 @@ internal static class DestroyChoreographySuites
         for (int i = 0; i < 120; i++)
             runtime.Advance(1f / 60f);
     }
+
+    // How far a node has been rotated out of its rest pose, in degrees: the shake defs are authored
+    // as XYZ_ROTATION on the plane's own body node, so any axis counts.
+    private static float RotationMagnitudeDeg(Node3D node) =>
+        Mathf.RadToDeg(node.Quaternion.Normalized().GetAngle());
 
     private static void CallbackSeamsReceiveTheirCodes(TestContext ctx, TestWorld world)
     {

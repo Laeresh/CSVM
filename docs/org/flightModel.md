@@ -1159,10 +1159,12 @@ it can cost is bounded by reach: the pull instrument below peaks at 5.83 G again
 so no stock envelope row reads the G ramp at all, and the only place the delay is visible is the
 outside-push graze at −6 G, one step late on a 92–97 % factor.
 
-⚠ **A fourth consumer exists and is NOT implemented.** The same scalar multiplies the `level_off`
+⚠ **A fourth consumer exists and is unreachable.** The same scalar multiplies the `level_off`
 torque (`obj+0x650`, the `level_off_rate` key, read at `0x48cedc`) when that torque opposes the
 closing axis. The key is accepted by the parser and **never authored**, so the term is zero and the
-remake carries neither it nor its limiter.
+remake carries neither it nor its limiter. `LevelOffRateAbsenceTests` pins both halves: the census
+that all 24 shipped `dynamics` blocks author `return_rate` and none authors `level_off_rate`, and
+the flight that a banked aircraft with centred sticks grows no roll rate.
 
 `return_rate` is a separate centring torque, described below.
 
@@ -3413,9 +3415,24 @@ cockpit's `nitrogauge`). The `nitro_boost` needle's third Euler component chases
 HUD flag `DAT_00624df0`, with boost as the needle angle × −26.5259 (100 at full sweep) and charge
 in percent; it is a debug readout, not a shipped HUD element.
 
+**The AI's shake and its loop sound both ride the same call.** `FUN_00473430(this, 1)` at
+`0x4b21b2` plays `medium_aishake` on the vehicle's own node where a person gets shake block 6, one
+shake at a time per aircraft; the shake player itself, and the four other kicks that carry the same
+AI twin, are in [`shakes.md`](shakes.md), "The seven component blocks and every kicker". The loop
+sound is keyed rather than driven: the refresh at `0x4b2279`–`0x4b22eb` gives it 0.1 s (the
+argument at `0x4b22b8`) and sits inside the method, so the AI arm sounds it at the engage and again
+through the per-frame release calls that follow the maneuver, and not during the maneuver itself,
+where nothing calls the method.
+
 **What CSVM implements.** `Flight/NitroSystem.cs` is the state machine above, engine-free:
 tank, burn, recharge, the 99 % arm, the 5 % cutoff, the engine-out refusal and the boost-animation
-edges. ⚠ The original has no edges: the play, the player shake and the force-feedback effect all
+edges, with `LoopRefreshedThisTick` standing for the refresh call. `FlightController.AdvanceNitro`
+plays `medium_aishake` on a non-human pilot's own rig (`EffectCatalogue.AiShakeAnim`, guarded by
+the runtime's own `ANIM_STATE` as the original is guarded by its one handle), drives the AI's
+positional loop through `AiEngineAudio.RefreshNitroLoop`, and ends the re-engage lockout when the
+`nitro_decay` INSTANCE ends rather than on a clock of its own, which is one sim step behind the
+original's completion callback because the step polls once. `nitro-ai-edges` measures all three.
+⚠ The original has no edges: the play, the player shake and the force-feedback effect all
 run inside `SetNitro` itself, so CSVM's `EngagedThisTick`/`ReleasedThisTick` stand in for that one
 call and must survive from the arm that raises them to the reader at the end of the same step.
 `NitroSystem.BeginStep` is where they are cleared, at the top of `FlightController.AdvanceNitro`
@@ -3488,6 +3505,7 @@ without a provenance. Five classes are used:
 | `NitroSystem.EngageFraction` | 0.99 | decoded | `0x6080a8`, the human arm's engage line at `0x487eba` |
 | `NitroSystem.CutoffFraction` | 0.05 | decoded | `0x6034d8`, the cutoff at `0x487ea1` and `0x49f888` |
 | `NitroSystem.MinBoostAnimSeconds` | 1.0 | decoded | `0x47a838`, `def+0x188`, compared against the engage timer at `0x4b2224` |
+| `NitroSystem.LoopKeyedSeconds` | 0.1 | decoded | `0x4b22b8`, the keyed `snd_nitro` refresh's own argument |
 | `PhysicsConstants.NomGravity` | 20 | authored | `player.json`'s `nom_gravity`, mirrored for ballistics |
 | `PhysicsConstants.MphToMs` | 0.44704 | decoded | the parser's own speed-token scale |
 | `StickRamp.Rate` | 2.5 | decoded | `FUN_00487460`, 0.4 s of held key to full deflection |
@@ -3685,18 +3703,18 @@ which are findings rather than code.
 | roll-to-pitch coupling: none exists | decoded | every read of `[obj+0x100]` and `[obj+0x114]` |
 | ambient turbulence: nothing ships | decoded | shake block 5, the five xrefs of `FUN_0042c070` |
 | the one-sided negative `C_L` ceiling is unreachable | decoded | `0x48c821`–`0x48c852` builds `n` as a vector length, so `FUN_0041abd0` is never handed a negative `C_L` |
+| the `level_off_rate` auto-level torque is unreachable | decoded | `0x48cedc` / `0x48cf76` read `def+0x650`, a token the parser accepts and no shipped `dynamics` block authors, so the term is zero on all eleven airframes (`LevelOffRateAbsenceTests`) |
+| the AI's `medium_aishake` on a nitro engage | decoded | `FUN_00473430(1)`, the middle def of the `0071c2f4` table, on the aircraft's own node |
+| the AI's positional `snd_nitro` blip | decoded | the keyed loop's 0.1 s refresh inside `FUN_004b2110`, reached at the engage and by the release calls after the maneuver |
+| the nitro decay lockout on the decay instance | decoded | the completion callback registered at `0x4b2271` (handler `0x4b20f0`); CSVM reads the instance's own `ANIM_STATE` instead |
 | a dead AI's throttle and surfaces freeze at their last commanded values | decoded | `FUN_004b82d0` zeroes neither `+0x124` nor the surface deflections; `StepWreckFall` steps `_lastInput` unchanged |
 | a wreck flies the near-field plant | decoded | `obj+0x384`'s only writers are the `-fd` switch, the console's `fd` / `ifon` and the constructor's zero, so no crash ever takes the `0x48c4ba` arm |
 | far-field range is measured to the NEAREST human pilot | exception | plan Decision 3; the original presumes one player |
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
 | the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
-| the `level_off_rate` auto-level torque | unsupported | `0x48cedc` / `0x48cf76`; decoded, and no shipped data authors the rate |
-| the AI's `medium_aishake` on a nitro engage | unsupported | `FUN_00473430(1)` |
-| the AI's positional `snd_nitro` blip | unsupported | the 0.1 s blip plus one second after |
 | a live producer for an AI's nitro injector | unsupported | `AiSpawn.Nitro` reads roster slot 34; the mission spawner does not read roster blocks yet |
-| the nitro decay lockout on a runtime callback | unsupported | CSVM runs the def's authored 1.0 s; the anim runtime offers no completion callback |
-| the mouse-flying arm's `is_autogyro` roll/yaw exchange | unsupported | `0x4876f4`; CSVM's mouse is head-look only |
+| the mouse-flying arm's `is_autogyro` roll/yaw exchange | unsupported | `0x4876f4`; CSVM has no mouse flight-control mode at all, so there is no arm to exchange in |
 
 ### Envelope rows
 

@@ -810,13 +810,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
   5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
   [`docs/org/flightModel.md`](docs/org/flightModel.md).
-- `BL-447` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The five unsupported nitro and shake edges in the parity ledger.**
-  `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the
-  `level_off_rate` auto-level torque, the AI's `medium_aishake` on a nitro engage, the AI's
-  positional `snd_nitro` blip, the nitro decay lockout on a runtime callback, and the mouse-flying
-  arm's `is_autogyro` roll/yaw exchange. The thin atmosphere band above 2000 m has left this list:
-  it is decoded and live, and it is the flight ceiling (`git log --grep=BL-448`).
-  Each is small and independently landable; each names its address in the table.
+- `BL-447` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The mouse-flying arm's `is_autogyro` roll/yaw exchange has
+  nowhere to land: CSVM has no mouse flight-control mode.** `0x4876f4` sits inside
+  `FUN_00487460`'s mouse arm, reached only with the mouse control bit of `DAT_0071c2a0` set and the
+  free-look flag `DAT_00654120` clear, and there it exchanges and negates the roll and yaw sources,
+  so an autogyro yaws with sideways mouse motion where an aeroplane rolls
+  ([`docs/org/flightModel.md`](docs/org/flightModel.md), "`is_autogyro` reaches no flight-plant
+  term"). CSVM's mouse is head-look, so porting the exchange means first adding a mouse
+  flight-control scheme and a way to select it, which is a product decision rather than a parity
+  gap. *Decision owed:* does CSVM offer mouse flying at all? With one, the exchange is a few lines
+  inside the new arm and closes with it; without one, the ledger row moves from unsupported to an
+  exception carrying that reason. Ledger row "the mouse-flying arm's `is_autogyro` roll/yaw
+  exchange" in the same page's "Parity ledger".
 - `BL-774` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **The sustained climb plateaus at 204 mph against the original's
   filmed 163, and the ceiling now shows it.** `--dump-flight`'s sustained climb settles at 204.03 mph
   on a 56.3° path where the footage reads 163.05 at 55.5°, so CSVM crosses the 2000 m band edge at
@@ -1762,8 +1767,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     ([`docs/org/shakes.md`](docs/org/shakes.md)). `PlaneShake.ExplosionAt` still kicks the authored
     `magnitude_factor` against a damage stand-in, so the port and the decode now disagree here;
     matching the original means zeroing that kick, not tuning it.
-  - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller,
-    likely script/set-piece.
+  - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs are the AI half of the five camera
+    kicks, not script calls: `FUN_00473430(index)` plays them on any vehicle that is not the
+    player's, from the same five sites ([`docs/org/shakes.md`](docs/org/shakes.md), "The seven
+    component blocks and every kicker"). The nitro engage is wired
+    (`FlightController.AdvanceNitro`); a round fired, a round taken, the overspeed arm and a
+    collision contact are decoded and still unwired.
   - **(d) `high_speed` drives the same random-walk accumulator as the gun, decoded; the engine
     port is owed.** The per-frame player updater `FUN_0048c470` reads block 4's `min_speed`/
     `magnitude_quotient` fields and calls the identical `FUN_0042c070`/`FUN_0042be10` dispatcher the

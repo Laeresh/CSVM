@@ -62,6 +62,14 @@ public static class EffectCatalogue
     // vehicle named `player`. Same NAME as the crash root, so it needs no anchor of its own.
     public const string PlayerDestroyAnim = "player";
 
+    // The middle of damage_shakes.zrd.json's three `*_aishake` defs, the plane-rocking half of the
+    // camera shake a person at the controls gets instead. FlightController plays it on an AI's
+    // nitro engage, the one trigger of the three the executable's shake player is decoded on, and
+    // CrashRigAnimNames binds it beside the nitro defs.
+    // ⚠ Its authored NAME is `bloodhawk`, which resolves nothing in a per-plane rig, so it reaches
+    // the aircraft through Play's PlaneModel fallback exactly as those do.
+    public const string AiShakeAnim = "medium_aishake";
+
     // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i].
     // ⚠ Unlike the crash family it has no bare last-resort anim: an unanswerable slot plays
     // nothing, so TouchdownDefTable passes a null lastResort. Built once per level (a global),
@@ -276,6 +284,7 @@ public static class EffectCatalogue
         names.AddRange(PlaneDamageEffectAnims);
         names.AddRange(PropChoreographyAnims);
         names.AddRange(NitroAnims);
+        names.Add(AiShakeAnim);
         names.AddRange(DamageStageAnims);
         if (!string.IsNullOrEmpty(destroyAnim))
             names.Add(destroyAnim);

@@ -73,6 +73,17 @@ public class ParityLedgerTests
         ("ambient turbulence: nothing ships", Decoded, "shake block 5, the five xrefs of FUN_0042c070"),
         ("the one-sided negative C_L ceiling is unreachable", Decoded,
             "0x48c821-0x48c852 builds n as a vector length, so FUN_0041abd0 is never handed a negative C_L"),
+        ("the level_off_rate auto-level torque is unreachable", Decoded,
+            "0x48cedc / 0x48cf76 read def+0x650, a token the parser accepts and no shipped dynamics "
+            + "block authors, so the term is zero on all eleven airframes (LevelOffRateAbsenceTests)"),
+        ("the AI's medium_aishake on a nitro engage", Decoded,
+            "FUN_00473430(1), the middle def of the 0071c2f4 table, on the aircraft's own node"),
+        ("the AI's positional snd_nitro blip", Decoded,
+            "the keyed loop's 0.1 s refresh inside FUN_004b2110, reached at the engage and by the "
+            + "release calls after the maneuver"),
+        ("the nitro decay lockout on the decay instance", Decoded,
+            "the completion callback registered at 0x4b2271 (handler 0x4b20f0); CSVM reads the "
+            + "instance's own ANIM_STATE instead"),
         ("a dead AI's throttle and surfaces freeze at their last commanded values", Decoded,
             "FUN_004b82d0 zeroes neither +0x124 nor the surface deflections; StepWreckFall steps _lastInput unchanged"),
         ("a wreck flies the near-field plant", Decoded,
@@ -88,16 +99,10 @@ public class ParityLedgerTests
 
         ("the G ramp reads the SAME tick's delivered lift", Unsupported,
             "0x48c883 writes it before 0x48ca1e; Step rotates before it translates, so CSVM is one step late"),
-        ("the level_off_rate auto-level torque", Unsupported,
-            "0x48cedc / 0x48cf76; decoded, and no shipped data authors the rate"),
-        ("the AI's medium_aishake on a nitro engage", Unsupported, "FUN_00473430(1)"),
-        ("the AI's positional snd_nitro blip", Unsupported, "the 0.1 s blip plus one second after"),
         ("a live producer for an AI's nitro injector", Unsupported,
             "AiSpawn.Nitro reads roster slot 34; the mission spawner does not read roster blocks yet"),
-        ("the nitro decay lockout on a runtime callback", Unsupported,
-            "CSVM runs the def's authored 1.0 s; the anim runtime offers no completion callback"),
         ("the mouse-flying arm's is_autogyro roll/yaw exchange", Unsupported,
-            "0x4876f4; CSVM's mouse is head-look only"),
+            "0x4876f4; CSVM has no mouse flight-control mode at all, so there is no arm to exchange in"),
     };
 
     // Every scenario the flight-envelope probe reports, its class, and the term that bounds it. The

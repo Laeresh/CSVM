@@ -2,7 +2,8 @@
 
 Part of the [format documentation](README.md). These shared zrdr readers define aircraft wobble
 and camera-shake laws. `ShakeDefs` reads `shakes.json`; `PlaneShake` applies five of its six
-sources as visual-only roll. The caller for `damage_shakes.json` remains unknown.
+sources as visual-only roll. `damage_shakes.json`'s `ON_CALL` defs are played by the exe's own
+shake player, one arm of it wired here (below).
 
 ⚠ Where the original **consumes** these laws — the per-shot/per-frame shake magnitudes, the
 random-walk accumulator they feed, the camera-attachment rule, and the engine's fidelity gap — is
@@ -48,12 +49,14 @@ Standard `ANIMATION_DEFINITIONS` ([anim-definitions.md](anim-definitions.md)), a
 `XYZ_ROTATION` (large ±(0, 3.2, 32), medium ±(0, 1.6, 16), small ±(0, 0.6, 4.5)) over
 `RUN_TIME` 0.05 s (0.04 for small) each way, `LOOP` 3 — a ~0.3 s wobble — and a `player_shake`
 rocking the plane's `healthy` node the same way. The aishake defs carry only the plane-rocking
-half. The motions are fully authored in the runtime's settled `XYZ_ROTATION` semantics;
-⚠ **the triggers are not** — what calls `small` vs `medium` vs `large` (and what calls them at
-all) lives in the exe, and these defs stay **unwired**. The routine being-hit feedback does not
-need them: the `bullet_impact`/`missile_impact`/`explosion` oscillator sources above scale
-continuously per hit, so the ON_CALL defs read as script/set-piece calls. Wiring them waits for
-footage of whatever actually invokes them.
+half.
+
+The triggers are decoded, and they are the AI half of the camera shake rather than script calls:
+one player (`FUN_00473430`) plays the three defs by index on any vehicle that is not the player's,
+from the same five sites that kick the player's own oscillator blocks (a round fired, a round
+taken, overspeed, a collision contact, a nitro engage). The decode, with the addresses and the
+one-at-a-time handle, is in [`../org/shakes.md`](../org/shakes.md), "The seven component blocks and
+every kicker". CSVM wires the nitro engage; the other four sites are not wired.
 
 ## Weapon camera-shake flag
 

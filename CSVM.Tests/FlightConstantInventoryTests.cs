@@ -100,6 +100,7 @@ public class FlightConstantInventoryTests
         ("NitroSystem", "EngageFraction", 0.99, Decoded, "0x6080a8, the engage line at 0x487eba"),
         ("NitroSystem", "CutoffFraction", 0.05, Decoded, "0x6034d8, the cutoff at 0x487ea1"),
         ("NitroSystem", "MinBoostAnimSeconds", 1.0, Decoded, "0x47a838, def+0x188, read at 0x4b2224"),
+        ("NitroSystem", "LoopKeyedSeconds", 0.1, Decoded, "0x4b22b8, the keyed snd_nitro refresh's own argument"),
         ("PhysicsConstants", "NomGravity", 20.0, Authored, "player.json's nom_gravity"),
         ("PhysicsConstants", "MphToMs", 0.44704, Decoded, "the parser's speed-token scale, 0x00607b2c"),
         ("StickRamp", "Rate", 2.5, Decoded, "FUN_00487460, 0.4 s of held key to full deflection"),

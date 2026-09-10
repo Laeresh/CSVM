@@ -715,13 +715,13 @@ separately from a plain evaluation. `AdvanceDamagedRearm` is the pure re-arm tim
 
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` an AI-flown aircraft carries instead of it: the same two engine
-slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `EngineAudioCurves`' cull
-distance and starts them again inside it. Its listeners are the human pilots, the seam
-`AiWeaponAudio` and `ProjectilePool` read too, so one aircraft answers one listener model. `Attach`
-is the whole spawner-side surface, and no own-ship concept rides here, since an AI kill is audible
-from its crash animation's own sound events. The `sound` log carries the whole observable: each
-slot's build verdict, one line per cull transition, one per damaged-engine swap. The healthy to
-damaged edge waits out the shared re-arm timer on `PlaneStats.DamagedTimer`; the other is immediate.
+slots on `AudioStreamPlayer3D`s plus the injector's `snd_nitro` loop, and the cull that stops them
+past `EngineAudioCurves`' cull distance and starts them again inside it. The nitro slot is keyed,
+`RefreshNitroLoop` giving it 0.1 s more each time, so its cadence is the state machine's own calls.
+Its listeners are the human pilots, the seam `AiWeaponAudio` and `ProjectilePool` read too, so one
+aircraft answers one listener model. `Attach` is the whole spawner-side surface, and no own-ship
+concept rides here. The `sound` log carries the observable: each slot's verdict, a line per cull
+transition, one per damaged-engine swap, whose edge waits out `PlaneStats.DamagedTimer`'s re-arm.
 
 ## src/Flight/AiWeaponAudio.cs
 The weapon half of the positional pair an AI-flown aircraft carries instead of `FlightAudio`: the
@@ -786,13 +786,13 @@ engine-free; `FlightController` steps one per keyboard axis. Decode:
 
 ## src/Flight/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free: a 30-unit tank burned at 4/s while boosting and
-refilled at 1/s always, so a burn nets 3/s and runs 9.5 s from full to the 5 % cutoff. The human arm
-(`HumanCommand`) engages on a held command only from a 99 % tank and re-asserts the flag until the
-cutoff; the AI arm (`AiSet`) has no engage line and fires once per nitro-flagged maneuver. Both
-refuse an engine-out aircraft and a re-engage while the boost or decay animation is alive.
-`Installed` is the injector, and `EngagedThisTick`/`ReleasedThisTick` are the edges
-`FlightController.AdvanceNitro` turns into the shake kick, the `nitro_boost`/`nitro_decay` defs and
-the `snd_nitro` loop. Decode: [../org/flightModel.md](../org/flightModel.md), "Nitro".
+refilled at 1/s always, so a burn nets 3/s and runs 9.5 s from full to the 5 % cutoff.
+`HumanCommand` engages on a held command only from a 99 % tank and re-asserts the flag until the
+cutoff; `AiSet` has no engage line and fires once per nitro-flagged maneuver. Both refuse an
+engine-out aircraft and a re-engage while the boost or decay animation is alive. `Installed` is the
+injector, and `EngagedThisTick`/`ReleasedThisTick`/`LoopRefreshedThisTick` are the edges
+`FlightController.AdvanceNitro` turns into the shake kick (a person's camera block, an AI's own
+`medium_aishake`), the two defs and the keyed `snd_nitro` loop. Decode: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/PathFollower.cs
 The engine's SECOND movement law and the exclusive alternative to `FlightModel`: the dispatcher

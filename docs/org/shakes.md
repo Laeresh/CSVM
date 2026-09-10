@@ -91,6 +91,19 @@ authored magnitude lands at its block's `[9]` (and `[10]` for the two-term sourc
 | 5 | `+0xf4` | `turbulence` | none parsed; `+0x118` is never written | `FUN_0048d2c0` at `0x48d409` | one collision contact (`PlaneShake.ContactHit`, every human pilot) |
 | 6 | `+0x120` | `nitro` | `magnitude` `+0x144` | `FUN_004b2131` at `0x4b21ce` | nitro engaged, player only (`PlaneShake.NitroEngaged`, every human pilot) |
 
+**Every kicker carries an AI twin, and that is what the `damage_shakes` `*_aishake` defs are
+for.** `FUN_00473430(this, index)` plays one of `_DAT_0071c2f4`/`+4`/`+8` (`small`, `medium`,
+`large_aishake`, resolved by name at startup in `FUN_004735b0` at `0x473911`) on the vehicle's own
+node `[obj+0xc]`, refuses when the vehicle IS the player (`DAT_0071c298`) and when a shake instance
+is already alive in `[obj+0x6ec]`, and clears that handle from the instance's completion callback,
+so one aircraft rocks to one def at a time. Its five call sites are the same five functions as the
+table above, each standing immediately before that block's player arm: `0x4b6e13` index 0 (a round
+fired), `0x4b9d0e` index 0 (a round taken), `0x48d204` index 1 (past `fd_speed` × `0x6040ac`, the
+overspeed arm), `0x48d3bf` index 2 (a collision contact) and `0x4b21b2` index 1 (a nitro engage).
+So the split is by who is flying rather than by event: a person gets the camera block, everyone
+else rocks the aeroplane. CSVM wires the nitro engage (`FlightController.AdvanceNitro`,
+`EffectCatalogue.AiShakeAnim`); the other four are decoded and not wired.
+
 That table is the complete kicker list. `FUN_0042c070` is a one-line forwarder to `FUN_0042be10`,
 `FUN_0042be10` has no other caller, and the five call sites above are every xref to
 `FUN_0042c070`. The only other writer of any block's accumulators is the integrator

@@ -18,6 +18,10 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class AiEngineAudio : Node3D
 {
+    /// <summary>The nitro loop's sound definition, looked up by this literal name at vehicle-def
+    /// load rather than authored per airframe, so every aircraft's injector sounds the same.</summary>
+    public const string NitroSound = "snd_nitro";
+
     /// <summary>Where the session's human pilots are, one per splitscreen pane, the same
     /// nearest-human seam <see cref="AiWeaponAudio"/> and <c>ProjectilePool</c> measure against.
     /// The cull takes the nearest of them, so one aircraft answers one listener model however you
@@ -25,9 +29,10 @@ public sealed partial class AiEngineAudio : Node3D
     public Func<IReadOnlyList<Vector3>>? Listeners;
 
     private PlaneStats _stats = null!;
-    private AudioStreamPlayer3D? _engine, _whine;
+    private AudioStreamPlayer3D? _engine, _whine, _nitro;
     private AudioStreamWav? _engineStream, _damagedStream;
-    private float _engineVol = 1f, _damagedVol = 1f, _whineVol = 1f;
+    private float _engineVol = 1f, _damagedVol = 1f, _whineVol = 1f, _nitroVol = 1f;
+    private float _nitroKeyedS;    // s the keyed nitro loop has left before it expires
     private bool _engineDamaged;
     private float _enginePitchMul = 1f;
     private bool _culled = true;   // starts culled so the first in-range frame logs its start
@@ -36,6 +41,10 @@ public sealed partial class AiEngineAudio : Node3D
     /// flag this component keeps, which could agree with itself while the voice is stopped.
     /// Internal for the listener suite's cull half.</summary>
     internal bool EngineSounding => _engine is { Playing: true };
+
+    /// <summary>Whether the nitro loop is sounding, read off the live player for the same reason
+    /// <see cref="EngineSounding"/> is.</summary>
+    internal bool NitroSounding => _nitro is { Playing: true };
 
     /// <summary>Builds this aircraft's engine audio and hangs it under <paramref name="controller"/>,
     /// or returns null when the session found no sound archive. The spawner's whole share of the
@@ -74,10 +83,11 @@ public sealed partial class AiEngineAudio : Node3D
         {
             _whine = MakeLoop(archive, defs, whineName, out _whineVol);
         }
+        _nitro = MakeLoop(archive, defs, NitroSound, out _nitroVol);
         // The build half of the headless observable (WorldSounds.Debug's precedent), which with the
         // cull transitions below separates the two silences: a slot logged `unresolved` here never
         // had a stream, one logged `ok` and later `culled` is silent by distance alone.
-        Log.Info("sound", $"ai engine {Aircraft()}: engine={SlotState(stats.EngineSound, _engineStream != null)} damaged={SlotState(stats.DamagedEngineSound, _damagedStream != null)} whine={SlotState(stats.WhineSound, _whine != null)} cull={EngineAudioCurves.CullDistance:0} m");
+        Log.Info("sound", $"ai engine {Aircraft()}: engine={SlotState(stats.EngineSound, _engineStream != null)} damaged={SlotState(stats.DamagedEngineSound, _damagedStream != null)} whine={SlotState(stats.WhineSound, _whine != null)} nitro={SlotState(NitroSound, _nitro != null)} cull={EngineAudioCurves.CullDistance:0} m");
     }
 
     /// <summary>Per-frame drive, same arguments as <see cref="FlightAudio.Update"/> and called from
@@ -101,6 +111,7 @@ public sealed partial class AiEngineAudio : Node3D
         {
             _engine?.Stop();
             _whine?.Stop();
+            _nitro?.Stop();
             return;
         }
         // A damaged loop that stopped (this cull, or its stream ending) waits out the re-arm
@@ -117,12 +128,33 @@ public sealed partial class AiEngineAudio : Node3D
         }
     }
 
-    /// <summary>Kills both slots for good — the aircraft is down, and its crash animation owns
+    /// <summary>The injector's own loop, keyed rather than driven: a refresh gives it
+    /// <see cref="NitroSystem.LoopKeyedSeconds"/> more, and it stops when nothing has refreshed it
+    /// for that long. The caller passes <see cref="NitroSystem.LoopRefreshedThisTick"/>, so the
+    /// cadence is the state machine's own call pattern and not a length invented here. Decode:
+    /// docs/org/flightModel.md, "Nitro".</summary>
+    public void RefreshNitroLoop(bool refreshed, float dt)
+    {
+        if (refreshed)
+            _nitroKeyedS = NitroSystem.LoopKeyedSeconds;
+        else if (_nitroKeyedS > 0f)
+            _nitroKeyedS -= dt;
+        if (_nitro == null)
+            return;
+        if (_nitroKeyedS > 0f)
+            UpdateLoop(_nitro, _nitroVol, 1f);
+        else if (_nitro.Playing)
+            _nitro.Stop();
+    }
+
+    /// <summary>Kills every slot for good — the aircraft is down, and its crash animation owns
     /// everything audible from here on.</summary>
     public void Stop()
     {
         _engine?.Stop();
         _whine?.Stop();
+        _nitro?.Stop();
+        _nitroKeyedS = 0f;
     }
 
     // One slot's line in the build log: the definition this airframe names, and whether a stream

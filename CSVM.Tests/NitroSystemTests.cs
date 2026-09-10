@@ -217,6 +217,65 @@ public class NitroSystemTests
         Assert.True(human.Boosting);
     }
 
+    /// <summary>The keyed loop sound's cadence on the AI arm, which is not a sustain: the refresh
+    /// lives inside the setter, the maneuver starter reaches it once, and nothing reaches it again
+    /// until the per-frame release calls that follow the maneuver. So the loop is a blip at the
+    /// engage and about a second of sound after the maneuver ends, which is the whole of what an
+    /// AI's injector is audible for.</summary>
+    [Fact]
+    public void TheAiLoopIsABlipAtTheEngageAndASecondAfterTheManeuver()
+    {
+        var n = Installed();
+        n.BeginStep();
+        n.AiSet(true, false, Dt);
+        n.Advance(Dt, false);
+        Assert.True(n.LoopRefreshedThisTick, "the engage's own call refreshes the loop");
+
+        // nitro_evade's single step is six seconds long, and nothing calls the setter inside it.
+        int duringManeuver = 0;
+        for (int i = 0; i < 360; i++)
+        {
+            n.BeginStep();
+            n.Advance(Dt, false);
+            if (n.LoopRefreshedThisTick)
+                duringManeuver++;
+        }
+
+        Assert.Equal(0, duringManeuver);
+        Assert.True(n.BoostAnimAlive, "the boost animation is still alive, and still silent");
+
+        int afterManeuver = 0, ticks = 0;
+        while (n.BoostAnimAlive && ticks < 600)
+        {
+            n.BeginStep();
+            n.AiSet(false, false, Dt);
+            n.Advance(Dt, false);
+            if (n.LoopRefreshedThisTick)
+                afterManeuver++;
+            ticks++;
+        }
+
+        Assert.InRange(afterManeuver * Dt, 0.95f, 1.05f);
+        Assert.False(n.LoopRefreshedThisTick, "the tick that stops the boost animation refreshes nothing");
+    }
+
+    /// <summary>The human arm's own cadence, for contrast: with the command held every frame lands
+    /// in one of the three arms, so the loop is refreshed continuously and sounds for the whole
+    /// burn. ⚠ Not "every frame whatever the input": a released command inside the first 0.1 s,
+    /// while the tank still reads at or above the engage line, reaches no arm at all.</summary>
+    [Fact]
+    public void TheHumanLoopIsRefreshedEveryFrameOfAHeldBurn()
+    {
+        var n = Installed();
+        Tick(n, held: true);
+        Assert.True(n.LoopRefreshedThisTick);
+        for (int i = 0; i < 120; i++)
+        {
+            Tick(n, held: true);
+            Assert.True(n.LoopRefreshedThisTick, $"frame {i} of the burn left the loop unrefreshed");
+        }
+    }
+
     [Fact]
     public void TheAiArmNeedsTheInjectorToo()
     {

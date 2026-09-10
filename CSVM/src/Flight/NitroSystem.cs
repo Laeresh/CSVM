@@ -23,6 +23,8 @@ public sealed class NitroSystem
     public const float CutoffFraction = 0.05f;
     // The boost animation lives at least this long after an engage before the decay replaces it.
     public const float MinBoostAnimSeconds = 1f;
+    // How long the keyed loop sound outlives its last refresh.
+    public const float LoopKeyedSeconds = 0.1f;
 
     private Anim _anim;
     private bool _active;
@@ -57,6 +59,14 @@ public sealed class NitroSystem
     /// cleared by the next <see cref="BeginStep"/>.</summary>
     public bool ReleasedThisTick { get; private set; }
 
+    /// <summary>Set on a tick whose command arm reached the state machine at all while the boost
+    /// animation was alive: the original refreshes its keyed <c>snd_nitro</c> loop for
+    /// <see cref="LoopKeyedSeconds"/> there, INSIDE the method, so the loop sounds only while
+    /// something keeps calling it. That is why an AI's loop is a blip at the engage and a second of
+    /// sound after the maneuver rather than a sustain: nothing calls the method during the
+    /// maneuver. Cleared by the next <see cref="BeginStep"/>.</summary>
+    public bool LoopRefreshedThisTick { get; private set; }
+
     /// <summary>Opens a step: clears both tick edges so this step's own arms can raise them.
     /// ⚠ Never clear them anywhere later in a step. An edge cleared between the arm that raises it
     /// and the consumer that reads it deletes the engage outright, costing the boost its animation,
@@ -66,6 +76,7 @@ public sealed class NitroSystem
     {
         EngagedThisTick = false;
         ReleasedThisTick = false;
+        LoopRefreshedThisTick = false;
     }
 
     /// <summary>The human command arm, once per tick before <see cref="Advance"/>: the injector
@@ -128,6 +139,7 @@ public sealed class NitroSystem
         BoostAnimAlive = false;
         EngagedThisTick = false;
         ReleasedThisTick = false;
+        LoopRefreshedThisTick = false;
     }
 
     // The original's SetNitro, in its order: refuse on engine out, refuse while the decay plays,
@@ -157,5 +169,10 @@ public sealed class NitroSystem
             _anim = Anim.Decay;
             ReleasedThisTick = true;
         }
+
+        // The loop refresh is the last thing the original's method does, after the release arm has
+        // had its say, so the tick that stops the boost animation refreshes nothing.
+        if (BoostAnimAlive)
+            LoopRefreshedThisTick = true;
     }
 }

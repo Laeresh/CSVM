@@ -422,9 +422,8 @@ public partial class FlightController : Node3D
     // stuck aircraft's per-frame resets read as a rate and a count rather than a flood of lines.
     private const float UnderMapReportInterval = 1f;
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
-    // The nitro_decay def's authored opacity fade (RUN_TIME 1.0), which is how long a re-engage
-    // stays refused for; the runtime has no completion callback to read it off.
-    private const float NitroDecayAnimSeconds = 1f;
+    // ANIM_STATE's RUNNING, the value AnimRuntime.AnimStateOf reports while an instance is live.
+    private const int AnimRunning = 2;
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
     private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
@@ -545,7 +544,6 @@ public partial class FlightController : Node3D
     private int _rocketeerVerdictsLogged;        // capped per shooter: a flight of twelve must not flood the log
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool _aiNitroArmed;                  // the current AI nitro maneuver already engaged
-    private float _nitroDecayLeftS;              // s the nitro_decay def has left to play
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
     private int? _team;                          // Team's backing field — null until overridden (B7)
@@ -1106,7 +1104,6 @@ public partial class FlightController : Node3D
         ThrottleSmoke?.Reset(_throttle);
         Nitro.Reset();
         _aiNitroArmed = false;
-        _nitroDecayLeftS = 0f;
         SpeedCue?.Reset();
         _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
@@ -2159,6 +2156,8 @@ public partial class FlightController : Node3D
         {
             if (IsHumanPiloted)
                 Shake?.NitroEngaged();
+            else
+                PlayAiShake();
             // Play, not PlayWithin: the def's anchor NAME ("warhawk") never resolves in this
             // per-plane index, same as startprops/stopprops above — Play's fallback to
             // PlaneModel is what makes those work; PlayWithin has no such fallback.
@@ -2173,18 +2172,17 @@ public partial class FlightController : Node3D
             // already this plane's own.
             CrashRuntime.Stop("nitro_boost");
             CrashRuntime.Play("nitro_decay", PlaneModel, applyReset: false);
-            _nitroDecayLeftS = NitroDecayAnimSeconds;
             Log.Debug("flight", $"nitro released charge={Nitro.Charge:0.0}");
         }
-        // The decay def has no completion callback here; its opacity fade is authored 1.0 s long.
-        if (_nitroDecayLeftS > 0f)
+        // The re-engage stays refused until the decay INSTANCE ends, which is what the original's
+        // completion callback clears its handle on, so the lockout is the def's own length whatever
+        // the def says. Never on the releasing tick: nothing completes before it has started.
+        else if (Nitro.DecayAnimPlaying
+                 && (CrashRuntime is not { } decayRig
+                     || decayRig.AnimStateOf("nitro_decay") != AnimRunning))
         {
-            _nitroDecayLeftS -= dt;
-            if (_nitroDecayLeftS <= 0f)
-                Nitro.DecayFinished();
-        }
-        else if (Nitro.DecayAnimPlaying)
             Nitro.DecayFinished();
+        }
 
         if (IsHumanPiloted && Audio != null)
         {
@@ -2193,6 +2191,23 @@ public partial class FlightController : Node3D
             else
                 Audio.StopNitroLoop();
         }
+        // An AI's loop is positional and keyed, not a sustain: the state machine refreshes it only
+        // on the ticks something calls it, which is the engage and the releases after the maneuver.
+        else if (!IsHumanPiloted)
+            EngineAudio?.RefreshNitroLoop(Nitro.LoopRefreshedThisTick, dt);
+    }
+
+    // The AI half of the engage's shake: the original plays the middle of the three `*_aishake`
+    // defs on the aircraft's own node, one at a time per vehicle, where a person at the controls
+    // gets the camera shake instead. The runtime's own ANIM_STATE is that one-at-a-time handle.
+    private void PlayAiShake()
+    {
+        if (PlaneModel == null || CrashRuntime is not { } rig
+            || rig.AnimStateOf(EffectCatalogue.AiShakeAnim) == AnimRunning)
+        {
+            return;
+        }
+        rig.Play(EffectCatalogue.AiShakeAnim, PlaneModel, applyReset: false);
     }
 
     // Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
