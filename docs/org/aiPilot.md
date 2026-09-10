@@ -266,7 +266,13 @@ what the crash-avoidance ray then sees.
 gun aim assist's own three lists) for one global minimum into `AiGunner.Target`, a standing target
 of any class, which `AiPilot` reads through `PursuitQuarry.Of` as its pursuit quarry: the mode
 machine promotes on it, and `FlyPursuit` takes the on-axis arm above for a non-aircraft one and
-never arms the merge rule against it. `AiTargetRanking.Score` is the decoded arithmetic term for
+never arms the merge rule against it. The vehicle arm is the WHOLE `VehicleList` through
+`ProjectilePool.CollectVehicleList`, so a surface hull is a candidate beside the aircraft, and the
+terms that are properties of an aeroplane are read off the source's own type: an aircraft supplies
+the `primary_target` name, the player and `wingman` flags and the `rating_biases` name, while a
+hull supplies its own node name and nothing else. Nine missions author a `patrolboat*` or
+`t_truck*` hard exclusion against hulls, which is what those pilots' `-1.0` entries then mean.
+`AiTargetRanking.Score` is the decoded arithmetic term for
 term: the `wingman` **+0.4** (an aircraft flying `AiPilot.Escort`, which is the netless `mode
 wingman` fork), the half-metre deadband on the raw offset for ahead/behind, the altitude sign, the
 closing term on the candidate's velocity, and the gasbag **−0.5**. The gasbag admission gate is

@@ -280,7 +280,11 @@ not a turret candidate, though it stays selectable on the player's Non-Aircraft 
 ⚠ **Ships and vessels are in the turret's set, and they are there as vehicles.** They ride
 `VehicleList`, the pool the picker walks first and never gates. Nothing in the path promotes a
 hull to an aircraft or reads an airframe field off one, so a port that reaches the same behaviour
-by registering a ship as an aircraft has ported the wrong mechanism.
+by registering a ship as an aircraft has ported the wrong mechanism. An AI pilot's own acquisition
+(`FUN_0041fe10`, [`aiPilot.md`](aiPilot.md) "Target acquisition") delegates to this same
+`FUN_0041f9c0`, so an aeroplane ranks a hull on the same terms; CSVM's
+`FlightController.SelectRankedTarget` reads each candidate's name and flags off its own source
+type for that reason.
 
 A turret's `SetTeam` override (`FUN_004acb70`) clears its current target pointer `+0x210` whenever
 the team actually changes (`0x004acb90`), so a retargeted turret drops a now-friendly lock rather

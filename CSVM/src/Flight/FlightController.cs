@@ -3113,10 +3113,11 @@ public partial class FlightController : Node3D
     // instance methods that are their only real callers rather than hoisted for SA1204's sake —
     // the same trade the SA1202 blocks elsewhere in this file already make.
 #pragma warning disable SA1204
-    // A standing gunner target's current geometry and liveness, read off whichever of the three
-    // D36 source types (BL-363) it actually is — a FlightController, a TurretController or a
-    // DestructibleRegistry.Instance. Neither non-aircraft source carries a facing axis (forward
-    // comes back zero). Internal: TargetingOverlay's F15 debug line reuses this same lookup.
+    // A standing gunner target's current geometry and liveness, read off whichever source type it
+    // actually is: a FlightController, a SurfaceVehicle, a TurretController or a
+    // DestructibleRegistry.Instance. No non-aircraft source carries a facing axis (forward comes
+    // back zero), which is what collapses the aspect test and the lead offset to "aim at the
+    // position". Internal: TargetingOverlay's F15 debug line reuses this same lookup.
     internal static bool TryTargetGeometry(object? target, out Vector3 position, out Vector3 velocity,
         out Vector3 forward, out bool live)
     {
@@ -3127,6 +3128,15 @@ public partial class FlightController : Node3D
                 velocity = fc.WorldVelocity;
                 forward = fc.NoseDirection;
                 live = fc.InPlay && fc.IsInsideTree();
+                return true;
+            case SurfaceVehicle hull:
+                // A hull that has not been woken is present but not live, the same shape an inert
+                // pilot takes: it is not a target until its WAKEUP_ENEMIES clause runs.
+                live = !hull.Inert && !hull.IsDestroyed && GodotObject.IsInstanceValid(hull.Body)
+                    && hull.Body.IsInsideTree();
+                position = live ? hull.Position : Vector3.Zero;
+                velocity = hull.Velocity;
+                forward = Vector3.Zero;
                 return true;
             case TurretController t:
                 position = t.WorldPosition;
@@ -3337,10 +3347,11 @@ public partial class FlightController : Node3D
         }
     }
 
-    // The acquisition: the decoded ranking formula over aircraft, turrets and structures
-    // (TargetVehicle/TargetTurret/TargetStruct), swept for one global minimum, same roster and
-    // team gate as the aim assist. A live PrimaryTargetName is picked outright; its "player"
-    // token resolves to the nearest human (C22) — both stay aircraft-only. Decode: docs/org/aiPilot.md.
+    // The acquisition: the decoded ranking formula over the whole VehicleList, the turrets and the
+    // structures (TargetVehicle/TargetTurret/TargetStruct), swept for one global minimum, same
+    // roster and team gate as the aim assist. A live PrimaryTargetName is picked outright; its
+    // "player" token resolves to the nearest human (C22), which only an aeroplane can be.
+    // Decode: docs/org/aiPilot.md.
     // ⚠ Deconfliction (AiTargetRanking) stays zero outside a mission.
     private object? SelectRankedTarget(AiGunner gunner, out TargetScore score, out string how)
     {
@@ -3349,7 +3360,10 @@ public partial class FlightController : Node3D
         if (Projectiles == null)
             return null;
         _gunnerScan.Clear();
-        Projectiles.CollectAircraft(_gunnerScan);
+        // ⚠ The whole VehicleList, not its aircraft half: the decoded sweep walks the one list that
+        // holds the AI ground and sea vehicles beside the aircraft, so a boat or a turret truck is a
+        // candidate as the vessel it is (docs/org/targeting.md). Never by being registered aircraft.
+        Projectiles.CollectVehicleList(_gunnerScan);
         Projectiles.CollectTurrets(_gunnerScan);
         if (Destructibles != null)
         {
@@ -3361,26 +3375,28 @@ public partial class FlightController : Node3D
         var ownFwd = NoseDirection;
         _rankCandidates.Clear();
         _rankSources.Clear();
-        FlightController? primary = null;
+        object? primary = null;
         FlightController? nearestHuman = null;
         float nearestHumanDistSq = float.MaxValue;
         foreach (var c in _gunnerScan.Vehicles)
         {
-            if (!c.Live || ReferenceEquals(c.Source, this))
+            if (!c.Live || c.Source == null || ReferenceEquals(c.Source, this))
                 continue;
             if (c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam || c.Team == ownTeam)
                 continue;
-            if (c.Source is not FlightController fc)
-                continue;
+            // ⚠ Read the source's TYPE, never gate on it: a hull is on this list and carries no
+            // FlightController, so every term below has a source-typed reading and the ones that
+            // are properties of an aeroplane simply do not apply to it.
+            var fc = c.Source as FlightController;
             if (gunner.PrimaryTargetName is { Length: > 0 } wanted
                 && ownPos.DistanceSquaredTo(c.Position) <= activation * activation)
             {
                 if (primary == null
-                    && string.Equals(fc.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                    && string.Equals(TargetPool.NameOf(c.Source), wanted, StringComparison.OrdinalIgnoreCase))
                 {
-                    primary = fc; // a by-NAME assignment names one aircraft: first match is it
+                    primary = c.Source; // a by-NAME assignment names one entry: first match is it
                 }
-                else if (fc.IsHumanPiloted
+                else if (fc is { IsHumanPiloted: true }
                     && wanted.Equals(AiTargetRanking.PlayerRole, StringComparison.OrdinalIgnoreCase))
                 {
                     // "player" is a role, not a name (C22); resolved ONCE per acquisition.
@@ -3399,23 +3415,26 @@ public partial class FlightController : Node3D
             {
                 if (a.Team == ownTeam && a.Source is FlightController ally
                     && !ReferenceEquals(ally, this)
-                    && ReferenceEquals(ally.Pilot?.Gunner?.Target, fc))
+                    && ReferenceEquals(ally.Pilot?.Gunner?.Target, c.Source))
                     attackers++;
             }
 
             // Wingman mode is the netless escort: a net demotes the mode to jet at spawn, and
-            // CSVM's session build makes the same fork (docs/org/aiPilot.md "Net assignment").
+            // CSVM's session build makes the same fork (docs/org/aiPilot.md "Net assignment"). A
+            // hull flies neither, so both flags read false for it off the null cast.
+            bool human = fc is { IsHumanPiloted: true };
             _rankCandidates.Add(new RankedTargetCandidate
             {
                 Position = c.Position,
                 Velocity = c.Velocity,
-                IsPlayer = fc.IsHumanPiloted,
-                IsWingman = fc.Pilot?.Escort != null,
+                IsPlayer = human,
+                IsWingman = fc?.Pilot?.Escort != null,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
-                    fc.IsHumanPiloted ? AiTargetRanking.PlayerRole : fc.Name, gunner.RatingBiases),
+                    human ? AiTargetRanking.PlayerRole : TargetPool.NameOf(c.Source),
+                    gunner.RatingBiases),
                 AlliedAttackers = attackers,
             });
-            _rankSources.Add(fc);
+            _rankSources.Add(c.Source);
         }
 
         // Turrets and structures: the other two pools, neither with a primary_target term. A

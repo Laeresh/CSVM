@@ -114,8 +114,8 @@ public sealed class TargetPool
     /// <summary>The IDENTITY name for a source: the plain node/label name. What <c>--target=</c>
     /// matches and what the breadcrumbs print — see <see cref="TargetRef.DisplayName"/> for what the
     /// marker prints instead. Internal rather than private: <c>FlightController.SelectRankedTarget</c>
-    /// (D12/D36) reuses this same identity for a turret/structure candidate's
-    /// <c>rating_biases</c> name match, rather than growing a second name-of-source switch.</summary>
+    /// (D12/D36) reuses this same identity for every candidate's <c>rating_biases</c> name match,
+    /// hull and turret and structure alike, rather than growing a second name-of-source switch.</summary>
     internal static string NameOf(object? source) => source switch
     {
         FlightController fc => fc.Name,

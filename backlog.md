@@ -808,27 +808,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   turrets and structures in front of the flight law, and its `ZeppelinRuntime.WireZones` fan is
   the pattern a docked structure lacks.
 
-- `BL-799` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **An AI aeroplane
-  cannot rank a surface hull as a target at all, so a boat or a turret truck is invisible to every
-  AI pilot and the `patrolboat*` / `t_truck*` exclusions nine missions author are inert.**
-  *Evidence (decoded):* the original's target scan walks `VehicleList` (`DAT_0071dabc`)
-  unconditionally, and that list holds the AI ground and sea vehicles beside the aircraft, built by
-  the same spawn (`docs/org/targeting.md`, "Ships and vessels are in the turret's set, and they are
-  there as vehicles"). CSVM's ranked pick drops one: `FlightController.SelectRankedTarget`'s
-  vehicle loop skips every candidate with `c.Source is not FlightController`, so a hull never
-  reaches `_rankCandidates` and `AiTargetRanking.ObjectiveBiasFor` is never asked about it. The
-  turret path does admit hulls (`TurretController.AcquireTarget`), so this is the aeroplane's gap
-  alone. *Impact:* small today, since every shipped bias naming a hull is the hard exclusion
-  `-1.0` (C1B/M03's `wingman_1..3` and `devastator_2/3` on `patrolboat*`; C3/M01, C3/M04, C3/M05
-  and C4/M04 on `t_truck*`), so the fix mostly makes an authored "leave it alone" mean something.
-  *Fix shape:* admit a hull to the vehicle loop the way the turret and structure loop already
-  admits its sources. ⚠ It carries no `FlightController`, so the loop's `primary_target` name term,
-  the wingman and human flags and the allied-attacker count each need a source-typed read rather
-  than the `fc` cast they share now. *⚠ Traps:* do not register a hull as an aircraft to get it in;
-  the same page warns that a port reaching this by promoting a hull has ported the wrong mechanism.
-  *Cross-refs:* `BL-741` (the other half of `rating_biases` coverage), `git log --grep=BL-637`
-  (the hull's own name line, found through the same missing switch arm).
-
 ## Flight model & collision physics
 
 - `BL-443` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
