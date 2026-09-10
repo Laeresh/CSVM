@@ -267,7 +267,9 @@ public sealed class CampaignRosterPage : CampaignPage
 
         _entry.Disarm();
         _selected = name;
-        Flow.GoTo(CampaignScreen.Cabin);
+        // ⚠ The flow's cabin door, not GoTo: a chapter's film plays on the way in, and this press
+        // is the door a player actually takes into the campaign.
+        Flow.OpenCabin();
         return true;
     }
 

@@ -15,11 +15,11 @@ namespace CSVM.Session;
 /// </summary>
 public static class ExtractionStamp
 {
-    /// <summary>The stamp schema this build's loaders expect. Hand-maintained promise, not
-    /// automation: bump it — together with <c>$StampSchema</c> in ExtractAssets.ps1 AND
-    /// ExtractRof.ps1, in the same commit — whenever a reader change invalidates old
-    /// extractions.</summary>
-    public const int Schema = 2;
+    /// <summary>The stamp schema this build's loaders expect. Bump it, together with
+    /// <c>$StampSchema</c> in ExtractAssets.ps1 AND ExtractRof.ps1, whenever a reader change
+    /// invalidates old extractions; <c>ExtractionStampTests</c> reads the three and refuses a
+    /// commit that moves fewer than all of them.</summary>
+    public const int Schema = 3;
 
     /// <summary>Whether the tree under <paramref name="dataRoot"/> is stamped below
     /// <paramref name="need"/>, with the re-extract instruction as <paramref name="reason"/>.

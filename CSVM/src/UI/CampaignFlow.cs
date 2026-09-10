@@ -458,6 +458,15 @@ public sealed class CampaignFlow
             return true;
         }
 
+        // Backing onto the cabin is a cabin door like any other, so it takes OpenCabin rather than
+        // the pop: GoTo truncates to the cabin exactly as removing the top would, and the film a
+        // chapter opening is due plays in front of it.
+        if (_stack[^2] == CampaignScreen.Cabin)
+        {
+            OpenCabin();
+            return true;
+        }
+
         _stack.RemoveAt(_stack.Count - 1);
         Entered();
         return true;
@@ -533,6 +542,35 @@ public sealed class CampaignFlow
         GoTo(CampaignScreen.Scrapbook);
     }
 
+    /// <summary>Seats a profile, puts the cabin on the book's far side and opens the book the way a
+    /// flown mission leaves it: the whole of the mission-end return.
+    /// ⚠ The feature's seat and a plain <see cref="GoTo"/>, never <see cref="SelectProfile"/> or
+    /// <see cref="OpenCabin"/>: this cabin is stacked and not entered, and a chapter film in front
+    /// of it would land the player on the cabin instead of the book they just earned.</summary>
+    public void OpenScrapbookAfterMission(CampaignProfileDef profile, int seq)
+    {
+        Feature.SelectProfile(profile);
+        GoTo(CampaignScreen.Cabin);
+        OpenScrapbookAfterMission(seq);
+    }
+
+    /// <summary>Opens the book the way a finished mission does, playing the closing film first for
+    /// a profile that has finished the campaign (<see cref="CampaignFeature.ClosingCinema"/>); the
+    /// book then opens on the frame the film stops. The mission-end return and the book's own
+    /// screenshot aid take this door.
+    /// ⚠ Not the door the table of contents and the two bookmarks take: those run inside the
+    /// campaign, where the original reaches <c>scrapbook.script</c> without <c>FINALCINEMA</c>.</summary>
+    public void OpenScrapbookAfterMission(int seq)
+    {
+        if (Feature.ClosingCinema is { } cinema && Feature.Profile is { } seated)
+        {
+            cinema.OpenScrapbook(seated, () => OpenScrapbook(seq));
+            return;
+        }
+
+        OpenScrapbook(seq);
+    }
+
     /// <summary>Takes the joined-player count from the shell, once a frame.</summary>
     public void SetPlayers(int players) => Field.SetPlayers(players);
 
@@ -543,6 +581,23 @@ public sealed class CampaignFlow
     public void SelectProfile(CampaignProfileDef profile)
     {
         Feature.SelectProfile(profile);
+        OpenCabin();
+    }
+
+    /// <summary>Opens the cabin on the seated profile, playing that profile's chapter cinema first
+    /// where one is due (<see cref="CampaignFeature.ChapterCinema"/>); the cabin then opens on the
+    /// frame the film stops. Every door onto the cabin takes this one, inside the campaign and out,
+    /// so the latch and the story position decide whether a film is due rather than which door was
+    /// taken. With no cinema, and for a position inside a chapter, it is the plain
+    /// <see cref="GoTo"/>.</summary>
+    public void OpenCabin()
+    {
+        if (Feature.ChapterCinema is { } cinema && Feature.Profile is { } seated)
+        {
+            cinema.OpenCabin(seated, () => GoTo(CampaignScreen.Cabin));
+            return;
+        }
+
         GoTo(CampaignScreen.Cabin);
     }
 

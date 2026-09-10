@@ -2410,6 +2410,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
   both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
+- `BL-810` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A pad button does
+  not skip a cinema, so a player on a controller sits through all of one.** *Evidence:* reported at
+  the controls across the boot sequence, the chapter cinema and the closing cinema.
+  `CinemaScreen.Skips` reads `InputEventMouseButton` and `InputEventKey` and nothing else, so
+  `CinemaSkip.AnyKey` means any key rather than any input and no pad button reaches it. The cost is
+  worst exactly where the skip matters most: `chap0.mpg` runs 145 s in front of a bare launch, which
+  is a cost Decision 8 of the cinemas plan accepted on the understanding that a press moves on.
+  *Fix shape:* admit a pad button through the same predicate that already answers the three key sets,
+  so one member still decides what skips what. *⚠ Traps:* the three sets are authored and differ,
+  `ChapterKeys` taking Escape, Space, Return and the left mouse where `ClosingKeys` takes Escape and
+  the mouse alone, so a pad button must join a set rather than bypass them; the boot sequence's
+  `BootKeys` is the any-input case and is where "any" has to mean the pad too. ⚠ A `--det` or
+  pads-off run disables pads entirely, so a headless check cannot see this and the confirmation is at
+  the controls. *Cross-refs:* `git log --grep=CinemaScreen`, `docs/formats/cinemas.md`.
 
 - `BL-802` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The pause screen
   marks a completed objective with a red check drawn over the row's number, and the row's text stays
@@ -2553,6 +2567,101 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   montage goes in front of them before anything is parked on a distance; `SCRAPBOOK.CSV` and the
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
+
+- `BL-812` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The load
+  screen stands still for the whole build, so a launch reads as a freeze: the bar never fills and
+  the propeller never turns.** *Evidence:* `Launcher.BeginLaunch` shows the board, lets one frame
+  render, and then `LaunchSession` builds in one synchronous block on the next tick, so nothing is
+  redrawn until the world is up (`CSVM/src/Session/Launcher.cs:1043-1076`). `LoadBoard` draws the
+  unlit strip and `prp0` on purpose (`CSVM/src/UI/LoadBoard.cs:11-13`). The original fills its bar
+  from a hand-authored milestone table, sixteen literal fractions from 0.01 to 0.90 set at fixed
+  points of the load, monotonic, never reaching 1.0, and repaints through a pump throttled to one
+  draw per 0.1 s called after each milestone; the propeller is a six-frame cycle at 6 fps
+  (`docs/org/loading-screen.md`, "The progress bar is a hand-authored milestone table" and "How the
+  screen keeps drawing"). On film the campaign bar visibly steps over the load
+  (`OriginalScreenshots/Videos/Loading Screen Mission1.mkv`, about 3 s of screen, the fill growing
+  from nothing to half; `Loading Screen Mission CM01.mkv` shows the first step only). *Fix shape:*
+  split `LaunchSession`'s build into phases the frame loop can interleave with a draw (a build that
+  yields between its steps, or one that runs off the main thread and hands scene-tree work back to
+  it), then assign each phase boundary a fraction the way the original does and let the board
+  repaint between them: the fill as `floor(fillWidth * fraction)` pixels of `prog_red` over
+  `prog_blk` (`prog_redload` over `prog_blkload` on the campaign sheet), and the propeller cycling
+  its six frames at 6 fps. *⚠ Traps:* do not derive the fractions from measured durations; the
+  original's are authored and the screen is torn down at 0.90, so a full bar is never drawn. The
+  extraction carries only the six range endpoints of the propeller cycle (`prp0`, `prp7`, `prp15`,
+  `prp22`, `prp30`, `prp37`), so the cycle is six frames, not 38. A CLI launch does not come through
+  `BeginLaunch` at all, so no scripted or golden run may gain a frame from this. The original does
+  not thread its load either; a pump from inside a blocking build is a legitimate shape if the
+  Godot frame loop can be driven that way. *Playtest after fix:* launch any Instant Action mission
+  from the menu and watch the bar step and the propeller turn until the world appears; then a
+  campaign launch for the sheet's own bar. *Cross-refs:* `BL-813` and `BL-814` (what each screen
+  draws while this one makes it move), `BL-314` (the splitscreen
+  race whose clock starts while a load screen is still up), `docs/org/loading-screen.md`.
+
+- `BL-813` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The Instant
+  Action load screen writes our own "LOADING" line where the original writes INSTANT ACTION, the
+  mission type, its blurb and its win condition, each at an authored position in its own face.**
+  *Evidence:* every `loading_i*` dialog's script places four texts: `HEAD1` at 70,35 in
+  `loadListTitle` (always "INSTANT ACTION"), `HEAD2` at 325,35 in the default face wrapped at 400
+  (the mission type: SQUADRON, STUNT FLYING, ZEPPELIN RUN, DOGFIGHT AN ACE.), `OBJ1` at 360,135 in
+  `loadListbody` wrapped at 400 (the blurb) and `OBJ2` at 360,215 in `loadListbody` (the win
+  condition), from the `MSG_BRF_IA*_*` string families (`extracted/zrdr/Loading.zrd.json:4806-4915`,
+  `extracted/messages.json:3825-3863`). `OriginalScreenshots/Instant Action Loading Screen STUNT
+  FLYING.png` and `IA LoadScreen.png` show the result: the two headings on one line across the top,
+  the blurb on the ruled right half a hand's width down, the win condition two rules under it. Ours
+  writes "LOADING" at 360,60 and "chapter · subject" under it, positions chosen rather than read
+  (`CSVM/src/UI/LoadBoard.cs:17-20,95-107`), and the decode page's "Where CSVM differs" records
+  the text placement as ours. The pictures, the bar and the propeller are already at their authored
+  places. *Fix shape:* read the mission type's dialog out of `Loading.zrd.json` (`loading_i%d%c`,
+  the letter from the mission-type table in `docs/org/loading-screen.md`) rather than hardcoding a
+  composition, and draw its four `Text` entries with their strings from `messages.json` at their
+  authored positions and wrap widths; map `loadListTitle`, `loadListbody` and the empty default face
+  onto the nearest shipped faces and record the choice. *⚠ Traps:* free flight and dogfight are ours
+  and have no dialog, so they need a stated stand-in (the `d` family's text is the nearest, or a
+  heading alone). The `HEAD2` face is the one the screenshot shows as a bold serif, distinct from
+  `HEAD1`; do not draw both in one face. Do not fold this into the animation (`BL-812`): the text is
+  right or wrong on a still screen. *Playtest after fix:* `--menu=loadboard` beside the two
+  screenshots at the same window size. *Cross-refs:* `BL-812`, `BL-814` (the campaign sheet's own
+  content), `BL-807` (the film shows FLY MISSION opening this screen titled by mission type),
+  `docs/org/loading-screen.md`.
+
+- `BL-814` `[Fidelity]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **The campaign
+  load screen is a bare chart sheet, where the original draws the mission's map with its pins and
+  icons, the objectives parchment listing the mission's objectives, and the profile's memento.**
+  *Evidence:* `OriginalScreenshots/Campaign Loading Screen CM01.png` and the two clips under
+  `OriginalScreenshots/Videos/` (`Loading Screen Mission CM01.mkv`, `Loading Screen Mission1.mkv`):
+  the map fills the sheet's frame, the objectives parchment sits top right with the mission's
+  numbered objectives, a photograph in a white border sits bottom right (the dog on one mission,
+  the pin-up on another, so it is the profile's memento rather than fixed art), the bar runs along
+  the bottom with 0 %, 50 % and 100 % marks, a compass rose at bottom left and the propeller at
+  bottom right. Each campaign dialog (`loading_c%d%d`, 24 of them, `extracted/zrdr/Loading.zrd.json`
+  `loading_c31` at line 254 onward) carries a `MAP` primitive naming the map bitmap with a screen
+  clip and a world window (`NW-m1MAP` at 16,19, clip 211,51 to 784,551, world -1571,5796 to
+  -7715,11940), a `MEMENTO` primitive at 533,326 whose `momento_temp` bitmap is a placeholder the
+  runtime replaces, a `PROGRESS` at 90,548, and a `LOADING_SCRIPT` that turns on the shared
+  `OBJECTIVESLIST` (parchment at 555,6, title at 595,25 in `ObjListTitle`, list at 580,50 wrapped 190
+  by 255, spacing 5), binds `OBJ1` to `OBJ4` by objective index, places the memento's shadow
+  (`momento_shad` centred on 661,454), the mission's pins (`pin1` to `pin4` at authored points),
+  the zeppelin and device icons, and spins the device forms. `FUN_004a1910` binds `OBJECTIVESLIST`
+  and `MEMENTO` only when `FUN_004639a0` holds (`docs/org/loading-screen.md`). Ours draws `loadframe`,
+  the unlit bar and two lines of our own text (`CSVM/src/UI/LoadBoard.cs:65-76`). *Fix shape:* first
+  decode what fills the two runtime bindings: which objective strings `Objective OBJn index k`
+  resolves to (the briefing's own `BriefingObjectives` reader is the likely source), and which
+  bitmap the `MEMENTO` primitive draws for a profile, since picking one is not shipped and the
+  cabin always shows `ms_p_initialpinup1` (`CSVM/src/UI/CampaignCabinPage.cs:89-93`), yet the film
+  shows a different photograph per mission. Then read the mission's dialog and draw it through
+  `ComposedBoard`: the map at its clip, every `Pict` the script turns on, the parchment and its
+  list, the memento and its shadow. *⚠ Traps:* the map's `WORLD` window is a world-to-screen
+  mapping, not decoration; `OWNSHIP` and `MYZEP` in the shared primitives are positioned through
+  it, so decide whether the load screen places anything by world position before drawing the map
+  as a flat bitmap. Pins on the CM01 screenshot read "?" and "4" while the other clip's read 1 to 3,
+  so which pin bitmap stands at each point is authored per dialog, not a numbered set to derive. `BriefingReveal` already draws this map with its pins and
+  route for the briefing; reuse its element model rather than a second map drawer. Do not fold this
+  into the animation (`BL-812`): the sheet is right or wrong on a still screen. *Playtest after
+  fix:* `--menu=loadboard-campaign` beside the CM01 screenshot at the same window size, then a real
+  campaign launch to see the memento and objectives follow the profile and the mission.
+  *Cross-refs:* `BL-812`, `BL-813`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
+  `CSVM/src/UI/CampaignBriefingPage.cs` (the map and pin drawer to share).
 
 ## Splitscreen
 
@@ -2745,24 +2854,6 @@ usual.
   data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
-
-- `BL-446` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The MPG movie cinemas do not play.** *Evidence:* Decision 2 of
-  `PLAN-M5-campaign` put them out of scope for the campaign milestone: plain MPG playback
-  is a codec and container problem orthogonal to the campaign flow, and the loop reaches the cabin
-  and the mission without one. **The decision this entry was waiting on is made and recorded in
-  [`docs/formats/cinemas.md`](docs/formats/cinemas.md); what remains is the work itself.** The ten
-  shipped files are MPEG-1 system streams, MPEG-1 video 320x240 at 856 to 1500 kbps with MPEG-1
-  audio layer II at 44.1 kHz, and Godot 4.7 compiles in exactly one video decoder, Ogg Theora, so
-  they cannot play as they ship. The decision is to transcode at extract time to `.ogv` and play
-  through a stock `VideoStreamPlayer`, with a C# `VideoStreamPlayback` subclass recorded as the
-  reversible alternative. *Fix shape:* the transcode step in the extraction pipeline and the player.
-  *⚠ Traps:* two files break the otherwise uniform profile and a reader must not assume one
-  (`msopen1.mpg` is 29.97 fps at 1500 kbps, `crimflag.mpg` is mono). `fmv.zrd`'s `PLAYAVI` actions
-  name `MSopen1.mpg`, `zipper.mpg` and `Chap0.mpg` in a case the on-disk names do not have, so a
-  case-sensitive lookup fails on all three. The chapter array at `0x0061e68c` names `chap1.mpg`
-  through `chap6.mpg` and `chap6.mpg` has no file in the install. Nobody has judged a transcode at
-  the controls, which is a presentation call and not a technical one.
-  *Cross-refs:* `PLAN-M5-campaign` Decision 2, which filed it; `docs/formats/cinemas.md`.
 
 - `BL-463` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: spec]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
   `PLAN-M5-campaign` deferred it: the function is cosmetic and rests on the undecoded
@@ -2973,6 +3064,24 @@ usual.
   the bay launch stamps it onto the aircraft like any roster spawn.
   *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`.
 
+- `BL-811` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **A campaign
+  position reached without flying leaves the scrapbook's mission list empty, with no floor under
+  it.** *Evidence:* seen at the controls on a profile whose `missionsCompleted` was set by hand,
+  which is what this project's own campaign verification prescribes for reaching a late position.
+  `CampaignPreviousMissionsPage.Seqs` reads `CampaignProgression.CompletedSeqs`, which lists a
+  mission only where `profile.MissionResults` holds a record whose best mask carries
+  `PrimaryObjectiveMask`, so a position advanced without a flown record lists nothing and no mission
+  can be viewed or replayed. In ordinary play the two move together: `MissionsCompleted` is raised
+  only by the advance rule, which runs on a recorded attempt, so no in-game path to the empty list
+  is known and finding one is part of this item. *Fix shape:* the proposal from the controls is that
+  the first mission always be listed. Before building that, settle what the original lists, since
+  `SCRAPBOOK.CSV` carries authored entries per mission and the book may be driven by the campaign
+  position rather than by a completion record; a floor invented here would be content this project
+  made up. *⚠ Traps:* REPLAY MISSION is offered only where a record holds a time, so a listed
+  mission with no record must not offer it; and the list is the same on both presentations, so a
+  change reaches Original through `EnterFromPage` as well. *Cross-refs:*
+  `git log --grep=CompletedSeqs`, `docs/formats/saved-games.md`.
+
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
@@ -3033,6 +3142,33 @@ usual.
   effect, but it is a behaviour change to announce rather than slip in. *Cross-refs:* the
   empty-stage rig this extends, which shipped deliberately without a net and whose `--ai=` squadron
   tokens and `--zep=` graft are documented in `docs/cli.md` (`git log --grep=BL-742`).
+
+- `BL-785` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TestData.TempDir()`
+  mints a GUID directory per call and nothing ever deletes one, so the unit suite leaks directories
+  into the OS temp tree until every run that touches it crawls.** *Evidence:*
+  `CSVM.Tests/TestData.cs:52-57` creates `%TEMP%\csvm-tests\<guid>` and returns it, with no disposal
+  on the test, no fixture teardown and no sweep anywhere; more than twenty test files call it.
+  `CleanScratch.ps1` does not mention `csvm-tests` and never has, so nothing in the repo removes
+  them. Measured on the author's machine: **377692 top-level directories**, the oldest created
+  2026-07-25, growing by **452 per full `RunTests.ps1` run**, so about 835 runs over six weeks.
+  **No performance cost has been demonstrated and one was looked for:** the units stage ran 77.2 s
+  on 3688 tests with the accumulation present and 74.0 s on the same 3688 immediately after it was
+  cleared, a difference inside run-to-run noise. NTFS indexes directories as a B-tree, so a large
+  entry count is cheap to add to. Treat this as unbounded disk and inode waste with an unknown
+  ceiling, not as a live slowdown, and do not cite it as the cause of a slow run without measuring
+  that run both ways. *Fix shape:* delete the
+  directory when the test that made it finishes, which means an `IDisposable` fixture or a
+  `TempDir` handle type rather than a bare string, and have `CleanScratch.ps1` sweep
+  `%TEMP%\csvm-tests` as a backstop for what escapes. *⚠ Traps:* renaming the directory and deleting
+  the rename afterwards is the only fast way to clear an accumulation this size; a recursive delete
+  in place takes far longer than the rename plus a background `rd /s /q`. Do not "fix" this by
+  pointing the tests at the repo's `.scratch/`, which is what `CleanScratch.ps1` already owns and
+  what would put test scratch inside a worktree. ⚠ **Do not repeat the misdiagnosis this entry was
+  first filed on.** A subagent that appeared to run for six hours was assumed to be crawling over
+  this accumulation; it had in fact been suspended along with an idle parent session, and its real
+  working time was under an hour. Wall clock since dispatch is not working time, and this leak was
+  not the cause. *Impact:* none on correctness and none measured on speed. The suite passes
+  throughout.
 
 - `BL-798` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **No golden shot renders the cockpit pass, so the shipped first-person view has no pixel tripwire.**
   *Evidence:* none of the 18 shots in `analysis/goldens/manifest.json` passes `--view=cockpit` or

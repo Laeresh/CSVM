@@ -325,6 +325,18 @@ one sentence of measured evidence; everything else belongs in the commit that la
   name before naming it in `--campaign=`, and delete the copy.** Godot derives `user://` from
   `project.godot`'s `config/name` alone, so every tree of this project shares
   `%APPDATA%\Godot\app_userdata\CSVM\`, which each run prints as its `[core] user=` line.
+- **LOG-21** — **An ordinary `.\RunTests.ps1` decodes the opening frames of the ten `.mpg` cinemas,
+  not all of them; run `$env:CSVM_MOVIE_WALK=1; .\RunTests.ps1` for the whole-file walk and its
+  frame-count pins.** Ten whole decodes cost about 65 s against the unit stage's 30 s budget, so
+  what runs every time reads all ten files and decodes one group of pictures from each, and
+  `MpegMovieTests.EveryCinemaDecodesEveryFrameItCarries` reports skipped with that command in its
+  reason rather than passing silently.
+- **LOG-22** — **A `*.godot.log` mirror is not that run's log: exclude it when sweeping
+  `.scratch/logs/` for what a run did or did not print.** Godot appends to one shared
+  `app_userdata/CSVM/logs/godot.log` and every quit copies the whole file, so a sweep for "no
+  battery launch played a cinema" reported 24 of 72 logs carrying one; the same sweep over CSVM's
+  own `fly-*.log` reported 0 of 48, the earlier hits all being one deliberate probe replayed by
+  every later mirror.
 
 ## WORLD — world data and runtime traps
 
@@ -635,6 +647,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   there; confirm a negative by reading the control flow around the site.** `FUN_004b6820` computes
   `(weaponFlags >> 6) & 1` once at the top of each station loop and keeps it in a register, so
   searching it for the immediate `0x40` reads as an unfiltered fire counter.
+- **SRC-10** — **A stream's own start timestamp is not an offset between streams; read both and
+  subtract.** Nine of the ten cinemas carry the identical presentation timestamp on their first
+  video and first audio packet, and only `msopen1.mpg` differs, its sound starting 0.0667 s before
+  its picture (`formats/cinemas.md`).
 
 ## What this project cannot verify itself
 

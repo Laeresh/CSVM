@@ -257,8 +257,8 @@ public static class CampaignBoards
     private static readonly Dictionary<CampaignScreen, BoardPane[]> Chrome = new()
     {
         // The profile dialog stands over the main menu it opened from: [@MainMenu@]'s title mark
-        // over the flag movie. The movie is not decoded and its shipped still is a placeholder, so
-        // the mark stands alone and the ground behind it stays plain.
+        // over the flag movie. [@Campaign@] authors no movie row of its own, so the mark stands on
+        // a plain ground here where the top level it opened from has the flag running behind it.
         [CampaignScreen.Roster] = new[]
         {
             new BoardPane(CampaignLayout.MainMenuSection, "MM_LOGO", Ui("MM_Logo.png"), 134, 13),

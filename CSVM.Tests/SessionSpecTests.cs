@@ -302,6 +302,98 @@ public class SessionSpecTests
         Assert.True(s.ShowsMenu);
     }
 
+    // ---- The boot sequence decision ------------------------------------------------------------
+
+    /// <summary>The rule the boot sequence rests on: a bare launch plays it and every other launch
+    /// does not, so no test, golden or perf run grows by the three movies.</summary>
+    [Fact]
+    public void OnlyABareLaunchPlaysTheBootSequence()
+    {
+        Assert.True(S().PlaysBootSequence);
+        Assert.False(S().SkipIntro);
+    }
+
+    /// <summary>Any argument suppresses it, which is why <c>--skip-intro</c> is documented for the
+    /// desktop shortcut rather than as a general suppressor. The rows are the argument every
+    /// scripted surface carries: the engine harness, a golden, a perf run, and a launch that still
+    /// shows the launchscreen.</summary>
+    [Theory]
+    [InlineData("--run-tests")]
+    [InlineData("--screenshot=shot.png")]
+    [InlineData("--det")]
+    [InlineData("--mute")]
+    [InlineData("--volume=1.0")]
+    [InlineData("--menu")]
+    [InlineData("--chapter=C4")]
+    [InlineData("--movie=zipper")]
+    [InlineData("--not-a-flag")]
+    public void AnyArgumentAtAllSuppressesTheBootSequence(string arg)
+        => Assert.False(S(arg).PlaysBootSequence);
+
+    /// <summary><c>--skip-intro</c> denies the sequence by meaning, not by being one more argument,
+    /// and it neither selects content nor hides the launchscreen.</summary>
+    [Fact]
+    public void SkipIntroDeniesTheSequenceAndNothingElse()
+    {
+        var s = S("--skip-intro");
+        Assert.True(s.SkipIntro);
+        Assert.False(s.PlaysBootSequence);
+        Assert.False(s.HasContentArg);
+        Assert.True(s.ShowsMenu);
+        Assert.Equal(SessionMode.Menu, s.Mode);
+    }
+
+    /// <summary><c>--intro</c> is the other direction: it plays the sequence despite the arguments
+    /// that would otherwise suppress it. The rows are what the two launch scripts prepend and what
+    /// a judging run would pair it with.</summary>
+    [Theory]
+    [InlineData("--volume=1.0")]
+    [InlineData("--mute")]
+    [InlineData("--menu")]
+    [InlineData("--not-a-flag")]
+    public void IntroPlaysTheSequenceDespiteAnotherArgument(string arg)
+        => Assert.True(S("--intro", arg).PlaysBootSequence);
+
+    /// <summary>It selects no content and forces no mode, so a launch carrying it still reaches
+    /// the launchscreen the sequence hands off to.</summary>
+    [Fact]
+    public void IntroSelectsNoContentAndForcesNoMode()
+    {
+        var s = S("--intro");
+        Assert.True(s.ForceIntro);
+        Assert.True(s.PlaysBootSequence);
+        Assert.False(s.HasContentArg);
+        Assert.True(s.ShowsMenu);
+        Assert.Equal(SessionMode.Menu, s.Mode);
+    }
+
+    /// <summary><c>--skip-intro</c> wins whichever order the two are given in: a suppressor another
+    /// flag can overrule is not a suppressor.</summary>
+    [Fact]
+    public void SkipIntroBeatsIntroBothWaysRound()
+    {
+        Assert.False(S("--intro", "--skip-intro").PlaysBootSequence);
+        Assert.False(S("--skip-intro", "--intro").PlaysBootSequence);
+    }
+
+    /// <summary>Nothing automatic reaches it: the flag has to be typed, so a launch that carries
+    /// only what a scripted surface passes still plays nothing.</summary>
+    [Theory]
+    [InlineData("--run-tests")]
+    [InlineData("--screenshot=x.png")]
+    [InlineData("--volume=1.0")]
+    public void WithoutTheFlagAScriptedLaunchStillPlaysNothing(string arg)
+    {
+        Assert.False(S(arg).ForceIntro);
+        Assert.False(S(arg).PlaysBootSequence);
+    }
+
+    /// <summary>A launch that builds content shows no launchscreen, which is the branch the
+    /// sequence lives in, so the flag does nothing there however the rule reads.</summary>
+    [Fact]
+    public void IntroShowsNoLaunchscreenAlongsideAContentArgument()
+        => Assert.False(S("--intro", "--chapter=C4").ShowsMenu);
+
     // ---- ModeName: the log file's name and the startup line's ----------------------------------
 
     [Theory]

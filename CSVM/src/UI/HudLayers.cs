@@ -63,4 +63,10 @@ internal static class HudLayers
     /// <see cref="PerfReadout"/>'s tier for the same reason: it has to read over whatever the
     /// active presentation drew on <see cref="Board"/>, opaque backdrop or decoded artwork.</summary>
     public const int BuildStamp = PerfReadout;
+
+    /// <summary>A cinema (<c>UI.CinemaScreen</c>). Above <see cref="Board"/> because a cinema plays
+    /// over the screen it hands off to and has to cover it, and above the two readouts at
+    /// <see cref="PerfReadout"/> because a cinema is the picture being judged rather than a mode
+    /// screen hiding a process-wide fact.</summary>
+    public const int Cinema = 12;
 }

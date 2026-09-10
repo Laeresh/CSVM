@@ -286,7 +286,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalCampaign.cs` — the shell's campaign (a `partial`): the nine decoded screens over the shared board component.
 - `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView`, seats polled.
 - `src/UI/Menu/Original/OriginalAvailability.cs` — Original's availability answer before entry: a refusal reason, or the loaded layout.
-- `src/UI/Menu/Original/OriginalAssetManifest.cs` — the required/optional file manifest derived from the layout, and the check over a tree.
+- `src/UI/Menu/Original/OriginalAssetManifest.cs` — the required/optional file manifest derived from the layout, the backdrop movies among the optional, and the check over a tree.
 - `src/UI/Menu/Original/OriginalRosters.cs` — the Original sortie screens' chapter labels and the eleven stock airframes with their nodes.
 - `src/UI/Menu/Original/OriginalCues.cs` — the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
 - `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
@@ -296,7 +296,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/CursorRow.cs` — one centred list row and its cursor marker, shared by the launchscreen's lists and every board menu.
-- `src/UI/HudLayers.cs` — the canvas-layer order for everything drawn over the 3D view: whiteout, HUD, sun wash, debug overlays, labs, boards.
+- `src/UI/HudLayers.cs` — the canvas-layer order for everything drawn over the 3D view: whiteout, HUD, sun wash, debug overlays, labs, boards, cinemas.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2-4), a shared `World3D`, every pane a 3D audio listener.
 - `src/UI/LaunchMenu.cs` — the Built-in presentation's launchscreen: the screen graph, the Godot controls, per-seat polling, and the hangar and campaign doors.
 - `src/UI/MenuZones.cs` — how the launchscreen divides a window: a fixed header and footer, the list in what is left, one shared scale. Engine-free.
@@ -338,10 +338,14 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ListWindow.cs` — a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
 - `src/UI/SliderTrack.cs` — a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
 - `src/UI/BoardFit.cs` — how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
-- `src/UI/ComposedBoard.cs` — what a composed campaign screen is made of: backdrop, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
+- `src/UI/ComposedBoard.cs` — what a composed screen is made of: a backdrop that may be a movie, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
 - `src/UI/CampaignBoards.cs` — the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
 - `src/UI/CampaignLayout.cs` — the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
-- `src/UI/ComposedBoardView.cs` — the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art cache, the hint band.
+- `src/UI/ComposedBoardView.cs` — the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
+- `src/UI/MovieSurface.cs` — a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
+- `src/UI/CinemaScreen.cs` — one cinema over the whole window: the picture in the board's own rectangle, the sound pushed to a generator on the Voice bus, and the skip.
+- `src/UI/BootSequence.cs` — `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
+- `src/UI/BootCard.cs` — the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
 - `src/UI/LoadBoard.cs` — the load screen a session builds behind: the original's chart sheet for a campaign launch, its blackboard for everything else.
 - `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
@@ -436,7 +440,7 @@ clusters they delegate to.
 - `src/Session/Launcher.cs` — Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
 - `src/Session/GameSession.cs` — the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
 - `src/Session/SessionSimulation.cs` — the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
-- `src/Session/ExtractionStamp.cs` — reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read.
+- `src/Session/ExtractionStamp.cs` — reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 - `src/Session/MenuAudioService.cs` — the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
 - `src/Session/LiveryResolver.cs` — each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
@@ -471,6 +475,8 @@ clusters they delegate to.
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.
 - `src/Session/CampaignProfileStore.cs` — JSON persistence for one named campaign profile: funds, owned planes, mission records, awards and the destruction log.
 - `src/Session/CampaignProgression.cs` — the rules that write a profile: an attempt's best-of merge, the monotonic position, the rewards and the skip offer.
+- `src/Session/ChapterCinema.cs` — which film plays before a campaign chapter, when it plays, and the single handoff to the passenger cabin that follows it.
+- `src/Session/ClosingCinema.cs` — whether the campaign's closing film plays before the scrapbook a flown mission opens, and the single handoff to that book.
 - `src/Session/CampaignPersistLog.cs` — the cross-mission state log: what a mission left destroyed, carried silently into later missions of the same chapter.
 - `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored ammunition and ordnance picks and the `LoadoutChoice` a launch hands the session.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the contiguous `OBJECTIVEn` blocks, in the typed shape the graph runs.
@@ -512,6 +518,27 @@ both sit on top of these types.
 - `src/Bindings/BindingProfile.cs` — one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
 - `src/Bindings/BindingStore.cs` — the versioned JSON keymap file, one per player under `user://`, falling back per action to the shipped default.
 - `src/Bindings/LaunchBindings.cs` — where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults.
+
+### `src/Video/` — the MPEG-1 cinema decoder
+
+The managed decoder for the install's ten `.mpg` files, from the container down to pixels and PCM.
+It holds no engine type, so it runs in a plain unit test; formats and evidence are in
+[`formats/cinemas.md`](formats/cinemas.md).
+
+- `src/Video/MpegMovie.cs` — one cinema opened from its own bytes: the file's declared parameters, the next picture and the next block of sound.
+- `src/Video/MpegSystemStream.cs` — the system-stream demultiplexer: each elementary stream joined into one buffer, with the audio packets and their timestamps kept.
+- `src/Video/MpegVideoDecoder.cs` — the video decoder: sequence, picture, slice and macroblock, yielding frames in display order on the container's clock.
+- `src/Video/MpegAudioDecoder.cs` — the layer II decoder: frame header, bit allocation, scale factors and requantisation, yielding 1152 samples per channel at a time.
+- `src/Video/MpegBitReader.cs` — the bit reader every symbol is read through: bit fields, alignment, start-code scanning, the variable-length code walk.
+- `src/Video/VideoVlcTables.cs` — the video variable-length code tables as data, each a flattened binary tree walked one bit at a time.
+- `src/Video/AudioLayer2Tables.cs` — the layer II tables as data: the header's rates, the four-step lookup to a bit allocation table, and the quantisers it selects.
+- `src/Video/DctBlock.cs` — the 8x8 block: scan order, the default quantiser matrices, dequantisation, and the integer inverse transform.
+- `src/Video/AudioSubbandSynthesis.cs` — one channel's polyphase synthesis filter bank: 32 subband samples in, 32 PCM samples out, over a 1024-sample history.
+- `src/Video/MotionCompensation.cs` — half-pel motion-compensated prediction of one macroblock of one plane, written or averaged into the current picture.
+- `src/Video/VideoFrame.cs` — one decoded picture: three 4:2:0 planes, its presentation time, and the BT.601 conversion to RGBA.
+- `src/Video/AudioFrame.cs` — one decoded sound frame: 1152 interleaved samples per channel as floats, and the moment the first of them is heard.
+- `src/Video/MoviePlayback.cs` — a movie on a clock: the picture due now as RGBA, timed by the frames' own timestamps, looping endlessly on a play count of zero.
+- `src/Video/CinemaPlayback.cs` — a cinema playing with its sound: clamped PCM out, the picture clocked by what the device has played, the two streams' start times taken against each other.
 
 ### Session root and tests
 

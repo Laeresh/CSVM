@@ -11,6 +11,7 @@ G5=GN_DROPDOWN,PM_B_DropDown.png
 G6=FC_SLIDER,PM_B_Slider.png
 
 [@MainMenu@]
+MOVIE=M,PM_Flag.MPG,0,0,0,250,250,0,0
 MM_LOGO=P,PM_Logo.png,100,10,0,1,0,1,0
 BFRAME=P,PM_Frame.png,250,250,0,1,0,1,0
 MM_B_CAMPAIGN=B,PM_B_Campaign.png,280,280,0,0,Campaign,0x1000,0,,,,,,
@@ -24,6 +25,7 @@ MM_B_QUIT=B,PM_B_Quit.png,280,530,0,0,,0x1000,0,,,,,,
 ;invented lines and art, and the Credits page whose one edge is out of scope.
 [@Preferences@]
 V1=TCOLOR,0xFFFFDDC4
+MOVIE=M,PM_Flag.MPG,0,0,0,250,250,0,0
 PF_BACKGROUND=P,PP_Back.png,100,200,0,1,0,1,0
 PF_LOGO=P,PM_Logo.png,100,10,0,1,0,1,0
 PF_B_GAMEOPTIONS=B,PP_B_GameOptions.png,110,260,0,0,GameOptions,0x1000,0,,,,,,

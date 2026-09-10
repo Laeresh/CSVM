@@ -96,7 +96,7 @@ navigation; the launchscreen owns every Godot control. Screens are a stack rathe
 order, since the campaign's navigation is a graph, and `Registry` maps a `CampaignScreen` to its
 page factory. A page contributes pictures, strokes and captions and names which authored button
 each row presses; `CampaignBoards` supplies the geometry through `Layout`, which is Built-in's
-alone. `Modal` and `Message` are the dialog and the refusal band every screen shares.
+alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each where one of the feature's two cinemas plays.
 
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
@@ -189,7 +189,8 @@ plaques and flowed list widgets, each in draw order. The backdrop is a layer of 
 can sit over the painted background and still stay under the page's pictures, which is where a
 list's selection bar goes. `BoardNote` is a widget's entries plus its wrap box, flowed by a caller
 that can measure text. `PlaqueFrame` and `PlaqueInk` are the two state rules a plaque draws by.
-`BoardArt` names a bitmap and its frame count; the renderer resolves it to a file.
+`BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries
+is a movie, which is how a background film reaches the backdrop with no engine type entering here.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -214,10 +215,39 @@ keys: [../formats/menu-layout.md](../formats/menu-layout.md).
 The Godot half of the campaign boards: draws one `ComposedBoard` over the whole window through
 `BoardFit`, with texture filtering pinned to Nearest so the authored pixel grid stays hard. Owns the
 texture cache and the only art resolution there is, mission art and screen chrome under their own
-extraction roots, and caches a miss so an absent extraction is probed once per name. Supplies the
-font metric a flowed `BoardNote` cannot take for itself. Carries the one piece of chrome that is not
-the original's, a two-line hint band with the focused row's description and the controls line,
-because the original said both with a mouse pointer and a pad has none.
+extraction roots, and caches a miss so an absent extraction is probed once per name. A movie
+resolves to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place,
+so the picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's
+own step and says whether to repaint. Supplies the font metric a flowed `BoardNote` cannot take for
+itself, and the one piece of chrome that is not the original's, the two-line hint band a pad needs.
+
+## src/UI/CinemaScreen.cs
+One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
+`AudioStreamGenerator` its samples are pushed to on the Voice bus, a cinema being a narrated film
+rather than score or world sound. The picture fills the same 800x600 rectangle `BoardFit` maps a
+board into, so a cinema and the screen it hands off to own one area of the window. `Open` answers
+null for a file that will not read, `Ended` is how a flow learns it stopped, and `CinemaSkip` is
+which presses end it early, the per-cinema differences there being the original's own. It mounts
+itself on `HudLayers.Cinema` and frees itself; `Session/Launcher.cs`'s `PlayCinema` is the seam.
+
+## src/UI/BootSequence.cs
+`fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
+800x600 space out of the extraction's own art, message-table strings and font metrics, and `Run`
+calls the block's eight actions in the reader's order over three injected delegates, one that plays
+a film, one that puts up a still and one that takes the card down as the first film starts. Every
+name, position and duration is the reader's ([../formats/cinemas.md](../formats/cinemas.md)), which
+is also where the card's one showing, the unseen fade and the films running back to back are
+settled; `Held` is the one member that says how much of an authored hold reaches the screen.
+`BootCard` supplies the stills, `Session/Launcher.cs`'s `PlayCinema` the films.
+
+## src/UI/BootCard.cs
+The boot sequence's engine half, and the only file that knows a boot still is drawn at all: the
+black the block runs on, a `ComposedBoardView` for the card, a countdown per hold, and the key or
+click that ends a hold early. It mounts on `HudLayers.Board`, the launchscreen's own layer, so a
+film at `HudLayers.Cinema` covers it; the card goes down with the first film and the black outlives
+it, and a hold of no seconds runs on without a frame of its own. `Play` is the whole surface: it
+mounts the node, runs a `BootSequence` over the caller's film call, and frees everything before the
+handoff.
 
 ## src/UI/BoardPalette.cs
 The ink a campaign board writes in, one palette per background family, because the screens are
@@ -628,12 +658,12 @@ drops the build and touches nothing saved. Economy and strings: [../org/hangar.m
 ## src/UI/Menu/CampaignFeature.cs
 The campaign as a shared engine-free feature in the host's feature set: the state and the operations
 both presentations read and write, with neither one's screen shell in it. `Open` opens a campaign
-over a `CampaignProfileStore`, each further dependency optional. The roster operations create,
-seat, delete and record the last-played player in the original's own words; the mission operations
-settle which `cm_sequence` entry the screens after the cabin are about, with its briefing, its
-wingman flag, its per-slot change-plane rules and the story aircraft its flight check grants;
-the writes save the loadout, the planes, an exported build and the mission exit. How a presentation
-offers them, cursors and working copies included, is its own. Read `CampaignFlow.cs` next.
+over a `CampaignProfileStore`, each further dependency optional. The roster operations create, seat,
+delete and record the last-played player in the original's own words; the mission operations settle
+which `cm_sequence` entry the screens after the cabin are about, with its briefing, wingman flag,
+per-slot change-plane rules and the story aircraft its flight check grants; the writes save the
+loadout, the planes, an exported build and the mission exit. It carries the one `ChapterCinema` and
+`ClosingCinema` the host built it with, which is how a cabin or mission-end door reaches a film. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs
 The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,
@@ -681,14 +711,14 @@ missions with every objective bit set, plus the scratch build store the export a
 `user://Profiles` or `user://Planes`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
-The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout`
-and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the
-art measurer and the flight-devices answer injected. It owns the top level composed from
-`[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
-Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
-screens are its ten partials, below. `Step` applies one seat's frame, `Compose` is the screen as a
-`ComposedBoard`, and every page's row kinds live here, `OriginalSlider` among them.
-Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and
+the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the art
+measurer and the flight-devices answer injected. It owns the top level composed from `[MainMenu]`'s
+own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome,
+and the messagebox idiom every refusal and confirm goes through; the other screens are its ten
+partials, below. `Step` applies one seat's frame, `Compose` is the screen as a `ComposedBoard` whose
+backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
+`OriginalSlider` among them. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -792,22 +822,22 @@ page; every pick binds straight to the feature. [../org/hangar.md](../org/hangar
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,
 the cabin, the table of contents, the flight check, ammo and plane selection, the book, a scrap's
-zoom and the briefing dialog. Each screen is drawn by the shared board component, so the shell hosts
-the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer into its
-own board; that flow is never walked, its screen and cursor mirroring this file's. The screen graph,
-the rows at their rectangles, the pointer hit-testing, the cues and the dialogs are this file's, as
-is `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's
-own device driving them while seat 0 keeps its pointer alone. The pages: `src/UI/CampaignFlow.cs`; the screens and their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
+zoom and the briefing dialog. What each screen draws is the shared board component, so the shell
+hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
+into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
+screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
+cues and the dialogs are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ShowScrapbook`, where the feature's two cinemas play, and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
+their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
-The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding
-one `ComposedBoardView`, so every screen scales as the campaign boards do. `Activate` builds the shell and the device
-bookkeeping once, refreshes the roster from the saved-plane store on every call, stands the shell on the top level, maps
-the return destination onto it and applies the `--menu=` aid on the first show alone. `Tick` keeps the pads in step (seat
-0's claim while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer
-into the authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends
-the preview on every door out and on `Hide`, and drives the briefing's reveal. `Measure` reads a strip's size off its file
-once; `PaletteFor` is each screen's inks.
+The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding one
+`ComposedBoardView`, so every screen scales as the campaign boards do. `Activate` builds the shell and the device
+bookkeeping once, refreshes the roster from the saved-plane store on every call, stands the shell on the top level, maps the
+return destination onto it and applies the `--menu=` aid on the first show. `Tick` keeps the pads in step (seat 0's claim
+while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer into the
+authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends the
+preview on every door out and on `Hide`, drives the briefing's reveal, and runs the board's movies on the step the host was
+given. `Measure` reads a strip's size off its file once and a movie's off its sequence header; `PaletteFor` is the inks.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses
@@ -815,18 +845,19 @@ a tree stamped below `OriginalAssetManifest.StampSchema` (`ExtractionStamp.Behin
 layout through `MenuLayout`, requires a `[MainMenu]` section in it, and then checks the manifest
 derived from that layout. Returns the loaded layout when Original can run, else null and the one
 reason, which the host appends to its fallback reason; `degraded` is the optional half, for the
-caller to log once. `ArtPath` is where a layout art name resolves, used by the presentation's own
-size read too. Off-engine coverage: `CSVM.Tests/OriginalManifestTests.cs`.
+caller to log once. `ArtPath` and `RelativeArtPath` are where a layout art name resolves, the
+presentation's size read going through the first; `IsMovie` puts the movies one directory deeper,
+under `MPG`, where the executable resolves them. Coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
 ## src/UI/Menu/Original/OriginalAssetManifest.cs
 The versioned required/optional asset manifest, derived from the decoded layout rather than
-hand-listed. `Derive` classes the art of the sections Original composes required, minus a short
-table of rows it does not draw, everything else optional, and the five files the scripts name and
-Original draws anyway required. `Check` reads no bitmap: existence plus the PNG signature and IHDR
-size for a required entry, existence alone for an optional one, and one report naming every fault
-with its section, row and file. `Schema` carries the rule for its own bumps. The classification is
-reconciled against what the screens draw by `CSVM.Tests/OriginalCoverageTests.cs`. The asset
-policy: [../menu-presentations.md](../menu-presentations.md).
+hand-listed. `Derive` classes the art of the sections Original composes required, less two short
+tables (rows it does not draw, and rows it draws whose file the screen survives the absence of,
+which is where the background movies sit), everything else optional, and the five files the scripts
+name and Original draws anyway required. `Check` reads no bitmap: existence plus the PNG signature
+and IHDR size for a required entry, existence alone for an optional one, and one report naming every
+fault with its section, row and file. `Schema` carries the rule for its own bumps; the asset policy
+and the reconciliation against what the screens draw are [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalRosters.cs
 The two rosters the Original sortie screens list. `Chapters` is the shared `MenuChapters` roster
@@ -921,3 +952,13 @@ select and confirm an environment (which re-fits the mission type and loads the 
 def), the mission type, the lives, the four waves, the wingmen and both plane picks, and apply a
 preset. `Refusal`/`CanLaunch`, `BuildDef` and `BuildExit` are the gate and the launch, `Discard`
 resets every field, and the decode is [../formats/instant-action.md](../formats/instant-action.md).
+
+## src/UI/MovieSurface.cs
+A movie as something a composition can draw: a `CSVM.Video.MoviePlayback` and the `ImageTexture`
+its pixels are uploaded to, made once and updated in place. There is no node, so a caller hangs
+the texture where its own layout row puts it and this surface never learns which screen that is.
+`Open` answers null for a file that cannot be read or is not a movie, because a screen missing its
+background still has everything else on it. `Advance` says whether the picture changed, so a caller
+repaints on the frames that need it and no others. Every timing decision belongs to the playback,
+which holds no engine type, so this half is the upload alone. Read `src/Video/MoviePlayback.cs`
+next.

@@ -260,7 +260,7 @@ if ($unknowns.Count -gt 0) {
 # $StampSchema bumps together with ExtractRof.ps1's and ExtractionStamp.Schema, in the
 # same commit as any reader change that invalidates old extractions (see the header).
 if ($failures.Count -eq 0) {
-    $StampSchema = 2
+    $StampSchema = 3
 
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"

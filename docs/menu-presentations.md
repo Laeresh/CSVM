@@ -407,20 +407,23 @@ refuses to run.
 
 Original is gated before entry. `OriginalAssetManifest` (`CSVM/src/UI/Menu/Original/OriginalAssetManifest.cs`)
 derives its classification from the decoded layout on every start: the art of the sections
-Original composes is required, less a short table of rows it never draws; every other section's
-art, those rows' art and the media a script names are optional; the files the scripts name and
-Original draws anyway (the two pointers, the font, the two export plaques) are required. `Check`
+Original composes is required, less two short tables (rows it never draws, and rows it draws whose
+file the screen survives the absence of, which today is the two background movies); every other
+section's art, those rows' art and the media a script names are optional; the files the scripts name
+and Original draws anyway (the two pointers, the font, the two export plaques) are required. `Check`
 reads no bitmap (existence plus the PNG signature and header size for required entries, existence
 alone for optional ones) and answers one report naming every fault with its section, row and file.
 A required fault makes the presentation unavailable and Built-in runs with the reason logged; an
 optional absence is logged once and degrades where it is drawn (a row with no readable strip keeps
 a fallback rectangle and no picture). The manifest's `StampSchema` is the extraction stamp's own
 schema (`ExtractionStamp.Schema`, recorded in `extracted/VERSION.json`), so a tree extracted before
-the layout decode is refused with the re-extract instruction rather than read as empty; the
+the layout decode, or before the movies were copied into it, is refused with the re-extract
+instruction rather than read as empty or opened on a menu with nothing running behind it; the
 extractor re-stamps an existing tree without re-extracting it.
 
 The classification is reconciled against what the screens draw: `OriginalCoverageTests` collects
-every art name its journeys draw and fails any the manifest classes optional. No game asset enters
+every screen-chrome name its journeys draw and fails any the manifest classes optional. Movies are
+outside that reconciliation on purpose, being the one thing a screen draws and survives without. No game asset enters
 the repository; every test over real data is an `[ExtractedDataFact]` that skips when the extraction
 is absent, and every fixture is hand-authored.
 

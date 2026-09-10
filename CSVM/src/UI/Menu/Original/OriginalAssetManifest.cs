@@ -109,9 +109,9 @@ public sealed class OriginalAssetReport
 public sealed class OriginalAssetManifest
 {
     /// <summary>The manifest schema. Bump it when the derivation changes what Original needs: the
-    /// composed-section table, the rows Original does not draw, the script-named files, or what
-    /// <see cref="Check"/> accepts as a readable file.</summary>
-    public const int Schema = 4;
+    /// composed-section table, the rows Original does not draw or draws optionally, the
+    /// script-named files, or what <see cref="Check"/> accepts as a readable file.</summary>
+    public const int Schema = 5;
 
     /// <summary>The extraction stamp schema Original refuses to read a tree below: the loaders'
     /// own expectation, which the decoded menu layout's first reader raised, so a tree extracted
@@ -141,8 +141,6 @@ public sealed class OriginalAssetManifest
     // "Section.Row", matched case-insensitively.
     private static readonly Dictionary<string, string> NotDrawn = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["MainMenu.MOVIE"] = "the top level's backdrop movie is not in the extraction and no screen plays one",
-        ["Preferences.MOVIE"] = "the page's backdrop movie is not in the extraction and no screen plays one",
         ["Preferences.PF_B_RETURNTOGAME"] = "the in-flight way back, which the menu's Preferences page never offers",
         ["Audio.AP_B_MUSIC"] = "the In-Game Music checkbox, whose mute a slider that reaches zero already offers",
         ["Audio.AP_D_SQuality"] = "the Sound Quality tier, which no mixer this port runs on has an equivalent of",
@@ -156,6 +154,14 @@ public sealed class OriginalAssetManifest
         ["MessageBox.MA_B_LEFT"] = "the About box, whose widget set the shared chrome does not compose",
         ["MessageBox.MA_B_CENTER"] = "the About box, whose widget set the shared chrome does not compose",
         ["MessageBox.MA_B_RIGHT"] = "the About box, whose widget set the shared chrome does not compose",
+    };
+
+    // Rows of a composed section Original does draw, but whose file it can be missing and still
+    // draw the rest of that screen. Keyed and matched like NotDrawn above.
+    private static readonly Dictionary<string, string> Degrades = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["MainMenu.MOVIE"] = "the top level's backdrop movie, the screen behind it drawing whole without it",
+        ["Preferences.MOVIE"] = "the page's backdrop movie, the page behind it drawing whole without it",
     };
 
     // The extensions of a file Original could draw or play. Anything else a script names (the
@@ -207,7 +213,7 @@ public sealed class OriginalAssetManifest
                 var need = why == null ? OriginalAssetNeed.Required : OriginalAssetNeed.Optional;
                 foreach (string art in widget.Art)
                 {
-                    Add(assets, index, new OriginalAsset(art, "ASSETS/GRAPHICS/" + art, need,
+                    Add(assets, index, new OriginalAsset(art, OriginalAvailability.RelativeArtPath(art), need,
                         screen.Section, widget.Key, why ?? "drawn by the section Original composes"));
                 }
             }
@@ -329,8 +335,14 @@ public sealed class OriginalAssetManifest
         }
     }
 
-    private static string? Undrawn(string section, string key) =>
-        NotDrawn.TryGetValue($"{section}.{key}", out var why) ? why : null;
+    // Why a composed section's row is optional: Original never draws it, or it draws it and the
+    // screen survives its absence. Null for a row whose file the screen cannot be drawn without.
+    private static string? Undrawn(string section, string key)
+    {
+        string row = $"{section}.{key}";
+        return NotDrawn.TryGetValue(row, out var undrawn) ? undrawn
+            : Degrades.TryGetValue(row, out var degrades) ? degrades : null;
+    }
 
     private static bool IsMedia(string path)
     {

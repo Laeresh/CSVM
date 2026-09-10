@@ -567,7 +567,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
                 Flow.OpenScrapbook(CurrentSeq());
                 return true;
             default:
-                Flow.GoTo(CampaignScreen.Cabin);
+                Flow.OpenCabin();
                 return true;
         }
     }

@@ -148,6 +148,13 @@ public sealed record SessionSpec
     public bool ForceMenu { get; private set; }
     public string MenuStartScreen { get; private set; } = "";
 
+    /// <summary><c>--movie=</c>: play that one cinema and quit, with no world and no menu behind
+    /// it. Null when the flag is absent. The name is resolved without regard to case
+    /// (<see cref="SessionPaths.Cinema"/>) and needs no <c>.mpg</c>. ⚠ It does not imply the
+    /// determinism bundle, unlike the other flags that end a run by themselves: the clock a cinema
+    /// runs on is the audio device's, so a fixed-step sim clock would say nothing about it.</summary>
+    public string? MovieName { get; private set; }
+
     /// <summary><c>--presentation=</c>: a session-only menu presentation override, never persisted.
     /// <see cref="Utils.PresentationResolution"/> ranks it above the saved request and below
     /// <see cref="ForceBuiltInPresentation"/>. Null when the flag is absent.</summary>
@@ -171,6 +178,23 @@ public sealed record SessionSpec
     /// branch. Reproduced deliberately; the equivalence gate compares against it.</summary>
     public bool ShowsMenu => ForceMenu || !HasContentArg;
 
+    /// <summary><c>--skip-intro</c>: no boot sequence on this launch. It exists for the desktop
+    /// shortcut, which is the one launch that would otherwise be bare.</summary>
+    public bool SkipIntro { get; private set; }
+
+    /// <summary><c>--intro</c>: play the boot sequence even though other arguments were passed.
+    /// A dev flag, and the only way to reach the sequence through this repo's launch scripts,
+    /// which prepend a volume of their own and would otherwise suppress it. ⚠ Read inside the
+    /// launchscreen branch only, so it plays nothing on a launch that builds content.</summary>
+    public bool ForceIntro { get; private set; }
+
+    /// <summary>Whether the boot sequence plays before the launchscreen. ⚠ Any argument at all
+    /// suppresses it, so no test, golden or perf launch grows by the three minutes those movies
+    /// run for. <see cref="SkipIntro"/> is read as well, so the flag denies the sequence by
+    /// meaning rather than by being one more argument, and it beats
+    /// <see cref="ForceIntro"/> because a suppressor another flag can overrule is not one.</summary>
+    public bool PlaysBootSequence => !SkipIntro && (ForceIntro || Args.Count == 0);
+
     /// <summary>The session shape's name: the log file's, and the startup timing line's. ⚠ The
     /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
     /// <c>menu-*.log</c>. That is today's behaviour, reproduced on purpose.</summary>
@@ -178,6 +202,7 @@ public sealed record SessionSpec
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
         : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid ? "dump"
+        : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
         : Versus ? "vs"
@@ -852,6 +877,9 @@ public sealed record SessionSpec
             else if (arg == "--perf") { s.Perf = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
+            else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }
+            else if (arg == "--skip-intro") { s.SkipIntro = true; }
+            else if (arg == "--intro") { s.ForceIntro = true; }
             else if (arg == "--menu") { s.ForceMenu = true; }
             else if (arg.StartsWith("--menu=")) { s.ForceMenu = true; s.MenuStartScreen = arg["--menu=".Length..]; }
             else if (arg.StartsWith("--presentation=")) { s.PresentationOverride = arg["--presentation=".Length..]; }

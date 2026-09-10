@@ -29,6 +29,7 @@ them round-trips byte-identically in the fork.** If you only need the practical 
 | `cam_anim.zbd` / `mis_anim.zbd` | ✅ **in the fork only** (not in the pinned v0.6.1 binary): `unzbd cs anim` / `rezbd cs anim` work end-to-end since  — test.py `--- ALL OK ---`, **all 61 archives of this install byte-identical through the real zip pipeline**. Extracted by `ExtractAssets.ps1` like every other type, and **consumed by the Godot project** (`CompiledAnim.cs` → `AnimProgram.cs` → `AnimRuntime.cs`) |
 | `GOSDATA/ASSETS/*.rof` | ✅ **not a ZBD, not mech3ax** — decoded by this project and extracted by `ExtractRof.ps1`. 846 members, all inflating to their exact declared size. Holds the customisation UI and the per-pattern **paint region masks** ([rof.md](rof.md)) |
 | `BINARIES/langui.dll` | ✅ Win32 STRINGTABLE, extracted by `ExtractRof.ps1` — 1,247 UI strings including the aircraft names and descriptions ([strings.md](strings.md)) |
+| `GOSDATA/ASSETS/GRAPHICS/MPG/*.mpg` | ✅ **copied verbatim, never converted**, by `ExtractRof.ps1`. The ten movies are not archive members: the `.rof` carries `ASSETS\GRAPHICS\MPG` as a directory entry with nothing behind it and the files sit loose in the install, so the step copies them and CSVM decodes MPEG-1 at runtime ([cinemas.md](cinemas.md)) |
 
 ## Animation archives
 

@@ -51,17 +51,35 @@ public sealed class CampaignFeature : IMenuFeature
 
     /// <summary>A feature labelling from <paramref name="strings"/> and resolving an airframe id
     /// to its planes.zbd node through <paramref name="nodeOfAirframe"/>, which is what a launch
-    /// seat carries.</summary>
-    public CampaignFeature(UiStrings strings, Func<int, string> nodeOfAirframe)
+    /// seat carries. <paramref name="chapterCinema"/> is the film a cabin door plays before it
+    /// opens and <paramref name="closingCinema"/> the film a finished mission's scrapbook door
+    /// plays; null (every off-engine caller) means that door plays none.</summary>
+    public CampaignFeature(
+        UiStrings strings, Func<int, string> nodeOfAirframe,
+        ChapterCinema? chapterCinema = null, ClosingCinema? closingCinema = null)
     {
         Strings = strings ?? throw new ArgumentNullException(nameof(strings));
         _nodeOfAirframe = nodeOfAirframe ?? throw new ArgumentNullException(nameof(nodeOfAirframe));
+        ChapterCinema = chapterCinema;
+        ClosingCinema = closingCinema;
         Field = new CampaignFlightField(this);
         Roster = Array.Empty<string>();
     }
 
     /// <summary>The langui table every label here is read from.</summary>
     public UiStrings Strings { get; }
+
+    /// <summary>The chapter cinema every cabin door runs its handoff through, or null when the
+    /// caller has none and a cabin door simply opens the cabin. One instance serves both
+    /// presentations, and its latch is what stops a film replaying (<c>Session/Launcher.cs</c>).
+    /// </summary>
+    public ChapterCinema? ChapterCinema { get; }
+
+    /// <summary>The closing cinema the scrapbook door a finished mission takes runs its handoff
+    /// through, or null when the caller has none and that door simply opens the book. One instance
+    /// serves both presentations, and its latch is what stops the film replaying
+    /// (<c>Session/Launcher.cs</c>).</summary>
+    public ClosingCinema? ClosingCinema { get; }
 
     /// <summary>Whether a campaign is open: a store was handed in by <see cref="Open"/> and
     /// <see cref="Discard"/> has not ended it.</summary>
