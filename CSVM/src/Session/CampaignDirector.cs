@@ -188,6 +188,11 @@ public sealed class CampaignDirector
     /// nothing here has to be looked up per frame.</summary>
     public IReadOnlyDictionary<string, string> RosterObjectiveMarkers => _rosterObjectiveMarkers;
 
+    /// <summary>The directive kinds this session has declined for want of a consumer, one entry per
+    /// kind, which is the set behind the <c>Gap</c> line. A suite asserts an arm exists by a
+    /// directive's absence here after the clause has run.</summary>
+    public IReadOnlyCollection<string> Gaps => _gapsLogged;
+
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
 
@@ -292,7 +297,8 @@ public sealed class CampaignDirector
         var store = CampaignProfileStore.UserProfiles();
         if (store.Load(spec.CampaignProfile) is not { } profile)
         {
-            GD.PushWarning($"--campaign={spec.CampaignProfile}: no such profile — flying without a mission");
+            GD.PushWarning($"--campaign={spec.CampaignProfile}: " +
+                           $"{store.LoadProblem(spec.CampaignProfile)}, flying without a mission");
             return null;
         }
 
@@ -1701,6 +1707,13 @@ public sealed class CampaignDirector
                         set++;
                         continue;
                     }
+                    // An airship takes the same clause, and its own arm fans the value across the
+                    // whole hull because the record's team reaches every part of it.
+                    if (_in.Zeppelins?.SetTeam(name, team) == true)
+                    {
+                        set++;
+                        continue;
+                    }
                     unmatched.Add(name);
                     continue;
                 }
@@ -1734,6 +1747,13 @@ public sealed class CampaignDirector
                         vessel.Patrol(water);
                         moved++;
                         GD.Print($"campaign: SET_AI_NET '{name}' (hull) onto '{water.Name}#{water.Id}'");
+                        continue;
+                    }
+                    // An airship re-seats on its own arm: no heading is offered to the seat, since
+                    // the nose-aligned edge pick is the aeroplane's rule and not a zeppelin's.
+                    if (_in.Zeppelins?.SetNet(name, netName) == true)
+                    {
+                        moved++;
                         continue;
                     }
                     unmatched.Add(name);
@@ -1844,8 +1864,8 @@ public sealed class CampaignDirector
         }
 
         // The shared tail of the three SET_AI_* directives: one line for what landed, one Gap for
-        // what did not. ⚠ SET_AI_NET and SET_AI_TEAM also take a ZEPPELIN name (six clauses over
-        // four missions), an arm with no seam here, so an unmatched name is always reported.
+        // what did not. An unmatched name has been through every arm the lookup has, so it names
+        // something this session did not build rather than an arm that is missing.
         private void Report(string directive, int applied, int total, List<string> unmatched)
         {
             if (applied > 0)
@@ -1856,7 +1876,7 @@ public sealed class CampaignDirector
             if (unmatched.Count > 0)
             {
                 _owner.Gap(directive, $"'{unmatched[0]}' and {unmatched.Count - 1} more name no " +
-                                      "spawned roster aircraft (a zeppelin is one such name)");
+                                      "aircraft, hull or zeppelin this mission built");
             }
         }
 

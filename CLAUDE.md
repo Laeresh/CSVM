@@ -25,7 +25,7 @@ landing gate for any change under `CSVM/`.
   with one of those, so reading, grepping or quoting the runner never builds. The Rebuild is
   deliberate: analyzer warnings are emitted only when the compiler runs, and an incremental build
   of an up-to-date tree reports nothing. (4) The content gate,
-  [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before `git commit`.
+  [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before a commit.
   ⚠ **Hook (3) formats the tree the command names.** An absolute `RunTests.ps1` path names its
   own tree, a `git -C <tree>` anywhere in the command names one, and only a command naming
   neither falls back to the session's ambient cwd. A `Set-Location` inside the same command is
@@ -59,6 +59,14 @@ landing gate for any change under `CSVM/`.
   the escape hatch, which is how a gate teaches people to skip it. Set
   `CSVM_SKIP_CONTENT_CHECKS=1` to land something first. `.\CheckCommitContent.ps1 -SelfTest`
   exercises the whole gate; `-ShowRoots -Command '…'` says which tree a given command would check.
+  ⚠ **Each gate owns its own trigger, and a harness never carries one.** Hooks (3) and (4) hand
+  their script every shell command, and the script decides whether that command invokes what it
+  guards. The decision is not "does `git` stand immediately before `commit`": git's own global
+  options stand between the two in `git -C <tree> commit`, which is the form this file prescribes
+  for naming a tree, so a trigger written that way skips the gate for every worktree-scoped commit.
+  Only git's globals are allowed in that gap, which keeps `git log --grep=commit` and a commit
+  quoted inside another command's argument out. Both self-tests enumerate those forms; extend them
+  rather than trusting a regex on inspection.
 - **The same gate serves Codex and pi.** `.codex/hooks/pre-tool-use.ps1` and
   `.pi/extensions/hooks.ts` call `CheckCommitContent.ps1` rather than reimplementing the checks;
   three hand-maintained copies had already drifted apart. Add a check to the repo scripts, never

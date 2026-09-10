@@ -216,7 +216,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
 
 ## PERF — performance
 
-- **PERF-1** — **Do not interpret `script_ms` as literal frame cost.**
+- **PERF-1** — **`script_ms` is Godot's `TIME_PROCESS`: the WORST single `_Process` pass of the
+  last wall second, refreshed about 1 Hz, so it is neither a per-frame cost nor a mean; read
+  `proc_ms` for the measured pass and `proc_max_ms` for the worst one in the window.** Over 20
+  windows of a flown C1 it ran a 9.44 ms median against `proc_ms`'s **1.645 ms**, exceeded the
+  window's own worst frame in 17 of them, and held two distinct values across a 120-frame hitch
+  ring whose `frame_ms` spanned 5.93 to 47.51 ms (`Launcher.ReportPerf`).
 - **PERF-2** — **Capped metrics are floors, not costs.**
 - **PERF-3** — **Split broad timers before choosing what to optimize.**
 - **PERF-5** — **Ignore differences below measured noise and an absolute floor.**
@@ -261,7 +266,7 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **PERF-21** — **`physics_ms` is the WORST single physics tick of the last wall second, neither a
   per-frame cost nor a mean; read `phys_tick_ms` for the step cost and `phys_hz` for whether the sim
   keeps up.** Over 333 windows of a flown C2/M02 session `physics_ms` ran a 16.96 ms median against
-  `phys_tick_ms`'s **1.81 ms** (`Launcher.ReadFrameCounters`; `script_ms` is the same shape).
+  `phys_tick_ms`'s **1.81 ms** (`Launcher.ReadFrameCounters`; `script_ms` is the same shape, PERF-1).
 - **PERF-22** — **A memo whose entries are a pure function of their key belongs to the process, not
   to the builder instance; split fresh-key work from repeat-key work before optimising anything
   else.** Of a ~300 ms `ai_spawn` frame on CM18, 190 ms sat in the 13 to 15 `ShaderMaterial`
@@ -278,6 +283,18 @@ one sentence of measured evidence; everything else belongs in the commit that la
   a block sized by its data must be split along that data's grain; name the phase with no seam of
   its own first.** Splitting CM18's `cargozep1` crash rig one `effect_pools.json` slot a step took
   one 35 ms frame to a dozen of about 3 ms, leaving `AnimRuntime.PrewarmEmitters` at 15 to 103 ms.
+- **PERF-27** — **A Godot wrapper built per call on the frame path is a finalizable object, so look
+  for the ones a call MAKES (a string handed to a `StringName` parameter, a physics query parameter
+  object) and judge the fix on `[perf] gc`'s `fin_per_s`, not its `pause_per_s_ms`: the count
+  reproduces to a tenth of a percent, the pause it sets to a few.** Caching one per-frame
+  `StringName` and reusing the flight query objects took a 150 s C1 cruise from 1352/1353 objects a
+  second to 927/929, and its pause from 0.510/0.529 to 0.401/0.374 ms a wall second.
+
+- **PERF-26** — **A process-wide "nothing to do" guard is not a fast path in a real session; read
+  its state at the moment you measure, not at process start.** `WorldCollision`'s live-faded-root
+  count never returns to zero once a world is freed with an effect resting at opacity 0, so the
+  `fade-walk-bound` suite's no-fade baseline reads 0 ancestor steps run alone and 44 once
+  `effect-pool-reset` has run in the same process.
 
 ## LOG — logs, error censuses, and exit codes
 
@@ -303,6 +320,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   sibling agent's probe finishing mid-run kills your viewport; count the Godot processes naming
   another worktree before believing an error census.** The signature is a repeating per-frame
   `NullReferenceException`, a `global_shader_parameter_set` condition and two `viewport is null` lines.
+- **LOG-20** — **A worktree's `user://` is the SAME directory as the main checkout's, so a probe
+  reads and writes the real saved profiles, planes, bindings and options; copy a profile under a new
+  name before naming it in `--campaign=`, and delete the copy.** Godot derives `user://` from
+  `project.godot`'s `config/name` alone, so every tree of this project shares
+  `%APPDATA%\Godot\app_userdata\CSVM\`, which each run prints as its `[core] user=` line.
 
 ## WORLD — world data and runtime traps
 
@@ -572,6 +594,23 @@ one sentence of measured evidence; everything else belongs in the commit that la
   even in a live session, because Godot flushes transform notifications once a frame; read the lag
   off `PhysicsServer3D.BodyGetState`, never off a ray.** `piratezep` on its net measures 0.25 m,
   enough to slip a line-of-sight ray past a body grazed 6 m away and not enough to open a hull.
+- **INSTR-51** — **A gate is only as good as its trigger, and the trigger belongs to the gate, not
+  to each harness that calls it: a passing self-test says nothing about a harness that exits before
+  the script runs.** Three `PreToolUse` copies of `git\s+commit` required the two words to be
+  adjacent, so `git -C <tree> commit`, the form `CLAUDE.md` prescribes for naming a tree, skipped
+  `CheckCommitContent.ps1` silently while all 21 of its rows passed; four comment-cap violations and
+  an over-cap doc entry reached `main`. Drive the harness's own command text with a crafted payload
+  against a fixture carrying a known fault.
+- **INSTR-52** — **Reading the two writers you expected does not prove a property is never
+  written: grep every assignment of the member before filing "it is never copied".** The cockpit
+  pass's cloned sun takes no bearing in `CockpitOverlay.NewOverlay` or
+  `WeatherRig.RegisterExtraLighting` and is aimed from the world sun in `CockpitOverlay.Sync`
+  every frame, which a C1/IA1 cockpit shot proves by moving pixel md5 `50b5fcf1` to `274ed29c`
+  when that third writer alone is cut.
+- **INSTR-53** — **Stubbing out a MEMOISED lookup does not turn a fix off: the first call still
+  fills the cache and every later one reads the answer back. Stub the cache fill as well, or the
+  red check passes and pins nothing.** A zeppelin broadside whose world-node resolve was stubbed to
+  return null still volleyed on that node, because the same call had already stored it.
 
 ## SRC — sources and documents
 

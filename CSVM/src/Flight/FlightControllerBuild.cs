@@ -46,6 +46,10 @@ internal sealed class FlightControllerBuild
     /// pass the null through, which a non-nullable field made impossible.</summary>
     public int[]? PadDevices = Array.Empty<int>();
     public bool UseKeyboard;
+
+    /// <summary>The message table the pilot HUD words its auto-land prompt from. Null on a rig
+    /// built without one, which leaves the prompt at its data-less stand-in.</summary>
+    public Messages? Strings;
     public bool AllowPause;
     public bool Inert;
     public int? Team;
@@ -102,6 +106,10 @@ public partial class FlightController
         // would otherwise read a player's keymap once per aircraft in the mission.
         if (build.IsHumanPiloted)
             LoadSavedKeymap();
+        // After the saved keymap, so the prompt names the control this seat will actually fly with
+        // rather than the shipped default the constructor put there.
+        _pilotHud.AutoLandPrompt = FlightHud.ComposeAutoLandPrompt(
+            build.Strings, FlightKeymap.Bindings(Bindings.InputAction.AutoLand), UseKeyboard);
         if (build.Team is { } team)
             Team = team;
 

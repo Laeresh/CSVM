@@ -212,7 +212,8 @@ internal static class ZeppelinSuites
         "node 7), where the mission's own zepgetcargo — the freighter's hold doors, the " +
         "Pandora's cargo doors, the crane on its chain — starts; releasing that too runs the " +
         "chain to node 0, an open end with NO stop point authored at all, where the structural " +
-        "dead-end hold (BL-529) parks it for good, pitch never past the steepest leg's slope")]
+        "dead-end hold parks it for good; the dock glide leaves the hull level at both stops, " +
+        "and the pitch never rings up on the way")]
     internal static void ZeppelinPandoraDeadEndSuite(TestContext ctx)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1B");
@@ -263,9 +264,9 @@ internal static class ZeppelinSuites
             if (motion == null)
                 return;
 
-            // The steepest leg of the chain: the decoded steer law pitches AT the slope from
-            // here to the node and eases onto it, so the hull never pitches past it. The old
-            // bang-bang rate rang up into a standing ±30° swing on the same route.
+            // The steepest leg of the chain. The law pitches at the slope from the HULL to the
+            // node, over the edge's own while a levelled hull lags below a climbing leg. The
+            // margin below is that transient, not slack; a ring-up would sit at the ±30° band.
             float steepest = 0f;
             foreach (var (a, b) in net.Edges)
             {
@@ -283,6 +284,8 @@ internal static class ZeppelinSuites
             float shortOf = motion.Position.DistanceTo(net.Nodes[5].Position);
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == 5 && shortOf < 1f,
                 $"stop 7 settles the hull ON node 5 in {steps / 60f:0} s, {shortOf:0.##} m off it — not a hold distance short");
+            ctx.Check(Mathf.Abs(Mathf.RadToDeg(motion.PitchRad)) < 0.5f,
+                $"…and level, which the dock glide does and the speed-scaled steer law cannot: pitch={Mathf.RadToDeg(motion.PitchRad):0.00}°");
 
             // OBJECTIVE11's own COMPLETED_STOPPOINT ["Klondike1", 7, 0] releases it onward.
             ctx.Same(1, runtime.SetStopPoint(def.Net, 7, false), $"stop 7 (node 5) releases");
@@ -293,12 +296,14 @@ internal static class ZeppelinSuites
                 $"…and stop 8 settles it ON the cargo point, node {cargoNode}, in {steps / 60f:0} s, {offCargo:0.##} m off it");
             ctx.Check(Mathf.Abs(motion.Position.Y - net.Nodes[cargoNode].Position.Y) < 1f,
                 $"…at the node's own altitude, which a crane lowering 54 m of chain needs: y={motion.Position.Y:0.#} against {net.Nodes[cargoNode].Position.Y:0.#}");
+            ctx.Check(Mathf.Abs(Mathf.RadToDeg(motion.PitchRad)) < 0.5f,
+                $"…and level over it, so the chain hangs off a level hull: pitch={Mathf.RadToDeg(motion.PitchRad):0.00}°");
 
             // OBJECTIVE21/22/23's ["Klondike1", 8, 0]: the rest of the chain to the bare end.
             ctx.Same(1, runtime.SetStopPoint(def.Net, 8, false), $"stop 8 (node {cargoNode}) releases");
             steps = FlyUntilHold(runtime, motion, farEnd, ref worstPitch, 60 * 900);
-            ctx.Check(worstPitch <= steepest + Mathf.DegToRad(1f),
-                $"pitch never exceeded the steepest leg's {Mathf.RadToDeg(steepest):0.#}° the whole route, worst {Mathf.RadToDeg(worstPitch):0.#}°");
+            ctx.Check(worstPitch <= steepest + Mathf.DegToRad(4f),
+                $"pitch stayed inside the steepest leg's {Mathf.RadToDeg(steepest):0.#}° and the departure lag, worst {Mathf.RadToDeg(worstPitch):0.#}°, nowhere near a ring-up");
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd,
                 $"the bare far end (node {farEnd}) holds it in {steps / 60f:0} s idx={motion.Follower.CurrentIndex} holding={motion.Follower.Holding}");
             ctx.Check(motion.Follower.Advances == net.Nodes.Count - 1,
@@ -755,7 +760,10 @@ internal static class ZeppelinSuites
         "the far side stays stowed, out-of-arc holds fire and retracts after the invented " +
         "idle window, an F18-destroyed cannon thins the next volley to 5, a " +
         "cannon_inaccuracy clone shows real scatter, and the zeppelin-vs-zeppelin arm " +
-        "rand()-picks only the target's IN-ARC gasbags on constructed geometry; then C5/M04's " +
+        "rand()-picks only the target's IN-ARC gasbags on constructed geometry, and a targets " +
+        "name that is neither player nor a zeppelin resolves through the world node table and " +
+        "is volleyed at by that node's own position while a roster name still aims at gasbags; " +
+        "then C5/M04's " +
         "Dante, sharing its twelve cannon node names with two other zeppelins on the same " +
         "mission, wires its own F18 pool per cannon, volleys a held target zeppelin's gasbags, " +
         "and thins the same way once one cannon is destroyed")]
@@ -979,6 +987,10 @@ internal static class ZeppelinSuites
                 });
                 ctx.Check(onlyInArc,
                     $"every rand()-picked aim point is an IN-ARC gasbag, never the out-of-arc g3");
+
+                // 6. Name resolution past the roster: a targets name that is neither `player`
+                // nor a zeppelin is a world node, engaged at that node's own position.
+                WorldNodeTargets(ctx, nets, live, weapons);
             }
             finally
             {
@@ -1234,6 +1246,107 @@ internal static class ZeppelinSuites
 
     // A copy of a shipped record with `cannon_inaccuracy` authored — the scatter
     // phase's instrument (no C1 record authors one; C2B/M04's 10° is the shipped value).
+    // The name-resolution arm the original reaches through its general node table: a `targets`
+    // name that is neither `player` nor a zeppelin resolves to a world node and is fired on by
+    // that node's position, while a roster name still takes the gasbag branch. Constructed
+    // geometry throughout, since no shipped record authors the first case at all.
+    internal static void WorldNodeTargets(TestContext ctx, IReadOnlyList<AiNet> nets,
+        ProjectilePool live, WeaponDefs weapons)
+    {
+        const float dt = 1f / 60f;
+
+        // A constructed hull carrying the two starboard cannon nodes SyntheticZep authors.
+        static Node3D Attacker(string name)
+        {
+            var built = new Node3D { Name = name };
+            built.AddChild(new Node3D { Name = "cb1", Position = new Vector3(20f, 0f, -30f) });
+            built.AddChild(new Node3D { Name = "cb2", Position = new Vector3(20f, 0f, 30f) });
+            return built;
+        }
+
+        var nodeHost = Attacker("nodeattackzep");
+        var surface = new Node3D { Name = "surfacehull" };
+        var bagHost = Attacker("bagattackzep");
+        var bagTarget = new Node3D { Name = "bagtargetzep" };
+        var bag = new Node3D { Name = "bg1", Position = new Vector3(0f, 0f, -300f) };
+        bagTarget.AddChild(bag);
+        ZeppelinRuntime? zeps = null;
+        try
+        {
+            ctx.Host.AddChild(nodeHost);
+            ctx.Host.AddChild(surface);
+            ctx.Host.AddChild(bagHost);
+            ctx.Host.AddChild(bagTarget);
+            var nodes = new Dictionary<string, Node3D>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                ["nodeattackzep"] = nodeHost,
+                ["surfacehull"] = surface,
+                ["bagattackzep"] = bagHost,
+                ["bagtargetzep"] = bagTarget,
+            };
+            var defs = new[]
+            {
+                SyntheticZep("nodeattackzep", new Vector3(0f, 5000f, 0f), nets[0].Name,
+                    targets: new[] { "surfacehull" }),
+                SyntheticZep("bagattackzep", new Vector3(0f, 6000f, 0f), nets[0].Name,
+                    targets: new[] { "bagtargetzep" }),
+                SyntheticZep("bagtargetzep", new Vector3(400f, 6000f, 0f), nets[0].Name,
+                    healthy: new[] { "bg1" }, deactivated: true),
+            };
+            zeps = new ZeppelinRuntime(defs,
+                name => nodes.TryGetValue(name, out var hit) ? hit : null, nets);
+            zeps.WireCannons(live, weapons);
+            ctx.Check(zeps.SetCannonsEngaged("nodeattackzep", true)
+                      && zeps.SetCannonsEngaged("bagattackzep", true),
+                $"both constructed attackers wire a broadside and the script's flag engages it");
+            // Off the attacker's beam, so aiming at the node is distinguishable from aiming at
+            // nothing; inside the record's 500 m fire range and the 0.707 starboard arc.
+            surface.GlobalPosition = nodeHost.GlobalPosition + new Vector3(400f, 0f, 60f);
+
+            for (int i = 0; i < (int)(8f / dt)
+                            && (zeps.BroadsideShotsOf("nodeattackzep") == 0
+                                || zeps.BroadsideShotsOf("bagattackzep") == 0); i++)
+            {
+                zeps.SimStep(dt);
+                live.SimStep(dt);
+            }
+
+            var atNode = zeps.LastVolleyOf("nodeattackzep");
+            var toSurface = surface.GlobalPosition - nodeHost.GlobalPosition;
+            float worstNode = 0f;
+            foreach (var dir in atNode)
+                worstNode = Mathf.Max(worstNode, dir.AngleTo(toSurface));
+            ctx.Same(2, atNode.Count,
+                $"a targets name that is no zeppelin resolves through the world node table, and both starboard cannons fire on it");
+            ctx.Check(atNode.Count == 2 && worstNode < Mathf.DegToRad(15f),
+                $"every round leaves lead-solved at the world node's own position worstOff={Mathf.RadToDeg(worstNode):0.#}°");
+
+            // The other half of the same gate: a roster name resolves as a zeppelin as it always
+            // did, so its rounds go to the gasbag 300 m off the hull axis, not to the hull origin.
+            var atBags = zeps.LastVolleyOf("bagattackzep");
+            var toBag = bag.GlobalPosition - bagHost.GlobalPosition;
+            var toHull = bagTarget.GlobalPosition - bagHost.GlobalPosition;
+            float worstBag = 0f;
+            float nearestHull = Mathf.Pi;
+            foreach (var dir in atBags)
+            {
+                worstBag = Mathf.Max(worstBag, dir.AngleTo(toBag));
+                nearestHull = Mathf.Min(nearestHull, dir.AngleTo(toHull));
+            }
+            ctx.Check(atBags.Count == 2 && worstBag < Mathf.DegToRad(15f)
+                      && nearestHull > Mathf.DegToRad(25f),
+                $"a zeppelin name still takes the gasbag branch: worst off the gasbag {Mathf.RadToDeg(worstBag):0.#}°, nearest the hull origin {Mathf.RadToDeg(nearestHull):0.#}°");
+        }
+        finally
+        {
+            zeps?.Free();
+            nodeHost.Free();
+            surface.Free();
+            bagHost.Free();
+            bagTarget.Free();
+        }
+    }
+
     internal static ZeppelinDef CloneWithInaccuracy(ZeppelinDef def, float inaccuracyDeg) => new()
     {
         Node = def.Node,

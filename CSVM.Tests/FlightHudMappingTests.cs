@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using CSVM.Bindings;
 using CSVM.Flight;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -252,9 +254,9 @@ public class FlightHudMappingTests
     [Fact]
     public void AutoLandOfferedAppendsThePromptUnlessHeldCrashedOrHalted()
     {
-        var hud = new FlightHud();
+        var hud = new FlightHud { AutoLandPrompt = "Press F9 to autodock" };
         var offered = new FlightHudState { AutoLandOffered = true };
-        Assert.Contains("AUTO-LAND AVAILABLE — PRESS F9 (GAMEPAD L3) TO LAND",
+        Assert.Contains("Press F9 to autodock",
             hud.ComposeTextLines(in offered, mph: 0f, ft: 0f, wide: false));
 
         var held = new FlightHudState { AutoLandOffered = true, Held = true };
@@ -262,9 +264,56 @@ public class FlightHudMappingTests
         var halted = new FlightHudState { AutoLandOffered = true, Halted = true };
         foreach (var state in new[] { held, crashed, halted })
         {
-            Assert.DoesNotContain("AUTO-LAND AVAILABLE — PRESS F9 (GAMEPAD L3) TO LAND",
+            Assert.DoesNotContain("Press F9 to autodock",
                 hud.ComposeTextLines(in state, mph: 0f, ft: 0f, wide: false));
         }
+    }
+
+    [Fact]
+    public void AnUnboundAutoLandDrawsNoPromptLineAtAll()
+    {
+        var hud = new FlightHud { AutoLandPrompt = "" };
+        var offered = new FlightHudState { AutoLandOffered = true };
+        int offeredLines = hud.ComposeTextLines(in offered, mph: 0f, ft: 0f, wide: false).Count;
+        var quiet = new FlightHudState();
+        Assert.Equal(hud.ComposeTextLines(in quiet, mph: 0f, ft: 0f, wide: false).Count, offeredLines);
+    }
+
+    // ---- the auto-land prompt's wording, off the message table and the seat's own bindings ----
+
+    [Fact]
+    public void TheAutoLandPromptTakesItsWordingFromTheMessageTable()
+    {
+        var strings = AutoLandMessages();
+        var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
+        Assert.Equal("Press F9 to autodock",
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, readsKeyboard: true));
+    }
+
+    [Fact]
+    public void APadOnlySeatIsNamedItsPadControlRatherThanAKeyItCannotPress()
+    {
+        var strings = AutoLandMessages();
+        var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
+        Assert.Equal("Press Pad Left Stick to autodock",
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, readsKeyboard: false));
+    }
+
+    [Fact]
+    public void AMouseButtonTakesTheClickWordingRatherThanThePressOne()
+    {
+        var strings = AutoLandMessages();
+        var mouseOnly = new[] { MouseBinding(MouseButton.Middle) };
+        Assert.Equal("Click Mouse Middle to autodock",
+            FlightHud.ComposeAutoLandPrompt(strings, mouseOnly, readsKeyboard: true));
+    }
+
+    [Fact]
+    public void AnUnboundActionComposesNoPromptAndAMissingTableStillNamesTheControl()
+    {
+        Assert.Equal("", FlightHud.ComposeAutoLandPrompt(AutoLandMessages(), System.Array.Empty<Binding>(), true));
+        Assert.Equal("AUTO-LAND AVAILABLE - F9",
+            FlightHud.ComposeAutoLandPrompt(null, new[] { KeyBinding(Key.F9) }, readsKeyboard: true));
     }
 
     [Fact]
@@ -314,6 +363,21 @@ public class FlightHudMappingTests
         Assert.Equal(1, hud.ComposeTextLines(in state, mph: 0f, ft: 0f, wide: false).Count);
         Assert.Equal(2, hud.ComposeTextLines(in state, mph: 0f, ft: 0f, wide: true).Count);
     }
+
+    // The two rows the prompt reads, as messages.json carries them (ids 181 and 182).
+    private static Messages AutoLandMessages() => Messages.Parse(
+        "{\"language_id\":1033,\"entries\":["
+        + "{\"key\":\"MSG_PRESS_AUTOLAND\",\"id\":181,\"value\":\"Press %1 to autodock\"},"
+        + "{\"key\":\"MSG_CLICK_AUTOLAND\",\"id\":182,\"value\":\"Click %1 to autodock\"}]}");
+
+    private static Binding KeyBinding(Key key) =>
+        new(DeviceId.Keyboard, BindingControl.Key((int)key));
+
+    private static Binding PadBinding(JoyButton button) =>
+        new(DeviceId.Joypad("test-pad"), BindingControl.Button((int)button));
+
+    private static Binding MouseBinding(MouseButton button) =>
+        new(DeviceId.Mouse, BindingControl.Mouse((int)button));
 
     private static GunGroup Gun(string mount, string weaponName, int ammo, int capacity) => new()
     {

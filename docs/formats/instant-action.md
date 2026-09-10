@@ -484,10 +484,18 @@ FUN_0047c210(block)           # the spawn reads it back
 difficulty(saved)
 ```
 
-`FUN_0047c210` is where that lands: a vehicle whose team differs from the player's has its armour
-and health maxima multiplied by **0.75 / 1.0 / 1.25** on difficulty 0 / 1 / 2
-([`org/vehicleDamage.md`](../org/vehicleDamage.md)). So the skill names are a **hit-point** scale in
-Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9 rating.
+`FUN_0047c210` is where that lands, and it does two things with the setting. A hostile vehicle has
+its armour and health maxima multiplied by **0.75 / 1.0 / 1.25** on difficulty 0 / 1 / 2
+([`org/vehicleDamage.md`](../org/vehicleDamage.md)), and the same tier adds **-2 / 0 / +2** to each
+of the pilot's nine skill ratings before they interpolate, clamped to `[0, 9]`
+([`org/aiControlLaw.md`](../org/aiControlLaw.md#the-rating-the-interpolation-receives-is-not-the-authored-one)).
+So the skill names reach a rating after all, as an offset on whatever the block and the def author,
+never as a rating in their own right: nothing on this path converts `novice`/`veteran`/`ace` into a
+1-to-9 value. ⚠ **The exemption the campaign's aces get does not apply here.** That is the roster's
+slot 67, and the entity field it lands in is written only by the roster spawn and by the entity
+constructor's own zero, so an Instant Action ace takes the offset like any other spawn. With
+`ace_stats` a uniform 9 the offset is invisible at the top tier (the clamp holds it at 9) and costs
+two points at `novice`.
 
 ## Wave sequencer and mission end
 

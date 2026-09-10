@@ -110,6 +110,32 @@ sim seconds a wall second bought, which is what shows a sim running at half spee
 `TIME_PHYSICS_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-21.
 
+## src/Utils/ProcessPassCost.cs
+The wall cost of one whole `_Process` pass, measured by two `ProcessPassBracket` nodes pinned to
+the extremes of the process priority order so the pair spans every `_Process` callback in the tree.
+`Take()` drains the window as total milliseconds, the worst single pass in it and the pass count
+the `--perf` window means over; a caller reading from inside the pass gets the frame in progress in
+its next window instead. `PhysicsTickCost` above is the same shape around the physics tick. Godot's
+`TIME_PROCESS` monitor answers neither question, and the misreading it invites is
+`docs/verification.md` PERF-1.
+
+## src/Utils/AiStepCost.cs
+The wall cost of the session's AI roster walks and how many aircraft they walked, banked by an
+`Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft`. It is the only `--perf`
+term that attributes frame cost to the AI: `proc_ms` and `phys_tick_ms` bracket whichever callback
+the clock mode makes the walk ride, so a plane-count sweep otherwise reads only as a whole-frame
+differential. `Take()` drains the window as total milliseconds, the walk count and the summed plane
+count, and `ai_ms` divides that total by FRAMES rather than walks, since a parent-driven clock runs
+several walks in one rendered frame. Presentation for the same aircraft stays in `proc_ms`.
+## src/Utils/GcTrace.cs
+The `--perf` GC readout: one `[perf] gc` line per ten wall seconds carrying the pause the process
+spent, the collections it spent it in, the bytes allocated, and how many FINALIZABLE objects died,
+read off the runtime's own `GCHeapStats` event through an `EventListener` on the GC keyword. The
+finalizable count is the figure a change to the frame path moves, and pause per wall second the
+figure it is judged on; every line carries process uptime so the world-build regime is excluded by
+uptime rather than by guesswork. What the two numbers mean and why the per-collection pause is the
+wrong one to read is `docs/verification.md` PERF-19, PERF-20 and PERF-27.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names

@@ -29,6 +29,8 @@ public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector
     // Overrides the session difficulty for this one spawn, which is all an Instant Action wave's
     // skill is (Flight.Difficulty); null takes the session's.
     int? Difficulty = null, float? InitHealth = null, float? Armor = null,
+    // Slot 67: exempts this pilot's skill ratings from the difficulty offset (Flight.Difficulty).
+    bool Ace = false,
     bool ObjectiveMarker = false, string? ObjectiveTypeLabel = null, string? ObjectiveCategory = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and

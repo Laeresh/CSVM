@@ -524,9 +524,28 @@ other chapter's rows are `half_cone` except its own auto row.
    frame.
 
 A row that passes and carries `auto` sets `DAT_00719109` instead of starting anything; the next
-frame `FUN_0045e120` turns that into the on-screen auto-land prompt (message `0xb5`, or `0xb6` when
-the binding is a pad button, over key binding `0x6a`). Every other row starts its animation with
-`FUN_004edda0` and registers the mission-script host on it with `FUN_004ee160`.
+frame `FUN_0045e120` turns that into the on-screen auto-land prompt. Every other row starts its
+animation with `FUN_004edda0` and registers the mission-script host on it with `FUN_004ee160`.
+
+##### The prompt's own wording
+
+`FUN_0045e120` reads command `0x6a` (Auto-Dock, [`../../org/input.md`](../../org/input.md)) out of
+the binding manager's typed slots in the manager's own order and formats the message id that slot
+implies through `FUN_0059cd70`, the `LoadStringA` + `FormatMessageA` pair:
+
+| Slot read | Name formatter | Message |
+|---|---|---|
+| keyboard A, then B (`FUN_005370d0`) | `GetKeyNameTextA`, modifier prefixes prepended | `0xb5` |
+| joystick, bits 22-25 (`FUN_00537130`) | the 16-entry button-name table at `0075cb10` | `0xb5` |
+| mouse, bits 26-27 (`FUN_00537150`) | the 4-entry button-name table at `0075cb50` | `0xb6` |
+
+The joystick slot is read only while the input mode at `DAT_0064f6c0` is 2, and the mouse slot only
+while `DAT_0071c2a0 & 2` is set. Nothing resolving means no prompt at all, not a keyless one.
+
+Both ids live in the **message table**, not in `langui.dll`: `0xb5` is `MSG_PRESS_AUTOLAND`
+("Press %1 to autodock") and `0xb6` is `MSG_CLICK_AUTOLAND` ("Click %1 to autodock"), so the second
+wording is the **mouse** one rather than a pad one. The id-to-row mapping is
+[`../missions.md`](../missions.md#message-table)'s.
 
 #### Arming is the mission script's job
 
@@ -653,7 +672,13 @@ shape `OriginalScreenshots/Videos/CM04.mkv`'s Balmoral docking shows: over its o
 centre mast draws at archive length for a frame, vanishes, and only then grows and swings.
 `AnimRuntime.ParkDockingHook` closes the gap by seeding every node its group's own `<x>_hook_extend`
 moves from that definition's own first FROM pose, which wins wherever a `RESET_STATE` omits a node
-or disagrees with it, never by editing the authored `RESET_STATE` data itself.
+or disagrees with it, never by editing the authored `RESET_STATE` data itself. The seed reaches
+each node exactly the way the dispatch that later moves the same node does, through that
+definition's compiled symbol table: the table's `l_arm1`/`r_arm1` claims for these three bind at the
+park's own staging point, so the seed needs no plain-name walk and cannot take a same-named arm off
+another group. ⚠ The wrong-axis park and the arms' nesting are separate facts about these three,
+not one: `brig_hook`/`fury_hook`/`peace_hook` carry an extra `l_arm`/`r_arm` level and their own
+`l_door`/`r_door`, where `bal_hook`/`war_hook` hang `l_arm2`/`r_arm2` straight off the group.
 
 **All three therefore need the flown aeroplane's own subtree in the animation runtime's node
 table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,
@@ -739,6 +764,28 @@ body verbatim, then `FUN_00455800(0)` (chrome off) and sets the player's `+0x91d
 and only then calls `FUN_0046c370(StartAnims.zrd, NEW_GAME_START)`. The intro's authored
 notifications restate a state the engine has already entered.
 
+**That park belongs to the mission start, not to the intro, and not to a mission type.** The other
+`StartAnims` section is reached the same way: `FUN_00464680`, the mission-data load, runs the same
+four calls in the same order, and the savegame path `FUN_0046c140` calls it (through
+`FUN_00465370`) before dispatching `FUN_0046c370(StartAnims.zrd, LOAD_GAME_START)`. Those two are
+the only sites in the exe that dispatch a `StartAnims` section, and in each the park and the
+dispatch sit in straight-line code with no branch between them. Neither reads the mission type.
+The type is the mission object's `+0x700`, written by the constructor `FUN_004636a0` and by the
+savegame restore and read by `FUN_00463a50` to pick the mission directory (1 gives `m01` to `m05`,
+2 gives `mp1` to `mp5`, 3 gives `ia1`) and by the predicates `FUN_004639a0`, `FUN_004639c0` and
+`FUN_004639b0`. An Instant Action sortie sets it to 3 in `FUN_004174d0` and a campaign mission sets
+it to 1 in `FUN_00417090`, and both then reach `FUN_00416f40` and `FUN_004654e0`. So every mission
+of every type opens in the same state, with the AI parked, the chrome off and the player's `+0x91d`
+cutscene flag set, before its own start list runs, and an Instant Action bootstrap is parked exactly
+as a story intro's is. The roster is standing at that moment rather than empty: `FUN_004735b0`
+builds the mission's vehicles through `FUN_0047c210` earlier in the same function.
+
+⚠ **What lifts that park is not read.** The unpark `FUN_0041f2e0` is reached only from the
+mission-script host's code 914 and from the console command table, and a `StartAnims` definition
+carries no host, so no start list can raise it. Do not read the park as evidence that a mission
+whose start list has no movie holds its AI down into gameplay; read it as the state the start
+enters, with the release undecoded.
+
 For a remake this matters in one direction only: **the codes are still the authoritative
 description of the cutscene's shape** (what is hidden, when the simulation stops, when control
 returns), which is what a cutscene player has to reproduce. They are not a set of messages that
@@ -817,13 +864,20 @@ Each case does the same five things, in this order.
    `+0x2fc` slot), re-registers the collision and landing sound handles, restores the saved motion
    state and re-applies the camera-parameter profile. It clears `+0x91d`/`+0x91e`/`+0x91f` on the
    way through, which is why step 4 re-asserts them.
-3. **Write the new airframe's tables.** The twelve ints at `DAT_0062ae28` are the player's
-   ammunition table, four gun-group counts then eight hardpoint counts, `−1` for a slot the airframe
-   has none of. The Bloodhawk takes 40/30 and two hardpoints of six, the Warhawk 70/50 and six
-   hardpoints of six, the Balmoral 50/50/30/30 and eight of six; the four bytes at `DAT_0062ae58`
-   ride the four gun slots. `FUN_004b24d0` pushes the table onto the player and `FUN_004b2350`
-   re-picks the selected gun and the selected hardpoint as the first slot in each half with a
-   positive count, so the readouts follow. `FUN_0047bd90(name, armour, −1)` then sets each of the
+3. **Write the new airframe's weapon table.** The twelve ints at `DAT_0062ae28` are the player's
+   weapon table, four gun slots then eight hardpoints, `−1` for a slot the airframe has none of.
+   They are `wep_NN` **ids**, not counts: `FUN_004b2550` renders the value's two digits into the
+   template `wep_??` at `0x0062ae5c`, resolves that name, and derives the round count from the
+   resolved weapon through `FUN_004bad90` whenever the caller passes `−1` for it, which all three
+   cases do. The Bloodhawk case (`0x0047e7d4`) writes 40, 30, −1, −1 and six into two hardpoints;
+   the Warhawk (`0x0047ea55`) 70, 50, −1, −1 and six into all eight; the Balmoral (`0x0047ed00`)
+   50, 50, 30, 30 and six into all eight. In the `wep_30`–`wep_73` gun matrix the low digit is the
+   ammunition (`0` slug, `1` dumdum, `2` armour-piercing, `3` magnesium), so every case hands over
+   **slug guns and `wep_06` high-explosive rockets**, each airframe's own stock fit, and the
+   sortie's Ammo Selection picks reach none of it. The four bytes at `DAT_0062ae58` ride the four
+   gun slots. `FUN_004b24d0` pushes the table onto the player and `FUN_004b2350`
+   re-picks the selected gun and the selected hardpoint as the first slot in each half carrying a
+   weapon, so the readouts follow. `FUN_0047bd90(name, armour, −1)` then sets each of the
    four hull sections to that airframe's own armour, max and current together: 20 across for the
    Bloodhawk, 30 across for the Warhawk, 40/35/25/25 for the Balmoral, which is the same row CSVM's
    own stat table carries for `player_balmoral`. Last, `FUN_00449140(<airframe id>)` reads a scalar
@@ -864,7 +918,11 @@ counted group as one live member, which is what keeps `C3/M05`'s `DEDG [5, 0]` f
 and napping the instant loss once the player is flying the last bomber. `Session/AirframeSwap.cs`'s
 `AirframeHandover` carries the mission gate, the 100 m / −45° placement and the capture test;
 `FlightRoster.RunSwap` runs the whole order, and the definition's root node reaches it through
-`AnimRuntime.CallbackHost`. Three divergences, each deliberate:
+`AnimRuntime.CallbackHost`. Step 3's table is also why the rebuild reads no `LoadoutChoice`
+(`HumanFlightAdapter.MenuFitFor`): the sortie's Ammo Selection picks belong to the aeroplane the
+pilot left, and composing them over the handed-over airframe would fly the pilot's own rockets
+where the case writes `wep_06`, which is what the `campaign-hangar-handover` suite reads for all
+three codes. Three divergences, each deliberate:
 
 - **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
   them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which
@@ -1033,13 +1091,25 @@ authored value.
 
 ### ⚠ The codes do not identify a cutscene
 
-`camera1-player_setup` authors **the same nine codes** (1, 10, 914, 20, 2, 11, 14, 913 plus the
-`RESET_STATE` ordering), and every Instant Action mission bootstraps it out of its own
-`startanims.zrd`; C1/M04 lists it under `LOAD_GAME_START`. What the original does with it is
-undecoded, and it is not one of the 13 story-mission intros the `generic_intro` /
-`mission_intro_animation` census counts. **A consumer that decides "this is a cutscene" from the
-authored codes therefore gives every mission in the install a letterbox and a suspended world.**
-Ask by definition name.
+`camera1-player_setup` authors **the same nine codes**, 1, 10 and 914 in `RESET_STATE` and 20, 2,
+11, 14 and 913 in `callback_sequence`, and it is not one of the 13 story-mission intros the
+`generic_intro` / `mission_intro_animation` census counts. **A consumer that decides "this is a
+cutscene" from the authored codes therefore gives every mission in the install a letterbox and a
+suspended world.** Ask by definition name.
+
+It is also not an Instant Action definition. It is the bootstrap of a mission that opens without a
+movie, and of a mission resumed from a save. All eight `ia1` missions list it under
+`NEW_GAME_START`, and so do the ten story missions with no opening film (C1/M02, C2/M01, C2/M02,
+C2/M03, C2/M05, C3/M04, C4/M03, C4/M05, C5/M02 and C5/M03); all 24 story missions list it under
+`LOAD_GAME_START`, which the `ia1` and `mp` missions leave null. The multiplayer counterpart is
+`multiplayer_setup`, which every `mp` mission bootstraps in its place.
+
+What it does is its two `OBJECT_ACTIVE_STATE` events, since its nine codes reach no host like every
+other start list definition's: `RESET_STATE` switches the `player` node **ACTIVE** and calls
+`speed_cue`, and `callback_sequence` switches `player` **INACTIVE**. `ACTIVATION` is `ON_CALL`,
+`AUTO_ADD_TO_WORLD` is `OFF` and `RESET_TIME` is `[0, -1]`. The AI park a reader might expect from
+its 913 is real but comes from the engine, which parks before any start list of any mission type
+runs ([above](#the-intro-defs-run-without-a-host)).
 
 Reading the eight as a pair of state transitions:
 
@@ -1120,9 +1190,10 @@ beat deactivating it; the smooth phase between them is
 
 - Geometry, material and node flags read from `extracted/<Cx>/gamez/{nodes,models,materials}.json`
   for all eight chapters; the `letterbox` subtree is identical in each.
-- Reader values read from `extracted/zrdr/{letterbox,generic_intro}.zrd.json`,
+- Reader values read from `extracted/zrdr/{letterbox,generic_intro,player_setup}.zrd.json`,
   `extracted/<Cx>/zrdr/landings.zrd.json`, `extracted/C1/M02/zrdr/pickups.zrd.json` and `extracted/C1/M04/zrdr/{intro,scenes,mis_anim,
-  startanims}.zrd.json`. Counts are over every `*.zrd.json` in the extraction.
+  startanims}.zrd.json`. Counts are over every `*.zrd.json` in the extraction; the section census
+  behind the bootstrap claims is over every `*/zrdr/startanims.zrd.json` in it, all 53.
 - Exe claims name the function they came from. The registration census is complete: `FUN_004ee160`
   is the only writer of the host pointer at `anim+0x74` on an animation instance, and its 13 call
   sites were each read.
@@ -1146,8 +1217,11 @@ beat deactivating it; the smooth phase between them is
   numbers; no exe site that computes it was traced, and no chapter's node count lands exactly on a
   multiple of 2500, so whether the rounding is strict or inclusive is undetermined. Resolve these
   names by name rather than by arithmetic on the pointer.
-- **Undecoded: what `camera1-player_setup` is for.** It carries the whole cutscene vocabulary and
-  every Instant Action mission starts it; nothing establishes what the original shows while it runs.
+- **`camera1-player_setup` is the bootstrap of a mission that opens without a movie**, and of a
+  mission resumed from a save, not an Instant Action definition. Its nine codes are unhosted no-ops
+  and its own work is the two `player` active-state events (above, "The codes do not identify a
+  cutscene"). **Undecoded: what the original shows while it runs**, and what lifts the engine's
+  mission-start AI park when no hosted definition raises 914.
 - **Undecoded: how the original draws a parentless active root.** `gwNodeSetActive`
   (`FUN_004cca30`) only flips the node's active bit; the traversal that reaches `letterbox` without
   it being anyone's child was not traced.

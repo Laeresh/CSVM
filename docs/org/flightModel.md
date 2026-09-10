@@ -195,7 +195,7 @@ Two state flags do change the force build, and death sets neither:
 
 | Flag | Tested at | What it does | Set by |
 |---|---|---|---|
-| `+0x384` | `0x0048c4ba` | swaps the whole aerodynamic build for a velocity-match to `fd_speed · throttle` along the nose, the same arm any non-player over 1000 units from the player takes | `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` |
+| `+0x384` | `0x0048c4ba` | swaps the whole aerodynamic build for a velocity-match to `fd_speed · throttle` along the nose, the same arm any non-player over 1000 units from the player takes | the `-fd` switch and the console's `fd` / `ifon`, nothing else (see "`+0x384` is a developer switch") |
 | `+0x2dc` bit `0x2` | `0x0048fdd0` | engine out: **thrust alone** goes to zero (`local_c` at `LAB_0048fdf3`); lift and drag are untouched | `FUN_004b1690` (the systems-damage setter), `FUN_004aff80` and `FUN_004b40c0` at spawn/reset |
 
 So "a dead engine means no lift and high drag" is refuted twice over: there is no engine-out state
@@ -812,7 +812,7 @@ departure from it.
 
 `FUN_0048c470` opens on a test that decides which of two plants the aircraft flies for this step,
 and it is not the AI/player split it resembles. The aircraft takes the **far-field** branch when its
-crashed flag `[obj+0x384]` is set (`0x48c4ba`), **or** when it is not the player and
+`fd` flag `[obj+0x384]` is set (`0x48c4ba`), **or** when it is not the player and
 `FUN_00538920(obj+0x204, player+0x204)` exceeds the float at `0x00607a18` (`0x48c4e9`–`0x48c4fc`).
 That helper returns `Δx² + Δz²`, so the separation is **horizontal** and the vertical gap is dropped,
 and the constant is **1e6 m²**, which is 1000 m. The compare is a strict `>` with no hysteresis and
@@ -862,16 +862,53 @@ far-field test is the pair at `0x48c4d7` and `0x48c4e9`.
 `FlightInput.NearestHumanDistSqM`, which `FlightController` fills from the session's
 `PlayerPositions` snapshot. The original measures against its single player pointer; CSVM measures
 against the **nearest human pilot**, deliberately widening a player-only behaviour to all four
-human pilots. This is the only difference from the
-decode. The crashed-flag arm is not ported: CSVM's own wreck fall already flies the near-field plant
-by `FUN_0048e580`'s rule, and the flag's writers are not decoded. Two constants of the plant's
-inventory come from here, `FarFieldRangeM` and `FarFieldAiSpeedBonus`.
+human pilots. This is the only difference from the decode. The `[obj+0x384]` arm is deliberately not
+ported, and that is now the decode rather than a gap: the flag is a developer switch no gameplay
+event sets, so a wreck in the original flies the near-field plant exactly as CSVM's does. Two
+constants of the plant's inventory come from here,
+`FarFieldRangeM` and `FarFieldAiSpeedBonus`.
 
 ⚠ **This branch does not explain a hard-banking AI.** It was once built to test that hypothesis
 against `BL-387`'s net-follower and measured not to: mean bank 66° against the near plant's 64°,
 peak 90° on both. The bank is the AI law's direct output (`roll = −bx` rolls until the target sits
 in the vertical plane), not a response to a turn requirement, so removing lift removes the need to
 bank without touching the command to. The port stands on faithfulness alone.
+
+### `+0x384` is a developer switch, not a crashed flag
+
+The whole binary writes `[obj+0x384]` at four instructions, and every one of them is either object
+construction or a developer input. No crash, ground contact, death, damage or mission-reset path
+touches it.
+
+| Write | Value | Runs when |
+|---|---|---|
+| `0x004b08c5` in `FUN_004aff80`, the vehicle constructor | 0 (`EBX`, zeroed at `0x004affaf` and never reloaded in the function) | always, inside the field-clearing run from `+0x2e8` to `+0x638` |
+| `0x004753ef` in `FUN_004735b0`, the per-mission initialiser | 1 | the global byte `0x0071dac9` is set, on the player aircraft `[0x0071c298]` |
+| `0x0043e5dc` in `FUN_0043d640`, the debug console | the parsed argument, 0 or 1 | the console line is exactly two tokens and the first is `fd` (`0x00622ee8`) |
+| `0x0043e626` in the same console | 1 | the console line is `ifon` (`0x00622eec`) |
+
+`0x0071dac9` is a command-line flag, not a game state. `0x004a74da` sets it when an argument matches
+`-fd` (`0x006298d4`), and the defaults block at `0x004b3764`–`0x004b3773` clears it with its
+neighbours before any argument is read. Its neighbour `0x0071dac8` is `-nodie` and drives
+`[player+0x920] = 1` at `0x004753da`, the byte that skips the contact push-out; the console's `ifon`
+sets that same pair, `+0x920` at `0x0043e617` and `+0x384` at `0x0043e626`. The mission initialiser
+applies both immediately after it publishes the player aircraft into the world object
+(`FUN_0042c250` at `0x004753c6`, the single pointer slot `[0x0064ef78]+0x150`), which is also the
+object the console's `fd` command resolves. The `fd` argument goes through `FUN_005b7910`, which
+returns 1 for `on` (`0x00639928`) or `true` (`0x0063992c`) and 0 for anything else, so `fd off` is
+the only writer that can clear the flag after construction.
+
+What the switch does is consistent across its readers: the aircraft holds `fd_speed · throttle`
+along its nose with no aerodynamics (`0x48c4ba`), keeps no weathervane (`0x48cd52`), takes no ground
+blow (`0x48cf8e`), no stall torque (`0x48d168`), no contact placement or impulse (`0x48dfc8`), no
+collision damage or camera kick (`0x48d3aa`), and the keyboard handler widens the throttle clamp
+from `[0, 1]` to `[−5, +5]` (`0x487ab6`). That is a fly-anywhere debug mode named after the
+`fd_speed` key it flies on, which is why `docs/formats/hud.md` sees it force the stall lamp dark.
+
+⚠ **"Crashed flag" was a guess at the name and it was wrong.** Everything the readers do is still
+what the entries above and below say it is; what changes is that no wreck ever reaches those arms.
+A crashed hull in the original flies the same near-field plant a live one does, which is the
+"A destroyed hull flies the same model" finding reached from the other end.
 
 ## The keyboard stick is an accumulator, not a switch (`FUN_00487460`)
 
@@ -1348,9 +1385,9 @@ fld [ebp-0x10]; fcomp 0    ; 0x49170a — speed ([obj+0x934], the true |v|) must
 
 **C22 (2026-08-15): the LIVE copy of this guard is `cmp esi, [0x71c298]` at `0x48cd3e` in
 `FUN_0048c470`**, jumping past the whole block to `0x48ce45`. It is guarded three times there rather
-than twice — player, `[obj+0x384]` (the crashed flag) clear at `0x48cd4a`, and speed > 0 — and the
-block is `0x48cd3e`–`0x48ce45`, reading `return_rate` from `[obj+0x654]`. The addresses in the
-listing above are the debug copy's and remain re-checkable there; this is the one the game runs, and
+than twice — player, `[obj+0x384]` (the `fd` developer switch) clear at `0x48cd4a`, and speed > 0 —
+and the block is `0x48cd3e`–`0x48ce45`, reading `return_rate` from `[obj+0x654]`. The addresses in
+the listing above are the debug copy's and remain re-checkable there; this is the one the game runs, and
 it is the guard `FlightModel.UsesAiForcePath` now stands for.
 
 Then, in full:
@@ -1876,17 +1913,18 @@ the same rate limit as the player's. The player's commanded value is written by 
 original has no AI speed-setpoint interface.**
 
 **What `fd_speed · throttle` at `0x48c593` actually is: the far-field aircraft model.**
-`FUN_0048c470` opens with a guard that skips the whole aerodynamic path when the aircraft is flagged
-crashed (`[obj+0x384]`), **or** when it is not the player and its **horizontal** distance from the
-player exceeds 1000 m (`FUN_00538920` returns `Δx² + Δz²`, compared against `1e6`). In that
-branch the aircraft's velocity is driven toward the nose axis at `fd_speed · throttle`
+`FUN_0048c470` opens with a guard that skips the whole aerodynamic path when the aircraft carries
+the `fd` developer switch (`[obj+0x384]`), **or** when it is not the player and its **horizontal**
+distance from the player exceeds 1000 m (`FUN_00538920` returns `Δx² + Δz²`, compared against
+`1e6`). In that branch the aircraft's velocity is driven toward the nose axis at `fd_speed · throttle`
 (`0x48c593`–`0x48c5a0`), plus a flat **5 m/s** for anything that is not the player
 (`0x48c5ae`, `[0x6036bc] = 5.0`), and the function's linear-acceleration output is set to
 `target − current` velocity rather than to a force. So distant traffic cruises along its nose at a
 speed the data sets, with no lift, drag or thrust computed at all.
 
 This is a level-of-detail model, not the AI's control interface: it is keyed on distance from the
-player and applies to the player's own aircraft only when it is crashed. CSVM flies it, measured
+player and applies to the player's own aircraft only under the `fd` developer switch, which no
+gameplay event sets. CSVM flies it, measured
 against the nearest human pilot rather than a single player; the branch, the terms it skips and the
 terms it keeps are in "The far-field plant" above.
 
@@ -2815,8 +2853,9 @@ frame it **rewrites the caller's translation vector in place** (`0x48e065`–`0x
 struck sphere exactly at its contact point, plus **0.03 m** along the normal for the player alone
 (the literal at `0x006080c4`, applied `0x48dfce`–`0x48e020`; a non-player rests exactly at the
 point, and the byte at `obj+0x920` skips even that at `0x48dac1`). The skipped-frame accumulator
-at `obj+0x6b0` is subtracted so the placement holds across the parity, and a crashed player
-(`obj+0x384`, tested `0x48dfbe`) gets severity and no placement or impulse at all. One resolution
+at `obj+0x6b0` is subtracted so the placement holds across the parity, and a player under the `fd`
+developer switch (`obj+0x384`, tested `0x48dfbe`) gets severity and no placement or impulse at all,
+an arm no shipped play reaches. One resolution
 per aircraft per sweep, no sub-stepping. **Ported** as `Collide`'s placement: the swept stop plus
 `ContactPushOut` 0.03 for a human pilot, the stop exactly for an AI. The fitted graze trio
 (`GrazeFriction` 0.35, `GrazeKick` 1.2, `GrazePushOut` 0.15) is retired with it: the push-out's
@@ -3011,8 +3050,9 @@ if the striker is not the player and it hit an aeroplane:  both × 0.2
 computed, `0x0048d3cc`–`0x0048d409` kicks shake block 5 with
 `min(speed · s · 0.03, 0.15)` radians: the true airspeed at `obj+0x934`, the RAW severity cosine
 rather than its cube, the literal `0.03` at `0x006080c4` and the ceiling `0.15` at `0x006036a8`. Two
-guards stand over it and nothing else does: the object is the player (`0x0048d3c4`) and its crashed
-flag `obj+0x384` is clear (`0x0048d3aa`), so every contact the caller's positive-severity gate lets
+guards stand over it and nothing else does: the object is the player (`0x0048d3c4`) and its `fd`
+switch `obj+0x384` is clear (`0x0048d3aa`), which it always is in play, so every contact the
+caller's positive-severity gate lets
 through kicks the camera, a graze included. At any flight speed the ceiling is reached by a cosine
 around 0.05, so the shallowest contacts already saturate. **Ported** as
 `CollisionDamage.ContactShake` feeding `PlaneShake.ContactHit`, widened from the player to every
@@ -3622,6 +3662,7 @@ which are findings rather than code.
 | the thrust-available Mach curve | decoded | `FUN_0041abd0` into `0x48fce7` |
 | the throttle lever, linear, and its 0.5/s slew | decoded | `0x48fce7`, `0x48e63f`–`0x48e6c3` |
 | atmosphere band selection at 2000 m | decoded | `0x0071bb3c`, written by `FUN_00463640` |
+| the thin band above 2000 m, and the ceiling it makes | decoded | `FUN_0041aca0`'s second arm; no altitude clamp exists, the position write at `0x0048ea81` is unconditional |
 | the stall flag and its nose-drop torque | decoded | `_DAT_0071c41c`, the torque at `0x48d158` |
 | the low-speed authority ramp | decoded | `FUN_0048bdd0` |
 | the pitch-only high-speed fade | decoded | `0x48be22`–`0x48be68`, `0x0071c400` / `0x0071c404` |
@@ -3645,10 +3686,10 @@ which are findings rather than code.
 | ambient turbulence: nothing ships | decoded | shake block 5, the five xrefs of `FUN_0042c070` |
 | the one-sided negative `C_L` ceiling is unreachable | decoded | `0x48c821`–`0x48c852` builds `n` as a vector length, so `FUN_0041abd0` is never handed a negative `C_L` |
 | a dead AI's throttle and surfaces freeze at their last commanded values | decoded | `FUN_004b82d0` zeroes neither `+0x124` nor the surface deflections; `StepWreckFall` steps `_lastInput` unchanged |
+| a wreck flies the near-field plant | decoded | `obj+0x384`'s only writers are the `-fd` switch, the console's `fd` / `ifon` and the constructor's zero, so no crash ever takes the `0x48c4ba` arm |
 | far-field range is measured to the NEAREST human pilot | exception | plan Decision 3; the original presumes one player |
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
-| a wreck flies the near-field plant | exception | the crashed-flag far arm at `0x48c4ba` is not ported; its writers are undecoded |
 | the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
 | the `level_off_rate` auto-level torque | unsupported | `0x48cedc` / `0x48cf76`; decoded, and no shipped data authors the rate |
 | the AI's `medium_aishake` on a nitro engage | unsupported | `FUN_00473430(1)` |

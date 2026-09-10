@@ -262,13 +262,13 @@ registry. The following law is `Flight/PathFollower.cs`, the route `Mech3/Script
 
 ## src/Session/SurfaceVehicleRuntime.cs
 Builds and steps a mission's surface vehicles, the `mode ship` blocks (`patrolboat`, `t_truck`)
-that have no player airframe: each is a copy of the chapter's library-root model, parented under
-the world root at its authored spot with its height read off the water, and indexed on the world
-runtime so the chapter's own definitions anchor on it and register its destructible pool.
-`GameSession` builds one lazily for the roster phase and the generator block, and `SessionSimulation`
-steps it after the generators that may launch another hull. `CollectVehicles` offers every hull to
-the aim assist's vehicle list ([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles` and
-`Weapons` are the seams a hull's gun needs, either null arming none. Read `SurfaceVehicle.cs` next.
+with no player airframe: each is a copy of the chapter's library-root model under the world root
+at its authored spot, its height read off the water, indexed on the world runtime so the chapter's
+definitions anchor on it and register its destructible pool. `GameSession` builds one lazily for
+the roster phase and the generator block; `SessionSimulation` steps it after the generators that
+may launch another hull. `CollectVehicles` offers every hull to the aim assist's vehicle list
+([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons` arm its gun and `Strings`
+names it, resolving slot 20 into `MarkerName`. Read `SurfaceVehicle.cs` next.
 
 ## src/Session/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path
@@ -356,14 +356,14 @@ grace. Every drop, launch and door prints an `egen:` line. Decode:
 [../formats/mission-entities/enemy-generators.md](../formats/mission-entities/enemy-generators.md).
 
 ## src/Session/ZeppelinRuntime.cs
-Runs a mission's zeppelins behind `--zeppelins`: each `ZeppelinDef` whose world node and net resolve
-has its hull switched on, is placed at its authored pose, and is flown kinematically by a
-`ZeppelinMotion` over `AiNetFollower` with no `FlightController`. A hull an animation motion drives
-is neither placed nor stepped. `WireDamage` builds the per-part pools, `PollDamage` owns the kill,
-the engine count Instant Action wins on and the generator disable, and `CollectTargetParts` is the
-only channel by which a structure becomes selectable; a def whose net does not resolve is held out
-of the live list, zones unwired, so `--zep=` grafts one on a synthetic net. `SetStopPoint`, `Hold`
-and `Wake` are the script's arms. Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
+Runs a mission's zeppelins behind `--zeppelins`: a `ZeppelinDef` whose world node and net resolve has
+its hull switched on, is placed at its authored pose and flown by `ZeppelinMotion` over
+`AiNetFollower`; an animation-driven hull is neither placed nor stepped. `WireDamage` builds the
+per-part pools, `PollDamage` owns the kill, the Instant Action engine count and the generator
+disable; `CollectTargetParts` alone makes a structure selectable. A def whose net does not resolve is
+held out, zones unwired; `--zep=` grafts one on a synthetic net. Script arms: `SetStopPoint`, `Hold`,
+`Wake`, `SetNet` (nearest-node seat from where the hull stands) and `SetTeam` (one side over every
+pool and gun). Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
 
 ## src/Session/ZeppelinRuntime.Cannons.cs
 The broadside half of `ZeppelinRuntime`, the second file of that partial class. `WireCannons`

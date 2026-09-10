@@ -187,8 +187,10 @@ matters because slot 11 is out of bounds in both arrays: it would land on the no
 **The ace flag is the mission roster's**, slot 67, the one 26 of the 414 shipped blocks author. The
 block reader stores it at the block's `+0xa4`, the spawn path `FUN_0047c210` copies it to the AI
 entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`), and `0x004ba23a` is where the debrief reads it. See
-[`formats/ai-rosters.md`](../formats/ai-rosters.md#field-table); the other read of the same flag,
-at `0x0047cde2` on the skill path, is still undecoded.
+[`formats/ai-rosters.md`](../formats/ai-rosters.md#field-table). The flag's only other read, at
+`0x0047cde2`, is on the spawn's skill path, where it exempts the pilot's nine ratings from the
+difficulty offset ([`aiControlLaw.md`](aiControlLaw.md#the-rating-the-interpolation-receives-is-not-the-authored-one));
+the two readers are independent, so a starred kill and a harder pilot come from one authored bit.
 
 **The tally object's field boundaries.** The arrays are eleven wide, not twelve: `+0x2c` has its own
 incrementer and its own meaning, and `+0x5c` and `+0x60` are the gun shot and hit words. Reading the

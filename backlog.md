@@ -521,23 +521,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
-- `BL-733` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A killed installation whose death sequence switches its `dbase` node off is revived to full health by the pool sync.**
-  *Evidence:* `AnimRuntime.SyncDestructiblePool` classifies a `dbase`-role node going inactive as
-  the `destroyed`-role node going inactive, since `dbaseRole` implies `destroyedRole` there, and
-  takes its revival branch. The Barracuda's own death sequence (`extracted/C3/M03`, the
-  `subhealthy` installation) deactivates `dbase` as an ordinary step of dying, so right after a
-  live kill `RunDeathSequence`'s own dispatch of that event sets `inst.Status` back to `Healthy`
-  and `inst.Health` to full, after the visible death has played. Found while landing the
-  generator's host-death notification (`git log --grep=BL-729`), which fires before the revert
-  and is unaffected. *Fix shape:* tell a `dbase` deactivation inside the def's own death sequence
-  apart from a scripted revival, by the running sequence's identity or by the transition's
-  direction, and pin it on the Barracuda with an `ANIM_HEALTH` read after the kill. *⚠ Traps:*
-  the bay's shutdown is not evidence either way; only a health read or a later `CarryState`
-  snapshot shows the revert. Which other installations author their death this way is not
-  surveyed. *Playtest after fix:* none needed; a headless CM04 kill with a health read after it.
-  *Cross-refs:* `docs/formats/destructibles.md`, `BL-672` (a healthy node that still answers a
-  hit after its gunback died, the same pool state read from the other side).
-
 ## Weapons & combat
 
 - `BL-066` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -562,23 +545,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   both wrong (the same rule that kept the `player` IMPACT row honest; its closing commit is
   `git log --grep=BL-222`). (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS`
   entry and named nowhere) — do not conflate the four groups.
-
-- `BL-227` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Blast knockback magnitude (D10, 2026-08-01).** The
-  splash falloff half of this item is closed: `Projectile.ApplyDamage` deals
-  `damage × (1 − d² / IMPACT_PROXIMITY²)` to both pools, cover-tested and capped at 32 targets, per
-  the decode in [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "Half two, the splash"
-  (`PLAN-ordnance-types` C10/C11). What stays open is the push: a directly struck rigid body takes
-  `BlastImpulsePerDamage = 1 N·s` per point of damage, an invented magnitude.
-  ⚠ **The impulse is decoded and is not a TUNE.** `FUN_004b9bc0` applies a per-hit impulse
-  (`FUN_0048f5e0`) whose two magnitudes are `damage × vehicle_def[+0xa0]` scaled by **0.005** and
-  **0.0333**, gated on the larger damage figure exceeding **5.0**
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). So the original scales with damage and
-  with a per-airframe constant, carries two magnitudes rather than one, and has a threshold below
-  which nothing moves. Read the constant and consume it; do not tune `BlastImpulsePerDamage`.
-  ⚠ Traps: do not retune the authored radius or fuse distance; `DAMAGE 0` specials carry large
-  effect radii and are deliberately excluded from blast damage. The per-round yield factor at
-  `+0x678` (scaling radius and both damage figures together) is not modelled; nothing observed writes
-  it other than 1.
 
 - `BL-230` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Near-miss trigger distance (B7, 2026-08-02).** `WarningShotCue.PassRadius` = **15 m**,
   the distance a round's swept step must pass within to sound `bullet_warning_sg`. Chosen, not read:
@@ -786,53 +752,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scoping; ordnance launch is unlikely to be the only one.
   *Cross-refs:* `BL-406` (closed; the ordnance plan excluded `TORPEDO` for this reason).
 
-- `BL-412` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]` **What does `CRATER` do? Six weapons author it and it drives a whole
-  terrain-deformation subsystem.** *Evidence:* the flag sets weapon `+0x74` bit `0x2000` and parses a
-  sub-block into `+0x194` (`FUN_005ad630` at `0x005ada98`); the effect runtime reads the same
-  `CRATER` block at `FUN_004e5590`. The binary carries `D:\zipper\gamez\zdeclient\zdec_crater.cpp`
-  with three distinct failure strings ("Tesselation Failed", "Clip Failed", "Build Failed"), a
-  `Crater%d` instance name, an `OnCrater` hook and a `MAX_CRATER_RADIUS` key. That is mesh carving,
-  not a decal. Carriers: `wep_04`, `wep_12`, `wep_25`, `wep_26`, `wep_27`, `wep_28`.
-  *Fix shape:* decode `FUN_004e5590` and the `zdec_crater` routines into `docs/org/craters.md`:
-  what the sub-block authors, what `MAX_CRATER_RADIUS` bounds, whether the carve is persistent or
-  pooled, and what happens on the three failure paths.
-  ⚠ *Trap:* `+0x74` bit `0x2000` is **not** the extension struct's `0x2000` (`SHAKES_CAMERA`). The
-  two flag words are unrelated bit spaces.
-  *Cross-refs:* `BL-413` (the implementation), `BL-406` (closed; it excluded this).
-
-- `BL-413` `[Feature]` `[Blocked: BL-412]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Ground-attack ordnance leaves no crater.** *Evidence:*
-  six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. Blocked
-  on `BL-412` because the mechanism is unread, so neither the size nor the approach can be stated
-  yet.
+- `BL-413` `[Feature]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Ground-attack ordnance leaves no crater.** *Evidence:*
+  six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. The
+  mechanism is decoded in [`docs/org/craters.md`](docs/org/craters.md): every crater in the shipped
+  game is the same shape (a 7-vertex rim clipped against the ground, radius 20, floor 6 below the
+  impact), it destroys every decoration inside the radius, it is permanent for the mission, and a
+  second crater whose footprint comes within 5 units of an existing one is refused outright, so a
+  mission accumulates a bounded scatter of non-overlapping bowls rather than a growing mesh.
   ⚠ *Trap:* this is a **terrain and renderer** change triggered by ordnance, not an ordnance change.
   Scope it against the terrain system's constraints (chunking, LOD, the golden manifest's mesh
   counts), not against the weapon table.
-  *Cross-refs:* `BL-412`, `BL-406` (closed).
-
-- `BL-405` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Mounted ordnance should track the aim before it launches, not hang fixed
-  along the pylon.** *Evidence:* the mount model is decoded
-  ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md), "`gun_pitch`/`gun_yaw` clamp
-  the mount"): `FUN_004b7670` rotates the desired lead into the vehicle frame, clamps each axis
-  into its authored band and writes the result as the mount's actual aim (`+0x48`–`+0x50`), and a
-  mount carrying an animated node (`+0x34`/`+0x38`) slews toward that direction through
-  `FUN_00460840` instead of snapping to it. Our pylons do not move: `PylonOrdnance` parents the
-  body to the pylon marker at identity and never touches it again (`PylonOrdnance.cs:46-49`).
-  An AI round leaves along a launch direction up to the traverse limit off the pylon axis
-  (`AiRocketeer.LaunchDirWorld`), so the mounted body and the round it becomes point different
-  ways at the launch instant, which the mounting comment's "seamless" claim no longer covers.
-  ⚠ *Settle the data question first.* The slewing mechanism is decoded; whether any shipped
-  aircraft authors an animated node on the mount its ordnance hangs from is **not**. A fixed
-  forward gun has no node and reaches the clamped direction the same frame, and if the ordnance
-  mounts are the same, the original's rocket body does not visibly track either and this item is
-  closed by the census rather than by code.
-  *Fix shape (only if the census says yes):* the pylon marker takes the clamped direction the fire
-  decision already computes, with the mounted body riding it as it does today. Ours would snap
-  where the original slews unless `FUN_00460840`'s rate is read too.
-  *Size:* localized, and probably closed as no-change.
-  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch);
-  `FlightController.OrdnanceLaunchDir` (a player's round takes the aircraft's own axis with no aim
-  at all, so the mismatch is the AI's alone; [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md),
-  "Who aims ordnance, and who does not"); `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
+  *Cross-refs:* `BL-406` (closed).
 
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
@@ -841,29 +771,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   for the human rig, which is wider than the six points. *Fix shape:* fly a slot the six points
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
-
-- `BL-681` `[Fidelity]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: decoded]` **A zeppelin broadside resolves only `player` and other zeppelins by name;
-  the original resolves any world node.** *Evidence (traced):* `ResolveOne` handles exactly two
-  cases, the literal name `player` and a name matched against the zeppelin roster by `Find`, and
-  logs `unresolved` for anything else
-  (`CSVM/src/Session/ZeppelinRuntime.Cannons.cs:315-336`). The original resolves each `targets`
-  name through the general node lookup `FUN_004d0280(7, name)` at load (`FUN_004bd8d0`), and
-  `FUN_004bfe00` fires on a stored pair whose zeppelin half is 0 by reading the node's world
-  position through `FUN_004cf2c0`, then running the same intercept solve and `> 0.707` arc test
-  ([`docs/formats/mission-entities.md`](docs/formats/mission-entities.md), "Steering"). So a record
-  naming a surface hull's node would be engaged in the original and warns here.
-  *Fix shape:* resolve an unmatched `targets` name through the world node table and aim at its
-  position, keeping the existing `player` and zeppelin cases as they are.
-  *⚠ Traps:* **currently unobservable, so do not manufacture a symptom for it.** No shipped record
-  names anything but `player` or another zeppelin, so nothing on screen changes; the value is that
-  a modified or later-decoded script would behave as the original does. This is a name-resolution
-  gap and **not** a candidate-set width gap: the broadside runs no candidate scan, and widening
-  `NearestHumanAircraft`'s `CollectAircraft` call is the disproven fix that `BL-667` proposed. Do
-  not re-derive that. Nothing here is a target-class rule either: no team, side or ally field is
-  read anywhere in the broadside chain, and the `DAMAGES_ZEPPELIN` gate lives in weapon-slot
-  selection, which the broadside does not use since it hardcodes `wep_28` by name.
-  *Cross-refs:* `BL-667`'s closing record in `PLAN-M5-polish-10` `A2`, `BL-517` and
-  `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
 
 - `BL-717` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The Pandora's turrets fire
   at the Balmoral the player is about to capture.** *Evidence:* reported at the controls on CM02
@@ -881,23 +788,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Balmoral reach the Pandora and watch the rings. *Cross-refs:* `BL-714` (the same rings,
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
-
-- `BL-718` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` `[CM07]` **The Blue Streak the 965
-  swap hands over carries the player's chosen rockets instead of its own HE load.** *Evidence:*
-  reported at the controls on CM07 (C1/M02): "the blood hawk has my rocket loadout, should be
-  default all boom" (`BOOM` is `wep_06`'s NAME, the high-explosive rocket,
-  `extracted/zrdr/weapons.zrd.json`). The decode writes the swap's own table onto the player, two
-  hardpoints of six, and the def's own fit (`docs/formats/anim-definitions/cutscenes.md`, "The
-  airframe swap codes 965, 966 and 967", step 3); nothing in it reads the sortie's ammo-screen
-  choices. CSVM rebuilds from `CampaignProgression.AwardBuild(3)` (`FlightRoster.RunSwap`,
-  `CSVM/src/Session/FlightRoster.cs:346`), whose pylons come through `CustomPlaneBuild.HardpointsFor`
-  off the stock fit's `wep_06`; where the sortie's per-pylon choice overrides that on the rebuilt
-  rig is not yet traced. *Fix shape:* trace the rebuilt rig's `Loadout.Bind` inputs, skip the
-  sortie's choice for a swap that carries a build, and pin it in `AirframeSwapSuites`. *⚠ Traps:*
-  `BL-394` is the AI fit and is not this; the Balmoral (967) and Warhawk (966) swaps go through the
-  same code and should be asserted too. *Playtest after fix:* CM07 with flak rockets bought, take
-  the Bloodhawk, read the hardpoint readout. *Cross-refs:* `BL-394`,
-  `docs/org/hangar.md` ("special-plane template").
 
 - `BL-741` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **A roster
   `rating_biases` exclusion naming a mission structure never reaches the structure's parts, so
@@ -930,6 +820,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   turrets and structures in front of the flight law, and its `ZeppelinRuntime.WireZones` fan is
   the pattern a docked structure lacks.
 
+- `BL-799` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **An AI aeroplane
+  cannot rank a surface hull as a target at all, so a boat or a turret truck is invisible to every
+  AI pilot and the `patrolboat*` / `t_truck*` exclusions nine missions author are inert.**
+  *Evidence (decoded):* the original's target scan walks `VehicleList` (`DAT_0071dabc`)
+  unconditionally, and that list holds the AI ground and sea vehicles beside the aircraft, built by
+  the same spawn (`docs/org/targeting.md`, "Ships and vessels are in the turret's set, and they are
+  there as vehicles"). CSVM's ranked pick drops one: `FlightController.SelectRankedTarget`'s
+  vehicle loop skips every candidate with `c.Source is not FlightController`, so a hull never
+  reaches `_rankCandidates` and `AiTargetRanking.ObjectiveBiasFor` is never asked about it. The
+  turret path does admit hulls (`TurretController.AcquireTarget`), so this is the aeroplane's gap
+  alone. *Impact:* small today, since every shipped bias naming a hull is the hard exclusion
+  `-1.0` (C1B/M03's `wingman_1..3` and `devastator_2/3` on `patrolboat*`; C3/M01, C3/M04, C3/M05
+  and C4/M04 on `t_truck*`), so the fix mostly makes an authored "leave it alone" mean something.
+  *Fix shape:* admit a hull to the vehicle loop the way the turret and structure loop already
+  admits its sources. ⚠ It carries no `FlightController`, so the loop's `primary_target` name term,
+  the wingman and human flags and the allied-attacker count each need a source-typed read rather
+  than the `fc` cast they share now. *⚠ Traps:* do not register a hull as an aircraft to get it in;
+  the same page warns that a port reaching this by promoting a hull has ported the wrong mechanism.
+  *Cross-refs:* `BL-741` (the other half of `rating_biases` coverage), `git log --grep=BL-637`
+  (the hull's own name line, found through the same missing switch arm).
+
 ## Flight model & collision physics
 
 - `BL-443` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
@@ -960,11 +871,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   constant on the ceiling: the height above the edge is bought with the climb and has no term of its
   own. *How you'd know it worked:* the plateau moves toward 163 mph and `altitude-ceiling` falls
   toward the ~7,000 ft the original reaches at the controls.
-- `BL-456` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Trace the writers of the crashed flag `[obj+0x384]`.** Its readers are
-  decoded (`0x48c4ba` selects the far-field arm, `0x48cd4a`, `0x48dfbe` gives a crashed hull
-  severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
-  so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
-  whom it is set so the wreck can fly the decoded arm.
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 45 to 51 ms in flight and
   about 124 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
   instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 82
@@ -990,8 +896,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   never wall seconds; state which mode a re-measurement flew (the numbers here are `--no-det` with
   nobody at the controls, so they under-weight projectiles and destruction cascades); and do not
   raise `max_physics_steps_per_frame`, which deepens the catch-up spiral rather than recovering
-  lost steps. *Cross-refs:* `PLAN-M5-polish-6` C22, `BL-606` (the same per-sim-step
-  suspects seen as an allocator), `docs/verification.md` PERF-21 and PERF-23.
+  lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
+  fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
+  *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-21, PERF-23 and PERF-27.
 
 ## Environment & world
 
@@ -1231,19 +1138,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-680` `[Research]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The compiled symbol table resolves nothing for `brig`/`fury`/`peace`'s
-  nested hook arms at `ParkDockingHook`'s staging point, though the same lookup succeeds later.**
-  *Evidence:* `_resolver.SymbolClaims` returns "claimed but unbuilt" for `l_arm1`/`r_arm1` under
-  `brig_hook`, `fury_hook` and `peace_hook` when `ParkDockingHook` runs, while the identical
-  node and definition pair resolves during ordinary animation dispatch afterwards.
-  `AnimRuntime.ParkDockingHook` works around it with a scoped plain-name walk (`FindNamedChild`).
-  *Fix shape:* find what the staging point has not yet built or indexed that the later dispatch
-  has, then decide whether the park should move after it or the index should be complete earlier.
-  *⚠ Traps:* the workaround is a name walk and will pick the wrong sibling if these airframes ever
-  gain a duplicate arm name, so it is a stopgap rather than an answer. The three airframes that
-  fail are exactly the three whose retract parks on the wrong axis, so check whether the two are
-  the same underlying data shape before treating them as separate questions.
-  *Cross-refs:* `BL-630`'s closing commit.
 - `BL-508` `[Research]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original never alpha-tests, so every alpha texture we scissor is an
   invention rather than a reproduction.** *Evidence:* decoded from `crimson.exe`
   (`analysis/alpha-classification/FINDINGS.md`, "The original has no cutout path"). The renderer is
@@ -1283,18 +1177,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is landed and works; only the ambient half is inert. *Cross-refs:* `BL-332`'s closing record in
   `PLAN-M5-polish-10` `B13`, `CAP-54`.
 
-- `BL-684` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The cockpit pass's light copies the sun's energy and colour but never its
-  bearing, so the interior is lit from Godot's default direction in every mission.** *Evidence
-  (traced):* `CockpitOverlay.NewOverlay` clones the session sun's `LightEnergy`, `LightColor` and
-  shadow settings, and `WeatherRig.RegisterExtraLighting` mirrors the per-zone energies onto that
-  clone, but neither copies `Rotation`. The zone apply points the session sun at the mission's
-  `SUNLIGHT_ORIENTATION` and the clone keeps the launcher default, in both graphics modes.
-  *Fix shape:* mirror the bearing wherever the energies are already mirrored, so the interior and
-  the airframe agree about where the sun is. *⚠ Traps:* the interior draws in its own
-  origin-relative pass, so check the bearing in that pass's own basis rather than assuming the
-  world rotation transfers unchanged. Pre-existing and found while wiring the energy mirror, so it
-  is not a regression of that work. *Cross-refs:* `BL-332`'s closing record, `docs/org/weather.md`.
-
 - `BL-735` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` **The multiplayer zeppelins' belly rings stand over no hull collider in six of the eight chapter worlds.**
   *Evidence:* on `multiplayer1zep` and `multiplayer2zep`, a plain unrestricted
   `CollisionLayers.World` ray cast straight up from the `WorldPosition` of `ctur1`, `ctur2` and
@@ -1310,6 +1192,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ring's own arc. *Playtest after fix:* a Dogfight against a `multiplayer1zep` hull, flying the
   belly. *Cross-refs:* `BL-714` (the pirate zeppelin's rings, cleared on a parked hull),
   `docs/architecture/Mech3.md` (`WorldCollision.cs`, `WorldBuilder.cs`).
+
+- `BL-800` `[Fidelity]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The world build applies a gamez node's `flags.active` only at world roots, while the original applies it to every node.**
+  *Evidence:* `WorldBuilder.Add` writes `built.Visible = node.Active` on each child of `world1`
+  and `SceneBuilder.BuildSubtree` never writes visibility, so a node below a world root builds
+  shown whatever its flag says. The original copies the flag straight through:
+  `gClsBlockReadNode` (`FUN_004e3690`, `cls_zbd.c`) reads the 212-byte node record and copies its
+  first 208 bytes into the live node object, so bit 2 of `node+0x24` is the record's own
+  `flags.active`, at every depth, and only `gwNodeSetActive` (`FUN_004cca30`) moves it afterwards.
+  32 world nodes across the eight chapters sit in that gap: `letterbox` and `sunlight` in all
+  eight, C1's nine barrage-balloon turret `healthy` variants (`lifesaver11`…`lifesaver33`, each
+  `bbtur<nn>/healthy`, which `attack_balloon<nn>` is what switches on), C3's three
+  `britbalmoral_<n>/markers/pylon8/bb_approach<n>/half_cone/land_on`, and C4's four parentless
+  `anim2_autogyro`/`anim2_warhawk`/`anim2_brigand`/`anim_warhawk` roots. *Fix shape:* apply the
+  flag where the subtree is built rather than at the walk root, then census what changes.
+  *⚠ Traps:* several of the 32 are already switched off by another mechanism (`letterbox` by
+  `WorldSession`, the destructible `healthy` variants by their own `RESET_STATE`), so the fix must
+  be measured against what the world actually draws, not against the flag count. `sunlight` is a
+  light rather than geometry and does not go through `Visible` at all. No prerequisite node is
+  affected: every one of the 784 REQUIRED `ACTIVATION_PREREQUISITE` node entries names a node
+  shipping `active: true`, so the animation gate reads the same state in both engines.
+  *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) ("The node
+  form reads the node's own live flag"), [`docs/formats/gamez.md`](docs/formats/gamez.md)
+  (`flags.active` as initial runtime visibility), `WorldBuilder.cs`, `SceneBuilder.cs`.
 
 - `BL-803` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics lays a
   dithering pattern over the whole screen.** *Evidence:* reported at the controls under Enhanced
@@ -1492,76 +1397,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `PLAN-M5-polish-2`
   E24 (the decode that made the two scenes unskippable).
 
-- `BL-606` `[Perf]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The settled GC pause is set by the finalizable-object count, and about 2000
-  finalizable Godot objects a second keep it there.** *Evidence (traced):* with the session's
-  build-settling transient excluded, a GC-verbose capture of a C1 cruise shows the pause tracking
-  the finalization-promoted COUNT at 0.4 to 0.5 ms per thousand objects, consistent across two
-  builds and 26k to 85k objects per collection, while ms per promoted MB varies several-fold over
-  the same collections. `MarkFinalizeQueueRoots` promotes 0.00 MB at every collection, so it is the
-  per-object queue walk and not resurrection marking, and queue registration happens at allocation,
-  outside the suspension window, so it cannot contribute. `Godot.StringName` is the largest single
-  source, ahead of the physics query parameters. *Fix shape:* reduce the RATE of finalizable Godot
-  object creation on the per-frame path, or take the objects off the finalization queue where the
-  binding allows it; caching `StringName` instances at their construction sites is the first move.
-  *⚠ Traps:* **cutting ordinary allocation does not shrink this pause, it only batches it.** Halving
-  the allocation rate moved the settled collection from gen0 every 13 s at 10 to 13 ms to gen1
-  every 31 to 36 s at 25 to 27 ms, leaving total pause per wall second unchanged at about 0.8 ms.
-  Judge any change on pause per second, never on per-collection pause or on collection frequency
-  alone. Exclude the first 50 s of process life, which is the world build tenuring and reproduces
-  to the byte. `docs/verification.md` PERF-13 (compare within one vsync mode) and PERF-19/PERF-20
-  apply. *Cross-refs:* `BL-536`'s closing commit (`git log --grep=BL-536`), which corrected the
-  premise this succeeds and landed the two allocator fixes, `BL-562` (the CM11 physics tick, now
-  rewritten onto single-tick spikes: its steady step is 1.81 ms and its ray casts are 13.4 % of it,
-  so the per-sim-step query objects cost measurable physics time even though C21 showed they are
-  1.6 % of allocation), `PLAN-perf-hitches`.
-
-- `BL-614` `[Perf]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`WorldCollision._fadedRoots`'s ancestor walk degrades globally once any two
-  faded objects overlap anywhere in the world.** *Evidence (traced):* found while measuring
-  `BL-535`. `WorldCollision.SetFaded` re-derives colliders through `SyncSubtree` and `FadedAbove`,
-  and `FadedAbove` walks ancestors against a process-wide `_fadedRoots` set rather than against the
-  subtree the fade belongs to, so its cost is a function of how many faded objects exist anywhere
-  rather than of the one effect being reset. *Fix shape:* bound the walk to the fading subtree, or
-  key `_fadedRoots` so an unrelated fade elsewhere in the world cannot lengthen it. *⚠ Traps:* the
-  fade contract itself is what keeps a collider from surviving its hidden geometry, so any bound
-  must be checked against the suites that pin it, not only against timings. This is a separate
-  question from which half of the reset dominates, which is `BL-535`'s. *Cross-refs:* `BL-535`
-  (the measurement this came out of), `PoseChannel.ApplyOpacity`, the `effect-pool-reset` suite.
-
-- `BL-652` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: data]` **Why an authored fork's sensor nodes start inactive is not traced to a
-  rule, so a fork placed away from the world origin may start open.** *Evidence:* found while
-  verifying the node-active `ACTIVATION_PREREQUISITE` gate over C1C/M01 (`git log --grep=BL-525`).
-  A definition forks on a sensor node's active state, and the fork only starts closed because that
-  node reads INACTIVE at the world build: `wv_tailhook/dropoff_node` and `pickup_node` are both
-  inactive until OBJECTIVE11 and OBJECTIVE15 wake them, which is what keeps the wrong docking leg
-  from running. The nodes are `active: true` in C1C's gamez, so the state the gate reads comes from
-  the build's own hide-unplaced rule rather than from the data's flag, and the agreement between the
-  two was not traced. It holds today in both C1C/M01's docking and CM07's hangar drop.
-  *What would settle it:* find the build rule that decides a sensor node's initial visibility and
-  establish whether it keys on placement, on the node's own flag, or on something else, then check a
-  fork whose sensor is placed away from the world origin against it. 784 REQUIRED node entries
-  across 112 root definitions ride this, so a fork starting open is a whole authored branch running
-  when it should not. *⚠ Traps:* this is a question, not a defect: nothing observed is wrong today,
-  and a change made on the strength of the coincidence alone would move behaviour that is currently
-  correct. Do not "fix" the flag to match the observed state.
-  *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) (the
-  prerequisite's census and both parse paths).
-
-- `BL-682` `[Bug]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TemplateStage` keeps freed nodes as dictionary KEYS in two identity-keyed
-  maps, the same shape of fault the name resolver had.** *Evidence (traced):* `_slotOfNode`
-  (`TemplateStage.cs:144`, filled by `SlotOf` for every anchor it is asked about) and the inner
-  dictionaries of `_callerSlots` (`:228`) are keyed by the same `Node3DIdentity` comparer. Both
-  guard the ARGUMENT with `_isValid` and never the stored keys, and nothing sweeps them, so a freed
-  call-site anchor on a pooled runtime leaves a dead key. The pooled runtimes are the world-effects
-  stage and the per-player crash rigs. *Fix shape:* the sweep `NameResolver.DropFreed` already
-  implements, applied wherever a staged subtree is freed: rebuild the maps rather than removing
-  from them, since a `Remove` hashes the dead key that is the dereference being avoided.
-  *⚠ Traps:* **no failure is observed yet**, so this is a traced lead and not a symptom, and it must
-  not be "confirmed" by re-running a suite until it throws. Read a stale-row count directly, the way
-  `AnimRuntime.FreedNodeRows` does, because a fault needing a hash collision fires on a minority of
-  runs ([`docs/verification.md`](docs/verification.md) `INSTR-38`). Do not guard the comparer's
-  `Equals` with a liveness check and call it fixed: that turns a loud exception into a later lookup
-  answering with the wrong node. *Cross-refs:* `BL-679`'s closing record in
-  `PLAN-M5-polish-10` `C24`, `PLAN-template-stage`.
 
 - `BL-720` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[CM24]` **The Dante's engine-explosion
   puffers drift between the engines, and some sit at the wrong place.** *Evidence:* reported at the
@@ -1591,6 +1426,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* do not spawn the roster aircraft on the hook to fake it; the display node is a
   separate model. *Playtest after fix:* CM19 to the first warning, watch the hook. *Cross-refs:*
   `docs/formats/anim-definitions/cutscenes.md` (801 to 803), `BL-730`'s closing commit.
+
+- `BL-797` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
+  *Evidence:* the disabled-systems mask's bit-`0x2` edges call `FUN_004b15c0` and `FUN_004b1630`,
+  which swap the airframe def's `stop_props_anim` and `spin_props_anim` on two anim slots at
+  vehicle `+0x6c8`/`+0x6cc` (decode: `docs/org/ordnanceTypes.md`, "What the mask's bit-2 edges
+  run"). `stopprops` fires the `snd_propstop` one-shot, activates `staticprop1`..`3` and fades them
+  in over 2.0 s, and fades `prop1`..`prop3b` out over 1.5 s before deactivating them; `spinprops`
+  reverses it silently and instantly. CSVM plays `stopprops` at Destroy and at Crash and
+  `startprops` at spawn (`Flight/FlightController.cs`, `Session/HumanFlightAdapter.cs`,
+  `Session/AiFlightAssembler.cs`) but runs neither on the choke, so a choked aircraft's blur discs
+  turn on at full rate with no cue. *Fix shape:* play `stopprops` through `CrashRuntime` on
+  `TryChokeEngine`'s rising edge and reverse it when `EngineDead` clears, the same call shape the
+  nitro edges already use, on the human rig and the AI one alike, with a suite that asserts the
+  slot state across both edges. *⚠ Traps:* the restart side is the decision this item is waiting
+  on. `PropAnimator` turns the discs procedurally at the same authored `-220`/`60` rates, so
+  playing `spinprops` puts a second writer on the same node transforms; either suppress its
+  `OBJECT_MOTION` and keep `PropAnimator`, or hand the spin to the anim runtime for the whole
+  flight. Do not reach for `startprops` on the restart: it carries `snd_propstart`, and the
+  original's restart is silent. Do not double the death-time `stopprops` when a choked aircraft
+  then crashes. *Playtest after fix:* fly into a `TANGLER` cloud and watch and listen to the prop
+  through the choke and the recovery. *Cross-refs:* `docs/formats/vehicle.md`
+  (`spin_props_anim`/`stop_props_anim`), `docs/org/vehicleDamage.md` (the mask), `BL-406` (the
+  choke itself), `BL-285` (the engine loop's start/stop inputs).
 
 ## Audio
 
@@ -1694,22 +1552,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `engine_sound` mix level (or the detuned dual-voice stack's combined gain, `EngineDetuneRatio`)
   read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
   the same method `BL-269` already used for this signal chain.
-
-- `BL-424` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **What else a choked engine does besides swap its loop.** The swap itself is
-  decoded and ported: the choker raises bit `0x2` of the disabled-systems mask, the engine-audio
-  routine tests the whole mask for nonzero, so a choked aircraft plays `snd_damagedengine` at a
-  drawn pitch exactly as a badly hurt one does (`docs/formats/vehicle.md`, "What makes an airframe
-  damaged"). Both the own-ship and the AI arm read the same gate. What is left is the pair of
-  functions the mask's bit-`0x2` edges call, `FUN_004b15c0` and `FUN_004b1630`, which
-  `docs/org/ordnanceTypes.md` names the engine stop and restart without either having been opened:
-  if they also cut a prop loop or fire a one-shot, a choke sounds like more than a definition swap.
-  *Fix shape:* open both functions, then port whatever they do beyond the swap.
-  ⚠ Traps: do not re-decode the swap, and do not read "engine stop" as an audio call on the
-  strength of its name, since it sits on the thrust path's flag and may touch no sound at all.
-  Rejected: gating the loop on `FlightController`'s engine-dead timer as a bespoke rule; the timer
-  reaches the audio through the decoded mask test and needs no second path.
-  *Cross-refs:* `BL-421` (closed; it confirmed the engine-audio model at the controls), `BL-285`
-  (the loop's start/stop inputs), `BL-406` (closed; the choke itself landed there).
 
 - `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*
@@ -2131,18 +1973,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and name FLY when only the press is left. *⚠ Traps:* the hint is remake-only text on a remake-only
   screen, so there is nothing to decode and nothing to match; keep it one short line, as the other
   arms are. *Cross-refs:* `BL-749`'s closing commit.
-- `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
-  does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
-  block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
-  four touches program-wide: the constructor default, that write, a read at `0x0047cde2` sitting
-  immediately ahead of the skill block, and a read in a runtime function that was not chased. So the
-  flag gates something in skill interpolation, and 26 blocks across the campaign carry it. CSVM
-  parses the slot and uses it for nothing. *Fix shape:* decode the `0x0047cde2` branch and the
-  runtime read before changing any rating, since what an ace gets is the question and "it is flagged"
-  is only the input. *⚠ Traps:* the flag is narrower than a complete skill vector (26 blocks against
-  29), so the two are not interchangeable and neither is a proxy for the other. Do not give aces a
-  blanket rating bonus on the strength of the flag alone; the branch may scale an interpolation
-  rather than add to it. *Cross-refs:* `PLAN-M5-polish` G75.
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
@@ -2253,44 +2083,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
-- `BL-510` `[Feature]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The auto-land prompt shows a placeholder line instead of the original's
-  `langui` string.** *Evidence:* the original lights message `0xb5` (or `0xb6` for a pad binding)
-  when the approach table's `auto` row passes (`FUN_0045e120`). `ExtractRof.ps1` already produces
-  `extracted/rof/ui_strings.json` from `langui.dll`'s STRINGTABLE (1247 rows), but ids `181` and
-  `182` are not present under that table's numbering, so `FlightHud.AutoLandPrompt` ships a
-  plain-English stand-in marked as such. *Fix shape:* find how the exe maps a message id onto the
-  STRINGTABLE (an offset or a second table), resolve `0xb5`/`0xb6`, and draw the resolved string
-  through `UiStrings`. *⚠ Traps:* ⚠ Do not guess the wording; the placeholder stays until the
-  mapping is decoded. ⚠ The binding is `F9` / left-stick click, not the original's `A`
-  (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
-  *Cross-refs:* `PLAN-M5-polish-2` C10.
-
-- `BL-637` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A targeted patrol boat shows no name line. The answer is per roster
-  block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence
-  (traced):* first reported in CM12 (C2/M01), where the boats target but carry no text, and again in
-  CM08 (C1B/M03) at the controls — "they have no label, should be `Patrol Boat`" — which is the
-  sighting that settles it. The two missions author the field differently:
-  `extracted/C1B/M03/zrdr/aiv.zrd.json`'s `patrolboat_1..4` each author slot 20
-  `MSG_VEH_PATROLBOAT`, which `extracted/messages.json` resolves to "Patrol boat" (lowercase b), so
-  the original *does* draw a name in CM08; `extracted/C2/M01/zrdr/aiv.zrd.json`'s `patrolboat_eg0`,
-  the `eshipg31` generator's own template, authors slot 20 EMPTY, so CSVM's blank in CM12 is
-  faithful. That split is why the fault was invisible in the mission this item was filed against.
-  [`docs/org/targeting.md`](docs/org/targeting.md):660-670 gives slot 20 as the name line's only
-  campaign author, and 239 of the install's 414 roster blocks author it empty, so a nameless box is
-  the common case rather than a fault.
-  *The code gap:* `TargetPool.NameOf`'s source switch has no `SurfaceVehicle` arm and ends `_ => ""`
-  (`CSVM/src/Flight/TargetPool.cs:119-128`), and `Describe`'s Vehicle arm casts the source as
-  `FlightController`, null for a hull (`:157-166`), so both strings come out empty and `TargetHud`
-  omits the line. A hull does reach the pool correctly, so this is a missing switch arm.
-  *What is still open, and why this stays `[Research]`:* `docs/org/targeting.md`:660-666 traces slot
-  20 through `FUN_00437620`/`FUN_0047c210`, which is the AIRCRAFT spawn. Nothing yet says a surface
-  hull's spawn reads slot 20 at all, so the fix shape is not settled even though the data is.
-  *⚠ Traps:* the answer is the BLOCK's slot 20, never the `vehicle.zrd` def's own `MSG_VEH_*` title,
-  which `targeting.md:686` says none of the three authors read — CM08's blocks happen to name that
-  same message key themselves, which is a legitimate use of the per-block field and not a licence to
-  read the def. So do not "fall back to the class". The same page warns a fourth author is unfound
-  rather than ruled out.
-  *Cross-refs:* the same boats' own guns, which they now fire (`git log --grep=BL-687`); `BL-626`.
 
 - `BL-706` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The PLANE NAME dialog
   sits off-centre because its pane is drawn at a raw 0,0 and its rows are drawn as though their
@@ -2907,15 +2699,6 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-671` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A holding zeppelin never levels its pitch, though the decode says it
-  should.** *Evidence:* `ZeppelinMotion` commands `desiredPitch = 0` while `Holding`, but
-  integrates it through `way = Speed / MaxSpeed`, which is zero at a stop, so the hull keeps
-  whatever pitch it arrived with. The original has the same speed scaling
-  (`docs/formats/mission-entities.md`), so this may be faithful rather than a defect. *Fix shape:*
-  decode whether `FUN_004bf500`'s station-keep levels the hull at zero speed before changing
-  anything; if it does not, the claim to correct is the documentation, not the code.
-  *⚠ Traps:* do not add a separate levelling term outside the speed factor to make a still hull
-  look right; that invents a law the original does not have.
 - `BL-501` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` `[CM02]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
   bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
@@ -2927,21 +2710,6 @@ usual.
   a formation that holds only because its members are far apart is not the one the original flies.
   *Cross-refs:* `PLAN-M5-polish` G77, whose `campaign-bomber-formation` suite is the harness to
   extend.
-
-- `BL-502` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`SET_AI_NET` and `SET_AI_TEAM` reach no zeppelin.** *Evidence:* found by
-  G80, which wired both clauses for roster-spawned aircraft and could not carry the same lookup to
-  airships. Six clauses across four missions name one: `blackswanzep` (C1C/M01), `blackhatzep`
-  (C4/M05), `piratezep` (C5/M04) and `cargozep2`/`cargozep3` (C2/M05 and C4/M05). None is in CM02,
-  so no mission the player is currently trying to finish depends on this. `ZeppelinMotion` holds its
-  net follower and `LiveZeppelin.Team` read-only, so this is a change to `ZeppelinRuntime` rather
-  than to the director's lookup. Those names surface through the `Gap` line today, so a mission
-  hitting this says so. *Fix shape:* give `ZeppelinRuntime` the same two writes the aircraft arm
-  got, re-seating the follower from the airship's current position rather than restarting its route.
-  *⚠ Traps:* a zeppelin is not a vehicle in the original and does not run the nose-aligned edge pick
-  (`PLAN-M5-polish` G77), so a re-seat here keeps the nearest-node rule and must not inherit the
-  aircraft path's heading argument. The record's own team fans across the whole airship including
-  its guns, so a script-side team write has to fan the same way or half the hull keeps the old side.
-  *Cross-refs:* `PLAN-M5-polish` G80, which landed the aircraft arm.
 
 - `BL-469` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
@@ -3276,18 +3044,6 @@ usual.
   the bay launch stamps it onto the aircraft like any roster spawn.
   *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`.
 
-- `BL-736` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Whether an Instant Action bootstrap parks the AI the way the imperative 913 parks it before a story intro.**
-  *Evidence:* `FUN_004654e0` runs code 913's body before any mission's `StartAnims` start, so
-  every story intro parks the AI whatever its own data authors, and `CutsceneController` now does
-  the same for an intro (`git log --grep=BL-719`). `camera1-player_setup` authors the same nine
-  codes outside a story mission (`docs/formats/anim-definitions/cutscenes.md`, "The codes do not
-  identify a cutscene"), and whether the Instant Action path runs the same imperative park before
-  it, or whether an Instant Action's AI is even alive at that moment, is not read. *Fix shape:*
-  read the Instant Action start path in the decompile for the same four calls, and if they are
-  there, extend the forced park to `player_setup`'s bootstrap with a suite over an Instant Action
-  wave. *⚠ Traps:* an Instant Action wave spawns after the bootstrap in CSVM, so a headless run
-  may show nothing to park; read the original first. *Cross-refs:* `BL-719`'s closing commit.
-
 - `BL-739` `[Bug]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **A mission that ends inside a
   docking film cuts back to the pilot's own view for the leaving hold, and the fade to black runs
   over that instead of over the film.** *Evidence:* reported at the controls on a successful
@@ -3331,24 +3087,6 @@ usual.
 
 ## Tooling, platform & docs
 
-- `BL-675` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **A `--campaign=<profile>:<n>` run launched through `RunProbe.ps1` from an
-  agent worktree reported no such profile, though the profile exists.** *Evidence:* a probe run
-  answered `--campaign=Gab: no such profile, flying without a mission` from
-  `CampaignDirector.TryCreate`, and repeated it against a fresh copy of the same profile. The store
-  is `CampaignProfileStore.UserProfiles()`, `user://Profiles/` globalized, and `user://` resolves by
-  the project name alone (`project.godot` sets `config/name="CSVM"`, and no custom user dir is set),
-  so a worktree should reach the same directory as the main checkout. That directory does hold the
-  profile, and a sibling agent's worktree run created a profile there in the same period, so the
-  store is reachable from a worktree at least for writing. **The cause is therefore not established
-  and the symptom is not reliably reproduced.** *Fix shape:* reproduce deliberately from a worktree
-  with nothing else running, print the globalized `user://` path at startup, and compare it against
-  the main checkout's. If they differ, the launch is picking up a different project name or user
-  dir; if they match, the fault is in the load rather than the path. *⚠ Traps:* do not "fix" this by
-  pointing the store at an absolute path; `user://` is what makes the release build's profiles land
-  in the right place. A `--campaign=` probe writes mission results back into the profile it names,
-  so any repro copies a profile under a new name and deletes the copy afterwards. *Impact:* while it
-  stands, an agent cannot take a screenshot deep inside a campaign mission from a probe, so items
-  whose verification wants one fall back to an engine suite plus an at-the-controls `PT-` row.
 - `BL-677` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **CSVM starts a `CALL_ANIMATION` callee inside the caller's own tick; the
   original starts it on the next one.** *Evidence:* `AnimRuntime.Start` advances a new instance at
   t=0 inside the `CallAnimation` dispatch (`CSVM/src/Mech3/AnimRuntime.cs:1763-1775`), so a callee's
@@ -3408,22 +3146,6 @@ usual.
   confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF
   rules, `PLAN-fast-verification` C23.
 
-- `BL-617` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: data]` **`--perf`'s `script_ms` is the same once-a-second worst-frame monitor that
-  `physics_ms` turned out to be, so PERF-1's "about 2.2x real" is a symptom rather than a
-  calibration.** *Evidence (traced):* `physics_ms` is Godot's `TIME_PHYSICS_PROCESS`, which holds
-  the worst step of the last wall second and refreshes about 1 Hz, which is why a window can report
-  27.52 ms against a worst frame of 8.33 ms in the same window and why a flown log repeats one
-  value byte-for-byte across a second of records (`docs/verification.md` PERF-21, and `BL-562`'s
-  closing commit). `TIME_PROCESS` is set from the same block in the same engine pass, and a C1
-  window showed `script_ms` equal to `frame_ms` to the digit while another read 212 ms against an
-  8.33 ms frame cap. *Fix shape:* bracket the `_Process` pass the way `PhysicsTickCost` brackets
-  the physics tick, report a measured `proc_ms` beside it, then rewrite PERF-1 onto what the
-  monitor actually is rather than onto a ratio fitted to it. *⚠ Traps:* the 2.2x figure is quoted
-  in existing analysis, so anything resting on it needs re-reading once this lands rather than
-  silent correction. Keep the raw monitor reported alongside the measured value, since it is what
-  older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
-  `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
-  PERF-21.
 - `BL-772` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty-stage
   rig has no patrol net, and a `--ai=` plane never takes a net's volumes, so patrol and the
   netted-versus-netless fork of `AiPilot` cannot be watched there.** *Evidence:* `AiNet` requires
@@ -3441,36 +3163,19 @@ usual.
   empty-stage rig this extends, which shipped deliberately without a net and whose `--ai=` squadron
   tokens and `--zep=` graft are documented in `docs/cli.md` (`git log --grep=BL-742`).
 
-- `BL-773` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`--perf` has no
-  term that attributes frame cost to the AI step, so a plane-count sweep can only be read as a
-  whole-frame differential.** *Evidence:* `FlightController` steps in `_Process`
-  (`FlightController.cs:1844`), so AI cost lands in script time; `script_ms` is `_perfProcess / n`
-  (`Launcher.cs:1721`), one of the two Godot `TIME_*` monitors `BL-617` establishes hold the worst
-  step of the last wall second rather than a mean; and `phys_tick_ms` brackets the physics tick
-  (`PhysicsTickCost.cs`), which the AI never enters. The honest terms left on the window line are
-  `p95_ms` and `max_ms` (`Launcher.cs:1735-1739`), both whole-frame. *Fix shape:* bracket the
-  roster's per-frame AI walk the way `PhysicsTickCost` brackets the physics tick, and report an
-  `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `BL-617` (the same misreading, on `script_ms`); the
-  empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
-  term worth having (`docs/cli.md`, `git log --grep=BL-742`).
-
-- `BL-786` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The content
-  gate's PreToolUse hook never fires for `git -C <tree> commit`, which is the form `CLAUDE.md`
-  prescribes for naming the tree a commit writes to.** *Evidence:* the hook's trigger in
-  `.claude/settings.json` is `if ($c -notmatch 'git\s+commit') { exit 0 }`, which requires
-  `commit` to follow `git` directly, so any `git -C <path> commit`, `git --work-tree=… commit` or
-  `git -c <k>=<v> commit` skips `CheckCommitContent.ps1` silently. Measured: four comment-cap
-  violations and one over-cap doc entry rode into `main` through `050c4538` and the
-  `0768507e` merge and sat there across several commits; two agents on separate worktrees hit all
-  five, and running the scripts by hand confirmed every one. `FormatBeforeTests.ps1` has the
-  matching exposure on its own trigger. *Fix shape:* match the subcommand rather than the literal
-  adjacency, allowing git's own global options between `git` and `commit`; the target-tree
-  resolution downstream already reads `git -C`, so only the trigger is wrong. *⚠ Traps:* do not
-  widen the trigger to any command merely containing the word `commit`, which would fire on
-  `git log --grep=commit` and on every `git commit` quoted inside a message file's path. The gate
-  is only as good as its trigger, so this wants `CheckCommitContent.ps1 -SelfTest` extended with a
-  `git -C` case rather than a one-line regex change trusted on inspection.
-  *Cross-refs:* `CLAUDE.md`'s hook section, which documents `git -C` as the way to name a tree.
+- `BL-798` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **No golden shot renders the cockpit pass, so the shipped first-person view has no pixel tripwire.**
+  *Evidence:* none of the 18 shots in `analysis/goldens/manifest.json` passes `--view=cockpit` or
+  `--view=nose`, and a flight shot defaults to the chase camera, so the `SubViewport` the interior
+  draws in (`Flight/CockpitOverlay`) is absent from every pinned image. Cutting the bearing mirror
+  in `CockpitOverlay.Sync` moved a `--view=cockpit` C1/IA1 capture's pixel md5 from `50b5fcf1` to
+  `274ed29c` while leaving all 18 goldens byte-identical, which is the size of the gap.
+  *Fix shape:* one further manifest row, a `--chapter=C1 --plane=player_bhawk --view=cockpit`
+  flight beside `c1-flight`. *⚠ Traps:* the pass composites over the main view under the HUD, so
+  such a shot is pinned by the world behind the panel as much as by the panel, and a moved hash
+  will need reading against `c1-flight` before it is read as a cockpit change. `--no-cockpit-pass`
+  draws the same panel through the other path, so one shot pins one path only.
+  *Cross-refs:* the `cockpit-overlay-pass` and `cockpit-sun-bearing` suites, which assert the
+  pass's transforms and its light without rendering either.
 
 ## Misc
 

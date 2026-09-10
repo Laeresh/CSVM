@@ -10,6 +10,18 @@ public sealed class GodotWorldQuery : IWorldQuery
 {
     private readonly Node3D _node;
 
+    // One query object per shape, reused across calls rather than made fresh at each one: both are
+    // finalizable Godot wrappers, and a per-part sweep every physics tick is where that rate is set
+    // (docs/verification.md PERF-20). ⚠ Every field a call reads must be assigned on that call --
+    // a value left from the previous one is silently still in force. Reuse is safe because the
+    // intersect calls below are native and cannot re-enter this class, and the sweep and the ray
+    // hold separate objects, so a ray issued between two sweep parts disturbs nothing.
+    private readonly PhysicsRayQueryParameters3D _ray = new();
+    private readonly PhysicsShapeQueryParameters3D _shape = new();
+
+    // The empty exclusion assigned when a caller passes none, so clearing costs no wrapper either.
+    private readonly Godot.Collections.Array<Rid> _noExclude = new();
+
     public GodotWorldQuery(Node3D node) => _node = node;
 
     public bool Sweep(IReadOnlyList<PlaneCollider.Part> parts, Transform3D baseTransform, Vector3 motion,
@@ -30,15 +42,12 @@ public sealed class GodotWorldQuery : IWorldQuery
         bool hit = false;
         foreach (var p in parts)
         {
-            var query = new PhysicsShapeQueryParameters3D
-            {
-                Shape = p.Shape,
-                Transform = baseTransform * p.Local,
-                Motion = motion,
-                CollisionMask = mask,
-            };
-            if (exclude != null)
-                query.Exclude = exclude;
+            var query = _shape;
+            query.Shape = p.Shape;
+            query.Transform = baseTransform * p.Local;
+            query.Motion = motion;
+            query.CollisionMask = mask;
+            query.Exclude = exclude ?? _noExclude;
             var cast = space.CastMotion(query); // [safe, unsafe] fractions; [1,1] = clear
             if (cast[0] >= 1f || cast[0] >= stopFrac)
                 continue;
@@ -77,10 +86,11 @@ public sealed class GodotWorldQuery : IWorldQuery
         var space = _node.GetWorld3D()?.DirectSpaceState;
         if (space == null)
             return false;
-        var query = exclude != null
-            ? PhysicsRayQueryParameters3D.Create(from, to, mask, exclude)
-            : PhysicsRayQueryParameters3D.Create(from, to, mask);
-        var hit = space.IntersectRay(query);
+        _ray.From = from;
+        _ray.To = to;
+        _ray.CollisionMask = mask;
+        _ray.Exclude = exclude ?? _noExclude;
+        var hit = space.IntersectRay(_ray);
         if (hit.Count == 0)
             return false;
         report = new RayReport(
@@ -96,14 +106,12 @@ public sealed class GodotWorldQuery : IWorldQuery
             return false;
         foreach (var p in parts)
         {
-            var query = new PhysicsShapeQueryParameters3D
-            {
-                Shape = p.Shape,
-                Transform = pose * p.Local,
-                CollisionMask = mask,
-            };
-            if (exclude != null)
-                query.Exclude = exclude;
+            var query = _shape;
+            query.Shape = p.Shape;
+            query.Transform = pose * p.Local;
+            query.Motion = Vector3.Zero;
+            query.CollisionMask = mask;
+            query.Exclude = exclude ?? _noExclude;
             // One hit is enough — this only asks whether the box is free.
             if (space.IntersectShape(query, 1).Count > 0)
                 return true;

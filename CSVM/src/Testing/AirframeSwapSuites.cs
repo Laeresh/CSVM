@@ -62,6 +62,17 @@ internal static class AirframeSwapSuites
     // this separates is the doors from the world origin 11 km away.
     private const float HangarDoorsM = 500f;
 
+    // The Ammo Selection picks the sortie is flown on. Neither is any airframe's stock fit, so a
+    // rebuilt rig still carrying one is unambiguous; every slot is picked, since the three codes
+    // hand over airframes with two, six and eight pylons.
+    private const string SortiePylon = "wep_07";
+    private const string SortieAmmo = "magnesium";
+
+    // What every swap case writes over the handed-over airframe's slots: slug guns and the
+    // high-explosive rocket on every pylon, which is each def's own stock fit.
+    private const string HandedPylon = Loadout.StockOrdnance;
+    private const string HandedAmmo = "slug";
+
     // The drop's fork: each pair is one camera leg and its twin, told apart by the direction
     // sensor's active state alone; the tail runs after the swap with no prerequisite.
     private static readonly (string Leg, string Twin)[] HangarLegs =
@@ -75,6 +86,10 @@ internal static class AirframeSwapSuites
     // The Bloodhawk's shipped skin textures the unpainted rebuild draws: wing and fin carry the
     // yellow-olive stripe, the fuselage top the blue-grey body.
     private static readonly string[] BloodhawkSkins = { "blo_wing", "blo_fin", "blo_fusalagetop" };
+
+    // The other two codes, driven past 965 on the same rig so the whole table is read rather than
+    // the one case the reported sortie flew.
+    private static readonly int[] OtherSwapCodes = { 966, 967 };
 
     /// <summary>Drives the swap CM02 authors against CM02's own built world: the code comes out of
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
@@ -144,7 +159,10 @@ internal static class AirframeSwapSuites
         + "carries -- twin 40 over twin 30, one pylon a wing, 20 armour a zone, the nitrous "
         + "injector -- in its shipped blo_* skins with no scheme over them (the blue-grey "
         + "body and yellow wingtips of the original), while a plain swap onto the same node "
-        + "stays a stock Bloodhawk with no injector; the flown aeroplane rides the drop in "
+        + "stays a stock Bloodhawk with no injector; the sortie is flown with an ammo-screen "
+        + "choice on every slot and the aeroplane flown in carries it, but every one of the "
+        + "three codes rebuilds onto slug guns and wep_06 pylons, the fit its own case writes; "
+        + "the flown aeroplane rides the drop in "
         + "view: the hangar-floor Bloodhawk prop shows for the first leg and goes at the "
         + "swap, and after it the rig is drawn on the player marker, wearing the staged "
         + "undercarriage, as the lift leg moves that marker, and the parachutist the drop's "
@@ -383,6 +401,7 @@ internal static class AirframeSwapSuites
             CheckRide(ctx, ride, cutscene, hangar, report);
             CheckChute(ctx, chute, hangar, report);
             CheckStockStaysStock(ctx, roster, rig, report);
+            CheckOtherCodesDropIt(ctx, roster, rig, report);
         }
         finally
         {
@@ -550,6 +569,7 @@ internal static class AirframeSwapSuites
             $"both twinned");
         ctx.Check(after.Loadout?.Hardpoints.Count == 2,
             $"two pylons, one a wing, rather than the stock Bloodhawk's own table");
+        CheckSortieFitDropped(ctx, before, after, report);
         ctx.Check(after.Damage != null && after.Damage.Parts.Count == 4
                   && after.Damage.Parts.Values.All(p => Mathf.IsEqualApprox(p.Def.MaxArmor, 20f)),
             $"and 20 armour on each of the four zones");
@@ -573,6 +593,102 @@ internal static class AirframeSwapSuites
             $"{onModel.Count} distinct texture(s) sampled");
         ctx.Check(found.Count == BloodhawkSkins.Length,
             $"and the model's surfaces sample the archive's own {string.Join("/", BloodhawkSkins)} (the blue-grey body and the yellow-olive wingtip stripe), so the skins the original shows are the ones loaded");
+    }
+
+    // The sortie's Ammo Selection picks stop at the aeroplane the pilot leaves. Each case writes
+    // the handed-over airframe's own weapon ids over every slot, so the rebuilt rig flies slug
+    // guns and high-explosive rockets whatever the pilot bought for the sortie.
+    private static void CheckSortieFitDropped(TestContext ctx, FlightController before,
+        FlightController after, StringBuilder report)
+    {
+        report.AppendLine($"sortie fit: flown in {DescribeFit(before)}; rebuilt {DescribeFit(after)}");
+        ctx.Check(Carries(before, SortiePylon, SortieAmmo),
+            $"the aeroplane the drop is flown in carries the sortie's own picks ('{SortiePylon}' on every pylon, '{SortieAmmo}' in every gun)");
+        ctx.Check(Carries(after, HandedPylon, HandedAmmo),
+            $"and the Blue Streak the drop hands over carries '{HandedPylon}' on both pylons and '{HandedAmmo}' in both guns, the fit 965's own case writes, rather than what the pilot picked at the ammo screen");
+    }
+
+    // The same reading over the other two codes, driven on the rig the drop left: all three cases
+    // write the same slug/high-explosive table, so none of them may carry a sortie pick either.
+    private static void CheckOtherCodesDropIt(TestContext ctx, FlightRoster roster, PlayerRig rig,
+        StringBuilder report)
+    {
+        foreach (int code in OtherSwapCodes)
+        {
+            if (AirframeSwapCodes.For(code) is not { } airframe)
+            {
+                continue;
+            }
+
+            var rebuilt = roster.RunSwap(rig, new AirframeSwapOrder(airframe, null), handsOver: false).Swapped
+                ? rig.Controller
+                : null;
+            report.AppendLine($"code {code}: {(rebuilt == null ? "no rebuild" : DescribeFit(rebuilt))}");
+            ctx.Check(rebuilt != null && Carries(rebuilt, HandedPylon, HandedAmmo),
+                $"code {code}'s rebuild onto '{airframe.PlaneNode}' carries '{HandedPylon}' on every pylon and '{HandedAmmo}' in every gun, its own case's table rather than the sortie's picks");
+        }
+    }
+
+    // Whether every pylon mounts one ordnance and every firable gun one ammunition. Read off the
+    // BOUND weapons rather than the def, since the bind is where a pick would still reach.
+    private static bool Carries(FlightController plane, string pylonId, string ammo)
+    {
+        if (plane.Loadout is not { } fit || fit.Hardpoints.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var pylon in fit.Hardpoints)
+        {
+            if (!string.Equals(pylon.Weapon.Id, pylonId, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        int guns = 0;
+        foreach (var gun in fit.Guns)
+        {
+            if (gun.IsTurret)
+            {
+                continue;
+            }
+
+            guns++;
+            if (!string.Equals(gun.Weapon.Id, StockLoadouts.GunWeaponId(GunCaliber(fit, gun.Slot), ammo),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return guns > 0;
+    }
+
+    // The caliber the def authored for one gun slot, which the ammunition rides: a bound group
+    // keeps no caliber of its own, only the resolved weapon the two together name.
+    private static int GunCaliber(Loadout fit, int slot)
+    {
+        foreach (var gun in fit.Def.Guns)
+        {
+            if (gun.Slot == slot)
+            {
+                return gun.Caliber;
+            }
+        }
+
+        return 0;
+    }
+
+    private static string DescribeFit(FlightController plane)
+    {
+        if (plane.Loadout is not { } fit)
+        {
+            return "unarmed";
+        }
+
+        return $"'{fit.Def.Def}' guns [{string.Join(",", fit.Guns.Select(g => g.Weapon.Id))}]" +
+            $" pylons [{string.Join(",", fit.Hardpoints.Select(h => h.Weapon.Id))}]";
     }
 
     private static HashSet<Texture2D> SurfaceTextures(Node3D root)
@@ -703,7 +819,7 @@ internal static class AirframeSwapSuites
         ctx.Host.AddChild(cutscene);
         try
         {
-            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs, HangarStartPlane);
+            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs, HangarStartPlane, SortieFit());
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
             leg(new HangarStaged(roster, rig, before, cutscene, textures));
@@ -1215,11 +1331,34 @@ internal static class AirframeSwapSuites
         return found;
     }
 
+    // The pilot's own Ammo Selection choice for the sortie, on every slot the screen offers: the
+    // campaign launch hands one of these to the session for the seated aeroplane.
+    private static LoadoutChoice SortieFit()
+    {
+        var fit = new LoadoutChoice();
+        for (int slot = 1; slot <= LoadoutChoice.MaxGunSlot; slot++)
+        {
+            fit.SetGunAmmo(slot, SortieAmmo);
+        }
+
+        for (int pylon = 1; pylon <= LoadoutChoice.MaxPylon; pylon++)
+        {
+            fit.SetPylon(pylon, SortiePylon);
+        }
+
+        return fit;
+    }
+
     private static FlightRoster BuildRoster(TestContext ctx, TestWorld world, string chapter,
         TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs,
-        string plane = StartPlane)
+        string plane = StartPlane, LoadoutChoice? fit = null)
     {
         var spec = SessionSpec.Parse(new[] { $"--plane={plane}" });
+        if (fit != null)
+        {
+            spec = spec.WithSeatedAircraft(plane, null, fit);
+        }
+
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var resources = new AircraftAssemblyResources
         {

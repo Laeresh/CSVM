@@ -68,7 +68,7 @@ Offsets are into the 0x88-byte block, for cross-checking against a decompile.
 | `max_slope` | `[degrees]` | +0x58 | −1.0 | Its **cosine** becomes the LOWER bound on the ground triangle's normal Y (step 3). **Unauthored.** |
 | `min_slope` | `[degrees]` | +0x5c | +1.0 | Its **cosine** becomes the UPPER bound (step 3). **Unauthored.** |
 | `OnWeaponHit` | `{health, anim, model}` | +0x60…+0x6c | absent | Response to being shot; `health` also sets the "destructible" bit at +0x60. **Unauthored.** |
-| `OnCrater` | `{health, anim, model}` | +0x70…+0x78 | absent | Response to a crater. **Unauthored.** |
+| `OnCrater` | `{health, anim, model}` | +0x70…+0x78 | absent | Response to a crater. **Unauthored, and also unread**: the crater path destroys every decoration inside its radius outright without consulting the template ([`org/craters.md`](../org/craters.md)). |
 | `OnCollide` | `{health, anim, model}` | +0x7c…+0x84 | absent | Response to being flown into. **Unauthored.** |
 
 Defaults are `FUN_004de7d0`'s own initialiser, not conventions: scale 1.0/1.0, slope bounds

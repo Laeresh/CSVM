@@ -243,6 +243,10 @@ public partial class Launcher : Node3D
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
 
+    // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
+    // without the flag subscribes to no runtime events at all.
+    private Utils.GcTrace? _gcTrace;
+
     // The always-on rate window (ReportRate). Separate accumulators from the --perf ones above
     // rather than shared: those are opt-in and reset on a frame count, these run every session.
     private double _rateWallMs;
@@ -321,6 +325,10 @@ public partial class Launcher : Node3D
         // side of one to be comparable.
         AddChild(PhysicsTickBracket.Make(false));
         AddChild(PhysicsTickBracket.Make(true));
+
+        // The same pair around the process pass (see ProcessPassCost), for the same reason.
+        AddChild(ProcessPassBracket.Make(false));
+        AddChild(ProcessPassBracket.Make(true));
 
         // Load the optional tuning-override file first, before any module reads a Config value.
         // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.
@@ -485,6 +493,10 @@ public partial class Launcher : Node3D
         // log. The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
         Log.Open(_repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
+        // Every persisted store resolves against this root (profiles, hangar planes, bindings,
+        // options), and it is derived from the project name alone, so a worktree run shares it with
+        // the main checkout. Printed so a "not found" against a file on disk is answered, not guessed.
+        Log.Info("core", $"user={ProjectSettings.GlobalizePath("user://")}");
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
         Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
@@ -868,7 +880,10 @@ public partial class Launcher : Node3D
         _perfHud?.Tick(frameMs, counters);
         _buildStamp?.Tick(_menuHost is { Shown: true });
         if (_spec.Perf)
+        {
+            (_gcTrace ??= new Utils.GcTrace()).Tick();
             ReportPerf(delta, counters);
+        }
 
         // Wall time, like the instruments above: the score is not part of the simulation, and a
         // paused or stepped session must not stall a fade halfway.
@@ -1075,9 +1090,11 @@ public partial class Launcher : Node3D
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
-        // Same boundary for the tick bracket: a build that spans the tail leaves a half-open tick
-        // whose next close would charge the whole build to one step.
+        // Same boundary for all three brackets: a build that spans the tail leaves a half-open
+        // tick, pass or AI walk whose next close would charge the whole build to one step.
         PhysicsTickCost.Reset();
+        ProcessPassCost.Reset();
+        AiStepCost.Reset();
         // D10: same reasoning as HitchMonitor.Rearm above — the build's own stall must never read
         // as the readout's worst recent frame.
         _perfHud.Rearm();
@@ -1598,6 +1615,8 @@ public partial class Launcher : Node3D
         RearmRate();
         PerfSample.Reset();
         PhysicsTickCost.Reset();
+        ProcessPassCost.Reset();
+        AiStepCost.Reset();
         _perfHud.Rearm();
         ShowMenu(destination);
     }
@@ -1716,9 +1735,9 @@ public partial class Launcher : Node3D
 
     // --perf: the headless stand-in for the editor's profiler, meaned over the window so a
     // single hitch doesn't read as a regression — A/B two builds by comparing the same line.
-    // `physics` moves independently of `frame`/`fps`, which sit pinned at the vsync cap; trust
-    // it as an A/B ratio, not an absolute, same caveat as `script` (docs/verification.md's
-    // PERF-1). `max_ms`/`p95_ms` answer "how bad did it get", not "how bad on average"; no
+    // `script_ms`/`physics_ms` are Godot's two worst-of-the-last-second monitors, kept only
+    // because older records hold them. The measured terms are `proc_ms`, `phys_tick_ms` and
+    // `ai_ms` (verification PERF-1, PERF-21). `max_ms`/`p95_ms` answer "how bad did it get"; no
     // `p99_ms` since a 60-sample window's nearest-rank p99 is just `max_ms` (Perf95Index).
     private void ReportPerf(double delta, in FrameCounters counters)
     {
@@ -1757,6 +1776,17 @@ public partial class Launcher : Node3D
         // tick is one 1/60 sim step on a realtime clock, so phys_hz is sim seconds per wall second
         // and a step over its 16.7 ms budget shows here as a rate under 60.
         var (physTickMs, physTickMaxMs, physTicks) = PhysicsTickCost.Take();
+        // ⚠ The script term to read, not script_ms above (verification PERF-1). Meaned over the
+        // passes that CLOSED, one fewer than the window's frames: this runs inside the pass, whose
+        // tail lands in the next window.
+        var (procTotalMs, procMaxMs, procPasses) = ProcessPassCost.Take();
+        double procMs = procPasses > 0 ? procTotalMs / procPasses : 0;
+        // ⚠ The only term that attributes frame cost to the AI. Meaned over the window's FRAMES,
+        // not its walks, because a parent-driven clock runs several walks per rendered frame and
+        // the question is what the AI cost that frame. Zero with no AI spawned.
+        var (aiTotalMs, aiSteps, aiPlaneSum) = AiStepCost.Take();
+        double aiMs = aiTotalMs / n;
+        double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
         double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
         double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
         double draws = _perfDraws / n;
@@ -1767,7 +1797,7 @@ public partial class Launcher : Node3D
         System.Array.Sort(_perfFrameMsSorted);
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }

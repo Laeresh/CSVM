@@ -236,22 +236,33 @@ the `[-11, 11]` every AI aircraft authors, a lead 20 degrees off the nose clamps
 9-degree residual, and `cos 9 = 0.9877` clears the gun's `0.9848`. The employable cone is therefore
 about the authored limit plus 10 degrees per axis, not the authored limit.
 
-An animated mount (a node in `+0x34`/`+0x38`) slews toward the clamped direction through
-`FUN_00460840` rather than snapping to it, so its `+0xa4` also carries however far the mount still
-has to travel. A fixed forward gun has no node and reaches the clamped direction the same frame.
+An animated mount slews toward the clamped direction through `FUN_00460840` rather than snapping to
+it, so its `+0xa4` also carries however far the mount still has to travel. The branch needs **both**
+`+0x34` and `+0x38` non-zero (`0x004b76a3`); a mount missing either reaches the clamped direction in
+the same frame.
 
-**Census: no shipped AIRFRAME carries that node.** The ten AI airframes that author ordnance
-(`bloodhawk`, `fury`, `warhawk`, `autogyro`, `avenger`, `balmoral`, `brigand`, `firebrand`,
-`kestrel`, `peacemaker`, which is every `gun_pitch`/`gun_yaw` carrier except `devastator` and
-`bswingman`, and those two carry no ordnance) hang their pylons off the same rig the player planes
-use: `pylon1`…`pylon8`, mesh-less `Object3d` markers at `model_index -1` with no children and no
-distinguishing flag (`extracted/planes/nodes.json`). `vehicle.zrd.json` authors no mount or
-node-reference field at all. The only nodes any shipped plane model ever moves are the five turret
-airframes' barrels (`fgun`/`rgun`/`bgun0`…`bgun3`/`hgun`/`hgun2`), and turrets do not run through
-this mount: they are `Turret`/`TurretRate` in `turret.cpp`, entered through their own projectile
-spawner, never through `FUN_004897c0`'s vehicle-list walk. So every aeroplane's mount, gun or
-ordnance, is the fixed case. ⚠ The census covers airframes only. The two SURFACE defs do carry the
-node, and take the branch below.
+**Every vehicle carries exactly one mount, and it is the one the ordnance fires from.**
+`FUN_00476250` pushes one mount per entry of the def's `guns` vector (`def+0x144`–`+0x148`) and then
+the main gun mount, but **no shipped def authors a `guns` key** (the parser token at `0x00627de8`;
+zero occurrences in `vehicle.zrd.json`), so that first loop never runs. `FUN_004b59b0` writes mount
+index `0` into every authored slot's `+0x28`, gun and ordnance alike, so every shot on every vehicle
+leaves the main gun mount. The `turrets` block's `firstp`/`thirdp` lists are a different vector
+(`def+0x1c4` and `def+0x1d4`, parsed at `0x00479c3d`) belonging to the `Turret` system, and never
+reach this mount.
+
+**Census: no shipped AIRFRAME animates that mount.** `+0x34` and `+0x38` are node pointers resolved
+by name at spawn rather than authored numbers: `FUN_00476250` fills them from a recursive search of
+the vehicle's model for the literal names `turret` and `gun` (`FUN_004761c0`, a full `strcmp` from
+the model root). No plane model carries either name. Across all 3317 nodes of
+`extracted/planes/nodes.json`, which covers every player and AI airframe, nothing is named `turret`
+or `gun`, nothing even begins with `turret`, and the only `gun` prefix is the cockpit's `gungauge`.
+The five turret airframes' barrels are `hturret`/`hgun`, `brigturret`, `bturret0`…`3` and
+`bgun0`…`3`, which match neither lookup, and their `pylon1`…`pylon8` hardpoints are the same
+mesh-less `model_index -1` markers the player planes use. So every aeroplane's mount is the fixed
+case, and **the original's own rocket body does not track the aim either**: it hangs on its pylon
+unmoved while the round leaves along the mount's clamped direction. ⚠ The census covers airframes
+only. The two SURFACE defs do carry both nodes (`patrolboat > healthy > turret > gun > firepoint` in
+every chapter's gamez), and take the branch below.
 
 ### A `mode ship` vehicle's mount
 
@@ -317,7 +328,7 @@ holds no target of its own, mirroring the original's single validated target acr
 walk. One divergence is deliberate: it does not arbitrate the weapon selection against the gun (our
 two classes share no mount and no aim vector, so there is nothing to arbitrate). The mounted body
 staying fixed to the pylon while the round leaves along the clamped aim is not a divergence at all
-(above, "Census: no shipped airframe carries that node"): the original's own mount is the fixed
+(above, "Census: no shipped airframe animates that mount"): the original's own mount is the fixed
 case for every shipped ordnance pylon, so it does not move either.
 
 The match's zeppelin side is flown. The acquisition offers a gasbag to a pilot whose
@@ -376,7 +387,8 @@ rarer still for the 89 mook blocks whose only authored skill is `dead_eye 1`.
 | `FUN_00460840` | the mount's slew step: snap at `dt × rate ≥ 1`, else interpolate by that fraction |
 | `FUN_00538d70` | the interpolation itself: lerp inside `0.96`, slerp otherwise, swept half turn when opposed |
 | `FUN_004b7590` | writes the mount's aim back onto its `gun` and `turret` nodes |
-| `FUN_004761c0` | the recursive find-by-name from a vehicle root that locates `turret` and `gun` |
+| `FUN_004761c0` | the recursive exact-name find from a vehicle root that locates `turret` and `gun` |
+| `FUN_004d8e40` | the same search by name PREFIX under one node, used for a `guns` entry's mount |
 | `FUN_004d1cc0` | reads a node's local position — the `firepoint` marker's, as the mount's muzzle offset |
 | `FUN_00476250` | the spawn that copies the def's gun limits onto each mount |
 | `FUN_004897c0` | the world tick over the vehicle list that drives the mount update |

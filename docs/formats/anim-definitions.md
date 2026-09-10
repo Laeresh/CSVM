@@ -64,7 +64,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `LOCAL_NODES_ONLY` | bare flag | Op node names resolve inside the instance subtree only (building/vehicle templates). |
 | `ACTIVATION` | `ON_STARTUP` \| `ON_CALL` | ON_STARTUP defs run their sequences at mission load (`zepstate`); ON_CALL waits for `CALL_ANIMATION`/game events. Sequences may carry their own `ACTIVATION ON_CALL` (run only via `CALL_SEQUENCE`). |
 | `EXECUTION_BY_RANGE` | 1 float, **metres** | Proximity gate: the def executes only with a player within this distance of its anchor. Compiled as `execution: {ByRange: {min, max}}` in **metres SQUARED** (reader 50 ↔ compiled 2500) — the same reader↔compiled unit divergence as `PLAYER_RANGE`; `min` is 0 across the install. On an ON_STARTUP def the runtime defers the start until a player first enters the band (the C3 `spiderweb_gone` 50 m fade; the 300 m nacelle-prop spins; C1's reader-only `cloudparent#` at 1900 m). 883 compiled defs carry it. |
-| `ACTIVATION_PREREQUISITE` | `OPTIONS [MINIMUM_TO_SATISFY n, ANIMATION_LIST …]` or `REQUIRED`/`OPTIONS [OBJECT_ACTIVE_LIST [[path…]…], OBJECT_INACTIVE_LIST […]]` | A start gate. The anim-list form is a counter over the definition's own callers (`all_pzep_gasbags`: 3 of the 6 `finish_pzepgasbag*`); see [The anim-list form counts the definition's callers](#the-anim-list-form-counts-the-definitions-callers). The node-state form names node paths and the active state each must read for the definition to start; compiled as a run of `Parent` entries closed by one `Object` leaf carrying `active_raw`/`required`, where the state is BIT 0 of `active_raw` (bit 1 is the def's LOCAL_NODES_ONLY scope, so a local INACTIVE entry reads 2, which mech3ax's `active` field misreports as true; [compiled-archives.md](anim-definitions/compiled-archives.md)). The shipped weight of the node form is the zeppelin gasbag finishers (`finished_lkgasbag0*`, `finish_pzepgasbag*`: `REQUIRED [OBJECT_INACTIVE_LIST [[gasbag, panelleftb1], [gasbag, panelrightb1]]]`, local), called by the burn that switched those panels off, and C1/M04's `hk_zep` (no zeppelin record) sinks only through them: door death, gasbag burn, finisher, three finishers satisfy `finish_locklear`. C1/M02's hangar drop is the shipped fork: `hangar_drop` calls both `hdplayer1` (`REQUIRED [OBJECT_INACTIVE_LIST [[hdrop_direction]]]`) and `hdplayer1b` (the same node ACTIVE), and `hdchute1`/`hdchute1b` likewise, so the direction sensor's state picks one camera leg of each pair. 112 distinct definitions carry the node form (gasbag panel finishers, `pzep_cargo_point`'s cargo stop, C1C/M01's docking legs), 437 definition files once every `mis_anim`/`cam_anim` archive's copy is counted, holding 1028 node entries of which 784 are REQUIRED; the reader spelling appears in 26 `zrdr` files, 52 keys. The runtime enforces the REQUIRED node entries at `Start`, each leaf bound through its compiled `ptr` (the definition's own node, whatever anchor the call arrived on: a finisher starts on the dead cannon's anchor, and C5/M04's Dante shares every panel name with nine other zeppelins) and by name path only for a reader definition or an unbuilt index, and the anim-list count at `CALL_ANIMATION`; optional node entries and a `MINIMUM_TO_SATISFY` over nodes are parsed only. |
+| `ACTIVATION_PREREQUISITE` | `OPTIONS [MINIMUM_TO_SATISFY n, ANIMATION_LIST …]` or `REQUIRED`/`OPTIONS [OBJECT_ACTIVE_LIST [[path…]…], OBJECT_INACTIVE_LIST […]]` | A start gate. The anim-list form is a counter over the definition's own callers (`all_pzep_gasbags`: 3 of the 6 `finish_pzepgasbag*`); see [The anim-list form counts the definition's callers](#the-anim-list-form-counts-the-definitions-callers). The node-state form names node paths and the active state each must read for the definition to start (see [The node form reads the node's own live flag](#the-node-form-reads-the-nodes-own-live-flag)); compiled as a run of `Parent` entries closed by one `Object` leaf carrying `active_raw`/`required`, where the state is BIT 0 of `active_raw` (bit 1 is the def's LOCAL_NODES_ONLY scope, so a local INACTIVE entry reads 2, which mech3ax's `active` field misreports as true; [compiled-archives.md](anim-definitions/compiled-archives.md)). The shipped weight of the node form is the zeppelin gasbag finishers (`finished_lkgasbag0*`, `finish_pzepgasbag*`: `REQUIRED [OBJECT_INACTIVE_LIST [[gasbag, panelleftb1], [gasbag, panelrightb1]]]`, local), called by the burn that switched those panels off, and C1/M04's `hk_zep` (no zeppelin record) sinks only through them: door death, gasbag burn, finisher, three finishers satisfy `finish_locklear`. C1/M02's hangar drop is the shipped fork: `hangar_drop` calls both `hdplayer1` (`REQUIRED [OBJECT_INACTIVE_LIST [[hdrop_direction]]]`) and `hdplayer1b` (the same node ACTIVE), and `hdchute1`/`hdchute1b` likewise, so the direction sensor's state picks one camera leg of each pair. 112 distinct definitions carry the node form (gasbag panel finishers, `pzep_cargo_point`'s cargo stop, C1C/M01's docking legs), 437 definition files once every `mis_anim`/`cam_anim` archive's copy is counted, holding 1028 node entries of which 784 are REQUIRED; the reader spelling appears in 26 `zrdr` files, 52 keys. The runtime enforces the REQUIRED node entries at `Start`, each leaf bound through its compiled `ptr` (the definition's own node, whatever anchor the call arrived on: a finisher starts on the dead cannon's anchor, and C5/M04's Dante shares every panel name with nine other zeppelins) and by name path only for a reader definition or an unbuilt index, and the anim-list count at `CALL_ANIMATION`; optional node entries and a `MINIMUM_TO_SATISFY` over nodes are parsed only. |
 | `RESET_TIME` | 1–2 floats (−1 common) | Reset scheduling (undecoded detail). |
 | `RESET_STATE` | op list | The object's **base state**, applied at load: healthy variants ACTIVE, `destroyed` variants INACTIVE, doors at rest pose. This is what fixes the destroyed-over-healthy coplanar flicker. |
 | `SEQUENCE_DEFINITION` | op list (repeatable) | One timeline of ops; optional `NAME`, optional `ACTIVATION`. |
@@ -715,6 +715,53 @@ shape is also reached from the zeppelin damage runtime, which owns that kill off
 `num_healthy_required` rather than off the animation count (`ZeppelinRuntime.PlayHullDeath`
 selects the def by this prerequisite's presence), and gating that path would leave every
 zeppelin in the game unkillable.
+
+### The node form reads the node's own live flag
+
+`REQUIRED [OBJECT_ACTIVE_LIST …]` compares a node's live active state against the state the entry
+asks for, and nothing about the node's placement enters it. The gate is `FUN_004edac0`, called
+from the definition start `FUN_004ed8c0` immediately before the instance is created: it walks the
+48-byte prerequisite entries (count at `def+0xe0`, `MINIMUM_TO_SATISFY` at `def+0xe1`, array
+pointer at `def+0x100`), reads the kind byte at `entry+4` (1 animation, 2 node), and for a node
+entry compares bit 2 of the flags word at `node+0x24` against bit 0 of the entry's state word at
+`entry+8`. The node is reached only through the compiled pointer at `entry+0x2c`, and a null
+pointer there skips the entry rather than refusing it. Bit 2 is the bit `gwNodeSetActive`
+(`FUN_004cca30`) writes, so the gate reads exactly what `OBJECT_ACTIVE_STATE` wrote.
+
+**A node's state at world load is its own gamez flag, copied verbatim.** `gClsBlockReadNode`
+(`FUN_004e3690`, `cls_zbd.c`) reads the 212-byte node record and copies its first 208 bytes into
+the live node object, so `node+0x24` is the record's own flags dword and bit 2 is
+[gamez.md](gamez.md)'s `flags.active`. No transform is read and no parent is walked, so there is
+no placement rule to agree or disagree with. Four authored channels move the bit afterwards, in
+the order the bootstrap runs them: the mission's `support\<chapter>\<mission>.gw` `NodeSetActive`
+([interp.md](interp.md)), a definition's `RESET_STATE`, an `ACTIVATION ON_STARTUP` definition, and
+the mission's `startanims` list.
+
+**What closes a fork is an authored channel, not the flag.** Censused over every `mis_anim` and
+`cam_anim` archive, all 1028 node entries (784 REQUIRED, 23 of which ask for ACTIVE) name a node
+its chapter gamez ships `active: true`, so a sensor that has to start closed is closed by data.
+C1C/M01's docking sensors are switched off by the `wv_hookup_state` start animation, whose first
+two events call `deactivate_pickup_node` and `deactivate_dropoff_node`, and OBJECTIVE11 and
+OBJECTIVE15 wake them again. C1's `hdrop_direction` is switched off by its own definition, C4's
+`blk_e_marker` and `fighters_destroyed` by `ON_STARTUP` definitions, and C2's `marypickford` and
+C4's `lookat_sparkspkup` by `RESET_STATE` blocks. Where the sensor is a destructible's own healthy
+variant the same channel holds it ACTIVE instead, so the fork runs until the thing dies: C1B's
+`phut_healthy` and C2's `snkchk`. C4's `sparks_ready` is the one sensor no channel writes at load,
+and its flag leaves it ACTIVE. The two entries that resolve to no chapter node name
+`player/pylon1`, which lives in the plane archive as 23 copies, every one of them `active: true`.
+
+**Distance from the world origin changes nothing, and shipped data says so.** Three forks sit far
+out and still start closed: `hdrop_direction` under `hangar_3` at (−4336, 128, −6288),
+`blk_e_marker` a world root placed at (−7724, 387, −2341), and `phut_healthy` under `powerhut` at
+(−7717, 48, −5348). The remaining sensors hang under the origin-parked library roots
+(`multiplayer1zep`, `piratezep`, `cargozep1`, `workersvoyagezep`, `tugandbarge01`, `trcar02`),
+and `blk_e_marker` is the only REQUIRED entry naming a world root at all.
+
+⚠ **CSVM applies `flags.active` at world roots only.** `WorldBuilder.Add` writes
+`built.Visible = node.Active` on each child of `world1`, and `SceneBuilder.BuildSubtree` never
+writes visibility, so a node below a world root builds shown whatever its flag says. Every
+prerequisite node ships active, so the gate cannot see the difference, but 32 world nodes across
+the eight chapters do sit in that gap.
 
 ## Sequence stopping
 

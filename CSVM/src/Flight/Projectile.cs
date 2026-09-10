@@ -118,9 +118,6 @@ public sealed partial class ProjectilePool : Node3D
     // single group still gets its smoke on essentially every round.
     private const float GunEffectInterval = 0.1f;
 
-    // The knockback on a directly struck rigid body. The original's impulse is decoded (BL-227:
-    // damage × a per-airframe constant, two magnitudes, a 5.0 threshold) and not yet consumed.
-    private const float BlastImpulsePerDamage = 1f; // N*s per point of dealt damage; TUNE
     // The raw candidate ceiling of the sphere query, well above anything a chapter packs into
     // one blast radius; the behavioural limit is MaxBlastTargets below.
     private const int MaxBlastBodies = 4096;
@@ -2478,13 +2475,6 @@ public sealed partial class ProjectilePool : Node3D
             accepted++;
         }
         _blastCandidates.Clear();
-
-        if (struck is RigidBody3D rigid)
-        {
-            var away = rigid.GlobalPosition - point;
-            if (away.LengthSquared() > 1e-6f)
-                rigid.ApplyCentralImpulse(away.Normalized() * fullDamage * BlastImpulsePerDamage);
-        }
     }
 
     // Every registered flying plane inside the radius, never the shooter's own and never one out

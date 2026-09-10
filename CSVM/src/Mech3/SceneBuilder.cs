@@ -79,6 +79,12 @@ public sealed class SceneBuilder
     // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
 
+    /// <summary>The albedo sampler every generated shader here declares, as a ready
+    /// <see cref="StringName"/>. ⚠ Use this, never the bare string, wherever the write is on a
+    /// per-frame path: the conversion mints a finalizable wrapper per call, and that count is what
+    /// sets the collection pause (docs/verification.md PERF-20).</summary>
+    public static readonly StringName AlbedoTexParam = "albedo_tex";
+
     /// <summary>A polygon carrying the <c>no_clutter</c> flag (raw bit <c>0x800</c>) in the
     /// <see cref="DebugClutterFlag"/> view: nothing is scattered on this ground.</summary>
     public static readonly Color FlaggedColor = new(1f, 0f, 0f);

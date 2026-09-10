@@ -41,10 +41,10 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // 4. Content checks before a commit: encoding, item IDs, golden prose, comment caps.
-  //    All four live in CheckCommitContent.ps1 at the repo root rather than being reimplemented
-  //    here. Three hand-maintained copies drifted - this file never received the comment-cap
-  //    check at all - so the checks are now written once and called by every harness.
+  // 4. Content checks before a commit: encoding, item IDs, golden prose, comment caps, doc
+  //    entries. All of them live in CheckCommitContent.ps1 at the repo root rather than being
+  //    reimplemented here. Three hand-maintained copies drifted - this file never received the
+  //    comment-cap check at all - so the checks are now written once and called by every harness.
   pi.on("tool_call", async (event, ctx) => {
     if (isToolCallEventType("bash", event) || isToolCallEventType("powershell", event)) {
       const result = await runContentGate(ctx.cwd, event);
@@ -145,8 +145,13 @@ async function runPowerShellDotnetFormat(cwd: string, event: any): Promise<HookR
 
 async function runContentGate(cwd: string, event: any): Promise<HookResult> {
   const command = event.input.command;
-  if (!command || !command.match(/git\s+commit/)) return NOT_BLOCKED;
+  if (!command) return NOT_BLOCKED;
 
+  // No trigger of its own. Whether a command is a commit is the gate's decision, made once in
+  // CheckCommitContent.ps1 and covered by its self-test. The three harnesses each used to test for
+  // /git\s+commit/ here, which required the two words to be adjacent and so skipped the gate
+  // entirely for "git -C <tree> commit", the form CLAUDE.md prescribes for naming a tree.
+  //
   // Only to LOCATE the gate; the gate works out which tree to check for itself.
   const here = await getGitRoot(cwd);
   if (!here) return NOT_BLOCKED;

@@ -36,7 +36,9 @@ redrawn, behind the `Loading.zrd` dialogs in [zrdr.md](zrdr.md)),
 [shakes.md](../org/shakes.md) (how the original consumes the shake laws — the per-shot/per-frame
 magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) here),
 [music.md](../org/music.md) (the music channel's routing, variant choice, battle timer and fades,
-behind [sounds.md](sounds.md)'s `MUSIC` groups) and
+behind [sounds.md](sounds.md)'s `MUSIC` groups),
+[craters.md](../org/craters.md) (the terrain-carving subsystem behind [weapons.md](weapons.md)'s
+`CRATER` key) and
 [debrief.md](../org/debrief.md) (the pass that fills the attempt half of the mission-result record
 in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries).
 

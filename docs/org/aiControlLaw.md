@@ -414,14 +414,40 @@ value = lo + (hi - lo) · rating · 0.11111112        (0x608028, exactly 1/9)
 
 so the endpoints sit at rating **0 and 9**, not 1 and 9. A rating of 9 gives `hi` exactly, but a
 rating of 1 gives `lo + (hi - lo)/9`, not `lo`. That page's stated working assumption ("linear
-interpolation over the 1-9 scale") is the right shape with the wrong origin, and `CSVM`'s
-`AiSkills` reader implements the assumption rather than this. Correcting it is `E42`'s business,
-not this page's.
+interpolation over the 1-9 scale") is the right shape with the wrong origin. `CSVM`'s `AiSkills.At`
+computes `rating/9`.
 
 This also fixes what `sixth_sense_factor` does, which that page could only describe as "the ease-off
 factor applied while being pursued". It is a **flat multiplier on the AI's three stick channels,
 applied every frame on the non-emergency path**, not a speed or a throttle term and not conditional
 on being pursued.
+
+### The rating the interpolation receives is not the authored one
+
+Each of the nine ratings is resolved and then **shifted by the difficulty** before it interpolates.
+`FUN_0047c210` builds one integer `k` at `0x0047cb32`-`0x0047cb4e` (`-2` on difficulty 0, `0` on 1,
+`+2` on 2), the same `k` the enemy armour and health scale is built from
+([vehicleDamage.md](vehicleDamage.md#taking-a-hit)), and each stat then runs the identical three
+steps: read the roster slot, fall through to the pilot def and then to the vehicle def's own
+`+0x1ec` when it is `-1`, add `k`, and clamp to `[0, 9]` (`0x0047ce15`-`0x0047ce33` for the first
+of them). All nine take it, `natural_touch` included, which is stored raw rather than interpolated.
+
+The gate is the same one the armour scale stands behind and it is **hostility, not inequality**:
+`0x0047ca79`-`0x0047ca8b` compares the spawned entity's side (`+0x8`) against the constant `1` that
+`FUN_004830c0` writes, and leaves `k` at zero when the two are equal **or when either is zero**. A
+neutral (side 0) therefore takes neither the shift nor the armour scale.
+
+⚠ **The roster's `ace` flag (slot 67) exempts a pilot from the shift, and from nothing else.** The
+read at `0x0047cde2` loads the entity's `+0x988` and zeroes `k` when it is set, and it sits between
+the armour block and the skill block: an ace's hull is scaled like any other enemy's, while its nine
+ratings reach the interpolation exactly as the roster authored them, at every difficulty. What this
+is worth is largest at the low tier, where an ordinary enemy loses two points on every stat and the
+ace loses none. This is the whole of what the flag does at spawn; its other read is the debrief's
+kill crediting ([debrief.md](debrief.md#what-the-tallies-count)).
+
+⚠ **`0` is an authored rating, not "unset".** The fall-through test is `CMP EAX,-0x1`, so only `-1`
+defers to the def. C1/M02's four `blakepeace_2_*` author a `steady_hand` of `0`, which resolves to
+the pair's `lo` outright.
 
 ## What this page does not settle
 

@@ -23,20 +23,13 @@ public sealed class Messages
     /// <summary>Loads the message table from a messages.json file. Missing file → an empty
     /// table (every lookup then falls back to the raw key), never throws — display strings
     /// are cosmetic and a mission must still load without them.</summary>
-    public static Messages Load(string path)
-    {
-        var msgs = new Messages();
-        if (!File.Exists(path))
-            return msgs;
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
-        if (doc.RootElement.TryGetProperty("entries", out var entries)
-            && entries.ValueKind == JsonValueKind.Array)
-            foreach (var e in entries.EnumerateArray())
-                if (e.TryGetProperty("key", out var k) && k.GetString() is { } key
-                    && e.TryGetProperty("value", out var v) && v.GetString() is { } value)
-                    msgs._byKey[key] = value;
-        return msgs;
-    }
+    public static Messages Load(string path) =>
+        File.Exists(path) ? Read(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
+
+    /// <summary>The same table out of JSON already in hand, for a caller with no file: the table's
+    /// own tests, and any consumer handed the document rather than the path.</summary>
+    public static Messages Parse(string json) => Read(JsonDocument.Parse(json));
+
 
     /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
     /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
@@ -93,4 +86,21 @@ public sealed class Messages
     /// <summary>Resolves <paramref name="key"/> and fills its placeholders in one call —
     /// <c>Fill(Get(key), args)</c>.</summary>
     public string Format(string? key, params string?[] args) => Fill(Get(key), args);
+
+    // The one reader both entry points share. Takes the document over so a malformed file leaks
+    // nothing on the way back out.
+    private static Messages Read(JsonDocument doc)
+    {
+        var msgs = new Messages();
+        using (doc)
+        {
+            if (doc.RootElement.TryGetProperty("entries", out var entries)
+                && entries.ValueKind == JsonValueKind.Array)
+                foreach (var e in entries.EnumerateArray())
+                    if (e.TryGetProperty("key", out var k) && k.GetString() is { } key
+                        && e.TryGetProperty("value", out var v) && v.GetString() is { } value)
+                        msgs._byKey[key] = value;
+        }
+        return msgs;
+    }
 }

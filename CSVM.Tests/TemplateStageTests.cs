@@ -16,8 +16,9 @@ namespace CSVM.Tests;
 /// no Godot engine anywhere in the path (the Godot structs used are pure math). The integration
 /// tier stays the in-engine <c>effect-template-mesh</c>/<c>effects-census</c>/
 /// <c>damage-template-pool</c> suites; nothing here re-implements those scene/visibility checks.
-/// <see cref="TestNode"/> carries no overridden <c>Equals</c>, so identity is reference equality —
-/// the same discipline the engine instantiation gets from its instance-id comparer.
+/// <see cref="TestNode"/> carries no overridden <c>Equals</c>, so identity is reference equality,
+/// the same discipline the engine gets from its instance-id comparer; the freed-node cases take
+/// <see cref="FreedThrowsIdentity"/>, which dereferences a freed node as that comparer does.
 /// </summary>
 public class TemplateStageTests
 {
@@ -474,6 +475,63 @@ public class TemplateStageTests
         Assert.True(model.Visible);
     }
 
+    // ---- a freed anchor has to LEAVE the identity-keyed maps, not merely be guarded on the way in ----
+
+    [Fact]
+    public void AFreedCallAnchorThrowsForTheNextAnchorsSlotLookup()
+    {
+        // The two maps are keyed on node identity and the comparer dereferences whatever it is
+        // handed, so the throw lands in whichever later lookup hashes into the dead key's bucket.
+        var h = new Harness(identity: FreedThrowsIdentity.Instance);
+        var (def, _) = h.PooledRoot("planeflakes", slots: 2);
+        var gone = h.Node("pdp1");
+        h.Stage.AssignCallerSlot(def, gone); // keys the slot memo and the claim map on this anchor
+        gone.Valid = false;
+
+        var live = h.Node("pdp2");
+        Assert.Throws<ObjectDisposedException>(() => h.Stage.AssignCallerSlot(def, live));
+        Assert.Equal(2, h.Stage.FreedKeys());
+        Assert.Equal(2, h.Stage.DropFreed()); // a Remove would hash the dead key and throw here
+        Assert.Equal(0, h.Stage.FreedKeys());
+        Assert.Null(h.Stage.AssignCallerSlot(def, live)); // the anchor's own first site
+    }
+
+    [Fact]
+    public void DropFreedKeepsALiveAnchorsClaimAndItsMemoizedSlot()
+    {
+        var h = new Harness(identity: FreedThrowsIdentity.Instance);
+        var (def, copies) = h.PooledRoot("planeflakes", slots: 2);
+        var gone = h.Node("pdp1");
+        var live = h.Node("pdp2");
+        h.Stage.AssignCallerSlot(def, gone);
+        h.Stage.AssignCallerSlot(def, live);
+        gone.Valid = false;
+
+        Assert.Equal(2, h.Stage.DropFreed());
+        Assert.Equal(0, h.Stage.FreedKeys());
+        // The surviving anchor still holds the copy it claimed, so the sweep retired rows and not
+        // the claim ledger: a rebuilt map that lost this would hand the next tear a live copy.
+        Assert.Same(copies[1], Assert.Single(h.Stage.RootsFor(def, live)));
+        Assert.Null(h.Stage.AssignCallerSlot(def, live));
+    }
+
+    [Fact]
+    public void DropFreedAlsoEndsAFollowRidingAFreedSite()
+    {
+        // PlaceOn and the hide half of Reveal both match a stored follow root through the same
+        // comparer, so a freed one is the same dereference between FollowSites ticks.
+        var h = new Harness(identity: FreedThrowsIdentity.Instance);
+        var (_, copies) = h.PooledRoot("fire_here", slots: 1);
+        var site = h.Node("dbase");
+        Assert.Equal(0, h.Stage.SlotOf(copies[0])); // memoizes the copy, so it is a key as well
+        h.Stage.PlaceFollowing(copies, site, site.Xf.Origin);
+        Assert.Equal(1, h.Stage.Following);
+
+        copies[0].Valid = false;
+        Assert.Equal(1, h.Stage.DropFreed()); // the copy's own slot memo row
+        Assert.Equal(0, h.Stage.Following);
+    }
+
     private static AnimDefinition Def(string name) => new() { Name = name };
 
     // The token adapter: reference-equality nodes, a parent-chain slot walk, transform
@@ -500,10 +558,10 @@ public class TemplateStageTests
         /// mid-test — the same shape production has, where <c>WorldEffectsFactory</c> builds a
         /// sealed stage and hands it to the runtime.</summary>
         public Harness(bool pooled = true, bool shown = false,
-            IEnumerable<string>? placeExempt = null)
+            IEnumerable<string>? placeExempt = null, IEqualityComparer<TestNode>? identity = null)
         {
             Stage = new TemplateStage<TestNode>(
-                EqualityComparer<TestNode>.Default,
+                identity ?? EqualityComparer<TestNode>.Default,
                 n =>
                 {
                     SlotWalks++;
@@ -561,6 +619,25 @@ public class TemplateStageTests
             Roots[name] = copies;
             return (Def(name), copies);
         }
+    }
+
+    // The engine's node identity as a freed node meets it: Godot reads an instance id that is gone.
+    // Every key hashes alike so one bucket holds them all, which makes the collision the engine only
+    // meets on some runs certain here.
+    private sealed class FreedThrowsIdentity : IEqualityComparer<TestNode>
+    {
+        public static readonly FreedThrowsIdentity Instance = new();
+
+        public bool Equals(TestNode? x, TestNode? y) => ReferenceEquals(Live(x), Live(y));
+
+        public int GetHashCode(TestNode obj)
+        {
+            Live(obj);
+            return 0;
+        }
+
+        private static TestNode? Live(TestNode? node) =>
+            node is { Valid: false } ? throw new ObjectDisposedException(nameof(TestNode)) : node;
     }
 
     private sealed class TestNode

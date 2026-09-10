@@ -49,6 +49,7 @@ be scanned across all three:
 | `templates.zrd` (the clutter decorations' per-model substitution/scale/fade properties) | [templates.md](templates.md) |
 | `interp.json` boot scripts (not zrdr, but the same config ecosystem) | [clutter.md](clutter.md) |
 | `Briefing.zrd` (the shared briefing dialog and its per-mission reveal scripts); `map.zrd`/`location.zrd` (the in-flight cockpit map, not the briefing) | [briefing.md](briefing.md) |
+| `declient.zrd` (the terrain-deformation sizes for craters and quicksand). ⚠ Chapter-level only: it lives in each chapter's `zrdr.zbd`, not the top-level one, so `unzbd`'s reader mode over the shared archive does not produce it | [org/craters.md](../org/craters.md) |
 
 ## Evidence & limits
 

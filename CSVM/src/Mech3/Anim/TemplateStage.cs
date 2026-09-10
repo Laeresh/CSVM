@@ -59,6 +59,7 @@ public sealed class TemplateStage<TNode>
     // Node → its pool slot (-1 = outside the pool), memoized on the same terms as the resolver's
     // own FindAll cache: slot containers are built before Bind and nothing is ever reparented.
     // IsAt asks per event on a poll loop, so the ancestor walk must not be repeated.
+    // ⚠ A freed node stays a KEY here; only DropFreed retires it.
     private readonly Dictionary<TNode, int> _slotOfNode;
 
     // Named once per effect, not per wrap: a pool that recycles a slot whose instance is still
@@ -75,6 +76,7 @@ public sealed class TemplateStage<TNode>
     // (template root, anchor, authored call site) here on its first call and keeps it. Keyed per
     // root, since one root's callers are a subset of all anchors. The list is in claim order, so
     // entry 0 is the anchor's own slot: the site a repeat call splits off from.
+    // ⚠ The inner map keys the anchor itself, so a freed one needs DropFreed as _slotOfNode does.
     private readonly Dictionary<string, Dictionary<TNode, List<(object Site, int Slot)>>> _callerSlots =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -212,6 +214,87 @@ public sealed class TemplateStage<TNode>
         if (_slotOfNode.TryGetValue(node, out int cached))
             return cached;
         return _slotOfNode[node] = _slotMarkOf(node);
+    }
+
+    /// <summary>How many keys of this stage's two identity-keyed maps name a node the liveness test
+    /// rejects: the memoized slot of each node asked about, and the caller-slot claims. Those are
+    /// the stale entries a freed subtree leaves behind. Walks both maps, so read it at a seam rather
+    /// than per frame; zero after <see cref="DropFreed"/>.</summary>
+    public int FreedKeys()
+    {
+        int freed = 0;
+        foreach (var entry in _slotOfNode)
+        {
+            if (!_isValid(entry.Key))
+                freed++;
+        }
+
+        foreach (var byAnchor in _callerSlots.Values)
+        {
+            foreach (var claim in byAnchor)
+            {
+                if (!_isValid(claim.Key))
+                    freed++;
+            }
+        }
+
+        return freed;
+    }
+
+    /// <summary>Retires every entry naming a node the liveness test now rejects: both
+    /// identity-keyed maps, the follows and the deferred hides. <see cref="SlotOf"/> guards only
+    /// the node it is handed, never the keys stored, so a dead key throws for the next lookup that
+    /// hashes into its bucket. Returns the keys dropped, which is what <see cref="FreedKeys"/>
+    /// counted.</summary>
+    // ⚠ Rebuild the maps; a Remove hashes the dead key it is handed.
+    public int DropFreed()
+    {
+        int dropped = 0;
+        var liveSlots = new List<KeyValuePair<TNode, int>>(_slotOfNode.Count);
+        foreach (var entry in _slotOfNode)
+        {
+            if (_isValid(entry.Key))
+                liveSlots.Add(entry);
+            else
+                dropped++;
+        }
+
+        if (dropped > 0)
+        {
+            _slotOfNode.Clear();
+            foreach (var entry in liveSlots)
+                _slotOfNode[entry.Key] = entry.Value;
+        }
+
+        foreach (var byAnchor in _callerSlots.Values)
+        {
+            var liveClaims = new List<KeyValuePair<TNode, List<(object Site, int Slot)>>>(byAnchor.Count);
+            int gone = 0;
+            foreach (var claim in byAnchor)
+            {
+                if (_isValid(claim.Key))
+                    liveClaims.Add(claim);
+                else
+                    gone++;
+            }
+
+            if (gone == 0)
+                continue;
+            dropped += gone;
+            byAnchor.Clear();
+            foreach (var claim in liveClaims)
+                byAnchor[claim.Key] = claim.Value;
+        }
+
+        // The follow list holds nodes rather than keys, but PlaceOn and the hide half of Reveal
+        // both match a stored Root through the identity comparer, so a freed one is the same
+        // dereference between the frames FollowSites drops it on.
+        _follows.RemoveAll(f => !_isValid(f.Root) || !_isValid(f.Site));
+        // A deferred hide names its call anchor, and every retry matches it against a later anchor
+        // through the comparer. Dropped rather than fulfilled: hiding now would write over the
+        // def's WHOLE anchor list. A null anchor is a global instance and stays.
+        _hidesPending.RemoveAll(p => p.Anchor is { } gone && !_isValid(gone));
+        return dropped;
     }
 
     /// <summary>Claims a pool slot for a relocating CALL_ANIMATION whose anchor sits in no slot

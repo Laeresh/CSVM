@@ -386,6 +386,43 @@ public class ZeppelinMotionTests
     }
 
     [Fact]
+    public void TheDockGlideLevelsAHullThatArrivedPitchedAtItsStopPoint()
+    {
+        // A 900 m descent onto an armed stop, so the hull arrives well nose-down. The dock glide
+        // decays the pitch toward level at the same rate as the position and the heading, outside
+        // the speed factor, so the parked airship does not keep its approach attitude.
+        var def = Def(position: new Vector3(0f, 1200f, 300f));
+        var net = new AiNet
+        {
+            Id = 1,
+            Name = "TestNet",
+            Nodes = new[]
+            {
+                new AiNetNode(new Vector3(0f, 1200f, 0f), Array.Empty<float>()),
+                new AiNetNode(new Vector3(0f, 300f, -1500f), new[] { 1f, 1f }),
+            },
+            Edges = new[] { (0, 1) },
+        };
+        var m = new ZeppelinMotion(def, new AiNetFollower(net, new Random(1), 250f,
+            observesStopPoints: true));
+
+        for (int i = 0; i < 60 * 900 && !m.Follower.Holding; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.True(m.Follower.Holding, "never reached the armed stop");
+        Assert.True(Mathf.Abs(m.PitchRad) > Mathf.DegToRad(10f),
+            $"arrived too level to test the glide: {Mathf.RadToDeg(m.PitchRad):0.#}");
+
+        for (int i = 0; i < 60 * 40; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.InRange(Mathf.RadToDeg(m.PitchRad), -0.5f, 0.5f);
+        Assert.InRange(m.Position.DistanceTo(net.Nodes[1].Position), 0f, 0.5f);
+    }
+
+    [Fact]
     public void AZeppelinSeatedOnItsOwnArmedNodeHoldsWhereTheRecordPutIt()
     {
         // The other half of the decoded pair: the node the hull already sits on halts, so it

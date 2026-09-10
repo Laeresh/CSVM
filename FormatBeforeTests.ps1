@@ -53,6 +53,14 @@ $q = [char]39
 $tokenGroup = '("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|\S+)'
 $runnerGroup = '("[^"]*RunTests\.ps1"|' + $q + '[^' + $q + ']*RunTests\.ps1' + $q + '|[^\s"' + $q + ']*RunTests\.ps1)'
 
+# git's own global options, which are what stands between "git" and its subcommand in the form
+# CLAUDE.md prescribes for naming a tree, "git -C <tree> commit". A trigger testing for the two
+# words adjacent misses every one of those, and one accepting any tokens in the gap turns
+# "git log --grep='a git commit'" into a commit and formats a tree on the strength of a quoted word.
+$gitGlobal = '(?:-[Cc]\s+' + $tokenGroup +
+    '|--(?:git-dir|work-tree|namespace|exec-path|super-prefix|config-env)(?:=|\s+)' + $tokenGroup +
+    '|--[a-z][a-z-]*|-[a-zA-Z])'
+
 # Splits a command into the pieces a shell would run one after another. A separator inside a
 # quoted string splits too; the piece that follows then begins mid-string and matches nothing,
 # which is the right answer for a mention.
@@ -77,7 +85,7 @@ function Get-Invocation {
         if ($s -match '^dotnet\s+test(?:\s|$)') {
             return [pscustomobject]@{ Kind = 'test'; Tree = '' }
         }
-        if ($s -match '^git\s+(?:.*?\s)?commit(?:\s|$)') {
+        if ($s -match ('^git(?:\s+' + $gitGlobal + ')*\s+commit(?:\s|$)')) {
             $c = [regex]::Match($s, '(?:^|\s)-C\s+' + $tokenGroup)
             $tree = ''
             if ($c.Success) { $tree = Get-UnquotedPath -Raw $c.Groups[1].Value }
@@ -178,6 +186,13 @@ function Invoke-SelfTest {
         Assert-Fires 'commit   git -C wt commit -F msg.txt' ('git -C ' + $other + ' commit -F msg.txt') 'commit'
         Assert-Fires 'commit   git add -A && git commit -m x' 'git add -A && git commit -m x' 'commit'
         Assert-Fires 'commit   a message mentioning the runner still commits' 'git commit -m "quotes RunTests.ps1"' 'commit'
+        Assert-Fires 'commit   git -c k=v commit' 'git -c user.email=x commit -m x' 'commit'
+        Assert-Fires 'commit   git --work-tree= --git-dir= commit' 'git --work-tree=Z:\wt --git-dir=Z:\wt\.git commit -m x' 'commit'
+        Assert-Fires 'commit   a valueless global before the subcommand' 'git --no-pager -C Z:\wt commit -F msg.txt' 'commit'
+        Assert-Fires 'commit   a quoted -C path holding a space' 'git -C "Z:\a b\wt" commit -m x' 'commit'
+        Assert-Fires 'mention  git log --grep="a git commit here"' 'git log --grep="a git commit here"' ''
+        Assert-Fires 'mention  git commit-tree is a different subcommand' 'git commit-tree HEAD -m x' ''
+        Assert-Fires 'mention  a non-global token before commit' 'git log commit' ''
 
         # Tree resolution: the invocation names it, a -C names it, the process directory is last.
         $r1 = Get-TargetRoot -CommandLine ($other + '\RunTests.ps1 -Quick') -From $main
@@ -192,6 +207,10 @@ function Invoke-SelfTest {
         Assert-Row 'tree     a same-call Set-Location is not honoured' ($r5 -ieq $main)
         $r6 = Get-TargetRoot -CommandLine 'Get-Content .\RunTests.ps1' -From $main
         Assert-Row 'tree     a mention resolves no tree' (-not $r6)
+        # dotnet format WRITES, so a lowercase -c read as -C would format a tree named by a config
+        # key rather than by a path.
+        $r7 = Get-TargetRoot -CommandLine 'git -c user.email=x commit -m x' -From $main
+        Assert-Row 'tree     -c is a config key and names no tree' ($r7 -ieq $main)
 
         # The entry point, end to end. A mention exits 0 having printed nothing under -ShowRoot.
         $shown = @(& (Join-Path $scriptRoot 'FormatBeforeTests.ps1') -ShowRoot -Command 'Get-Content .\RunTests.ps1')

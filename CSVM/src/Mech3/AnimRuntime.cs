@@ -531,11 +531,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // See RangePositions: the last flying pose of each player, which a cutscene hold answers with.
     private readonly List<Vector3> _rangePositions = new();
 
+    // The seeded nodes ParkDockingHook could not bind through a symbol table, published with the
+    // rest of its tally as LastDockingHookPark when the park finishes.
+    private readonly List<string> _hookSeedsUnbound = new();
+
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
 
     private int _opsApplied, _opsUnresolved;
+
+    private int _hookSeeds, _hookSeedsBound;
 
     // Whether the ambient passes have already run — set when Bootstrap runs them inline
     // (AutoStart=true) or when StartAmbient runs them on demand, so StartAmbient is idempotent
@@ -662,6 +668,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// defs by a rule <see cref="Play"/>'s name lookup cannot express (the zeppelin damage
     /// runtime finding the hull-death def by its activation prerequisite, M4 F18).</summary>
     public IReadOnlyList<AnimDefinition> ProgramDefs => _program.Defs;
+
+    /// <summary>What the last <see cref="ParkDockingHook"/> left behind (<see cref="DockingHookPark"/>),
+    /// zeroed before it starts. A suite reads the park's OWN verdict rather than re-asking the
+    /// resolver afterwards, which would answer about a table later stages have grown.</summary>
+    public DockingHookPark LastDockingHookPark { get; private set; }
 
     /// <summary>One-shot SOUND events that resolved to a stream and fired this session (the
     /// destruction/damage/impact audio). Exposed for the damage-test harness, which cannot
@@ -1163,9 +1174,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// generic node names must not re-pose it.</summary>
     public void IndexRebasedStage(Node3D subtree, int indexOffset)
     {
-        // ⚠ Retire first, and only here: this is the one stage that puts a subtree in over one
-        // its caller may have freed, an airframe swapped for another on the same rig.
-        DropFreedNodes();
+        // ⚠ Retire first: this is the one stage that puts a subtree in over one its caller may
+        // have freed, an airframe swapped for another on the same rig.
+        RetireFreedNodes();
         IndexWorld(subtree, indexOffset: indexOffset);
         _resolver.ClearFindCache();
     }
@@ -1175,6 +1186,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// assert that, because the fault a stale row causes needs a hash collision and so shows on
     /// some runs only.</summary>
     public int FreedNodeRows() => _resolver.FreedRows();
+
+    /// <summary>How many keys of the template stage's identity-keyed maps name a node that has
+    /// since been freed, the same reading <see cref="FreedNodeRows"/> gives for the node table.
+    /// The stage guards the node a call hands it and never the keys it already holds, so a suite
+    /// reads this rather than re-running until a collision throws.</summary>
+    public int FreedStageKeys() => _templateStage.FreedKeys();
+
+    /// <summary>Retires every node-table row and every template-stage key naming a node that has
+    /// been freed, and returns how many went. The two staging entries call it before they grow
+    /// their tables; a caller that frees a subtree this runtime resolved against and stages nothing
+    /// in its place calls it itself, since the free is the only event either table gets.</summary>
+    // ⚠ Both halves REBUILD; a Remove hashes the dead key it is handed, which is the dereference
+    // being avoided. Why a dead key throws at all: docs/architecture/Mech3.md.
+    public int RetireFreedNodes()
+    {
+        int rows = _resolver.DropFreed();
+        int keys = _templateStage.DropFreed();
+        if (rows > 0 || keys > 0)
+            Log.Info("anim", $"anim: retired {rows} node-table row(s) and {keys} template-stage key(s) naming freed node(s)");
+        return rows + keys;
+    }
 
     /// <summary>Parks a flown airframe's docking hook where its own <c>&lt;x&gt;_hook_retract</c>
     /// RESET_STATE puts it, scoped to a <see cref="PlaneBuilder.IsDockingHook"/> group inside this
@@ -1186,6 +1218,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         ArgumentNullException.ThrowIfNull(planeModel);
         int applied = 0;
+        _hookSeeds = 0;
+        _hookSeedsBound = 0;
+        _hookSeedsUnbound.Clear();
         // Two explicit passes, not one interleaved: _program.Defs lists a group's own extend and
         // retract in whatever order they were loaded, and the seed pass below must win over every
         // RESET_STATE, never race it.
@@ -1210,6 +1245,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 applied++;
             }
         }
+        LastDockingHookPark = new DockingHookPark(
+            _hookSeeds, _hookSeedsBound, string.Join(", ", _hookSeedsUnbound));
         return applied;
     }
 
@@ -1761,6 +1798,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// resolves against itself as long as it is passed as the anchor.</summary>
     internal void IndexPooledCopy(Node3D subtree)
     {
+        // ⚠ Retire first, as IndexRebasedStage does: a copy is built mid-session, so the maps it
+        // joins may already key a call-site anchor the world has freed since the last one.
+        RetireFreedNodes();
         _templateStage.IndexPooledCopy(subtree);
         PrimeRest(subtree);
         _stagedCopies.Add(subtree);
@@ -1945,6 +1985,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private static bool AuthoredInResetState(AnimDefinition def, AnimEvent ev) =>
         def.ResetState is { } reset && reset.Events.Contains(ev);
 
+    // Does this event come from the definition's own death choreography, the non-ON_CALL sequences
+    // and destruction slot RunDeathSequence plays? Reference identity again, and static rather than
+    // a look at what is dying: a death's later events land minutes after its burst has returned.
+    private static bool AuthoredInDeathChoreography(AnimDefinition def, AnimEvent ev)
+    {
+        foreach (var seq in def.Sequences)
+            if (!seq.OnCallOnly && seq.Events.Contains(ev))
+                return true;
+        return def.DeathSlot is { } slot && slot.Events.Contains(ev);
+    }
+
     // The name of def's own healthy-role node, for DestructibleKilled: the node an OBJECT_ACTIVE_
     // STATE switches off in def's own Initial sequences (the visible-death case), or else the one
     // RESET_STATE holds ACTIVE (the RESET-derived swap ApplyDeathSwap plays instead). Null for a
@@ -2057,20 +2108,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         root.TopLevel = true;
         root.GlobalTransform = xf;
-    }
-
-    // A plain depth-first name search under one root: no symbol table, no wildcard, just NameOf
-    // equality, scoped to a single aircraft's own subtree so it cannot cross into another.
-    private static Node3D? FindNamedChild(Node3D root, string name)
-    {
-        if (string.Equals(NameOf(root), name, StringComparison.OrdinalIgnoreCase))
-            return root;
-        foreach (var child in root.GetChildren())
-        {
-            if (child is Node3D n3d && FindNamedChild(n3d, name) is { } found)
-                return found;
-        }
-        return null;
     }
 
     /// <summary>INVALIDATE_ANIMATION: latches an animation off without touching what it is doing.
@@ -2398,16 +2435,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Walk(worldRoot, worldRoot.GetParent() as Node3D);
     }
 
-    // Retires every row naming a node freed since the last stage, before this stage's own queries
-    // meet one. Nothing tells the resolver a node has gone, and its ancestry walk hashes each step
-    // of a chain. A dead key then throws for whatever later query lands in its bucket.
-    private void DropFreedNodes()
-    {
-        int dropped = _resolver.DropFreed();
-        if (dropped > 0)
-            Log.Info("anim", $"anim: node table retired {dropped} row(s) naming freed node(s)");
-    }
-
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
     // within a subtree added after the fact — IndexStage's (and IndexPooledCopy's) own tail.
     private void ApplyResetStatesWithin(Node3D subtree)
@@ -2609,18 +2636,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             if (!rotate.ContainsKey(name) && !scale.ContainsKey(name) && !translate.ContainsKey(name))
                 continue;
-            // A plain name walk under the anchor, scoped so it cannot cross into another
-            // aircraft: the docking-hook subtree is small and its node names are unambiguous
-            // within it, so this needs no symbol table.
-            if (anchor == null || FindNamedChild(anchor, name) is not { } t)
-                continue;
-            var rest = RestOf(t);
-            var rot = rotate.TryGetValue(name, out var r) ? r
-                : rest.Basis.Orthonormalized().GetEuler(EulerOrder.Yxz);
-            var sc = scale.TryGetValue(name, out var s) ? s : rest.Basis.Scale;
-            var origin = translate.TryGetValue(name, out var o) ? o : rest.Origin;
-            t.Transform = new Transform3D(
-                Basis.FromEuler(rot, EulerOrder.Yxz).Scaled(NonSingularScale(sc)), origin);
+            _hookSeeds++;
+            if (_resolver.SymbolClaims(extend, name, anchor, out var bound) && bound != null)
+                _hookSeedsBound++;
+            else
+                _hookSeedsUnbound.Add($"{extend.AnimName ?? extend.Name}/{name}");
+            // Resolved exactly as the dispatch that later moves this same node resolves it
+            // (Targets): the definition's own symbol table, and on a claimed-but-unbuilt index the
+            // anchor-scoped rescue, never a global name match onto another aircraft's arm.
+            foreach (var t in Targets(ev, extend, anchor))
+            {
+                var rest = RestOf(t);
+                var rot = rotate.TryGetValue(name, out var r) ? r
+                    : rest.Basis.Orthonormalized().GetEuler(EulerOrder.Yxz);
+                var sc = scale.TryGetValue(name, out var s) ? s : rest.Basis.Scale;
+                var origin = translate.TryGetValue(name, out var o) ? o : rest.Origin;
+                t.Transform = new Transform3D(
+                    Basis.FromEuler(rot, EulerOrder.Yxz).Scaled(NonSingularScale(sc)), origin);
+            }
         }
     }
 
@@ -3753,7 +3786,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         else if ((active && healthyRole) || (!active && destroyedRole))
         {
-            if (inst.Status == DestructibleRegistry.State.Destroyed)
+            // Dying is not reviving. A wreck that clears itself away switches its own destroyed-role
+            // nodes back off, so only a baseline or another script may put the pool back.
+            if (inst.Status == DestructibleRegistry.State.Destroyed
+                && !AuthoredInDeathChoreography(def, ev))
             {
                 inst.Health = inst.MaxHealth;
                 inst.Status = DestructibleRegistry.State.Healthy;
@@ -4312,4 +4348,12 @@ public sealed partial class AnimRuntime
         private static Vector2? MinMax(AnimData? pair) =>
             pair is { } p ? new Vector2(p.Num("min") ?? 0f, p.Num("max") ?? 0f) : null;
     }
+
+    /// <summary>What one <see cref="ParkDockingHook"/> made of the nodes it seeds, kept so a caller
+    /// reads the state that park LEFT: the same question asked later answers about a node table
+    /// other stages have grown and other definitions have dispatched against.</summary>
+    /// <param name="Seeded">Nodes the flown airframe's own extend definitions author a FROM pose for.</param>
+    /// <param name="SymbolBound">Of those, the ones that definition's compiled symbol table bound.</param>
+    /// <param name="Unbound">The rest, as <c>anim/node</c>; empty when the table bound them all.</param>
+    public readonly record struct DockingHookPark(int Seeded, int SymbolBound, string Unbound);
 }
