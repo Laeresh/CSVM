@@ -28,7 +28,8 @@ internal static class GeneratorCreditSuites
         "the decoded credit rule over C4/M03's BUILT world (BL-657): cargozep1's generator "
         + "launches nothing through 30 s at altitude on its authored capacity 0, cutscene "
         + "callback 800 raised through the runtime's host chain is answered and credits the "
-        + "generator by name with five launches, which then drop through the opened hangar doors "
+        + "generator by name with five launches, the first of which waits out the door lead the "
+        + "crediting step starts rather than dropping through shut panels, and which then come "
         + "one every 4 s (ind 3 + wave 1) and stop at five, while 801, the launch hook's own "
         + "code, is passed down the chain rather than credited")]
     internal static void GeneratorCallbackCredit(TestContext ctx)
@@ -65,6 +66,7 @@ internal static class GeneratorCreditSuites
                 float clock = 0f;
                 var spawns = new List<float>();
                 var doorPlays = new List<string>();
+                var doorTimes = new List<float>();
                 generators = new AiGeneratorRuntime(defs,
                     (name, scope) => runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
                     AiNets.Load(chapterZrdr), ctx.PlaneName,
@@ -73,7 +75,7 @@ internal static class GeneratorCreditSuites
                         spawns.Add(clock);
                         return default(LaunchedVehicle);
                     },
-                    (name, _) => { doorPlays.Add(name); return 1; },
+                    (name, _) => { doorPlays.Add(name); doorTimes.Add(clock); return 1; },
                     (_, _) => { });
                 ctx.Check(generators.LiveCount > 0, $"'{Generator}' is live over the built world");
 
@@ -115,10 +117,13 @@ internal static class GeneratorCreditSuites
                 Sim(LaunchWindowS);
                 ctx.Same(AiGeneratorRuntime.CallbackCredit, spawns.Count,
                     $"exactly {AiGeneratorRuntime.CallbackCredit} launches follow the credit in {LaunchWindowS:0} s");
-                if (spawns.Count > 0)
+                if (spawns.Count > 0 && doorTimes.Count > 0)
                 {
-                    ctx.Check(spawns[0] - IdleS < 2f * StepDt,
-                        $"the held first launch fires on the crediting step (t=+{spawns[0] - IdleS:0.00} s)");
+                    float lead = spawns[0] - doorTimes[0];
+                    ctx.Check(doorTimes[0] - IdleS < 2f * StepDt,
+                        $"the crediting step starts the hangar opening (t=+{doorTimes[0] - IdleS:0.00} s)");
+                    ctx.Check(Math.Abs(lead - GeneratorCycle.DoorLeadSeconds) < 0.1f,
+                        $"…and the first launch follows it by {lead:0.00} s, the decoded {GeneratorCycle.DoorLeadSeconds:0} s lead, not through shut panels");
                 }
                 for (int i = 1; i < spawns.Count; i++)
                 {

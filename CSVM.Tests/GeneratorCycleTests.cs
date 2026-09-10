@@ -7,7 +7,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// The decoded egen timing law (docs/formats/mission-entities/enemy-generators.md "The generator
 /// cycle"), pure and engine-free: period composition, the hold-not-cancel altitude gate,
-/// max_active blocking, and the credit rule under which an uncredited cycle never launches.
+/// max_active blocking, the credit rule under which an uncredited cycle never launches, and the
+/// door lead a released spawn waits out rather than flying through a hangar that is still shut.
 /// </summary>
 public class GeneratorCycleTests
 {
@@ -41,14 +42,16 @@ public class GeneratorCycleTests
     public void TheAltitudeGateHoldsAndDoesNotCancel()
     {
         // Below the gate nothing spawns, but the timer keeps running (hold, not cancel): the
-        // held spawn fires on the FIRST step at altitude, not a full period later.
+        // held spawn follows the FIRST step at altitude by the door lead, not a full period.
         var cycle = Credited(maxActive: 99, waveSize: 1, wavePeriod: 10f, indPeriod: 10f,
             minAltitude: 150f);
         for (float t = 0f; t < 60f; t += Dt)
         {
             Assert.False(cycle.Step(Dt, hostAltitude: 100f));
         }
-        Assert.True(cycle.Step(Dt, hostAltitude: 200f));
+        Assert.False(cycle.Step(Dt, hostAltitude: 200f));   // the hangar opens on this step
+        Assert.True(cycle.DoorOpen);
+        Assert.InRange(StepsUntilSpawn(cycle) * Dt, 3.9f, 4.15f);
     }
 
     [Fact]
@@ -73,7 +76,9 @@ public class GeneratorCycleTests
             Assert.False(cycle.Step(Dt, hostAltitude: 100f));   // held below the gate
             t += Dt;
         }
-        Assert.True(cycle.Step(Dt, HighAltitude));   // the held individual fires immediately
+        // The hangar shut while the wave was held, so the individual waits out the door lead.
+        Assert.False(cycle.Step(Dt, HighAltitude));
+        Assert.InRange(StepsUntilSpawn(cycle) * Dt, 3.9f, 4.15f);
         // The wave's third individual follows one ind_period later, not one inter-wave gap.
         int steps = 0;
         while (!cycle.Step(Dt, HighAltitude))
@@ -90,8 +95,10 @@ public class GeneratorCycleTests
         Assert.Single(SpawnTimes(cycle, seconds: 30f));
         Assert.Equal(1, cycle.Active);
         cycle.SpawnRemoved();
-        // The timer accumulated the whole while (hold, not cancel): the next spawn is immediate.
-        Assert.True(cycle.Step(Dt, HighAltitude));
+        // The timer accumulated the whole while (hold, not cancel), but the hangar shut under
+        // the block, so the freed slot's spawn follows the reopening by the door lead.
+        Assert.False(cycle.Step(Dt, HighAltitude));
+        Assert.InRange(StepsUntilSpawn(cycle) * Dt, 3.9f, 4.15f);
     }
 
     [Fact]
@@ -114,24 +121,27 @@ public class GeneratorCycleTests
         cycle.GrantCapacity(2);
         Assert.Equal(2, SpawnTimes(cycle, seconds: 60f).Count);
         Assert.Equal(0, cycle.CapacityRemaining);
-        // A later credit releases the held spawn on its first step: the timer ran on.
+        // A later credit reopens the hangar on its first step and the held spawn follows the
+        // door lead: the timer ran on, but the panels have not moved yet.
         cycle.GrantCapacity(1);
-        Assert.True(cycle.Step(Dt, HighAltitude));
+        Assert.False(cycle.Step(Dt, HighAltitude));
+        Assert.True(cycle.DoorOpen);
+        Assert.InRange(StepsUntilSpawn(cycle) * Dt, 3.9f, 4.15f);
     }
 
     [Fact]
-    public void AHeldCreditLaunchesImmediatelyAndThenOnTheComposedPeriod()
+    public void AHeldCreditWaitsOutTheDoorLeadAndThenRunsTheComposedPeriod()
     {
-        // C4/M03's cargozep1: wave 1, ind 3 + wave 1. Credited 5 long after load, the first
-        // launch fires on the crediting step (the timer is far past its threshold) and the
-        // other four follow one every 4 s.
+        // C4/M03's cargozep1: wave 1, ind 3 + wave 1. Credited 5 long after load, the crediting
+        // step opens the hangar and the first Fury waits out the lead rather than flying through
+        // panels that have not moved; the other four follow one every 4 s.
         var cycle = new GeneratorCycle(maxActive: 10, waveSize: 1, wavePeriod: 1f, indPeriod: 3f,
             minAltitude: null);
         Assert.Empty(SpawnTimes(cycle, seconds: 30f));
         cycle.GrantCapacity(5);
         var times = SpawnTimes(cycle, seconds: 30f);
         Assert.Equal(5, times.Count);
-        Assert.Equal(0.1f, times[0]);
+        Assert.InRange(times[0], GeneratorCycle.DoorLeadSeconds, GeneratorCycle.DoorLeadSeconds + 0.3f);
         for (int i = 1; i < times.Count; i++)
         {
             // One step of float accumulation slack on each 4 s gap.
@@ -177,6 +187,25 @@ public class GeneratorCycleTests
     }
 
     [Fact]
+    public void NoSpawnSharesTheStepATravellingDoorOpensOn()
+    {
+        // The original's spawn branch tests the door for FULLY open, a state its open animation's
+        // completion reaches, so an overdue cycle cannot satisfy both thresholds in one call. Four
+        // shapes that leave the timer past its threshold with the hangar shut.
+        var overdue = new List<GeneratorCycle>
+        {
+            LateCredit(), ReleasedGate(), FreedSlot(), LateCreditOnAShortPeriod(),
+        };
+        foreach (var cycle in overdue)
+        {
+            Assert.False(cycle.DoorOpen);
+            Assert.False(cycle.Step(Dt, HighAltitude));
+            Assert.True(cycle.DoorOpen);
+            Assert.InRange(StepsUntilSpawn(cycle) * Dt, 3.9f, 4.15f);
+        }
+    }
+
+    [Fact]
     public void TheDoorClosesEarlyOnlyWhenTheNextSpawnIsMoreThanEightSecondsAway()
     {
         // Gap 20 s: after a spawn the door holds its 4 s minimum, then closes early
@@ -219,7 +248,7 @@ public class GeneratorCycleTests
     }
 
     [Fact]
-    public void ABlockedGeneratorClosesOnlyTheDoorAndReopensToSpawnOnRelease()
+    public void ABlockedGeneratorClosesOnlyTheDoorAndReopensAheadOfTheReleasedSpawn()
     {
         // Block right after a spawn, with the door open and the since-spawn timer under the
         // 4 s minimum (the decoded rule measures the door's minimum on that same timer).
@@ -244,9 +273,10 @@ public class GeneratorCycleTests
             Assert.False(cycle.Step(Dt, hostAltitude: 100f));
         }
         Assert.False(cycle.DoorOpen);
-        // Release: the door reopens and the held spawn fires in the same step.
-        Assert.True(cycle.Step(Dt, HighAltitude));
+        // Release: the door reopens on this step and the held spawn waits out the lead behind it.
+        Assert.False(cycle.Step(Dt, HighAltitude));
         Assert.True(cycle.DoorOpen);
+        Assert.InRange(StepsUntilSpawn(cycle) * Dt, 3.9f, 4.15f);
     }
 
     [Fact]
@@ -284,7 +314,7 @@ public class GeneratorCycleTests
     {
         // C5/M04's shape: the Dante's kill lands 0.3 s before OBJECTIVE11 credits Miles's
         // launch. The bay is past its first due point (timer 40 s against a 4 s threshold), so
-        // the credit opens the door and launches on the same step, inside the grace.
+        // the credit opens the door and the launch waits out the lead, outliving the grace.
         var cycle = new GeneratorCycle(maxActive: 1, waveSize: 1, wavePeriod: 2f, indPeriod: 2f,
             minAltitude: null);
         Assert.Empty(SpawnTimes(cycle, seconds: 40f));
@@ -294,8 +324,12 @@ public class GeneratorCycleTests
             Assert.False(cycle.Step(Dt, HighAltitude));
         }
         cycle.GrantCapacity(1);
-        Assert.True(cycle.Step(Dt, HighAltitude));
+        Assert.False(cycle.Step(Dt, HighAltitude));
+        Assert.InRange(StepsUntilSpawn(cycle) * Dt, 3.9f, 4.15f);
         Assert.Equal(1, cycle.Active);
+        // The launch spent, the bay disables on its next step: the grace covered one hold.
+        Assert.Empty(SpawnTimes(cycle, seconds: 10f));
+        Assert.True(cycle.Disabled);
     }
 
     [Fact]
@@ -329,6 +363,60 @@ public class GeneratorCycleTests
             }
         }
         Assert.Fail("no spawn within the budget");
+    }
+
+    // C4/M03's cargozep1: nothing until the docking film's callback 800 credits it minutes in.
+    private static GeneratorCycle LateCredit()
+    {
+        var cycle = new GeneratorCycle(maxActive: 10, waveSize: 1, wavePeriod: 1f, indPeriod: 3f,
+            minAltitude: null);
+        SpawnTimes(cycle, seconds: 30f);
+        cycle.GrantCapacity(5);
+        return cycle;
+    }
+
+    // The same shape on a cycle whose whole period is under the door lead.
+    private static GeneratorCycle LateCreditOnAShortPeriod()
+    {
+        var cycle = new GeneratorCycle(maxActive: 10, waveSize: 1, wavePeriod: 0.5f,
+            indPeriod: 0.5f, minAltitude: null);
+        SpawnTimes(cycle, seconds: 30f);
+        cycle.GrantCapacity(5);
+        return cycle;
+    }
+
+    // A zeppelin that spent the whole cycle under its launch gate and has just climbed back.
+    private static GeneratorCycle ReleasedGate()
+    {
+        var cycle = Credited(maxActive: 99, waveSize: 1, wavePeriod: 10f, indPeriod: 10f,
+            minAltitude: 150f);
+        for (float t = 0f; t < 60f; t += Dt)
+        {
+            cycle.Step(Dt, hostAltitude: 100f);
+        }
+        return cycle;
+    }
+
+    // A bay held at max_active whose one live spawn has just been shot down.
+    private static GeneratorCycle FreedSlot()
+    {
+        var cycle = Credited(maxActive: 1, waveSize: 1, wavePeriod: 1f, indPeriod: 1f);
+        SpawnTimes(cycle, seconds: 30f);
+        cycle.SpawnRemoved();
+        return cycle;
+    }
+
+    private static int StepsUntilSpawn(GeneratorCycle cycle)
+    {
+        for (int i = 1; i <= 10_000; i++)
+        {
+            if (cycle.Step(Dt, HighAltitude))
+            {
+                return i;
+            }
+        }
+        Assert.Fail("no spawn within the budget");
+        return 0;
     }
 
     private static List<float> SpawnTimes(GeneratorCycle cycle, float seconds)

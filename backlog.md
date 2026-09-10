@@ -2993,31 +2993,6 @@ usual.
   case in `CampaignSuites` should assert all three. *Playtest after fix:* CM14, dock with the
   objectives complete. *Cross-refs:* `BL-727`'s closing commit.
 
-- `BL-771` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` `[CM18]` **A generator
-  credited long after load fires its first launch on the same step its hangar door starts opening,
-  so that aircraft flies out through a door that is still closed.** *Evidence:* reported at the
-  controls on CM18's docking film (`PT-118` (b), closed; the row's four other checks passed).
-  Five allied Furies drop from `cargozep1` about 4 s apart, but "the first one
-  starts a little early and flies through the still closed door". `GeneratorCycle.Step` is where it
-  comes from: an uncredited cycle is `Blocked`, and a blocked step advances `_timer` without ever
-  opening the door, so by the time cutscene callback 800 grants capacity minutes into the mission
-  the timer is far past `_nextEvent`. On that first unblocked step the door-lead branch sets
-  `DoorOpen` and the spawn branch fires inside the same call, spending the whole
-  `DoorLeadSeconds` at once, and `AiGeneratorRuntime` only starts the open anim on that same step
-  (`PlayDoor`, `CSVM/src/Session/AiGeneratorRuntime.cs:263-267`), so the panels have not moved yet.
-  Launches two to five are clean because the spawn resets `_timer` to 0 and leaves the door open.
-  *Fix shape:* on a step that opens a door from closed, hold the spawn until the lead has actually
-  run (clamp `_timer` to `_nextEvent - DoorLeadSeconds` as `DoorOpen` flips) instead of letting one
-  step satisfy both thresholds. *⚠ Traps:* whether the original does the same is not decoded, and
-  `FUN_00452850`'s loop order is what settles it: the remake mirrors the decoded order, so this may
-  be authentic and the fix a deliberate deviation. Read it before touching the cycle. The
-  `generator-callback-credit` suite pins five launches one every 4 s but does not look at the door
-  at the first spawn; extend that suite rather than adding one. *Playtest after fix:* CM18
-  (`./RunGame.ps1 --campaign=<profile>:17`), the docking beauty shot, the first Fury only.
-  *Cross-refs:* `BL-657`'s closing commit (the credit rule and the callback host), `BL-699` (the
-  per-launch hitch, which is a separate item and was not seen on these five),
-  `docs/formats/mission-entities/enemy-generators.md`.
-
 ## Tooling, platform & docs
 
 - `BL-677` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **CSVM starts a `CALL_ANIMATION` callee inside the caller's own tick; the

@@ -368,7 +368,8 @@ internal static class ZeppelinSuites
         "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
         "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +
         "compiled OnCall defs over door_left/door_right), holds below the 100 m gate with " +
-        "the door shut, and on F17's flown zeppelin opens the door and drops fighters at " +
+        "the door shut, and on F17's flown zeppelin opens the door, holds the overdue drop " +
+        "for the decoded door lead, then drops fighters at " +
         "the origin node's LIVE position on the composed 7 s schedule — the fast cycle " +
         "leaving the hangar open (close early only past an 8 s gap) — while a max_active 1 " +
         "clone stops after one live spawn")]
@@ -503,7 +504,7 @@ internal static class ZeppelinSuites
 
             // F17 places and flies the zeppelin; the gate releases. The held spawn is overdue
             // (timer 10 s > the 7 s threshold), so the first unblocked step opens the door and
-            // drops the fighter through it in the same tick.
+            // the drop follows the lead behind it rather than passing through shut panels.
             zeps = new ZeppelinRuntime(zepDefs, name =>
                 name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase) ? resolvedHost : null, nets);
             ctx.Same(1, zeps.LiveCount, $"the zeppelin is placed and flying (F17)");
@@ -513,9 +514,20 @@ internal static class ZeppelinSuites
                 $"…and has left its authored pose dist={host.GlobalPosition.DistanceTo(zepDefs[0].Position):0.#} m");
 
             gens.SimStep(dt);
-            ctx.Check(spawned.Count == 1, $"the held spawn fires on the first step at altitude");
+            ctx.Check(spawned.Count == 0, $"the first step at altitude drops nobody spawns={spawned.Count}");
             ctx.Check(animPlays.Count == 1 && animPlays[0] == "mp1_open_doors",
-                $"the door opened with the authored anim plays=[{string.Join(",", animPlays)}]");
+                $"…it opens the door with the authored anim plays=[{string.Join(",", animPlays)}]");
+            int leadSteps = 0;
+            while (spawned.Count < 1 && leadSteps < 60 * 8)
+            {
+                leadSteps++;
+                zeps.SimStep(dt);
+                gens.SimStep(dt);
+            }
+            float heldFor = leadSteps / 60f;
+            ctx.Check(spawned.Count == 1 && heldFor > GeneratorCycle.DoorLeadSeconds - 0.1f
+                && heldFor < GeneratorCycle.DoorLeadSeconds + 0.1f,
+                $"…and the held fighter drops {heldFor:0.00} s behind it, the decoded {GeneratorCycle.DoorLeadSeconds:0} s lead");
             ctx.Check(spawnPositions.Count == 1
                 && spawnPositions[0].DistanceTo(cargobay.GlobalPosition) < 0.1f,
                 $"the fighter dropped at the origin node's LIVE position (riding the moving hull) pos={spawnPositions[0]} bay={cargobay.GlobalPosition}");

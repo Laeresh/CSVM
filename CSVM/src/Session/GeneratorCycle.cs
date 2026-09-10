@@ -24,9 +24,10 @@ public sealed class GeneratorCycle
     public const float DoorEarlyCloseGapSeconds = 8f;
 
     /// <summary>Seconds a launch bay stays open after its host's kill: the decoded wreck timer
-    /// (the kill stamps the zeppelin's sink for 3 s later). ⚠ A deliberate deviation: the
-    /// original disables the generator on the kill tick, and C5/M04 loses on it when the fourth
-    /// gasbag dies inside OBJECTIVE10's 0.5 s nap before OBJECTIVE11 credits Miles's launch
+    /// (the kill stamps the zeppelin's sink for 3 s later). A launch already waiting out its door
+    /// lead completes past it. ⚠ A deliberate deviation: the original disables the generator on
+    /// the kill tick, and C5/M04 loses on it when the fourth gasbag dies inside OBJECTIVE10's
+    /// 0.5 s nap before OBJECTIVE11 credits Miles's launch
     /// (docs/formats/mission-entities/enemy-generators.md, "The host's death").</summary>
     public const float HostDeathGraceSeconds = 3f;
 
@@ -41,6 +42,7 @@ public sealed class GeneratorCycle
     private float _timer;
     private float _nextEvent;
     private float? _sinceHostDeath;
+    private bool _launchHeldForDoor;
 
     public GeneratorCycle(int maxActive, int waveSize, float wavePeriod, float indPeriod,
         float? minAltitude)
@@ -73,10 +75,12 @@ public sealed class GeneratorCycle
 
     /// <summary>The hangar door, driven by <see cref="Step"/> under the decoded hardcoded
     /// timings. Closed at load; on the host's death it keeps its last state (the decoded loop
-    /// early-outs a disabled generator before any door rule runs).</summary>
+    /// early-outs a disabled generator before any door rule runs). No spawn shares the step this
+    /// flips on, so nothing launches through panels that have not moved.</summary>
     public bool DoorOpen { get; private set; }
 
-    /// <summary>Seconds since the last spawn (or load); compared against <see cref="NextEvent"/>.</summary>
+    /// <summary>Seconds since the last spawn (or load), pushed back to the lead point when a due
+    /// spawn waits for its hangar; compared against <see cref="NextEvent"/>.</summary>
     public float Timer => _timer;
 
     /// <summary>The threshold the timer must reach for the next spawn.</summary>
@@ -106,8 +110,9 @@ public sealed class GeneratorCycle
 
     /// <summary>Advances the cycle one sim step. True exactly when a spawn is due this step,
     /// at most one per call, matching the original's one-spawn-per-tick shape. A blocked step
-    /// still advances the timer (hold, not cancel), so the spawn fires on the first unblocked
-    /// step at or past the threshold. <paramref name="hostAltitude"/> is compared against the
+    /// still advances the timer (hold, not cancel); the released spawn then follows by the door
+    /// lead whenever the hangar has to open for it, unless <see cref="ReleaseDoorHold"/> says the
+    /// door has no animation to travel. <paramref name="hostAltitude"/> is compared against the
     /// authored gate; pass anything when <see cref="EnemyGeneratorDef.MinAltitude"/> is null.</summary>
     public bool Step(float dt, float hostAltitude)
     {
@@ -118,7 +123,9 @@ public sealed class GeneratorCycle
         if (_sinceHostDeath is float since)
         {
             _sinceHostDeath = since + dt;
-            if (since >= HostDeathGraceSeconds)
+            // A launch waiting out its door lead outlives the grace, or the deviation buys C5/M04
+            // nothing: the credit lands 0.5 s after the kill and the lead runs past 3 s.
+            if (since >= HostDeathGraceSeconds && !_launchHeldForDoor)
             {
                 Disabled = true;
                 return false;
@@ -134,6 +141,7 @@ public sealed class GeneratorCycle
             {
                 DoorOpen = false;
             }
+            _launchHeldForDoor = false;
             return false;
         }
         if (DoorOpen && _timer >= DoorMinOpenSeconds
@@ -144,11 +152,37 @@ public sealed class GeneratorCycle
         if (!DoorOpen && _timer >= _nextEvent - DoorLeadSeconds)
         {
             DoorOpen = true;    // open 4 s ahead of the due spawn
+            if (_timer >= _nextEvent)
+            {
+                // The panels only start moving on this step, and the original's spawn tests the
+                // door for FULLY open, a state its open animation's completion reaches. Give a
+                // timer that ran past both thresholds while blocked the lead back.
+                _timer = _nextEvent - DoorLeadSeconds;
+                _launchHeldForDoor = true;
+            }
         }
         if (!DoorOpen || _timer < _nextEvent)
         {
             return false;
         }
+        return CommitSpawn();
+    }
+
+    /// <summary>Reports that the door this step opened has no animation to travel, so it stands
+    /// fully open at once as the decoded no-definition branch does, and any launch held for its
+    /// lead goes now. True when that launch fires, which the caller books like any other.</summary>
+    public bool ReleaseDoorHold()
+    {
+        if (!_launchHeldForDoor)
+        {
+            return false;
+        }
+        return CommitSpawn();
+    }
+
+    private bool CommitSpawn()
+    {
+        _launchHeldForDoor = false;
         _capacityRemaining--;
         Active++;
         _spawnedThisWave++;

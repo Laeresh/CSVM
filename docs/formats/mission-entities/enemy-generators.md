@@ -66,12 +66,16 @@ blocked = (wave_size - spawnedThisWave) + active   > max_active
        or (wave_size - spawnedThisWave)            > capacityRemaining
        or (min_altitude set and host altitude < min_altitude)
 
-if blocked:      if door open and timer >= 4 -> close door        # hold, do not cancel
+if blocked:      if door OPEN and timer >= 4 -> close door        # hold, do not cancel
 else:
-  door open  and timer >= 4 and timer + 8 < nextEvent -> close door
-  door closed and timer >= nextEvent - 4               -> open door
-  door open  and timer >= nextEvent                    -> SPAWN
+  door OPEN   and timer >= 4 and timer + 8 < nextEvent -> close door
+  door CLOSED and timer >= nextEvent - 4               -> open door
+  door OPEN   and timer >= nextEvent                   -> SPAWN
 ```
+
+The capitals matter: `OPEN` and `CLOSED` are two of the door's **four** states, and a door in
+motion is in neither, so none of those three rules fires while one is travelling. See
+[The door is a four-state machine](#the-door-is-a-four-state-machine).
 
 On a successful spawn: `capacityRemaining--`, `active++`, timer resets to 0, and the wave counter
 advances. If the wave is now complete the counter resets and
@@ -93,6 +97,31 @@ One value the decode does not pin: the FIRST `nextEvent` threshold after load. T
 implementation (`Session/GeneratorCycle.cs`) assumes the full inter-wave gap
 (`ind_period + wave_period`), the conservative reading, and says so where F20 will revisit it.
 
+### The door is a four-state machine
+
+The door is its own small object on the generator record at `+0xa4`: a handler table, a state at
+`+0xa8`, and the resolved open and close definitions at `+0xac`/`+0xb0`. The record parser
+(`FUN_00452850`) installs each definition through `FUN_00445500`/`FUN_00445540`, and those two also
+register the definition's **completion callback** (`FUN_004ee160` writes it at the instance's
+`+0x74`/`+0x78`, the trampolines at `004454e0`/`004454f0`). The four states are `0` CLOSED, `1`
+OPEN, `2` OPENING and `3` CLOSING.
+
+`FUN_004455e0` is the open request. From OPEN it succeeds without doing anything. From CLOSED it
+splits: with **no** open definition it sets OPEN there and then, and with one it starts the
+animation and goes to **OPENING**, where it stays until the animation's completion callback runs
+the handler that writes OPEN (`FUN_004454c0`). `FUN_00445620` mirrors it into CLOSING and
+`FUN_004454d0`. Neither request does anything from the two moving states, so a door mid-close
+cannot be caught and reopened.
+
+**So a generator with authored hangar doors cannot launch on the step its door starts opening.**
+The spawn rule tests the door for OPEN, and the open request just before it can only reach OPENING;
+the aircraft leaves when the panels have finished travelling, which for the zeppelin
+`hangerdoors` definitions is their authored 5 s, one second past the 4 s lead. The generators
+that launch on the same step are exactly those with no open definition to run: `barracuda`, whose
+defaulted `barra_openda` name resolves to nothing, opens instantly and launches at its threshold.
+The same reading says a wave whose door had to reopen is a second late throughout, not only after
+a long hold.
+
 **The host's death disables the generator.** For a fixed installation that is the `healthy` node
 going inactive; for a zeppelin it is the zeppelin's own destroyed flag, record byte +6, which the
 survivor check (`FUN_004bf0b0` → `FUN_004bd780`) sets on the tick survivors drop below
@@ -100,7 +129,8 @@ survivor check (`FUN_004bf0b0` → `FUN_004bd780`) sets on the tick survivors dr
 sink. The cycle (`FUN_00452640`) reads the flag at the top of every tick, and the objective credit
 (`FUN_00469af0`, `WAKEUP_GENERATOR`) only adds to the remaining capacity, so a credit landing after
 the kill launches nothing. ⚠ **CSVM deviates here on purpose: a killed host's bay launches for the
-wreck timer's 3 s, then disables** (`GeneratorCycle.HostDeathGraceSeconds`). C5/M04 authors the
+wreck timer's 3 s, then disables** (`GeneratorCycle.HostDeathGraceSeconds`), and a launch already
+waiting out its door lead completes past that, since the lead alone outruns the 3 s. C5/M04 authors the
 race: OBJECTIVE10 completes on three gasbags inactive and naps OBJECTIVE11, the credit for Miles's
 launch, 0.5 s later, while the Dante dies on the fourth gasbag. A torpedo salvo kills the fourth
 inside that half second, the decoded rule disables the bay before the credit arrives, Miles never
@@ -270,6 +300,17 @@ the throttle open. An aircraft then flies the take-off **run** under the scripte
 and is handed to the flight model at the final leg's 300 m point, climbing; a hull runs the same
 points and joins its
 net where they end (`Session/SurfaceVehicle.cs`).
+
+**The door hold is kept, its length is not.** The remake's cycle carries a two-state door and no
+animation clock, so a spawn released past its threshold with the hangar shut opens the door and
+then waits the hardcoded 4 s lead, where the original waits out whatever its open definition takes
+(5 s on the zeppelins). The split by definition is reproduced: `AiGeneratorRuntime` plays the
+transition, and a door whose animation starts nothing releases the hold in the same step
+(`GeneratorCycle.ReleaseDoorHold`), so `barracuda` launches at its threshold as decoded. Two
+consequences of the four-state decode are not reproduced: a wave whose door reopens on schedule
+still launches on its threshold rather than a second late, and a door caught mid-close reopens
+where the original refuses. Pinned by `GeneratorCycleTests` over the four shapes that leave a cycle
+overdue behind a shut door, and by the `generator-callback-credit` and `zeppelin-launch` suites.
 
 **CSVM runs the credit rule as decoded.** `Session/GeneratorCycle.cs` never reads the authored
 `capacity`: every cycle starts at zero remaining and blocks while the wave's remainder exceeds it,

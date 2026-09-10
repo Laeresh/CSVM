@@ -330,9 +330,9 @@ landings trigger, story missions only. Read `LadderSwitch.cs` for the rule it fl
 The decoded egen launch timing law for ONE generator, pure over `Step` calls (no clock, no
 randomness, no nodes) so a unit test pins it off-engine: the timer always advances, blocking holds
 rather than cancels, and the individual and wave periods compose. `DoorOpen` runs the decoded
-hangar-door timings inside the same step, and `HostDied` starts the wreck grace the bay keeps
-launching through, after which the cycle disables permanently. `GrantCapacity` is the one way
-launches arrive. Format and decode:
+hangar-door timings and holds a spawn behind a door that has to travel; `HostDied` starts the wreck grace
+the bay keeps launching through, after which the cycle disables permanently. `GrantCapacity` is
+the one way launches arrive. Format and decode:
 [../formats/mission-entities/enemy-generators.md](../formats/mission-entities/enemy-generators.md).
 Read `AiGeneratorRuntime.cs` for what drives it.
 

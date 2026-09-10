@@ -263,7 +263,13 @@ public sealed partial class AiGeneratorRuntime : Node
             if (gen.Cycle.DoorOpen != gen.DoorOpen)
             {
                 gen.DoorOpen = gen.Cycle.DoorOpen;
-                PlayDoor(gen, opening: gen.DoorOpen);
+                int started = PlayDoor(gen, opening: gen.DoorOpen);
+                // A door with nothing to run is fully open the moment it is asked, so its overdue
+                // launch is not held: the barracuda's defaulted name resolves to no definition.
+                if (gen.DoorOpen && started == 0)
+                {
+                    spawned |= gen.Cycle.ReleaseDoorHold();
+                }
             }
             if (spawned)
             {
@@ -338,14 +344,15 @@ public sealed partial class AiGeneratorRuntime : Node
         }
     }
 
-    private void PlayDoor(LiveGenerator gen, bool opening)
+    // How many instances the transition started, which is 0 for a door with no definition to run.
+    private int PlayDoor(LiveGenerator gen, bool opening)
     {
         string? anim = opening ? gen.Def.OpenAnim : gen.Def.CloseAnim;
         string what = opening ? "open" : "close";
         if (anim == null)
         {
             GD.Print($"egen: '{gen.Def.Node}' door {what} (no authored anim)");
-            return;
+            return 0;
         }
         // Stop the opposite motion first: a fast cycle can otherwise leave both from-to motions
         // writing. Hooks are scoped to the host's subtree — C1 has three 'hangerdoors' namesakes.
@@ -357,6 +364,7 @@ public sealed partial class AiGeneratorRuntime : Node
         int started = _playAnim?.Invoke(anim, gen.Host) ?? 0;
         GD.Print($"egen: '{gen.Def.Node}' door {what} (anim '{anim}'" +
                  (started > 0 ? $", {started} instance(s))" : ", not in this program)"));
+        return started;
     }
 
     // pos/drop below are computed once and shared by the release and net-pick branches; the
