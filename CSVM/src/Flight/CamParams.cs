@@ -7,10 +7,11 @@ namespace CSVM.Flight;
 
 /// <summary>The original's camera tuning for one aircraft, from the zrdr extraction's
 /// <c>camparam.json</c>: a <c>default</c> block every plane starts from, with seven of the eleven
-/// airframes overriding their own chase distance on top (docs/formats/camparam.md). Only
+/// airframes overriding their own chase distance on top (docs/formats/camparam.md).
 /// <see cref="Dist"/>/<see cref="DistFactor"/> drive the chase radius
-/// (<c>d = Dist + DistFactor·V</c>); every other field is decoded and carried here but is
-/// deliberately dormant, its mechanism unsettled — see the docs page before wiring one in.
+/// (<c>d = Dist + DistFactor·V</c>) and <see cref="DistMin"/>/<see cref="DistMax"/> bound it;
+/// several other fields are decoded and carried here but deliberately dormant — see the docs page
+/// before wiring one in.
 /// </summary>
 public sealed class CamParams
 {
@@ -22,20 +23,22 @@ public sealed class CamParams
     /// the Bloodhawk's slope as 0.0105 against this shipped 0.01 — 5% agreement).</summary>
     public float DistFactor = 0.01f;
 
-    // The rest of the dynamic-distance block. Undecoded — see the type's second ⚠.
+    /// <summary>The bounds the speed-driven distance is held inside for a forward-facing camera,
+    /// so <see cref="DistMin"/> is also the pose the view rests at. <see cref="DistVary"/> is the
+    /// throttle transient's gain, which the engine does not read yet.</summary>
     public float DistVary = 0.1f;
     public float DistMin = 15.7f;
     public float DistMax = 25f;
 
-    // Catch-up rates. Units undecoded — see the type's third ⚠.
+    // Catch-up rates, per frame-second, in the same exponential (docs/formats/camparam.md).
     public float DistCatchUp = 1f;
     public float PosCatchUp = 2f;
     public float LookCatchUp = 3f;
 
     /// <summary>Third-person eye height and pitch. The Balmoral is the only airframe overriding
-    /// them (0.2/0.2 against 0.138/0.29). ThirdpPitch in radians is 16.6°, close enough to our
-    /// hand-picked chase elevation (15.7°) to be suggestive, but the height's units are unknown —
-    /// so the offset DIRECTION stays hand-picked and only the radius comes from the data.</summary>
+    /// them (0.2/0.2 against 0.138/0.29). ThirdpPitch is DEGREES in the file, and 0.29° is far too
+    /// small to be the chase offset's elevation; the height's units are unknown. So the offset
+    /// DIRECTION stays hand-picked and only the radius comes from the data.</summary>
     public float ThirdpHeight = 0.138f;
     public float ThirdpPitch = 0.29f;
 

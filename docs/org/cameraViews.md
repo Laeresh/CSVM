@@ -280,6 +280,49 @@ places a Godot camera relative to a Godot-space plane using Godot-space marker d
 every firepoint and pylon, without ever needing to resolve which convention the original binary
 used internally.
 
+## The external camera's distance, and the zoom axis that only goes outward
+
+`FUN_0042c7f0` places every external camera on the aircraft, the look-behind included: its second
+argument is the look-behind flag, and the two arms differ only in which bounds pair they take and
+whether the zoom is applied. Field offsets into the resolved `camparam` block (`FUN_0042f700`,
+the live block pointer `DAT_0064efd0`) are `+0x00` `dist`, `+0x04` `dist_factor`, `+0x08`
+`dist_vary`, `+0x0c` `dist_catch_up`, `+0x10` `dist_min`, `+0x14` `dist_max`, `+0x18`/`+0x1c` the
+`back_dist` pair. Distance is built in three steps, in this order:
+
+1. **A speed law with an acceleration term** (`0042c993`-`0042c9ae`):
+   `d = dist + dist_factor·V + dist_vary·(V − V̄)·f`. `V` is the aircraft's own speed
+   (`[obj+0x934]`); `V̄` is a lagged copy of it in `DAT_0064ef14`, eased toward `V` every frame at
+   `dist_catch_up` through the shared exponential `FUN_00460490`; `f` is the direction factor
+   below. So `dist_vary` is the throttle transient's gain and `dist_catch_up` its relaxation rate,
+   and the ratio `dist_vary / dist_catch_up` is the steady-state metres of excess per m/s² of
+   along-path acceleration.
+2. **A clamp into an authored pair** (`0042c9ae`-`0042c9d3`), chosen by where the camera is
+   pointed. The forward-facing pair is `[dist_min, dist_max]` and the look-behind pair
+   `[back_dist_min, back_dist_max]`; a partly swung view takes the linear blend
+   `(back + fwd)/2 + (fwd − back)/2·f` on each end (`0042c8f7`-`0042c934`), with the same `f` in
+   step 1. `f` is the view direction's own longitudinal component (×`0.988936`): `+1` looking
+   straight back down the flight path, `−1` in the look-behind arm, which hard-codes it.
+3. **The zoom axis, added OUTWARD** (`0042c9db`-`0042c9ea`): `d += zoom · 10.0`, the metre span a
+   literal at `0x00603390`. It is a flat span, not a fraction of the airframe's own distance.
+   `0042c9d6` skips this step entirely when the look-behind flag is set.
+
+⚠ **The zoom axis rests at its NEAR end and can only travel outward.** Its value is `[0, 1]` with
+`0` the rest pose, so the authored `dist_min` is where the view opens and `dist_min + 10` is the
+far end of the pilot's travel. The far end of the pilot's travel is therefore NOT `dist_max`:
+`dist_max` bounds the speed-driven distance of step 2, before the zoom is added on top of it.
+
+The axis itself is the tail of `FUN_0042d010`. Key `0x43` (**External Camera Zoom In**, numpad
+`+` in the shipped table, [input.md](input.md)) drives the target `DAT_0064ef30` toward `0` at
+`2·dt`, key `0x44` (**Zoom Out**, numpad `−`) toward `1` at the same rate, clamped `[0, 1]`; the
+shown value `DAT_0064ef38` then eases toward it at `1.5/s`. Zoom In is the dead direction at rest.
+Three sites put the axis back to `0`: camera init (`FUN_0042b730` at `0042b779`), entering chase
+mode `0` from any other mode (`FUN_0042c280` at `0042c33d`), and the head-look centre key `0x3e`
+in free-look. Nothing else writes it, so a mode change always returns the pilot to the near end.
+
+CSVM's port is `CameraController.ExternalRadius` (steps 2 and 3) and `UpdateDynamics` (step 1's
+speed law; the transient there is still a measured pair rather than these two authored fields,
+which `BL-816` carries).
+
 ## Head-look controller
 
 Decoded from `FUN_0042d010`. Three callers share it: the
@@ -305,8 +348,8 @@ the chase caller is `BL-435`, filed and not yet built.
 - **Smoothing.** The displayed angles (`DAT_0064ef58/5c`) approach their targets exponentially,
   `shown = target + (shown − target)·e^(−rate·dt)` (`FUN_00460490`; `FUN_00460410` a cubic Taylor
   `e^(−x)` for `x < 0.1`): elevation rate **3.0/s**, azimuth rate **5.0/s** (τ ≈ 0.33 s / 0.20 s).
-  The zoom/lean value (`BL-433`) smooths at 1.5/s, moves at `2·dt` on keys `0x43`/`0x44`, clamped
-  `[0, 1]`.
+  The external camera's zoom value smooths at 1.5/s, moves at `2·dt` on keys `0x43`/`0x44`,
+  clamped `[0, 1]` — the section above has its direction and what it feeds.
 - **Autohead** (idle velocity-follow, the gated tail block): with the option byte `DAT_0071dacc`
   set and no look input, the plane's velocity transforms into the plane frame, scales by
   `autohead_turn_time`, caps in magnitude at `autohead_turn_max`, and the head aims along it,

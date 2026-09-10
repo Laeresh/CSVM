@@ -69,9 +69,13 @@ public sealed class CameraController
     // radius and a full cut ~−7%, which is the term the eye actually sees.
     private const float DistTransientPerAccel = 0.105f;
 
-    // The numpad +/- zoom axis (PLAN-cockpit-view, "What the data actually ships"):
-    // the target moves at 2/s, clamped [0, 1]; the shown trim chases it at 1.5/s.
+    // The numpad +/- zoom axis: the target moves at 2/s, clamped [0, 1]; the shown trim chases
+    // it at 1.5/s. 0 is the pose the view rests at, never a mid-point (docs/org/cameraViews.md).
     private const float ZoomAxisRate = 2f, ZoomSmoothRate = 1.5f;
+
+    // How far OUT a fully held zoom axis carries the external camera, in metres. An authored-
+    // distance fraction would be wrong: the original adds this flat span whatever the airframe.
+    private const float ZoomSpanMetres = 10f;
 
     private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
 
@@ -129,6 +133,10 @@ public sealed class CameraController
     // else — they are one number, and moving only one desyncs the two cameras.
     private readonly float _dist, _distFactor;
 
+    // The authored bounds the speed-driven distance is held inside before any zoom
+    // (camparam `dist_min`/`dist_max`, per plane). The near one is the pose the view rests at.
+    private readonly float _distMin, _distMax;
+
     // The plane-local offset of this aircraft's authored cockpit_camera marker (PlaneBuilder,
     // fallback (0,0,0) when the plane has none) — both first-person views share it, there is no
     // separate nose marker (docs/org/cameraViews.md).
@@ -147,8 +155,8 @@ public sealed class CameraController
     private float _prevSpeed;                    // last sim step's speed (accel derivative)
     private float _simTime, _logAccum;           // chase breadcrumb bookkeeping
 
-    // The numpad +/- zoom axis's own state (BL-433): target then shown, both [0, 1]. Kept apart
-    // from _radius above; EffectiveRadius is where the two combine.
+    // The numpad +/- zoom axis's own state: target then shown, both [0, 1], 0 = the rest pose.
+    // Kept apart from _radius above; EffectiveRadius is where the two combine.
     private float _zoomTarget, _zoomShown;
 
     // The smoothed plane→camera offset, world space. The offset eases, never the world position:
@@ -170,6 +178,8 @@ public sealed class CameraController
         _dist = cam.Dist;
         _distFactor = cam.DistFactor;
         _radius = cam.Dist;
+        _distMin = cam.DistMin;
+        _distMax = cam.DistMax;
         _crashHoriz = cam.CrashHoriz;
         _crashY = cam.CrashY;
         _backMin = cam.BackDistMin;
@@ -203,10 +213,9 @@ public sealed class CameraController
     /// cockpit.</summary>
     public bool FirstPerson => PilotView.IsFirstPerson(ViewMode);
 
-    // The radius every external pose actually reads: the dynamic chase radius, minus the zoom
-    // axis's own trim over the AUTHORED base distance (not the dynamic one), floored at zero
-    // since a negative distance has no meaning. _radius itself never carries the trim.
-    private float EffectiveRadius => Mathf.Max(0f, _radius - (_zoomShown * _dist));
+    // The radius every forward-facing external pose reads. _radius itself never carries either
+    // term; the look-behind takes its own bounds and no zoom at all.
+    private float EffectiveRadius => ExternalRadius(_radius, _distMin, _distMax, _zoomShown);
 
     /// <summary>One press of the original's "Cycle Cockpit Views" key advances the three-stop
     /// cycle: Cockpit → Nose → Chase → Cockpit.</summary>
@@ -270,13 +279,13 @@ public sealed class CameraController
     }
 
     /// <summary>The look-behind view (numpad 0, or <c>--view=back</c>): ahead of the nose looking
-    /// back at the plane. Distance is the chase radius clamped into the authored
-    /// <c>[back_dist_min, back_dist_max]</c> — see docs/formats/camparam.md for why that reads as
-    /// bounds rather than a law of its own. Rigid and instant, like the numpad views, for the same
-    /// scripted-capture reason.</summary>
+    /// back at the plane. Distance is the speed-driven radius clamped into the authored
+    /// <c>[back_dist_min, back_dist_max]</c>, its own pair. ⚠ The zoom axis is deliberately absent
+    /// here; the original applies it only to the forward-facing camera. Rigid and instant, like the
+    /// numpad views, for the same scripted-capture reason.</summary>
     public void BackView(in Transform3D renderPose)
     {
-        float r = Mathf.Clamp(EffectiveRadius, _backMin, _backMax);
+        float r = Mathf.Clamp(_radius, _backMin, _backMax);
         var dir = new Vector3(0f, 0f, -1f);     // ahead of the nose, plane frame
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * r));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
@@ -397,12 +406,20 @@ public sealed class CameraController
 
     // Kept beside its one caller, for the same SA1204 reason as FirstPersonPose above.
 #pragma warning disable SA1204
-    /// <summary>The zoom axis's raw target: moves toward 1 while <paramref name="zoomIn"/> is
-    /// held and toward 0 while <paramref name="zoomOut"/> is held, at <see cref="ZoomAxisRate"/>,
+    /// <summary>The distance a forward-facing external pose sits at: the speed-driven radius held
+    /// inside the authored <c>[dist_min, dist_max]</c>, then the zoom axis carried OUTWARD from
+    /// there by up to <see cref="ZoomSpanMetres"/>. The clamp comes first, so an aircraft at rest
+    /// sits on its near bound and the axis has nowhere inward to go (docs/org/cameraViews.md).
+    /// Pure, so the whole law unit-tests without a camera.</summary>
+    public static float ExternalRadius(float radius, float distMin, float distMax, float zoomShown) =>
+        Mathf.Clamp(radius, distMin, distMax) + (zoomShown * ZoomSpanMetres);
+
+    /// <summary>The zoom axis's raw target: moves toward 1 while <paramref name="zoomOut"/> is
+    /// held and toward 0 while <paramref name="zoomIn"/> is held, at <see cref="ZoomAxisRate"/>,
     /// clamped to [0, 1]. Holding both cancels, the same as a plain axis. Pure, so the rate and
     /// clamp unit-test without a camera.</summary>
     public static float ZoomTarget(float target, bool zoomIn, bool zoomOut, float dt) =>
-        Mathf.Clamp(target + (((zoomIn ? 1f : 0f) - (zoomOut ? 1f : 0f)) * ZoomAxisRate * dt), 0f, 1f);
+        Mathf.Clamp(target + (((zoomOut ? 1f : 0f) - (zoomIn ? 1f : 0f)) * ZoomAxisRate * dt), 0f, 1f);
 #pragma warning restore SA1204
 
     /// <summary>Advance the numpad +/- zoom axis one frame: the target via <see
@@ -419,8 +436,8 @@ public sealed class CameraController
 
     /// <summary>Advance the dynamic chase radius one SIM step: <c>d = dist + dist_factor·V</c>
     /// (both authored) plus a first-order acceleration transient relaxing at the measured 0.65
-    /// /sim-s — see docs/formats/camparam.md. ⚠ Deliberately NOT clamped into
-    /// <c>[dist_min, dist_max]</c>. Called by the host once per SIM step, never per render frame,
+    /// /sim-s — see docs/formats/camparam.md. Raw here; <see cref="ExternalRadius"/> is what
+    /// applies the authored bounds. Called by the host once per SIM step, never per render frame,
     /// so the acceleration derivative stays clean; a halted or crashed sim takes no steps.</summary>
     public void UpdateDynamics(float dt, float speed)
     {

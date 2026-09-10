@@ -1899,19 +1899,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `PLAN-cockpit-view` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
 
-- `BL-702` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The chase camera's
-  zoom range sits inside the original's rather than on it: the original starts at its closest and
-  only zooms out, while ours starts mid-range and zooms both ways.** *Evidence:* reported at the
-  controls on the build that landed `BL-433`, which gave the axis its decoded keybind (numpad plus
-  and minus) but took the clamp ends from CSVM's existing chase distance rather than from the
-  original's. The axis works; the two ends and the rest position are what disagree.
-  *Fix shape:* decode the chase camera's authored default distance and its clamp pair, then set the
-  rest pose to the near end so the only travel available is outward. *⚠ Traps:* do not derive the
-  near end from the current default by subtracting the observed travel. The report says the
-  original's default IS the near end, so the near end is a datum to be read and the default follows
-  from it, not the reverse. *Playtest after fix:* chase view held at both ends of the clamp, and the
-  pose the view opens on before any zoom input. *Cross-refs:* `BL-433`'s closing commit
-  (`git log --grep=BL-433`), which carries the keybind decode.
+- `BL-816` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The chase
+  camera's throttle transient is a pair of measured constants where the original reads two
+  authored `camparam` fields.** *Evidence:* `FUN_0042c7f0` at `0042c993`-`0042c9ae` builds the
+  transient as `dist_vary·(V − V̄)`, with `V̄` a lagged copy of speed eased at `dist_catch_up`
+  through `FUN_00460490` on the engine's per-frame dt. `CAP-21` corroborates both: the steady-state
+  excess implied by `dist_vary/dist_catch_up` is 0.1 m per m/s² against the measured 0.105, and the
+  clips' raw relaxation figure 0.90 per wall-second is within 10% of the shipped `dist_catch_up`
+  1.0. `CameraController.UpdateDynamics` instead carries `DistTransientPerAccel` 0.105 and
+  `DistTransientRelax` 0.65, the latter on the SIM clock.
+  *Fix shape:* read the two fields off `CamParams` and drop the two constants. *⚠ Traps:* the clock
+  is the open question, not the gain. The measured 0.65 /sim-s and the authored 1.0 /frame-s are
+  the same observation in two clocks, so decide which clock the port runs on before touching the
+  numbers, and do not mix a sim-converted rate with an authored one. The direction factor also
+  inverts the term in the look-behind arm, which CSVM has no equivalent of.
+  *Cross-refs:* `docs/formats/camparam.md` ("The distance law"), `docs/org/cameraViews.md`.
 
 ## HUD & UI
 
