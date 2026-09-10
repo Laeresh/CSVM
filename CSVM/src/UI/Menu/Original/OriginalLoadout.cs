@@ -6,15 +6,16 @@ using CSVM.Mech3;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// The Instant Action screen's Weapon Loadout, the shell's partial over the decoded
-/// <c>[@OrdinanceLayout@]</c> section (the campaign's own ammo selection chrome) and the fit of the
-/// seat the radio pair names: seat 0's <see cref="LoadoutChoice"/> for the pilot, the feature's
-/// wingman fit for the wingmen. The four ammunition fields stand for the airframe's gun slots and
-/// the eight rocket fields for its pylons (the left column pylons 1 to 4, the right 5 to 8), each
-/// over the stock table's option list; a slot or pylon the airframe lacks draws no field. The fit
-/// is edited in place, ACCEPT LOADOUT keeps the picks and CANCEL LOADOUT or Back restores the
-/// picks the screen opened on, which is the original's working copy read onto a shared choice.
-/// Remake-only: the original reaches this section from the campaign's flight check alone.
+/// The Weapon Loadout screen, the shell's partial over the decoded <c>[@OrdinanceLayout@]</c>
+/// section (the campaign's own ammo selection chrome) and one aeroplane's fit. Two doors open it,
+/// each returning to the screen it came from: the Instant Action strip over the seat its radio pair
+/// names (seat 0's <see cref="LoadoutChoice"/> or the feature's wingman fit) and the per-seat
+/// picker's WEAPON LOADOUT over the picking seat's own <see cref="PlayerSeat.Fit"/>. The four
+/// ammunition fields stand for the airframe's gun slots and the eight rocket fields for its pylons
+/// (the left column pylons 1 to 4, the right 5 to 8), each over the stock table's option list; a
+/// slot or pylon the airframe lacks draws no field. The fit is edited in place, ACCEPT LOADOUT keeps
+/// the picks and CANCEL LOADOUT or Back restores the picks it opened on, the original's working copy
+/// read onto a shared choice. Remake-only: the original reaches this section from the flight check.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -54,9 +55,18 @@ public sealed partial class OriginalShell
     private LoadoutOptions _loadoutOptions = new();
     private string? _loadoutNode;
     private string _loadoutName = string.Empty;
+    // The seat whose own fit the screen is editing, set only by the per-seat picker's door and null
+    // for the Instant Action strip's. It is what says the screen belongs to a walk in progress, so
+    // the walk survives the trip and the return lands back on the picker rather than on Instant
+    // Action.
+    private PlayerSeat? _loadoutSeat;
 
     /// <summary>The fit the loadout screen is editing, or null while it is not showing.</summary>
     public LoadoutChoice? LoadoutFit => _loadoutFit;
+
+    /// <summary>The seat the loadout screen is editing for, as its index, or -1 when it is not
+    /// showing or was opened from the Instant Action screen instead.</summary>
+    public int LoadoutSeat => _loadoutSeat is { } seat ? SeatIndex(seat) : -1;
 
     /// <summary>The stock node whose fit the loadout screen is editing, or null while it is not showing.</summary>
     public string? LoadoutNode => _loadoutNode;
@@ -71,33 +81,13 @@ public sealed partial class OriginalShell
         if (_iaRadio == 1)
         {
             var wingman = _instantAction.WingmanPlane;
-            _loadoutNode = wingman.Node;
-            _loadoutName = wingman.Name;
-            _loadoutFit = _instantAction.WingmanFit;
+            BeginLoadout(wingman.Node, wingman.Name, _instantAction.WingmanFit, null);
         }
         else
         {
             var pilot = PilotPick();
-            _loadoutNode = pilot.Node;
-            _loadoutName = PilotRowText(pilot);
-            _loadoutFit = PilotFit;
+            BeginLoadout(pilot.Node, PilotRowText(pilot), PilotFit, null);
         }
-
-        var stock = _stock?.Invoke();
-        _loadoutDef = stock?.ForModel(_loadoutNode);
-        _loadoutOptions = stock?.Options ?? new LoadoutOptions();
-        for (int slot = 1; slot <= LoadoutChoice.MaxGunSlot; slot++)
-        {
-            _loadoutBefore[slot - 1] = _loadoutFit.GunAmmoFor(slot);
-        }
-
-        for (int pylon = 1; pylon <= LoadoutChoice.MaxPylon; pylon++)
-        {
-            _loadoutBefore[LoadoutChoice.MaxGunSlot + pylon - 1] = _loadoutFit.PylonFor(pylon);
-        }
-
-        _iaOpen = null;
-        Open(OriginalScreen.InstantActionLoadout);
     }
 
     private static int OptionIndex(IReadOnlyList<LoadoutOption> options, string id)
@@ -152,8 +142,49 @@ public sealed partial class OriginalShell
         return null;
     }
 
-    // Leaves the screen for the Instant Action screen: the picks stay on ACCEPT and go back to
-    // what stood on entry otherwise, so the shared fit reads as a working copy.
+    // The per-seat picker's WEAPON LOADOUT: the seat's own fit over the airframe it has selected,
+    // named for the seat so the screen says whose loadout it is. Its own storage and no other's, so
+    // one pilot's picks cannot reach another's aeroplane.
+    private void OpenSeatLoadout(PlayerSeat seat)
+    {
+        var roster = _setup.Roster;
+        if (!seat.Locked || seat.Cursor < 0 || seat.Cursor >= roster.Count)
+        {
+            return;
+        }
+
+        var row = roster[seat.Cursor];
+        BeginLoadout(row.Node, $"P{SeatIndex(seat) + 1}  {row.Name}", seat.Fit, seat);
+    }
+
+    // The screen over one aeroplane's fit, whichever door opened it: the airframe's stock def and
+    // the option lists, then the picks standing on entry, which CANCEL and Back restore.
+    private void BeginLoadout(string node, string name, LoadoutChoice fit, PlayerSeat? seat)
+    {
+        _loadoutNode = node;
+        _loadoutName = name;
+        _loadoutFit = fit;
+        _loadoutSeat = seat;
+        var stock = _stock?.Invoke();
+        _loadoutDef = stock?.ForModel(_loadoutNode);
+        _loadoutOptions = stock?.Options ?? new LoadoutOptions();
+        for (int slot = 1; slot <= LoadoutChoice.MaxGunSlot; slot++)
+        {
+            _loadoutBefore[slot - 1] = fit.GunAmmoFor(slot);
+        }
+
+        for (int pylon = 1; pylon <= LoadoutChoice.MaxPylon; pylon++)
+        {
+            _loadoutBefore[LoadoutChoice.MaxGunSlot + pylon - 1] = fit.PylonFor(pylon);
+        }
+
+        _iaOpen = null;
+        Open(OriginalScreen.InstantActionLoadout);
+    }
+
+    // Leaves the screen for whichever one opened it: the picks stay on ACCEPT and go back to what
+    // stood on entry otherwise, so the shared fit reads as a working copy. The focus lands on the
+    // row that opened the screen, so a second visit is one press away.
     private void CloseLoadout(bool keep)
     {
         if (!keep && _loadoutFit is { } fit)
@@ -169,12 +200,21 @@ public sealed partial class OriginalShell
             }
         }
 
+        bool seated = _loadoutSeat != null;
+        DropLoadout();
+        Open(seated ? OriginalScreen.SeatPlane : OriginalScreen.InstantAction);
+        FocusKey(seated ? nameof(BoardButton.ChangeAmmo) : WeaponLoadoutKey);
+    }
+
+    // Forgets what the screen was editing without deciding where to go next, which is what a walk
+    // losing its picking seat mid-edit needs: the fit belongs to a seat that has left.
+    private void DropLoadout()
+    {
         _loadoutFit = null;
         _loadoutDef = null;
         _loadoutNode = null;
+        _loadoutSeat = null;
         _iaOpen = null;
-        Open(OriginalScreen.InstantAction);
-        FocusKey(WeaponLoadoutKey);
     }
 
     // The rows: an open list's items alone while one is open, else the fields the airframe has

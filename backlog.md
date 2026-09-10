@@ -110,6 +110,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
+- `BL-787` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A breakup piece that lands after its wreck has settled dispatches no water splash.**
+  *Evidence:* on C2B/M04's Gemini, two of the five sections play no `hit_waterN` when they reach the
+  sea, the two that land last, and `gemini-breakup-rest` records them resting there all the same.
+  `MotionSet.OwesBounce` can only hold a def instance open once a bounce is already recorded, and a
+  body records one at its landing, so a body still in the air holds nothing: by the time the last
+  sections land, `killgmzep` has gone INVALID and there is no instance left to dispatch their
+  branch on. *Fix shape:* let a def instance stay open while any of its bodies is still ballistic,
+  or give a landing body its own dispatch path that does not depend on the def instance's life.
+  *⚠ Traps:* the pirate zeppelin hides this entirely, because all six of its sections land inside
+  the wreck's own descent, so a probe on `piratezep` reads green. Do not chase it in the contact
+  solver: the resting height is correct on both hulls, and the missing piece is the dispatch, not
+  the landing. *Cross-refs:* `BL-698`/`BL-700`'s closing commit, which found it and left it.
 - `BL-672` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The remake attributes a weapon hit by climbing the node-parent chain;
   the original attributes it only to the struck node's own handler.** *Evidence:* `FUN_005abcf0`
   reads the hit record's struck node at `+0x24`, reads that node's handler at `+0xbc`, and returns
@@ -1250,6 +1262,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-796` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM01]` **The two hangar hand-over props cannot take the player's livery: their subtrees carry no decal placeholder.**
+  *Evidence:* `anim_bloodhawk`, the Bloodhawk standing on the hangar floor in CM01's drop, and
+  `bloodhawk_gear`, the undercarriage the flown aeroplane wears on the lift, are both the player's own
+  aeroplane and should wear the player's skins. `BL-690` built the route that dresses a staged prop in
+  its aeroplane's livery, and it cannot reach these two: `PlanePainter.PrefixFor` reads the skin prefix
+  off a subtree's own materials, and measured across the staged set only `balmoral` (`bal`) and
+  `piratefighter` (`dev`) carry one. *Fix shape:* resolve the prefix some other way for these two, a
+  node-name to prefix mapping or a read off the airframe the prop stands for, then hand them through
+  the same `AircraftStage.Paint`. *⚠ Traps:* judge it at the controls first. The gear rides a painted
+  aeroplane and the wrong-livery gear may not read on screen at all, in which case the mapping is
+  not worth carrying. Do not invent a prefix for a subtree that has none: check what its materials
+  actually name before mapping anything. *Cross-refs:* `BL-690`'s closing commit,
+  `docs/formats/anim-definitions/cutscenes.md` "What a staged prop is painted in".
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
   during its scripted entrance.** *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
   sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
@@ -1474,6 +1499,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
+- `BL-792` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **One AI aircraft answers two listener models: its weapon voice culls against the nearest human, its engine voice against a viewport camera.**
+  *Evidence:* `AiWeaponAudio` is attached with `_world.HumanPositions`, the nearest-human seam
+  `ProjectilePool` measures its weapon one-shots against; `AiEngineAudio` is attached with
+  `listeners: null` and falls back to the node's own viewport camera. In splitscreen those two
+  answers differ, so the same aeroplane can be audible on one measure and culled on the other, and
+  which pane hears it depends on which voice you ask. *Fix shape:* wire the engine voice to the same
+  seam, so one aircraft has one listener model. *⚠ Traps:* this changes existing cull behaviour on the
+  engine voice, which is why `BL-079` left it alone rather than folding it in; expect the engine
+  voice's audible set to move, and check a 2-pane and a 4-pane session, not just a lone camera.
+  *Cross-refs:* `BL-079`'s closing commit, `docs/architecture/Flight.md`'s `AiEngineAudio` and
+  `AiWeaponAudio` entries.
+- `BL-793` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **No turret has a gun voice: a carried gunner, a zeppelin ring and a ground mount all fire silently.**
+  *Evidence:* `snd_turretgun` and `snd_chaingun` both carry `3D`, `LOOPED` and a `RANGE` pair in
+  `sounds.zrd.json`, so the data authors them as world sounds, and no turret path plays a loop at all.
+  `BL-079` built the positional per-aircraft voice and stopped at aircraft, that item being another
+  aeroplane's weapons. *Fix shape:* a carried AI turret gunner can take `AiWeaponAudio` as it stands;
+  a world mount (a ring, a ground emplacement) needs its own emitter under `WorldSounds`, since it has
+  no `FlightController` to hang under. *⚠ Traps:* the cull is the cue's own `RANGE` audible distance,
+  not `EngineAudioCurves.CullDistance`; a zeppelin carries seventeen rings on one hull, so decide
+  whether they share a voice before giving each one an emitter. *Cross-refs:* `BL-079`'s closing
+  commit, `docs/formats/sounds.md`'s channel section.
+- `BL-794` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Two small debts in the new weapon-audio seam: the dry cue's name is a constant beside the data read, and the loop plays from the aircraft node rather than the muzzle.**
+  *Evidence:* both audio paths take `WeaponAudioCues.EmptyClipDef`, a `snd_emptyclip` literal, while
+  `WeaponDefs.EmptyClipSound` is the actual `NO_AMMO_WARNING` read; they agree in the shipped data and
+  should be one read. Separately, `AiWeaponAudio`'s players ride the aircraft node, a couple of metres
+  from the muzzle against a 20 m full-volume radius, and where the original places a firing emitter is
+  unverified. *Fix shape:* resolve the dry cue through `WeaponDefs`, and settle the emitter's origin
+  against the executable before moving it. *⚠ Traps:* the muzzle half is not worth a fitted answer:
+  measure what the original does, or leave it, since at these distances the difference may be
+  inaudible. *Cross-refs:* `BL-079`'s closing commit.
 - `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.
@@ -1955,6 +2010,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-795` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A sortie screen with the aircraft picked but no map still tells the pilot to pick an aircraft.**
+  *Evidence:* `OriginalShell.SortieHint` tests the chapter first and returns "Pick a map, then an
+  aircraft" whenever no map is picked, however far the rest of the screen has got, so with seat 0's
+  aircraft chosen and every joined seat confirmed the hint names the one thing already done and not
+  the press that is missing. The wording predates `BL-749`, which made it reachable in a new place: a
+  walk whose FLY gate is unmet now drops the pilots back on this screen, where the hint should read
+  "Pick a map, then FLY". *Fix shape:* order `SortieHint`'s branches by what is actually outstanding,
+  and name FLY when only the press is left. *⚠ Traps:* the hint is remake-only text on a remake-only
+  screen, so there is nothing to decode and nothing to match; keep it one short line, as the other
+  arms are. *Cross-refs:* `BL-749`'s closing commit.
 - `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
   does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
   block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
@@ -2521,6 +2586,18 @@ The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 complete — the chrome playtest F52/`BL-126` closed it out). New splitscreen findings mint here as
 usual.
 
+- `BL-788` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Seat 0's whole frame drives another pilot's campaign flight check.**
+  *Evidence:* `OriginalShell.StepSeat` routes seat 0 through `SeatZeroFrame`, which reduces the frame
+  to its pointer only on the per-seat aircraft screen. On `CampaignScreen.FlightCheck` the reduction
+  does not apply, so while the check of the seat `_campaign.Field.Current` names is showing, seat 0's
+  cursor, Accept and Back reach it as well as that seat's own device: seat 0 can change a guest's
+  ammunition, aircraft and readiness. The later seat's own arm is already correct, `own` being true
+  exactly when the field stands on its index. *Fix shape:* widen `SeatZeroFrame`'s screen test to the
+  flight check, on the same rule the per-seat screen takes, the seat's identity rather than the
+  device kind. *⚠ Traps:* keep the pointer, as the per-seat screen does; the mouse rides seat 0's
+  source and is the one device a guest with no pad can use. Seat 0 must still drive its OWN check,
+  which is what the field's index answers. *Cross-refs:* `BL-747`'s closing commit, which found this
+  as the same shape of defect on the neighbouring screen and left it out of scope.
 - `BL-380` `[Bug]` `[Blocked: per-instance fog shader uniforms]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Fog-zone selection stays
   player-1-only in splitscreen: `csky_fog_color`/`_range`/`_alt`/`csky_world_light` are one GLOBAL
   shader uniform set, written from rig 0's camera weather state alone
@@ -2732,6 +2809,29 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `PLAN-M5-campaign` Decision 3.
 
+- `BL-789` `[Research]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]` **Which vehicle volume gates AI target admission: CSVM reads the activation radius where the original reads the attack cylinder.**
+  *Evidence:* `FlightController.cs:3344` hands `AiModeMachine.ActivationRange` to
+  `AiTargetRanking.Score`, which refuses a candidate beyond it (`AiTargetRanking.cs:156`), while the
+  original admits candidates on the cylinder `FUN_00421ad0` reads at
+  `+0x328`/`+0x32c`/`+0x330`, the fields the roster map assigns to the ATTACK volume; the activation
+  triple `+0x318` to `+0x320` is read by the AI state update `FUN_004897c0`. Both volumes ship at
+  2,000 m, so the mapping never showed until `BL-565` landed the `DEDG` widening: a watched member
+  now admits candidates out to 9,000 m where the original would still admit only inside its attack
+  cylinder. Engaging is unchanged, `AiModeMachine.cs:321` gating that on
+  `min(ActivationRange, AttackRange)`, so what is at stake is selection and pursuit range, not
+  firing range. *Fix shape:* settle which volume each consumer should read, then align the consumer;
+  the answer decides whether `BL-565`'s widening should reach acquisition at all. **It also decides
+  half of `BL-565`'s own goal:** the pursue ENTRY gate is `min(activation, attack)` and no `DEDG`
+  widens the 2,000 m attack radius, so the widening keeps an engaged member engaged and does not make
+  one parked 8 km away set off, which is what "a watched group comes to the player from anywhere on
+  the map" asked for. Whether the original's own entry gate reads the widened triple is the same
+  question about `FUN_004897c0`.
+  *⚠ Traps:* the negative half of this decode is the weak half. `FUN_00421ad0` was read as the only
+  admission path and `FUN_004897c0` as the only reader of the activation triple; re-read both writers
+  and map their offsets before acting, since a second reader would change the answer.
+  `docs/org/aiPilot.md` has been corrected on the field identity, but no code moved on it.
+  *Cross-refs:* `BL-565`'s closing commit, which found this and left it; `BL-523`, the mode cycle
+  this range feeds.
 - `BL-523` `[Bug]` `[L]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
   and CM09's enemies fly up to 80 km away.** *Evidence:* three

@@ -208,6 +208,10 @@ internal sealed class AiFlightAssembler
             // The engine loop, positional and culled at 2000 units. Attach no-ops to null when the
             // session found no sound archive; the own-ship FlightAudio is never built for an AI.
             controller.EngineAudio = AiEngineAudio.Attach(controller, _world.Sounds, _world.SoundDefs, stats);
+            // The weapon voice beside it, culled by each cue's own authored audible distance. Its
+            // listeners are the human pilots, the seam the projectile pool's one-shots measure against.
+            controller.WeaponAudio = AiWeaponAudio.Attach(controller, _world.Sounds, _world.SoundDefs,
+                _world.HumanPositions);
 
             if (_world.CrashProgram != null && _world.WorldScene != null)
             {

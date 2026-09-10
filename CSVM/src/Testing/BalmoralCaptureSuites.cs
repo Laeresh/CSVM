@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
+using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using Godot;
@@ -15,6 +18,14 @@ internal static class BalmoralCaptureSuites
     private const int MissionSeq = 14; // CM15, C2/M05.
     private const string DropAnim = "drop_paratroopers";
     private const string DropZeppelin = "cargozep2";
+
+    // The mission roster block the staged Balmoral stands in for: Tex's bomber, the aeroplane the
+    // drop is filmed around.
+    private const string StandInBlock = "balmoral_1";
+
+    // The vehicle def whose own nodename IS the intro prop, and the base of the wingman def that
+    // derives from it, so it is where that model's authored pattern lives.
+    private const string PropDef = "devastator";
 
     // C3/M01: a mission that stages an aircraft (its own chuteman drop-off needs one) but never
     // names 'balmoral' in any of its own definitions, the same position dropoff-chuteman-stage
@@ -110,6 +121,242 @@ internal static class BalmoralCaptureSuites
 
         ctx.WriteArtifact($"test-cm15-balmoral-hidden-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"drove {chapter}/{folder} and confirmed 'balmoral' stays undrawn there");
+    }
+
+    /// <summary>The livery half of the same shot: CM15 puts two Balmoral models on screen for one
+    /// aeroplane, so the staged prop has to wear the paint the mission's own <c>balmoral_1</c> rig
+    /// resolved rather than the archive's shipped skins. Checked as the substitution reaching the
+    /// staged subtree's built materials, with the parachutist beside it as the control.</summary>
+    [Suite("campaign-cm15-staged-paint",
+        "the livery of CM15's staged Balmoral over C2/M05's BUILT world: the drop prop's own "
+        + "materials name an aircraft skin prefix, the mission's 'balmoral_1' block flies on the "
+        + "player's team with a pattern authored up its own def chain, painting that scheme onto "
+        + "the staged subtree swaps its built skins, the intro prop takes the pattern its own "
+        + "vehicle def authors, and the parachutist carries no skins so nothing reaches it")]
+    internal static void Cm15StagedPaint(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        string rof = Path.Combine(ctx.DataRoot, "extracted", "rof");
+        ctx.RequireData(rof, $"extracted UI archive (paint patterns)");
+
+        var report = new StringBuilder();
+        report.AppendLine($"seq {MissionSeq} -> {chapter}/{folder}");
+        var liveries = new LiveryResolver(SessionSpec.Parse(Array.Empty<string>()), rof);
+        if (liveries.Patterns.IsEmpty)
+        {
+            throw new SuiteSkippedException("the extracted UI archive ships no paint patterns");
+        }
+
+        var stand = StandInPlan(ctx, chapter, missionZrdr);
+        var balmoralScheme = RigScheme(ctx, liveries, stand);
+        var propScheme = liveries.DefScheme(ctx.ZrdrPath, PropDef);
+        report.AppendLine($"'{StandInBlock}' -> def '{stand?.Def}' ai '{stand?.AiDef}' "
+            + $"airframe '{stand?.PlaneNode}' team {stand?.Team} -> {balmoralScheme}");
+        report.AppendLine($"'{AircraftStage.PropNode}' -> def '{PropDef}' -> {propScheme}");
+        ctx.Check(stand is { Team: AimAssist.PlayerTeam },
+            $"CM15's '{StandInBlock}' flies on the player's own team, so its rig draws a livery");
+        // ⚠ Its def chain authors none, so this scheme is the default-pattern rule's, not a value
+        // read out of the data; only the intro prop's own is authored.
+        ctx.Check(balmoralScheme != null && stand?.AiDef != null
+            && liveries.DefScheme(ctx.ZrdrPath, stand.AiDef) == null
+            && string.Equals(balmoralScheme.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase),
+            $"and wears the default pattern ('{balmoralScheme?.Pattern}'), its own def chain authoring none");
+        ctx.Check(propScheme != null && balmoralScheme != null
+            && string.Equals(propScheme.Pattern, balmoralScheme.Pattern, StringComparison.OrdinalIgnoreCase),
+            $"the intro prop's own '{PropDef}' def AUTHORS that same militia's pattern ('{propScheme?.Pattern}')");
+
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, folder,
+                world => PaintStaged(ctx, world, balmoralScheme, propScheme, liveries.Patterns, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-cm15-staged-paint-{chapter}-{folder}.txt", report.ToString());
+        ctx.Note($"painted {chapter}/{folder}'s staged props from their own stand-ins' schemes");
+    }
+
+    // What the block's own rig is painted in, resolved in the spawn's order (Session/
+    // AiFlightAssembler.cs): the AI def's authored militia first, then the default pattern an
+    // aircraft on the player's own team draws when nothing authored one for it.
+    private static PaintScheme? RigScheme(TestContext ctx, LiveryResolver liveries,
+        RosterSpawnPlan? plan)
+    {
+        if (plan == null)
+        {
+            return null;
+        }
+
+        if (plan.AiDef is { } aiDef && liveries.DefScheme(ctx.ZrdrPath, aiDef) is { } authored)
+        {
+            return authored;
+        }
+
+        return liveries.SchemeFor(0, ctx.ZrdrPath, liveries.NewPaintRng(),
+            useDefaultPattern: plan.Team == AimAssist.PlayerTeam);
+    }
+
+    // The mission's own roster block the staged Balmoral stands in for, planned off the mission
+    // data alone: what its rig resolves is decided here, before any aeroplane is built.
+    private static RosterSpawnPlan? StandInPlan(TestContext ctx, string chapter, string missionZrdr)
+    {
+        var plan = CampaignRosterPlan.Build(
+            AiSkills.LoadRoster(missionZrdr),
+            VehicleDefs.Load(ctx.ZrdrPath),
+            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter)),
+            netDraw: _ => 0);
+        foreach (var spawn in plan.Spawns)
+        {
+            if (spawn.Name.Equals(StandInBlock, StringComparison.OrdinalIgnoreCase))
+            {
+                return spawn;
+            }
+        }
+
+        return null;
+    }
+
+    private static void PaintStaged(TestContext ctx, TestWorld world, PaintScheme? balmoralScheme,
+        PaintScheme? propScheme, PatternLibrary patterns, StringBuilder report)
+    {
+        if (world.Session.Aircraft is not { Balmoral: { } balmoral } stage)
+        {
+            ctx.Check(false, $"the world build staged the archive's '{AircraftStage.BalmoralNode}' node");
+            return;
+        }
+
+        foreach (string node in StagedNodeNames())
+        {
+            report.AppendLine($"staged '{node}': skins {stage.SkinPrefixOf(node) ?? "(none)"}");
+        }
+
+        ctx.Check(stage.SkinPrefixOf(AircraftStage.BalmoralNode) != null,
+            $"the staged Balmoral's own materials name an aircraft skin prefix, so a livery can reach it");
+        ctx.Check(stage.SkinPrefixOf(AircraftStage.ChuteNode) == null,
+            $"and '{AircraftStage.ChuteNode}' names none, being a parachutist rather than an airframe");
+
+        var before = Albedos(balmoral);
+        var painter = stage.Paint(AircraftStage.BalmoralNode, balmoralScheme, patterns);
+        int changed = Changed(before, Albedos(balmoral));
+        report.AppendLine($"'{AircraftStage.BalmoralNode}': {before.Count} textured material(s), "
+            + $"{changed} re-resolved, {painter?.PaintedSkins ?? 0} skin(s) painted");
+        ctx.Check(painter != null && painter.PaintedSkins > 0,
+            $"painting the rig's scheme onto the staged Balmoral composites its skins ({painter?.PaintedSkins ?? 0})");
+        ctx.Check(changed > 0,
+            $"and the substitution reaches the built materials ({changed} of {before.Count} re-resolved)");
+        PaintProp(ctx, stage, propScheme, patterns, report);
+        PaintChute(ctx, stage, balmoralScheme, patterns, report);
+    }
+
+    // The intro prop, on the same route off its own def's authored pattern.
+    private static void PaintProp(TestContext ctx, AircraftStage stage, PaintScheme? scheme,
+        PatternLibrary patterns, StringBuilder report)
+    {
+        if (stage.Prop is not { } prop)
+        {
+            ctx.Check(false, $"the world build staged '{AircraftStage.PropNode}' too");
+            return;
+        }
+
+        var before = Albedos(prop);
+        var painter = stage.Paint(AircraftStage.PropNode, scheme, patterns);
+        int changed = Changed(before, Albedos(prop));
+        report.AppendLine($"'{AircraftStage.PropNode}': {before.Count} textured material(s), "
+            + $"{changed} re-resolved, {painter?.PaintedSkins ?? 0} skin(s) painted");
+        ctx.Check(painter != null && painter.PaintedSkins > 0 && changed > 0,
+            $"the intro prop takes its own def's pattern the same way ({changed} material(s) re-resolved)");
+    }
+
+    // The control: one builder no longer serves every subtree, so a scheme aimed at the aeroplane
+    // must not reach the parachutist that shares the stage with it.
+    private static void PaintChute(TestContext ctx, AircraftStage stage, PaintScheme? scheme,
+        PatternLibrary patterns, StringBuilder report)
+    {
+        if (stage.Chuteman is not { } chute)
+        {
+            ctx.Check(false, $"the world build staged '{AircraftStage.ChuteNode}' too");
+            return;
+        }
+
+        var before = Albedos(chute);
+        bool painted = stage.Paint(AircraftStage.ChuteNode, scheme, patterns) != null;
+        int changed = Changed(before, Albedos(chute));
+        report.AppendLine($"'{AircraftStage.ChuteNode}': {before.Count} textured material(s), "
+            + $"{changed} re-resolved, painted={painted}");
+        ctx.Check(!painted && changed == 0,
+            $"'{AircraftStage.ChuteNode}' keeps the textures the archive shipped it with");
+    }
+
+    // Every textured material under a staged subtree paired with the texture it currently
+    // resolves to, which is what a repaint rewrites and a comparison can therefore see.
+    private static List<(ShaderMaterial Material, ulong Texture)> Albedos(Node node)
+    {
+        var found = new List<(ShaderMaterial, ulong)>();
+        void Walk(Node n)
+        {
+            if (n is MeshInstance3D { Mesh: { } mesh })
+            {
+                for (int i = 0; i < mesh.GetSurfaceCount(); i++)
+                {
+                    if (mesh.SurfaceGetMaterial(i) is ShaderMaterial sm
+                        && sm.GetShaderParameter("albedo_tex").As<Texture2D>() is { } tex)
+                    {
+                        found.Add((sm, tex.GetInstanceId()));
+                    }
+                }
+            }
+
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+
+        Walk(node);
+        return found;
+    }
+
+    private static int Changed(List<(ShaderMaterial Material, ulong Texture)> before,
+        List<(ShaderMaterial Material, ulong Texture)> after)
+    {
+        int changed = 0;
+        for (int i = 0; i < before.Count && i < after.Count; i++)
+        {
+            if (before[i].Texture != after[i].Texture)
+            {
+                changed++;
+            }
+        }
+
+        return changed;
+    }
+
+    private static IEnumerable<string> StagedNodeNames()
+    {
+        yield return AircraftStage.PropNode;
+        yield return AircraftStage.ChuteNode;
+        yield return AircraftStage.BalmoralNode;
+        foreach (string name in AircraftStage.FigureNodes)
+        {
+            yield return name;
+        }
+
+        foreach (string name in AircraftStage.PropNodes)
+        {
+            yield return name;
+        }
     }
 
     private static void DriveHidden(TestContext ctx, TestWorld world, StringBuilder report)

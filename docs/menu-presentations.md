@@ -157,11 +157,23 @@ the campaign boards under Built-in are one composed surface and stay on the keys
 Under Original a seat picks its aircraft on a screen of its own, not down a list every seat shares.
 Seat 0 picks on the sortie screen or in the Instant Action Pilot Plane row; then each joined seat in
 player order gets the per-seat aircraft screen (`OriginalSeatPlane.cs`), the campaign plane-selection
-board's shape over the sortie roster, where Accept selects, a second Accept confirms and Back undoes
-the selection or unjoins. Joining stays closed on that screen. The walk ends on the sortie screen
-with FLY live, or as the Instant Action launch, and FLY goes live only when every joined seat is
-Confirmed. Seat 0's own controller drives the screen too, so one pad at the desk can walk it, and
-seat 0's Back there cancels the walk with every seat kept. Nothing on that screen is decoded.
+board's shape over the sortie roster, where Accept selects and a second Accept confirms. Back and
+CANCEL SELECTIONS each take back a selection, and over the open list each leaves the walk for the
+screen it came from with every seat kept, so no press on that screen unjoins: a pilot leaves the
+sortie with Back on the Instant Action screen or with their device. Joining stays closed on that
+screen. The last seat's confirm is the launch, on either sortie screen as on Instant Action, so seat
+0's pick is the ready and the walk is the launch; where FLY's own gate is unmet (Dogfight without a
+second seat, a sortie with no map picked) the screen the walk came from returns instead with FLY to
+press, FLY going live only when every joined seat is Confirmed. Over a selection the screen also
+offers WEAPON LOADOUT, which opens the loadout chrome on that seat's own fit and airframe and
+returns to the picker, so every joined pilot picks weapons as well as an aeroplane and the choice
+rides that seat's own `Fit` into the launch; the original has no second pilot, so this is a remake
+decision and not fidelity. The picking seat's own device drives that screen and the Weapon Loadout
+it opens, and the mouse, which rides seat 0's source and is the one device a pilot without a pad of their own
+can pick with; seat 0's stick, buttons and keyboard move nothing there, `StepSeat` reducing seat 0's
+frame to its pointer while another seat picks. CANCEL SELECTIONS is therefore the pointer's own Back,
+its second press leaving the walk once there is no selection left to drop. Nothing on that screen is
+decoded.
 
 The wheel and the thumb reach the lists through one seam. `OriginalShell.Lists` answers the screen's
 scrolling lists as `OriginalList` records, topmost first, each a key, a `ListWindow`

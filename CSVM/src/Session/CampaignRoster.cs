@@ -151,6 +151,11 @@ public sealed class CampaignRosterPlan
     /// <summary>The block name the roster gives the human player's aircraft.</summary>
     public const string PlayerBlock = "player";
 
+    /// <summary>Activation radius, metres, that an awake <c>DEDG</c> raises every live member of
+    /// the watched group to each tick (<c>FUN_00465850</c>, docs/formats/objectives.md's DEDG row).
+    /// Stored squared there, as 8.1e7.</summary>
+    public const float DedgActivationRangeM = 9000f;
+
     private CampaignRosterPlan()
     {
     }
@@ -339,6 +344,18 @@ public sealed class CampaignRosterPlan
         if (volumes.Return.Radius != 0f)
             machine.ReturnRange = volumes.Return.Radius;
         machine.ActivationRange = Mathf.Max(machine.ActivationRange, minAiActiveDist);
+    }
+
+    /// <summary>What an awake <c>DEDG</c> does to one live member of the group it watches: the
+    /// activation radius is raised to <see cref="DedgActivationRangeM"/> and never lowered, so a
+    /// watched member keeps engaging instead of dropping back to patrol out at the 2,000 m floor.
+    /// The altitude bands the same write widens have no consumer, as in
+    /// <see cref="ApplyVolumes"/>.</summary>
+    public static void WidenForDedg(AiModeMachine? machine)
+    {
+        if (machine == null)
+            return;
+        machine.ActivationRange = Mathf.Max(machine.ActivationRange, DedgActivationRangeM);
     }
 
     /// <summary>The spawn record a planned block launches as, a generator launch included: its
