@@ -182,11 +182,18 @@ public sealed record SessionSpec
     /// shortcut, which is the one launch that would otherwise be bare.</summary>
     public bool SkipIntro { get; private set; }
 
+    /// <summary><c>--intro</c>: play the boot sequence even though other arguments were passed.
+    /// A dev flag, and the only way to reach the sequence through this repo's launch scripts,
+    /// which prepend a volume of their own and would otherwise suppress it. ⚠ Read inside the
+    /// launchscreen branch only, so it plays nothing on a launch that builds content.</summary>
+    public bool ForceIntro { get; private set; }
+
     /// <summary>Whether the boot sequence plays before the launchscreen. ⚠ Any argument at all
     /// suppresses it, so no test, golden or perf launch grows by the three minutes those movies
     /// run for. <see cref="SkipIntro"/> is read as well, so the flag denies the sequence by
-    /// meaning rather than by being one more argument.</summary>
-    public bool PlaysBootSequence => !SkipIntro && Args.Count == 0;
+    /// meaning rather than by being one more argument, and it beats
+    /// <see cref="ForceIntro"/> because a suppressor another flag can overrule is not one.</summary>
+    public bool PlaysBootSequence => !SkipIntro && (ForceIntro || Args.Count == 0);
 
     /// <summary>The session shape's name: the log file's, and the startup timing line's. ⚠ The
     /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
@@ -872,6 +879,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }
             else if (arg == "--skip-intro") { s.SkipIntro = true; }
+            else if (arg == "--intro") { s.ForceIntro = true; }
             else if (arg == "--menu") { s.ForceMenu = true; }
             else if (arg.StartsWith("--menu=")) { s.ForceMenu = true; s.MenuStartScreen = arg["--menu=".Length..]; }
             else if (arg.StartsWith("--presentation=")) { s.PresentationOverride = arg["--presentation=".Length..]; }

@@ -230,6 +230,22 @@ null for a file that will not read, `Ended` is how a flow learns it stopped, and
 which presses end it early, the per-cinema differences there being the original's own. It mounts
 itself on `HudLayers.Cinema` and frees itself; `Session/Launcher.cs`'s `PlayCinema` is the seam.
 
+## src/UI/BootSequence.cs
+`fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
+800x600 space out of the extraction's own art, message-table strings and font metrics, and `Run`
+calls the block's eight actions in the reader's order over two injected delegates, one that plays a
+film and one that puts up a still. Every name, position and duration is the reader's
+([../formats/cinemas.md](../formats/cinemas.md)), which is also where the block's undecoded corners
+are recorded. `BootCard` supplies the stills and `Session/Launcher.cs`'s `PlayCinema` the films.
+
+## src/UI/BootCard.cs
+The boot sequence's engine half, and the only file that knows a boot still is drawn at all: a
+`ComposedBoardView` for the card, a countdown per hold, the black cover the fade ramps in, and the
+key or click that ends a hold early. It mounts on `HudLayers.Board`, the launchscreen's own layer,
+so a film at `HudLayers.Cinema` covers it with nothing torn down, and it lives for the whole block
+rather than per action. `Play` is the whole surface: it mounts the node, runs a `BootSequence` over
+the caller's film call, and frees everything before the handoff.
+
 ## src/UI/BoardPalette.cs
 The ink a campaign board writes in, one palette per background family, because the screens are
 painted art and the grey the flight check's forms use is invisible on the cabin's dark hangar. The

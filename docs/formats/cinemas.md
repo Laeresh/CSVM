@@ -2,8 +2,8 @@
 
 Part of the [format documentation](README.md). This page describes the ten video files the retail
 install ships, what they actually are as containers and codecs, where the original names them from,
-and how CSVM plays them. CSVM decodes them itself, in `CSVM.Video`; nothing composes a decoded
-frame on screen yet.
+and how CSVM plays them. CSVM decodes them itself, in `CSVM.Video`, and composes the decoded frames
+through the same board pipeline every other screen draws through.
 
 ## Contents
 
@@ -92,11 +92,37 @@ Three places name them, and none is a directory scan. The executable itself name
 **`fmv.zrd`, as `PLAYAVI` actions**, holds the boot sequence: its `INTRO` block plays `MSopen1.mpg`,
 waits, fades and plays `zipper.mpg`, and its `CHAP0` block plays `Chap0.mpg`. Those are the only
 three `.mpg` strings in the whole extracted reader set, and the block's `IMAGE_PATH` is `video`.
-The two logos are not the whole of `INTRO`. It opens on `SHOWIMAGE MM_splashbackground` carrying
-`MSG_COPYRIGHT1` and `MSG_COPYRIGHT2` at 400,550 and 400,565 in the `CopyrightNotice` font, holds it
-for `WAIT 5.0`, waits a second after `MSopen1.mpg`, fades to black over `FADEOUT 0,0,0 1.0 1.0`
-before `zipper.mpg`, and waits a second again after it. `CHAP0` is the one `PLAYAVI` and nothing
-else.
+
+The two logos are not the whole of `INTRO`. It is **seven** actions, in this order, and `CHAP0` is
+the eighth:
+
+| # | Action | Parameters |
+|---|---|---|
+| 1 | `SHOWIMAGE` | `MM_splashbackground`, with a `TEXTLIST` of two `TEXT` entries: `MSG_COPYRIGHT1` at `POSITION 400,550` and `MSG_COPYRIGHT2` at `400,565`, both in the `CopyrightNotice` font |
+| 2 | `WAIT` | `5.0` |
+| 3 | `PLAYAVI` | `MSopen1.mpg` |
+| 4 | `WAIT` | `1.0` |
+| 5 | `FADEOUT` | `0,0,0`, then `1.0` and `1.0` |
+| 6 | `PLAYAVI` | `zipper.mpg` |
+| 7 | `WAIT` | `1.0` |
+| 8 | `PLAYAVI` | `Chap0.mpg`, the whole of `CHAP0` |
+
+**The card's three resources are all in the extraction, and named there rather than in CSVM.**
+`MM_splashbackground` is `ASSETS/GRAPHICS/MM_SPLASHBACKGROUND.JPG`, 800x600, which is the authored
+dialog space exactly, so it fills the board with no scale of its own. `MSG_COPYRIGHT1` and
+`MSG_COPYRIGHT2` are ids 212 and 213 of `messages.json`, the Microsoft copyright line and the
+"protected by U.S. and International copyright laws as described in Credits/About" line.
+`CopyrightNotice` is a `fonts.zrd` entry: face Courier New, `height` −12, colour 255,255,255,
+`shadow` true, `align` center. That centre alignment is what the 400 in both positions means, 400
+being the midline of the 800-wide space.
+
+**What the four opcodes do is only as decoded as this block.** `SHOWIMAGE`, `WAIT`, `PLAYAVI` and
+`FADEOUT` appear in no other reader file in the extraction, and `FUN_0044ae70`'s handler for them
+was never followed into the executable, so the block itself is the whole evidence. Three
+consequences: whether `SHOWIMAGE`'s picture survives a `PLAYAVI` over it is not stated anywhere,
+whether a skip abandons the rest of the block or only the film playing is not either, and
+`FADEOUT`'s second `1.0` has no second instance to compare against. CSVM reads the fade's existence
+as saying something is still on screen to fade, and holds the card under the films until it runs.
 
 **`ASSETS/LAYOUT.CSV`, as `movie` widgets**, holds every other placement. A `movie` row is widget
 type `M` with script class `@ctl@AL`, and it carries an `ArtPath`, a position, a `Loops` count and a
@@ -223,13 +249,12 @@ over `crimson.exe`, with every address stated at the claim it supports.
 
 Where this stops:
 
-- **No frame of these files has been displayed by this project.** All ten decode end to end in
-  `CSVM.Video`, which is where the frame counts below come from, but nothing composes a decoded
-  frame on screen, so no claim here rests on a picture anyone has looked at. There is also no
-  reference decoder to check the decode against, and MPEG-1 permits IDCT mismatch between
-  conformant decoders, so exact-match testing against one would not work even if there were.
-  Correctness is settled the way every other presentation claim in this project is settled, by
-  the user at the controls.
+- **There is no reference decoder to check the decode against**, and there deliberately will not
+  be one; MPEG-1 permits IDCT mismatch between conformant decoders, so exact-match testing against
+  one would not work even if there were. All ten decode end to end in `CSVM.Video`, which is where
+  the frame counts above come from, and the flag and a whole cinema have been watched at the
+  controls. Correctness is settled the way every other presentation claim in this project is
+  settled, by the user at the controls.
 - **The engine side of the script callbacks is not traced.** Callback 2151 supplies the chapter
   number `CAMPAIGNINTRO` builds its filename from, and callback 3104 gates the final cinema, but
   neither was followed into the executable: the script callback dispatch is not a plain switch on

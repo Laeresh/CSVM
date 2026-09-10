@@ -948,13 +948,12 @@ public partial class Launcher : Node3D
         AddChild(cinema);
     }
 
-    // The boot sequence in fmv.zrd's own order: INTRO plays MSopen1.mpg then zipper.mpg, and CHAP0
-    // plays Chap0.mpg. The names carry that reader's spelling and resolve without regard to case.
-    // A skip ends the cinema it was pressed during, and the next one begins. Whether the original
-    // abandoned the rest of the block is not decoded. INTRO's splash card, waits and fade are not
-    // reproduced (docs/formats/cinemas.md). All three take BootKeys, PlayCinema's default.
+    // The boot sequence in fmv.zrd's own order, its card and waits and fade included: the reader's
+    // eight actions live in BootSequence and not one of them is written down here. A press ends the
+    // action it lands in and the next begins. Whether the original abandoned the rest of the block
+    // instead is not decoded (docs/formats/cinemas.md).
     private void PlayBootSequence(System.Action then) =>
-        PlayCinema("MSopen1.mpg", () => PlayCinema("zipper.mpg", () => PlayCinema("Chap0.mpg", then)));
+        UI.BootCard.Play(this, _dataRoot, PlayCinema, then);
 
     // The step the menus advance on. A deterministic run gives them the sim's own, for the reason
     // the sim takes it: what a capture shows must be a function of the frame count and nothing
