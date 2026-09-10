@@ -73,14 +73,24 @@ public partial class FlightAudio : Node
     private System.Random? _warningShotRng;
 
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats,
-        IReadOnlyDictionary<string, SoundGroup>? groups = null)
+        WeaponDefs? weapons, IReadOnlyDictionary<string, SoundGroup>? groups = null)
     {
         _stats = stats;
         _archive = archive;
         _defs = defs;
-        // The shared empty-clip cue (weapons.json NO_AMMO_WARNING), named by the selection both
-        // weapon paths read so this and AiWeaponAudio cannot come to play different definitions.
-        _emptyClip = MakeOneShot(archive, defs, WeaponAudioCues.EmptyClipDef, out _emptyClipVol);
+        // The shared empty-clip cue (weapons.json NO_AMMO_WARNING), resolved through the selection
+        // both weapon paths read so this and AiWeaponAudio cannot come to play different
+        // definitions. Flat, because this is what the pilot hears.
+        if (WeaponAudioCues.EmptyClip(archive, defs, weapons) is { } dry)
+        {
+            _emptyClipVol = dry.Volume;
+            _emptyClip = new AudioStreamPlayer { Stream = dry.Stream, Bus = AudioBuses.Effects };
+            AddChild(_emptyClip);
+        }
+        else
+        {
+            GD.PushWarning($"empty-clip cue unresolved: {WeaponAudioCues.EmptyClipName(weapons) ?? "none"}");
+        }
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _engineStream = _engine?.Stream as AudioStreamWav;
         // Not built as a player of its own: this stream replaces the engine's on the one slot, so a

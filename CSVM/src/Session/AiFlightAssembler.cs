@@ -214,7 +214,7 @@ internal sealed class AiFlightAssembler
             // FlightAudio is never built for an AI. The engine loop culls at 2000 units, each
             // weapon cue at its own authored audible distance.
             controller.WeaponAudio = AiWeaponAudio.Attach(controller, _world.Sounds, _world.SoundDefs,
-                _world.HumanPositions);
+                _aircraft.WeaponDefs, _world.HumanPositions);
 
             if (_world.CrashProgram != null && _world.WorldScene != null)
             {

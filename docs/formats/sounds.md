@@ -59,11 +59,15 @@ announcer id without defs) are [combat-voice.md](combat-voice.md); the reader is
 
 ⚠ **An aircraft's weapon cues are in the positional class, not the cockpit one.** Every caliber's
 `LOOPED_SOUND_NAME` (`snd_30cal` through `snd_70cal`, plus `snd_turretgun` and `snd_chaingun`)
-carries `3D` + `LOOPED` + `RANGE`, and so does the `NO_AMMO_WARNING` cue `snd_emptyclip`. So a gun
+carries `3D` + `LOOPED` + `RANGE`. The `NO_AMMO_WARNING` cue `snd_emptyclip` carries `3D` and
+`RANGE [80, 800]` but no `LOOPED`, a dry trigger being one click. So a gun
 loop is a point in the world, which is what the remake plays it as: the pilot's own guns stay flat
 because that is what the pilot hears, and every other aircraft's come from its own position, culled
 at the definition's own audible distance. Those distances are short, 150 m for a 30-cal against 800 m
-for the dry cue, so traffic firing 300 m off is inaudible by the data's own numbers. ⚠ Nothing here
+for the dry cue, so traffic firing 300 m off is inaudible by the data's own numbers.
+⚠ **The flags say a definition MAY be positional, not that the original placed it.** The original's
+fire path hands its firing loop the aircraft's own position every tick, and hands the dry cue no
+position at all, which its play entry takes as flat ([weaponFire.md](../org/weaponFire.md)). ⚠ Nothing here
 authorises a pitch term: `RANGE` is a gain model, and `CAP-09` measured no Doppler on the original's
 world emitters at all.
 

@@ -386,7 +386,7 @@ internal sealed class HumanFlightAdapter
         if (_world.Sounds != null && _world.SoundDefs != null)
         {
             var audio = new FlightAudio { MixGain = _human.MixGain };
-            audio.Setup(_world.Sounds, _world.SoundDefs, stats, _world.SoundGroups);
+            audio.Setup(_world.Sounds, _world.SoundDefs, stats, _aircraft.WeaponDefs, _world.SoundGroups);
             controller.Audio = audio;
             controller.AddChild(audio);
             if (verbose)

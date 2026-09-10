@@ -28,22 +28,25 @@ public readonly record struct WeaponSoundCue(
 /// </summary>
 public static class WeaponAudioCues
 {
-    /// <summary>The dry-trigger cue, <c>weapons.json</c>'s <c>NO_AMMO_WARNING</c> value in the
-    /// shipped data (<see cref="WeaponDefs.EmptyClipSound"/> is the read of record). Named once here
-    /// because both audio paths play it and a second literal would let them drift.</summary>
-    public const string EmptyClipDef = "snd_emptyclip";
+    /// <summary>The dry-trigger cue's definition name, <c>weapons.json</c>'s
+    /// <c>NO_AMMO_WARNING</c>. Exposed apart from <see cref="EmptyClip"/> because it is the name
+    /// the emitter roll-call and the suites compare against, and a name selection can be pinned
+    /// without a decoded stream behind it.</summary>
+    public static string? EmptyClipName(WeaponDefs? weapons) => weapons?.EmptyClipSound;
+
+    /// <summary>The dry-trigger cue both weapon audio paths play, resolved through
+    /// <see cref="WeaponDefs.EmptyClipSound"/> rather than a literal of this class's own, so the
+    /// two paths cannot come to play different definitions on an install whose
+    /// <c>NO_AMMO_WARNING</c> is not the stock name.</summary>
+    public static WeaponSoundCue? EmptyClip(SoundArchive? archive,
+        IReadOnlyDictionary<string, SoundDef>? defs, WeaponDefs? weapons) =>
+        Resolve(archive, defs, EmptyClipName(weapons), looped: false);
 
     /// <summary>The sustained-fire loop for a caliber's <c>LOOPED_SOUND_NAME</c>, or null when the
     /// name is empty, unknown to <c>sounds.json</c>, or its WAV will not decode.</summary>
     public static WeaponSoundCue? GunLoop(SoundArchive? archive,
         IReadOnlyDictionary<string, SoundDef>? defs, string? sndName) =>
         Resolve(archive, defs, sndName, looped: true);
-
-    /// <summary>A weapon one-shot (the dry-trigger cue), same resolution as
-    /// <see cref="GunLoop"/> without the forced loop.</summary>
-    public static WeaponSoundCue? OneShot(SoundArchive? archive,
-        IReadOnlyDictionary<string, SoundDef>? defs, string? sndName) =>
-        Resolve(archive, defs, sndName, looped: false);
 
     // ⚠ A firing loop is decoded LOOPED whatever its definition says, because it is a sustained-fire
     // cue held while the trigger is; SoundArchive caches per (wav, looped), so the flag is also the

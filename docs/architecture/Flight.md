@@ -726,21 +726,22 @@ damaged edge waits out the shared re-arm timer on `PlaneStats.DamagedTimer`; the
 ## src/Flight/AiWeaponAudio.cs
 The weapon half of the positional pair an AI-flown aircraft carries instead of `FlightAudio`: the
 sustained-fire gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding this node, so
-another aircraft's guns are heard from where that aircraft is. `Attach` is the whole spawner-side
-surface; the cues come from `WeaponAudioCues`. The cull is each cue's own authored audible distance
-and rides `StartGunLoop`, which the fire path already calls every frame the loop is wanted; the
-listeners are the human pilots, the one seam `AiEngineAudio` and `ProjectilePool` read too. A
-definition without the `3D` flag gets no world player, since the data gives it no distance model.
-The `sound` log carries the observable: what resolved, then the loop's verdict and every transition.
+another aircraft's guns are heard from where that aircraft is, which is where the original's fire
+tick puts its own ([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle offset belongs here.
+`Attach` is the whole spawner-side surface; the cues come from `WeaponAudioCues`. The cull is each
+cue's own authored audible distance and rides `StartGunLoop`, which the fire path already calls every
+frame the loop is wanted; the listeners are the human pilots, the one seam `AiEngineAudio` and
+`ProjectilePool` read too. No `3D` flag means no world player, and the `sound` log names each verdict.
 
 ## src/Flight/WeaponAudioCues.cs
 The weapon-sound selection both audio paths read, `EngineAudioCurves`' counterpart for guns: a
 definition name to a `WeaponSoundCue` carrying the stream, the definition's unscaled `VOLUME`, its
 `RANGE` pair and its `3D` flag. The range travels with the cue so a positional player's `UnitSize`,
 `MaxDistance` and cull threshold cannot disagree with the definition it came from. It selects and
-nothing else, which is what keeps own-ship concepts out of the world path. A firing loop is decoded
-`LOOPED` whatever its definition says, and that flag is also the prewarm key
-(`WeaponDefs.SoundCues`). Definitions: [../formats/sounds.md](../formats/sounds.md).
+nothing else, which keeps own-ship concepts out of the world path. A firing loop is decoded `LOOPED`
+whatever its definition says, and that flag is also the prewarm key (`WeaponDefs.SoundCues`). The
+dry-trigger cue resolves through `WeaponDefs.EmptyClipSound`, the `NO_AMMO_WARNING` read of record,
+so neither path can hold a name of its own. Definitions: [../formats/sounds.md](../formats/sounds.md).
 
 ## src/Flight/SpectatorCamera.cs
 The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look, wheel speed and

@@ -3151,8 +3151,10 @@ internal static class AiSuites
         }
         ctx.Check(players == emitters.Count, $"{name}'s emitter roll-call matches the live players ({players})");
         ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}) — {string.Join(", ", emitters.Select(e => $"{e.Name} cull {e.RangeMax:0} m"))}");
-        ctx.Check(emitters.Any(e => e.Name == WeaponAudioCues.EmptyClipDef),
-            $"…including the dry-trigger cue {WeaponAudioCues.EmptyClipDef}");
+        // The dry cue is named by weapons.json's own NO_AMMO_WARNING read, not by a literal of the
+        // audio path's: an install that renamed it must still reach this emitter.
+        ctx.Check(emitters.Any(e => e.Name == weapons.EmptyClipSound),
+            $"…including the dry-trigger cue this catalogue's NO_AMMO_WARNING names, {weapons.EmptyClipSound}");
         ctx.Check(emitters.Any(e => weapons.All.Any(w => w.LoopedSoundName == e.Name)),
             $"…and a loop this catalogue actually binds to a caliber");
     }

@@ -60,7 +60,8 @@ internal static class AudioBusSuites
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        string? gunLoop = WeaponDefs.Load(ctx.ZrdrPath, null).All
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        string? gunLoop = weapons.All
             .Select(w => w.LoopedSoundName)
             .FirstOrDefault(n => !string.IsNullOrEmpty(n));
         using var archive = new SoundArchive(ctx.SoundsPath);
@@ -98,7 +99,7 @@ internal static class AudioBusSuites
             ctx.Host.AddChild(menu);
 
             flight = new FlightAudio { Name = "GuardFlightAudio" };
-            flight.Setup(archive, defs, stats, groups);
+            flight.Setup(archive, defs, stats, weapons, groups);
             ctx.Host.AddChild(flight);
             if (gunLoop != null)
             {

@@ -1421,15 +1421,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not `EngineAudioCurves.CullDistance`; a zeppelin carries seventeen rings on one hull, so decide
   whether they share a voice before giving each one an emitter. *Cross-refs:* `BL-079`'s closing
   commit, `docs/formats/sounds.md`'s channel section.
-- `BL-794` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Two small debts in the new weapon-audio seam: the dry cue's name is a constant beside the data read, and the loop plays from the aircraft node rather than the muzzle.**
-  *Evidence:* both audio paths take `WeaponAudioCues.EmptyClipDef`, a `snd_emptyclip` literal, while
-  `WeaponDefs.EmptyClipSound` is the actual `NO_AMMO_WARNING` read; they agree in the shipped data and
-  should be one read. Separately, `AiWeaponAudio`'s players ride the aircraft node, a couple of metres
-  from the muzzle against a 20 m full-volume radius, and where the original places a firing emitter is
-  unverified. *Fix shape:* resolve the dry cue through `WeaponDefs`, and settle the emitter's origin
-  against the executable before moving it. *⚠ Traps:* the muzzle half is not worth a fitted answer:
-  measure what the original does, or leave it, since at these distances the difference may be
-  inaudible. *Cross-refs:* `BL-079`'s closing commit.
+- `BL-815` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original plays the dry-trigger cue flat, from no position at all, while an AI aircraft's in CSVM is a world emitter.**
+  *Evidence:* `NO_AMMO_WARNING` resolves once at `wep.ini` load into a global (`FUN_005ad630` at
+  `005ad71e`) and is played by `FUN_005ac560`, which calls the general play entry with no position
+  argument; `FUN_005936e0` takes that null as 2D and puts the voice in the head-relative mode, so the
+  cue is flat even though its definition carries `3D` and `RANGE [80, 800]`. Its play site is the fire
+  routine's out-of-ammo arm (`FUN_004b6820`) and is not owner-gated, so a non-player aircraft running
+  dry sounds it flat too (`docs/org/weaponFire.md`). `FlightAudio` matches this for the pilot;
+  `AiWeaponAudio` gives it an `AudioStreamPlayer3D` culled at the definition's 800 m instead.
+  *Fix shape:* either drop the AI dry-cue emitter and let the flat own-ship player carry the cue for
+  everybody, or keep the positional one as a deliberate departure and say so on the member. *⚠ Traps:*
+  the flat form is heard at full volume from any distance, which is what the original does and is
+  plausibly why nobody has reported it; `ai-weapon-emitters` asserts a two-emitter roll-call per
+  aircraft and its count moves with the behaviour. *Cross-refs:* `BL-794`'s closing commit.
 - `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.

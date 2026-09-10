@@ -33,6 +33,7 @@ public sealed partial class AiWeaponAudio : Node3D
     private float _gunLoopVol = 1f;
     private float _gunLoopCullSq;             // the live loop's own RANGE audible distance, squared
     private AudioStreamPlayer3D? _emptyClip;
+    private string? _emptyClipName;
     private float _emptyClipVol = 1f;
     // Null until the loop's first frame, so THAT frame always logs its verdict. A gun's authored
     // audible distance is 150-550 m and traffic engages further out than that, so a first frame
@@ -47,9 +48,11 @@ public sealed partial class AiWeaponAudio : Node3D
     /// <summary>Builds this aircraft's weapon audio and hangs it under <paramref name="controller"/>,
     /// or returns null when the session found no sound archive. The spawner's whole share of the job;
     /// call it after the controller has joined the tree, since the cull reads a world position.
+    /// <paramref name="weapons"/> carries the dry cue's <c>NO_AMMO_WARNING</c> name;
     /// <paramref name="listeners"/> left null falls back to the node's own viewport camera.</summary>
     public static AiWeaponAudio? Attach(FlightController controller, SoundArchive? archive,
-        IReadOnlyDictionary<string, SoundDef>? defs, Func<IReadOnlyList<Vector3>>? listeners = null)
+        IReadOnlyDictionary<string, SoundDef>? defs, WeaponDefs? weapons,
+        Func<IReadOnlyList<Vector3>>? listeners = null)
     {
         if (archive == null || defs == null)
         {
@@ -60,7 +63,7 @@ public sealed partial class AiWeaponAudio : Node3D
         }
         var audio = new AiWeaponAudio { Name = "WeaponAudio", Listeners = listeners };
         controller.AddChild(audio);
-        audio.Setup(archive, defs);
+        audio.Setup(archive, defs, weapons);
         return audio;
     }
 
@@ -68,17 +71,19 @@ public sealed partial class AiWeaponAudio : Node3D
     /// a caliber fires rather than up front (an airframe's loadout can hold several, and a plane that
     /// never shoots should decode none), and resolves the dry-trigger cue now, since there is exactly
     /// one of it.</summary>
-    public void Setup(SoundArchive archive, IReadOnlyDictionary<string, SoundDef> defs)
+    public void Setup(SoundArchive archive, IReadOnlyDictionary<string, SoundDef> defs,
+        WeaponDefs? weapons)
     {
         _archive = archive;
         _defs = defs;
-        var empty = WeaponAudioCues.OneShot(archive, defs, WeaponAudioCues.EmptyClipDef);
+        _emptyClipName = WeaponAudioCues.EmptyClipName(weapons);
+        var empty = WeaponAudioCues.EmptyClip(archive, defs, weapons);
         _emptyClip = MakePlayer(empty);
         _emptyClipVol = empty?.Volume ?? 1f;
         // The build half of the observable INSTR-45 asks for, WorldSounds.Debug's precedent: a cue
         // logged `unresolved` here never had a stream, one logged `ok` and later `culled` is silent by
         // distance alone. The gun loop's own line comes when a caliber first fires.
-        Log.Info("sound", $"ai weapons {Aircraft()}: dry={SlotState(WeaponAudioCues.EmptyClipDef, empty)} loop=on first burst");
+        Log.Info("sound", $"ai weapons {Aircraft()}: dry={SlotState(_emptyClipName, empty)} loop=on first burst");
     }
 
     /// <summary>Starts (or keeps playing) the gun firing loop for the given
@@ -144,7 +149,7 @@ public sealed partial class AiWeaponAudio : Node3D
         }
         if (_emptyClip != null)
         {
-            live.Add((WeaponAudioCues.EmptyClipDef, _emptyClip.GlobalPosition, _emptyClip.MaxDistance));
+            live.Add((_emptyClipName ?? "?", _emptyClip.GlobalPosition, _emptyClip.MaxDistance));
         }
         return live;
     }
@@ -162,7 +167,8 @@ public sealed partial class AiWeaponAudio : Node3D
     // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance curve
     // the way WorldSounds and AiEngineAudio map every other 3D emitter. A definition without the 3D
     // flag gets no player: the data says it has no distance model, so placing it in the world would
-    // invent one.
+    // invent one. ⚠ The player hangs on this node and takes no muzzle offset: the original's fire
+    // tick hands its firing loop the vehicle's own position (docs/org/weaponFire.md).
     private AudioStreamPlayer3D? MakePlayer(WeaponSoundCue? cue)
     {
         if (cue is not { Is3D: true } resolved)

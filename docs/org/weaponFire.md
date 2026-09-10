@@ -43,14 +43,48 @@ FUN_004b3e50()        // muzzle-flash / recoil timers
 
 `FUN_004881e0` reads the trigger (input slot `0x13`, fire bits `0x3/0x4`), reconciles the armed
 def (`+0x950`) with the selected group's def (re-arming if they differ, `FUN_004b20b0`), and then
-spawns a round: a **single** `FUN_00498850` call and a **single** `FUN_0045e470` projectile spawn
-(disassembly `00488440` / `004884b8`). There is **no loop over barrels and no salvofire** — one
-round leaves per fire-tick. The round interval is gated by the group's counter, decremented
+spawns a round: a **single** `FUN_00498850` call (disassembly `00488440`) and a **single** pass
+through the fire routine `FUN_004b6820` (`0048837e`, and `00489c0e`/`00489c2d` for the arm the
+trigger half raises). There is **no loop over barrels and no salvofire**, so one round leaves per
+fire-tick. The interval is gated by the group's counter, decremented
 elsewhere until it drops below the fire threshold seen in `FUN_004b34f0`
 (`plane + (group·3 + 0x13e)·4 < 1`).
 
 Consequently the effective rounds per second equals the authored `FIRE_RATE` — the same data the
 engine already reads (8.0 for `wep_40`). The two muzzle slots are visual/aim, not a doubled rate.
+
+## The firing sound plays from the aircraft's own position, not from a muzzle
+
+The fire tick's two sound plays both go through `FUN_0045e470(slot, key, def, ttl, position,
+velocity)`, the keyed 3D loop: it starts the definition through the general play entry
+`FUN_00593590` if the keyed slot holds no live voice, then sets that voice's world position and
+velocity through `FUN_00597af0` (`zSound/zsnd_3d.c`) and stamps an expiry of `now + ttl`, so the
+voice dies unless the tick refreshes it again.
+
+**The position argument is the vehicle's own origin.** Both calls push `plane + 0x204`
+(`004884a9` for the first, the same LEA for the second), which is the aircraft's world position
+`x`/`y`/`z` at `+0x204`/`+0x208`/`+0x20c`. There is no barrel slot, muzzle marker or forward offset
+anywhere on the path: the `plane + 0x3a4 + i·0x24` barrel array the aim assist and the muzzle
+flashes read is never consulted for the sound. A firing emitter placed at the muzzle in a port
+would be an invention, and against the 20 to 40 m full-volume radius the shipped gun cues author
+it would be inaudible as a difference anyway.
+
+The two plays are:
+
+| Cue | Definition | `ttl` | Gate |
+| --- | --- | --- | --- |
+| the caliber's firing loop | the armed weapon record's own slot at `plane + 0x950`, the data's `LOOPED_SOUND_NAME` | 0, so it lives one tick and the next tick renews it | the armed weapon has one |
+| `cannon_sound` | the vehicle def's `+0x180`, resolved by name at vehicle load (`0047a7fb`–`0047a81c`) | 0.1 s | the weapon carries `CANNON` (flag bit `0x40`) |
+
+⚠ **No shipped vehicle def authors `cannon_sound`**, so `+0x180` is null install-wide and the
+second play never fires. One firing loop is heard, the caliber's own.
+
+⚠ **The dry-trigger cue is not positional at all.** `NO_AMMO_WARNING` is resolved once at
+`wep.ini` load into a global (`FUN_005ad630` at `005ad71e`) and played by `FUN_005ac560`, which
+calls `FUN_00593590` with no position argument. `FUN_005936e0` takes that null as "2D" and puts
+the voice in the head-relative mode, so the cue is flat even though its definition carries `3D` and
+a `RANGE`. The play site is the fire routine's out-of-ammo arm and is not owner-gated, so a
+non-player aircraft running dry sounds it flat as well.
 
 ## The two barrels are muzzle-flash / assist, not a rate doubler
 
