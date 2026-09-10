@@ -672,7 +672,13 @@ shape `OriginalScreenshots/Videos/CM04.mkv`'s Balmoral docking shows: over its o
 centre mast draws at archive length for a frame, vanishes, and only then grows and swings.
 `AnimRuntime.ParkDockingHook` closes the gap by seeding every node its group's own `<x>_hook_extend`
 moves from that definition's own first FROM pose, which wins wherever a `RESET_STATE` omits a node
-or disagrees with it, never by editing the authored `RESET_STATE` data itself.
+or disagrees with it, never by editing the authored `RESET_STATE` data itself. The seed reaches
+each node exactly the way the dispatch that later moves the same node does, through that
+definition's compiled symbol table: the table's `l_arm1`/`r_arm1` claims for these three bind at the
+park's own staging point, so the seed needs no plain-name walk and cannot take a same-named arm off
+another group. ⚠ The wrong-axis park and the arms' nesting are separate facts about these three,
+not one: `brig_hook`/`fury_hook`/`peace_hook` carry an extra `l_arm`/`r_arm` level and their own
+`l_door`/`r_door`, where `bal_hook`/`war_hook` hang `l_arm2`/`r_arm2` straight off the group.
 
 **All three therefore need the flown aeroplane's own subtree in the animation runtime's node
 table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,

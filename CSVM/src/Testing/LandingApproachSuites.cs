@@ -168,6 +168,10 @@ internal static class LandingApproachSuites
     // The piratezep crane's own two inward-swinging side parts.
     private static readonly string[] HookCraneParts = { "top_seg", "hoop" };
 
+    // The three FROM_TO channels a park seeds a node's pose from, any one of which authoring a
+    // `from` puts that node on the park's own list (AnimRuntime.SeedFromExtend).
+    private static readonly string[] MotionChannels = { "rotate", "scale", "translate" };
+
     private delegate void MissionDrive(TestContext ctx, TestWorld world, CampaignDirector director,
         ObjectiveScript script, string missionZrdr, StringBuilder report);
 
@@ -314,7 +318,10 @@ internal static class LandingApproachSuites
         + "Every airframe the shared fork branches on builds its hook group parked, and the "
         + "loaded program holds one definition per hook name, so a call cannot start the same "
         + "swing twice; the episode's every start is counted by name, the airframe's own "
-        + "extend-hook branch among them rather than only the shared fork")]
+        + "extend-hook branch among them rather than only the shared fork. The park that seeds "
+        + "those arms reaches every node its own extend definition authors a FROM pose for, and "
+        + "reaches each one through that definition's compiled symbol table rather than by name, "
+        + "read off the verdict the park itself recorded")]
     internal static void HookupAirframe(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-hookup-airframe", DriveHookupAirframe);
 
@@ -735,6 +742,7 @@ internal static class LandingApproachSuites
         ctx.Check(hook != null,
             $"and carries its own '{branch.HookAnim}' hook group rather than a skipped subtree");
         ctx.Check(hook is not { Visible: true }, $"which starts retracted");
+        CheckParkResolvedBySymbol(ctx, world, branch.HookAnim, report);
 
         // One definition per animation name is what the compiled-plus-reader merge leaves
         // (docs/formats/anim-definitions.md, the scope gates and the pair deduplication after
@@ -1633,6 +1641,61 @@ internal static class LandingApproachSuites
         }
 
         ctx.Same(planes.Count, read, $"every branch the fork authors names a hook to read");
+    }
+
+    // The park's own verdict on how it reached the nodes it seeded, read as the state the staging
+    // point LEFT rather than re-asked afterwards: the same question put to the resolver once the
+    // episode has dispatched answers about a table later stages have grown. Every seeded node has
+    // to come from the definition's compiled symbol table, since a name walk would take the wrong
+    // sibling on any airframe that ever gains a duplicate arm name.
+    private static void CheckParkResolvedBySymbol(
+        TestContext ctx, TestWorld world, string? hookAnim, StringBuilder report)
+    {
+        var park = world.Runtime.LastDockingHookPark;
+        int authored = 0;
+        foreach (var def in world.Runtime.DefsFor(hookAnim ?? ""))
+        {
+            authored += SeededMoverNames(def).Count;
+        }
+
+        report.AppendLine($"park: seeded {park.Seeded} of {authored} authored mover(s), " +
+            $"{park.SymbolBound} bound by symbol table, unbound [{park.Unbound}]");
+        ctx.Same(authored, park.Seeded,
+            $"the park seeds every node '{hookAnim}' authors a FROM pose for");
+        ctx.Check(authored > 0, $"…and '{hookAnim}' authors at least one, so that is not vacuous");
+        ctx.Same(park.Seeded, park.SymbolBound,
+            $"and the compiled symbol table binds every one of them at the park (unbound: [{park.Unbound}])");
+    }
+
+    // The nodes SeedFromExtend seeds off one extend definition: every distinct name an
+    // ObjectMotionFromTo moves that authors a `from` on any of the three channels.
+    private static List<string> SeededMoverNames(AnimDefinition def)
+    {
+        var names = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var seq in def.Sequences)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "ObjectMotionFromTo" || ev.Data.Str("name") is not { } name)
+                {
+                    continue;
+                }
+
+                bool from = false;
+                foreach (string channel in MotionChannels)
+                {
+                    from |= ev.Data.Obj(channel) is { } c && c.Has("from");
+                }
+
+                if (from && seen.Add(name))
+                {
+                    names.Add(name);
+                }
+            }
+        }
+
+        return names;
     }
 
     // The node a hook definition is rooted on, as that definition names it.

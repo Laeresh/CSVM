@@ -1137,19 +1137,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-680` `[Research]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The compiled symbol table resolves nothing for `brig`/`fury`/`peace`'s
-  nested hook arms at `ParkDockingHook`'s staging point, though the same lookup succeeds later.**
-  *Evidence:* `_resolver.SymbolClaims` returns "claimed but unbuilt" for `l_arm1`/`r_arm1` under
-  `brig_hook`, `fury_hook` and `peace_hook` when `ParkDockingHook` runs, while the identical
-  node and definition pair resolves during ordinary animation dispatch afterwards.
-  `AnimRuntime.ParkDockingHook` works around it with a scoped plain-name walk (`FindNamedChild`).
-  *Fix shape:* find what the staging point has not yet built or indexed that the later dispatch
-  has, then decide whether the park should move after it or the index should be complete earlier.
-  *⚠ Traps:* the workaround is a name walk and will pick the wrong sibling if these airframes ever
-  gain a duplicate arm name, so it is a stopgap rather than an answer. The three airframes that
-  fail are exactly the three whose retract parks on the wrong axis, so check whether the two are
-  the same underlying data shape before treating them as separate questions.
-  *Cross-refs:* `BL-630`'s closing commit.
 - `BL-508` `[Research]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original never alpha-tests, so every alpha texture we scissor is an
   invention rather than a reproduction.** *Evidence:* decoded from `crimson.exe`
   (`analysis/alpha-classification/FINDINGS.md`, "The original has no cutout path"). The renderer is

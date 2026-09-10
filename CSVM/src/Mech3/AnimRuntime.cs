@@ -531,11 +531,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // See RangePositions: the last flying pose of each player, which a cutscene hold answers with.
     private readonly List<Vector3> _rangePositions = new();
 
+    // The seeded nodes ParkDockingHook could not bind through a symbol table, published with the
+    // rest of its tally as LastDockingHookPark when the park finishes.
+    private readonly List<string> _hookSeedsUnbound = new();
+
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
 
     private int _opsApplied, _opsUnresolved;
+
+    private int _hookSeeds, _hookSeedsBound;
 
     // Whether the ambient passes have already run — set when Bootstrap runs them inline
     // (AutoStart=true) or when StartAmbient runs them on demand, so StartAmbient is idempotent
@@ -662,6 +668,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// defs by a rule <see cref="Play"/>'s name lookup cannot express (the zeppelin damage
     /// runtime finding the hull-death def by its activation prerequisite, M4 F18).</summary>
     public IReadOnlyList<AnimDefinition> ProgramDefs => _program.Defs;
+
+    /// <summary>What the last <see cref="ParkDockingHook"/> left behind (<see cref="DockingHookPark"/>),
+    /// zeroed before it starts. A suite reads the park's OWN verdict rather than re-asking the
+    /// resolver afterwards, which would answer about a table later stages have grown.</summary>
+    public DockingHookPark LastDockingHookPark { get; private set; }
 
     /// <summary>One-shot SOUND events that resolved to a stream and fired this session (the
     /// destruction/damage/impact audio). Exposed for the damage-test harness, which cannot
@@ -1207,6 +1218,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         ArgumentNullException.ThrowIfNull(planeModel);
         int applied = 0;
+        _hookSeeds = 0;
+        _hookSeedsBound = 0;
+        _hookSeedsUnbound.Clear();
         // Two explicit passes, not one interleaved: _program.Defs lists a group's own extend and
         // retract in whatever order they were loaded, and the seed pass below must win over every
         // RESET_STATE, never race it.
@@ -1231,6 +1245,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 applied++;
             }
         }
+        LastDockingHookPark = new DockingHookPark(
+            _hookSeeds, _hookSeedsBound, string.Join(", ", _hookSeedsUnbound));
         return applied;
     }
 
@@ -2094,20 +2110,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         root.GlobalTransform = xf;
     }
 
-    // A plain depth-first name search under one root: no symbol table, no wildcard, just NameOf
-    // equality, scoped to a single aircraft's own subtree so it cannot cross into another.
-    private static Node3D? FindNamedChild(Node3D root, string name)
-    {
-        if (string.Equals(NameOf(root), name, StringComparison.OrdinalIgnoreCase))
-            return root;
-        foreach (var child in root.GetChildren())
-        {
-            if (child is Node3D n3d && FindNamedChild(n3d, name) is { } found)
-                return found;
-        }
-        return null;
-    }
-
     /// <summary>INVALIDATE_ANIMATION: latches an animation off without touching what it is doing.
     /// Whatever is running keeps running to its own end; what changes is that nothing can start it
     /// again until a RESET_ANIMATION (or an explicit <see cref="Play"/>) clears the latch. See
@@ -2634,18 +2636,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             if (!rotate.ContainsKey(name) && !scale.ContainsKey(name) && !translate.ContainsKey(name))
                 continue;
-            // A plain name walk under the anchor, scoped so it cannot cross into another
-            // aircraft: the docking-hook subtree is small and its node names are unambiguous
-            // within it, so this needs no symbol table.
-            if (anchor == null || FindNamedChild(anchor, name) is not { } t)
-                continue;
-            var rest = RestOf(t);
-            var rot = rotate.TryGetValue(name, out var r) ? r
-                : rest.Basis.Orthonormalized().GetEuler(EulerOrder.Yxz);
-            var sc = scale.TryGetValue(name, out var s) ? s : rest.Basis.Scale;
-            var origin = translate.TryGetValue(name, out var o) ? o : rest.Origin;
-            t.Transform = new Transform3D(
-                Basis.FromEuler(rot, EulerOrder.Yxz).Scaled(NonSingularScale(sc)), origin);
+            _hookSeeds++;
+            if (_resolver.SymbolClaims(extend, name, anchor, out var bound) && bound != null)
+                _hookSeedsBound++;
+            else
+                _hookSeedsUnbound.Add($"{extend.AnimName ?? extend.Name}/{name}");
+            // Resolved exactly as the dispatch that later moves this same node resolves it
+            // (Targets): the definition's own symbol table, and on a claimed-but-unbuilt index the
+            // anchor-scoped rescue, never a global name match onto another aircraft's arm.
+            foreach (var t in Targets(ev, extend, anchor))
+            {
+                var rest = RestOf(t);
+                var rot = rotate.TryGetValue(name, out var r) ? r
+                    : rest.Basis.Orthonormalized().GetEuler(EulerOrder.Yxz);
+                var sc = scale.TryGetValue(name, out var s) ? s : rest.Basis.Scale;
+                var origin = translate.TryGetValue(name, out var o) ? o : rest.Origin;
+                t.Transform = new Transform3D(
+                    Basis.FromEuler(rot, EulerOrder.Yxz).Scaled(NonSingularScale(sc)), origin);
+            }
         }
     }
 
@@ -4340,4 +4348,12 @@ public sealed partial class AnimRuntime
         private static Vector2? MinMax(AnimData? pair) =>
             pair is { } p ? new Vector2(p.Num("min") ?? 0f, p.Num("max") ?? 0f) : null;
     }
+
+    /// <summary>What one <see cref="ParkDockingHook"/> made of the nodes it seeds, kept so a caller
+    /// reads the state that park LEFT: the same question asked later answers about a node table
+    /// other stages have grown and other definitions have dispatched against.</summary>
+    /// <param name="Seeded">Nodes the flown airframe's own extend definitions author a FROM pose for.</param>
+    /// <param name="SymbolBound">Of those, the ones that definition's compiled symbol table bound.</param>
+    /// <param name="Unbound">The rest, as <c>anim/node</c>; empty when the table bound them all.</param>
+    public readonly record struct DockingHookPark(int Seeded, int SymbolBound, string Unbound);
 }
