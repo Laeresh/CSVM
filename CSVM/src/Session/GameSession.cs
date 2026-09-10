@@ -1205,6 +1205,7 @@ public partial class GameSession : Node3D
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime, session.Aircraft);
+        state.Aircraft = session.Aircraft;
         state.StagedAircraftMeshes = session.Aircraft?.MeshInstances ?? 0;
         state.Landings = session.Landings;
         state.Pickups = session.Pickups;
@@ -2521,6 +2522,9 @@ public partial class GameSession : Node3D
                 _ladder?.Bind(landingWorld, _cutscene, () => _rigs, state.Pickups);
             }
         }
+        // After every roster build, because a staged prop's livery is the one its own aeroplane's
+        // rig resolved and that rig does not exist earlier.
+        PaintStagedAircraft(state);
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
@@ -2960,6 +2964,45 @@ public partial class GameSession : Node3D
         {
             state.What += $" + '{iaOverride ?? _spec.PlaneName}' flying";
         }
+    }
+
+    // Dresses each staged cutscene prop in the livery of the aeroplane it stands in for: the
+    // scheme its own roster block's rig resolved, else the one its vehicle def authors
+    // (Mech3/AircraftStage.cs, StandIns). ⚠ Nothing here draws a default pattern of its own, and
+    // nothing touches the paint RNG, which --det pins for every rig in the session.
+    private void PaintStagedAircraft(BuildState state)
+    {
+        if (state.Aircraft is not { } stage || stage.PaintableNodes.Count == 0)
+        {
+            return;
+        }
+
+        var painted = new List<string>();
+        foreach (var (node, block, def) in AircraftStage.StandIns)
+        {
+            PaintScheme? scheme = null;
+            // The rig's own resolved livery first: it is the aeroplane the shot is about, and a rig
+            // wearing the shipped skins (an enemy militia) must leave the prop wearing them too.
+            if (block != null && _campaign is { } director
+                && director.Roster.TryGetValue(block, out var rig))
+            {
+                scheme = rig.Scheme;
+            }
+            else if (def != null)
+            {
+                scheme = _liveryResolver.DefScheme(state.ZrdrPath, def);
+            }
+
+            if (stage.Paint(node, scheme, _liveryResolver.Patterns) is { } painter)
+            {
+                painted.Add($"'{node}' {painter.Scheme.Label} ({painter.PaintedSkins} skin(s))");
+            }
+        }
+
+        string what = painted.Count > 0
+            ? string.Join(", ", painted)
+            : "no stand-in resolved a livery";
+        Log.Info("world", $"aircraft stage paint: {what}");
     }
 
     // --debug-objective=N: the scripted twin of flying whatever completes campaign objective N, so
@@ -3961,6 +4004,9 @@ public partial class GameSession : Node3D
         // The intro's staged prop aircraft, counted apart because the world builder never saw it:
         // it comes off the aircraft archive on its own SceneBuilder (Mech3/AircraftStage.cs).
         public int StagedAircraftMeshes;
+        // The same stage, kept so the roster build can hand a staged prop the livery of the
+        // aeroplane it stands in for once the rigs that resolved it exist.
+        public AircraftStage? Aircraft;
         public int Colliders;
         public string What = "";
 

@@ -40,6 +40,12 @@ public partial class FlightController : Node3D
     /// non-positional by design, and a rig with a person in it takes <see cref="Audio"/>.</summary>
     public AiEngineAudio? EngineAudio;
 
+    /// <summary>The weapon half of that positional pair, again carried by an AI-flown aircraft
+    /// instead of <see cref="Audio"/>: the gun loop and the dry cue on 3D emitters, culled by each
+    /// cue's own authored audible distance. Separate from <see cref="EngineAudio"/> because that
+    /// component's contract is the engine slots alone.</summary>
+    public AiWeaponAudio? WeaponAudio;
+
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
 
@@ -2455,23 +2461,29 @@ public partial class FlightController : Node3D
                 Log.Info("weapons", $"rocket: {Name} launched {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, {(InfiniteAmmo ? "∞" : hp.Ammo.ToString(CultureInfo.InvariantCulture))} left on that pylon");
             }
         }
+        // Exactly one of the two is built per rig, so both lines run and the null one no-ops: a pilot
+        // hears their own guns flat, and every other aircraft's come from where it is.
         if (outcome.GunLoopWanted)
         {
             _gunLoopOn = true;
             Audio?.StartGunLoop(outcome.GunLoopSound);
+            WeaponAudio?.StartGunLoop(outcome.GunLoopSound);
         }
         else if (_gunLoopOn)
         {
             _gunLoopOn = false;
             Audio?.StopGunLoop();
+            WeaponAudio?.StopGunLoop();
         }
         if (outcome.GunDryCue)
         {
             Audio?.PlayEmptyClip();
+            WeaponAudio?.PlayEmptyClip();
         }
         if (outcome.RocketDryCue)
         {
             Audio?.PlayEmptyClip();
+            WeaponAudio?.PlayEmptyClip();
             Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty — empty-clip cue");
         }
     }
@@ -2499,6 +2511,7 @@ public partial class FlightController : Node3D
         {
             _gunLoopOn = false;
             Audio?.StopGunLoop();
+            WeaponAudio?.StopGunLoop();
         }
         Projectiles?.Clear();
     }
@@ -2667,12 +2680,14 @@ public partial class FlightController : Node3D
         {
             _gunLoopOn = false;
             Audio?.StopGunLoop();
+            WeaponAudio?.StopGunLoop();
         }
         Audio?.StopNitroLoop();
         Audio?.OnCrash();
         // An AI aircraft's loops end here and stay ended: the animation's own authored sound
         // events are what is audible from now on, and no wreck respawns to restart them.
         EngineAudio?.Stop();
+        WeaponAudio?.Stop();
         // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with
         // snd_propstop.
         Audio?.OnEngineStop();

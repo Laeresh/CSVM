@@ -276,11 +276,25 @@ the data. Measured the hard way in the remake: with the mount in the cast, C1/IA
 reported blocked by their own `turret` body at 0.5 m and by their own hull panels at 19–25 m of a
 150–400 m shot.
 
-What the remake excludes is the gun's own **mounting section** (the hull group its node hangs
-off), not the whole vehicle: excluding a zeppelin entire lets its rings shoot straight through
-their own hull, and excluding only the gun's own rig still blocks all 14 of them, because the
-panel colliders engulf the ring they carry. Neither extreme is decoded either; the section is the
-smallest unit that separates a gun's own clutter from the far side of the same hull.
+What the remake keeps out of the cast is the first **1.5 m** off the gun's own node, and nothing
+else. Excluding a node group instead cannot work on this data, whichever group is chosen:
+excluding a zeppelin entire lets its rings shoot straight through their own hull, excluding only
+the gun's own rig blocks all 14 of them because the panel colliders engulf the ring they carry,
+and excluding the **mounting section** in between leaks just as badly, because a section is a
+modelling group and holds the far side of the same hull. On `piratezep` the section rule left
+**422 of 517** in-arc bearings that cross 120 m or more of the hull's own body clear, and the
+belly rings `ctur1` to `ctur3` fired straight through 162 to 255 m of it. The distance rule leaves
+172, and every ring keeps 54 % to 79 % of its in-arc field of fire
+(`turret-moving-hull-blocks-own-fire`).
+
+The 1.5 m is measured, not decoded: a ring's own bodies engulf it out to about 1 m (`g21` and
+`gun` answer at 0 to 1 m), and the nearest hull skin standing over one answers at 2 m. The
+residual 172 is mostly hull that carries no collider at all, such as the gasbag ends
+`doublecannon4` and `doublecannon5` look across, which is a collision-data question and not a
+line-of-sight one.
+
+⚠ **The mounting section is still what a round this gun fires owns**, for the hit ray and the
+splash below. Only the line-of-sight test stopped reading it.
 
 ### Aiming
 
@@ -326,8 +340,8 @@ rate but turns the audible firing spell into isolated shots.
 intersect bit for the whole gather ([org/ordnanceTypes.md](../org/ordnanceTypes.md) "Half two, the
 splash"), so a flak bursting beside the emplacement that fired it reaches every neighbour and never
 the shooter. Which node an emplacement's round names as its owner is not decoded; the remake uses
-the gun's own mounting section, the set its line-of-sight ray already excludes, for both the hit
-ray and the splash. Measured before that exclusion: a flak bursting 12 m over its own pit dealt the
+the gun's own mounting section for both the hit ray and the splash, which is the one thing that
+set is still read for. Measured before that exclusion: a flak bursting 12 m over its own pit dealt the
 gun four splash shares at once (one per collider body of the destructible, -8.18/-8.04/-8/-7.36 of
 its 10), and a strike on the fort's barrier beside the gun the -10/-9.64 pair the CM07 sortie logged.
 

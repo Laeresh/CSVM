@@ -360,12 +360,9 @@ internal static class MenuLaunchReturnSuites
         run.Press(guest, Accept);
         run.Press(guest, Accept);
         ctx.Check(setup.Seats[1].Confirmed, $"the guest confirms through the presentation's poll");
-        run.Press(Up);
-        ctx.Check(shell.FocusedKey == OriginalShell.FlyKey, $"Up wraps onto the live FLY ({shell.FocusedKey})");
-        run.Press(Accept);
         var dogfight = run.Expect<LaunchExit>();
         ctx.Check(dogfight is { Mode: MenuMode.Versus, Seats.Count: 2 },
-            $"FLY leaves as one Versus LaunchExit for both seats ({dogfight?.Mode}, {dogfight?.Seats.Count})");
+            $"and that last confirm leaves as one Versus LaunchExit for both seats ({dogfight?.Mode}, {dogfight?.Seats.Count})");
         run.Show(MenuReturnDestination.TopLevel);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && run.Host.Seats.Count == 2 && !setup.Seats[1].Locked,
             $"the return lands on the top level with both seats kept and the picks dropped ({shell.Screen}, {run.Host.Seats.Count})");

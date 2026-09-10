@@ -5,15 +5,15 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original shell's two sortie screens, Free Flight and the remake-only Dogfight, over the
-/// shared player setup: the chapter column, the aircraft column as a window onto the shared
-/// roster (the stock airframes, then the saved customs), the seat strip, the join hint, BACK and
-/// FLY. Seat 0 alone drives the screen: the focus, the pointer, the chapter, its aircraft and
-/// FLY. Once seat 0 has picked, each joined seat picks in turn on the per-seat screen
-/// (<c>OriginalSeatPlane.cs</c>); on the sortie screen itself a later seat can only leave with
-/// Back. FLY is seat 0's confirmation and the launch in one press, so it stands only once every
-/// other seat has confirmed and, for Dogfight, a second seat has joined. Also the joining rule
-/// the presentation reads (<see cref="JoiningOpen"/>) and the same seat strip over the campaign
-/// boards and the Instant Action screen once a second seat has joined. Nothing here is decoded.
+/// shared player setup: the chapter column, the aircraft column as a window onto the shared roster
+/// (the stock airframes, then the saved customs), the seat strip, the join hint, BACK and FLY. Seat 0
+/// alone drives the screen: the focus, the pointer, the chapter, its aircraft and FLY. Once seat 0 has
+/// picked, each joined seat picks in turn on the per-seat screen (<c>OriginalSeatPlane.cs</c>); on the
+/// sortie screen itself a later seat can only leave with Back. FLY is seat 0's confirmation and the
+/// launch in one press, so it stands only once every other seat has confirmed and, for Dogfight, a
+/// second seat has joined; the walk's last confirm takes that press for it. Also the joining rule the
+/// presentation reads (<see cref="JoiningOpen"/>) and the same seat strip over the campaign boards
+/// and the Instant Action screen once a second seat has joined. Nothing here is decoded.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -105,16 +105,17 @@ public sealed partial class OriginalShell
     /// <summary>The row key of the roster's aircraft at <paramref name="index"/>.</summary>
     public static string AirframeKey(int index) => AirframeKeyPrefix + index;
 
-    /// <summary>Applies one frame of one seat's commands. Seat 0's frame is <see cref="Step"/>;
-    /// a later seat drives the per-seat aircraft screen while it is that seat's, its own check on
-    /// the campaign's flight check, and anywhere else can only leave with Back (from any screen,
-    /// as a guest may).</summary>
+    /// <summary>Applies one frame of one seat's commands. A seat drives its walk's screens while it
+    /// is the one picking, the per-seat aircraft screen and the Weapon Loadout opened from it (seat
+    /// 0's frame reduced to its pointer there, see <see cref="SeatZeroFrame"/>), its own check on the
+    /// campaign's flight check, and every other screen if it is seat 0; a later seat anywhere else
+    /// can only leave with Back, from any screen, as a guest may.</summary>
     public OriginalStep StepSeat(int index, MenuCommands commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
         if (index == 0)
         {
-            return Step(commands);
+            return ApplyFrame(SeatZeroFrame(commands));
         }
 
         var seats = _setup.Seats;
@@ -124,20 +125,12 @@ public sealed partial class OriginalShell
         }
 
         var seat = seats[index];
-        bool own = _screen == OriginalScreen.SeatPlane
+        bool own = OnSeatWalk
             ? ReferenceEquals(seat, _pickingSeat)
             : _screen == OriginalScreen.CampaignFlightCheck && _campaign?.Field.Current == index;
         if (own)
         {
-            _steppingSeat = index;
-            try
-            {
-                return Step(commands);
-            }
-            finally
-            {
-                _steppingSeat = 0;
-            }
+            return ApplyFrame(commands);
         }
 
         bool changed = commands.Back && _setup.Unjoin(seat);
@@ -340,9 +333,9 @@ public sealed partial class OriginalShell
         return null;
     }
 
-    // FLY: seat 0's confirmation and the launch. Free Flight leaves through its feature with the
-    // chapter handed over; Dogfight, the remake's own mode with no feature of its own, leaves
-    // through the setup's exit.
+    // FLY: seat 0's confirmation and the launch, reached by its own press and by the per-seat
+    // walk's last confirm. Free Flight leaves through its feature with the chapter handed over;
+    // Dogfight, the remake's own mode with no feature of its own, leaves through the setup's exit.
     private MenuExit? Fly()
     {
         if (!FlyEnabled() || Seat0 is not { } seat)

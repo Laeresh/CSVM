@@ -56,6 +56,8 @@ internal sealed class MotionRuntime : IAnimMotion
     private const float RestHorizontal = 0.1f, RestVertical = 0.5f;
 
     // Defensive only: the energy test ends a body in two or three contacts, so this never fires.
+    // ⚠ It bounds HOPS alone. A body re-meeting the surface because its own frame carried it
+    // through charges the watchdog instead, so this cap never decides a resting height.
     private const int MaxContacts = 8;
 
     // Held pose, seeded once from the live transform: an absent channel carries it through.
@@ -119,6 +121,11 @@ internal sealed class MotionRuntime : IAnimMotion
     private int _contacts;
     private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
     private float _landedAt;        // the clock at contact; rotation and scale freeze there too
+    // The body's own frame on the previous contact-tested step. The solve is in that frame, so the
+    // speed the frame itself is travelling at appears nowhere in `_v0` or `_accel`, and the energy
+    // test needs it: a breakup piece rides a wreck still doing a hundred metres a second.
+    private Transform3D _prevParent;
+    private bool _hasPrevParent;
 
     public Node3D Target { get; private init; } = null!;
 
@@ -453,6 +460,7 @@ internal sealed class MotionRuntime : IAnimMotion
         var parent = (Target.GetParent() as Node3D)?.GlobalTransform ?? Transform3D.Identity;
         var from = parent * BallisticOrigin(_t);
         var to = parent * BallisticOrigin(next);
+        float arrivalSq = ArrivalSpeedSquared(parent, BallisticOrigin(_t), dt);
         // A descending step admits the test, `complex` widens it to every step. It decides here
         // too, since the column read below can answer with a surface above the body, exactly as
         // the original's cell query does.
@@ -477,7 +485,22 @@ internal sealed class MotionRuntime : IAnimMotion
         // The body keeps the step's horizontal travel and gives up only its descent, as the
         // original does: it rewrites the step's Y component alone and leaves X and Z be.
         return Land(next, parent.AffineInverse() * new Vector3(to.X, surfaceY, to.Z),
-            hit["collider"].As<GodotObject>(), byContact: true, worldStepY: to.Y - from.Y);
+            hit["collider"].As<GodotObject>(), byContact: true, arrivalSq, dt, to.Y - from.Y);
+    }
+
+    // How fast the body is really arriving, squared: its own velocity taken into world, plus the
+    // velocity its frame carries it at, read off that frame's step over the last tested frame.
+    // ⚠ Not the body's net world step — a body already being held on a surface has none, so that
+    // reading calls a piece at rest the instant its frame stops lifting it clear.
+    // Identical to the local speed under a parent standing still, which is every other body.
+    private float ArrivalSpeedSquared(Transform3D parent, Vector3 localOrigin, float dt)
+    {
+        var velocity = parent.Basis * (_v0 + _accel * (_t - _ballisticStart));
+        if (_hasPrevParent && dt > 0f)
+            velocity += ((parent * localOrigin) - (_prevParent * localOrigin)) / dt;
+        _prevParent = parent;
+        _hasPrevParent = true;
+        return velocity.LengthSquared();
     }
 
     // The do_intersections sweep: cast the step the body is about to take, last origin to next in
@@ -506,6 +529,7 @@ internal sealed class MotionRuntime : IAnimMotion
         float next = _runTime > 0f ? Mathf.Min(_t + dt, _runTime) : _t + dt;
         var from = parent * BallisticOrigin(_t);
         var to = parent * BallisticOrigin(next);
+        float arrivalSq = ArrivalSpeedSquared(parent, BallisticOrigin(_t), dt);
         if (from.DistanceSquaredTo(to) < 1e-8f)
             return false;
 
@@ -519,7 +543,7 @@ internal sealed class MotionRuntime : IAnimMotion
         float span = from.DistanceTo(to);
         float fraction = span > 0f ? Mathf.Clamp(from.DistanceTo(point) / span, 0f, 1f) : 0f;
         return Land(_t + (next - _t) * fraction, parent.AffineInverse() * point,
-            hit["collider"].As<GodotObject>(), byContact: true, worldStepY: to.Y - from.Y);
+            hit["collider"].As<GodotObject>(), byContact: true, arrivalSq, dt, to.Y - from.Y);
     }
 
     // The original's watchdog, charged only by a contact query that ran and found nothing — a
@@ -531,14 +555,14 @@ internal sealed class MotionRuntime : IAnimMotion
             return false;
         _watchdog += dt;
         return _watchdog >= _watchdogLimit
-               && Land(next, BallisticOrigin(next), null, byContact: false);
+               && Land(next, BallisticOrigin(next), null, byContact: false, arrivalSq: 0f, dt: dt);
     }
 
     // Comes to rest, the shared response both tiers end on: they differ only in what they ask the
     // world, never in what they do with the answer. The bounce branch is chosen here, since the
     // struck body is what picks it; MotionSet.Tick turns this into the dispatched Landing.
     private bool Land(float time, Vector3 parentOrigin, GodotObject? struck, bool byContact,
-        float worldStepY = 0f)
+        float arrivalSq, float dt, float worldStepY = 0f)
     {
         // The velocity this contact arrives with, which decides both halves of the response.
         var incoming = _v0 + _accel * (time - _ballisticStart);
@@ -552,15 +576,24 @@ internal sealed class MotionRuntime : IAnimMotion
         if (byContact && moving)
             pose += ParentUp() * Mathf.Abs(worldStepY * 0.5f);
 
-        // Energy: the contact is survivable while the incoming speed still covers the acceleration
-        // driving it. Each one takes four fifths of the speed, so a piece striking at 20 m/s under
-        // Earth gravity damps to 4 and ends on its next contact: one hop or two, never a count.
-        if (byContact && incoming.LengthSquared() >= _accel.LengthSquared() && _contacts < MaxContacts)
+        // A contact the body did not approach under its own power: its frame carried it through the
+        // surface. Bounded by the watchdog rather than by the contact count, because how many
+        // frames a descending wreck takes to settle is a frame-rate figure, not a number of hops.
+        bool carried = byContact && !moving;
+        if (carried)
+            _watchdog += dt;
+        bool spent = _watchdogLimit > 0f && _watchdog >= _watchdogLimit;
+
+        // Energy: the contact is survivable while the arriving speed still covers the acceleration
+        // driving it, so a piece striking at 20 m/s under Earth gravity damps to 4 and ends on its
+        // next one. ⚠ The ARRIVING speed, never `incoming` (docs/org/objectMotion.md).
+        if (byContact && arrivalSq >= _accel.LengthSquared() && _contacts < MaxContacts && !spent)
         {
             _heldOrigin = pose;
             _v0 = incoming * Restitution;
             _ballisticStart = time;
-            _contacts++;
+            if (!carried)
+                _contacts++;
             Seek(time);
             return true;
         }

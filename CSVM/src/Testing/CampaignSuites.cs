@@ -1705,6 +1705,10 @@ internal static class CampaignSuites
 
         public int? GroupLiveCount(int group, string? generator) => null;
 
+        public void WidenGroupEngagement(int group)
+        {
+        }
+
         public bool? TravelersMet(TravelersSpec spec) => null;
 
         public void WakeupEnemies(IReadOnlyList<string> names)

@@ -54,6 +54,7 @@
     "surface-vehicle-guns": 2.66,
     "turret-structure-targets": 1.5,
     "turret-hull-blocks-own-fire": 4.7,
+    "turret-moving-hull-blocks-own-fire": 10.3,
     "graze-bounce": 0.774,
     "ai-spawn-jitter": 0.945,
     "ai-actor": 0.732,
@@ -63,6 +64,7 @@
     "voice-runtime": 0.693,
     "ai-voice": 0.488,
     "ai-engine-rearm": 1.1,
+    "ai-weapon-emitters": 1.5,
     "ai-net-follow": 0.510,
     "zeppelin-motion": 0.157,
     "zeppelin-pandora-dead-end": 2.046,
@@ -73,6 +75,7 @@
     "zeppelin-broadside": 3.427,
     "zeppelin-cannon-burnout": 8.890,
     "gemini-gasbag-bays": 6.306,
+    "gemini-breakup-rest": 4.470,
     "dante-cannon-burnout": 12.270,
     "zeppelin-cannon-stowed": 1.330,
     "zeppelin-hull-activation": 2.800,
@@ -221,6 +224,7 @@
     "roster-voice-ratings": 1.904,
     "mission-radio": 1.825,
     "campaign-zeppelin-wakeup": 1.745,
+    "campaign-dedg-volume": 2.080,
     "campaign-squad-wakeup": 5.154,
     "campaign-roster-wake-node": 3.128,
     "campaign-blacke-search": 6.027,
@@ -256,6 +260,7 @@
     "display-det-guard": 0.05,
     "menu-campaign-journey": 1.0,
     "campaign-layout-parity": 0.28,
+    "campaign-flight-check-plane-change": 0.05,
     "perf-hud-layout": 0.009,
     "campaign-briefing-note": 0.161,
     "campaign-capture-group": 5.66,
@@ -274,6 +279,7 @@
     "campaign-cm09-gasbag-kill": 11.420,
     "campaign-cm15-capture": 3.110,
     "campaign-balmoral-hidden": 2.77,
+    "campaign-cm15-staged-paint": 3.20,
     "ace-wake-terrain": 3.60
   }
 }

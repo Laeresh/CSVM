@@ -8,14 +8,14 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// The remake-only per-seat aircraft screen: once seat 0 has picked on a sortie screen, or has
 /// pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in player
-/// order picks its own aircraft here, on the campaign plane-selection board's shape (its list
-/// field, silhouette, ratings and weapon column, ACCEPT and CANCEL SELECTIONS) over the sortie
-/// roster. The list stands open while the seat browses; Accept selects and closes it, Accept
-/// again confirms and hands the screen to the next unconfirmed seat; Back undoes a selection
-/// or, while browsing, unjoins, as CANCEL SELECTIONS does. Seat 0's controller drives the screen
-/// as well, so one pad at the desk can walk it, and seat 0's own Back undoes its pick and returns
-/// to the screen it came from with every seat kept. The walk ends back on the sortie screen with
-/// FLY live, or on Instant Action as the launch itself. Nothing here is decoded.
+/// order picks its own aircraft here, on the campaign plane-selection board's shape (its list field,
+/// ratings and weapon column, WEAPON LOADOUT over a selection, ACCEPT and CANCEL SELECTIONS) over
+/// the sortie roster. The list stands open while the seat browses; Accept selects and closes it,
+/// Accept again confirms and hands the screen on, and WEAPON LOADOUT opens the loadout screen on
+/// that seat's own fit. Back and CANCEL SELECTIONS each drop a selection and reopen the list, and
+/// over the open list each leaves the walk with every seat kept; nothing here unjoins. Only the
+/// picking seat's device drives the screen, and the mouse riding seat 0's source. The last seat's
+/// confirm is the launch, or the return of a screen whose FLY gate is unmet. Nothing is decoded.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -26,15 +26,19 @@ public sealed partial class OriginalShell
     private PlayerSeat? _pickingSeat;
     private OriginalScreen _seatReturn = OriginalScreen.FreeFlight;
 
-    // Which seat's frame Step is applying: 0 unless StepSeat is routing a later seat's frame
-    // through it, which is how Back tells seat 0's press from the picking seat's.
-    private int _steppingSeat;
-
     /// <summary>The seat picking on the per-seat screen, as its index, or -1 off that screen.</summary>
     public int PickingSeat => _screen == OriginalScreen.SeatPlane && _pickingSeat is { } seat ? SeatIndex(seat) : -1;
 
     /// <summary>The screen the per-seat walk returns to, meaningful while <see cref="PickingSeat"/> is not -1.</summary>
     public OriginalScreen SeatReturn => _seatReturn;
+
+    // The screens a per-seat walk stands on: the picker itself, and the Weapon Loadout it opens for
+    // the picking seat. ⚠ Both, not just the picker. The seat that opened the loadout still owns
+    // every frame while it is showing, and the walk has to survive the trip; treating only the
+    // picker as the walk's screen made the picking seat's Back unjoin it from the loadout screen.
+    private bool OnSeatWalk =>
+        _screen == OriginalScreen.SeatPlane
+        || (_screen == OriginalScreen.InstantActionLoadout && _loadoutSeat != null);
 
     /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
     /// showing, the screenshot aid's pose; with a joined seat still to confirm, the per-seat
@@ -60,6 +64,15 @@ public sealed partial class OriginalShell
 
         BeginSeatWalkIfDue();
     }
+
+    // Seat 0's frame as the screen showing takes it: whole, except on a walk's screens while
+    // another seat is picking, where only the pointer is kept. ⚠ Keep the pointer. The mouse rides
+    // seat 0's source, so dropping the whole frame would take the one device a pilot without a pad
+    // of their own can pick with; the seat's identity, never the device kind, is what decides here.
+    private MenuCommands SeatZeroFrame(MenuCommands commands) =>
+        OnSeatWalk && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)
+            ? new MenuCommands { Pointer = commands.Pointer }
+            : commands;
 
     private int SeatIndex(PlayerSeat seat)
     {
@@ -151,13 +164,21 @@ public sealed partial class OriginalShell
         return FinishSeatWalk();
     }
 
-    // Every seat confirmed: back to the sortie screen, where FLY now stands, or the Instant Action
-    // launch with every seat's choice, seat 0's confirmation being FLY MISSION's own press.
+    // Every seat confirmed: the launch, whichever screen the walk came from, the last seat's
+    // confirm standing in for seat 0's press there. The screen it returns to opens first, so a
+    // sortie launch reads that screen's own chapter and mode. ⚠ Leave the gate to FLY's own rule:
+    // Dogfight without a second seat, or a sortie with no map picked, must return the screen with
+    // FLY to press rather than fly.
     private MenuExit? FinishSeatWalk()
     {
         var back = _seatReturn;
         Open(back);
-        if (back != OriginalScreen.InstantAction || Seat0 is not { } seat)
+        if (back != OriginalScreen.InstantAction)
+        {
+            return IsSortie ? Fly() : null;
+        }
+
+        if (Seat0 is not { } seat)
         {
             return null;
         }
@@ -166,13 +187,17 @@ public sealed partial class OriginalShell
         return _instantAction.BuildExit(_setup.Choices(_flightDevices));
     }
 
-    // Seat 0's Back: its own pick is undone and the screen it came from returns, the seats kept,
-    // so a pick made again walks them again.
+    // Back's one way out of the walk, whoever pressed it: the screen it came from returns with
+    // every seat kept, so a pick made again walks them again. ⚠ Unwind seat 0 all the way to
+    // browsing; a sortie screen reopens the walk every frame seat 0's pick still stands, so a
+    // single stage back would put the walk straight up again and Back would have no exit.
     private void CancelSeatWalk()
     {
         if (Seat0 is { } seat)
         {
-            _setup.Back(seat);
+            while (_setup.Back(seat) != SeatBack.Browsing)
+            {
+            }
         }
 
         Open(_seatReturn);
@@ -210,6 +235,9 @@ public sealed partial class OriginalShell
                 }
 
                 return null;
+            case nameof(BoardButton.ChangeAmmo):
+                OpenSeatLoadout(seat);
+                return null;
             case nameof(BoardButton.AcceptSelections):
                 if (seat.Locked)
                 {
@@ -219,8 +247,19 @@ public sealed partial class OriginalShell
                 TakeSeatPick(page, seat);
                 return null;
             case nameof(BoardButton.CancelSelections):
-                _setup.Unjoin(seat);
-                return AdvanceSeatWalk();
+                // The pointer's Back, in the picking seat's own two stages: the selection goes
+                // first, then the walk. ⚠ Keep the second stage; a mouse has no other way off this
+                // screen, Back being the picking seat's device alone.
+                if (seat.Locked)
+                {
+                    ReopenSeatList(page, seat);
+                }
+                else
+                {
+                    CancelSeatWalk();
+                }
+
+                return null;
             default:
                 return null;
         }
@@ -243,8 +282,19 @@ public sealed partial class OriginalShell
         return AdvanceSeatWalk();
     }
 
-    // Back on the per-seat screen: seat 0's undoes its own pick and leaves the walk; the picking
-    // seat's undoes its selection (the list reopening) or, browsing, unjoins it.
+    // The picking seat's undo, taken by Back over a closed list and by CANCEL SELECTIONS: the
+    // selection goes and the list reopens over it, the seat keeping its place in the walk.
+    private void ReopenSeatList(SeatPlanePage page, PlayerSeat seat)
+    {
+        _setup.Back(seat);
+        page.List.Expand();
+        _focus[(int)OriginalScreen.SeatPlane] = 0;
+    }
+
+    // Back on the per-seat screen, which only the picking seat's device can press: it takes back a
+    // selection first and leaves the walk from the open list, so two presses at most reach the
+    // screen the walk came from. Neither unjoins, a pilot leaving the sortie only on the Instant
+    // Action screen or with their device.
     private MenuExit? BackSeatPlane()
     {
         if (_seatPage is not { } page || _pickingSeat is not { } seat)
@@ -252,22 +302,14 @@ public sealed partial class OriginalShell
             return AdvanceSeatWalk();
         }
 
-        if (_steppingSeat == 0)
-        {
-            CancelSeatWalk();
-            return null;
-        }
-
         if (seat.Locked)
         {
-            _setup.Back(seat);
-            page.List.Expand();
-            _focus[(int)OriginalScreen.SeatPlane] = 0;
+            ReopenSeatList(page, seat);
             return null;
         }
 
-        _setup.Unjoin(seat);
-        return AdvanceSeatWalk();
+        CancelSeatWalk();
+        return null;
     }
 
     // The screen as the shared board component composes it over the seat's page, with the seat
@@ -298,9 +340,9 @@ public sealed partial class OriginalShell
     /// <summary>
     /// One seat's picker as a campaign page, so <c>CampaignBoards.For</c> draws it in the
     /// plane-selection board's shape: the list field over the sortie roster, the silhouette of
-    /// the row under the cursor, its ratings and weapon column, ACCEPT and CANCEL SELECTIONS. The
-    /// page composes only; the shell applies every press itself, since the picks are the shared
-    /// setup's stages and not a profile's slots.
+    /// the row under the cursor, its ratings and weapon column, WEAPON LOADOUT over a selection, and
+    /// ACCEPT and CANCEL SELECTIONS. The page composes only; the shell applies every press itself,
+    /// since the picks are the shared setup's stages and not a profile's slots.
     /// </summary>
     private sealed class SeatPlanePage : ICampaignPage
     {
@@ -335,6 +377,17 @@ public sealed partial class OriginalShell
         private const float TitleFont = 20f;
         private const float BodyFont = 12f;
         private const int SilhouetteFrames = 12;
+
+        // The plaques after the list field, in the order the campaign board's own page puts them:
+        // the crew block's paper button, then the two commit strips. WEAPON LOADOUT stands only over
+        // a selection, because a fit needs an aeroplane to hang on and the seat has picked none
+        // while its list is open. Every lock and unlock parks the focus back on the list, so the row
+        // moving with the stage costs no cursor.
+        private static readonly BoardButton[] SelectedPlaques =
+            { BoardButton.ChangeAmmo, BoardButton.AcceptSelections, BoardButton.CancelSelections };
+
+        private static readonly BoardButton[] BrowsingPlaques =
+            { BoardButton.AcceptSelections, BoardButton.CancelSelections };
 
         private static readonly string[] RatingLabels = { "TOP SPEED:", "ARMOR:", "AGILITY:", "OFFENSE:" };
         private static readonly string[] RatingKeys = { "PS_T_TOPSPEEDP", "PS_T_ARMORP", "PS_T_AGILITYP", "PS_T_OFFENSEP" };
@@ -374,7 +427,7 @@ public sealed partial class OriginalShell
 
         public string Title => "PLANE SELECTION";
 
-        public int RowCount => 3;
+        public int RowCount => Plaques.Length + 1;
 
         public int OpeningRow => 0;
 
@@ -458,6 +511,8 @@ public sealed partial class OriginalShell
 
         private UiStrings Strings => _shell._campaign?.Strings ?? _shell._hangar?.Strings ?? UiStrings.Empty;
 
+        private BoardButton[] Plaques => _seat.Locked ? SelectedPlaques : BrowsingPlaques;
+
         // The roster row the screen stands for: the highlighted one while the list is open, the
         // selected one once it is closed.
         private MenuAircraft? Current
@@ -470,12 +525,11 @@ public sealed partial class OriginalShell
             }
         }
 
-        public BoardButtonRef Button(int row) => row switch
+        public BoardButtonRef Button(int row)
         {
-            1 => new BoardButtonRef(BoardButton.AcceptSelections),
-            2 => new BoardButtonRef(BoardButton.CancelSelections),
-            _ => BoardButtonRef.None,
-        };
+            var plaques = Plaques;
+            return row >= 1 && row <= plaques.Length ? new BoardButtonRef(plaques[row - 1]) : BoardButtonRef.None;
+        }
 
         public CampaignCombo? Combo(int row) => row == 0 ? List : null;
 
@@ -483,11 +537,12 @@ public sealed partial class OriginalShell
 
         public bool Focusable(int row) => true;
 
-        public string RowText(int row) => row switch
+        public string RowText(int row) => Button(row).Button switch
         {
-            0 => List.Text,
-            1 => "ACCEPT SELECTIONS",
-            _ => "CANCEL SELECTIONS",
+            BoardButton.ChangeAmmo => "WEAPON LOADOUT",
+            BoardButton.AcceptSelections => "ACCEPT SELECTIONS",
+            BoardButton.CancelSelections => "CANCEL SELECTIONS",
+            _ => List.Text,
         };
 
         public string Detail(int row) => string.Empty;

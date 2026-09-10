@@ -189,6 +189,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Weather.cs` — weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
 - `src/Flight/AiEngineAudio.cs` — an AI aircraft's positional engine loops and the 2000-unit cull.
+- `src/Flight/AiWeaponAudio.cs` — an AI aircraft's positional gun loop and dry cue, culled by each cue's own authored audible distance.
+- `src/Flight/WeaponAudioCues.cs` — the weapon-sound selection both audio paths share: a definition name to a resolved cue with its `RANGE` pair.
 - `src/Flight/EngineAudioCurves.cs` — the engine-slot definition choice and curve maths both audio paths share.
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look plus WASD/QE, no roll; `Frame`/`FollowNode` track an object.
 - `src/Flight/OrbitLock.cs` — the re-lock rule behind that key: nearest first, then outward, engine-free.

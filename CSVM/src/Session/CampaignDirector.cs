@@ -1358,6 +1358,23 @@ public sealed class CampaignDirector
             return alive;
         }
 
+        public void WidenGroupEngagement(int group)
+        {
+            // The same liveness test the count uses, so the widened set is exactly the counted one.
+            // A hull carries no activation volume in this engine, so only the aircraft are reached.
+            foreach (var (name, plan) in _owner._rosterPlans)
+            {
+                if (plan.Group != group)
+                {
+                    continue;
+                }
+                if (_owner._roster.TryGetValue(name, out var rig) && !rig.Crashed && !rig.Deactivated)
+                {
+                    CampaignRosterPlan.WidenForDedg(rig.Pilot?.Machine);
+                }
+            }
+        }
+
         public bool? TravelersMet(TravelersSpec spec)
         {
             Vector3? reference = spec.WherePoint is { } p

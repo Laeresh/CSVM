@@ -11,7 +11,9 @@ namespace CSVM.Mech3;
 /// as a prop with no pilot, a bodiless <c>player</c> the flown aircraft follows, <c>chuteman</c>'s
 /// parachutist subtree, and <c>balmoral</c>, a drop's own actor. All come from the shared aircraft
 /// archive rather than the chapter gamez, so their compiled pointers are rebased onto the
-/// chapter's own pointer space (<see cref="PointerBaseOf"/>).
+/// chapter's own pointer space (<see cref="PointerBaseOf"/>). A subtree carrying aircraft skins is
+/// built on a builder of its own, so <see cref="Paint"/> can dress it in the livery of the
+/// aeroplane it stands in for (<see cref="StandIns"/>).
 /// Decode: docs/formats/anim-definitions/cutscenes.md.
 /// </summary>
 public sealed class AircraftStage
@@ -59,11 +61,25 @@ public sealed class AircraftStage
     /// <see cref="ChuteNode"/> is: the drop's own legs add, activate and detach them.</summary>
     public static readonly string[] PropNodes = { "anim_bloodhawk", "bloodhawk_gear" };
 
+    /// <summary>Which aeroplane each staged prop wears the paint of. A node named here still keeps
+    /// the shipped skins in a mission that flies neither source: nothing invents a livery for a
+    /// prop, it only tracks the aeroplane it stands in for.</summary>
+    public static readonly IReadOnlyList<StandIn> StandIns = new StandIn[]
+    {
+        new(BalmoralNode, "balmoral_1", null),
+        new(PropNode, null, "devastator"),
+    };
+
     private readonly Dictionary<string, Node3D> _figures =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, Node3D> _props =
         new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, StagedPaint> _paints =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private TextureArchive _textures = null!;
 
     private AircraftStage() { }
 
@@ -111,6 +127,11 @@ public sealed class AircraftStage
     /// flight rigs exist.</summary>
     public Node3D? Flown { get; private set; }
 
+    /// <summary>The staged subtrees <see cref="Paint"/> can reach, by gamez name: the ones whose
+    /// own materials name a decal placeholder, so a livery has skins to composite onto. A
+    /// parachutist or a rope ladder carries none and is absent here.</summary>
+    public IReadOnlyCollection<string> PaintableNodes => _paints.Keys;
+
     /// <summary>Where a chapter's own node table ends and the shared aircraft archive's begins: the
     /// chapter's node count rounded up to the next multiple of <see cref="PointerBlock"/>. Holds for
     /// all eight extracted chapters.</summary>
@@ -125,6 +146,7 @@ public sealed class AircraftStage
         TextureArchive textures)
     {
         var stage = new AircraftStage();
+        stage._textures = textures;
         int pointerBase = PointerBaseOf(chapterNodeCount);
         stage.PointerBase = pointerBase;
         if (planesGamez.FindByName(PlayerNode) is { } player)
@@ -136,15 +158,33 @@ public sealed class AircraftStage
             stage.PlayerMarker = marker;
         }
 
-        // One builder over the aircraft archive, shared by every archive subtree this stage builds:
-        // the world's own SceneBuilder reads the chapter gamez's meshes and materials, which none of
-        // these subtrees' model indices address.
+        // The builder over the aircraft archive: the world's own SceneBuilder reads the chapter
+        // gamez's meshes and materials, which none of these subtrees' model indices address. This
+        // one serves every subtree that cannot be painted; a paintable one gets its own below.
         var scene = new SceneBuilder(planesGamez, textures, cullBackfaces: true);
+
+        // ⚠ A paintable subtree needs a builder of its own, never a substitution hook on the
+        // shared one: the material cache is per builder, so one hook would hand a later subtree a
+        // material painted for the first aeroplane's livery.
+        SceneBuilder BuilderFor(GameZNode node)
+        {
+            if (PlanePainter.PrefixFor(planesGamez, node) is not { } prefix)
+            {
+                return scene;
+            }
+
+            var paint = new StagedPaint { Prefix = prefix };
+            paint.Scene = new SceneBuilder(planesGamez, textures, cullBackfaces: true,
+                textureSubstitute: (name, tex) => paint.Painter?.Substitute(name, tex) ?? tex);
+            stage._paints[node.Name] = paint;
+            return paint.Scene;
+        }
+
         // ⚠ Drawn in the archive's own shipped state (ACTIVE), never forced off: C1/M04's
         // pfighter11..13 fly it on SI scripts and nothing in that mission activates or parents it,
         // so a prop built switched off leaves the wingman out of the launch and the dive.
         if (planesGamez.FindByName(PropNode) is { } prop
-            && scene.BuildSubtree(prop, collisionSkip: _ => true) is { } builtProp)
+            && BuilderFor(prop).BuildSubtree(prop, collisionSkip: _ => true) is { } builtProp)
         {
             builtProp.Transform = Transform3D.Identity;
             Rebase(builtProp, pointerBase);
@@ -154,7 +194,7 @@ public sealed class AircraftStage
         }
 
         if (planesGamez.FindByName(ChuteNode) is { } chute
-            && scene.BuildSubtree(chute, collisionSkip: _ => true) is { } builtChute)
+            && BuilderFor(chute).BuildSubtree(chute, collisionSkip: _ => true) is { } builtChute)
         {
             builtChute.Transform = Transform3D.Identity;
             Rebase(builtChute, pointerBase);
@@ -169,7 +209,7 @@ public sealed class AircraftStage
         var balmoralHolder = new Node3D { Name = "balmoral_holder", Visible = false };
         worldRoot.AddChild(balmoralHolder);
         if (planesGamez.FindByName(BalmoralNode) is { } balmoral
-            && scene.BuildSubtree(balmoral, collisionSkip: _ => true) is { } builtBalmoral)
+            && BuilderFor(balmoral).BuildSubtree(balmoral, collisionSkip: _ => true) is { } builtBalmoral)
         {
             builtBalmoral.Transform = Transform3D.Identity;
             builtBalmoral.Visible = balmoral.Active;
@@ -181,7 +221,8 @@ public sealed class AircraftStage
         foreach (string propName in PropNodes)
         {
             if (planesGamez.FindByName(propName) is not { } propNode
-                || scene.BuildSubtree(propNode, collisionSkip: _ => true) is not { } builtPropNode)
+                || BuilderFor(propNode).BuildSubtree(propNode, collisionSkip: _ => true)
+                    is not { } builtPropNode)
             {
                 continue;
             }
@@ -201,7 +242,7 @@ public sealed class AircraftStage
         foreach (string figure in FigureNodes)
         {
             if (planesGamez.FindByName(figure) is not { } node
-                || scene.BuildSubtree(node, collisionSkip: _ => true) is not { } built)
+                || BuilderFor(node).BuildSubtree(node, collisionSkip: _ => true) is not { } built)
             {
                 continue;
             }
@@ -214,6 +255,10 @@ public sealed class AircraftStage
         }
 
         stage.MeshInstances = scene.MeshInstanceCount;
+        foreach (var paint in stage._paints.Values)
+        {
+            stage.MeshInstances += paint.Scene.MeshInstanceCount;
+        }
 
         string marked = stage.PlayerMarker != null ? PlayerNode : $"no {PlayerNode}";
         string staged = stage.Prop != null ? PropNode : $"no {PropNode}";
@@ -225,9 +270,44 @@ public sealed class AircraftStage
         string props = stage._props.Count > 0
             ? string.Join(", ", stage._props.Keys)
             : "no props";
-        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {balmoraled}, {figures}, {props}, {stage.MeshInstances} mesh instances");
+        string paintable = stage._paints.Count > 0
+            ? string.Join(", ", stage._paints.Keys)
+            : "none paintable";
+        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {balmoraled}, {figures}, {props}, {stage.MeshInstances} mesh instances, skins on {paintable}");
         return stage;
     }
+
+    /// <summary>Paints one staged subtree in <paramref name="scheme"/>, so a prop wears the livery
+    /// of the aeroplane it stands in for instead of the archive's shipped skins. Returns the
+    /// painter, or null when this build staged no such node, the node carries no skins, or the
+    /// scheme is null (the shipped skins, which is what an unresolved stand-in leaves).
+    /// Runs after the flight rigs, since the scheme is theirs.</summary>
+    public PlanePainter? Paint(string nodeName, PaintScheme? scheme, PatternLibrary patterns)
+    {
+        ArgumentNullException.ThrowIfNull(patterns);
+        if (!_paints.TryGetValue(nodeName, out var paint))
+        {
+            return null;
+        }
+
+        paint.Painter = scheme != null
+            ? new PlanePainter(_textures, patterns, scheme, paint.Prefix)
+            : null;
+        paint.Scene.Repaint();
+        return paint.Painter;
+    }
+
+    /// <summary>The livery <see cref="Paint"/> composited onto one staged subtree, null while it
+    /// still wears the shipped skins. The count of skins it repainted is what says the
+    /// substitution reached the built materials.</summary>
+    public PlanePainter? PainterOf(string nodeName) =>
+        _paints.TryGetValue(nodeName, out var paint) ? paint.Painter : null;
+
+    /// <summary>The skin-texture prefix a staged subtree's own materials name (<c>bal</c>,
+    /// <c>dev</c>), or null when it carries no decal placeholder to read one off and so no livery
+    /// can reach it.</summary>
+    public string? SkinPrefixOf(string nodeName) =>
+        _paints.TryGetValue(nodeName, out var paint) ? paint.Prefix : null;
 
     /// <summary>Puts the flown aircraft's own airframe subtree in the animation runtime's node
     /// table, rebased onto <see cref="PointerBase"/>, which is what makes a hookup definition's
@@ -267,5 +347,23 @@ public sealed class AircraftStage
                 Rebase(n3d, pointerBase);
             }
         }
+    }
+
+    /// <summary>Where a staged prop's livery comes from: the mission roster block whose rig it
+    /// stands in for, or the vehicle def that names the archive node as its own model when no block
+    /// flies it. Both may be null, which is a prop that keeps the shipped skins.</summary>
+    /// <param name="Node">The staged archive node, one of this class's own node names.</param>
+    /// <param name="RosterBlock">The block whose spawned rig resolved the livery, or null.</param>
+    /// <param name="VehicleDef">The def whose authored <c>paint_pattern</c> stands in, or null.</param>
+    public readonly record struct StandIn(string Node, string? RosterBlock, string? VehicleDef);
+
+    // One paintable subtree: its own builder, the skin prefix its materials name, and the painter
+    // Paint installs. The builder's substitution hook reads the painter field, so installing one
+    // and repainting swaps every skin the subtree resolved, exactly as PlaneBuilder.Repaint does.
+    private sealed class StagedPaint
+    {
+        public SceneBuilder Scene = null!;
+        public string Prefix = "";
+        public PlanePainter? Painter;
     }
 }

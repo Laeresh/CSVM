@@ -82,6 +82,11 @@ public interface IObjectiveWorld
     /// has no AI-group roster at all.</summary>
     int? GroupLiveCount(int group, string? generator);
 
+    /// <summary>`DEDG`'s side effect: raise every live member of the group to the widened
+    /// engagement volume, so a watched group never disengages by distance. Raise only, so a napped
+    /// or wiped-out objective leaves the volume where it put it.</summary>
+    void WidenGroupEngagement(int group);
+
     /// <summary>Whether a <c>TRAVELERS</c> proximity condition reads true this tick. An authored
     /// <c>player</c> subject is the human field, nearest human first. Null when the subject or the
     /// reference cannot be resolved.</summary>
@@ -161,7 +166,8 @@ public readonly record struct ObjectiveRow(
 /// <summary>
 /// One mission's objectives runtime: the four-state machine per objective, the rotating
 /// one-completion-per-tick scan, the chaining executor with its already-awake truncation, the
-/// condition families' OR, the mission countdown, and the win/loss flags. Engine-free by
+/// condition families' OR with <c>DEDG</c>'s engagement widening, the mission countdown, and the
+/// win/loss flags. Engine-free by
 /// construction (no Godot type, no logging), so <c>CSVM.Tests/ObjectiveGraphTests.cs</c> pins it
 /// off-engine and <see cref="CampaignDirector"/> owns every log line about it. Every rule here is
 /// decoded in docs/formats/objectives.md and implemented as decoded, shipped quirks included.
@@ -603,6 +609,14 @@ public sealed class ObjectiveGraph
         if (def.Dedg is not { } dedg)
         {
             return false;
+        }
+
+        // ⚠ Keep the widening on the same tick as the count, and only here: the original's walk
+        // (FUN_004658d0) counts and widens in one pass, and a positive group is its own guard, so a
+        // group-0 clause reaches no member at all. Nothing narrows the volume back.
+        if (dedg.Group > 0)
+        {
+            _world.WidenGroupEngagement(dedg.Group);
         }
 
         int? live = _world.GroupLiveCount(dedg.Group, dedg.Generator);
