@@ -156,6 +156,12 @@ internal sealed class MotionRuntime : IAnimMotion
     /// on the termination model.</summary>
     public float RunTime => _runTime;
 
+    /// <summary>Whether this body is still in the air. The original's <c>OBJECT_MOTION</c> handler
+    /// reports "not done" for every frame of a flight, which parks the sequence entry that launched
+    /// it and so keeps the whole animation record alive; <see cref="MotionSet.Airborne"/> is that
+    /// hold, and this is what it reads. Decode: docs/org/objectMotion.md.</summary>
+    public bool Ballistic => _hasBallistic && !_landed;
+
     /// <summary>The ON_CALL sequence this body owes when it lands — <c>BOUNCE_SEQUENCE</c>'s
     /// <c>default</c> branch — or null when nothing is owed. Armed only on a launch whose flight
     /// time this class SOLVED and which names a bounce; a shape with a run time arms its bounce at

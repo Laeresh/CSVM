@@ -45,9 +45,10 @@ internal static class GeminiBreakupRestSuites
         "C2B/M04's geminizep killed by its gasbags over the sea, on a world that carries " +
         "collision: killgmzep's main_altitude_check gate opens as floatdown brings the wreck " +
         "down, breakupzep drops all five sections, and the wreck and every one of those sections " +
-        "comes to rest on the water instead of falling through it. zeppelin-breakup pins the " +
-        "six-section piratezep and gemini-gasbag-bays runs this hull with no colliders at all, so " +
-        "this is the only resting check the Gemini has")]
+        "comes to rest on the water instead of falling through it and dispatches its own " +
+        "hit_waterN splash there, including the two that land after the wreck has settled. " +
+        "zeppelin-breakup pins the six-section piratezep and gemini-gasbag-bays runs this hull " +
+        "with no colliders at all, so this is the only resting check the Gemini has")]
     internal static void GeminiBreakupRest(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
@@ -177,12 +178,16 @@ internal static class GeminiBreakupRestSuites
 
         int dropped = 0;
         int afloat = 0;
+        int splashed = 0;
         for (int i = 0; i < bags.Count; i++)
         {
             float restY = bags[i].GlobalPosition.Y;
             report.AppendLine($"gasbag{i + 1} rests at y={restY:0.0} on {SurfaceUnder(bags[i])}");
             dropped += fired.Contains($"break{i + 1}:ObjectMotion(gasbag{i + 1})") ? 1 : 0;
             afloat += Mathf.Abs(restY - SurfaceY) <= RestBandM ? 1 : 0;
+            // break{i}'s BOUNCE_SEQUENCE names hit_water{i}, whose first event is the splash. The
+            // two sections that land last are the ones a def-instance-scoped dispatch loses.
+            splashed += fired.Contains($"hit_water{i + 1}:CallAnimation(huge_splash)") ? 1 : 0;
         }
 
         float wreckY = hull.GlobalPosition.Y;
@@ -196,12 +201,14 @@ internal static class GeminiBreakupRestSuites
             $"the wreck settles on the sea it was killed over y={wreckY:0.0} surface y={SurfaceY:0}");
         ctx.Same(5, afloat,
             $"…and every section comes to rest on the sea rather than falling through it afloat={afloat} of 5");
-        ctx.Note($"{Chapter}/{Mission} {Hull}: wreck rests at y={wreckY:0.0}, {afloat} of 5 sections on the sea; per-step trace in test-gemini-breakup-rest.txt");
+        ctx.Same(5, splashed,
+            $"…and every one dispatches its own hit_waterN splash on landing splashed={splashed} of 5");
+        ctx.Note($"{Chapter}/{Mission} {Hull}: wreck rests at y={wreckY:0.0}, {afloat} of 5 sections on the sea, {splashed} of 5 splashing; per-step trace in test-gemini-breakup-rest.txt");
     }
 
     // What a settled section is standing on, read from above so the answer is the first surface
-    // over it rather than the sea it may already be a few centimetres into. Reported, not asserted:
-    // three of the five take the water bounce and two land on the floating wreck's own colliders.
+    // over it rather than the sea it may already be a few centimetres into. Reported, not asserted;
+    // the splash count is what pins that the surface each section struck was the water.
     private static string SurfaceUnder(Node3D bag)
     {
         if (bag.GetWorld3D()?.DirectSpaceState is not { } space)

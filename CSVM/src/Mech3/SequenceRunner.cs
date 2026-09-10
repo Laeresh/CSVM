@@ -110,10 +110,10 @@ public sealed class AnimInstance
     public int RefusedStoppedCalls { get; private set; }
 
     /// <summary>No runner is still executing. ⚠ NOT on its own the test for retiring an instance —
-    /// see <c>AnimRuntime.Retirable</c> and <c>MotionSet.OwesBounce</c>, which additionally hold an
-    /// instance open while one of its
-    /// motions still owes a BOUNCE_SEQUENCE, since such a launch is the last event of its sequence
-    /// and its runner ends the moment the piece leaves the ground.</summary>
+    /// see <c>AnimRuntime.Retirable</c> and <c>MotionSet.Airborne</c>, which additionally hold an
+    /// instance open while one of its bodies is still in the air, since such a launch is the last
+    /// event of its sequence and its runner ends on the launch's reported duration rather than on
+    /// the landing.</summary>
     public bool Finished
     {
         get

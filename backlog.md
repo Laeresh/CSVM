@@ -110,18 +110,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-787` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A breakup piece that lands after its wreck has settled dispatches no water splash.**
-  *Evidence:* on C2B/M04's Gemini, two of the five sections play no `hit_waterN` when they reach the
-  sea, the two that land last, and `gemini-breakup-rest` records them resting there all the same.
-  `MotionSet.OwesBounce` can only hold a def instance open once a bounce is already recorded, and a
-  body records one at its landing, so a body still in the air holds nothing: by the time the last
-  sections land, `killgmzep` has gone INVALID and there is no instance left to dispatch their
-  branch on. *Fix shape:* let a def instance stay open while any of its bodies is still ballistic,
-  or give a landing body its own dispatch path that does not depend on the def instance's life.
-  *⚠ Traps:* the pirate zeppelin hides this entirely, because all six of its sections land inside
-  the wreck's own descent, so a probe on `piratezep` reads green. Do not chase it in the contact
-  solver: the resting height is correct on both hulls, and the missing piece is the dispatch, not
-  the landing. *Cross-refs:* `BL-698`/`BL-700`'s closing commit, which found it and left it.
 - `BL-672` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The remake attributes a weapon hit by climbing the node-parent chain;
   the original attributes it only to the struck node's own handler.** *Evidence:* `FUN_005abcf0`
   reads the hit record's struck node at `+0x24`, reads that node's handler at `+0xbc`, and returns

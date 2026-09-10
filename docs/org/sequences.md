@@ -822,6 +822,35 @@ the chain waits for it.** Reporting 0 collapses `he_light_seq`'s authored 0.41 s
 ramps — into a single frame, each tween overwriting the previous, and `he_ground_effect`'s six-step
 1.2 s white↔violet wash into one instant.
 
+## A definition ends only when no sequence of it is still stepping
+
+The per-frame record update walks the definition's own sequence array (`anim+0xcc`, stride 0x40,
+count `anim+0xd8`) twice. The first walk (`004ecedc`-`004ecf53`) steps every entry whose state byte
+is 0 or 1 through `FUN_004ecbb0`, and re-arms to 0 an entry the `LOOP` return left at 4. The second
+(`004ecf5d`-`004ecf8a`) asks the same array whether any entry came out of that still in state 0 or
+1; only when none did does it call the animation stop `FUN_004ebbb0` (`004ecf95`), which carries the
+record into its terminal state (2 → 3, 6 → 4). Neither walk reads the record's own state byte at
+`+0xa0`, so an invalidated definition keeps stepping exactly like a plain running one, which is the
+other half of the `INVALIDATE_ANIMATION` latch in
+[`../formats/anim-definitions.md`](../formats/anim-definitions.md).
+
+**A body still in the air therefore holds its whole definition open.** `OBJECT_MOTION`
+(`FUN_004e8fa0`, slot 10) returns 1 on every frame of a launch it has not terminated, so the entry
+that launched it stays in state 1 for the whole flight, not for the launch's reported duration. The
+bounce dispatch depends on that: on contact the handler picks the branch index from the struck
+surface (`004e9997`-`004e99c4`), resolves the branch name against this same array
+(`004e99ed`-`004e9a7b`), and writes the branch entry's state byte 3 → 0 (`004e9aa8`-`004e9acf`),
+which is a `CALL_SEQUENCE` of an `ON_CALL` sequence of the definition the flying body belongs to. A
+piece that reaches the sea long after the rest of its wreck has settled still finds that array,
+because its own parked entry is what kept the record from being stopped.
+
+⚠ CSVM's runner does not park on a launch; it schedules the next event off the launch's reported
+duration and ends when the events run out, so the equivalent hold lives on the instance instead:
+`MotionSet.Airborne` keeps an instance out of `AnimRuntime.Retirable` while any of its bodies is
+ballistic. Holding only on a body with an ARMED bounce branch is not enough. A branch is armed at
+the landing, so a body still in the air holds nothing, and C2B/M04's Gemini loses the `hit_waterN`
+splash of the two sections that reach the sea after `killgmzep`'s other sequences have finished.
+
 ## FBFX_COLOR_FROM_TO is a full-screen wash
 
 `FUN_004ec6a0`, dispatch slot 36, read in full (decompiled and disassembled). **152 events ship**,
@@ -973,10 +1002,11 @@ The train is also what pins the absent-start reading: its sequences are
 previous event COMPLETES" turns that into the surveyed **~327 s track loop** instead of a
 zero-length infinite loop.
 
-⚠ **"No runner is still executing" is not on its own the test for retiring an instance.** A motion
-that still owes a `BOUNCE_SEQUENCE` holds its instance open: such a launch is the last event of its
-sequence, and its runner ends the moment the piece leaves the ground, while the landing has still to
-dispatch into a sequence.
+⚠ **"No runner is still executing" is not on its own the test for retiring an instance.** A body
+still in the air holds its instance open: such a launch is the last event of its sequence, its
+runner ends on the launch's reported duration rather than on the landing, and the landing has still
+to dispatch into a sequence. The original's own version of that hold is above, under "A definition
+ends only when no sequence of it is still stepping".
 
 ## Where CSVM deliberately differs
 

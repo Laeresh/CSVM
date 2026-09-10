@@ -285,6 +285,13 @@ carries no such condition.
 index for `default` / `water` / `lava`. Install-wide the `BOUNCE_SEQUENCE` blocks name `default` 324
 times and `water` 104; **no block in the install names a lava branch**.
 
+The dispatch is a write into the definition's own sequence array, not a call through anything that
+could have gone away: the handler resolves the branch name against `anim+0xcc` and sets that entry's
+state byte 3 → 0 (`004e9aa8`-`004e9acf`). It always finds a live record, because the update returns
+"still running" for every frame of the flight and an entry in that state is exactly what stops the
+record from being stopped ([sequences.md](sequences.md), "A definition ends only when no sequence of
+it is still stepping").
+
 ⚠ `altitude_surface` is **not** a terrain-only bit — the great majority of world nodes carry it,
 buildings included — so filtering a column by it does not keep debris off rooftops. Any argument
 that reaches for it on that reasoning is reaching for the wrong thing.

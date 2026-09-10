@@ -449,8 +449,9 @@ motion decode, both contact tiers and the readings they supersede: [../org/objec
 ## src/Mech3/Anim/MotionSet.cs
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp, `(Target, Channel)` eviction,
 `LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the predicates the rest of the
-runtime asks: `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults), `HasSpinOn` (the
-`Loop{-1}` spin re-assert guard) and `LiveFromToMotion` (the still-live transform tween
+runtime asks: `Airborne` (the retirement hold `AnimRuntime.Retirable` consults), `OwesBounce` (its
+armed-branch subset, which a suite reads), `HasSpinOn` (the `Loop{-1}` spin re-assert guard) and
+`LiveFromToMotion` (the still-live transform tween
 `PoseChannel` carries into a replacement channel). It never constructs a motion; `PoseChannel`
 builds them and hands them over. `Node3D`-typed but never dereferenced, every operation here being
 identity comparison, which is why the freed-target rule sits on `Tick`. Read `Anim/PoseChannel.cs`.

@@ -142,12 +142,20 @@ internal sealed class MotionSet
     /// <see cref="LaunchCount"/> alone.</summary>
     public void Reset() => _motions.Clear();
 
-    /// <summary>Whether an instance still owes a <c>BOUNCE_SEQUENCE</c>: the retirement hold
+    /// <summary>Whether an instance still has a body in the air: the retirement hold
     /// <see cref="AnimRuntime.Retirable"/> consults (this module's docs/architecture.md entry). A
-    /// bounce-terminated launch's runner finishes before the piece lands, so the instance needs
-    /// this to stay open that long.
-    /// ⚠ Deliberately narrow: a motion OWING a bounce, not any live motion. An unbounded
-    /// <see cref="SpinMotion"/> never finishes, so pinning on any live motion makes it immortal.</summary>
+    /// launch's runner finishes long before a piece falling to a distant sea lands, and the
+    /// original's parked <c>OBJECT_MOTION</c> entry holds its record open for the whole flight.
+    /// ⚠ Ballistic bodies only, never any live motion. An unbounded <see cref="SpinMotion"/> never
+    /// finishes, so pinning on any live motion makes the instance immortal.</summary>
+    public bool Airborne(AnimDefinition def, Node3D? anchor) =>
+        _motions.Any(m => m is MotionRuntime { Ballistic: true }
+                          && m.Owner.Def == def && m.Owner.Anchor == anchor);
+
+    /// <summary>Whether an instance has a body carrying an armed <c>BOUNCE_SEQUENCE</c> branch.
+    /// A strict subset of <see cref="Airborne"/>, since only a ballistic body arms one and it is
+    /// swept out of the collection on the tick it lands. Observation only; the retirement hold is
+    /// <see cref="Airborne"/>, which a body naming no branch also takes.</summary>
     public bool OwesBounce(AnimDefinition def, Node3D? anchor) =>
         _motions.Any(m => m is MotionRuntime { PendingBounce: not null }
                           && m.Owner.Def == def && m.Owner.Anchor == anchor);

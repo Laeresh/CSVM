@@ -753,9 +753,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     internal EmitterDirector Emitters => _emitters ??= new EmitterDirector(
         EmitterFactory ?? new SpentEmitterFactory(), DefScopedPufferKeys, DebugMotions, Count);
 
-    /// <summary>The live motion collection and its registration rules. `internal` so the
-    /// `bounce-launch` suite can ask <c>OwesBounce</c>, which is the retirement hold's own
-    /// mechanism.</summary>
+    /// <summary>The live motion collection and its registration rules. `internal` so a suite can
+    /// ask <c>Airborne</c>, the retirement hold's own mechanism, and <c>OwesBounce</c> beside
+    /// it.</summary>
     internal MotionSet Motions { get; } = new();
 
     /// <summary>This runtime's `SOUND_NODE`/`SOUND` family. Reads <see cref="Sounds"/> and
@@ -3357,9 +3357,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Whether a finished instance may actually be retired — an instance-retirement question that
     // consults the motions, which is why it stays here rather than moving with them. The narrowness
-    // of the hold, and the measurement behind it, are on OwesBounce.
+    // of the hold, and the measurement behind it, are on Airborne.
     private bool Retirable(AnimInstance inst) =>
-        inst.Finished && !Motions.OwesBounce(inst.Def, inst.Anchor);
+        inst.Finished && !Motions.Airborne(inst.Def, inst.Anchor);
 
     // Both sequence events act on the live instance of (def, anchor); on the instant/bootstrap
     // dispatch path no instance exists and both are no-ops.
