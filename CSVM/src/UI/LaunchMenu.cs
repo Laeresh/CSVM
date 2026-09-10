@@ -729,14 +729,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Opens the campaign on the named profile's scrapbook, at the mission a finished
     /// mission just flew, cabin on its far side after <see cref="Session.Launcher"/>'s deferred
     /// hop. The profile is re-read from the store, the same discipline as
-    /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote.</summary>
+    /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote. A
+    /// profile that has just finished the campaign watches the closing film first
+    /// (<see cref="CampaignFlow.OpenScrapbookAfterMission(Session.CampaignProfileDef, int)"/>).</summary>
     public void OpenCampaignScrapbook(string profileName, int seq)
     {
         OpenCampaign();
         if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
         {
-            flow.SelectProfile(profile);
-            flow.OpenScrapbook(seq);
+            flow.OpenScrapbookAfterMission(profile, seq);
         }
 
         Rebuild();
@@ -1930,7 +1931,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 // The book as a finished mission leaves it: opened on the last mission this
                 // profile flew, which is the one door the mission end itself takes.
                 flow.GoTo(CampaignScreen.PreviousMissions);
-                flow.OpenScrapbook(Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1));
+                flow.OpenScrapbookAfterMission(Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1));
                 return;
             case "campaign-briefing":
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));

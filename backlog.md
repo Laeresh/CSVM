@@ -3058,6 +3058,25 @@ usual.
   *Cross-refs:* `BL-657`'s closing commit (the credit rule and the callback host), `BL-699` (the
   per-launch hitch, which is a separate item and was not seen on these five),
   `docs/formats/mission-entities/enemy-generators.md`.
+- `BL-801` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The chapter
+  cinema plays only when the campaign is entered from outside, where the original reaches it on
+  every cabin entry.** *Evidence:* `PASSENGERCABIN.SCRIPT:88` runs `script_run
+  "assets\\scripts\\" "campaignintro.script", 0x1999`, so the original invokes the chapter-intro
+  script whenever the passenger cabin is entered and that script's own `callback($$E$$, 2151, FC)`
+  decides whether a film follows. CSVM wires `ChapterCinema` to the doors from outside the campaign
+  alone, `CampaignFlow.OpenCabin` and `OriginalCampaign`'s equivalent, which are the roster's
+  CONTINUE and the flight return. The case that differs: win a chapter's last mission, at sequence
+  position 4, 9, 14 or 19, land on the scrapbook and press RETURN TO CABIN. The original plays the
+  next chapter's film there; CSVM plays nothing, and the film arrives only after leaving the
+  campaign and re-entering it. *Fix shape:* route the in-campaign cabin doors through the same
+  `OpenCabin` seam, so the once-per-run latch decides whether a film is due rather than which door
+  was taken. *⚠ Traps:* on Original the in-campaign path mirrors a screen the flow has already
+  moved to, so a deferred handoff may not fit there and may want a different seam. This exact shape
+  has already bitten once: `LaunchMenu.OpenCampaignScrapbook` opened the book through a cabin door
+  and played the wrong chapter's film until the closing cinema's work re-seated it. And the latch
+  being per program run is the author's decision rather than a decode, so widening the doors must
+  not drift into persisting it in the profile. *Cross-refs:* `git log --grep=ChapterCinema` and
+  `git log --grep=ClosingCinema` for both sides of the wiring, `docs/formats/cinemas.md`.
 
 ## Tooling, platform & docs
 

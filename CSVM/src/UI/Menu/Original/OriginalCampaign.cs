@@ -195,7 +195,10 @@ public sealed partial class OriginalShell
     }
 
     /// <summary>Seats the named profile and opens the book on a mission's first spread with the
-    /// cabin on its far side, the mission end's own door; false when the profile cannot be read.</summary>
+    /// cabin on its far side, the mission end's own door and the book's screenshot aid; false when
+    /// the profile cannot be read. True says the profile is seated, not that the book is showing:
+    /// the closing cinema plays first for a finished campaign, and the book arrives when it
+    /// stops.</summary>
     public bool ShowScrapbook(string profile, int seq)
     {
         if (_flow == null || _campaign == null || !_campaign.SeatProfile(profile))
@@ -203,9 +206,13 @@ public sealed partial class OriginalShell
             return false;
         }
 
-        _campaign.EnterScrapbook(seq);
-        _bookReturn = OriginalScreen.CampaignCabin;
-        ShowCampaign(OriginalScreen.CampaignScrapbook);
+        if (_campaign.ClosingCinema is { } cinema && _campaign.Profile is { } seated)
+        {
+            cinema.OpenScrapbook(seated, () => OpenBook(seq));
+            return true;
+        }
+
+        OpenBook(seq);
         return true;
     }
 
@@ -1032,6 +1039,15 @@ public sealed partial class OriginalShell
         }
 
         ShowCampaign(OriginalScreen.CampaignCabin);
+    }
+
+    // The book as a finished mission leaves it, with the cabin on its far side. Separate from
+    // ShowScrapbook so the closing cinema can defer it to the frame the film stops.
+    private void OpenBook(int seq)
+    {
+        _campaign?.EnterScrapbook(seq);
+        _bookReturn = OriginalScreen.CampaignCabin;
+        ShowCampaign(OriginalScreen.CampaignScrapbook);
     }
 
     // DELETE PLAYER: the original's question (langui 201) as the two-answer box, on CAMPAIGN.SCRIPT's

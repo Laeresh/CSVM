@@ -471,6 +471,7 @@ clusters they delegate to.
 - `src/Session/CampaignProfileStore.cs` — JSON persistence for one named campaign profile: funds, owned planes, mission records, awards and the destruction log.
 - `src/Session/CampaignProgression.cs` — the rules that write a profile: an attempt's best-of merge, the monotonic position, the rewards and the skip offer.
 - `src/Session/ChapterCinema.cs` — which film plays before a campaign chapter, when it plays, and the single handoff to the passenger cabin that follows it.
+- `src/Session/ClosingCinema.cs` — whether the campaign's closing film plays before the scrapbook a flown mission opens, and the single handoff to that book.
 - `src/Session/CampaignPersistLog.cs` — the cross-mission state log: what a mission left destroyed, carried silently into later missions of the same chapter.
 - `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored ammunition and ordnance picks and the `LoadoutChoice` a launch hands the session.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the contiguous `OBJECTIVEn` blocks, in the typed shape the graph runs.

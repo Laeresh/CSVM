@@ -309,6 +309,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   what runs every time reads all ten files and decodes one group of pictures from each, and
   `MpegMovieTests.EveryCinemaDecodesEveryFrameItCarries` reports skipped with that command in its
   reason rather than passing silently.
+- **LOG-21** — **A `*.godot.log` mirror is not that run's log: exclude it when sweeping
+  `.scratch/logs/` for what a run did or did not print.** Godot appends to one shared
+  `app_userdata/CSVM/logs/godot.log` and every quit copies the whole file, so a sweep for "no
+  battery launch played a cinema" reported 24 of 72 logs carrying one; the same sweep over CSVM's
+  own `fly-*.log` reported 0 of 48, the earlier hits all being one deliberate probe replayed by
+  every later mirror.
 
 ## WORLD — world data and runtime traps
 

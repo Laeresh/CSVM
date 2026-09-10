@@ -227,6 +227,11 @@ public partial class Launcher : Node3D
     // chosen behaviour, not a decoded one: the original's rule sits behind GUI callback 2151, which
     // nothing here decodes. Do not replace it with a latch persisted in the profile.
     private ChapterCinema? _chapterCinema;
+    // The process's one closing cinema, so the campaign's last film plays once per program run
+    // however often the player reopens the book afterwards. Its gate is the seated profile's own
+    // completion, not a flag stored anywhere, so a second profile that finishes in the same run
+    // does not get it again. Do not replace it with a latch persisted in the profile.
+    private ClosingCinema? _closingCinema;
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
     // cabin track would restart every time the player left a board. See docs/org/music.md.
@@ -1330,10 +1335,12 @@ public partial class Launcher : Node3D
         host.Features.Add(new PlayerSetupFeature());
         var strings = UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
-        // The campaign feature carries the chapter cinema because both presentations already read
-        // that one feature, and neither of them can reach a Launcher to play a film through.
+        // The campaign feature carries both cinemas because both presentations already read that
+        // one feature, and neither of them can reach a Launcher to play a film through.
         _chapterCinema ??= new ChapterCinema((name, then, skip) => PlayCinema(name, then, skip));
-        host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode, _chapterCinema));
+        _closingCinema ??= new ClosingCinema((name, then, skip) => PlayCinema(name, then, skip));
+        host.Features.Add(new CampaignFeature(
+            strings, PlanePickerRoster.AirframeNode, _chapterCinema, _closingCinema));
         // The keymap editor writes through C21's per-player store. The write is injected rather
         // than reached for, so the feature itself stays engine-free and a suite can hold a
         // different one.

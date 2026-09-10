@@ -33,7 +33,7 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 ## src/Session/Launcher.cs
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits,
-and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, and the one `ChapterCinema` the campaign's cabin doors play through). It owns the
+and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
 menu as one `MenuHost` built on the first show, the presentation resolution, the only options write,
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`),
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
@@ -220,6 +220,16 @@ story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a differen
 folder. Playing is a delegate the caller supplies, `Session/Launcher.cs`'s `PlayCinema` being its
 shape, which leaves the film to `UI/CinemaScreen.cs` and keeps every decision here testable with no
 engine present. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaign.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
+
+## src/Session/ClosingCinema.cs
+Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
+handoff to that book. The gate is `CampaignProgression.Complete` over the seated profile, so an
+unfinished campaign reaches the book with no film, which is what the original's own script does when
+its completion callback answers false. The film is the `FinalCinema` screen's layout row's name, and
+the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on purpose.
+Playing is a delegate the caller supplies, `Session/Launcher.cs`'s `PlayCinema` being its shape;
+`Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how
+both presentations' mission-end doors reach it. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions

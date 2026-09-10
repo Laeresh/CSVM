@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Audio playback and A/V sync from the stream's presentation timestamps
 22. ☑ The boot sequence on a bare launch, with the skip and `--skip-intro`
 23. ☑ The chapter cinema and its passenger-cabin handoff
-24. ☐ The closing cinema, its gate and its scrapbook handoff
+24. ☑ The closing cinema, its gate and its scrapbook handoff
 
 ## Dependency and parallelism notes
 
@@ -989,7 +989,14 @@ harness would cost minutes per launch and no wall-time reading is needed to see 
 `A1` measured 145.6 s, `A3` 126.7 s, `B11` 150.5 s and `B12` 149.0 s. Nothing this item added runs
 in an engine suite.
 
-**Verified (the card, the block and `--intro`).** <pending orchestrator run> The agent's own
+**Verified (the card, the block and `--intro`).** The orchestrator's own `.\RunTests.ps1` on the
+fully merged plan tree, the one that carries every item in this plan: PASS, exit 0, 206.4 s. Build
+2.8 s with zero StyleCop warnings; units 21.3 s against a 30 s budget, 3850 passed, 0 failed,
+2 skipped of 3852; engine 140.5 s, 266 passed, errors clean; goldens 41.9 s, 20 shots
+hash-identical. The wiring was also exercised end to end there: `--intro --menu --screenshot` logs
+`boot Card 5s`, `MSopen1.mpg` ending at `frames=404`, `boot Wait 1s`, `boot Fade 1s`, `zipper.mpg`
+at 608, `boot Wait 1s`, `Chap0.mpg` at 4349, then the launchscreen, which is `fmv.zrd`'s order with
+`A1`'s census counts. The agent's own
 foreground `.\RunTests.ps1` on this tree: PASS, exit 0, **238.1 s**. Build 2.9 s with zero StyleCop warnings; units 22.8 s against
 a 30 s budget, 3828 passed, 0 failed, 2 skipped of 3830, carrying the 16 cases this item added and
 the two skips being `A3`'s and `C21`'s opt-in whole-file walks; engine 174.5 s, 266 passed, errors
@@ -1112,7 +1119,16 @@ Original's back to `ShowCampaign(OriginalScreen.CampaignCabin)` fails exactly th
 checks, 2 failed against 30 passed, each reporting the film as null where `chap1` was expected
 (METHOD-9). Both perturbations were restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The orchestrator's own `.\RunTests.ps1` on the fully merged plan tree: PASS, exit 0,
+206.4 s. Build 2.8 s with zero StyleCop warnings; units 21.3 s against a 30 s budget, 3850 passed,
+0 failed, 2 skipped of 3852; engine 140.5 s, 266 passed, errors clean; goldens 41.9 s, 20 shots
+hash-identical.
+
+**⚠ One door was left narrower than the original, and `BL-801` carries it.**
+`PASSENGERCABIN.SCRIPT:88` runs `campaignintro.script`, so the original reaches the chapter cinema
+on every cabin entry and this item wired only the doors from outside the campaign. Winning a
+chapter's last mission and returning to the cabin from the scrapbook therefore plays nothing where
+the original plays the next chapter's film.
 
 ### Original approach (kept for reference)
 
@@ -1148,7 +1164,92 @@ missions in, and it must play nothing at all.
 the member or someone will unify them as a bug fix. ⚠ The dead array at `0x0061e68c` is not the
 source of these names; see the disproven-claims table.
 
-## C24 ☐ The closing cinema, its gate and its scrapbook handoff
+## C24 ☑ The closing cinema, its gate and its scrapbook handoff
+
+**Landed.** `ClosingCinema` in `CSVM/src/Session/ClosingCinema.cs` owns the decision and
+`CSVM.Tests/ClosingCinemaTests.cs` pins it: `OpenScrapbook(profile, showScrapbook)` reads the gate
+through `CampaignProgression.Complete`, which is `missionsCompleted >= CampaignSequence.MissionCount`
+and already existed as the rule that disables New Mission; a complete campaign plays `Final.MPG` with
+`CinemaScreen.ClosingKeys` and an incomplete one runs the handoff at once, which is what
+`FINALCINEMA.SCRIPT`'s own false branch does. The handoff is wrapped in the `Once` latch the
+original's `EC` stands for, and playing is an injected delegate with `Launcher.PlayCinema`'s shape,
+so the whole decision tests with no engine present.
+
+**The wiring is one instance and the mission end's door.** `Launcher` builds a `ClosingCinema` over
+`PlayCinema` beside `C23`'s chapter one and hands both to the host's shared `CampaignFeature`, the
+closing one as a fourth optional constructor argument defaulting to null. Every off-engine caller
+gets null and takes the plain door, so no suite and no golden can reach a film by construction rather
+than by a flag someone must remember. Built-in's door is `CampaignFlow.OpenScrapbookAfterMission`,
+taken by `LaunchMenu.OpenCampaignScrapbook` and by the `campaign-scrapbook` aid; Original's is
+`OriginalShell.ShowScrapbook`, taken by `OriginalPresentation`'s `DebriefReturn` and by its own aid.
+The film plays once per program run, for the reason `C23`'s does.
+
+**Seven doors onto the scrapbook, enumerated rather than taken from a list.** The sweep was
+`Scrapbook` over `CSVM/src`, narrowed to every site that puts the book up (`CampaignScreen.Scrapbook`,
+`OriginalScreen.CampaignScrapbook`, `OpenScrapbook`, `OpenCampaignScrapbook`, `ShowScrapbook`), then
+each site read back to the press or the return that reaches it. Five run **inside** the campaign, on
+pages both presentations press: `CampaignPreviousMissionsPage`'s VIEW SELECTED button, its VIEW
+SELECTED secondary press, its forward arrow into the book, its CURRENT MISSION bookmark, and
+`CampaignScrapbookZoomPage`'s way back out of a zoom. Original mirrors the first four through
+`OriginalCampaign.EnterFromPage`'s `Scrapbook` case, so they are not separate doors. Two come from
+**outside** the campaign, one per presentation, and both are the mission end's: those two are wired.
+
+**⚠ The original's `FinalCinema` is the campaign mission end's screen, and that is what makes its
+false branch mean anything.** Nothing in the extracted reader or script set runs
+`finalcinema.script`; the only occurrences of the name outside `LAYOUT.CSV` are one entry in the
+executable's screen-name table, beside `ScrapBook`, `PassengerCabin` and `IA_WrapUp`. `IA_WrapUp` is
+the screen the executable puts up when an Instant Action mission ends, which `Flight/IaWrapupBoard.cs`
+already models, so `FinalCinema` is its campaign twin. A screen entered after **every** campaign
+mission is exactly a screen that needs a gate answering false 23 times out of 24, and its false
+branch running `scrapbook.script` is the mission end CSVM already has. The five in-campaign doors are
+not it: `SCRAPBOOK_TOC.SCRIPT` runs `scrapbook.script` directly at `0x1100`, reaching the book with no
+`FINALCINEMA` in the path at all.
+
+**⚠ `C23`'s chapter cinema was reaching the mission-end door, and it is fixed here.**
+`LaunchMenu.OpenCampaignScrapbook` opened the book through `CampaignFlow.SelectProfile`, which `C23`
+made a cabin door. Finishing the last mission of a chapter puts the profile on a chapter-opening
+position, so on Built-in the four missions at `seq` 4, 9, 14 and 19 ended with the next chapter's film
+playing and the **cabin** on screen after it, in place of the book the mission just earned. The door
+now seats through the feature and puts a plain cabin on the stack under the book, which is what it
+did before `C23`, and `TheMissionEndDoorPlaysNoChapterFilmOnAChapterOpeningPosition` fails against the
+old body. Original's own mission-end door seats through `CampaignFeature.SeatProfile` and never had
+it.
+
+**⚠ The film's name is transcribed from the layout row, not read back from it.**
+`FINALCINEMA.SCRIPT` sets no art path, so `Final.MPG` exists only in the `FinalCinema` screen's
+`CF_MOVIE` row, which lives in Original's decoded layout. This film plays under both presentations
+and Built-in loads no such layout, so `ClosingCinema.Name` holds the string and the member says where
+it came from. `Loops` 1 on that row needs no expression here: a cinema plays once by construction.
+
+**The controls, both directions, on the default presentation and on Built-in.** The negative control
+is `--menu=campaign-scrapbook` over the aid store, whose pilot is three missions in: zero `cinema`
+lines in the whole log, and the shot is the book itself, so the control is not vacuous. The positive
+control raises `CampaignAidProfiles.MissionsFlown` to 24 for one build, which makes the same aid's
+pilot a finished campaign; Original logs `cinema Final.MPG playing skip=Escape, LeftMouse` and
+Built-in logs the same line, and the shot is the film's opening frames filling the board rectangle.
+The perturbation was restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
+
+**METHOD-9 four ways, each failing exactly one check against 13 passed.** Passing
+`CinemaScreen.ChapterKeys` in place of `ClosingKeys` fails only
+`TheClosingCinemaTakesNeitherSpaceNorReturnWhereTheChapterOneDoes`; handing the continuation over
+unwrapped fails only `TheBookOpensOnceWhenASkipLandsOnThePlayoutFrame`; putting Built-in's door back
+to `SelectProfile` fails only `TheMissionEndDoorPlaysNoChapterFilmOnAChapterOpeningPosition`; and
+putting Original's `ShowScrapbook` back to its old body fails only
+`OriginalsMissionEndDoorPlaysTheClosingFilmAndTheBookFollowsIt`. All four were restored and `git diff`
+over `CSVM/src` confirms it.
+
+**No harness launch played a film, checked directly rather than inferred from the clock.** The
+battery wrote 48 CSVM launch logs and not one carries a `cinema` line. ⚠ The first sweep said 24 of
+72 did, and every one of those was a `*.godot.log` mirror: Godot appends to one shared engine log and
+every quit copies the whole file, so the positive control above was replayed into every later run's
+mirror. `docs/verification.md` gains **LOG-21**.
+
+**Verified.** The orchestrator's own `.\RunTests.ps1` on the fully merged plan tree, which is the
+first run carrying every item in this plan at once: PASS, exit 0, 206.4 s. Build 2.8 s with zero
+StyleCop warnings; units 21.3 s against a 30 s budget, 3850 passed, 0 failed, 2 skipped of 3852;
+engine 140.5 s, 266 passed, errors clean; goldens 41.9 s, 20 shots hash-identical.
+
+### Original approach (kept for reference)
 
 **Goal.** `final.mpg` plays on campaign completion and hands off to the scrapbook, skipping straight
 to the scrapbook when the campaign is not complete.
@@ -1163,7 +1264,29 @@ rather than from callback 3104.
 
 **Model recommendation.** Opus.
 
-**Verify.** <TODO: name how a completed campaign is reached or simulated for this check>
+**Verify.** At the controls, launched with `.\RunGame.ps1 -- --menu --volume=1.0`, since a repo run's
+developer gain is zero and a cinema then plays silent.
+
+**Reaching a completed campaign.** The gate is one number in the profile:
+`CampaignProgression.Complete` is `missionsCompleted >= 24`, and that field is `missionsCompleted` in
+`user://Profiles/<name>/profile.json`
+(`%APPDATA%\Godot\app_userdata\CSVM\Profiles\<name>\profile.json`). Open Campaign, create a profile
+and pick it, quit, and set that number to **23** with the game closed. Relaunch, press CONTINUE on
+that name, and the cabin's Next Mission is `CM24`, the campaign's last; fly it and **win** it. The
+record advances the profile to 24 before the menu re-reads it, so the mission end plays `final.mpg`
+over the whole window and the scrapbook is on screen the moment it ends. That is the path a player
+who finishes the campaign actually takes. When the last mission will not be won, set the number to
+**24** before the sortie instead and end any mission any way at all: the gate is the profile's
+position and not the run's outcome, so the film plays on that mission's end too.
+
+**The skip set, which is the item's own trap.** Repeat the run and press Space, then Return, during
+the film: neither may do anything. Then press Escape, and on a further run the left mouse button:
+each must end the film and put the book up at once. Then leave the book, fly another mission, and
+confirm no film plays a second time in the same program run.
+
+**The negative control** is the same profile at `missionsCompleted` **22**, flying and winning
+`CM23`, which leaves it at 23: the mission end must open the book with nothing played, which is what
+a player sees after each of the first 23 missions.
 
 **⚠ Traps.** ⚠ Escape and left mouse only. Space and Return do nothing here and do something in C23,
 and that difference is authored, not accidental.
