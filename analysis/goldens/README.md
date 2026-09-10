@@ -1,6 +1,6 @@
 # The golden-image tripwire
 
-Twenty pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
+Twenty-one pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
 a mismatch names the shot and leaves the actual PNG in `.scratch/goldens/` next to that run's engine
 log. Nothing here is a picture — `manifest.json` holds command lines and hashes only, which is what
 keeps it inside the repo's no-game-assets rule.
@@ -70,10 +70,11 @@ you know which instrument to reach for.
 Each entry's `exercises` field says what that shot covers and carries its measured
 frame-sensitivity — frame N against N+1, which is
 the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
-twice proves nothing, because most poses show nothing that moves). Nine shots move on a one-frame
-perturbation (`c1-targeting-hud` 48.18 %, `c1-flight` 34.52 %, `campaign-4p-grid` 73.79 %,
-`empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %, `campaign-intro-fill` 3.89 %,
-`c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
+twice proves nothing, because most poses show nothing that moves). Ten shots move on a one-frame
+perturbation (`c1-targeting-hud` 48.18 %, `c1-cockpit` 43.35 %, `c1-flight` 34.52 %,
+`campaign-4p-grid` 73.79 %, `empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %,
+`campaign-intro-fill` 3.89 %, `c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are
+geometry-and-shading shots and say so.
 
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of clock
 (`viewer-bhawk` 30, `c1-crash` 20), so anything whose period is seconds long is barely sampled: the
@@ -91,4 +92,8 @@ Of the front end, only Original's top level and its Options screen are pinned, b
 running behind them. `campaign-4p-grid` and `campaign-intro-fill` cover a co-op campaign
 launch and its intro collapse alone — a mid-mission cutscene trigger, a guest capture, a downed
 pilot's spectator camera and a cutscene skip all need a human at the controls (`playtest.md`
-`PT-90`–`PT-93`) rather than a scripted frame.
+`PT-90`–`PT-93`) rather than a scripted frame. `c1-cockpit` pins the **shipped** cockpit pass alone:
+`--no-cockpit-pass` draws the same panel in the main world instead, 5.10 % of the frame apart, and
+no shot pins that path. It also flies the same held input over the same world as `c1-flight`, which
+is how a moved hash is read: both moving is a world or flight change, `c1-cockpit` alone is the
+interior.

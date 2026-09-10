@@ -90,6 +90,13 @@
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
+      "name": "c1-cockpit",
+      "frame": 120,
+      "hash": "e0f6ebbdec367923840b3fb509912b9e",
+      "exercises": "The same held flight seen from the pilot's seat: the cockpit1 interior in the pass's own SubViewport world under its re-aimed sun, needles, drum, belts and readouts, canopy frame and gunsight over world-lit C1; frame-sensitive 43.35 %.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute"]
+    },
+    {
       "name": "c1-destroy-effects",
       "frame": 120,
       "hash": "3d31248b621f8e7f9f565d1d69874e5c",

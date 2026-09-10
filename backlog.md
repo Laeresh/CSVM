@@ -3172,20 +3172,6 @@ usual.
   not the cause. *Impact:* none on correctness and none measured on speed. The suite passes
   throughout.
 
-- `BL-798` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **No golden shot renders the cockpit pass, so the shipped first-person view has no pixel tripwire.**
-  *Evidence:* none of the 18 shots in `analysis/goldens/manifest.json` passes `--view=cockpit` or
-  `--view=nose`, and a flight shot defaults to the chase camera, so the `SubViewport` the interior
-  draws in (`Flight/CockpitOverlay`) is absent from every pinned image. Cutting the bearing mirror
-  in `CockpitOverlay.Sync` moved a `--view=cockpit` C1/IA1 capture's pixel md5 from `50b5fcf1` to
-  `274ed29c` while leaving all 18 goldens byte-identical, which is the size of the gap.
-  *Fix shape:* one further manifest row, a `--chapter=C1 --plane=player_bhawk --view=cockpit`
-  flight beside `c1-flight`. *⚠ Traps:* the pass composites over the main view under the HUD, so
-  such a shot is pinned by the world behind the panel as much as by the panel, and a moved hash
-  will need reading against `c1-flight` before it is read as a cockpit change. `--no-cockpit-pass`
-  draws the same panel through the other path, so one shot pins one path only.
-  *Cross-refs:* the `cockpit-overlay-pass` and `cockpit-sun-bearing` suites, which assert the
-  pass's transforms and its light without rendering either.
-
 ## Misc
 
 - `BL-077` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade) — spawning mid-air

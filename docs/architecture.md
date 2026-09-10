@@ -150,7 +150,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CameraController.cs` — the flown plane's camera: chase, numpad fixed views, look-behind, the selected view mode and the lab's held-airframe orbit.
 - `src/Flight/HeadLook.cs` — the pilot's head in a first-person view: snap directions, free-look, the centre key and the smoothing to the shown angles.
 - `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN plane in first person; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
-- `src/Flight/CockpitOverlay.cs` — `--cockpit-pass`: the cockpit interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player.
+- `src/Flight/CockpitOverlay.cs` — the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out.
 - `src/Flight/CockpitGauges.cs` — the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`, the weapon-fire subsystem: ballistics, guidance, fuses, the hit ray, tracers, impact and splash damage.

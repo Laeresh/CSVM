@@ -242,7 +242,7 @@ pose that frame actually took, so a look-behind brings the body back while it is
 [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/CockpitOverlay.cs
-The cockpit interior's own render pass, behind `--cockpit-pass` and off by default. It re-parents
+The cockpit interior's own render pass, the shipped path `--no-cockpit-pass` opts out of. It re-parents
 the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on the mount basis
 `PlaneBuilder` gave it, and puts the pass camera at that world's origin aimed by
 `CameraController.FirstPersonPose` with the plane position and `cockpit_camera` offset both zero,
