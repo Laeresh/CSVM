@@ -338,6 +338,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private const int MaxStartDepth = 8;
 
+    // How many queued first advances one tick's walk may run before the rest wait for the next
+    // walk. A ring of definitions that restart each other would otherwise spin inside one tick,
+    // where the original's own start gate refuses the second start outright. Far above the widest
+    // shipped call fan-out, so no authored beat ever meets it.
+    private const int MaxQueuedStarts = 512;
+
     // Backstop on a single WAIT_FOR_COMPLETION hold, in seconds, well clear of the longest hold the
     // data authors. "Completes" is our instance lifetime, not the authored one, so a callee held
     // open by something the data cannot predict would wedge the caller's sequence silently. Every
@@ -393,6 +399,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // instances mid-walk, so an index into the live list goes out of range; a cutscene definition
     // that stops the scene it just called is where that happens.
     private readonly List<AnimInstance> _advancing = new();
+
+    // Instances a CALL_ANIMATION started during the walk, waiting for their first advance at the
+    // tail of that same walk, paired with the self-invalidate protection their Start asked for.
+    // The original's dispatcher reaches a node appended during its own pass, so a callee's first
+    // event lands after the caller's remaining events (docs/org/sequences.md).
+    private readonly List<(AnimInstance Inst, bool Protect)> _queuedStarts = new();
 
     // The destructible whose death is directly dispatching right now (a stack, since deaths nest).
     // Lets a death-triggered CALL_ANIMATION landing on the SAME anchor as the dying instance
@@ -551,6 +563,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private int? _seed;
 
     private int _startDepth;
+
+    // True while Advance is walking the live instances, which is the one window where a start
+    // belongs at the tail of the walk rather than inside the dispatch that asked for it.
+    private bool _walkingInstances;
 
     // Nonzero while a death's own Start burst (RunDeathSequence) is on the call stack, a counter
     // because a chained CALL_ANIMATION can call again. It lets a death-triggered call relocate its
@@ -1396,28 +1412,40 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (DebugMotions)
             LogMotions(dt);
         // Instances can finish, stop each other, and be added by CallAnimation during the walk, so
-        // iterate a copy: newest first, one added this frame waits for the next.
+        // iterate a copy: newest first, one added this frame runs in the drain that closes the walk.
         _advancing.Clear();
         _advancing.AddRange(_instances);
-        for (int i = _advancing.Count - 1; i >= 0; i--)
+        // Saved and restored rather than set and cleared, so a nested advance cannot end the outer
+        // walk's queueing window behind it.
+        bool wasWalking = _walkingInstances;
+        _walkingInstances = true;
+        try
         {
-            var inst = _advancing[i];
-            if (!_instances.Contains(inst))
+            for (int i = _advancing.Count - 1; i >= 0; i--)
             {
-                continue;
+                var inst = _advancing[i];
+                if (!_instances.Contains(inst))
+                {
+                    continue;
+                }
+
+                inst.Advance(this, dt);
+                if (Retirable(inst) && _instances.Remove(inst))
+                {
+                    FinishInputGoverned(inst.Def, inst.Anchor);
+                    FinishEffectInstance(inst.Def, inst.Anchor);
+                    _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
+                    OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+                }
             }
 
-            inst.Advance(this, dt);
-            if (Retirable(inst) && _instances.Remove(inst))
-            {
-                FinishInputGoverned(inst.Def, inst.Anchor);
-                FinishEffectInstance(inst.Def, inst.Anchor);
-                _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
-                OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
-            }
+            DrainQueuedStarts();
         }
-
-        _advancing.Clear();
+        finally
+        {
+            _walkingInstances = wasWalking;
+            _advancing.Clear();
+        }
     }
 
     /// <summary>Stops every live instance of an animation name (optionally only on one anchor) and
@@ -1848,26 +1876,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         _instances.Add(inst);
         OnInstanceStarted?.Invoke(def, anchor);
-        // Fire whatever is due at t=0 immediately, so instantaneous sequences (zepstate's
-        // active-state roster) settle during the build rather than one frame later.
-        _startDepth++;
-        _startingInstances.Push((inst, protectSelfInvalidate));
-        try
-        {
-            inst.Advance(this, 0f);
-        }
-        finally
-        {
-            _startingInstances.Pop();
-            _startDepth--;
-        }
-        // The t=0 events can finish the instance, so notify only a finish that removed something:
-        // the timeline needs start and finish notifications balanced against the live count.
-        if (Retirable(inst) && _instances.Remove(inst))
-        {
-            FinishInputGoverned(def, anchor);
-            OnInstanceFinished?.Invoke(def, anchor);
-        }
+        // A call made by the tick's own walk hands its callee to the drain that closes the walk;
+        // everything else fires whatever is due at t=0 immediately, so instantaneous sequences
+        // (zepstate's active-state roster) settle during the build rather than one frame later.
+        if (QueueFirstAdvance(inst, protectSelfInvalidate))
+            return;
+        AdvanceStarted(inst, protectSelfInvalidate);
     }
 
     /// <summary>Stops every live instance and clears the effect-TTL list — a full reset of what
@@ -2108,6 +2122,76 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         root.TopLevel = true;
         root.GlobalTransform = xf;
+    }
+
+    /// <summary>Whether this start's first advance belongs at the tail of the tick's instance walk,
+    /// which is where the original reaches a definition started during a walk.
+    /// ⚠ Only a call the walk itself dispatched qualifies. A bootstrap, a mission or range trigger
+    /// and a death burst all need their t=0 events inside the bracket that started them, which
+    /// <see cref="RunDeathSequence"/> reads through <see cref="_dyingInstances"/>.</summary>
+    private bool QueueFirstAdvance(AnimInstance inst, bool protectSelfInvalidate)
+    {
+        if (!_walkingInstances || _deathCallDepth > 0 || _rangeCallDepth > 0
+            || _missionCallDepth > 0)
+        {
+            return false;
+        }
+        _queuedStarts.Add((inst, protectSelfInvalidate));
+        return true;
+    }
+
+    /// <summary>Runs the first advance of every definition a <c>CALL_ANIMATION</c> started during
+    /// this tick's walk, in the order the calls were made. The original's dispatcher appends a
+    /// started instance to the tail of the list it is walking and re-reads the link after every
+    /// callback, so a callee is reached in the same pass, after the caller's remaining events.
+    /// Decode: docs/org/sequences.md.</summary>
+    private void DrainQueuedStarts()
+    {
+        for (int started = 0; _queuedStarts.Count > 0; started++)
+        {
+            if (started >= MaxQueuedStarts)
+            {
+                // Leave the rest to the next walk rather than running them here: they are live
+                // instances already, so that walk advances them like any other.
+                Count("CallAnimation(tick start budget)");
+                _queuedStarts.Clear();
+                return;
+            }
+            var (inst, protect) = _queuedStarts[0];
+            _queuedStarts.RemoveAt(0);
+            // A later event of the caller can stop what an earlier one started, and the original's
+            // dispatcher clears such a node rather than calling it.
+            if (!_instances.Contains(inst))
+                continue;
+            AdvanceStarted(inst, protect);
+        }
+    }
+
+    /// <summary>The t=0 burst of a just-started instance: its own events fire under the
+    /// self-invalidate guard, and an instance the burst drained retires here.
+    /// ⚠ Keep the advance at zero dt. A definition's sequences are not charged the delta of the
+    /// pass they were started in, and the instance clock they gate against ticks with them
+    /// (docs/org/sequences.md).</summary>
+    private void AdvanceStarted(AnimInstance inst, bool protectSelfInvalidate)
+    {
+        _startDepth++;
+        _startingInstances.Push((inst, protectSelfInvalidate));
+        try
+        {
+            inst.Advance(this, 0f);
+        }
+        finally
+        {
+            _startingInstances.Pop();
+            _startDepth--;
+        }
+        // The t=0 events can finish the instance, so notify only a finish that removed something:
+        // the timeline needs start and finish notifications balanced against the live count.
+        if (Retirable(inst) && _instances.Remove(inst))
+        {
+            FinishInputGoverned(inst.Def, inst.Anchor);
+            OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+        }
     }
 
     /// <summary>INVALIDATE_ANIMATION: latches an animation off without touching what it is doing.

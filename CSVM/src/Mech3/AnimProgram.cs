@@ -232,6 +232,17 @@ public sealed class AnimProgram
         return def.Archive.Script(def.SiScriptIds[slot]);
     }
 
+    /// <summary>A program over definitions built in code, for a suite that drives the runtime on
+    /// authored event shapes rather than on a mission's archives. Same dedup rule as a loaded
+    /// program; nothing here reads an archive, so the defs carry no SI scripts.</summary>
+    internal static AnimProgram FromDefinitions(IEnumerable<AnimDefinition> defs)
+    {
+        var program = new AnimProgram();
+        foreach (var def in defs)
+            program.Add(def, compiled: false);
+        return program;
+    }
+
     /// <summary>The shared-scope reader files a mission sees, by stem: the closure of the shared
     /// <c>anim.zrd</c> index plus the shared entries of the chapter's <c>cam_anim.zrd</c> and the
     /// mission's <c>mis_anim.zrd</c>. Null when the index is absent, which leaves the scope

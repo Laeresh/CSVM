@@ -50,6 +50,9 @@ bottom rather than hidden.
 | `004eb3e0`–`004eb56d` | The `CALL_ANIMATION` handler. Undefined in the database; the block is the citable unit. `PUSH 0x0` at `004eb53d` is the anchor argument, which is what makes the callee keep its own |
 | `FUN_004edf80` | The animation start the handler calls: parks the call site's node at `callee+0x7c` (`INPUT_NODE`) with a position snapshot at `+0x80`, plus a second node/position pair at `+0x8c`/`+0x90` |
 | `FUN_004ed8c0` | The start gate, i.e. the restart refusal: the callee's own run state at `+0xa0`, the concurrency bit `0x100` in `+0x9c`, and the instance chain at `+0x10c` |
+| `FUN_004ccde0` / `FUN_004d04e0` | Arming a record's action callback, and the list append it makes: the new node's `prev` takes the old tail and the old tail's `next` is stored at `004d050d`, so a started definition joins at the **tail** |
+| `FUN_004d0010` / `FUN_004cffa0` | The per-frame action dispatcher and the list walk it runs: each node's callback, then a re-read of that node's `next` at `004cffee`, which is what lets the pass reach a node appended during it |
+| `FUN_004ecd20` | The per-instance callback the walk calls: charges `+0xb0` the frame delta, publishes it as `DAT_009fd1a8`, then runs the tick walk over the sequence array. Undefined in the database; the entry is the citable unit |
 | `FUN_00521180` | The re-anchor: swaps `+0x48`, re-resolves the root name under the new anchor only, then re-resolves every interned entry. `CALL_ANIMATION` never invokes it |
 | `FUN_005230d0` | The post-load pass over every record: registers each definition's damage handlers keyed on `activation` (`+0xa1`), **on `*(def+0x6c)`, the animation root node**, never on `+0x48` |
 | `FUN_005abbf0` / `FUN_005abb20` | The registration itself: a per-node handler list at `node+0xbc`, two slots of (owner, handler), so several definitions register on one object without displacing each other. Slot 0 is the weapon-hit handler `0x004e7220`; what this decides for a destructible is in [`../formats/destructibles.md`](../formats/destructibles.md) |
@@ -704,6 +707,40 @@ stop-style path, matches the call-table entry's name (`+0`) or its `LOCAL_NAME` 
 wins, then falls back to a `strcmp` scan of the global animation array (`DAT_009fd14c`, count
 `DAT_009fd14a`, stride 0x110) and again takes the first match, caching the index back into the event.
 
+### A started definition joins the tail of the dispatcher's list, and is reached in the same pass
+
+`CALL_ANIMATION` starts nothing itself. `FUN_004ed8c0` resets the callee's sequence records
+(`FUN_004ed600` zeroes the instance clock at `+0xb0` and each slot's cursor and timer through
+`FUN_004ebfa0`), writes run state 2, and hands the record's action node to `FUN_004ccde0`, which
+appends it to the action list its own `+0x44` names (list 1, allocated with that index in
+`FUN_004cc4f0`). The append is `FUN_004d04e0`: the new node's `prev` takes the old tail and the old
+tail's `next` is stored at `004d050d`, so a start always lands **at the tail**. No event fires
+during any of this.
+
+The per-frame dispatcher `FUN_004d0010` walks lists 0 through 6, each through `FUN_004cffa0`, which
+calls each node's callback (`obj+0x48`) and then re-reads that node's `next` at `004cffee`. Reading
+the link after the callback rather than before it is what decides the ordering: a node appended to
+the tail while the walk is in progress is ahead of the cursor, or becomes the current node's own
+`next`, so **the walk reaches it in the same pass**, after every node that was already in the list.
+There is no start-guard flag to skip it; the node's `+0xc` skip flag is zeroed by the allocator and
+is only ever set to retire a node. Removals are the opposite: `FUN_004cffa0` clears the global at
+`DAT_0062cf98` for the length of the walk, so a stop only marks a node and `FUN_004cfcf0` unlinks it
+after the pass.
+
+So a definition called mid-tick takes its first step in the tick of the call, at the end of that
+tick's pass, never inside the caller's own dispatch. A callee whose first event is
+`INVALIDATE_ANIMATION` therefore cannot latch a name the caller has not reached yet: the caller's
+remaining events all run first. The callee's own first callback (`FUN_004ecd20`) does charge the
+instance clock at `+0xb0` the frame delta before stepping, while the sequence timers are not
+charged the delta of the pass they were started in (see the tick walk below).
+
+CSVM matches the ordering: `AnimRuntime.Start` queues an instance started during the instance walk
+and `DrainQueuedStarts` gives it its first advance when the walk ends. That advance stays at zero
+dt, which keeps the instance clock and the sequence timers in step the way the runner's own
+first-pass rule needs. A start from outside the walk (the bootstrap, a mission or range trigger, a
+death burst) keeps its immediate zero-dt burst, since those bursts read state that only exists
+inside the bracket that opened them.
+
 ## The tick walk is ascending, and that is what decides same-tick dispatch
 
 A running definition advances its sequences in **one forward pass over the array**, not over a list
@@ -1018,6 +1055,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **The branch-taken stack** stands in for the original's arrival distinction | See the residual above: it needs a nesting shape no shipped definition has |
 | **A 256-dispatch-per-tick guard** | Bounds a zero-length sequence within one tick; the remainder defers to the next. The original has no such cap |
 | **A reader `DAMAGE_SEQUENCE` occupies a slot**, where the original keeps it out of the array | `AnimDefs.cs` appends it to `Def.Sequences` so `ApplyDamageStages` can find it by name, which gives it an index the original's standalone `anim+0xd4` record never has. Nothing calls it, and an insertion cannot invert the order of the sequences around it, so the same-tick rule is unaffected |
+| **A start from outside the tick's walk fires its t=0 events at once**, where the original waits for the next dispatcher pass | The bootstrap, a mission or range trigger and a death burst read state that exists only inside the bracket that opened them, and a settled pose is what the build hands on. A call the walk itself dispatched does take the original's order: it is queued and stepped when the walk ends |
 | **The u16 pass-counter wrap** at 65,536, not reproduced | Unreachable within a session, and `-1` already spells "infinite" |
 | **The 86,400 s instance-clock clamp** (`FUN_004ebfd0`), not reproduced | A session never reaches a day |
 | **`LIGHT_ANIMATION` ramps asynchronously** rather than one delta-tick per dispatch | Same picture only because the sequence is also held for the run time; the tick-by-tick advance is not reproduced |

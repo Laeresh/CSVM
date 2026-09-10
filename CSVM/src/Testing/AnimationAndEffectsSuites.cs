@@ -887,6 +887,69 @@ internal static class AnimationAndEffectsSuites
         });
     }
 
+    // ---- CALL_ANIMATION: where the callee's first step lands in the tick -------------------------
+
+    // The original's dispatcher walks a linked list of live animation records and re-reads the link
+    // after every callback, and a start appends at the tail, so a definition called mid-tick takes
+    // its first step after the caller's remaining events. Taking it inside the call instead lets a
+    // callee's INVALIDATE_ANIMATION latch a name the caller has yet to call, which the original
+    // cannot reach. Decode: docs/org/sequences.md.
+    [Suite("anim-call-start-order",
+        "a CALL_ANIMATION callee takes its first step after the caller's remaining events of the same tick rather than inside the call, so a callee that invalidates a name the caller calls one event later cannot cancel that call")]
+    internal static void CallStartOrder(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const string Caller = "order_caller";
+        const string Callee = "order_callee";
+        const string Victim = "order_victim";
+        var program = AnimProgram.FromDefinitions(new[]
+        {
+            // The call that starts the callee is scheduled, so it is dispatched by a tick's walk
+            // and not by the instant burst a Play runs; the second call follows in the same tick.
+            OrderDef(Caller,
+                OrderEvent("CallAnimation", Callee, "Sequence", 0.1f),
+                OrderEvent("CallAnimation", Victim)),
+            OrderDef(Callee, OrderEvent("InvalidateAnimation", Victim)),
+            OrderDef(Victim, OrderEvent("StopAnimation", "order_nothing")),
+        });
+        var stage = new Node3D { Name = "CallOrderStage" };
+        var runtime = new AnimRuntime
+        {
+            AutoStart = false,
+            ManualAdvance = true,
+            SoundHandledElsewhere = true,
+        };
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, program);
+            var fired = new List<string>();
+            var started = new List<string>();
+            runtime.OnEventDispatched = d => fired.Add($"{d.Def.AnimName}:{d.EventKind}");
+            runtime.OnInstanceStarted = (def, _) => started.Add(def.AnimName ?? "");
+            ctx.Same(1, runtime.Play(Caller).Count, $"the caller starts as one instance");
+            for (int step = 0; step < 16 && !fired.Contains($"{Victim}:StopAnimation"); step++)
+            {
+                runtime.Advance(Tick);
+            }
+
+            ctx.Check(started.Contains(Victim),
+                $"the caller's second call starts {Victim}, the callee's INVALIDATE_ANIMATION not having run yet");
+            string order = string.Join(" | ", fired);
+            string want = $"{Caller}:CallAnimation | {Caller}:CallAnimation | "
+                + $"{Callee}:InvalidateAnimation | {Victim}:StopAnimation";
+            ctx.Check(order == want,
+                $"both of the caller's events fire before the callee's first one, and the callee before the definition it started: {order}");
+            ctx.Note($"dispatch order over {Tick:0.000} s ticks: {order}");
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+        }
+    }
+
     // ---- the MAIN_ROOT_NODE self-reference: a launch onto the def's own anchor -------------------
 
     // MAIN_ROOT_NODE / INPUT_NODE mean "the node this definition was invoked on", a sentinel and not a
@@ -2239,4 +2302,27 @@ internal static class AnimationAndEffectsSuites
             }
         }
     }
+
+    // One definition of one sequence, the shape the call-order suite needs: an animation name a
+    // CALL_ANIMATION can reach, and events with nothing to resolve against the world.
+    private static AnimDefinition OrderDef(string animName, params AnimEvent[] events)
+    {
+        var def = new AnimDefinition { Name = animName, AnimName = animName };
+        var seq = new AnimSequence { Name = "seq" };
+        seq.Events.AddRange(events);
+        def.Sequences.Add(seq);
+        return def;
+    }
+
+    // An event carrying only a target name. A null offset is the unstamped form, which fires as
+    // soon as the previous event has; "Sequence" makes the time absolute in the sequence's clock.
+    private static AnimEvent OrderEvent(string kind, string name, string? offset = null,
+        float time = 0f) =>
+        new()
+        {
+            Kind = kind,
+            StartOffset = offset,
+            StartTime = time,
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }),
+        };
 }
