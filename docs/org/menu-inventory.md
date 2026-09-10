@@ -600,15 +600,17 @@ available. That is an accepted remake-only rule to write down, not a missing ass
 
 ### Owed captures
 
-Five minted, filed in [`playtest.md`](../../playtest.md) under **Menus and front end**.
+Filed in [`playtest.md`](../../playtest.md) under **Menus and front end**. The first takes of all
+of them were filmed with a silent audio track, so what they settled is the picture, recorded in the
+paragraphs below, and what they still owe is listed per row; `CAP-49`'s row is retired, its open
+halves riding `CAP-52`.
 
-| ID | What it films | What it unblocks |
+| ID | What it still owes | What it unblocks |
 |---|---|---|
-| `CAP-49` | the main menu: composition, the flag movie, rollover and press, music, and what Quit does | E41's Original top level, E42's main-menu asset rules, `BL-654` |
-| `CAP-50` | the Instant Action setup page: every drop-down open, the paged enemy rows, the ace hiding every enemy control, the Table of Contents and View Story | C21, B13, and the whole wizard's fidelity target |
-| `CAP-51` | Preferences and its four leaves, each opened and changed | A3's options store, E41's Options route, `BL-570`, and the AUDIO page's preview against the decoded script |
-| `CAP-52` | menu audio and pointer behaviour across screens | A4's audio and input contracts, D33's cue work |
-| `CAP-53` | the Plane Construction tab bar driven between its six screens | C23's Original hangar navigation |
+| `CAP-50` | VIEW STORY pressed on the Instant Action page | `BL-807` |
+| `CAP-51` | the AUDIO page with sound, and a leaf re-entered after CANCEL CHANGES | the AUDIO page's preview against the decoded script, `BL-806` |
+| `CAP-52` | the whole menu walk with sound routed, a keyboard and pad pressed on each screen, REPLAY BRIEFING and DELETE PLAYER pressed | A4's audio and input contracts, D33's cue work, `BL-805` |
+| `CAP-53` | the tab bar out of order, Purchase, the cleared default box, the two refusals | C23's Original hangar navigation, `BL-808` |
 
 ### Where Built-in and the original disagree
 
@@ -646,45 +648,54 @@ stacked frames imply a rollover state under the pointer and a depressed state wh
 the plaque under the pointer draws frame 2 and draws frame 3 while the button is held; the two
 pointer bitmaps the globals script names are drawn as the pointer, the active one over a live
 button and the passive one elsewhere; the two wavs the control library binds play on a rollover
-and on a press. Everything else is remake-only until filmed. `CAP-49` must confirm, for the top
-level: whether the movie (absent from the extraction) loops behind the buttons and what replaces
-it, whether the rollover frame appears on entering the plaque or on a delay, whether a press fires
-on the button-down or on the release, whether a disabled button ever draws, where `mm_t_title`
-sits, that Quit ends the game on the press with no confirm (`MAINMENU.SCRIPT` terminates on
-`mm_b_quit`, which is what Original does), and whether any keyboard or pad focus exists at all
-(Original's keyboard and pad focus is a remake equivalence, not a decode). `CAP-51` must confirm,
-for the Preferences page itself: what the page shows before any door is pressed (Original draws the
-four doors, their four descriptions and RETURN TO MAIN MENU together, the layout placing them on
-one panel), whether a description follows the pointer or stands (Original draws all four at once),
-which button leads out of the page from the top level (Original draws `PF_B_MAINMENU`, the button
-the script picks out of flight), and whether the movie plays behind the page (Original's place for
-it is black, as on the top level). The chooser row is ours and the four doors' disabled frames are
-a state the original never shows. `CAP-52` must confirm, for the pointer and audio: which sound
-plays on a rollover and which on a press, whether a disabled button makes either, whether list rows
-make a rollover sound (Original plays none on a list row), which pointer bitmap shows over a
-button, over a list and over nothing, and where each bitmap's hotspot is (Original draws the
-bitmap's top-left at the pointer).
+and on a press. The film (`CAP-49`, `CAP-52`, both silent) shows the top level this way: the
+movie fills the 4:3 frame edge to edge behind the plaques, loops on a cycle near eight seconds,
+keeps running in phase behind Preferences and every leaf page, and nothing but the plaque under
+the pointer changes; a plaque has three states that differ only in lettering colour, gold at
+rest, orange under the pointer and red while held, the rollover arriving on the frame the hot
+point enters the box; a press fires on the release, never on the button-down (Quit held for 1.4 s
+did nothing until released); Multiplayer is a live plaque like the other five, and no take draws
+any plaque disabled, while Original keeps it in its disabled frame by the user's decision until
+multiplayer is implemented; nothing is drawn at `mm_t_title`; Quit ends the process on the release with
+no confirm, as `MAINMENU.SCRIPT` terminates on `mm_b_quit`; and the top level arrives with no
+plaque lit. The pointer is the active bitmap over a live button, a plaque, an edit box and an
+open dropdown's rows, the passive one over a roster row, a scrap and dead space, with the hotspot
+at the bitmap's top-left; the bitmap swaps on an enter or leave event only, so a pointer already
+standing inside a button when a screen is drawn keeps the bitmap it arrived with. Preferences
+draws the logo, the panel, the PREFERENCES title, the four doors with all four descriptions
+standing at once, CONTROLS live, and RETURN TO MAIN MENU as its only exit, no ACCEPT or CANCEL,
+with the movie playing behind it; a leaf's description text stands, following neither the pointer
+nor a selection; a dropdown opens under its box and draws only as many rows as it has items; the
+Video page stacks ACCEPT over CANCEL, the Keys page draws CANCEL left of ACCEPT, and Escape
+inside an armed rebind cell binds Escape. The chooser row is ours, and the four doors' disabled
+frames are a state the original never shows. Where Original differs from the film today is
+`BL-805` and `BL-806`. Still unfilmed: every sound; whether any keyboard or pad focus exists at
+all (no take pressed a key outside an edit box, so Original's focus walk stays a remake
+equivalence); whether a setting reverts on CANCEL CHANGES (no leaf was re-entered after one);
+whether Preferences is reachable in flight; and whether a disabled button ever draws or sounds.
 
 The campaign screens are built from what the layout, the scripts and the briefing dialog evidence:
 every `B` row's position and four-frame strip, the `D` rows' boxes, the listbox's window, the
 scrapbook rows' region column, the two messagebox button sets and their rows, the roster
 sub-script's two colours, the edit box's pre-fill and its two bound wavs, NEXT MISSION disabled
 once the campaign is complete, the briefing's narration following its script's start count.
-Everything else is remake-only until filmed. `CAP-52` must confirm, for the campaign: whether a
-campaign plaque (a cabin button, a briefing plaque, a paper button) plays the rollover and click
-sounds a main-menu button does (Original plays both) and whether a roster row, a mission row of the
-table of contents or a scrap plays anything on entry (Original plays nothing); what the edit box's
-keystroke and reject sounds are attached to (Original plays `ENTERTEXT` per taken character and
-`ENTERTEXT_ERROR` per refused one in the profile screen's box); which pointer bitmap shows over a
-scrap (Original draws the passive one, as over a list row); whether REPLAY BRIEFING restarts the
-narration from its start (Original begins the wav again from the top) and whether leaving the
-briefing by RETURN TO CABIN or GO TO FLIGHT CHECK cuts the voice (Original ends it and lifts the
-music duck); whether a mission's end starts any narration on the book (Original starts none);
-whether a scrap whose region column reads `0,0,0,0` is clickable on its picture (Original hit-tests
-the picture's bounds); and whether any
-keyboard or pad focus exists on these screens at all, and where Back lands
-(Original walks each screen back to the one that opened it and keeps the focus on the plaque that
-opened what is being left, a remake equivalence).
+The film (`CAP-52`, silent) shows the campaign screens this way: a campaign plaque (a cabin
+button, a briefing plaque, a flight check's paper button) carries the same three lettering states
+a main-menu plaque does and fires on the release; a roster row, a contents row and a scrap show no
+rollover art; the passive pointer stands over a roster row and a scrap and the active one over
+the name box; the profile screen's name box shows a blinking red caret and takes non-ASCII
+letters; the sell confirm is the two-button box reading Yes left and No right, the refusal the
+one-button OK, and neither draws a focus; and every Back-shaped button lands on the screen that
+opened it. Still unfilmed: which sound plays on a plaque, a row or a scrap, and what the edit
+box's keystroke and reject sounds are attached to (Original plays `MOUSEOVER` and `MOUSECLICK` on
+a plaque, nothing on a row or a scrap, `ENTERTEXT` per taken character and `ENTERTEXT_ERROR` per
+refused one); whether REPLAY BRIEFING restarts the narration from its start (never pressed;
+Original begins the wav again) and whether leaving the briefing cuts the voice (Original ends it
+and lifts the music duck); whether a mission's end starts any narration on the book (Original
+starts none); whether a scrap whose region column reads `0,0,0,0` is clickable on its picture
+(Original hit-tests the picture's bounds); the delete confirm (never pressed; Original focuses
+Yes); and whether any keyboard or pad focus exists on these screens at all and where Back lands
+it (Original keeps the focus on the plaque that opened what is being left, a remake equivalence).
 
 The Instant Action screen is built from what the layout and the script evidence: the widgets at
 their authored positions over `IA_BackGround`, the contents list's 14-row window with its own
@@ -694,23 +705,28 @@ picked value with the `DropDown` arrow strip, the enemy rows on two pages keyed 
 `0 == WT` branch), the wingman plane hidden at zero wingmen, a changed militia resetting its
 aircraft (`AV[BA].QG = 0`), stunt flying clearing the clouds (`FUN_004103b0`'s mask), a contents
 row applying its preset on select (callback 2302) and View Story writing the preset's name as the
-story title (the `IDS_IA_STORYTITLE` format). Everything else is remake-only until filmed. `CAP-50`
-must confirm: whether the contents list and the dropdown half show together or View Story reveals
-the right half (Original shows both, the layout placing them on disjoint halves of one background);
-what a rollover previews, if anything (Original previews nothing: a contents row changes the fields
-only when selected); whether a changed militia visibly resets its aircraft field (Original resets
-it to the militia's first aircraft); what BUILD CUSTOM PLANE does from this screen (Original draws
-it disabled); how the screen reads before anything is chosen (Original opens on an airfield, the
-ace duel, an Autogyro, no wingmen, one life and no contents row selected, the screen's stored
-defaults); whether an opened dropdown lists below its box and how many rows it shows (Original
-lists every item below the box, and the layout's `TotalDisplayed` is read as the window); whether
-the Wingmen dropdown stays under the ace duel (Original keeps it, the script hiding only the enemy
-controls, and the parser forces the count to zero at launch); whether the up/down buttons and the
-"[continued ...]" text hide under the ace duel (Original hides them with the enemy rows); whether
-the Player/Wingman radio hides at zero wingmen and what WEAPON LOADOUT opens (Original keeps the
-radio and draws the button disabled); and whether keyboard or pad input reaches the screen at all
-(Original walks the widgets in two columns and steps a dropdown's value sideways, a remake
-equivalence).
+story title (the `IDS_IA_STORYTITLE` format). The film (`CAP-50`, silent) shows the screen this
+way: the contents list and the dropdown half show together on one background; the screen opens on
+preset 0 with its row selected and every field reading that preset, not on stored defaults; a
+rollover previews nothing, a hover highlight tracking the pointer beside the selected row; a
+selected row rewrites the whole right page at once, the preset's name under HEY PILOT! included,
+so VIEW STORY writes nothing new there (VIEW STORY itself was never pressed); a changed militia
+resets its aircraft to the militia's first; a dropdown opens flush under its box at the box's
+width with the current value and the hovered row both highlighted, draws only as many rows as it
+has items, and scrolls with its own bar once the list outgrows the authored window (the
+pilot-plane list at 21 entries in a 20-row window); a closed box lightens under the pointer; the
+ace duel empties the four enemy boxes in place with pale arrows and keeps "[continued ...]" and
+the down button live; at zero wingmen the wingman-plane box blanks while the Wingmen count stays
+live and the radio stays with its Wingmen option greyed; the up/down buttons replace the whole
+right page with the three later waves under "[go back ...]", a zero-count wave's boxes blanked;
+BUILD CUSTOM PLANE opens the plane-name dialog and WEAPON LOADOUT opens AMMO SELECTION for
+whichever of Pilot or Wingmen the radio holds, both live; and FLY MISSION opens a loading spread
+titled by the mission type. Original already draws BUILD CUSTOM PLANE and WEAPON LOADOUT live;
+it opens the page and names the preset differently by the user's decision, a deliberate departure
+recorded here, not a defect; where it differs from the film otherwise is `BL-807`. Still
+unfilmed: VIEW STORY; whether keyboard or pad input reaches the screen at all (Original walks the
+widgets in two columns and steps a dropdown's value sideways, a remake equivalence); and every
+sound.
 
 The plane-construction screens are built from what the layout and the stills evidence: the
 `[@PlaneConstruction@]` chrome and the six tab sections at their authored positions over
@@ -721,21 +737,27 @@ dropdown's box `Width` wide and `ItemHeight` high with `TotalDisplayed` as its w
 region masks (the paint composite the stills show), `PT_P_DECALS`' fifty frames as the decal
 tiles, the cabin's `PC_B_PLANEX` edge to `PlaneName` first, the `PN_B_DEFAULT` box authored
 checked, langui 203 as the name screen's refusal and 206 as the airframe-switch ask, and the
-economy and paint tables (`hangar.md`). Everything else is remake-only until filmed. `CAP-53` must
-confirm: whether a tab is ever disabled (Original disables only the standing tab, drawn in its
-`ColorDisabled` frame); where the running total shows (Original writes it into `PX_T_PLANECOST`
-over the blueprint and updates it on every pick); whether leaving a tab commits or the whole build
-commits at Purchase (Original commits only on `PUR_B_PURCHASE`, and CANCEL drops every pick); what
-SELL PLANES does (Original opens the `[@Hangar@]` INVENTORY with Sell, a disabled Export and Done
-back to the tab); what Load Default Configuration loads (Original starts the build on the
-Devastator with its stock engine, guns, hardpoints and armour when checked, on a bare airframe when
-cleared); whether the airframe switch asks with string 206 as a message box (Original raises it as
-a dialog over the page with OK and Cancel); how an opened dropdown lists and scrolls (Original
-lists under the box in the row's `TotalDisplayed` window with the list's own arrows); whether the
-Instant Action path's hub reads READY TO EXPORT and shows `$$$ on $50000` (Original wears the
-export strips on the wallet-free door and shows no figure, since no decode says what the $50000
-gates); and whether keyboard or pad input reaches the hub at all (Original walks the page's rows
-then the tab bar and steps a dropdown's value sideways, a remake equivalence).
+economy and paint tables (`hangar.md`). The film (`CAP-50` from Instant Action's door, `CAP-52`
+from the cabin's, both silent) shows the hub this way: the name screen is a dialog over the
+blueprint page with Load Default Configuration drawn checked, and checked it opened on a Balmoral
+from Instant Action and a Bloodhawk from the cabin, both complete stock builds, so what picks the
+airframe is not read and the Devastator reading is wrong; the standing tab draws raised and pale
+with dark lettering, the other five purple with white, and nothing is gated; the running total is
+the PLANE COST line on the page's top rail beside the plane name, following every pick; a
+dropdown lists flush under its box, the airframe list at eleven rows with no bar, and the decal
+picker is a five-wide thumbnail grid with its own arrows; the Instant Action door wears READY TO
+EXPORT and CANCEL EXPORT with a `$$$ on $50000` scrap on every tab, the cabin door READY TO
+PURCHASE and CANCEL PURCHASE with `$$$ on $16780`; SELL PLANES opens the `[@Hangar@]` INVENTORY
+with a plane dropdown, Sell and Export both drawn live, a value block and DONE back to the tab,
+where selling asks with the Yes/No box and a plane that cannot be sold refuses with the OK box;
+no airframe switch raised string 206 on a fresh build; CANCEL drops every pick; and the weight
+line turns red over capacity. Where Original differs from the film today is `BL-808`. Still
+unfilmed: tabs visited out of order (both walks ran 1 to 6); Purchase and whether leaving a tab
+commits (Original commits only on `PUR_B_PURCHASE`); the cleared default box (Original starts on
+a bare airframe); string 206 on a customised build (Original raises it as a dialog with OK and
+Cancel) and string 203; what Export does; and whether keyboard or pad input reaches the hub at all
+(Original walks the page's rows then the tab bar and steps a dropdown's value sideways, a remake
+equivalence).
 - **Built-in's Chapter screen is ours.** The original picks a map through Instant Action's
   environment dropdown; there is no standalone chapter list.
 - **The original's plane construction is a tab bar; Built-in's is a linear nine-screen walk.**
