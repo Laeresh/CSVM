@@ -6,11 +6,11 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The engine half of the boot sequence: the node the copyright card is drawn on, the clock its
-/// holds run down, and the fade to black between the two logos. What the card is made of belongs
-/// to <see cref="BootSequence.Card"/>; a <see cref="ComposedBoardView"/> draws it, so the art and
-/// the strings resolve out of the extraction the way every other screen's do. It sits on the
-/// launchscreen's own layer, under the films, and lives for the whole block.
+/// The engine half of the boot sequence: the black the block runs on, the node the copyright card
+/// is drawn on, and the clock its holds run down. What the card is made of belongs to
+/// <see cref="BootSequence.Card"/>; a <see cref="ComposedBoardView"/> draws it, so the art and the
+/// strings resolve out of the extraction the way every other screen's do. The card goes down with
+/// the first film and the black outlives it, so the waits and the fade hold an empty screen.
 /// <see cref="Play"/> is the one call a caller makes.
 /// </summary>
 public sealed partial class BootCard : Node
@@ -20,11 +20,8 @@ public sealed partial class BootCard : Node
 
     private CanvasLayer? _layer;
     private ComposedBoardView? _view;
-    private ColorRect? _cover;
     private Action? _then;
     private double _left;
-    private double _span;
-    private bool _fading;
 
     private BootCard(string dataRoot)
     {
@@ -40,7 +37,7 @@ public sealed partial class BootCard : Node
     {
         var card = new BootCard(dataRoot);
         host.AddChild(card);
-        new BootSequence(film, card.Hold).Run(() =>
+        new BootSequence(film, card.Hold, card.Drop).Run(() =>
         {
             card.Close();
             then();
@@ -55,8 +52,6 @@ public sealed partial class BootCard : Node
     {
         _then = then;
         _left = seconds;
-        _span = seconds;
-        _fading = hold == BootHold.Fade;
         if (hold == BootHold.Card)
         {
             // Neither of the card's two inks reads the palette, so which one it is handed cannot
@@ -67,22 +62,31 @@ public sealed partial class BootCard : Node
         Log.Info("ui", $"boot {hold} {seconds.ToString("0.###", CultureInfo.InvariantCulture)}s");
     }
 
+    /// <summary>Takes the card off the screen, leaving the block's black behind, and is called as
+    /// the first film starts. ⚠ Do not hold the card under the films: <c>SHOWIMAGE</c>'s picture
+    /// does not survive a <c>PLAYAVI</c>, the original showing the copyright notice at the
+    /// beginning only (docs/formats/cinemas.md).</summary>
+    public void Drop()
+    {
+        _view?.QueueFree();
+        _view = null;
+        Log.Info("ui", $"boot {BootHold.Card} down");
+    }
+
     /// <inheritdoc/>
     public override void _Ready()
     {
+        // The block owns a black screen for its whole length, so what a gap between two films
+        // shows is black rather than whatever an empty viewport clears to.
+        var black = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
+        black.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _view = ComposedBoardView.Build(_dataRoot);
-        _cover = new ColorRect
-        {
-            Color = new Color(0f, 0f, 0f, 0f),
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        _cover.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 
         // The launchscreen's own layer, because the card is the screen standing in front of the
-        // launchscreen; a film at HudLayers.Cinema then covers it with nothing torn down.
+        // launchscreen; a film at HudLayers.Cinema then covers both of these.
         _layer = new CanvasLayer { Layer = HudLayers.Board, Name = "boot_card_layer" };
+        _layer.AddChild(black);
         _layer.AddChild(_view);
-        _layer.AddChild(_cover);
         AddChild(_layer);
     }
 
@@ -107,12 +111,6 @@ public sealed partial class BootCard : Node
         }
 
         _left -= delta;
-        if (_fading && _cover != null)
-        {
-            float done = _span <= 0.0 ? 1f : (float)Math.Clamp(1.0 - (_left / _span), 0.0, 1.0);
-            _cover.Color = new Color(0f, 0f, 0f, done);
-        }
-
         if (_left <= 0.0)
         {
             Advance();
@@ -129,14 +127,6 @@ public sealed partial class BootCard : Node
     {
         var then = _then;
         _then = null;
-
-        // A skipped fade still leaves the screen black, or the card comes back under the next wait
-        // at whatever opacity the press caught it at.
-        if (_fading && _cover != null)
-        {
-            _cover.Color = Colors.Black;
-        }
-
         then?.Invoke();
     }
 

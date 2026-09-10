@@ -857,11 +857,11 @@ a sync bug to chase.
 
 ## C22 ☑ The boot sequence on a bare launch, with the skip and `--skip-intro`
 
-**Landed.** Three lines of flow and one rule. `Launcher.PlayBootSequence` chains three
-`PlayCinema` calls, `MSopen1.mpg` then `zipper.mpg` then `Chap0.mpg`, and hands the launchscreen
-the last continuation; it sits inside the existing `ShowsMenu` branch **after** the no-game-data
-check, so a tree with no extraction still gets its instruction screen rather than three warnings and
-a menu. `SessionSpec.PlaysBootSequence` is the rule: `!SkipIntro && Args.Count == 0`. Nothing else
+**Landed.** One line of flow and one rule. `Launcher.PlayBootSequence` runs the whole block through
+`BootCard.Play`, `MSopen1.mpg` then `zipper.mpg` then `Chap0.mpg` with the card and the holds around
+them, and hands the launchscreen the last continuation; it sits inside the existing `ShowsMenu`
+branch **after** the no-game-data check, so a tree with no extraction still gets its instruction
+screen rather than three warnings and a menu. `SessionSpec.PlaysBootSequence` is the rule: `!SkipIntro && Args.Count == 0`. Nothing else
 in `Launcher` moved, and `C21`'s `PlayCinema` contract is untouched, so `C23` and `C24` call the
 member they were promised.
 
@@ -891,12 +891,12 @@ wrong, and the seven actions are tabulated in [`docs/formats/cinemas.md`](format
 
 **The whole block is built, in two modules.** `BootSequence` in `CSVM/src/UI/BootSequence.cs` is
 engine-free and unit-tested: `Card(dataRoot)` composes the copyright card as a `ComposedBoard`, and
-`Run(then)` calls the eight actions in the reader's order over two injected delegates, one that
-plays a film with `Launcher.PlayCinema`'s shape and one that puts up a still. `BootCard` in
-`CSVM/src/UI/BootCard.cs` is the engine half and the only file that knows a still is drawn: a
-`ComposedBoardView` for the card, a countdown per hold, the black cover the fade ramps in, and the
-press that ends a hold early. `BootCard.Play` is the whole surface, and it mounts on
-`HudLayers.Board` so a film at `HudLayers.Cinema` covers the card with nothing torn down.
+`Run(then)` calls the eight actions in the reader's order over three injected delegates, one that
+plays a film with `Launcher.PlayCinema`'s shape, one that puts up a still, and one that takes the
+card down as the first film starts. `BootCard` in `CSVM/src/UI/BootCard.cs` is the engine half and
+the only file that knows a still is drawn: the black the block runs on, a `ComposedBoardView` for
+the card, a countdown per hold, and the press that ends a hold early. `BootCard.Play` is the whole
+surface, and it mounts on `HudLayers.Board` so a film at `HudLayers.Cinema` covers it.
 
 **The card's three resources exist and are named in the extraction, not here.**
 `MM_splashbackground` is `extracted/rof/ASSETS/GRAPHICS/MM_SPLASHBACKGROUND.JPG` at 800x600, which
@@ -914,14 +914,22 @@ sequence's whole contract with a player who has been taught no key is that a pre
 card or a gap that ignored one would teach them the opposite right before a 145-second film. That
 reason is on the member, and the paragraph below covers what a press does to the rest of the block.
 
-**⚠ Three corners of the block are undecoded, and the code says which reading it takes.**
-`SHOWIMAGE`, `WAIT`, `PLAYAVI` and `FADEOUT` appear in no other reader file in the extraction and
-their handler was never followed into the executable, so the block is the whole evidence. Whether
-`SHOWIMAGE`'s picture survives a `PLAYAVI` over it is not stated: the card is held under the films
-until the fade takes it, on the reading that a fade to black is authored because something is still
-on screen to fade. `FADEOUT`'s second `1.0` has no second instance to compare against and is
-deliberately not spent. And the block's own dark gap is what the author has to judge: `WAIT 1.0`
-after each logo is a second of held card or held black either way.
+**⚠ The card is shown at the beginning only, settled at the controls rather than out of the
+reader.** The author, playing the retail game, reports the copyright notice before the videos and
+never between them, and no fade anywhere in the sequence. One fact accounts for both:
+`SHOWIMAGE`'s picture does not survive a `PLAYAVI`, so the first film tears the card down and the
+`FADEOUT` after that film runs against a screen with nothing on it. `BootSequence` takes the card down as
+the first film starts and `BootCard` leaves its black behind, so the waits and the fade hold an
+empty screen. An at-the-controls report about the original beats a reading taken from the data,
+and this one replaces the reading `C22` first landed with.
+
+**⚠ `FADEOUT` keeps its second, invisible or not.** An authored action is not deleted for being
+unseen, so the block still spends `FADEOUT`'s `1.0` where the reader puts it, and the code says on
+the member why nobody will see it. `FADEOUT`'s second `1.0` has no second instance to compare
+against and is still not spent. What follows is the gap for the author to judge: between the two
+logos the block now holds 2.0 s of black, the `WAIT 1.0` plus the fade's own second, where the same
+gap used to hold the card. Nothing in the extraction says what that gap should be, and the
+observation above says nothing about it either, so it is judged at the controls or not at all.
 
 **The skip ends one cinema, not the sequence.** `FUN_0044ae70`'s `PLAYAVI` handler is not decoded,
 so whether a press in the original abandoned the rest of the block is unknown. This takes the
@@ -929,29 +937,14 @@ reading the seam already gives: `CinemaScreen` stops, `Ended` fires, the next `P
 three presses reach the menu. The Traps section below points the same way: a player who has not
 learned the skip meeting `chap0` is a player who let the two logos go by unpressed.
 
-**⚠ The card is not wired, and `Launcher.PlayBootSequence` still chains three `PlayCinema` calls.**
-No call site for `BootCard` exists anywhere in `CSVM/src`, so a launch today plays the three films
-and no card, no wait and no fade. The `--intro` half is whole and needs no `Launcher` change at all,
-since `Launcher` already reads `_spec.PlaysBootSequence`.
-
-**The wiring contract.** Replace `Launcher.PlayBootSequence`'s body, and nothing else in that file,
-with the one call that runs the whole block:
-
-```csharp
-private void PlayBootSequence(System.Action then) =>
-    UI.BootCard.Play(this, _dataRoot, PlayCinema, then);
-```
-
-`BootCard.Play(Node host, string dataRoot, BootSequence.PlayFilm film, Action then)` mounts the card
-on `host`, runs `fmv.zrd`'s eight actions in order, frees everything it put up and then runs `then`,
-so the launchscreen continuation the member already passes needs no change. `PlayCinema` converts to
-`BootSequence.PlayFilm` as a method group, its default skip argument being irrelevant because the
-sequence passes `CinemaScreen.BootKeys` itself. Do not pass a film name, a duration or a skip set
-in: every one of them is the reader's and lives in `BootSequence`. The comment above the member
-should lose its "INTRO's splash card, waits and fade are not reproduced" sentence, which the wiring
-makes false. Watch the result with
-`.\RunGame.ps1 -- --intro --volume=1.0`, or capture the card alone with
-`.\RunProbe.ps1 --intro --menu --screenshot=<path> --frames=45`.
+**`Launcher.PlayBootSequence` is the one call into the block.** Its body is
+`UI.BootCard.Play(this, _dataRoot, PlayCinema, then)`, `PlayCinema` converting to
+`BootSequence.PlayFilm` as a method group, and not one of the reader's names, durations or skip sets
+is written down in `Launcher`. `BootCard.Play` mounts the node on the caller, runs `fmv.zrd`'s eight
+actions in order, frees everything it put up and then runs `then`, so the launchscreen continuation
+that member already passed needs no change. Watch the result with
+`.\RunGame.ps1 -- --intro --volume=1.0`; a `--screenshot` photographs none of it, for the reason the
+suite paragraph below gives.
 
 **Verified (the three films).** Four live runs on this tree, each read off its own log, with
 `CSVM_DATA_ROOT` at the primary tree so the movies resolve.
@@ -989,6 +982,14 @@ harness would cost minutes per launch and no wall-time reading is needed to see 
 `A1` measured 145.6 s, `A3` 126.7 s, `B11` 150.5 s and `B12` 149.0 s. Nothing this item added runs
 in an engine suite.
 
+**⚠ The block was watched at the controls, and the watch overturned a reading.** The card renders
+as the metrics say it should and the presses land where they should, so `fonts.zrd`'s face, size and
+shadow are confirmed rather than merely read. Two departures from the original came back from that
+same watch: the notice was showing **between** the videos as well as at the start, and there was a
+visible fade. Both are corrected above, from the one fact that `SHOWIMAGE`'s picture does not
+survive a `PLAYAVI`. **What that leaves owed is a second look at the corrected block**, and with it
+the 2.0 s gap between the logos, which no reading in the extraction settles.
+
 **Verified (the card, the block and `--intro`).** The orchestrator's own `.\RunTests.ps1` on the
 fully merged plan tree, the one that carries every item in this plan: PASS, exit 0, 206.4 s. Build
 2.8 s with zero StyleCop warnings; units 21.3 s against a 30 s budget, 3850 passed, 0 failed,
@@ -1013,21 +1014,42 @@ says: `--intro --menu --volume=1.0` logs `MSopen1.mpg` at `frames=404`, `zipper.
 `frames=608` and then `Chap0.mpg`, those being `A1`'s census counts exactly, where
 `--menu --volume=1.0` alone reaches `menu presentation active=original` with zero cinema lines.
 
-**⚠ The card has never been on a screen, and cannot be until the wiring lands.** `CSVM.Tests` is
-engine-free, so what is checked there is the composition and the order: the block's eight actions
-with the reader's durations and names, the boot skip set on all three films, the card's art name,
-its two lines at 550 and 565 centred across the authored width, and, against a real extraction, that
-the art file exists and both `MSG_COPYRIGHT` keys resolve to their strings. `ComposedBoardView`,
-`CanvasLayer`, the countdown and the fade ramp compile and nothing more is proven about them.
+**⚠ What the suite proves, and what no test here can.** `CSVM.Tests` is engine-free, so what is
+checked there is the composition and the order: the block's eight actions with the reader's
+durations and names, the card down once as the first film starts and never put back, the fade
+keeping its second behind it, the boot skip set on all three films, the card's art name, its two
+lines at 550 and 565 centred across the authored width, and, against a real extraction, that the art
+file exists and both `MSG_COPYRIGHT` keys resolve to their strings. `ComposedBoardView`,
+`CanvasLayer` and the countdown compile and nothing more is proven about them. The sequence cannot
+be photographed either: `Launcher` ticks the capture director with `_menuHost is { Shown: true }`,
+so a `--screenshot` run spends the whole block not counting and lands on the launchscreen.
 
-**⚠ Owed at the controls, and no instrument here replaces it.** Every run above played at gain 0 on
-a hidden desktop, so nobody has watched the sequence or heard it. What is owed, once the wiring
-lands, is one `.\RunGame.ps1 -- --intro --volume=1.0` watched from the copyright card to the
-launchscreen. Four things need the author's eyes: whether the card reads at all, since its face,
-size and shadow are a reading of `fonts.zrd`'s metrics rather than a decode of how the original drew
-them; whether the second of held card after each logo and the second the fade takes read as authored
-or as a hang; whether a press during the card and during the fade lands where it should; and
-Decision 8's cost, `chap0` running 145 seconds in front of a player nothing has taught the key to.
+**⚠ Owed at the controls, and no instrument here replaces it.** One
+`.\RunGame.ps1 -- --intro --volume=1.0` watched from the copyright card to the launchscreen is what
+answers these, and the author's watch of it is what settled the card's single showing above. Three
+things still need their eyes: whether the card reads at all, since its face, size and shadow are a
+reading of `fonts.zrd`'s metrics rather than a decode of how the original drew them; whether the
+2.0 s of black between the two logos reads as authored or as a hang, the fade's own second being
+half of it; and Decision 8's cost, `chap0` running 145 seconds in front of a player nothing has
+taught the key to.
+
+**The corrected block on a live run.** `.\RunProbe.ps1 --intro --menu --volume=1.0`, read off its
+own log, with the card down before the first film and no second showing of it:
+
+```
+INFO  [ui] boot Card 5s
+INFO  [ui] boot Card down
+INFO  [ui] cinema MSopen1.mpg playing skip=LeftMouse, AnyKey
+INFO  [ui] cinema ended frames=404 clock=13.481s
+INFO  [ui] boot Wait 1s
+INFO  [ui] boot Fade 1s
+INFO  [ui] cinema zipper.mpg playing skip=LeftMouse, AnyKey
+INFO  [ui] cinema ended frames=608 clock=20.274s
+INFO  [ui] boot Wait 1s
+INFO  [ui] cinema Chap0.mpg playing skip=LeftMouse, AnyKey
+```
+
+**Verified.** <pending orchestrator run>
 
 ### Original approach (kept for reference)
 

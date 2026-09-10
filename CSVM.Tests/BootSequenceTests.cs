@@ -9,8 +9,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>Pins the boot sequence against the block <c>fmv.zrd</c> authors: the eight actions in
-/// the reader's own order with the reader's own durations and film names, the skip set every film
-/// takes, and one handoff at the end however the last film stopped.</summary>
+/// the reader's own order with the reader's own durations and film names, the card down as the
+/// first film starts, the skip set every film takes, and one handoff at the end however the last
+/// film stopped.</summary>
 [Trait("Tier", "Quick")]
 public class BootSequenceTests
 {
@@ -21,12 +22,13 @@ public class BootSequenceTests
     public void TheBlockRunsInTheReadersOwnOrder()
     {
         var stage = new Recorder();
-        new BootSequence(stage.Film, stage.Still).Run(stage.Handoff);
+        new BootSequence(stage.Film, stage.Still, stage.Drop).Run(stage.Handoff);
 
         Assert.Equal(
             new[]
             {
                 "still Card 5",
+                "drop",
                 "film MSopen1.mpg",
                 "still Wait 1",
                 "still Fade 1",
@@ -38,13 +40,39 @@ public class BootSequenceTests
             stage.Steps);
     }
 
+    /// <summary>The card is seen at the beginning and nowhere else: it goes down once, as the first
+    /// film starts, and no later action puts it back. ⚠ This is the original at the controls, not a
+    /// reading of the reader, which says nothing about what survives a <c>PLAYAVI</c>.</summary>
+    [Fact]
+    public void TheFirstFilmTakesTheCardDownForGood()
+    {
+        var stage = new Recorder();
+        new BootSequence(stage.Film, stage.Still, stage.Drop).Run(stage.Handoff);
+
+        Assert.Equal(1, stage.Steps.Count(step => step == "drop"));
+        Assert.Equal(1, stage.Steps.Count(step => step == "still Card 5"));
+        Assert.True(stage.Steps.IndexOf("drop") < stage.Steps.IndexOf("film MSopen1.mpg"));
+    }
+
+    /// <summary><c>FADEOUT</c> keeps its second in the block even though the screen it would ramp is
+    /// already empty, an authored action not being deleted for being invisible.</summary>
+    [Fact]
+    public void TheFadeKeepsItsSecondAfterTheCardIsGone()
+    {
+        var stage = new Recorder();
+        new BootSequence(stage.Film, stage.Still, stage.Drop).Run(stage.Handoff);
+
+        Assert.Equal(1.0, BootSequence.FadeSeconds);
+        Assert.True(stage.Steps.IndexOf("still Fade 1") > stage.Steps.IndexOf("drop"));
+    }
+
     /// <summary>Every film takes the boot set, any key or a left click, because a player at the
     /// first screen the game shows has been taught no key at all.</summary>
     [Fact]
     public void EveryFilmTakesTheBootSkipSet()
     {
         var stage = new Recorder();
-        new BootSequence(stage.Film, stage.Still).Run(stage.Handoff);
+        new BootSequence(stage.Film, stage.Still, stage.Drop).Run(stage.Handoff);
 
         Assert.Equal(3, stage.Skips.Count);
         Assert.All(stage.Skips, skip => Assert.Equal(CinemaScreen.BootKeys, skip));
@@ -56,7 +84,7 @@ public class BootSequenceTests
     public void TheHandoffWaitsForTheLastFilm()
     {
         var stage = new Recorder(runContinuations: false);
-        new BootSequence(stage.Film, stage.Still).Run(stage.Handoff);
+        new BootSequence(stage.Film, stage.Still, stage.Drop).Run(stage.Handoff);
 
         Assert.Equal(new[] { "still Card 5" }, stage.Steps);
         Assert.False(stage.HandedOff);
@@ -69,10 +97,13 @@ public class BootSequenceTests
     public void AnInstallMissingEveryFilmStillReachesTheHandoff()
     {
         var stage = new Recorder();
-        new BootSequence((_, then, _) => then(), stage.Still).Run(stage.Handoff);
+        new BootSequence((_, then, _) => then(), stage.Still, stage.Drop).Run(stage.Handoff);
 
         Assert.Equal(
-            new[] { "still Card 5", "still Wait 1", "still Fade 1", "still Wait 1", "handoff" },
+            new[]
+            {
+                "still Card 5", "drop", "still Wait 1", "still Fade 1", "still Wait 1", "handoff",
+            },
             stage.Steps);
     }
 
@@ -138,6 +169,8 @@ public class BootSequenceTests
                 then();
             }
         }
+
+        public void Drop() => Steps.Add("drop");
 
         public void Still(BootHold hold, double seconds, Action then)
         {

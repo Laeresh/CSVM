@@ -7,28 +7,30 @@ namespace CSVM.UI;
 
 /// <summary>
 /// What a boot-sequence still is, one member per action in <c>fmv.zrd</c>'s <c>INTRO</c> block that
-/// is not a film. The block puts its image up once and never clears it, and its fade to black
-/// before the second logo only does anything while something is still on screen, so the card stays
-/// up under the films until the fade takes it.
+/// is not a film. The block puts its image up once, at the start, and the first film takes it down,
+/// so the two waits and the fade that follow hold a screen with nothing on it.
 /// </summary>
 public enum BootHold
 {
-    /// <summary><c>SHOWIMAGE</c>: the copyright card goes up, and stays up.</summary>
+    /// <summary><c>SHOWIMAGE</c>: the copyright card goes up, and the first film takes it
+    /// down.</summary>
     Card,
 
     /// <summary><c>WAIT</c>: whatever is on screen holds for that long.</summary>
     Wait,
 
-    /// <summary><c>FADEOUT</c>: the screen ramps to black over that long and stays black.</summary>
+    /// <summary><c>FADEOUT</c>: a held second that draws nothing, the card having gone down with
+    /// the first film. ⚠ Do not drop the action: it is authored, and an action is not deleted for
+    /// being invisible.</summary>
     Fade,
 }
 
 /// <summary>
 /// <c>fmv.zrd</c>'s boot block, engine-free: the copyright card it opens with, and the eight
 /// actions in the reader's own order. The card, its five-second hold, the publisher logo, a wait,
-/// the fade to black, the developer logo, another wait, then <c>CHAP0</c>'s opening cinema. Every
-/// name, position and duration here is that reader's own (docs/formats/cinemas.md), and the two
-/// calls that put something on screen are supplied by the caller, so the order runs with no engine
+/// the fade, the developer logo, another wait, then <c>CHAP0</c>'s opening cinema. Every name,
+/// position and duration here is that reader's own (docs/formats/cinemas.md), and the three calls
+/// that change what is on screen are supplied by the caller, so the order runs with no engine
 /// present. <see cref="BootCard"/> is the engine half and <c>Launcher.PlayCinema</c> the films.
 /// </summary>
 public sealed class BootSequence
@@ -40,9 +42,10 @@ public sealed class BootSequence
     /// <summary>The <c>WAIT 1.0</c> the block puts after each of its two logos.</summary>
     public const double LogoGapSeconds = 1.0;
 
-    /// <summary><c>FADEOUT 0,0,0 1.0 1.0</c>'s first number, the ramp to black before the second
-    /// logo. ⚠ Its second 1.0 is deliberately not spent: what that number governs is undecoded,
-    /// and no other reader in the extraction uses the action to compare against.</summary>
+    /// <summary><c>FADEOUT 0,0,0 1.0 1.0</c>'s first number, the second the block spends before the
+    /// second logo. Nobody sees it: the first film took the card down, so there is nothing left on
+    /// screen for it to take. ⚠ Its second 1.0 is deliberately not spent, that number being
+    /// undecoded.</summary>
     public const double FadeSeconds = 1.0;
 
     /// <summary><c>INTRO</c>'s first <c>PLAYAVI</c>, the publisher logo.</summary>
@@ -79,12 +82,14 @@ public sealed class BootSequence
 
     private readonly PlayFilm _film;
     private readonly ShowStill _still;
+    private readonly DropStill _drop;
 
-    /// <summary>Builds the sequence over the two calls that put something on screen.</summary>
-    public BootSequence(PlayFilm film, ShowStill still)
+    /// <summary>Builds the sequence over the three calls that change what is on screen.</summary>
+    public BootSequence(PlayFilm film, ShowStill still, DropStill drop)
     {
         _film = film;
         _still = still;
+        _drop = drop;
     }
 
     /// <summary>How a film reaches the screen: its name, the continuation to run on the frame it
@@ -96,6 +101,12 @@ public sealed class BootSequence
     /// <summary>How a still reaches the screen: which one, how long it holds, and the continuation
     /// to run when the hold ends or a press ends it early.</summary>
     public delegate void ShowStill(BootHold hold, double seconds, Action then);
+
+    /// <summary>How the card leaves the screen, called once, as the first film starts.
+    /// <c>SHOWIMAGE</c>'s picture does not survive a <c>PLAYAVI</c>: the original shows the
+    /// copyright notice at the beginning only and shows no fade between the logos, watched at the
+    /// controls (docs/formats/cinemas.md).</summary>
+    public delegate void DropStill();
 
     /// <summary>The copyright card in the original's 800x600 space: the splash art under the two
     /// message-table lines <c>SHOWIMAGE</c> carries. It composes like any other screen, so the art
@@ -121,7 +132,12 @@ public sealed class BootSequence
     /// handler never having been followed into the executable.</summary>
     public void Run(Action then)
     {
-        void First() => _film(FirstLogo, AfterFirst, Keys);
+        void First()
+        {
+            _drop();
+            _film(FirstLogo, AfterFirst, Keys);
+        }
+
         void AfterFirst() => _still(BootHold.Wait, LogoGapSeconds, Fade);
         void Fade() => _still(BootHold.Fade, FadeSeconds, Second);
         void Second() => _film(SecondLogo, AfterSecond, Keys);

@@ -118,11 +118,19 @@ being the midline of the 800-wide space.
 
 **What the four opcodes do is only as decoded as this block.** `SHOWIMAGE`, `WAIT`, `PLAYAVI` and
 `FADEOUT` appear in no other reader file in the extraction, and `FUN_0044ae70`'s handler for them
-was never followed into the executable, so the block itself is the whole evidence. Three
-consequences: whether `SHOWIMAGE`'s picture survives a `PLAYAVI` over it is not stated anywhere,
-whether a skip abandons the rest of the block or only the film playing is not either, and
-`FADEOUT`'s second `1.0` has no second instance to compare against. CSVM reads the fade's existence
-as saying something is still on screen to fade, and holds the card under the films until it runs.
+was never followed into the executable, so the block itself is the whole of the extracted evidence.
+Two questions are left open by it: whether a skip abandons the rest of the block or only the film
+playing, and what `FADEOUT`'s second `1.0` governs, that number having no second instance to
+compare against.
+
+**`SHOWIMAGE`'s picture does not survive a `PLAYAVI`, and the evidence for that is the original at
+the controls.** This project's author, playing the retail game, reports that the copyright notice is
+shown at the beginning only and never between the videos, and that there is no fade anywhere in the
+sequence. One fact accounts for both: the first `PLAYAVI` tears the card down, so the notice is seen
+for its authored `WAIT 5.0` and no longer, and the `FADEOUT` that follows that film ramps a screen
+with nothing on it, which is why no fade is ever visible. CSVM plays the block that way. It keeps
+the `FADEOUT` and its second, an authored action not being dropped for being invisible, so the gap
+between the two logos is that second plus the `WAIT 1.0` before it.
 
 **`ASSETS/LAYOUT.CSV`, as `movie` widgets**, holds every other placement. A `movie` row is widget
 type `M` with script class `@ctl@AL`, and it carries an `ArtPath`, a position, a `Loops` count and a
