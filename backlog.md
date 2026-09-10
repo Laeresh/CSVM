@@ -2627,6 +2627,101 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
+- `BL-812` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The load
+  screen stands still for the whole build, so a launch reads as a freeze: the bar never fills and
+  the propeller never turns.** *Evidence:* `Launcher.BeginLaunch` shows the board, lets one frame
+  render, and then `LaunchSession` builds in one synchronous block on the next tick, so nothing is
+  redrawn until the world is up (`CSVM/src/Session/Launcher.cs:1043-1076`). `LoadBoard` draws the
+  unlit strip and `prp0` on purpose (`CSVM/src/UI/LoadBoard.cs:11-13`). The original fills its bar
+  from a hand-authored milestone table, sixteen literal fractions from 0.01 to 0.90 set at fixed
+  points of the load, monotonic, never reaching 1.0, and repaints through a pump throttled to one
+  draw per 0.1 s called after each milestone; the propeller is a six-frame cycle at 6 fps
+  (`docs/org/loading-screen.md`, "The progress bar is a hand-authored milestone table" and "How the
+  screen keeps drawing"). On film the campaign bar visibly steps over the load
+  (`OriginalScreenshots/Videos/Loading Screen Mission1.mkv`, about 3 s of screen, the fill growing
+  from nothing to half; `Loading Screen Mission CM01.mkv` shows the first step only). *Fix shape:*
+  split `LaunchSession`'s build into phases the frame loop can interleave with a draw (a build that
+  yields between its steps, or one that runs off the main thread and hands scene-tree work back to
+  it), then assign each phase boundary a fraction the way the original does and let the board
+  repaint between them: the fill as `floor(fillWidth * fraction)` pixels of `prog_red` over
+  `prog_blk` (`prog_redload` over `prog_blkload` on the campaign sheet), and the propeller cycling
+  its six frames at 6 fps. *⚠ Traps:* do not derive the fractions from measured durations; the
+  original's are authored and the screen is torn down at 0.90, so a full bar is never drawn. The
+  extraction carries only the six range endpoints of the propeller cycle (`prp0`, `prp7`, `prp15`,
+  `prp22`, `prp30`, `prp37`), so the cycle is six frames, not 38. A CLI launch does not come through
+  `BeginLaunch` at all, so no scripted or golden run may gain a frame from this. The original does
+  not thread its load either; a pump from inside a blocking build is a legitimate shape if the
+  Godot frame loop can be driven that way. *Playtest after fix:* launch any Instant Action mission
+  from the menu and watch the bar step and the propeller turn until the world appears; then a
+  campaign launch for the sheet's own bar. *Cross-refs:* `BL-813` and `BL-814` (what each screen
+  draws while this one makes it move), `BL-314` (the splitscreen
+  race whose clock starts while a load screen is still up), `docs/org/loading-screen.md`.
+
+- `BL-813` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The Instant
+  Action load screen writes our own "LOADING" line where the original writes INSTANT ACTION, the
+  mission type, its blurb and its win condition, each at an authored position in its own face.**
+  *Evidence:* every `loading_i*` dialog's script places four texts: `HEAD1` at 70,35 in
+  `loadListTitle` (always "INSTANT ACTION"), `HEAD2` at 325,35 in the default face wrapped at 400
+  (the mission type: SQUADRON, STUNT FLYING, ZEPPELIN RUN, DOGFIGHT AN ACE.), `OBJ1` at 360,135 in
+  `loadListbody` wrapped at 400 (the blurb) and `OBJ2` at 360,215 in `loadListbody` (the win
+  condition), from the `MSG_BRF_IA*_*` string families (`extracted/zrdr/Loading.zrd.json:4806-4915`,
+  `extracted/messages.json:3825-3863`). `OriginalScreenshots/Instant Action Loading Screen STUNT
+  FLYING.png` and `IA LoadScreen.png` show the result: the two headings on one line across the top,
+  the blurb on the ruled right half a hand's width down, the win condition two rules under it. Ours
+  writes "LOADING" at 360,60 and "chapter · subject" under it, positions chosen rather than read
+  (`CSVM/src/UI/LoadBoard.cs:17-20,95-107`), and the decode page's "Where CSVM differs" records
+  the text placement as ours. The pictures, the bar and the propeller are already at their authored
+  places. *Fix shape:* read the mission type's dialog out of `Loading.zrd.json` (`loading_i%d%c`,
+  the letter from the mission-type table in `docs/org/loading-screen.md`) rather than hardcoding a
+  composition, and draw its four `Text` entries with their strings from `messages.json` at their
+  authored positions and wrap widths; map `loadListTitle`, `loadListbody` and the empty default face
+  onto the nearest shipped faces and record the choice. *⚠ Traps:* free flight and dogfight are ours
+  and have no dialog, so they need a stated stand-in (the `d` family's text is the nearest, or a
+  heading alone). The `HEAD2` face is the one the screenshot shows as a bold serif, distinct from
+  `HEAD1`; do not draw both in one face. Do not fold this into the animation (`BL-812`): the text is
+  right or wrong on a still screen. *Playtest after fix:* `--menu=loadboard` beside the two
+  screenshots at the same window size. *Cross-refs:* `BL-812`, `BL-814` (the campaign sheet's own
+  content), `BL-807` (the film shows FLY MISSION opening this screen titled by mission type),
+  `docs/org/loading-screen.md`.
+
+- `BL-814` `[Fidelity]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **The campaign
+  load screen is a bare chart sheet, where the original draws the mission's map with its pins and
+  icons, the objectives parchment listing the mission's objectives, and the profile's memento.**
+  *Evidence:* `OriginalScreenshots/Campaign Loading Screen CM01.png` and the two clips under
+  `OriginalScreenshots/Videos/` (`Loading Screen Mission CM01.mkv`, `Loading Screen Mission1.mkv`):
+  the map fills the sheet's frame, the objectives parchment sits top right with the mission's
+  numbered objectives, a photograph in a white border sits bottom right (the dog on one mission,
+  the pin-up on another, so it is the profile's memento rather than fixed art), the bar runs along
+  the bottom with 0 %, 50 % and 100 % marks, a compass rose at bottom left and the propeller at
+  bottom right. Each campaign dialog (`loading_c%d%d`, 24 of them, `extracted/zrdr/Loading.zrd.json`
+  `loading_c31` at line 254 onward) carries a `MAP` primitive naming the map bitmap with a screen
+  clip and a world window (`NW-m1MAP` at 16,19, clip 211,51 to 784,551, world -1571,5796 to
+  -7715,11940), a `MEMENTO` primitive at 533,326 whose `momento_temp` bitmap is a placeholder the
+  runtime replaces, a `PROGRESS` at 90,548, and a `LOADING_SCRIPT` that turns on the shared
+  `OBJECTIVESLIST` (parchment at 555,6, title at 595,25 in `ObjListTitle`, list at 580,50 wrapped 190
+  by 255, spacing 5), binds `OBJ1` to `OBJ4` by objective index, places the memento's shadow
+  (`momento_shad` centred on 661,454), the mission's pins (`pin1` to `pin4` at authored points),
+  the zeppelin and device icons, and spins the device forms. `FUN_004a1910` binds `OBJECTIVESLIST`
+  and `MEMENTO` only when `FUN_004639a0` holds (`docs/org/loading-screen.md`). Ours draws `loadframe`,
+  the unlit bar and two lines of our own text (`CSVM/src/UI/LoadBoard.cs:65-76`). *Fix shape:* first
+  decode what fills the two runtime bindings: which objective strings `Objective OBJn index k`
+  resolves to (the briefing's own `BriefingObjectives` reader is the likely source), and which
+  bitmap the `MEMENTO` primitive draws for a profile, since picking one is not shipped and the
+  cabin always shows `ms_p_initialpinup1` (`CSVM/src/UI/CampaignCabinPage.cs:89-93`), yet the film
+  shows a different photograph per mission. Then read the mission's dialog and draw it through
+  `ComposedBoard`: the map at its clip, every `Pict` the script turns on, the parchment and its
+  list, the memento and its shadow. *⚠ Traps:* the map's `WORLD` window is a world-to-screen
+  mapping, not decoration; `OWNSHIP` and `MYZEP` in the shared primitives are positioned through
+  it, so decide whether the load screen places anything by world position before drawing the map
+  as a flat bitmap. Pins on the CM01 screenshot read "?" and "4" while the other clip's read 1 to 3,
+  so which pin bitmap stands at each point is authored per dialog, not a numbered set to derive. `BriefingReveal` already draws this map with its pins and
+  route for the briefing; reuse its element model rather than a second map drawer. Do not fold this
+  into the animation (`BL-812`): the sheet is right or wrong on a still screen. *Playtest after
+  fix:* `--menu=loadboard-campaign` beside the CM01 screenshot at the same window size, then a real
+  campaign launch to see the memento and objectives follow the profile and the mission.
+  *Cross-refs:* `BL-812`, `BL-813`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
+  `CSVM/src/UI/CampaignBriefingPage.cs` (the map and pin drawer to share).
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
