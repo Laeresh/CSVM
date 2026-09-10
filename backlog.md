@@ -2609,18 +2609,6 @@ The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 complete — the chrome playtest F52/`BL-126` closed it out). New splitscreen findings mint here as
 usual.
 
-- `BL-788` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Seat 0's whole frame drives another pilot's campaign flight check.**
-  *Evidence:* `OriginalShell.StepSeat` routes seat 0 through `SeatZeroFrame`, which reduces the frame
-  to its pointer only on the per-seat aircraft screen. On `CampaignScreen.FlightCheck` the reduction
-  does not apply, so while the check of the seat `_campaign.Field.Current` names is showing, seat 0's
-  cursor, Accept and Back reach it as well as that seat's own device: seat 0 can change a guest's
-  ammunition, aircraft and readiness. The later seat's own arm is already correct, `own` being true
-  exactly when the field stands on its index. *Fix shape:* widen `SeatZeroFrame`'s screen test to the
-  flight check, on the same rule the per-seat screen takes, the seat's identity rather than the
-  device kind. *⚠ Traps:* keep the pointer, as the per-seat screen does; the mouse rides seat 0's
-  source and is the one device a guest with no pad can use. Seat 0 must still drive its OWN check,
-  which is what the field's index answers. *Cross-refs:* `BL-747`'s closing commit, which found this
-  as the same shape of defect on the neighbouring screen and left it out of scope.
 - `BL-380` `[Bug]` `[Blocked: per-instance fog shader uniforms]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Fog-zone selection stays
   player-1-only in splitscreen: `csky_fog_color`/`_range`/`_alt`/`csky_world_light` are one GLOBAL
   shader uniform set, written from rig 0's camera weather state alone

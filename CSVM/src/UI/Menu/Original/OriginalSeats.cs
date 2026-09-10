@@ -106,10 +106,11 @@ public sealed partial class OriginalShell
     public static string AirframeKey(int index) => AirframeKeyPrefix + index;
 
     /// <summary>Applies one frame of one seat's commands. A seat drives its walk's screens while it
-    /// is the one picking, the per-seat aircraft screen and the Weapon Loadout opened from it (seat
-    /// 0's frame reduced to its pointer there, see <see cref="SeatZeroFrame"/>), its own check on the
-    /// campaign's flight check, and every other screen if it is seat 0; a later seat anywhere else
-    /// can only leave with Back, from any screen, as a guest may.</summary>
+    /// is the one picking, the per-seat aircraft screen and the Weapon Loadout opened from it, and
+    /// its own check on the campaign, the check and the ammo and plane screens it opens; seat 0
+    /// drives every other screen, its frame reduced to its pointer on a screen standing for another
+    /// seat (see <see cref="SeatZeroFrame"/>). A later seat anywhere else can only leave with Back,
+    /// from any screen, as a guest may.</summary>
     public OriginalStep StepSeat(int index, MenuCommands commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
@@ -125,9 +126,7 @@ public sealed partial class OriginalShell
         }
 
         var seat = seats[index];
-        bool own = OnSeatWalk
-            ? ReferenceEquals(seat, _pickingSeat)
-            : _screen == OriginalScreen.CampaignFlightCheck && _campaign?.Field.Current == index;
+        bool own = OnSeatWalk ? ReferenceEquals(seat, _pickingSeat) : CheckSeat == index;
         if (own)
         {
             return ApplyFrame(commands);

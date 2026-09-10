@@ -792,12 +792,12 @@ page; every pick binds straight to the feature. [../org/hangar.md](../org/hangar
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,
 the cabin, the table of contents, the flight check, ammo and plane selection, the book, a scrap's
-zoom and the briefing dialog. What each screen draws is the shared board component, so the shell
-hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
-into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
-screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
-cues and the dialogs are this file's. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
-their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
+zoom and the briefing dialog. Each screen is drawn by the shared board component, so the shell hosts
+the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer into its
+own board; that flow is never walked, its screen and cursor mirroring this file's. The screen graph,
+the rows at their rectangles, the pointer hit-testing, the cues and the dialogs are this file's, as
+is `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's
+own device driving them while seat 0 keeps its pointer alone. The pages: `src/UI/CampaignFlow.cs`; the screens and their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
 The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding

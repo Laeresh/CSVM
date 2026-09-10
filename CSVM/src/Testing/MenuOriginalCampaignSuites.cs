@@ -42,7 +42,9 @@ internal static class MenuOriginalCampaignSuites
         + "clock and starts its narration through the host's audio once, REPLAY BRIEFING starts it "
         + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
         + "from a blank map with the narration starting over, the flight check walks two debug-joined "
-        + "guests and FLY MISSION leaves as one CampaignMissionExit with three seats, the debrief "
+        + "guests where the seated player's cursor, Accept and Back move nothing on a guest's check "
+        + "and the guest's own Back retreats, and FLY MISSION leaves as one CampaignMissionExit "
+        + "with three seats, the debrief "
         + "return lands on the book with RETURN TO CABIN focused and starts no narration, a pointer "
         + "press on the book's unselected results tab switches the half the card reads and a press "
         + "on the one it swapped with reads Most Recent again, the cabin "
@@ -279,7 +281,8 @@ internal static class MenuOriginalCampaignSuites
             $"focus opens on CHANGE AMMO with FLY MISSION offered ({shell.FocusedKey})");
 
         var setup = host.Features.Get<PlayerSetupFeature>();
-        var guest1 = setup.Join(new MenuIdleSource());
+        var padded = new ScriptedSeat();
+        var guest1 = setup.Join(padded);
         var guest2 = setup.Join(new MenuIdleSource());
         host.Tick(Dt);
         ctx.Check(campaign.Field.Players == 3 && campaign.Field.Current == 0,
@@ -290,8 +293,14 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && campaign.Field.Current == 1 && campaign.Field.Locked,
             $"FLY MISSION on the seated player's check advances to P2's ({campaign.Field.Current}, locked {campaign.Field.Locked})");
         ctx.Check(HasLine(shell.Compose(), "FLIGHT CHECK P2"), $"headed for the guest");
+        string focused = shell.FocusedKey;
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
         Press(host, seat, Back);
-        ctx.Check(campaign.Field.Current == 0, $"Back retreats to the seated player's check ({campaign.Field.Current})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && campaign.Field.Current == 1 && shell.FocusedKey == focused,
+            $"the seated player's cursor, Accept and Back move nothing on the guest's check ({shell.Screen}, {campaign.Field.Current}, {shell.FocusedKey})");
+        Press(host, padded, Back);
+        ctx.Check(campaign.Field.Current == 0, $"the guest's own Back retreats to the seated player's check ({campaign.Field.Current})");
         fly = Row(shell, "FlyMission")!;
         Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
         fly = Row(shell, "FlyMission")!;
@@ -309,7 +318,7 @@ internal static class MenuOriginalCampaignSuites
                 $"for the seated profile at seq 0 with three seats ({exit.Profile}, {exit.MissionSeq}, {exit.Seats.Count})");
             ctx.Check(exit.Seats[0].PlaneNode == PlanePickerRoster.AirframeNode(profile.Planes[0].Airframe) && exit.Seats[0].Fit != null,
                 $"seat 0 flies the profile's plane with its campaign fit ({exit.Seats[0].PlaneNode})");
-            ctx.Check(exit.Seats[1].Pads.Count == 0 && exit.Seats[2].Pads.Count == 0, $"the device-less guests carry no pads");
+            ctx.Check(exit.Seats[1].Pads.Count == 0 && exit.Seats[2].Pads.Count == 0, $"the pad-less guests carry no pads");
         }
 
         ctx.Check(!host.Shown && Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Visible,

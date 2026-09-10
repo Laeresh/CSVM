@@ -551,8 +551,9 @@ public sealed partial class OriginalShell
     }
 
     /// <summary>Applies one frame of seat 0's commands, under the rule <see cref="StepSeat"/>
-    /// applies to it: on the per-seat aircraft screen picking for another seat, only its pointer
-    /// counts. The pointer, when present, is in authored pixels.</summary>
+    /// applies to it: on a screen standing for another seat, the per-seat aircraft screen picking
+    /// for one and the campaign check's screens on a guest's, only its pointer counts. The pointer,
+    /// when present, is in authored pixels.</summary>
     public OriginalStep Step(MenuCommands commands) => StepSeat(0, commands);
 
     // One seat's frame applied to the screen showing, the seat's own right to drive it already

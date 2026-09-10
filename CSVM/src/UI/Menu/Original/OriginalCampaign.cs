@@ -146,6 +146,17 @@ public sealed partial class OriginalShell
     // The screens whose fields are board combos, so a list of theirs can stand open.
     private bool IsComboScreen => IsCampaignScreen || _screen == OriginalScreen.SeatPlane;
 
+    // The flight check's screens: the check itself and the ammo and plane screens its own rows
+    // open, which no other door reaches. All three stand for one player at a time, so the seat the
+    // field names owns them; the guest that opened ammo selection is still the seat whose aircraft
+    // it edits.
+    private bool OnCampaignCheck =>
+        _campaign != null && _screen is OriginalScreen.CampaignFlightCheck
+            or OriginalScreen.CampaignAmmo or OriginalScreen.CampaignPlaneSelection;
+
+    // The seat whose check is showing, as its index, or -1 off the check's screens.
+    private int CheckSeat => OnCampaignCheck && _campaign is { } campaign ? campaign.Field.Current : -1;
+
     /// <summary>The Campaign row's door: opens the campaign over the user's profile store and lands
     /// on the profile screen. Nothing happens when the shell has no feature or no store.</summary>
     public void OpenCampaign()

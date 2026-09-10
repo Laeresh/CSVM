@@ -65,12 +65,13 @@ public sealed partial class OriginalShell
         BeginSeatWalkIfDue();
     }
 
-    // Seat 0's frame as the screen showing takes it: whole, except on a walk's screens while
-    // another seat is picking, where only the pointer is kept. ⚠ Keep the pointer. The mouse rides
-    // seat 0's source, so dropping the whole frame would take the one device a pilot without a pad
-    // of their own can pick with; the seat's identity, never the device kind, is what decides here.
+    // Seat 0's frame as the screen showing takes it: whole, except on a screen standing for another
+    // seat, where only the pointer is kept. That is a walk's screens while another seat is picking,
+    // and the campaign check's screens while the field names a guest. ⚠ Keep the pointer. The mouse
+    // rides seat 0's source, so dropping the whole frame would take the one device a pilot without
+    // a pad of their own can pick with; the seat's identity, never the device kind, decides here.
     private MenuCommands SeatZeroFrame(MenuCommands commands) =>
-        OnSeatWalk && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)
+        (OnSeatWalk && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)) || CheckSeat > 0
             ? new MenuCommands { Pointer = commands.Pointer }
             : commands;
 

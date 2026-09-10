@@ -15,7 +15,8 @@ namespace CSVM.Tests;
 /// The Original campaign over the hand-authored layout fixture and a scratch profile store: the
 /// Campaign row's door, the profile screen's box, roster rows, refusals and its two-answer delete,
 /// the cabin's four plaques under the pointer and the keyboard, the briefing, the flight check's
-/// launch, the ammo screen's way back, the hangar over the wallet with the cabin as its return,
+/// launch, the ammo screen's way back, a guest's check driven by its own device and by seat 0's
+/// pointer alone, the hangar over the wallet with the cabin as its return,
 /// the two flight returns' mapping, and every door out leaving no open campaign. Every rectangle
 /// here is the fixture's invented geometry; the game's is read the same way.
 /// </summary>
@@ -328,6 +329,58 @@ public class OriginalCampaignTests : IDisposable
         Assert.Contains(OriginalCues.Click, step.Cues);
     }
 
+    /// <summary>The check standing on a guest belongs to that guest's device and to the mouse
+    /// riding seat 0's source, nothing else of seat 0's: its cursor, Accept and Back would
+    /// otherwise change a pilot's ammunition, aircraft and readiness from another chair. Seat 0
+    /// keeps the whole frame on its own check, which is what the field's index answers.</summary>
+    [Fact]
+    public void SeatZeroDrivesItsOwnCheckAndOnlyItsPointerReachesAGuests()
+    {
+        var shell = Shell(out var campaign, out _, out var setup);
+        Seat(shell, "Zachary");
+        setup.Join(new ScriptedMenuSeat());
+        shell.Step(Accept);
+        var go = shell.Rows.Single(r => r.Key == "GoToFlightCheck");
+        shell.Step(Pointer(go.X + 2f, go.Y + 2f, pressed: true, clicked: true));
+        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+
+        // Seat 0's own check takes its whole frame, into ammo selection and back out.
+        Assert.Equal("ChangeAmmo", shell.FocusedKey);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+        shell.Step(Back);
+        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+
+        // FLY MISSION hands the screen to the guest, and seat 0's cursor, Accept and Back then
+        // move nothing: no row, no ammo screen, no retreat off the guest's check.
+        var fly = shell.Rows.Single(r => r.Key == "FlyMission");
+        Assert.Null(shell.Step(Pointer(fly.X + 2f, fly.Y + 2f, pressed: true, clicked: true)).Exit);
+        Assert.Equal((1, 2), (campaign.Field.Current, campaign.Field.Players));
+        Assert.Equal("ChangeAmmo", shell.FocusedKey);
+        Assert.False(shell.Step(Down).Changed);
+        Assert.False(shell.Step(Accept).Changed);
+        Assert.False(shell.Step(Back).Changed);
+        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+        Assert.Equal(1, campaign.Field.Current);
+        Assert.Equal("ChangeAmmo", shell.FocusedKey);
+
+        // The guest's own device drives it, and the ammo screen its row opens is the guest's too.
+        Assert.True(shell.StepSeat(1, Accept).Changed);
+        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+        Assert.False(shell.Step(Back).Changed);
+        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+        shell.StepSeat(1, Back);
+        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+        Assert.Equal(1, campaign.Field.Current);
+
+        // Seat 0's pointer still reaches the guest's check, the one device a pilot with no pad of
+        // their own has, so the last check's FLY MISSION is the launch for both seats.
+        fly = shell.Rows.Single(r => r.Key == "FlyMission");
+        var exit = Assert.IsType<CampaignMissionExit>(
+            shell.Step(Pointer(fly.X + 2f, fly.Y + 2f, pressed: true, clicked: true)).Exit);
+        Assert.Equal(2, exit.Seats.Count);
+    }
+
     [Fact]
     public void PlaneConstructionOpensTheHangarOverTheWalletWithTheCabinAsItsReturn()
     {
@@ -539,11 +592,14 @@ public class OriginalCampaignTests : IDisposable
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
 
+    private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar) =>
+        Shell(out campaign, out hangar, out _);
+
     // The shell over the fixture, a scripted seat, no extraction, and a private hangar and campaign
-    // feature over this test's scratch stores.
-    private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar)
+    // feature over this test's scratch stores. The setup comes back for the tests that join a guest.
+    private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar, out PlayerSetupFeature setup)
     {
-        var setup = new PlayerSetupFeature();
+        setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
