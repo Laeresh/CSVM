@@ -1216,6 +1216,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   form reads the node's own live flag"), [`docs/formats/gamez.md`](docs/formats/gamez.md)
   (`flags.active` as initial runtime visibility), `WorldBuilder.cs`, `SceneBuilder.cs`.
 
+- `BL-803` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics lays a
+  dithering pattern over the whole screen.** *Evidence:* reported at the controls under Enhanced
+  Graphics as a "dithering effect over the screen"; which chapter, view and window size are not
+  recorded, and the faithful presentation is not reported to show it. Nothing in the Enhanced
+  environment asks for a dither on purpose: `Launcher.cs` builds the `WorldEnvironment` with SSAO,
+  screen-space reflection, glow and an AgX tonemap (`CSVM/src/Session/Launcher.cs:1120-1132`), the
+  sun's shadow with a blur of 1.0 whose own comment records that raising it "dithered the lit
+  water" (`Launcher.cs:91-94`), and the clutter fade dithers only its own fragments
+  (`SceneBuilder.cs:1557`). *Fix shape:* reproduce it, then bisect the effect by disabling SSAO,
+  SSR, glow and the shadow blur one at a time (a `--no-*` style door if none exists) until the
+  pattern goes, and fix that one pass: Godot's SSAO and soft-shadow passes both resolve with a
+  screen-space noise that a low resolution scale or a half-resolution buffer leaves visible.
+  *⚠ Traps:* Godot's own debanding is not enabled here, so the pattern is not that; a screenshot
+  captured through `--shots` is a previous frame's render and carries the burst camera's dither
+  (`CaptureDirector.cs:96`), so judge this at the controls or on an undithered capture.
+  *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
+  ground. *Cross-refs:* `BL-804` (the same sitting's reflection flicker), `docs/architecture/Utils.md`
+  (`GraphicsMode`).
+
+- `BL-804` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics' water
+  reflections flicker at the screen border and around the player's aircraft.** *Evidence:* reported
+  at the controls under Enhanced Graphics as "screen space reflection flickering on screen border
+  and around the plane"; which chapter and view are not recorded. Both places are where
+  screen-space reflection has nothing to reflect: a ray that runs off the screen edge, and the
+  water behind the aircraft, whose reflection the aircraft itself occludes in the depth buffer,
+  so a small camera move flips those texels between a reflection and the fallback and the
+  surface shimmers. The pass is enabled for the water surfaces alone with 64 steps, a fade-in of
+  0.15, a fade-out of 2.0 and a depth tolerance of 0.2 (`CSVM/src/Session/Launcher.cs:78-83`,
+  `1168-1179`). *Fix shape:* lengthen the edge fade and raise the depth tolerance so a lost ray
+  fades into the sky colour instead of cutting, and judge whether the aircraft's own silhouette
+  still shimmers; if it does, the remaining tool is a roughness on the water material, which
+  blurs the reflection and hides the per-texel flip. *⚠ Traps:* the constants are TUNE with no
+  decoded magnitude, so there is nothing to match, only a flicker to remove; do not trade it for
+  a reflection so faint the glossy water arm no longer reads. *Playtest after fix:* a low pass
+  over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
+  crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
+  `EnableWaterReflections`.
+
 ## Effects & animation runtime
 
 - `BL-796` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM01]` **The two hangar hand-over props cannot take the player's livery: their subtrees carry no decal placeholder.**
@@ -2420,6 +2458,149 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
   both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
+
+- `BL-802` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The pause screen
+  marks a completed objective with a red check drawn over the row's number, and the row's text stays
+  black.** *Evidence:* the four `OriginalScreenshots/CAP-45 Mission Pause with objective*.png` stills
+  (CM01, C3/M01, whose four keyed rows fill the parchment). In the first still row 1 carries a
+  red brush-stroke check over its leading "1)"; in the third and fourth, rows 1, 2 and 3 each carry
+  one, drawn over the number so the check overlaps the digit and the text after it does not move.
+  No row drops, no row dims and no row is struck: a completed line reads in the same black italic
+  as an open one, the check is the only mark, and the parchment keeps all four rows throughout.
+  Ours draws a "✓" glyph in a mark column of its own and dims the whole line green
+  (`CSVM/src/UI/ObjectivesHud.cs:34-38`, `199-218`). *Fix shape:* draw the mark in red over the
+  text's own leading characters instead of in a column, keep the completed line's colour, and
+  re-pin the campaign-objectives-hud suite's expectations; the glyph itself stays TUNE, since no
+  extracted asset for it is identified. *⚠ Traps:* the mark column exists because a tick prefixed
+  into the text moved the line (`git log --grep=BL-466`); overlaying the mark as its own label at
+  the row's origin keeps the text where it is without the column. The map flags in the same stills
+  do not change on completion (every "?" flag stays "?" after rows 1 to 3 complete), so nothing on
+  the map side is owed. *Playtest after fix:* `./RunGame.ps1 --campaign=<profile>:0 --debug-pause
+  --debug-objective=N` on CM01, against the CAP-45 stills. *Cross-refs:* `BL-466`'s closing commit (the
+  readout's placement and its mark column), `docs/formats/objectives.md` (the display list).
+
+- `BL-805` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The original's
+  menus fire a press on the release, colour a plaque's lettering gold, orange and red for its three
+  states, draw no version text, swap the pointer bitmap only on an enter or leave, and keep the
+  flag movie looping behind Preferences.** *Evidence:* `CAP-49.mkv` and
+  `CAP-52.mkv` (`playtest/CAP-49/`, `playtest/CAP-52/`, stills and a 6 fps pointer track). A press
+  acts on the frame after the release, never on the button-down: QUIT held red for 1.4 s did nothing
+  until released (CAP-49 t=52.7 to 54.1), and four presses in CAP-52 land one to two frames after the
+  pressed art ends. A plaque's three states differ only in lettering colour, measured on the same
+  bitmap as gold #B99950 at rest, orange #A85B26 under the pointer and red #A32620 while held, the
+  rollover arriving on the frame the hot point enters the box. Multiplayer lights and takes the
+  active pointer like the other five; no take draws any plaque disabled. Nothing is drawn at
+  `mm_t_title`: a static-pixel map over ten seconds of the moving movie leaves only the logo, the
+  six plaques and the frame. The movie fills the 4:3 frame edge to edge, loops on a cycle near 8 s,
+  and keeps running in phase behind Preferences and every leaf page. The active pointer stands over a
+  live button, a plaque, an edit box and an open dropdown's rows, the passive one over a roster row,
+  a scrap and dead space, hotspot at the bitmap's top-left; and a pointer already inside a button
+  when a screen is drawn keeps the bitmap it arrived with (CANCEL PURCHASE at CAP-52 t=143.7 to
+  145.3 stays passive through its rollover and press). Ours fires on the button-down and swaps
+  the pointer by where it stands (`CSVM/src/UI/Menu/Original/OriginalShell.cs`,
+  `PointerSeat.cs`). *Fix shape:* fire on the release with the held frame drawn until then; read
+  the three lettering colours off the layout's colour tail and check the drawn frames against the
+  measured values; draw no title text; swap the pointer bitmap on enter and leave events only;
+  leave the movie's place black, since the extraction carries no `CrimFlag.MPG`, and record that
+  as the missing asset. *⚠ Traps:* Multiplayer stays in its disabled frame by the user's decision
+  until multiplayer is implemented, a deliberate departure from the live plaque the film shows;
+  the keyboard and pad focus walk stays a remake equivalence, since no take pressed a key on any
+  screen; the takes are silent, so nothing here touches a sound. *Playtest after fix:*
+  `./RunGame.ps1 --presentation=original`, hold a plaque down and release off it, against
+  `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-806` to `BL-808` (the
+  same takes' page-level corrections), `docs/org/menu-inventory.md` Part 4.
+
+- `BL-806` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Preferences and
+  its leaves: Video stacks ACCEPT over CANCEL, Keys draws CANCEL left of ACCEPT, a dropdown draws
+  only as many rows as it has items, and Escape inside an armed rebind cell binds Escape.**
+  *Evidence:* `CAP-51.mkv` (`playtest/CAP-51/`, one still per page). The Preferences page draws the
+  logo, the panel, the title, the four doors with all four descriptions standing at once, CONTROLS
+  live, and RETURN TO MAIN MENU as its only exit (t=3.0). Game Options offers Difficulty Normal,
+  Hard, Hardest reading Normal, Default View Cockpit, First Person, Exterior, and an eye toggle for
+  Auto Head Turn, ACCEPT left of CANCEL (t=6 to 7.5). Audio has the In-Game Music toggle, three
+  sliders and Sound Quality Low or High (t=26, 67). Video is a taller panel of nine rows with
+  ACCEPT above CANCEL at bottom right (t=75). Controls offers Keyboard Only, Joystick/Key,
+  Mouse/Keyboard, a Mouse Sensitivity slider and KEYS AND BUTTONS (t=84). Keys and Buttons draws
+  seven category plaques, an Action / Control A / Control B list with the category row in red,
+  RESET TO DEFAULT, and CANCEL left of ACCEPT (t=96); clicking a cell arms it as an empty outlined
+  box and the next key is written in, Escape included (t=125). The difficulty list draws three rows,
+  the skill list on Instant Action three (CAP-50 t=62.6), so a short list is only as tall as its
+  items. *Fix shape:* check each page of `OriginalGameOptions.cs`, `OriginalVideo.cs` and the
+  controls pages against the stills and align the exit pair's order and stacking, the list height
+  and the rebind capture. *⚠ Traps:* whether a setting reverts on CANCEL is unfilmed, since no page
+  was re-entered after one (`CAP-51`'s re-record); the Audio page's sound is unfilmed, the track
+  being silent. *Cross-refs:* `BL-805`, `CAP-51`, `docs/org/menu-inventory.md` Part 4.
+
+- `BL-807` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The Instant
+  Action screen keeps the ace duel's enemy boxes, its paging button and its "[continued ...]" text
+  drawn but inert, highlights the hovered dropdown row beside the current one, and scrolls a list
+  past its window with a bar.** *Evidence:* `CAP-50.mkv` (`playtest/CAP-50/`, 36 stills). The ace
+  duel empties the four enemy boxes in place with pale arrows and keeps `[continued ...]` and the
+  down button live (t=13.0); at zero wingmen the wingman-plane box blanks while the Wingmen count
+  stays live, and the radio stays with its Wingmen option greyed (t=13.0, 77.5). The up/down
+  buttons replace the whole right page with the three later waves under `[go back ...]` (t=70.0),
+  a zero-count wave's boxes blanked. A dropdown opens flush under its box at its width with the
+  current value and the hovered row both highlighted, and the pilot-plane list scrolls with its own
+  bar at 21 entries in a 20-row window (t=28.8). A closed box lightens under the pointer (t=47.6).
+  WEAPON LOADOUT opens AMMO SELECTION for whichever of Pilot or Wingmen the radio holds (t=78,
+  99.5, 117.5), and FLY MISSION opens a loading spread titled by the mission type, not the preset
+  (t=142). Ours omits the wave rows and the page-down button under the ace duel
+  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs:417-421`), and draws BUILD CUSTOM PLANE
+  and WEAPON LOADOUT live already, as the film does. The film also opens on preset 0 with its row
+  selected and writes the preset's name on select rather than on VIEW STORY; ours opens and names
+  differently by the user's decision, a deliberate departure and not a defect. *Fix shape:* keep
+  the enemy boxes, the paging button and the text drawn and disabled under the ace duel; add the
+  hover highlight to an open dropdown, the lightened closed box, and the scrollbar once a list
+  outgrows its window. *⚠ Traps:* keyboard and pad stay unfilmed; the profile in the take carried
+  ten custom planes, which is what pushed the pilot-plane list past its window. *Cross-refs:*
+  `BL-805`, `BL-808`, `CAP-50`, `docs/formats/instant-action.md`, `docs/org/menu-inventory.md`
+  Part 4.
+
+- `BL-808` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The plane
+  construction hub's default build is not the Devastator, its running total sits on the top rail,
+  every door shows a `$$$ on` scrap, and the INVENTORY's Export is drawn live.** *Evidence:*
+  `CAP-50.mkv` t=118.6 to 139.9 from Instant Action and `CAP-52.mkv` t=109.9 to 145.3 from the
+  cabin (`playtest/CAP-50/29-35`, `playtest/CAP-52/pc1.png`, `inventory.png`, `msgbox.png`). The
+  name screen is a dialog over the blueprint page with Load Default Configuration drawn checked;
+  checked, it opened on a Balmoral at $10720 from Instant Action and a Bloodhawk at $9088 from the
+  cabin, both complete stock builds, so what picks the airframe is not read. The standing tab
+  draws raised and pale with dark lettering, the other five purple with white, none gated. PLANE
+  COST stands on the page's top rail beside the plane name and follows every pick. The airframe
+  list draws eleven rows with no bar; the decal picker is a five-wide thumbnail grid with its own
+  arrows. The Instant Action door wears READY TO EXPORT and CANCEL EXPORT with a `$$$ on $50000`
+  scrap on every tab; the cabin door wears READY TO PURCHASE and CANCEL PURCHASE with `$$$ on
+  $16780`. SELL PLANES opens the INVENTORY with a plane dropdown, Sell and Export as grey pills with
+  blue lettering, Sell turning green under the pointer, a value block and DONE back to the tab;
+  selling asks with the Yes/No box (Yes left) and a plane that cannot be sold refuses with the OK
+  box, neither drawing a focus. No airframe switch raised string 206 on a fresh build. CANCEL
+  drops the build. The weight line turns red over capacity. Ours starts on the Devastator
+  (`HangarFeature.DefaultAirframe`, read off langui 3005), writes PLANE COST at the layout row's
+  own position, shows no scrap on the export door and draws Export disabled
+  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:78`, `1305`). *Fix shape:* check the drawn PLANE
+  COST against the still's top rail, since the layout row is the decode and the film only says
+  where it landed; draw the scrap on both doors with its figure; draw Export live (what it does is
+  unfilmed); keep the Devastator until the decode says what picks the airframe, since two takes
+  gave two different ones and langui 3005 names the Devastator; draw the standing tab raised
+  rather than disabled. *⚠ Traps:* out-of-order tabs,
+  Purchase, the cleared default box, string 206 on a customised build and string 203 are all
+  unfilmed (`CAP-53`). *Cross-refs:* `BL-807`, `CAP-53`, `docs/org/hangar.md`,
+  `docs/org/menu-inventory.md` Part 4.
+
+- `BL-809` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **An opened scrap
+  reads differently from the original's: the typeface differs, and where ours shows the scrap's
+  picture the original shows a newspaper-header-like image and then the text.** *Evidence:* reported
+  at the controls as "Scrapbook Texts look different in the original", detailed as "Typeface, the
+  image not showing but another one like the header of a newspaper and then the text". `CAP-52.mkv`
+  t=46 to 88.8 opens six scraps full page (`playtest/CAP-52/scrapclick.png` holds one), which is the
+  A/B to read them against. Ours composes the zoom family's background, the scrap's inset image and
+  up to three text lines at the family's boxes, with TUNE font sizes and no font-face decode
+  (`CSVM/src/UI/CampaignScrapbookZoomPage.cs:27-31`, `ScrapbookComposition.ZoomFamily`). *Fix
+  shape:* still the six opened scraps from CAP-52, put each beside ours at the same scrap, and say
+  per family what the original draws where (which image, which text boxes, which face); then align
+  the composition and pick the nearest shipped face. *⚠ Traps:* the look is the user's call, so a
+  montage goes in front of them before anything is parked on a distance; `SCRAPBOOK.CSV` and the
+  scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
+  `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
 ## Splitscreen
 
