@@ -96,7 +96,7 @@ navigation; the launchscreen owns every Godot control. Screens are a stack rathe
 order, since the campaign's navigation is a graph, and `Registry` maps a `CampaignScreen` to its
 page factory. A page contributes pictures, strokes and captions and names which authored button
 each row presses; `CampaignBoards` supplies the geometry through `Layout`, which is Built-in's
-alone. `Modal` and `Message` are the dialog and the refusal band every screen shares.
+alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin from outside the campaign, and where the feature's chapter cinema plays.
 
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
@@ -644,7 +644,7 @@ than failing. The roster operations create, seat, delete and record the last-pla
 original's own words; the mission operations settle which `cm_sequence` entry the screens after
 the cabin are about, with its briefing, its wingman flag and its change-plane rules; the writes
 save the loadout, the planes, an exported build and the mission exit. How a presentation offers
-them, cursors and working copies included, stays the presentation's. Read `CampaignFlow.cs` next.
+them, cursors and working copies included, stays the presentation's. It also carries the one `ChapterCinema` the host built it with, which is how a cabin door reaches a film. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs
 The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,
@@ -806,7 +806,7 @@ zoom and the briefing dialog. What each screen draws is the shared board compone
 hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
 into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
 screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
-cues and the dialogs are this file's. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
+cues and the dialogs are this file's, as is `OpenCabin`, every door onto the cabin from outside the campaign and where the feature's chapter cinema plays. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs

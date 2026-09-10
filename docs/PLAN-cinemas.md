@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Audio playback and A/V sync from the stream's presentation timestamps
 22. ☑ The boot sequence on a bare launch, with the skip and `--skip-intro`
-23. ◐ The chapter cinema and its passenger-cabin handoff
+23. ☑ The chapter cinema and its passenger-cabin handoff
 24. ☐ The closing cinema, its gate and its scrapbook handoff
 
 ## Dependency and parallelism notes
@@ -967,18 +967,48 @@ any argument plays nothing. `.\RunTests.ps1` wall time is unchanged, checked aga
 before they learn it, which is the cost Decision 8 accepted knowingly. ⚠ The names resolve
 case-insensitively or three of these four files are not found.
 
-## C23 ◐ The chapter cinema and its passenger-cabin handoff
+## C23 ☑ The chapter cinema and its passenger-cabin handoff
 
-**Landed so far.** `ChapterCinema` in `CSVM/src/Session/ChapterCinema.cs`, engine-free and
-unit-tested in `CSVM.Tests/ChapterCinemaTests.cs`, with its `docs/architecture/Session.md` entry and
-its index bullet. It answers what the flow has to answer and nothing more: which film a campaign
-position plays, whether the position plays one at all, that it plays once, and the single handoff
-that follows. `ChapterOf(seq)` is `seq / MissionsPerChapter + 1`, `OpensChapter(seq)` is true only at
-`seq` 0, 5, 10, 15 and 20, `NameOf(chapter)` is the identity `CAMPAIGNINTRO.SCRIPT` builds, and
-`OpenCabin(profile, showCabin)` reads the position through `CampaignProgression.NextMissionSeq`, so
-no screen passes a chapter number in. Playing is an injected delegate with `Launcher.PlayCinema`'s
-shape, which is what makes the decision testable with no engine present and what kept this item off
-`Launcher.cs` while `C22` held that file.
+**Landed.** `ChapterCinema` in `CSVM/src/Session/ChapterCinema.cs` owns the decision and
+`CSVM.Tests/ChapterCinemaTests.cs` pins it: `ChapterOf(seq)` is `seq / MissionsPerChapter + 1`,
+`OpensChapter(seq)` is true only at `seq` 0, 5, 10, 15 and 20, `NameOf(chapter)` is the identity
+`CAMPAIGNINTRO.SCRIPT` builds, and `OpenCabin(profile, showCabin)` reads the position through
+`CampaignProgression.NextMissionSeq`, chooses the film, passes `CinemaScreen.ChapterKeys` and wraps
+the handoff in the `Once` latch the original's own `EC` stands for. Playing is an injected delegate
+with `Launcher.PlayCinema`'s shape, so the whole decision tests with no engine present.
+
+**The wiring is one instance and one seam.** `Launcher` builds a `ChapterCinema` over `PlayCinema`
+and hands it to the host's shared `CampaignFeature`, which is the one object both presentations'
+campaigns already read and the only place that reaches both without an engine type crossing into
+either. Every door onto the cabin from outside the campaign runs through it: Built-in's
+`CampaignFlow.OpenCabin` (the roster's CONTINUE, `SelectProfile`'s flight and debrief returns, the
+screenshot aids) and Original's `OriginalShell.OpenCabin` (CONTINUE, and `ShowCabin`'s flight return
+and aids). A campaign whose feature carries no cinema opens the cabin exactly as it did before, and
+that is what every engine suite and every golden gets, since nothing but `Launcher` hands one over.
+
+**The instance lives on `Launcher`, so a chapter's film plays once per program run.** Entering the
+campaign plays it, leaving to the main menu and coming back does not, and a restart plays the
+current chapter's film again until that chapter's first mission has been flown. That is a chosen
+behaviour rather than a decoded one, since the original's own rule sits behind callback 2151, which
+this plan puts out of scope. The field that holds the instance says exactly that, so the next reader
+does not correct it toward a latch persisted in the profile.
+
+**⚠ The wiring contract named one door per presentation, and neither is the one a player takes.**
+`CampaignFlow.SelectProfile` is reached only by Built-in's flight return, its debrief return and
+`WalkCampaignAid`; the roster's CONTINUE runs `CampaignRosterPage.Continue` into
+`Feature.ContinuePlayer` and then `GoTo(Cabin)`, and never touches it. `OriginalShell.ShowCabin` is
+the flight return and the aids alone; Original's CONTINUE is `OriginalShell.ContinuePlayer`, which
+called `ShowCampaign(CampaignCabin)` directly. Wiring the two named doors and stopping would have
+left this item's own first Verify run, a new pilot picked on the default presentation, playing
+nothing. Both CONTINUE paths are wired here. Built-in's is one line in
+`CSVM/src/UI/CampaignRosterPage.cs` and Built-in's feature gained one constructor argument in
+`CSVM/src/UI/Menu/CampaignFeature.cs`, both outside the wiring pass's own file list.
+
+**⚠ Built-in's `--menu=campaign-roster` now plays `chap1` before its shot.** That aid seats an
+unprogressed profile on the cabin, which `MenuCampaignSuites` pins as "lands on the first one's
+cabin", and an unprogressed profile is a chapter-opening position. Every other campaign aid seats a
+profile three missions in and plays nothing. No golden takes a campaign aid at all, and no engine
+suite builds a menu through `Launcher`, so this reaches a developer's own aid run and nothing else.
 
 **The campaign state does supply the chapter, and it was already being read.** `seq / 5 + 1` is the
 story chapter, settled twice over:
@@ -996,31 +1026,15 @@ alone, 1 failed against 23 passed, and passing `CinemaScreen.ClosingKeys` in pla
 fails only `TheChapterCinemaTakesSpaceAndReturnWhereTheClosingOneDoesNot`, also 1 against 23
 (METHOD-9). Both perturbations were restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
 
-**⚠ Nothing is wired, which is why this item is ◐ and not ☑.** No call site exists anywhere in
-`CSVM/src` outside the module itself: both cabin doors are untouched, `Launcher.cs` is untouched, and
-a campaign entered from the menu behaves exactly as it did. No film can reach a screen through this
-code yet.
-
-**The wiring contract.** Wire `CSVM.Session.ChapterCinema` into the campaign's two cabin doors.
-Construct one over `Launcher.PlayCinema`, as
-`new ChapterCinema((name, then, skip) => launcher.PlayCinema(name, then, skip))`, and hand that
-instance to the doors rather than letting them build one, since both are engine-free and neither can
-reach a `Launcher`. Then each door's body becomes its own current body wrapped in one call:
-`chapterCinema.OpenCabin(profile, () => <what the door does today>)`. The doors are
-`CampaignFlow.SelectProfile(CampaignProfileDef)` in `CSVM/src/UI/CampaignFlow.cs`, today
-`Feature.SelectProfile(profile); GoTo(CampaignScreen.Cabin);`, and
-`OriginalCampaign.ShowCabin(string)` in `CSVM/src/UI/Menu/Original/OriginalCampaign.cs`, today a
-`SeatProfile` followed by `ShowCampaign(OriginalScreen.CampaignCabin)`. `OpenCabin` takes a
-`CampaignProfileDef` and the action that opens the cabin, reads the story position itself, chooses
-the film, passes `CinemaScreen.ChapterKeys` on its own and returns whether a film played, so do not
-pass a chapter number, a film name or a skip set in. `ChapterCinema` is landed, unit-tested and
-documented, and it is **not wired**: no campaign entry plays a cinema today and both doors are
-exactly as they were. The one decision the wiring pass still owns is where the instance lives, since
-the latch that stops a film replaying is per instance: one held by `Launcher` replays a chapter only
-after a restart, one per presentation replays it on the next visit to the campaign, and which of
-those the original did is behind callback 2151, which this plan puts out of scope.
+**The eight new checks in `CSVM.Tests/ChapterCinemaWiringTests.cs` drive both presentations' doors,
+and they can fail.** Putting Built-in's CONTINUE back to `Flow.GoTo(CampaignScreen.Cabin)` and
+Original's back to `ShowCampaign(OriginalScreen.CampaignCabin)` fails exactly the two CONTINUE
+checks, 2 failed against 30 passed, each reporting the film as null where `chap1` was expected
+(METHOD-9). Both perturbations were restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
 
 **Verified.** <pending orchestrator run>
+
+### Original approach (kept for reference)
 
 **Goal.** Each chapter's cinema plays before its chapter and hands off to the passenger cabin, with
 the original's skip keys.

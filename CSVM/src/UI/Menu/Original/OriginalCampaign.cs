@@ -180,7 +180,9 @@ public sealed partial class OriginalShell
     }
 
     /// <summary>Seats the named profile re-read from the store and lands on the cabin, the door a
-    /// flight return takes; false, on the profile screen, when the profile cannot be read.</summary>
+    /// flight return and the campaign screenshot aids take; false, on the profile screen, when the
+    /// profile cannot be read. True says the profile is seated, not that the cabin is showing: a
+    /// chapter cinema plays first where one is due, and the cabin arrives when it stops.</summary>
     public bool ShowCabin(string profile)
     {
         if (_flow == null || _campaign == null || !_campaign.SeatProfile(profile))
@@ -188,7 +190,7 @@ public sealed partial class OriginalShell
             return false;
         }
 
-        ShowCampaign(OriginalScreen.CampaignCabin);
+        OpenCabin();
         return true;
     }
 
@@ -1014,6 +1016,21 @@ public sealed partial class OriginalShell
         }
 
         entry.Set(_campaign.Profile?.Name ?? entry.Text.Trim());
+        OpenCabin();
+    }
+
+    // Every door onto the cabin from outside the campaign: CONTINUE above, the flight return and
+    // the screenshot aids through ShowCabin. The seated profile's chapter cinema plays first where
+    // one is due, and the cabin opens on the frame the film stops. A position inside a chapter, and
+    // a shell with no cinema (every suite), opens the cabin straight away.
+    private void OpenCabin()
+    {
+        if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated)
+        {
+            cinema.OpenCabin(seated, () => ShowCampaign(OriginalScreen.CampaignCabin));
+            return;
+        }
+
         ShowCampaign(OriginalScreen.CampaignCabin);
     }
 

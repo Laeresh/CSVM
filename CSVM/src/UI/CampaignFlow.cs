@@ -545,6 +545,23 @@ public sealed class CampaignFlow
     public void SelectProfile(CampaignProfileDef profile)
     {
         Feature.SelectProfile(profile);
+        OpenCabin();
+    }
+
+    /// <summary>Opens the cabin on the seated profile, playing that profile's chapter cinema first
+    /// where one is due (<see cref="CampaignFeature.ChapterCinema"/>); the cabin then opens on the
+    /// frame the film stops. Every door onto the cabin from outside the campaign takes this one:
+    /// the roster's CONTINUE, <see cref="SelectProfile"/>'s flight return and the screenshot aids.
+    /// With no cinema, and for a position inside a chapter, it is the plain
+    /// <see cref="GoTo"/>.</summary>
+    public void OpenCabin()
+    {
+        if (Feature.ChapterCinema is { } cinema && Feature.Profile is { } seated)
+        {
+            cinema.OpenCabin(seated, () => GoTo(CampaignScreen.Cabin));
+            return;
+        }
+
         GoTo(CampaignScreen.Cabin);
     }
 

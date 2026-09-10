@@ -221,6 +221,12 @@ public partial class Launcher : Node3D
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
+    // The process's one chapter cinema, so a chapter's film plays once per program run. Entering
+    // the campaign plays it; leaving to the main menu and coming back does not. A restart plays the
+    // current chapter's film again until that chapter's first mission has been flown. This is a
+    // chosen behaviour, not a decoded one: the original's rule sits behind GUI callback 2151, which
+    // nothing here decodes. Do not replace it with a latch persisted in the profile.
+    private ChapterCinema? _chapterCinema;
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
     // cabin track would restart every time the player left a board. See docs/org/music.md.
@@ -1325,7 +1331,10 @@ public partial class Launcher : Node3D
         host.Features.Add(new PlayerSetupFeature());
         var strings = UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
-        host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode));
+        // The campaign feature carries the chapter cinema because both presentations already read
+        // that one feature, and neither of them can reach a Launcher to play a film through.
+        _chapterCinema ??= new ChapterCinema((name, then, skip) => PlayCinema(name, then, skip));
+        host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode, _chapterCinema));
         // The keymap editor writes through C21's per-player store. The write is injected rather
         // than reached for, so the feature itself stays engine-free and a suite can hold a
         // different one.
