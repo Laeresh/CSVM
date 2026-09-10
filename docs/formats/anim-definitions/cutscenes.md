@@ -524,9 +524,28 @@ other chapter's rows are `half_cone` except its own auto row.
    frame.
 
 A row that passes and carries `auto` sets `DAT_00719109` instead of starting anything; the next
-frame `FUN_0045e120` turns that into the on-screen auto-land prompt (message `0xb5`, or `0xb6` when
-the binding is a pad button, over key binding `0x6a`). Every other row starts its animation with
-`FUN_004edda0` and registers the mission-script host on it with `FUN_004ee160`.
+frame `FUN_0045e120` turns that into the on-screen auto-land prompt. Every other row starts its
+animation with `FUN_004edda0` and registers the mission-script host on it with `FUN_004ee160`.
+
+##### The prompt's own wording
+
+`FUN_0045e120` reads command `0x6a` (Auto-Dock, [`../../org/input.md`](../../org/input.md)) out of
+the binding manager's typed slots in the manager's own order and formats the message id that slot
+implies through `FUN_0059cd70`, the `LoadStringA` + `FormatMessageA` pair:
+
+| Slot read | Name formatter | Message |
+|---|---|---|
+| keyboard A, then B (`FUN_005370d0`) | `GetKeyNameTextA`, modifier prefixes prepended | `0xb5` |
+| joystick, bits 22-25 (`FUN_00537130`) | the 16-entry button-name table at `0075cb10` | `0xb5` |
+| mouse, bits 26-27 (`FUN_00537150`) | the 4-entry button-name table at `0075cb50` | `0xb6` |
+
+The joystick slot is read only while the input mode at `DAT_0064f6c0` is 2, and the mouse slot only
+while `DAT_0071c2a0 & 2` is set. Nothing resolving means no prompt at all, not a keyless one.
+
+Both ids live in the **message table**, not in `langui.dll`: `0xb5` is `MSG_PRESS_AUTOLAND`
+("Press %1 to autodock") and `0xb6` is `MSG_CLICK_AUTOLAND` ("Click %1 to autodock"), so the second
+wording is the **mouse** one rather than a pad one. The id-to-row mapping is
+[`../missions.md`](../missions.md#message-table)'s.
 
 #### Arming is the mission script's job
 

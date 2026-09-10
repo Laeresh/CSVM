@@ -197,6 +197,9 @@ internal sealed class HumanFlightAdapter
             // one player), empty reads none. Coalescing here flew a single player pad-dead.
             PadDevices = _human.PadAssignment?[pi],
             UseKeyboard = pi == 0,
+            // The whole messages.json table, not just the weapon rows: the pilot HUD words its
+            // auto-land prompt out of the same file.
+            Strings = _aircraft.WeaponMessages,
             AllowPause = true,
             Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam : null,
             Shake = new PlaneShake(_aircraft.Shakes),

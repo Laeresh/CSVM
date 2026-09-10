@@ -2142,18 +2142,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
-- `BL-510` `[Feature]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The auto-land prompt shows a placeholder line instead of the original's
-  `langui` string.** *Evidence:* the original lights message `0xb5` (or `0xb6` for a pad binding)
-  when the approach table's `auto` row passes (`FUN_0045e120`). `ExtractRof.ps1` already produces
-  `extracted/rof/ui_strings.json` from `langui.dll`'s STRINGTABLE (1247 rows), but ids `181` and
-  `182` are not present under that table's numbering, so `FlightHud.AutoLandPrompt` ships a
-  plain-English stand-in marked as such. *Fix shape:* find how the exe maps a message id onto the
-  STRINGTABLE (an offset or a second table), resolve `0xb5`/`0xb6`, and draw the resolved string
-  through `UiStrings`. *⚠ Traps:* ⚠ Do not guess the wording; the placeholder stays until the
-  mapping is decoded. ⚠ The binding is `F9` / left-stick click, not the original's `A`
-  (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
-  *Cross-refs:* `PLAN-M5-polish-2` C10.
-
 - `BL-637` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A targeted patrol boat shows no name line. The answer is per roster
   block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence
   (traced):* first reported in CM12 (C2/M01), where the boats target but carry no text, and again in

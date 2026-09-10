@@ -946,13 +946,13 @@ ground-blow write stay on `FlightController`, which has the live world a source 
 
 ## src/Flight/FlightHud.cs
 Everything one pane draws for its pilot, in one module the flight node holds privately: the heading
-tape, the cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker,
-the targeting HUD, the `--hud-font-test` overlay and the flight text block. Nothing outside this
-class writes one of them. With the cockpit interior on screen the dials, tape and text block come
-off (`SetCockpitView`), its panel carrying them; the pipper and marker HUDs stay. The per-frame
-entry is `Draw(in FlightHudState)`, a struct of aircraft STATE rather than readout values, so the
-text, dial positions and gates are composed here and assertable with no Godot `Control`, as statics
-(`ComputeStallWarning`, `MphFromSpeedMps`, `FeetFromWorldY`, `ComputeAgl`, `ComposeTextLines`).
+tape, the cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker, the
+targeting HUD, the `--hud-font-test` overlay and the flight text block, none written from outside.
+With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its
+panel carrying them; the pipper and marker HUDs stay. The per-frame entry is
+`Draw(in FlightHudState)`, a struct of aircraft STATE, so text, dials and gates compose here and
+assert with no Godot `Control`: `ComputeStallWarning`, `ComputeAgl`, `ComposeTextLines`, and
+`ComposeAutoLandPrompt`, `messages.json`'s own auto-land wording with the seat's control in it.
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

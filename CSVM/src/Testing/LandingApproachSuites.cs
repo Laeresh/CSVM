@@ -277,7 +277,8 @@ internal static class LandingApproachSuites
     [Suite("landings-auto-land-button",
         "the auto-land button over the first story mission's BUILT world: flying the chapter's "
         + "auto row lights AutoLandOffered but starts nothing while the button is up, a realtime "
-        + "frame of the flown rig's own _Process actually draws the prompt, pressing the button "
+        + "frame of the flown rig's own _Process draws the prompt in the message table's own "
+        + "wording with this seat's control in it, pressing the button "
         + "starts the same animation the manual row would, the cutscene host still runs it, and "
         + "holding the button past the handoff does not re-fire the row")]
     internal static void AutoLandButton(TestContext ctx) =>
@@ -621,8 +622,11 @@ internal static class LandingApproachSuites
         report.AppendLine($"drawn on a realtime frame: DrawsTextBlock={rig.PilotHud.DrawsTextBlock}, " +
             $"text='{rig.PilotHud.DrawnText}'");
         ctx.Check(rig.PilotHud.DrawsTextBlock, $"the flown pane still holds a text block to draw into");
-        ctx.Check(rig.PilotHud.DrawnText is { Length: > 0 } drawn && drawn.Contains("AUTO-LAND"),
-            $"…and a realtime frame actually puts the auto-land prompt on it");
+        // The shipped wording out of messages.json, not a stand-in: this rig reads no keyboard, so
+        // MSG_PRESS_AUTOLAND's %1 carries its pad control.
+        string wanted = Messages.Load(ctx.MessagesPath).Format("MSG_PRESS_AUTOLAND", "Pad Left Stick");
+        ctx.Check(rig.PilotHud.DrawnText is { Length: > 0 } drawn && drawn.Contains(wanted),
+            $"…and a realtime frame actually puts '{wanted}' on it");
 
         rig.AutoLand = true;
         for (int i = 0; i < RestartFrames && !cutscene.Playing; i++)
@@ -3565,6 +3569,11 @@ internal static class LandingApproachSuites
             ctx.Host.AddChild(rig);
             rig.Setup(new FlightModel(stats), null, new CamParams(), Vector3.Zero,
                 Vector3.Forward, ApproachThrottle, ApproachSpeedMps);
+            // What FlightControllerBuild.Bind does for a session rig; this suite builds the
+            // controller by hand, so the prompt would otherwise stay at its data-less stand-in.
+            rig.PilotHud.AutoLandPrompt = FlightHud.ComposeAutoLandPrompt(
+                Messages.Load(ctx.MessagesPath),
+                rig.FlightKeymap.Bindings(Bindings.InputAction.AutoLand), rig.UseKeyboard);
             return rig;
         }
         finally
