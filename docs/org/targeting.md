@@ -55,6 +55,7 @@ Two findings will not be guessed correctly from the screenshots:
 | `FUN_004a2570` | The structure constructor. Stores the scene node at `+0xc` and fills `+0x74` from `FUN_004cf2c0` |
 | `FUN_004a2730` | The per-frame refresh of `+0x74`/`+0x80`, gated on the `+0x8f` moving flag |
 | `FUN_004cf2c0` | Node → point: the active bbox (`FUN_004cd960`, six floats at `node + 0x70`), its midpoint (`FUN_004d8b10`), in the frame `FUN_004cef20` builds |
+| `0x004ac720` | **The turret's cost function**, slot 0 of the query vtable `0x00608b68`. Range gate, then `1200 * weight + distance` |
 | `FUN_004b9770` | The take-a-hit path. Appends the shooter to the attacker queue |
 | `FUN_004a5f40` | `Target::GetColor`, the marker colour rule |
 | `FUN_004574d0` | **Draws the bracket box** (six line sprites) and computes the label anchor |
@@ -289,6 +290,68 @@ type for that reason.
 A turret's `SetTeam` override (`FUN_004acb70`) clears its current target pointer `+0x210` whenever
 the team actually changes (`0x004acb90`), so a retargeted turret drops a now-friendly lock rather
 than keeping it.
+
+### The two targetable bytes the predicate reads first
+
+Before the team comparison, `FUN_004a5b90` requires the candidate entity's `+0x8c` **and** `+0x90`
+to be non-zero. Both are on the combat-object base, and both are decoded:
+
+- **`+0x8c` is the scene node's active bit, walked up the parent chain.** `FUN_004a2730` rewrites it
+  every frame at `0x004a2840` from `FUN_004a32c0(node)`, which returns 1 only when the node and
+  every ancestor still carry bit 2 of `node+0x24`, the same active bit a destroy sequence clears.
+  The construction default at `0x004a2637` is 0, so an object is untargetable until its first
+  refresh. This is what silences a turret the instant an airframe swap switches the flying model
+  off, and it is the only one of the two that moves at runtime.
+- **`+0x90` is a construction-time targetable byte.** `FUN_004a2570` writes 1 at `0x004a264f`, and
+  exactly two sites clear it: `0x004a3000` in `FUN_004a2e00` (an object built from a `targets.zrd`
+  record) and `0x004a34b5` in `FUN_004a3360` (the same fallback path for a scene object). An
+  aeroplane keeps the 1 for its whole life. Nothing in the mission-script verb table writes it.
+
+### The picker's cost, and the three weights it spends
+
+`FUN_0041f9c0` asks its query object for each candidate's cost through the query vtable's slot 0.
+For a turret that vtable is `0x00608b68` and the function is `0x004ac720`:
+
+- **The range gate is first and is hard.** The candidate's own position getter against the query's
+  position (`0x005388d0`), compared at `0x004ac73e` to the query's `+0x18`, which `FUN_004aabb0`
+  fills from the turret's `+0x168`, the entry's authored `DETECTION_RANGE`. Anything further away
+  returns the constant at `0x00608b40`, `1e+21`. That is the same value a candidate the predicate
+  rejected scores, and it is above the loop's `1e+20` seed, so an out-of-range candidate can never
+  win the minimisation.
+- **In range the cost is `1200 * weight + distance`** (`0x00603534` holds `1200.0`, and the add is
+  at `0x004ac81a`). The weight starts at `1.0` and is **replaced**, not accumulated:
+  `0.8` when the candidate's entity is the local player's plane (`DAT_0071c298`, compared at
+  `0x004ac75a`); `0.6` when the turret's own `+0x6f` byte is set and the candidate casts to
+  `TargetProjectile`; `1.4` when it casts to `TargetVehicle` whose `+0x67c` is `4`, the `wingman`
+  mode class, which is the same preference the AI pilot's scorer spends as an additive `+0.4`
+  ([`aiPilot.md`](aiPilot.md)). A further `0.5` comes off whatever weight stands when the wrapper's
+  `+0x1c` virtual reports the gasbag flag, and a `TargetTurret` candidate instead takes `42.0`
+  (`0x00608b6c`) onto its **distance**.
+
+So the weights are 240 m, 480 m and 600 m of slack in a distance race, not filters. A turret on the
+player's team never reaches the `0.8` branch at all, because the predicate has already rejected the
+player as friendly.
+
+### Nothing in the turret path reads an objective, capture or pickup flag
+
+⚠ **The pool membership, `FUN_00422890` and the cost function above are the entire filter.** Every
+call the turret update `FUN_004aabb0` makes on the way to a lock was read end to end, and neither
+`+0x4c` (`otherTarget`) nor `+0x4d` (`objectiveTarget`) appears in any of them. Those two bytes are
+read in exactly one place, `FUN_004b5cd0`, the **player's own** candidate class filter, which is why
+`ADD_OBJECTIVE_TARGET` moves a marker and changes nothing about who shoots. There is no capture
+state, no "marked for pickup" bit, and no per-zeppelin exclusion list on the turret side: a
+zeppelin record's `targets` list is the broadside's, parsed by `FUN_004bd8d0` and never consulted
+by `FUN_004aabb0`.
+
+**The worked example is C3/M05's Pandora.** `ai.zrd` gives the four `piratezep` turret entries
+`TEAM 1` with `DETECTION_RANGE` 600 m and 800 m, and the mission's `OBJECTIVE1` wakes them two
+seconds in (`WAKEUP_ZEP_TURRETS [piratezep]`). The three `britbalmoral_*` roster blocks author team
+`2` in `aiv.zrd` slot 3, and their `britbalmoral` vehicle def inherits `mode jet` from
+`basic_airplane`, so they take the plain `1.0` weight a Peacemaker takes. The mission's own script
+never issues `SET_AI_TEAM` on them. A Balmoral flying its docking approach to `pzhookpoint` is
+therefore both hostile to those rings and the nearest thing to them, and the original engages it.
+The rings fall silent only when the docking sequence switches the flying airframe off and `+0x8c`
+goes to 0.
 
 ### What a mission structure's team is
 
@@ -785,6 +848,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
 | A turret's candidate set | all four pools (the table above): the whole `VehicleList`, every turret, the `+0x8d` mission structures, and tracked ordnance | `TurretController.AcquireTarget` walks the whole `VehicleList` through `ProjectilePool.CollectVehicleList`, so a hostile hull is a candidate beside the aircraft. The other three pools are not scanned yet |
+| A turret's cost | a hard `DETECTION_RANGE` gate, then `1200 * weight + distance` with three class weights | `TurretController.AcquireTarget` gates on `Def.DetectionRange` and then scores plain distance, so the player, torpedo and `wingman` weights are not spent. Nothing in either version consults an objective or capture flag |
 | A turret against a structure | admitted through `MStructList`, and hostile when the structure's team differs | `TurretController.AcquireTarget` walks the structure pool after the vehicles against the same running best, through `ProjectilePool.CollectMissionStructures`, and drops a gasbag as the decoded pass does |
 | A mission structure's team | the node's own ownership slot for the mission being flown, inherited from the parent chain where it authors none | the same: `SceneBuilder` resolves the slot for the built mission (`GameZ.WorldObjectTeam`, `SceneBuilder.MissionSlot`) and stamps it, and `DestructibleRegistry.Register` reads it onto the pool, so C1/M05's hospital ship is the player's and a zeppelin's zones are the enemy's |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |

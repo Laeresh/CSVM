@@ -760,19 +760,42 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-717` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The Pandora's turrets fire
-  at the Balmoral the player is about to capture.** *Evidence:* reported at the controls on CM02
-  (C3/M05): the player's own zeppelin's turrets shot at the last Balmoral, the bomber the mission
-  wants boarded. The three `britbalmoral_*` blocks are enemy-team aircraft in `aiv.zrd.json`, so
-  the turret acquisition (aircraft only, `BL-626`'s closing commit) sees them as any other hostile.
-  The Pandora's record names `player` alone under `targets`, and that field is the broadside's,
-  not the turrets'. *Fix shape:* decode whether the original's turret acquisition skips an
-  objective-flagged aircraft, a capture subject, or an aircraft the script has marked for pickup,
-  or whether the Pandora fires at Balmorals in the original too and the report is a preference.
-  Read the turret target scan the ring uses before adding a rule. *⚠ Traps:* a Balmoral carrying
-  the objective flag is one candidate on the Enemy cycle, not two, and that is a HUD matter; this
-  entry is about rounds leaving the Pandora. Do not fix it by making the Balmorals friendly, since
-  the player has to shoot them to the capture threshold. *Playtest after fix:* CM02, let the third
+- `BL-717` `[Feature]` `[S]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]` `[CM02]` **The Pandora's
+  turrets fire at the Balmoral the player is about to capture, and the original's turrets do the
+  same, so the remaining question is whether to diverge.** *Evidence:* the turret path was read end
+  to end in `crimson.exe`. The gun update `FUN_004aabb0` builds its query through `FUN_00422850`
+  (own position, own team, the `SHOOT_UP_ONLY` byte, and `DETECTION_RANGE` at query `+0x18`) and
+  calls the shared picker `FUN_0041f9c0`. A candidate passes exactly three tests and no others:
+  pool membership, the hostility predicate `FUN_00422890` into `FUN_004a5b90`, and the cost
+  function `0x004ac720`. `FUN_004a5b90` reads the candidate's `+0x8c` (the scene node's active bit
+  walked up the parent chain, rewritten every frame at `0x004a2840` from `FUN_004a32c0`), its
+  `+0x90` (a construction byte written 1 at `0x004a264f` and cleared only for `targets.zrd` world
+  objects at `0x004a3000` and `0x004a34b5`), and the raw team compare. The cost is a hard range
+  gate against the authored `DETECTION_RANGE`, then `1200 * weight + distance`, the weights being
+  the local player (0.8), a `TargetProjectile` under the turret's `+0x6f` flag (0.6) and a
+  `wingman`-mode vehicle (1.4); they are slack in a distance race, not filters. `+0x4d`
+  (`objectiveTarget`) and `+0x4c` (`otherTarget`) are read in one place only, `FUN_004b5cd0`, the
+  player's own candidate class filter, so `ADD_OBJECTIVE_TARGET` moves a marker and changes nothing
+  about who shoots; there is no capture state and no marked-for-pickup bit anywhere in the turret
+  path. On CM02 in particular: `extracted/zrdr/ai.zrd.json`'s four `piratezep` turret entries author
+  `TEAM 1` with `DETECTION_RANGE` 600 m and 800 m, `extracted/C3/M05/zrdr/objectives.zrd.json`'s
+  `OBJECTIVE1` wakes them two seconds in, the three `britbalmoral_*` blocks author team `2` in
+  `aiv.zrd.json` slot 3 and never take a `SET_AI_TEAM`, and the `britbalmoral` def in
+  `extracted/zrdr/vehicle.zrd.json` inherits `mode jet`, so the bomber carries the same 1.0 weight a
+  Peacemaker carries and is the nearest candidate of all while it flies its approach to
+  `pzhookpoint`. The full decode is `docs/org/targeting.md` ("Nothing in the turret path reads an
+  objective, capture or pickup flag"). *Question for the user:* keep the original's behaviour and
+  close this, or add a remake-only hold-fire rule (a ring skips an aircraft the mission has flagged
+  `objectiveTarget`, or one inside its own zeppelin's docking approach) and accept the divergence?
+  *Fix shape if the answer is "diverge":* one predicate in `TurretController.AcquireTarget`
+  (`CSVM/src/Flight/TurretController.cs`) over the flag `AiFlightAssembler` already stamps, plus an
+  engine suite over C3/M05's built world where a ring holds fire on a Balmoral in range and still
+  engages a Peacemaker. *⚠ Traps:* a Balmoral carrying the objective flag is one candidate on the
+  Enemy cycle, not two, and that is a HUD matter; this entry is about rounds leaving the Pandora. Do
+  not fix it by making the Balmorals friendly, since the player has to shoot them to the capture
+  threshold. The one thing the original genuinely does is fall silent the instant the docking
+  sequence switches the flying airframe off, because `+0x8c` goes to 0; if CSVM keeps firing through
+  the swap that is a separate defect from this preference. *Playtest after fix:* CM02, let the third
   Balmoral reach the Pandora and watch the rings. *Cross-refs:* `BL-714` (the same rings,
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
