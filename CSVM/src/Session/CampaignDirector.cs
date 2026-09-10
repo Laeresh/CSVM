@@ -297,7 +297,8 @@ public sealed class CampaignDirector
         var store = CampaignProfileStore.UserProfiles();
         if (store.Load(spec.CampaignProfile) is not { } profile)
         {
-            GD.PushWarning($"--campaign={spec.CampaignProfile}: no such profile — flying without a mission");
+            GD.PushWarning($"--campaign={spec.CampaignProfile}: " +
+                           $"{store.LoadProblem(spec.CampaignProfile)}, flying without a mission");
             return null;
         }
 

@@ -314,6 +314,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   sibling agent's probe finishing mid-run kills your viewport; count the Godot processes naming
   another worktree before believing an error census.** The signature is a repeating per-frame
   `NullReferenceException`, a `global_shader_parameter_set` condition and two `viewport is null` lines.
+- **LOG-20** — **A worktree's `user://` is the SAME directory as the main checkout's, so a probe
+  reads and writes the real saved profiles, planes, bindings and options; copy a profile under a new
+  name before naming it in `--campaign=`, and delete the copy.** Godot derives `user://` from
+  `project.godot`'s `config/name` alone, so every tree of this project shares
+  `%APPDATA%\Godot\app_userdata\CSVM\`, which each run prints as its `[core] user=` line.
 
 ## WORLD — world data and runtime traps
 

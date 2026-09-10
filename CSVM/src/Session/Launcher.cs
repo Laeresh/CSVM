@@ -489,6 +489,10 @@ public partial class Launcher : Node3D
         // log. The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
         Log.Open(_repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
+        // Every persisted store resolves against this root (profiles, hangar planes, bindings,
+        // options), and it is derived from the project name alone, so a worktree run shares it with
+        // the main checkout. Printed so a "not found" against a file on disk is answered, not guessed.
+        Log.Info("core", $"user={ProjectSettings.GlobalizePath("user://")}");
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
         Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");

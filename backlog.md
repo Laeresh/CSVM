@@ -2928,24 +2928,6 @@ usual.
 
 ## Tooling, platform & docs
 
-- `BL-675` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **A `--campaign=<profile>:<n>` run launched through `RunProbe.ps1` from an
-  agent worktree reported no such profile, though the profile exists.** *Evidence:* a probe run
-  answered `--campaign=Gab: no such profile, flying without a mission` from
-  `CampaignDirector.TryCreate`, and repeated it against a fresh copy of the same profile. The store
-  is `CampaignProfileStore.UserProfiles()`, `user://Profiles/` globalized, and `user://` resolves by
-  the project name alone (`project.godot` sets `config/name="CSVM"`, and no custom user dir is set),
-  so a worktree should reach the same directory as the main checkout. That directory does hold the
-  profile, and a sibling agent's worktree run created a profile there in the same period, so the
-  store is reachable from a worktree at least for writing. **The cause is therefore not established
-  and the symptom is not reliably reproduced.** *Fix shape:* reproduce deliberately from a worktree
-  with nothing else running, print the globalized `user://` path at startup, and compare it against
-  the main checkout's. If they differ, the launch is picking up a different project name or user
-  dir; if they match, the fault is in the load rather than the path. *⚠ Traps:* do not "fix" this by
-  pointing the store at an absolute path; `user://` is what makes the release build's profiles land
-  in the right place. A `--campaign=` probe writes mission results back into the profile it names,
-  so any repro copies a profile under a new name and deletes the copy afterwards. *Impact:* while it
-  stands, an agent cannot take a screenshot deep inside a campaign mission from a probe, so items
-  whose verification wants one fall back to an engine suite plus an at-the-controls `PT-` row.
 - `BL-677` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **CSVM starts a `CALL_ANIMATION` callee inside the caller's own tick; the
   original starts it on the next one.** *Evidence:* `AnimRuntime.Start` advances a new instance at
   t=0 inside the `CallAnimation` dispatch (`CSVM/src/Mech3/AnimRuntime.cs:1763-1775`), so a callee's
