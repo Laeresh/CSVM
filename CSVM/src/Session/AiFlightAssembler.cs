@@ -205,11 +205,14 @@ internal sealed class AiFlightAssembler
                 ? authored
                 : $"ai{index + 1}_{spawn.PlaneName}";
             _worldRoot.AddChild(controller);
-            // The engine loop, positional and culled at 2000 units. Attach no-ops to null when the
-            // session found no sound archive; the own-ship FlightAudio is never built for an AI.
-            controller.EngineAudio = AiEngineAudio.Attach(controller, _world.Sounds, _world.SoundDefs, stats);
-            // The weapon voice beside it, culled by each cue's own authored audible distance. Its
-            // listeners are the human pilots, the seam the projectile pool's one-shots measure against.
+            // ⚠ Both voices take the SAME listener seam, the human pilots the projectile pool's
+            // one-shots measure against. An aircraft answering two listener models let a
+            // splitscreen pane hear its engine and not its guns, or the reverse.
+            controller.EngineAudio = AiEngineAudio.Attach(controller, _world.Sounds, _world.SoundDefs,
+                stats, _world.HumanPositions);
+            // Attach no-ops to null when the session found no sound archive; the own-ship
+            // FlightAudio is never built for an AI. The engine loop culls at 2000 units, each
+            // weapon cue at its own authored audible distance.
             controller.WeaponAudio = AiWeaponAudio.Attach(controller, _world.Sounds, _world.SoundDefs,
                 _world.HumanPositions);
 

@@ -18,9 +18,10 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class AiEngineAudio : Node3D
 {
-    /// <summary>Where the session's listeners are, one per splitscreen pane. The cull measures to
-    /// the nearest of them, since that is the pane whose volume wins the mix. Left null, the cull
-    /// falls back to this node's own viewport camera.</summary>
+    /// <summary>Where the session's human pilots are, one per splitscreen pane, the same
+    /// nearest-human seam <see cref="AiWeaponAudio"/> and <c>ProjectilePool</c> measure against.
+    /// The cull takes the nearest of them, so one aircraft answers one listener model however you
+    /// ask it. Left null, the cull falls back to this node's own viewport camera.</summary>
     public Func<IReadOnlyList<Vector3>>? Listeners;
 
     private PlaneStats _stats = null!;
@@ -30,6 +31,11 @@ public sealed partial class AiEngineAudio : Node3D
     private bool _engineDamaged;
     private float _enginePitchMul = 1f;
     private bool _culled = true;   // starts culled so the first in-range frame logs its start
+
+    /// <summary>Whether the engine loop is sounding, read off the live player rather than off a
+    /// flag this component keeps, which could agree with itself while the voice is stopped.
+    /// Internal for the listener suite's cull half.</summary>
+    internal bool EngineSounding => _engine is { Playing: true };
 
     /// <summary>Builds this aircraft's engine audio and hangs it under <paramref name="controller"/>,
     /// or returns null when the session found no sound archive. The spawner's whole share of the

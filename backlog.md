@@ -1414,17 +1414,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-792` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **One AI aircraft answers two listener models: its weapon voice culls against the nearest human, its engine voice against a viewport camera.**
-  *Evidence:* `AiWeaponAudio` is attached with `_world.HumanPositions`, the nearest-human seam
-  `ProjectilePool` measures its weapon one-shots against; `AiEngineAudio` is attached with
-  `listeners: null` and falls back to the node's own viewport camera. In splitscreen those two
-  answers differ, so the same aeroplane can be audible on one measure and culled on the other, and
-  which pane hears it depends on which voice you ask. *Fix shape:* wire the engine voice to the same
-  seam, so one aircraft has one listener model. *⚠ Traps:* this changes existing cull behaviour on the
-  engine voice, which is why `BL-079` left it alone rather than folding it in; expect the engine
-  voice's audible set to move, and check a 2-pane and a 4-pane session, not just a lone camera.
-  *Cross-refs:* `BL-079`'s closing commit, `docs/architecture/Flight.md`'s `AiEngineAudio` and
-  `AiWeaponAudio` entries.
 - `BL-793` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **No turret has a gun voice: a carried gunner, a zeppelin ring and a ground mount all fire silently.**
   *Evidence:* `snd_turretgun` and `snd_chaingun` both carry `3D`, `LOOPED` and a `RANGE` pair in
   `sounds.zrd.json`, so the data authors them as world sounds, and no turret path plays a loop at all.

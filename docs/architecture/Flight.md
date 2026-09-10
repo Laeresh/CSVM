@@ -716,21 +716,21 @@ separately from a plain evaluation. `AdvanceDamagedRearm` is the pure re-arm tim
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` an AI-flown aircraft carries instead of it: the same two engine
 slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `EngineAudioCurves`' cull
-distance and starts them again inside it. `Attach` is the whole spawner-side surface. It carries no
-own-ship concept, since an AI kill is audible from its crash animation's own sound events. The
-`sound` log carries the whole observable: what each slot resolved to at build, then one line per cull
-transition and one per damaged-engine swap. The healthy to damaged edge waits out the shared re-arm
-timer on `PlaneStats.DamagedTimer`; the other is immediate. `AiWeaponAudio` is its weapon-side
-sibling, separate because this component's contract is the engine slots alone.
+distance and starts them again inside it. Its listeners are the human pilots, the seam
+`AiWeaponAudio` and `ProjectilePool` read too, so one aircraft answers one listener model. `Attach`
+is the whole spawner-side surface, and no own-ship concept rides here, since an AI kill is audible
+from its crash animation's own sound events. The `sound` log carries the whole observable: each
+slot's build verdict, one line per cull transition, one per damaged-engine swap. The healthy to
+damaged edge waits out the shared re-arm timer on `PlaneStats.DamagedTimer`; the other is immediate.
 
 ## src/Flight/AiWeaponAudio.cs
 The weapon half of the positional pair an AI-flown aircraft carries instead of `FlightAudio`: the
 sustained-fire gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding this node, so
 another aircraft's guns are heard from where that aircraft is. `Attach` is the whole spawner-side
-surface and `WeaponAudioCues` is where the cues come from. The cull is each cue's own authored
-audible distance, and it rides `StartGunLoop`, which the fire path already calls every frame the
-loop is wanted; the listeners are the human pilots, the seam `ProjectilePool` also measures against.
-A definition without the `3D` flag gets no world player, since the data gives it no distance model.
+surface; the cues come from `WeaponAudioCues`. The cull is each cue's own authored audible distance
+and rides `StartGunLoop`, which the fire path already calls every frame the loop is wanted; the
+listeners are the human pilots, the one seam `AiEngineAudio` and `ProjectilePool` read too. A
+definition without the `3D` flag gets no world player, since the data gives it no distance model.
 The `sound` log carries the observable: what resolved, then the loop's verdict and every transition.
 
 ## src/Flight/WeaponAudioCues.cs

@@ -2798,6 +2798,172 @@ internal static class AiSuites
         }
     }
 
+    // One aircraft, one listener model. The seam identity and the cull verdicts are asserted
+    // together because either alone passes a broken build: a bound seam still proves nothing about
+    // what the cull reads, and a cull verdict taken with the camera parked far away would pass on
+    // the camera fallback too.
+    [Suite("ai-engine-listeners",
+        "an AI aircraft's engine voice and its weapon voice read the SAME nearest-human seam the "
+        + "session binds, so one aeroplane answers one listener model rather than one measure per "
+        + "voice: the engine loop sounds while a human pane is inside the cull distance, the "
+        + "NEAREST pane decides it (never the first entry), it falls silent only when every pane "
+        + "is outside and sounds again on any one of them coming back, in a two-pane and a "
+        + "four-pane session alike, and it does none of that off the viewport camera, parked ON "
+        + "the aircraft throughout so a verdict read from it could only say audible, with a "
+        + "`sound` log line either way")]
+    internal static void AiEngineListeners(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var textures = new TextureArchive(texturesPath);
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        ProjectilePool? pool = null;
+        FlightController? ai = null;
+        // Put back on the way out: the harness camera is shared with every other suite, and this
+        // one parks it deliberately below.
+        var cameraWas = ctx.Camera.GlobalTransform;
+        try
+        {
+            var live = new ProjectilePool(textures, archive, soundDefs, soundGroups: soundGroups);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new AircraftAssemblyResources
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                Textures = textures,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            // Two panes, the splitscreen shape the two answers used to differ on. Both start
+            // inside the cull so the first frame has a verdict to move away from.
+            var pos = new Vector3(0f, 500f, 0f);
+            float cull = EngineAudioCurves.CullDistance;
+            var panes = new List<Vector3> { pos + new Vector3(300f, 0f, 0f), pos + new Vector3(900f, 0f, 0f) };
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs,
+                new FlightWorldBindings
+                {
+                    Projectiles = live,
+                    Gamez = planesGamez,
+                    Sounds = archive,
+                    SoundDefs = soundDefs,
+                    SoundGroups = soundGroups,
+                    HumanPositions = () => panes,
+                },
+                new HumanRosterBindings());
+
+            ai = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, pos, pos + Vector3.Forward,
+                AiPilot.HoldingCourse(pos, pos + Vector3.Forward), Team: InstantActionRuntime.EnemyTeam));
+
+            ctx.Check(ai.EngineAudio != null && ai.WeaponAudio != null,
+                $"the spawned aircraft built both voices (engine={ai.EngineAudio != null} weapons={ai.WeaponAudio != null})");
+            if (ai.EngineAudio is not { } engine || ai.WeaponAudio is not { } weapons)
+            {
+                return;
+            }
+            ctx.Check(engine.Listeners != null && ReferenceEquals(engine.Listeners, weapons.Listeners),
+                $"both voices hold the SAME listener seam (engine bound={engine.Listeners != null})");
+
+            // ⚠ The control on every cull check below: the camera the old engine path fell back to
+            // is parked ON the aircraft, so a verdict read off it could only ever say audible.
+            ctx.Camera.GlobalPosition = ai.GlobalPosition;
+            float toCamera = ctx.Camera.GlobalPosition.DistanceTo(ai.GlobalPosition);
+            ctx.Check(toCamera < 1f,
+                $"the viewport camera sits on the aircraft, {toCamera:0} m off, so no silence below can be its answer");
+
+            var culls = new List<string>();
+            string[] lines = System.Array.Empty<string>();
+            bool wasDebug = Utils.Log.ConsoleShows("sound", Utils.Log.Level.Debug);
+            try
+            {
+                Utils.Log.Configure("sound:debug");
+                using var sink = Utils.Log.PushConsoleSink(line =>
+                {
+                    if (line.Contains("ai engine ") && (line.Contains(" culled ") || line.Contains(" audible ")))
+                        culls.Add(line);
+                });
+
+                const float dt = 1f / 60f;
+                var drive = new EngineDrive(0.5f, 0f, 0f);
+                void Step() => engine.Update(dt, drive, 0.5f, 1f);
+
+                Step();
+                ctx.Check(engine.EngineSounding,
+                    $"the loop sounds with a pane {panes[0].DistanceTo(ai.GlobalPosition):0} m off, inside the {cull:0} m cull");
+
+                // The nearest pane decides, not the first: the near one moves to the back of the
+                // list and the verdict must not move with it.
+                panes[0] = pos + new Vector3(cull * 4f, 0f, 0f);
+                Step();
+                ctx.Check(engine.EngineSounding,
+                    $"…and still sounds with the near pane second in the list, {panes[1].DistanceTo(ai.GlobalPosition):0} m off");
+
+                // Every pane outside now. This is the frame the old build could not reach: with no
+                // seam bound it measured the camera above and stayed audible.
+                panes[1] = pos + new Vector3(cull * 5f, 0f, 0f);
+                Step();
+                ctx.Check(!engine.EngineSounding,
+                    $"with BOTH panes past the cull ({panes[0].DistanceTo(ai.GlobalPosition):0} m and {panes[1].DistanceTo(ai.GlobalPosition):0} m) the loop is silent");
+
+                // One pane back inside, the second half of the pairing: a component that stopped
+                // for good would pass the check above on its own.
+                panes[1] = pos + new Vector3(300f, 0f, 0f);
+                Step();
+                ctx.Check(engine.EngineSounding,
+                    $"…and sounds again the moment one pane is back inside it, {panes[1].DistanceTo(ai.GlobalPosition):0} m off");
+
+                // The other splitscreen shape. The measure is over EVERY pane, so a fourth one on
+                // its own inside is enough to sound the loop, and taking it out is enough to stop it.
+                panes[0] = pos + new Vector3(cull * 4f, 0f, 0f);
+                panes[1] = pos + new Vector3(cull * 5f, 0f, 0f);
+                panes.Add(pos + new Vector3(cull * 6f, 0f, 0f));
+                panes.Add(pos + new Vector3(600f, 0f, 0f));
+                Step();
+                ctx.Check(engine.EngineSounding,
+                    $"in a FOUR-pane session the one pane inside, the fourth, keeps the loop sounding from {panes[3].DistanceTo(ai.GlobalPosition):0} m");
+                panes[3] = pos + new Vector3(cull * 7f, 0f, 0f);
+                Step();
+                ctx.Check(!engine.EngineSounding,
+                    $"…and taking that last one out past the {cull:0} m cull silences it again");
+                ctx.Check(culls.Count(l => l.Contains(" culled ")) >= 1
+                    && culls.Count(l => l.Contains(" audible ")) >= 2,
+                    $"the `sound` log carries both verdicts (lines={culls.Count})");
+                // ⚠ Snapshot before noting: ctx.Note echoes each line to the console, which the sink
+                // above would match and append to the very list being walked.
+                lines = culls.ToArray();
+            }
+            finally
+            {
+                Utils.Log.Configure(wasDebug ? "sound:debug" : "sound:info");
+            }
+            foreach (string line in lines)
+            {
+                ctx.Note($"{line}");
+            }
+        }
+        finally
+        {
+            ctx.Camera.GlobalTransform = cameraWas;
+            ai?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The most recent one-shot player under a WorldSounds node.
     internal static AudioStreamPlayer3D? LastOneShotPlayer(WorldSounds sounds)
     {
