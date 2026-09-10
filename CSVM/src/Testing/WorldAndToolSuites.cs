@@ -1496,28 +1496,6 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // SUNLIGHT_ORIENTATION's euler pair as a direction, written out from the binary's own law
-    // (docs/org/weather.md) so a suite's expectation does not come from the reader under test.
-    private static Vector3 SunBeam(float pitchRad, float yawRad) => new Vector3(
-        -Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
-        Mathf.Sin(pitchRad),
-        -Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
-
-    // Moves the camera, lets the rig resolve the new weather state, then draws one frame of the
-    // interior pass: the beam the panel is lit by, how far it sits off the session sun, and the
-    // state that produced it. The Sync is what a flown frame does, so the mirror under test is the
-    // shipped one rather than a probe of its own.
-    private static (Vector3 Beam, float Off, int State) CrossedBeam(WeatherRig rig,
-        CockpitOverlay pass, CameraController cam, IReadOnlyList<PlayerRig> rigs, Vector3 at,
-        DirectionalLight3D clone, DirectionalLight3D sun)
-    {
-        rigs[0].Camera.Position = at;
-        rig.Tick(rigs);
-        pass.Sync(Basis.Identity, cam, 0f);
-        var beam = -clone.GlobalBasis.Z;
-        return (beam, beam.AngleTo(-sun.GlobalBasis.Z), rigs[0].CameraWeatherState);
-    }
-
     // ---- the fade re-derive's ancestor walk ------------------------------------------------------
 
     // A synthetic tree rather than a chapter's, because what is measured is the shape of the walk
@@ -1697,4 +1675,27 @@ internal static class WorldAndToolSuites
             cost += PerNodeWalkCost(child);
         return cost;
     }
+
+    // SUNLIGHT_ORIENTATION's euler pair as a direction, written out from the binary's own law
+    // (docs/org/weather.md) so a suite's expectation does not come from the reader under test.
+    private static Vector3 SunBeam(float pitchRad, float yawRad) => new Vector3(
+        -Mathf.Cos(pitchRad) * Mathf.Sin(yawRad),
+        Mathf.Sin(pitchRad),
+        -Mathf.Cos(pitchRad) * Mathf.Cos(yawRad));
+
+    // Moves the camera, lets the rig resolve the new weather state, then draws one frame of the
+    // interior pass: the beam the panel is lit by, how far it sits off the session sun, and the
+    // state that produced it. The Sync is what a flown frame does, so the mirror under test is the
+    // shipped one rather than a probe of its own.
+    private static (Vector3 Beam, float Off, int State) CrossedBeam(WeatherRig rig,
+        CockpitOverlay pass, CameraController cam, IReadOnlyList<PlayerRig> rigs, Vector3 at,
+        DirectionalLight3D clone, DirectionalLight3D sun)
+    {
+        rigs[0].Camera.Position = at;
+        rig.Tick(rigs);
+        pass.Sync(Basis.Identity, cam, 0f);
+        var beam = -clone.GlobalBasis.Z;
+        return (beam, beam.AngleTo(-sun.GlobalBasis.Z), rigs[0].CameraWeatherState);
+    }
+
 }
