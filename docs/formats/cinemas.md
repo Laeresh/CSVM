@@ -92,6 +92,11 @@ Three places name them, and none is a directory scan. The executable itself name
 **`fmv.zrd`, as `PLAYAVI` actions**, holds the boot sequence: its `INTRO` block plays `MSopen1.mpg`,
 waits, fades and plays `zipper.mpg`, and its `CHAP0` block plays `Chap0.mpg`. Those are the only
 three `.mpg` strings in the whole extracted reader set, and the block's `IMAGE_PATH` is `video`.
+The two logos are not the whole of `INTRO`. It opens on `SHOWIMAGE MM_splashbackground` carrying
+`MSG_COPYRIGHT1` and `MSG_COPYRIGHT2` at 400,550 and 400,565 in the `CopyrightNotice` font, holds it
+for `WAIT 5.0`, waits a second after `MSopen1.mpg`, fades to black over `FADEOUT 0,0,0 1.0 1.0`
+before `zipper.mpg`, and waits a second again after it. `CHAP0` is the one `PLAYAVI` and nothing
+else.
 
 **`ASSETS/LAYOUT.CSV`, as `movie` widgets**, holds every other placement. A `movie` row is widget
 type `M` with script class `@ctl@AL`, and it carries an `ArtPath`, a position, a `Loops` count and a

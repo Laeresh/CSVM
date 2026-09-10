@@ -145,7 +145,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the cinema sequence
 
 21. ☑ Audio playback and A/V sync from the stream's presentation timestamps
-22. ☐ The boot sequence on a bare launch, with the skip and `--skip-intro`
+22. ☑ The boot sequence on a bare launch, with the skip and `--skip-intro`
 23. ☐ The chapter cinema and its passenger-cabin handoff
 24. ☐ The closing cinema, its gate and its scrapbook handoff
 
@@ -855,7 +855,94 @@ against `VideoStartTime` rather than assuming a common origin. ⚠ Sound outlast
 file, by 0.01 to 0.25 s, so a few frames of audio tail after the last picture is correct and is not
 a sync bug to chase.
 
-## C22 ☐ The boot sequence on a bare launch, with the skip and `--skip-intro`
+## C22 ☑ The boot sequence on a bare launch, with the skip and `--skip-intro`
+
+**Landed.** Three lines of flow and one rule. `Launcher.PlayBootSequence` chains three
+`PlayCinema` calls, `MSopen1.mpg` then `zipper.mpg` then `Chap0.mpg`, and hands the launchscreen
+the last continuation; it sits inside the existing `ShowsMenu` branch **after** the no-game-data
+check, so a tree with no extraction still gets its instruction screen rather than three warnings and
+a menu. `SessionSpec.PlaysBootSequence` is the rule: `!SkipIntro && Args.Count == 0`. Nothing else
+in `Launcher` moved, and `C21`'s `PlayCinema` contract is untouched, so `C23` and `C24` call the
+member they were promised.
+
+**The suppression is over the raw argument list, not over the recognised flags.** `--not-a-flag` is
+ignored by the parser and still suppresses, which is what makes the rule cheap to reason about: if
+anything followed `--`, no movie plays. `--skip-intro` is therefore redundant by construction, and
+is read anyway (`!SkipIntro &&`) so the flag denies the sequence by meaning rather than by being one
+more argument. It selects no content and forces no mode, so a launch carrying it alone is the bare
+launch minus the movies.
+
+**⚠ `RunGame.ps1` and `RunDev.ps1` can never show the boot sequence.** Both prepend `--volume=1.0`
+when the caller passed no volume of their own, and that is an argument, so the sequence is
+suppressed on every launch either script makes. The two ways to watch it are an exported build
+double-clicked (no arguments, and an exported build's gain defaults to unattenuated) and a bare
+Godot launch in the repo with the `audio.volume` config key set to 1.0, since a repo run's developer
+gain is otherwise 0 and the movies play silent. This follows from the Approach's own rule and is not
+a defect in it, but it is the reason nobody has heard the sequence yet.
+
+**⚠ `INTRO` is six actions and the Evidence named two of them.** Read out of
+`extracted/zrdr/fmv.zrd.json`: `SHOWIMAGE MM_splashbackground` carrying `MSG_COPYRIGHT1` and
+`MSG_COPYRIGHT2` at 400,550 and 400,565 in the `CopyrightNotice` font, `WAIT 5.0`, `PLAYAVI
+MSopen1.mpg`, `WAIT 1.0`, `FADEOUT 0,0,0 1.0 1.0`, `PLAYAVI zipper.mpg`, `WAIT 1.0`. `CHAP0` is the
+single `PLAYAVI Chap0.mpg`. So the copyright card the original holds for five seconds before its
+first logo is a real thing this item does not build: it needs that art, those two message-table
+strings and that font, which is a screen rather than a movie and outside a Goal that names three
+movies. The whole block is now in [`docs/formats/cinemas.md`](formats/cinemas.md) so the next reader
+finds it there rather than in the reader file. **The order and the names the Evidence claimed are
+exactly right**, and the file is the authority for both.
+
+**The skip ends one cinema, not the sequence.** `FUN_0044ae70`'s `PLAYAVI` handler is not decoded,
+so whether a press in the original abandoned the rest of the block is unknown. This takes the
+reading the seam already gives: `CinemaScreen` stops, `Ended` fires, the next `PlayCinema` runs, so
+three presses reach the menu. The Traps section below points the same way: a player who has not
+learned the skip meeting `chap0` is a player who let the two logos go by unpressed.
+
+**Verified.** Four live runs on this tree, each read off its own log, with `CSVM_DATA_ROOT` at the
+primary tree so the movies resolve.
+
+A bare launch (`.\RunProbe.ps1` with no arguments at all) plays all three in order and reaches the
+launchscreen, the whole 179 seconds of it:
+
+```
+INFO  [ui] cinema MSopen1.mpg playing skip=LeftMouse, AnyKey
+INFO  [ui] cinema ended frames=404 clock=13.484s
+INFO  [ui] cinema zipper.mpg playing skip=LeftMouse, AnyKey
+INFO  [ui] cinema ended frames=608 clock=20.274s
+INFO  [ui] cinema Chap0.mpg playing skip=LeftMouse, AnyKey
+INFO  [ui] cinema ended frames=4349 clock=144.973s
+INFO  [ui] menu presentation active=original requested=original
+```
+
+Those three frame counts are `A1`'s census figures for the three files exactly, so each played out
+rather than stopping early. `--volume=1.0` alone and `--skip-intro` alone both reach
+`menu presentation active=original` with **zero** `cinema` lines in the log, which is the "any
+argument plays nothing" half proved on a real launch rather than read off the branch.
+
+`.\RunTests.ps1` PASS, exit 0, **222.9 s**, against `C21`'s 280.1 s on the same budgets file, which
+is unmodified. Build 3.0 s with zero StyleCop warnings; units 24.1 s against a 30 s budget (3788
+passed, 0 failed, 2 skipped of 3790, the two skips being `A3`'s and `C21`'s opt-in whole-file
+walks); engine 153.0 s, 266 passed, errors clean; goldens 42.7 s, **20** shots hash-identical with
+`analysis/goldens/manifest.json` unmodified in `git diff` afterwards (GOLD-9).
+
+**No harness launch played a movie, checked directly rather than inferred from the clock.** The
+battery wrote 50 launch logs and not one carries a `cinema` line; the only two logs on this machine
+that do are the two bare probes above. That is the check that matters here, because a leak into the
+harness would cost minutes per launch and no wall-time reading is needed to see it.
+
+**⚠ Still over budget on the engine stage, and still not this plan's.** 153.0 s against 100 s, where
+`A1` measured 145.6 s, `A3` 126.7 s, `B11` 150.5 s and `B12` 149.0 s. Nothing this item added runs
+in an engine suite.
+
+**⚠ Owed at the controls, and no instrument here replaces it.** Every run above played at gain 0 on
+a hidden desktop, so nobody has watched the sequence or heard it. What is owed is one bare launch
+watched from the copyright-less opening of `msopen1` to the launchscreen, with a key pressed during
+each of the three to confirm the skip lands on the next one, and Decision 8's cost judged rather
+than argued: `chap0` runs 145 seconds and the player meets it before anything has taught them the
+key. Reach it by exporting a build and double-clicking `CSVM.exe`, or by putting `audio.volume` 1.0
+in `CSVM/config.json` and launching Godot on the project with nothing after `--`. Not through
+`RunGame.ps1`, for the reason above.
+
+### Original approach (kept for reference)
 
 **Goal.** Double-clicking `CSVM.exe` plays `msopen1`, `zipper` and then `chap0` before the launch
 screen, and any key or click moves on.

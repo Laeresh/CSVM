@@ -178,6 +178,16 @@ public sealed record SessionSpec
     /// branch. Reproduced deliberately; the equivalence gate compares against it.</summary>
     public bool ShowsMenu => ForceMenu || !HasContentArg;
 
+    /// <summary><c>--skip-intro</c>: no boot sequence on this launch. It exists for the desktop
+    /// shortcut, which is the one launch that would otherwise be bare.</summary>
+    public bool SkipIntro { get; private set; }
+
+    /// <summary>Whether the boot sequence plays before the launchscreen. ⚠ Any argument at all
+    /// suppresses it, so no test, golden or perf launch grows by the three minutes those movies
+    /// run for. <see cref="SkipIntro"/> is read as well, so the flag denies the sequence by
+    /// meaning rather than by being one more argument.</summary>
+    public bool PlaysBootSequence => !SkipIntro && Args.Count == 0;
+
     /// <summary>The session shape's name: the log file's, and the startup timing line's. ⚠ The
     /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
     /// <c>menu-*.log</c>. That is today's behaviour, reproduced on purpose.</summary>
@@ -861,6 +871,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }
+            else if (arg == "--skip-intro") { s.SkipIntro = true; }
             else if (arg == "--menu") { s.ForceMenu = true; }
             else if (arg.StartsWith("--menu=")) { s.ForceMenu = true; s.MenuStartScreen = arg["--menu=".Length..]; }
             else if (arg.StartsWith("--presentation=")) { s.PresentationOverride = arg["--presentation=".Length..]; }
