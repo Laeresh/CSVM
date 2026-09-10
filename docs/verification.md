@@ -390,6 +390,15 @@ one sentence of measured evidence; everything else belongs in the commit that la
   to rest.** `gemini-gasbag-bays` drives `killgmzep` end to end over such a world while C2B/M04's
   `gasbag1` and `gasbag4` were resting 13.1 m and 26.9 m under the sea.
 
+- **WORLD-36** — **Every vehicle a mission never placed stands at the world origin, one hull inside
+  another, so scope a ray's answer to the subtree you asked about.** An upward probe from a parked
+  `multiplayer1zep` belly ring answers `workersvoyage_cargobay` at 5.9 m in C1C's Instant Action
+  world and `g375` at 24.4 m in C5's, neither of them any part of the hull the ring hangs from.
+- **WORLD-37** — **A hull the mission's `.gw` switched off has its colliders disabled by design, so
+  "the ray found nothing" reports the switch rather than a missing collision mesh.** Both
+  multiplayer zeppelins are switched off by every mission script but `mp3.gw`; over the eight `MP3`
+  worlds that keep them, all 48 belly rings meet hull 12.8 m straight up (`zeppelin-belly-hull`).
+
 ## SHELL — Windows, PowerShell, and processes
 
 - **SHELL-2** — **Identify stray Godot processes by worktree and probe flag.**
@@ -623,6 +632,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   fills the cache and every later one reads the answer back. Stub the cache fill as well, or the
   red check passes and pins nothing.** A zeppelin broadside whose world-node resolve was stubbed to
   return null still volleyed on that node, because the same call had already stored it.
+- **INSTR-54** — **A collider switched on after the world was built is not in the physics broadphase
+  inside a synchronous suite, which yields no frame for the server to flush: build a world the
+  object already stands in rather than showing it and casting.** Showing `multiplayer1zep` left all
+  six axis rays from every belly ring reading open air with 146 of its 196 shapes enabled.
 
 ## SRC — sources and documents
 

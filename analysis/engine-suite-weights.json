@@ -81,6 +81,7 @@
     "dante-cannon-burnout": 12.270,
     "zeppelin-cannon-stowed": 1.330,
     "zeppelin-hull-activation": 2.800,
+    "zeppelin-belly-hull": 13.300,
     "damage-stages": 0.067,
     "damage-hd": 1.089,
     "stop-sequence": 0.014,

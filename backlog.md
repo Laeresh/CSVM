@@ -1141,22 +1141,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is landed and works; only the ambient half is inert. *Cross-refs:* `BL-332`'s closing record in
   `PLAN-M5-polish-10` `B13`, `CAP-54`.
 
-- `BL-735` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` **The multiplayer zeppelins' belly rings stand over no hull collider in six of the eight chapter worlds.**
-  *Evidence:* on `multiplayer1zep` and `multiplayer2zep`, a plain unrestricted
-  `CollisionLayers.World` ray cast straight up from the `WorldPosition` of `ctur1`, `ctur2` and
-  `ctur3` finds nothing for over 100 m in the C1, C1B, C2, C2B, C3 and C4 worlds, while the same
-  models read solid in C1C and C5, which reads as a per-chapter revision of the shared vehicle
-  mesh rather than a runtime defect. The pirate zeppelin's seventeen rings all find hull where
-  their arcs say they should (`turret-hull-blocks-own-fire`, `git log --grep=BL-714`). Reachability
-  by a hostile ring in play is not confirmed: it needs the hull armed hostile in a skirmish.
-  *Fix shape:* compare the two hull meshes' collision-bearing nodes across chapters against the
-  gamez, say whether the six chapters ship a thinner mesh or the builder drops a node, and give
-  the belly rings a hull to hit. *⚠ Traps:* a ray through the hull node's origin is a
-  false-positive census, since a hull's origin is not its mesh centre; test on bearings inside a
-  ring's own arc. *Playtest after fix:* a Dogfight against a `multiplayer1zep` hull, flying the
-  belly. *Cross-refs:* `BL-714` (the pirate zeppelin's rings, cleared on a parked hull),
-  `docs/architecture/Mech3.md` (`WorldCollision.cs`, `WorldBuilder.cs`).
-
 - `BL-800` `[Fidelity]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The world build applies a gamez node's `flags.active` only at world roots, while the original applies it to every node.**
   *Evidence:* `WorldBuilder.Add` writes `built.Visible = node.Active` on each child of `world1`
   and `SceneBuilder.BuildSubtree` never writes visibility, so a node below a world root builds
