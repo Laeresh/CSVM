@@ -8,7 +8,7 @@ namespace CSVM.UI;
 /// <summary>
 /// What a boot-sequence still is, one member per action in <c>fmv.zrd</c>'s <c>INTRO</c> block that
 /// is not a film. The block puts its image up once, at the start, and the first film takes it down,
-/// so the two waits and the fade that follow hold a screen with nothing on it.
+/// so the two waits and the fade that follow have no picture to hold.
 /// </summary>
 public enum BootHold
 {
@@ -16,12 +16,12 @@ public enum BootHold
     /// down.</summary>
     Card,
 
-    /// <summary><c>WAIT</c>: whatever is on screen holds for that long.</summary>
+    /// <summary><c>WAIT</c>: whatever is on screen holds for that long, and after the card is down
+    /// there is nothing to hold.</summary>
     Wait,
 
-    /// <summary><c>FADEOUT</c>: a held second that draws nothing, the card having gone down with
-    /// the first film. ⚠ Do not drop the action: it is authored, and an action is not deleted for
-    /// being invisible.</summary>
+    /// <summary><c>FADEOUT</c>: a ramp over the screen the first film already emptied. ⚠ Do not
+    /// drop the action: it is authored, and an action is not deleted for being invisible.</summary>
     Fade,
 }
 
@@ -39,13 +39,14 @@ public sealed class BootSequence
     /// first logo.</summary>
     public const double CardSeconds = 5.0;
 
-    /// <summary>The <c>WAIT 1.0</c> the block puts after each of its two logos.</summary>
+    /// <summary>The <c>WAIT 1.0</c> the block puts after each of its two logos. It is authored and
+    /// not spent, for the reason <see cref="Held"/> gives.</summary>
     public const double LogoGapSeconds = 1.0;
 
-    /// <summary><c>FADEOUT 0,0,0 1.0 1.0</c>'s first number, the second the block spends before the
-    /// second logo. Nobody sees it: the first film took the card down, so there is nothing left on
-    /// screen for it to take. ⚠ Its second 1.0 is deliberately not spent, that number being
-    /// undecoded.</summary>
+    /// <summary><c>FADEOUT 0,0,0 1.0 1.0</c>'s first number, the second it would ramp over before
+    /// the second logo. Nobody sees it: the first film took the card down, so there is nothing left
+    /// on screen for it to take, and <see cref="Held"/> is why it costs none of the player's time.
+    /// ⚠ Its second 1.0 is deliberately not spent, that number being undecoded.</summary>
     public const double FadeSeconds = 1.0;
 
     /// <summary><c>INTRO</c>'s first <c>PLAYAVI</c>, the publisher logo.</summary>
@@ -126,25 +127,36 @@ public sealed class BootSequence
             backdrop: new[] { new BoardPicture(new BoardArt(BoardArtLibrary.Ui, CardArt), 0f, 0f) });
     }
 
+    /// <summary>How much of a hold's authored duration is spent on screen: all of it while the card
+    /// is up, none of it once the first film has taken the card down. Film of the original from
+    /// launch shows the films running back to back, 0.183 s of black where this block authors 2.0 s
+    /// between the two logos (docs/formats/cinemas.md). ⚠ Do not spend the rest again: the reader
+    /// authors both waits and the fade, and the block still runs all three in its order.</summary>
+    public static double Held(BootHold hold, double authored) =>
+        hold == BootHold.Card ? authored : 0.0;
+
     /// <summary>Runs the block in the reader's own order and calls <paramref name="then"/> after
     /// the opening cinema. ⚠ A press ends the action it lands on and the next one begins; whether
     /// the original abandoned the rest of the block instead is undecoded, its <c>PLAYAVI</c>
     /// handler never having been followed into the executable.</summary>
     public void Run(Action then)
     {
+        void Still(BootHold hold, double authored, Action next) =>
+            _still(hold, Held(hold, authored), next);
+
         void First()
         {
             _drop();
             _film(FirstLogo, AfterFirst, Keys);
         }
 
-        void AfterFirst() => _still(BootHold.Wait, LogoGapSeconds, Fade);
-        void Fade() => _still(BootHold.Fade, FadeSeconds, Second);
+        void AfterFirst() => Still(BootHold.Wait, LogoGapSeconds, Fade);
+        void Fade() => Still(BootHold.Fade, FadeSeconds, Second);
         void Second() => _film(SecondLogo, AfterSecond, Keys);
-        void AfterSecond() => _still(BootHold.Wait, LogoGapSeconds, Opening);
+        void AfterSecond() => Still(BootHold.Wait, LogoGapSeconds, Opening);
         void Opening() => _film(OpeningCinema, then, Keys);
 
-        _still(BootHold.Card, CardSeconds, First);
+        Still(BootHold.Card, CardSeconds, First);
     }
 
     // Each line is drawn twice, a black copy one authored pixel down and across under a white one,

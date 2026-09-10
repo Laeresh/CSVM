@@ -129,8 +129,27 @@ shown at the beginning only and never between the videos, and that there is no f
 sequence. One fact accounts for both: the first `PLAYAVI` tears the card down, so the notice is seen
 for its authored `WAIT 5.0` and no longer, and the `FADEOUT` that follows that film ramps a screen
 with nothing on it, which is why no fade is ever visible. CSVM plays the block that way. It keeps
-the `FADEOUT` and its second, an authored action not being dropped for being invisible, so the gap
-between the two logos is that second plus the `WAIT 1.0` before it.
+the `FADEOUT` and both `WAIT`s where the reader puts them, an authored action not being dropped for
+being invisible, and spends none of them, for the reason the next paragraph gives.
+
+**The films run back to back, and the card cuts straight into the first of them.** Film of the
+original from launch (`OriginalScreenshots/Videos/CAP-49.mkv`), measured with ffmpeg's `blackdetect`
+at `d=0.04:pic_th=0.98:pix_th=0.10`, holds four black intervals that bear on the block: 0.067 s
+where the card ends and the first film begins; 0.183 s where the first film ends and `zipper.mpg`
+begins; and 0.167 s plus 0.400 s, one transition split by a non-black frame, where `zipper.mpg` ends
+and `chap0.mpg` begins. Not one of those is an authored hold. Between the two logos, where the block
+authors `WAIT 1.0` plus the `FADEOUT`'s own second, the film shows 0.183 s, and the longest interval
+anywhere is the two fifths of a second before `chap0.mpg`, where the block authors `WAIT 1.0`. This
+project's author, watching the same film, reports the card cutting straight into the first film and
+the films running back to back. So
+the card's `WAIT 5.0`, the one hold with a picture under it, is spent on screen, and a hold over a
+screen the first film already emptied runs in its authored place and costs the player nothing.
+
+**A capture like that also records the original's own startup, so black at a display-mode boundary
+belongs to the recording rather than to the block.** The same measurement returns a fifth interval,
+0.617 s ending as the card appears, and that one is the fullscreen mode change at launch. Read a
+black interval as an authored hold only when both of its edges are events the block itself
+schedules.
 
 **`ASSETS/LAYOUT.CSV`, as `movie` widgets**, holds every other placement. A `movie` row is widget
 type `M` with script class `@ctl@AL`, and it carries an `ArtPath`, a position, a `Loops` count and a
@@ -263,6 +282,14 @@ Where this stops:
   the frame counts above come from, and the flag and a whole cinema have been watched at the
   controls. Correctness is settled the way every other presentation claim in this project is
   settled, by the user at the controls.
+- **What follows a film reaching its own end is unmeasured.** Every film in the capture the black
+  intervals above come from was skipped by the person filming, and the card holds 4.100 s there
+  against its authored 5.0, which reads as a press as well, so those intervals say what follows a
+  press and nothing else. One
+  unskipped transition settles it: let `msopen1.mpg` play all 404 of its frames and watch what
+  precedes `zipper.mpg`. Until that exists, "the films run back to back" is a reading taken from
+  three skips, and whether the block spends its `WAIT` and its `FADEOUT` when a film ends by itself
+  is open.
 - **The engine side of the script callbacks is not traced.** Callback 2151 supplies the chapter
   number `CAMPAIGNINTRO` builds its filename from, and callback 3104 gates the final cinema, but
   neither was followed into the executable: the script callback dispatch is not a plain switch on

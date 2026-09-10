@@ -919,17 +919,28 @@ reader.** The author, playing the retail game, reports the copyright notice befo
 never between them, and no fade anywhere in the sequence. One fact accounts for both:
 `SHOWIMAGE`'s picture does not survive a `PLAYAVI`, so the first film tears the card down and the
 `FADEOUT` after that film runs against a screen with nothing on it. `BootSequence` takes the card down as
-the first film starts and `BootCard` leaves its black behind, so the waits and the fade hold an
-empty screen. An at-the-controls report about the original beats a reading taken from the data,
+the first film starts and `BootCard` leaves its black behind, so the waits and the fade have nothing
+to hold. An at-the-controls report about the original beats a reading taken from the data,
 and this one replaces the reading `C22` first landed with.
 
-**⚠ `FADEOUT` keeps its second, invisible or not.** An authored action is not deleted for being
-unseen, so the block still spends `FADEOUT`'s `1.0` where the reader puts it, and the code says on
-the member why nobody will see it. `FADEOUT`'s second `1.0` has no second instance to compare
-against and is still not spent. What follows is the gap for the author to judge: between the two
-logos the block now holds 2.0 s of black, the `WAIT 1.0` plus the fade's own second, where the same
-gap used to hold the card. Nothing in the extraction says what that gap should be, and the
-observation above says nothing about it either, so it is judged at the controls or not at all.
+**⚠ `FADEOUT` and both `WAIT`s are authored and none of them is spent.** An authored action is not
+deleted for being unseen, so the block still runs `WAIT 1.0`, `FADEOUT 0,0,0 1.0 1.0` and the second
+`WAIT 1.0` in the reader's own order, and `BootSequence.Held` is the single place that says how much
+of an authored duration reaches the screen: all of it while the card is up, none of it once the
+first film has taken the card down. `FADEOUT`'s second `1.0` has no second instance to compare
+against and is not spent either. What decided it is film of the original from launch: the black
+between the first film ending and `zipper.mpg` beginning measures 0.183 s, and between `zipper.mpg`
+and `chap0.mpg` 0.167 s plus 0.400 s, where the block authors 2.0 s between the logos and the author
+watching that film reports the two running back to back. The intervals and the limit on them are in
+[`docs/formats/cinemas.md`](formats/cinemas.md).
+
+**⚠ Every film in that capture was skipped, so what follows a film reaching its own end is
+unmeasured.** The intervals say what follows a press, and the card holds 4.100 s in that capture
+against its authored 5.0, which reads as a press as well. The same capture carries the original's
+own startup, so its 0.617 s of black before the card is the fullscreen mode change and says nothing
+about the block. One unskipped transition settles the rest: let `msopen1.mpg`
+play all 404 of its frames and watch what precedes `zipper.mpg`. `BootSequence.Held` is the one
+member that changes if it turns out a film left to end by itself is followed by the authored 2.0 s.
 
 **The skip ends one cinema, not the sequence.** `FUN_0044ae70`'s `PLAYAVI` handler is not decoded,
 so whether a press in the original abandoned the rest of the block is unknown. This takes the
@@ -987,8 +998,9 @@ as the metrics say it should and the presses land where they should, so `fonts.z
 shadow are confirmed rather than merely read. Two departures from the original came back from that
 same watch: the notice was showing **between** the videos as well as at the start, and there was a
 visible fade. Both are corrected above, from the one fact that `SHOWIMAGE`'s picture does not
-survive a `PLAYAVI`. **What that leaves owed is a second look at the corrected block**, and with it
-the 2.0 s gap between the logos, which no reading in the extraction settles.
+survive a `PLAYAVI`. **What that leaves owed is a second look at the corrected block.** The gap
+between the logos is settled off film of the original rather than out of the extraction, which
+authors 2.0 s of black there and is not what the film shows.
 
 **Verified (the card, the block and `--intro`).** The orchestrator's own `.\RunTests.ps1` on the
 fully merged plan tree, the one that carries every item in this plan: PASS, exit 0, 206.4 s. Build
@@ -1015,9 +1027,10 @@ says: `--intro --menu --volume=1.0` logs `MSopen1.mpg` at `frames=404`, `zipper.
 `--menu --volume=1.0` alone reaches `menu presentation active=original` with zero cinema lines.
 
 **⚠ What the suite proves, and what no test here can.** `CSVM.Tests` is engine-free, so what is
-checked there is the composition and the order: the block's eight actions with the reader's
-durations and names, the card down once as the first film starts and never put back, the fade
-keeping its second behind it, the boot skip set on all three films, the card's art name, its two
+checked there is the composition and the order: the block's eight actions with the reader's names,
+the card down once as the first film starts and never put back, the fade keeping its authored second
+and spending none of it, the card's `WAIT 5.0` as the only hold that reaches the screen, every hold
+after it holding nothing, the boot skip set on all three films, the card's art name, its two
 lines at 550 and 565 centred across the authored width, and, against a real extraction, that the art
 file exists and both `MSG_COPYRIGHT` keys resolve to their strings. `ComposedBoardView`,
 `CanvasLayer` and the countdown compile and nothing more is proven about them. The sequence cannot
@@ -1028,26 +1041,38 @@ so a `--screenshot` run spends the whole block not counting and lands on the lau
 `.\RunGame.ps1 -- --intro --volume=1.0` watched from the copyright card to the launchscreen is what
 answers these, and the author's watch of it is what settled the card's single showing above. Three
 things still need their eyes: whether the card reads at all, since its face, size and shadow are a
-reading of `fonts.zrd`'s metrics rather than a decode of how the original drew them; whether the
-2.0 s of black between the two logos reads as authored or as a hang, the fade's own second being
-half of it; and Decision 8's cost, `chap0` running 145 seconds in front of a player nothing has
-taught the key to.
+reading of `fonts.zrd`'s metrics rather than a decode of how the original drew them; whether a film
+left to reach its own end still cuts straight into the next, which is the one thing the capture
+cannot say because all three of its films were skipped; and Decision 8's cost, `chap0` running 145
+seconds in front of a player nothing has taught the key to.
 
-**The corrected block on a live run.** `.\RunProbe.ps1 --intro --menu --volume=1.0`, read off its
-own log, with the card down before the first film and no second showing of it:
+**The corrected block on a live run.** `.\RunProbe.ps1 --intro --menu --perf --volume=0`, read off
+its own log, with the card down before the first film, no second showing of it, the reader's own
+order kept, and every hold after the card holding nothing:
 
 ```
 INFO  [ui] boot Card 5s
 INFO  [ui] boot Card down
 INFO  [ui] cinema MSopen1.mpg playing skip=LeftMouse, AnyKey
-INFO  [ui] cinema ended frames=404 clock=13.481s
-INFO  [ui] boot Wait 1s
-INFO  [ui] boot Fade 1s
+INFO  [ui] cinema ended frames=404 clock=13.484s
+INFO  [ui] boot Wait 0s
+INFO  [ui] boot Fade 0s
 INFO  [ui] cinema zipper.mpg playing skip=LeftMouse, AnyKey
 INFO  [ui] cinema ended frames=608 clock=20.274s
-INFO  [ui] boot Wait 1s
+INFO  [ui] boot Wait 0s
 INFO  [ui] cinema Chap0.mpg playing skip=LeftMouse, AnyKey
+INFO  [ui] cinema ended frames=4349 clock=144.973s
 ```
+
+**The gap is measured the way the 2.0 s was, off the same run's `--perf` windows.** Four consecutive
+windows of 500.02, 500.66, 505.17 and 509.99 ms used to lie between the first film ending and the
+second starting, 2015.8 ms of black. Now **no window lies between them at all**: the whole
+transition falls inside one 60-frame window that ran **502.74 ms** against the 500.00 ms every
+neighbouring window measures, whose worst frame was 9.68 ms against a steady 8.33. So the black
+between the two logos is one frame, and under 11 ms on this run. `zipper.mpg` into `chap0.mpg`
+measures the same way, one containing window of 515.99 ms with a worst frame of 15.43 ms, the extra
+milliseconds being the opening cinema's own first decode. All three films still play their full
+census counts, so nothing was shortened to buy the gap.
 
 **Verified.** <pending orchestrator run>
 

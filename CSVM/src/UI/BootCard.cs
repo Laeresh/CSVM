@@ -10,7 +10,8 @@ namespace CSVM.UI;
 /// is drawn on, and the clock its holds run down. What the card is made of belongs to
 /// <see cref="BootSequence.Card"/>; a <see cref="ComposedBoardView"/> draws it, so the art and the
 /// strings resolve out of the extraction the way every other screen's do. The card goes down with
-/// the first film and the black outlives it, so the waits and the fade hold an empty screen.
+/// the first film and the black outlives it, so the waits and the fade have nothing to hold and
+/// pass without a frame of their own.
 /// <see cref="Play"/> is the one call a caller makes.
 /// </summary>
 public sealed partial class BootCard : Node
@@ -46,8 +47,9 @@ public sealed partial class BootCard : Node
 
     /// <summary>Puts <paramref name="hold"/> on screen for <paramref name="seconds"/> and runs
     /// <paramref name="then"/> when it expires, or at once when a key or a left click ends it
-    /// early. This has <see cref="BootSequence.ShowStill"/>'s shape and is what the sequence
-    /// drives.</summary>
+    /// early. A hold of no seconds runs it in the same frame, so nothing of the block stands
+    /// between two films. This has <see cref="BootSequence.ShowStill"/>'s shape and is what the
+    /// sequence drives.</summary>
     public void Hold(BootHold hold, double seconds, Action then)
     {
         _then = then;
@@ -60,6 +62,13 @@ public sealed partial class BootCard : Node
         }
 
         Log.Info("ui", $"boot {hold} {seconds.ToString("0.###", CultureInfo.InvariantCulture)}s");
+
+        // ⚠ Do not leave a hold of no seconds to _Process: the original runs the films back to
+        // back, so even one frame of black between two of them is a gap it does not have.
+        if (_left <= 0.0)
+        {
+            Advance();
+        }
     }
 
     /// <summary>Takes the card off the screen, leaving the block's black behind, and is called as

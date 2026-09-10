@@ -9,9 +9,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>Pins the boot sequence against the block <c>fmv.zrd</c> authors: the eight actions in
-/// the reader's own order with the reader's own durations and film names, the card down as the
-/// first film starts, the skip set every film takes, and one handoff at the end however the last
-/// film stopped.</summary>
+/// the reader's own order with the reader's own film names, the card down as the first film starts,
+/// the two logos running back to back with no black held between them, the skip set every film
+/// takes, and one handoff at the end however the last film stopped.</summary>
 [Trait("Tier", "Quick")]
 public class BootSequenceTests
 {
@@ -30,10 +30,10 @@ public class BootSequenceTests
                 "still Card 5",
                 "drop",
                 "film MSopen1.mpg",
-                "still Wait 1",
-                "still Fade 1",
+                "still Wait 0",
+                "still Fade 0",
                 "film zipper.mpg",
-                "still Wait 1",
+                "still Wait 0",
                 "film Chap0.mpg",
                 "handoff",
             },
@@ -54,8 +54,9 @@ public class BootSequenceTests
         Assert.True(stage.Steps.IndexOf("drop") < stage.Steps.IndexOf("film MSopen1.mpg"));
     }
 
-    /// <summary><c>FADEOUT</c> keeps its second in the block even though the screen it would ramp is
-    /// already empty, an authored action not being deleted for being invisible.</summary>
+    /// <summary><c>FADEOUT</c> keeps its place and its authored second in the block even though the
+    /// screen it would ramp is already empty, an authored action not being deleted for being
+    /// invisible. What it no longer does is spend that second.</summary>
     [Fact]
     public void TheFadeKeepsItsSecondAfterTheCardIsGone()
     {
@@ -63,7 +64,26 @@ public class BootSequenceTests
         new BootSequence(stage.Film, stage.Still, stage.Drop).Run(stage.Handoff);
 
         Assert.Equal(1.0, BootSequence.FadeSeconds);
-        Assert.True(stage.Steps.IndexOf("still Fade 1") > stage.Steps.IndexOf("drop"));
+        Assert.Equal(0.0, BootSequence.Held(BootHold.Fade, BootSequence.FadeSeconds));
+        Assert.True(stage.Steps.IndexOf("still Fade 0") > stage.Steps.IndexOf("drop"));
+    }
+
+    /// <summary>The two logos run back to back: every hold after the card is down holds nothing and
+    /// takes no time, so the only screen time the block spends on a still is the card's own
+    /// <c>WAIT 5.0</c>. ⚠ This is film of the original from launch, not a reading of the reader,
+    /// which authors 2.0 s between the logos.</summary>
+    [Fact]
+    public void NothingIsHeldBetweenTheFilms()
+    {
+        var stage = new Recorder();
+        new BootSequence(stage.Film, stage.Still, stage.Drop).Run(stage.Handoff);
+
+        Assert.Equal(5.0, BootSequence.Held(BootHold.Card, BootSequence.CardSeconds));
+        Assert.Equal(0.0, BootSequence.Held(BootHold.Wait, BootSequence.LogoGapSeconds));
+        Assert.Equal(
+            new[] { "still Card 5" },
+            stage.Steps.Where(step => step.StartsWith("still", StringComparison.Ordinal)
+                && !step.EndsWith(" 0", StringComparison.Ordinal)));
     }
 
     /// <summary>Every film takes the boot set, any key or a left click, because a player at the
@@ -102,7 +122,7 @@ public class BootSequenceTests
         Assert.Equal(
             new[]
             {
-                "still Card 5", "drop", "still Wait 1", "still Fade 1", "still Wait 1", "handoff",
+                "still Card 5", "drop", "still Wait 0", "still Fade 0", "still Wait 0", "handoff",
             },
             stage.Steps);
     }
