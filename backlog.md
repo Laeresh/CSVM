@@ -2593,15 +2593,6 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-671` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A holding zeppelin never levels its pitch, though the decode says it
-  should.** *Evidence:* `ZeppelinMotion` commands `desiredPitch = 0` while `Holding`, but
-  integrates it through `way = Speed / MaxSpeed`, which is zero at a stop, so the hull keeps
-  whatever pitch it arrived with. The original has the same speed scaling
-  (`docs/formats/mission-entities.md`), so this may be faithful rather than a defect. *Fix shape:*
-  decode whether `FUN_004bf500`'s station-keep levels the hull at zero speed before changing
-  anything; if it does not, the claim to correct is the documentation, not the code.
-  *⚠ Traps:* do not add a separate levelling term outside the speed factor to make a still hull
-  look right; that invents a law the original does not have.
 - `BL-501` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` `[CM02]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
   bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its

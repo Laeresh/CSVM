@@ -356,10 +356,10 @@ record's stage list, where every crossed threshold fires once. The zone pools li
 The kinematic zeppelin motion law: flies a `ZeppelinDef` along its net through `AiNetFollower`,
 forward-only along the facing, speed by `max_accel` toward `max_speed`, and yaw and pitch through the
 decoded per-axis steer law, whose commanded rate eases inside 25 degrees of error and whose angle
-advances scaled by the fraction of authored speed the hull is making, so a stopped hull cannot turn.
-There is no per-step pitch band, the record's pair being degree-valued and compared against radians.
-The stop-point half is the decoded approach, cutting the throttle inside the follower's hold distance
-and decaying the pose onto the node, while a follower still on its seat station-keeps. Steering:
+advances scaled by the speed fraction the hull is making, so a stopped hull cannot turn. There is no
+per-step pitch band, the record's pair being degrees compared against radians. The stop-point half is
+the decoded approach: throttle cut inside the follower's hold distance, then position, heading and
+pitch decayed onto the node, the leg's bearing and level; a seated follower station-keeps. Steering:
 [../formats/mission-entities.md](../formats/mission-entities.md). Pure state, no `Node`.
 
 ## src/Flight/AiPilot.cs

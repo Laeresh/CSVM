@@ -212,7 +212,8 @@ internal static class ZeppelinSuites
         "node 7), where the mission's own zepgetcargo — the freighter's hold doors, the " +
         "Pandora's cargo doors, the crane on its chain — starts; releasing that too runs the " +
         "chain to node 0, an open end with NO stop point authored at all, where the structural " +
-        "dead-end hold (BL-529) parks it for good, pitch never past the steepest leg's slope")]
+        "dead-end hold parks it for good; the dock glide leaves the hull level at both stops, " +
+        "and the pitch never rings up on the way")]
     internal static void ZeppelinPandoraDeadEndSuite(TestContext ctx)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1B");
@@ -263,9 +264,9 @@ internal static class ZeppelinSuites
             if (motion == null)
                 return;
 
-            // The steepest leg of the chain: the decoded steer law pitches AT the slope from
-            // here to the node and eases onto it, so the hull never pitches past it. The old
-            // bang-bang rate rang up into a standing ±30° swing on the same route.
+            // The steepest leg of the chain. The law pitches at the slope from the HULL to the
+            // node, over the edge's own while a levelled hull lags below a climbing leg. The
+            // margin below is that transient, not slack; a ring-up would sit at the ±30° band.
             float steepest = 0f;
             foreach (var (a, b) in net.Edges)
             {
@@ -283,6 +284,8 @@ internal static class ZeppelinSuites
             float shortOf = motion.Position.DistanceTo(net.Nodes[5].Position);
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == 5 && shortOf < 1f,
                 $"stop 7 settles the hull ON node 5 in {steps / 60f:0} s, {shortOf:0.##} m off it — not a hold distance short");
+            ctx.Check(Mathf.Abs(Mathf.RadToDeg(motion.PitchRad)) < 0.5f,
+                $"…and level, which the dock glide does and the speed-scaled steer law cannot: pitch={Mathf.RadToDeg(motion.PitchRad):0.00}°");
 
             // OBJECTIVE11's own COMPLETED_STOPPOINT ["Klondike1", 7, 0] releases it onward.
             ctx.Same(1, runtime.SetStopPoint(def.Net, 7, false), $"stop 7 (node 5) releases");
@@ -293,12 +296,14 @@ internal static class ZeppelinSuites
                 $"…and stop 8 settles it ON the cargo point, node {cargoNode}, in {steps / 60f:0} s, {offCargo:0.##} m off it");
             ctx.Check(Mathf.Abs(motion.Position.Y - net.Nodes[cargoNode].Position.Y) < 1f,
                 $"…at the node's own altitude, which a crane lowering 54 m of chain needs: y={motion.Position.Y:0.#} against {net.Nodes[cargoNode].Position.Y:0.#}");
+            ctx.Check(Mathf.Abs(Mathf.RadToDeg(motion.PitchRad)) < 0.5f,
+                $"…and level over it, so the chain hangs off a level hull: pitch={Mathf.RadToDeg(motion.PitchRad):0.00}°");
 
             // OBJECTIVE21/22/23's ["Klondike1", 8, 0]: the rest of the chain to the bare end.
             ctx.Same(1, runtime.SetStopPoint(def.Net, 8, false), $"stop 8 (node {cargoNode}) releases");
             steps = FlyUntilHold(runtime, motion, farEnd, ref worstPitch, 60 * 900);
-            ctx.Check(worstPitch <= steepest + Mathf.DegToRad(1f),
-                $"pitch never exceeded the steepest leg's {Mathf.RadToDeg(steepest):0.#}° the whole route, worst {Mathf.RadToDeg(worstPitch):0.#}°");
+            ctx.Check(worstPitch <= steepest + Mathf.DegToRad(4f),
+                $"pitch stayed inside the steepest leg's {Mathf.RadToDeg(steepest):0.#}° and the departure lag, worst {Mathf.RadToDeg(worstPitch):0.#}°, nowhere near a ring-up");
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd,
                 $"the bare far end (node {farEnd}) holds it in {steps / 60f:0} s idx={motion.Follower.CurrentIndex} holding={motion.Follower.Holding}");
             ctx.Check(motion.Follower.Advances == net.Nodes.Count - 1,

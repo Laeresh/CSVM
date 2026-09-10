@@ -164,19 +164,38 @@ on C1B/M03's level `Klondike1` legs (steepest leg 6.3°), which is what read at 
 the Pandora diving along its route.
 
 Inside 30 m along-facing of a halting node ahead (`FUN_004bf360`'s near branch) the throttle is
-cut and the pitch is left alone; the position decays onto the node and the heading onto the leg's
-own bearing, both by `x ← target + (x − target) · e^(−0.2·dt)` (`FUN_00460700`, `FUN_00460490`
-over `FUN_00460410` = `exp(−x)`). The remake's `Dock` is that branch.
+cut and three quantities decay by `x ← target + (x − target) · e^(−0.2·dt)`: the position onto the
+node (`FUN_00460700`), the heading onto the leg's own bearing (`FUN_00460490`), and **the pitch
+onto level** (`FUN_00460470`, the same decay with the target fixed at zero), all three over
+`FUN_00460410` = `exp(−x)`. The remake's `Dock` is that branch.
+
+⚠ **The pitch decay is outside the speed factor, and it is the only thing that levels a parked
+airship.** Do not fold it into the speed-scaled steer law: that factor is zero at a stop, so a
+hull that arrived nose-down would keep that attitude for the rest of the mission. Nor is the
+station-keep law a second chance at it, for the reason below.
 
 ### Route ends and stop points
 
 The `net` a zeppelin flies is a patrol graph ([ai-nets.md](ai-nets.md)) walked by the shared
 `AiNetFollower`; a zeppelin observes its nodes' STOP-POINT flags, which an aircraft on the same
 net type does not. Two routines decode the halted state (`FUN_004bf9d0`'s own-node gate, called
-every step): `FUN_004bf500` levels the airship at an armed stop it already sits ON (commanded
+every step): `FUN_004bf500` station-keeps at an armed stop it already sits ON (commanded
 pitch 0, heading kept, speed 0, and the pose left where it stands) and `FUN_004bf360` ramps the
 throttle down from 250 m out toward a halting node AHEAD, its inside-30 m branch decaying the
 pose onto that node at e^(−0.2·dt) rather than parking the hull on the 30 m sphere.
+
+⚠ **The station-keep law asks for level and cannot deliver it.** `FUN_004bf500` is four calls with
+no arithmetic of its own: `FUN_004bf530(0)` for the pitch, `FUN_004bf620(yaw)` for the heading it
+already holds, `FUN_004bf240(0)` for the throttle, then the pose write. The pitch call is the
+ordinary steer routine, so the commanded 0 goes through the same `speed / max_speed` factor as a
+leg, with no floor on that factor, no separate settle term and no branch that skips the scaling.
+The commanded rate at `+0xc8` keeps tracking the error, but the angle integration it feeds is
+multiplied by zero way, so the hull holds whatever pitch it is standing at. What makes that
+harmless is the arrival: `FUN_004bf360`'s near branch has already decayed the pitch to level
+before the airship comes to rest, and a hull seated on an armed node from the start, which never
+flew a leg to be levelled on, begins at the record's own `pitch`, which all 58 instances author as
+0. Do not read `FUN_004bf500` as a levelling routine, and do not give it a settle term to make one.
+
 **A structural dead end — the current node's only edge is the one just flown — holds the same way,
 unconditionally, ahead of and regardless of any authored stop-point id.** Some nets author their
 far node as an armed stop under an unaddressable id (id 0, which the script side rejects before it
