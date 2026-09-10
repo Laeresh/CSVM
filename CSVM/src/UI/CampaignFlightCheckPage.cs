@@ -40,7 +40,8 @@ internal readonly record struct FlightRow(
 /// visit hands the flow a freshly read profile (<c>CampaignFeature.Resume</c>), so both show up
 /// here as a different object.</summary>
 internal readonly record struct FlightCheckState(
-    object? Profile, int MissionSeq, int Player, bool Wingman, bool ChangePlane,
+    object? Profile, int MissionSeq, int Player, bool Wingman,
+    bool PilotChangePlane, bool WingChangePlane,
     OwnedPlane? Pilot, object? PilotAmmo, object? PilotOrdnance,
     OwnedPlane? Wing, object? WingAmmo, object? WingOrdnance);
 
@@ -48,7 +49,7 @@ internal readonly record struct FlightCheckState(
 /// The flight check screen (<c>Campaign Flight Check.png</c>, <c>FLIGHTCHECK.SCRIPT</c>,
 /// <c>docs/formats/campaign-screens.md</c>): the mission title, a PILOT row and, when the mission's
 /// <c>cm_sequence</c> wingman flag is set, a WINGMAN row, CHANGE AMMO per row (into
-/// <see cref="CampaignScreen.Ammo"/>), CHANGE PLANE where the mission allows it, RETURN TO BRIEFING
+/// <see cref="CampaignScreen.Ammo"/>), CHANGE PLANE where the slot's own rules allow, RETURN TO BRIEFING
 /// and FLY MISSION. The row list carries only these actionable items; each plane's dense text
 /// (title, both eight-row lists) and the objectives note live in <see cref="Detail"/>, the split
 /// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE opens
@@ -61,6 +62,12 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // The ordnance table's own "None" row (docs/formats/campaign-screens.md, the Ammo selection
     // decode): a pylon resolving to this row carries nothing, whether or not the pylon itself exists.
     private const int NoOrdnance = 11;
+
+    // The two crew slots, the original's -1 and -2 throughout the campaign callbacks. Each carries
+    // its own CHANGE PLANE answer: the script bars the pilot's button alone on the grant missions
+    // (docs/formats/campaign-screens.md, "Plane change").
+    private const int PilotSlot = 0;
+    private const int WingmanSlot = 1;
 
     // The layout section every fixed element of this screen is read from, and the screen's own
     // title, FC_T_TITLE. ⚠ The title's x is pinned at the measured 138 and drawn left-justified
@@ -416,7 +423,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         var pilot = Player > 0 ? Flow.Field.Plane(Player) : PlaneAt(profile, profile.SelectedPlane);
         var wing = Player == 0 && HasWingman ? PlaneAt(profile, profile.WingmanPlane) : null;
         return new FlightCheckState(
-            Flow.Profile, Flow.MissionSeq, Player, HasWingman, Flow.Feature.ChangePlaneAllowed,
+            Flow.Profile, Flow.MissionSeq, Player, HasWingman,
+            Flow.Feature.ChangePlaneAllowed(PilotSlot), Flow.Feature.ChangePlaneAllowed(WingmanSlot),
             pilot, pilot?.Ammo, pilot?.Ordnance,
             wing, wing?.Ammo, wing?.Ordnance);
     }
@@ -433,16 +441,16 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         {
             // A guest picks out of the stock eleven and copies, so neither of FLIGHTCHECK.SCRIPT's
             // plane-change gates applies: both are rules about the seated profile's own aircraft.
-            AddSlot(rows, Flow.Field.Plane(Player), slot: 0, heading: "PILOT", changePlane: true);
+            AddSlot(rows, Flow.Field.Plane(Player), slot: PilotSlot, heading: "PILOT", changePlane: true);
         }
         else
         {
-            AddSlot(rows, PlaneAt(profile, profile.SelectedPlane), slot: 0, heading: "PILOT",
-                changePlane: Flow.Feature.ChangePlaneAllowed);
+            AddSlot(rows, PlaneAt(profile, profile.SelectedPlane), slot: PilotSlot, heading: "PILOT",
+                changePlane: Flow.Feature.ChangePlaneAllowed(PilotSlot));
             if (HasWingman)
             {
-                AddSlot(rows, PlaneAt(profile, profile.WingmanPlane), slot: 1, heading: "WINGMAN",
-                    changePlane: Flow.Feature.ChangePlaneAllowed);
+                AddSlot(rows, PlaneAt(profile, profile.WingmanPlane), slot: WingmanSlot, heading: "WINGMAN",
+                    changePlane: Flow.Feature.ChangePlaneAllowed(WingmanSlot));
             }
         }
 

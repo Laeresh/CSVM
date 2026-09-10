@@ -653,14 +653,14 @@ line, the would-be cost behind the mark on an over-priced row, the name rules, a
 drops the build and touches nothing saved. Economy and strings: [../org/hangar.md](../org/hangar.md).
 
 ## src/UI/Menu/CampaignFeature.cs
-The campaign as a shared engine-free feature in the host's feature set: the state and the
-operations both presentations read and write, with neither one's screen shell in it. `Open` opens
-a campaign over a `CampaignProfileStore`, each further dependency optional and degrading rather
-than failing. The roster operations create, seat, delete and record the last-played player in the
-original's own words; the mission operations settle which `cm_sequence` entry the screens after
-the cabin are about, with its briefing, its wingman flag and its change-plane rules; the writes
-save the loadout, the planes, an exported build and the mission exit. How a presentation offers
-them, cursors and working copies included, stays the presentation's. It also carries the one `ChapterCinema` and `ClosingCinema` the host built it with, which is how a cabin or mission-end door reaches a film. Read `CampaignFlow.cs` next.
+The campaign as a shared engine-free feature in the host's feature set: the state and the operations
+both presentations read and write, with neither one's screen shell in it. `Open` opens a campaign
+over a `CampaignProfileStore`, each further dependency optional. The roster operations create, seat,
+delete and record the last-played player in the original's own words; the mission operations settle
+which `cm_sequence` entry the screens after the cabin are about, with its briefing, wingman flag,
+per-slot change-plane rules and the story aircraft its flight check grants; the writes save the
+loadout, the planes, an exported build and the mission exit. It carries the one `ChapterCinema` and
+`ClosingCinema` the host built it with, which is how a cabin or mission-end door reaches a film. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs
 The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,
@@ -771,20 +771,20 @@ The shell's two sortie screens, Free Flight and Dogfight, over the shared player
 seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
 the setup's roster (an eleven-row sliding window) and FLY. Seat 0 alone drives these screens; each
 joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enabled once the mode's
-gate is met and leaves as the mode's own typed exit. `JoiningOpen` is the per-screen joining rule
-the presentation reads, and `CampaignSeatPanel` the seat strip the campaign boards and the Instant
-Action screen take as an overlay once a second seat has joined. Remake-only by design, the original
-shipping no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
+gate is met and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
+`JoiningOpen` is the per-screen joining rule the presentation reads, and `CampaignSeatPanel` the
+seat strip the campaign boards and the Instant Action screen take as an overlay once a second seat
+has joined. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeatPlane.cs
 The remake-only per-seat aircraft screen, a shell partial: once seat 0 has picked on a sortie
 screen, or pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in
-player order picks here before the walk ends. `SeatPlanePage` is an `ICampaignPage` over the sortie
-roster, so `CampaignBoards.For` draws it in the campaign plane-selection board's shape: the list
-field, the silhouette, the ratings and weapon column, ACCEPT and CANCEL SELECTIONS, with the seat
-strip over it. Accept selects and a second Accept confirms; Back undoes a selection, unjoins while
-browsing, or, from seat 0's own controller, cancels the walk. The walk ends on the sortie screen
-with FLY live, or as the Instant Action launch. Nothing here is decoded: [../menu-presentations.md](../menu-presentations.md).
+player order picks here. `SeatPlanePage` is an `ICampaignPage` over the sortie roster, so
+`CampaignBoards.For` draws it in the plane-selection board's shape (its list field, WEAPON LOADOUT
+over a selection, ACCEPT and CANCEL SELECTIONS), the seat strip over it. The picking seat's own
+device drives it, and the mouse riding seat 0's source. Accept selects, a second Accept confirms,
+Back and CANCEL SELECTIONS drop a selection then leave the walk with every seat kept and nothing
+unjoined, and the last seat's confirm is the launch: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
@@ -797,13 +797,14 @@ return; a picked build flies its airframe's stock node with its def on the seat.
 wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/Menu/Original/OriginalLoadout.cs
-The Instant Action Weapon Loadout, the shell's partial over the decoded `[@OrdinanceLayout@]`
-section (the campaign's ammo chrome) and one shared `LoadoutChoice`: seat 0's for the pilot, the
-`InstantActionFeature`'s wingman fit for the wingmen, picked by the radio pair. It owns the
-mapping of the section's four ammunition and eight rocket fields onto the airframe's gun slots and
-pylons over the stock table's option lists, the snapshot CANCEL and Back restore, the airframe's
-diagram frames and the description pane. Rows and open lists reuse the Instant Action partial's
-dropdown machinery. What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
+The Weapon Loadout screen, the shell's partial over the decoded `[@OrdinanceLayout@]` section (the
+campaign's ammo chrome) and one aeroplane's `LoadoutChoice`: the Instant Action strip's seat (seat
+0's fit or the `InstantActionFeature`'s wingman fit, by the radio pair) or the per-seat picker's own
+`PlayerSeat.Fit`, `_loadoutSeat` deciding which screen the exit returns to. It owns the mapping of
+the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over
+the stock table's option lists, the snapshot CANCEL and Back restore, the airframe's diagram frames
+and the description pane; rows and open lists reuse the Instant Action partial's dropdown machinery.
+What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
 ## src/UI/Menu/Original/OriginalHangar.cs
 The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar

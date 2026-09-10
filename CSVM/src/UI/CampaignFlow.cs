@@ -459,8 +459,7 @@ public sealed class CampaignFlow
         }
 
         _stack.RemoveAt(_stack.Count - 1);
-        Row = Page.OpeningRow;
-        ClampedRow();
+        Entered();
         return true;
     }
 
@@ -487,8 +486,7 @@ public sealed class CampaignFlow
             _stack.Add(screen);
         }
 
-        Row = Page.OpeningRow;
-        ClampedRow();
+        Entered();
     }
 
     /// <summary>Ends the flow for the launchscreen, the CANCEL and RETURN TO MAIN MENU press.</summary>
@@ -668,6 +666,20 @@ public sealed class CampaignFlow
         }
 
         return page;
+    }
+
+    // The screen just arrived on, opened before its page composes anything. ⚠ The flight check's
+    // grant must run here and not from a page member: the rows are built at frame rate and read the
+    // profile the grant rewrites, so a write behind that read would run every frame.
+    private void Entered()
+    {
+        if (Screen == CampaignScreen.FlightCheck)
+        {
+            Feature.GrantMissionAircraft();
+        }
+
+        Row = Page.OpeningRow;
+        ClampedRow();
     }
 
     // The focused row, kept inside the page's current list: a page whose row count shrank under the

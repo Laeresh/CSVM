@@ -480,6 +480,52 @@ public class ObjectiveGraphTests
         Assert.True(graph.CompletedOf(1));
     }
 
+    [Fact]
+    public void An_awake_dedg_widens_its_group_every_tick_it_is_tested()
+    {
+        var (graph, world) = Build("\"OBJECTIVE1\",[\"DEDG\",[3,0]]");
+        world.GroupLive[3] = 2;
+        Run(graph, 1f);
+        Assert.InRange(world.Widened.Count, 9, 11);
+        Assert.All(world.Widened, g => Assert.Equal(3, g));
+        Assert.False(graph.CompletedOf(1));
+    }
+
+    [Fact]
+    public void A_dedg_that_is_not_awake_widens_nothing()
+    {
+        // Dormant, then gated on a dormant objective: neither is tested, so neither widens. The
+        // original's walk sits behind the same awake-and-not-complete gate.
+        var (dormant, dormantWorld) = Build("\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[5.0],\"DEDG\",[3,0]]");
+        dormantWorld.GroupLive[3] = 2;
+        Run(dormant, 2f);
+        Assert.Empty(dormantWorld.Widened);
+
+        var (gated, gatedWorld) = Build(
+            "\"OBJECTIVE1\",[\"TICK_DEPENDS_ON_OBJ\",[2],\"DEDG\",[3,0]],"
+            + "\"OBJECTIVE2\",[\"BEGIN_DORMANT\",[60.0],\"INACTIVE1\",[\"never\"]]");
+        gatedWorld.GroupLive[3] = 2;
+        Run(gated, 2f);
+        Assert.Empty(gatedWorld.Widened);
+    }
+
+    [Fact]
+    public void A_completed_dedg_stops_widening_and_a_group_0_clause_never_starts()
+    {
+        var (graph, world) = Build("\"OBJECTIVE1\",[\"DEDG\",[3,0]]");
+        world.GroupLive[3] = 0;
+        Run(graph, 1f);
+        Assert.True(graph.CompletedOf(1));
+        int widenedWhileAwake = world.Widened.Count;
+        Run(graph, 1f);
+        Assert.Equal(widenedWhileAwake, world.Widened.Count);
+
+        var (zero, zeroWorld) = Build("\"OBJECTIVE1\",[\"DEDG\",[0,1]]");
+        zeroWorld.GroupLive[0] = 2;
+        Run(zero, 1f);
+        Assert.Empty(zeroWorld.Widened);
+    }
+
     private static (ObjectiveGraph Graph, FakeWorld World) Build(string body)
     {
         var world = new FakeWorld();
@@ -516,6 +562,8 @@ public class ObjectiveGraphTests
 
         public Dictionary<int, int> GroupLive { get; } = new();
 
+        public List<int> Widened { get; } = new();
+
         public List<string> WokenEnemies { get; } = new();
 
         // The human field, read through the same CampaignHumanField rules CampaignDirector's own
@@ -530,6 +578,9 @@ public class ObjectiveGraphTests
             GroupLive.TryGetValue(group, out int live)
                 ? live + CampaignHumanField.LiveInGroup(Humans, group)
                 : null;
+
+        // One entry per widening call, so a test can count the ticks that widened a group.
+        public void WidenGroupEngagement(int group) => Widened.Add(group);
 
         public bool? TravelersMet(TravelersSpec spec)
         {

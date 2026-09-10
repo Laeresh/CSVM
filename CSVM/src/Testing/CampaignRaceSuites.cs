@@ -260,6 +260,10 @@ internal static class CampaignRaceSuites
 
         public int? GroupLiveCount(int group, string? generator) => Dead.Contains(group) ? 0 : 1;
 
+        public void WidenGroupEngagement(int group)
+        {
+        }
+
         public bool? TravelersMet(TravelersSpec spec) => null;
 
         public void WakeupEnemies(IReadOnlyList<string> names)

@@ -193,10 +193,16 @@ and not normalised:
 - `d` dotted with the candidate's own forward (its vtable `+0x04`) negative, meaning it faces the
   scorer, adds **+0.2**; otherwise **−0.2**.
 
-The activation test is a **cylinder**, not a radius: horizontal `d.x² + d.z²` at or under
+The admission test is a **cylinder**, not a radius: horizontal `d.x² + d.z²` at or under
 `+0x328`, and `+0x32c ≤ d.y ≤ +0x330`. Outside it the score is `1e21` and the candidate is never
 picked. `FUN_00421ad0` also returns `1e21` when the candidate object's `+0x04` field is 3 or more,
 and `FUN_00422890` is a validity check whose failure scores the same.
+
+⚠ **That cylinder is the ATTACK volume, not the activation volume**, on the field map the
+net-assignment section below records: activation is `+0x318`/`+0x31c`/`+0x320`, and its only reader
+in the executable is the state update `FUN_004897c0`. Both volumes ship at 2,000 m, so the two
+readings part company only where something moves one of them, and `DEDG`'s widening moves the
+activation volume alone ([../formats/objectives.md](../formats/objectives.md)).
 
 ### `rating_biases` returns rank units directly
 

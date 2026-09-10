@@ -123,6 +123,10 @@ public class ObjectiveSitesTests
 
         public int? GroupLiveCount(int group, string? generator) => 0;
 
+        public void WidenGroupEngagement(int group)
+        {
+        }
+
         public bool? TravelersMet(TravelersSpec spec) => false;
 
         public void WakeupEnemies(IReadOnlyList<string> names)

@@ -62,8 +62,11 @@ public class OriginalCoverageTests : IDisposable
     {
         new("free-flight", OriginalScreen.FreeFlight, new[] { OriginalShell.FreeFlightKey }, new[] { OriginalShell.BackKey }),
         new("dogfight", OriginalScreen.Dogfight, new[] { OriginalShell.DogfightKey }, new[] { OriginalShell.BackKey }),
-        new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, "C1", OriginalShell.AirframeKey(0) },
-            new[] { OriginalShell.SeatPlaneFieldKey, "CancelSelections", OriginalShell.BackKey }),
+        // ⚠ The cursor families walk this screen as the picking seat, not as seat 0, which drives
+        // nothing here; only the pointer stays seat 0's. ⚠ Leave the map unpicked: the way off by
+        // row is the walk's completion, which is the launch itself once FLY's gate is met.
+        new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, OriginalShell.AirframeKey(0) },
+            new[] { OriginalShell.SeatPlaneFieldKey, "AcceptSelections", OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
             new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
@@ -335,6 +338,10 @@ public class OriginalCoverageTests : IDisposable
         ? (vertical ? new MenuCommands { MoveY = 1 } : new MenuCommands { MoveX = 1 })
         : (vertical ? new MenuCommands { MoveY = -1 } : new MenuCommands { MoveX = -1 });
 
+    // Which seat's device the screen showing answers to: the picking seat on the per-seat aircraft
+    // screen, seat 0 everywhere else. The pointer stays seat 0's, the mouse being one desk device.
+    private static int Driver(OriginalShell shell) => Math.Max(0, shell.PickingSeat);
+
     private static OriginalRow? Row(OriginalShell shell, string key)
     {
         foreach (var row in shell.Rows)
@@ -441,7 +448,7 @@ public class OriginalCoverageTests : IDisposable
         Assert.Null(Walk(shell, journey, family));
         for (int i = 0; i < BackGuard && shell.Screen != OriginalScreen.TopLevel; i++)
         {
-            Assert.Null(shell.Step(Back).Exit);
+            Assert.Null(shell.StepSeat(Driver(shell), Back).Exit);
         }
 
         AssertHome(shell, campaign, hangar, "the Back chain");
@@ -526,11 +533,11 @@ public class OriginalCoverageTests : IDisposable
             int index = rows.ToList().FindIndex(r => r.Key == key);
             Assert.True(index >= 0, $"{key} left {shell.Screen}'s rows while walking");
             bool cross = rows[focus].Column != rows[index].Column && rows[focus].Kind is not (OriginalRowKind.Dropdown or OriginalRowKind.Radio);
-            shell.Step(Move(family, !cross));
+            shell.StepSeat(Driver(shell), Move(family, !cross));
         }
 
         Assert.True(shell.FocusedKey == key, $"the {family} walk reached {shell.FocusedKey}, not {key}, on {shell.Screen}");
-        return shell.Step(Accept).Exit;
+        return shell.StepSeat(Driver(shell), Accept).Exit;
     }
 
     // Every ScriptToExe edge of an in-scope section: mapped, and its mapping true of the shell.

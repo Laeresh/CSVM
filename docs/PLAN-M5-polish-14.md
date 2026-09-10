@@ -77,25 +77,25 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The second pilot's walk
 
-1. ☐ `BL-746` Back on the per-seat screen returns instead of unjoining
-2. ☐ `BL-747` Only the picking seat's device drives the per-seat screen
-3. ☐ `BL-749` A two-pilot Free Flight walk launches on the last confirm
-4. ☐ `BL-748` A joined pilot picks a weapon loadout
+1. ☑ `BL-746` Back on the per-seat screen returns instead of unjoining
+2. ☑ `BL-747` Only the picking seat's device drives the per-seat screen
+3. ☑ `BL-749` A two-pilot Free Flight walk launches on the last confirm
+4. ☑ `BL-748` A joined pilot picks a weapon loadout
 
 ### Wave B — Wrecks, hulls and reach over the mission map
 
-11. ☐ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
-12. ☐ `BL-714` A moving hull blocks its own rings' fire
-13. ☐ `BL-565` An awake DEDG widens its members' engagement volume
+11. ☑ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
+12. ☑ `BL-714` A moving hull blocks its own rings' fire
+13. ☑ `BL-565` An awake DEDG widens its members' engagement volume
 
 ### Wave C — The campaign's own screens and props
 
-21. ☐ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
-22. ☐ `BL-690` A staged cutscene aeroplane wears its scheme
+21. ☑ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
+22. ☑ `BL-690` A staged cutscene aeroplane wears its scheme
 
 ### Wave D — What another aeroplane sounds like
 
-31. ☐ `BL-079` Another aircraft's weapons have a position
+31. ☑ `BL-079` Another aircraft's weapons have a position
 
 ### Wave E — The closing sortie
 
@@ -120,7 +120,41 @@ it is the author's sitting, not an agent's.
 
 # Wave A — The second pilot's walk
 
-## A1 ☐ `BL-746` Back on the per-seat screen returns instead of unjoining
+## A1 ☑ `BL-746` Back on the per-seat screen returns instead of unjoining
+
+**Landed.** No press on the per-seat screen unjoins any more. `BackSeatPlane` keeps one arm for the
+picking seat with a selection standing, which takes that selection back and reopens the list, and
+every other press of Back, the picking seat's over the open list and seat 0's, goes through
+`CancelSeatWalk`. CANCEL SELECTIONS now shares the first arm through a new `ReopenSeatList`, so
+Decision 6 lands with the rest of the item: the button drops the seat's selection and reopens the
+list without leaving the walk or the sortie. `CancelSeatWalk` unwinds seat 0 to browsing in a loop
+rather than one stage, because a sortie screen reopens the walk on every frame seat 0's pick still
+stands and a single stage back could put the walk straight up again. The walk is therefore
+re-enterable from every state it can be left in: on a sortie screen seat 0 picks an aircraft again
+and the walk reopens at the same seat, and on Instant Action FLY MISSION is unconditionally live and
+starts it again. Unjoining survives at `StepSeat`'s guest arm (a seat's Back away from its own
+screen) and on the device-lost path through `Step`, which is what the report asked for.
+
+**One thing Decision 6 costs, for A2 to weigh.** The per-seat screen's three rows are the list,
+ACCEPT SELECTIONS and CANCEL SELECTIONS, and with CANCEL SELECTIONS no longer leaving, no row of
+that screen leaves the walk: the only way out is Esc or B. That is fine for a pad or a keyboard and
+it removes the mouse's one exit, which matters because A2's goal keeps the mouse driving this
+screen. `OriginalCoverageTests`' `seat-plane` journey now walks out by completing the walk (the
+field, then ACCEPT SELECTIONS) rather than by cancelling it, with the reason on the journey. The two
+fixes are a second CANCEL SELECTIONS press leaving when there is no selection left to drop, or a
+BACK plaque on the screen; neither was taken here, because Decision 6 says this button stays in the
+walk and A2 owns who drives the screen.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying A1, B11, B12 and C21:
+build clean, 268 of 268 engine suites pass with engine errors clean, 18 goldens hash-identical,
+units 3,518 of 3,519. `menu-player-setup-seats` covers this item's whole sequence, and the
+`OriginalSeats` and `OriginalCoverage` unit cases pass. The one unit failure is the `MenuLayout`
+census pin (`artMissing` expects 2 where this install's extraction reports 0), which predates the
+wave and is recorded on main; it touches nothing any item here changed. Still owed at the controls,
+on E41's sortie: two pads on Instant Action, Back on the per-seat screen returning to the sortie
+screen with both seats listed, and Back on the Instant Action screen still unjoining.
+
+**Original approach (kept for reference).**
 
 **Goal.** On the per-seat plane-selection screen, Back leaves the walk and reopens the screen the
 walk came from with every joined seat kept. A pilot leaves the sortie only by pressing Back on the
@@ -156,7 +190,39 @@ sortie screen is reachable after a Back at every point in it. Decision 6 settles
 so do not leave that arm calling `_setup.Unjoin` on the ground that Back no longer does; both
 changes belong to this item.
 
-## A2 ☐ `BL-747` Only the picking seat's device drives the per-seat screen
+## A2 ☑ `BL-747` Only the picking seat's device drives the per-seat screen
+
+**Landed.** The mechanism was one frame-routing decision, not a device check. `StepSeat` handed seat
+0's whole frame to the shell on every screen, so the per-seat screen took seat 0's cursor, Accept and
+Back as if they were the picking seat's. The screen now answers to the seat that is picking: seat 0's
+frame is reduced to its pointer alone while another seat picks (`SeatZeroFrame`), and the public
+`Step` became the seat-0 entry over a private `ApplyFrame`, so no caller can drive a screen it does
+not own by skipping `StepSeat`. The pointer is kept deliberately, since the mouse rides seat 0's
+source and is the one device a pilot without a pad of their own can pick with; the identity that
+decides is the seat, never the device kind. `_steppingSeat` is gone with the last reader it had:
+`BackSeatPlane` now branches on the picking seat's own state, which is also what makes the walk
+behave the same when seat 0 is itself the picking seat.
+
+**Decided: the mouse keeps an exit, through CANCEL SELECTIONS.** A1 handed A2 the question, and the
+answer is that a mouse-only pilot could not leave the walk once seat 0's reach was removed. On
+Instant Action the only remaining way off the screen would have been to complete the walk, which
+launches the mission, so the desk had no way back at all whenever the picking seat's pad was not to
+hand (a sleeping wireless pad, a `--debug-join` seat with no device). Of A1's two candidate fixes the
+smaller landed: CANCEL SELECTIONS drops the selection standing, exactly as Decision 6 says, and with
+none left to drop the same press leaves the walk. That makes it the pointer's Back, in the two stages
+the picking seat's Back already takes, and it adds no row to a screen authored with two buttons. The
+BACK plaque was not taken, because A4 adds a Weapon Loadout row to this screen and a fourth plaque is
+better judged with that row's layout in hand.
+
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `menu-player-setup-seats` presses seat 0's Down, Accept and Back on seat 1's
+screen and reads the row, the lock, the screen and the picking seat all standing still, and the
+`OriginalSeats` and `OriginalCoverage` units cover the mouse's own reach. Still owed at the controls,
+on E41's sortie: two pads, seat 0's stick and buttons moving nothing while seat 1 picks, and a
+pad-less second pilot picking with the mouse alone and leaving through CANCEL SELECTIONS.
+
+**Original approach (kept for reference).**
 
 **Goal.** The picking seat's device and the mouse drive the per-seat plane-selection screen. Seat
 0's commands do nothing there unless seat 0 is the picking seat.
@@ -181,7 +247,33 @@ walk with seat 0 as the picking seat, where its own device must drive it. Comple
 **⚠ Traps.** Do not fix this by gating on device kind; the seat's own `Source` is the identity that
 matters.
 
-## A3 ☐ `BL-749` A two-pilot Free Flight walk launches on the last confirm
+## A3 ☑ `BL-749` A two-pilot Free Flight walk launches on the last confirm
+
+**Landed.** The mechanism was one branch in `FinishSeatWalk`, which treated the return screen as the
+question. Instant Action was the only return that launched; every other return reopened the screen
+the walk came from and left seat 0 to press FLY, which a second pilot's confirm has already earned.
+The walk's completion now reaches the launch whatever screen it returns to: `InstantAction` keeps its
+own exit, and a sortie return goes through `Fly()`, the same press FLY makes, so Free Flight and
+Dogfight launch from the last seat's confirm with each seat's aircraft and devices. Routing it
+through `Fly()` rather than a second launch path is what keeps both gates: the screen is opened
+before the call, so the launch reads that screen's own chapter and mode, and `FlyEnabled` still
+withholds a Dogfight without a second seat and a sortie with no map picked. Where a gate is unmet the
+screen returns with FLY dark, exactly as before, and picking the map then lights it for seat 0's own
+press, so nothing became unreachable. The interaction with A1 needed no new code: a walk left by Back
+unwinds seat 0 to browsing, so the sortie screen does not reopen the walk, and a re-entry after
+seat 0 picks again ends in the launch instead of a second wait. The launch also cannot race the
+walk's reopening, since `ApplyFrame` reads `BeginSeatWalkIfDue` only when the frame produced no exit.
+
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `menu-player-setup-seats` walks the Free Flight leg with no map picked
+(nothing launches, FLY dark), then the map picked and seat 0's own press flying both, and
+`menu-launch-return` takes the Dogfight launch off the guest's confirm, which is where the one
+cross-suite regression showed before it was fixed. Still owed at the controls, on E41's sortie: two
+pads on Free Flight, the flight starting on seat 1's confirm, and Dogfight still withholding the
+launch until a second seat has joined.
+
+**Original approach (kept for reference).**
 
 **Goal.** The last seat's confirm launches the sortie, on Free Flight as it already does on Instant
 Action, so seat 0's pick is the ready and the walk is the launch.
@@ -206,7 +298,42 @@ seat has joined. Complete `.\RunTests.ps1`.
 **⚠ Traps.** Dogfight shares the sortie path and additionally withholds the launch until a second
 seat has joined; keep that gate.
 
-## A4 ☐ `BL-748` A joined pilot picks a weapon loadout
+## A4 ☑ `BL-748` A joined pilot picks a weapon loadout
+
+**Landed.** The open question below is answered: **the launch path already carries a per-seat
+loadout and needed no change at all.** `PlayerSetupFeature.Choices` builds each seat's
+`MenuSeatChoice` from `seat.Fit` (stock reported as null), and both sortie exits and the Instant
+Action exit go through it, so the item was one screen away from working rather than a change to the
+launch. Every seat has had its own `LoadoutChoice` all along; nothing but a door to it was missing.
+
+The per-seat picker gains a WEAPON LOADOUT plaque, standing only over a selection because a fit
+needs an aeroplane to hang on, and pressing it opens the existing `[@OrdinanceLayout@]` screen on
+that seat's own `Fit` and selected airframe, named for the seat. The loadout screen's three doors now
+share one `BeginLoadout`, and `_loadoutSeat` records which door opened it, so the exit returns to the
+picker rather than to Instant Action and the walk survives the trip. `OnSeatWalk` is the walk's own
+screen test, the picker plus a Weapon Loadout it opened, which A2's frame reduction, `StepSeat`'s
+ownership test and `Open`'s walk-ending arm all read: treating only the picker as the walk's screen
+made the picking seat's Back unjoin it from the loadout screen.
+
+The plaque borrows the pilot block's `PS_B_EXPORTP` geometry on the plane-selection board, since the
+remake's picker draws no EXPORT (a seat has no stored record to write) and the loadout plaque belongs
+in the block it acts on. The campaign's own plane-selection page never asks for that button, so it
+draws nothing new there.
+
+**No BACK plaque was added**, which A2 deferred to this item. The screen now has three plaques and
+the pointer already has its way out through CANCEL SELECTIONS' second press, so a fourth would be a
+second exit rather than a first one.
+
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `menu-player-setup-seats` opens a selected seat's WEAPON LOADOUT on its own
+fit and airframe with the walk and the seat's own reach kept there, restores on CANCEL LOADOUT, keeps
+on ACCEPT, and asserts the last confirm launching a Dogfight for both seats carrying seat 1's own
+loadout beside seat 0's stock fit, which is this item's goal end to end. `OriginalSeats` units run 14
+of 14. Still owed at the controls, on E41's sortie: two pilots picking different loadouts on Instant
+Action and again on Free Flight, and each aeroplane carrying its own pilot's weapons in the air.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every joined pilot picks a weapon loadout as well as an aircraft, on Instant Action and on
 Free Flight, and that choice reaches the launch.
@@ -233,14 +360,62 @@ unchanged. Complete `.\RunTests.ps1`.
 
 **⚠ Traps.** Nothing here is decoded, because the original has no second pilot; this is a remake
 decision and must not be written up as fidelity. The loadout screen is written against seat 0 and
-the wingman radio pair. `<TODO: confirm the launch path can read a per-seat loadout, or name what
-has to change in it, before the row is drawn.>`
+the wingman radio pair. The launch path was confirmed before the row was drawn and needed nothing:
+`PlayerSetupFeature.Choices` already emits each seat's own `Fit`.
 
 ---
 
 # Wave B — Wrecks, hulls and reach over the mission map
 
-## B11 ☐ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
+## B11 ☑ `BL-698` + `BL-700` Every breakup piece rests on the sea, on both hulls
+
+**Landed.** The cause is neither of the three candidates below. Every piece takes the column tier,
+every piece reaches the sea, and every origin is inside the column the hull queries. What decides
+where a piece stops is WHEN it lands: the wreck is still descending at about 104 m/s when the first
+sections reach the water, the solve is in the wreck's own frame, and the energy test that ends a
+body reads only the body's velocity IN that frame, which is a metre or two a second. So a section
+that touches the sea early is rested at the surface, frozen in the wreck's frame, and then carried
+down by every metre the wreck still has to fall. Measured on C2B/M04 before the fix, a section's
+final depth is exactly minus the wreck's height at the frame it landed: `gasbag4` landed with the
+hull at 26.96 m and rested at −26.94, `gasbag1` landed with it at 13.14 m and rested at −13.12,
+while `gasbag2`, `gasbag3` and `gasbag5` landed at or after the hull's own rest and stopped on the
+water. The same shape was already visible on `piratezep`, where `zeppelin-breakup` recorded rest
+heights of −0.2 to −5.6 m under a 10 m band that passed them all.
+
+The fix reads the ARRIVING speed rather than the local one: the body's own velocity taken into
+world, plus the velocity of the frame it is solved in, taken from that frame's own step. A section
+carried through the surface therefore fails the energy test's "the contact is survivable" arm no
+longer, is lifted back onto the water each frame it is carried under it, and comes to rest there
+once the wreck stops. A contact the body did not approach under its own power charges the 15 s
+watchdog instead of the contact cap, because how many frames a wreck takes to settle is a
+frame-rate figure and spending the cap on it would make the resting height depend on the frame
+rate. Nothing is clamped, no constant is tuned, and a body under a parent that stands still is
+untouched: the two readings agree exactly there.
+
+Measured after, on the new `gemini-breakup-rest` suite: all five Gemini sections rest at −0.2 to
++0.1 m against a sea at 0, each on `col_water`, and the wreck at 0.0. On `piratezep` all six move
+to −0.2 to 0.0 from −0.2 to −5.6. Both suites, `ground-contact` and `campaign-balloon-death` pass.
+
+`gemini-breakup-rest` is the resting check the Gemini hull owed: C2B/M04 with collision wired, the
+hull killed through its gasbag zones, and the wreck and all five sections asserted against the sea.
+It was red on the unfixed tree at 3 of 5 sections afloat and is green at 5 of 5.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged tree: build clean, 268 of 268 engine
+suites pass with engine errors clean, 18 goldens hash-identical, units 3,518 of 3,519, the one
+failure being the pre-existing `MenuLayout` census pin recorded under A1. `gemini-breakup-rest`
+reports the C2B/M04 wreck resting at y = 0.0 with 5 of 5 sections on the sea, and `ground-contact`,
+`gemini-gasbag-bays`, `zeppelin-breakup` and `campaign-balloon-death` pass beside it. Still owed at
+the controls, on E41's sortie: a CM14 Gemini and a pirate zeppelin each killed over water and
+watched from outside until every piece settles.
+
+**Follow-up found and not fixed here.** Two of the five sections dispatch no `hit_waterN` splash,
+the two that land last, and this predates the fix. `MotionSet.OwesBounce` can only hold a def
+instance open once a bounce is already recorded, and a body records one at its landing, so a body
+still in the air holds nothing and `killgmzep` has already gone INVALID by the time it lands. The
+pirate hull hides it because all six of its sections land inside the wreck's own descent. Needs its
+own id.
+
+**Original approach (kept for reference).**
 
 **Goal.** A zeppelin killed over water comes to rest on the sea in every one of its pieces: the
 pirate zeppelin's front and back hull sections, and the Gemini's `gasbag1` and `gasbag5`, settle
@@ -278,7 +453,42 @@ but over a collision-less world where nothing comes to rest, so neither suite co
 check. Gasbags ride the hull and were confirmed resting in the same sitting, so on the pirate ship
 this is not the gasbag path.
 
-## B12 ☐ `BL-714` A moving hull blocks its own rings' fire
+## B12 ☑ `BL-714` A moving hull blocks its own rings' fire
+
+**Landed.** The hull's motion is not the mechanism. A ring's line-of-sight ray excluded every
+collider of its own *mounting section*, and on `piratezep` a section is a large piece of the hull:
+the belly rings `ctur1` to `ctur3` hang off `underneath`, whose 33 bodies include `g375`, the very
+skin standing between them and a plane on the far flank. Across the seventeen rings, **422 of 517**
+in-arc bearings that cross 120 m or more of the hull's own body read clear under that rule, and the
+belly rings fired 7 rounds in 6 s docked and 27 flying straight through 162 to 255 m of their own
+hull. The rule now reads the world layer with no exclusion at all, blind only to the first
+`TurretController.MountSkirtM` = 1.5 m off the muzzle, which is where a ring's own bodies stop (`g21`
+and `gun` answer at 0 to 1 m) and below where a hull skin stands over one (2 m). That leaves 172 of
+the 517 clear, mostly hull carrying no collider, and every ring keeps 54 % to 79 % of its in-arc
+field of fire. The mounting section is still what a round the gun fires owns, for the hit ray and
+the splash; only the sight line stopped reading it.
+
+The new `turret-moving-hull-blocks-own-fire` holds each ring's target at a station fixed in the
+HULL's frame, so the hull's motion is the only variable between a docked leg and a flying one, and
+probes successive rings at successive points of the net. Both legs are green, and both were red on
+the unchanged rule. Two instrument faults found beside it, both now rules in `docs/verification.md`:
+a first-obstruction sweep tests the geometry nearest the instrument rather than the shot in the
+report (INSTR-48), and a suite with no clock of its own freezes every time-expiring cache on its
+first verdict, which is why `turret-hull-blocks-own-fire`'s "8 s over several 1-2 s windows" was one
+cast per ring and why `turret-self-fire` read every bearing off bearing 0 (INSTR-49). Both suites now
+step a clock. The collider's own pose lag was measured directly off the physics server at **0.25 m**
+on the net (INSTR-50): real, but it only flips a verdict grazing a body 6 m off, and it is left
+unfixed.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged tree: build clean, 268 of 268 engine
+suites pass with engine errors clean, 18 goldens hash-identical, units 3,518 of 3,519, the one
+failure being the pre-existing `MenuLayout` census pin recorded under A1. The new
+`turret-moving-hull-blocks-own-fire` passes on both legs, `turret-hull-blocks-own-fire` now confirms
+16 of 17 rings against the 14 it read before, and `turret-self-fire` and `surface-vehicle-guns`
+pass on the widened rule. Still owed at the controls, on E41's sortie: an Instant Action Dogfight
+against a pirate zeppelin, flown along the far hull while it moves.
+
+### Original approach (kept for reference)
 
 **Goal.** A zeppelin's rings hold fire on a bearing its own hull blocks while that hull is moving
 along its net, as they already do while it is parked.
@@ -311,9 +521,50 @@ shoot through their own hull. A probe that samples one point of the authored leg
 self-obstruction there and so tested nothing; sample across the leg. `BL-735`, the multiplayer
 hulls' belly rings over no collider at all, is a separate change and stays separate.
 
-## B13 ☐ `BL-565` An awake DEDG widens its members' engagement volume
+## B13 ☑ `BL-565` An awake DEDG widens its members' engagement volume
 
-**Goal.** Each tick an awake DEDG objective raises every live member of the watched group to a
+**Landed.** An awake `DEDG` now raises every live member of the group it watches to a 9,000 m
+activation radius on the tick it is tested, and never narrows it again.
+
+- The decode was re-read before implementing and says what the plan said. `FUN_004658d0` walks the
+  vehicle list for one group and calls `FUN_00465850` per entry, which, for a member whose dead byte
+  `+0x91d` is clear and whose group `+0x388` matches, raises `+0x318` to 8.1e7 (9,000 m squared),
+  `+0x31c` to −9,000 and `+0x320` to +9,000, each only when the field is narrower, and counts it.
+  The count and the widening are therefore one pass, and `FUN_00465910` is the only caller: the
+  widening exists nowhere but a `DEDG` test, sits behind the awake-and-not-complete gate at
+  `FUN_0046a490`, and returns before the walk when the group is not positive or the max is negative.
+- `IObjectiveWorld.WidenGroupEngagement(group)` is the new seam, called from `DedgMet` on the same
+  tick as the count for a positive group. `CampaignDirector.World` implements it over the same
+  liveness test `GroupLiveCount` uses, and `CampaignRosterPlan.WidenForDedg` is the single write,
+  `Max(ActivationRange, 9000)`. The altitude bands still have no consumer, as in `ApplyVolumes`.
+- Measured over C3/M05, whose OBJECTIVE5 (`DEDG [1, 0]`) and OBJECTIVE22 (`DEDG [5, 0]`) are its
+  two clauses awake from the first tick. Baseline: all 14 spawned members sit at the 2,000 m
+  `min_ai_active_dist` floor and stay there over a driven tick. After: the five live members of
+  groups 1 and 5 read 9,000 m, a member pre-set to 12,000 m keeps 12,000, and the eight others
+  (group 0, plus the deactivated group-2/4 blocks behind dormant clauses) keep 2,000.
+- The player-visible consequence, measured on the widened machine: with the target 3,000 m off and
+  the aircraft 1,700 m from its pursuit anchor (return range 1,200 m), a floored member reads
+  "beyond return range" and drops back to patrol while the widened one stays in pursuit. ⚠ The
+  pursue ENTRY gate is `min(activation, attack)` and no `DEDG` widens the 2,000 m attack radius, so
+  this keeps an engaged survivor engaged rather than making a patrolling one set off from 8 km.
+- ⚠ One divergence this exposes, left open on purpose and owed a `BL-` of its own: the only reader of
+  the vehicle's activation triple in the executable is the AI flight state update `FUN_004897c0`,
+  while the target-ranking cylinder `FUN_00421ad0` reads `+0x328`/`+0x32c`/`+0x330`, which the net and
+  roster writes assign to the ATTACK volume. CSVM gates acquisition on `ActivationRange` instead
+  (`FlightController.SelectRankedTarget`, `AiTargetRanking.Score`), so a widened member here also
+  acquires out to 9,000 m where the original would still gate acquisition at its attack cylinder.
+  Both volumes ship at 2,000 m, which is why the mapping never showed before.
+
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `campaign-dedg-volume` reads C3/M05's two awake DEDG clauses widening groups
+1 and 5 and nothing else: the five watched members at 9,000 m (one pre-set to 12,000 left alone) and
+the other eight at the 2,000 m floor, with the disengage row reading patrol at the floor and pursue
+widened. ⚠ **What that does not buy is stated above and is what the sortie should watch:** the
+pursue ENTRY gate is still the 2,000 m attack radius, so this keeps an engaged survivor engaged
+rather than making one parked 8 km away set off, and the milestone's "comes to the player from
+anywhere on the map" waits on `BL-789`. Still owed at the controls, on E41's sortie: a campaign
+mission whose DEDG objective waits on a wave survivor, watched for whether the objective completes.
 9,000 m activation radius, so a watched group never disengages by distance and comes to the player
 from anywhere on the map.
 
@@ -344,7 +595,34 @@ but the original never shrinks the volume back. Match that: set, never reset.
 
 # Wave C — The campaign's own screens and props
 
-## C21 ☐ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
+## C21 ☑ `BL-689` CM13's flight check answers per crew slot and grants its aircraft
+
+**Landed.** The flight check now answers CHANGE PLANE per crew slot, reads the owned count the way
+`uiData` 2018 reports it, and grants the mission's story aircraft on entry.
+
+- `CampaignFeature.ChangePlaneAllowed` is a method over the crew slot, not a slot-less property.
+  The pilot's answer alone carries `FLIGHTCHECK.SCRIPT`'s outright bar on the two grant missions;
+  both answers carry the floor of three.
+- `ChangePlaneCount` is `uiData` 2018's own answer, the owned count less one on missions 13 and 17,
+  which is the term the tree had no expression for. The floor itself was already there.
+- `CampaignFeature.GrantMissionAircraft` is `uiData` 2021: it takes the mission reward table's
+  ungated entry, adds the aircraft the first time with the table's own name and the class-2 marker,
+  and makes it the pilot's plane on every entry. `CampaignFlow.Entered` runs it as the flight check
+  opens, before the page composes, so both presentations get it through the one flow.
+- `CampaignFlightCheckPage` holds the two answers separately in `FlightCheckState` and hands each
+  slot its own. A guest's own check is unchanged: neither script rule is about a guest's aircraft.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged tree: build clean, 268 of 268 engine
+suites pass with engine errors clean, 18 goldens hash-identical, units 3,518 of 3,519, the one
+failure being the pre-existing `MenuLayout` census pin recorded under A1. The new
+`campaign-flight-check-plane-change` runs a two-plane profile (granted the aircraft, neither button
+offered), a three-plane one (the wingman's button alone, the pilot's barred by the mission), a
+profile already carrying the award (granted nothing a second time, the plane re-selected) and the
+neighbouring mission (both buttons, the selection kept); `campaign-layout-parity` and
+`menu-campaign-journey` pass beside it. Still owed at the controls, on E41's sortie: CM13 replayed
+on a profile on each side of the floor of three.
+
+**Original approach (kept for reference).**
 
 **Goal.** CM13's flight check answers CHANGE PLANE per crew slot rather than once for both, applies
 the original's second rule, and grants the mission's own aircraft.
@@ -373,7 +651,47 @@ buttons when owned-minus-one falls below three (`:285-287`). Whether the wingman
 have been offered at all depends on how many aeroplanes that profile owns. The gaps are the three
 named above, not "CM13 locks plane selection".
 
-## C22 ☐ `BL-690` A staged cutscene aeroplane wears its scheme
+**Corrections to the item as written.** Two of the three gaps were stated slightly wrong and one
+path was wrong. The files are `CSVM/src/UI/Menu/CampaignFeature.cs` and
+`CSVM/src/UI/CampaignFlightCheckPage.cs`, not the `Session/` and `Menu/Original/` paths cited; the
+per-slot lines are `:441` and `:445`, not `:385,389`. Gap 2's floor of three was already in the
+tree (`(Profile?.Planes.Count ?? 0) >= 3`); what had no term was the minus-one on the two grant
+missions. Gap 1 and gap 3 were exactly as stated.
+
+## C22 ☑ `BL-690` A staged cutscene aeroplane wears its scheme
+
+**Landed.** A staged prop is now built on a `SceneBuilder` of its own and painted in the livery of
+the aeroplane it stands in for, on one route that serves every staged node carrying aircraft skins.
+
+- `AircraftStage` gives a subtree its own builder, with the same `textureSubstitute` hook
+  `PlaneBuilder` carries, only when that subtree's materials name a skin prefix. Two of the seven
+  do: `balmoral` (`bal`) and `piratefighter` (`dev`). `chuteman`, the wing-walk figures and the two
+  hangar Bloodhawk props name none, so no substitution can reach them and the shared bare builder
+  still serves them.
+- `AircraftStage.Paint` installs a `PlanePainter` on one staged subtree and re-resolves its
+  materials, the way `PlaneBuilder.Repaint` does. `StandIns` is the table of where each prop's
+  livery comes from: a roster block for `balmoral` (`balmoral_1`), a vehicle def for
+  `piratefighter` (`devastator`).
+- `GameSession.PaintStagedAircraft` runs after the roster build, since a stand-in's scheme is the
+  one its own rig resolved and no rig exists earlier. A block that did not fly, or that flew in the
+  shipped skins, leaves its prop in the shipped skins; nothing draws a default pattern of its own
+  here and nothing touches the paint RNG.
+- CM15 now resolves `player_fortune` for both Balmoral models off the same `balmoral_1` rig
+  (`[world] aircraft stage paint: 'balmoral' player_fortune (5 skin(s)), 'piratefighter'
+  player_fortune (5 skin(s))`).
+
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical (`campaign-intro-fill` among them, over the newly painted prop), exit 0.
+`campaign-cm15-staged-paint` asserts the substitution reaching the staged materials, 69 of
+`balmoral`'s 122 re-resolved with 5 skins painted and 50 of `piratefighter`'s 99 with 5, while
+`chuteman` carries no prefix and takes no painter. ⚠ **The drop Balmoral is not proven by picture**
+and cannot be: it is a range-gated mid-mission cutscene no CLI flag plays, and a CM15 sweep sat
+inside its own noise floor. Still owed at the controls, on E41's sortie: CM15's intro with the drop
+Balmoral in frame against the flyable one, and `piratefighter`, `chuteman` and the wing-walk figures
+in the same pass.
+
+**Original approach (kept for reference).**
 
 **Goal.** CM15's staged Balmoral wears the scheme of the aeroplane it stands in for, rather than the
 shipped skins, and the same route serves every staged prop that has a scheme.
@@ -405,11 +723,51 @@ no CM15 footage exists to settle what the original's drop Balmoral wears. The in
 `piratefighter`, whose `devastator`/`wingman` defs do author `paint_pattern player_fortune`, is the
 better-founded half of the same item.
 
+**Corrections to the item as written.** The livery trap holds and is now measured: `balmoral_1`
+ships 66 fields, short of the livery slots at 68, and its def chain (`balmoral` → `basic_airplane`)
+authors no `paint_pattern`, so Fortune Hunters on the drop Balmoral is the default-pattern rule's
+answer through the block's own rig, which flies on the player's team. The prop half is firmer than
+the item states: `devastator`'s own `nodename` **is** `piratefighter`, so the def that authors
+`player_fortune` is the def of that exact model, and `wingman` derives from it. The Verify line
+conflates two cutscenes: the drop Balmoral is `drop_paratroopers`, a range-gated mid-mission
+cutscene, not the intro, and no CLI flag plays one, so it cannot be brought on screen headlessly.
+
 ---
 
 # Wave D — What another aeroplane sounds like
 
-## D31 ☐ `BL-079` Another aircraft's weapons have a position
+## D31 ☑ `BL-079` Another aircraft's weapons have a position
+
+**Landed.** An AI-flown aircraft now carries `AiWeaponAudio` beside its `AiEngineAudio`: the gun
+loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding the aeroplane, each culled at its own
+definition's authored audible distance. `WeaponAudioCues` is the selection seam both audio paths read,
+so the own-ship path and the world path cannot come to play different definitions. Baseline, a C1
+sortie flown past two `--ai-attack` Bloodhawks with `--volume=0`: both fired (`gun group 1 … firing
+on ai1_player_bhawk`, `ai2_player_bhawk`), both carried a positional engine voice
+(`cull=2000 m`, audible at 269 m and 275 m), and **zero** positional weapon emitters existed, no line
+of any kind. After, the same sortie: **two** aircraft each build **two** positional weapon emitters,
+`snd_30cal` culled at 150 m and `snd_emptyclip` at 800 m, logged as `ai weapons ai1_player_bhawk:
+loop=snd_30cal(ok) cull=150 m` plus a verdict per aircraft (`culled at 570 m`, `culled at 1024 m`).
+Flown into the traffic with `--hold`, one voice crosses into earshot and back out:
+`ai weapons ai2_player_bhawk audible at 150 m (cull 150 m)` then `culled at 715 m`. The gun-loop
+definitions settle the design rather than a judgement doing it: every caliber's `LOOPED_SOUND_NAME`
+and `snd_emptyclip` carry `3D` + `RANGE`, so they were always world sounds in the data. The
+`ai-weapon-emitters` suite is the red/green proof: it fails on `both AI aircraft built a positional
+weapon voice (a=False b=False)` with the voice unattached. No pitch term was written, and Doppler on
+Instant Action traffic stays unmeasured. What the suite does settle is that nothing introduces one by
+default: every emitter is asserted at `DopplerTracking` Disabled and `PitchScale` 1.000, so a changed
+engine default or a copied line cannot add a shift without failing.
+
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `ai-weapon-emitters` reads both AI aircraft building a positional weapon
+voice and logs the cull crossing it in both directions, audible at 54 m and 45 m against a 150 m
+`snd_30cal` cull and culled at 645 m, which is the pairing INSTR-45 asks for since no screenshot can
+answer for audio. Still owed at the controls, on E41's sortie: an Instant Action sortie flown past
+firing traffic, listened to for whether another aeroplane's guns come from where that aeroplane is
+and fall silent at the authored distance.
+
+**Original approach (kept for reference).**
 
 **Goal.** Another aircraft's gun loop and weapon one-shots play from that aircraft's position with
 their own distance cull, as its engine already does.

@@ -179,7 +179,7 @@ The objectives runtime over a parsed script, pure state over `Step` calls in the
 Implemented as decoded, shipped quirks included: the four states per objective, at most one
 completion per tick from a rotating scan, dependency gating on an AWAKE target, the wake
 executor's truncating early return, the nap that clears a completed flag, and the condition
-families' OR. Four endings reach it, three from the script and `NotifyDockingComplete` from the
+families' OR, whose `DEDG` arm also widens the watched group's engagement volume on every tick it is tested. Four endings reach it, three from the script and `NotifyDockingComplete` from the
 animation. World seam: `IObjectiveWorld`. Decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/Session/CampaignDirector.cs
@@ -190,7 +190,7 @@ the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
 family, CM19's only launch path; `Step` runs the graph, the escort repair and the music. The
-nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's
@@ -269,7 +269,7 @@ decoded fork lives here and nowhere else: `Escorts` is `mode wingman` with no au
 is any authored net the chapter carries, and a plan never has both. `ApplyPlan` is the
 after-the-spawn half (volumes, maneuvers, gunner ratings), shared by the campaign placement and
 the generator launch so the two cannot drift; `BuildGeneratorTemplate`/`ResolveGeneratorLaunch`
-serve the enemy generators. Nets and modes: [../org/aiPilot.md](../org/aiPilot.md).
+serve the enemy generators, and `WidenForDedg` is the one write an awake `DEDG` makes to a member's activation radius. Nets and modes: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles. `Place` binds a spawned body to its authored
@@ -440,13 +440,13 @@ it in place first. `Drop` is the rollback path and `Discard` the membership clea
 
 ## src/Session/AiFlightAssembler.cs
 `FlightRoster`'s private AI assembly path: authored or fallback pilot skills and maneuvers, then the
-model, controller, livery, loadout and ordnance, damage visuals and optional crash runtime, then the
-finished node placed. The crash runtime is OPENED rather than built wherever the caller supplied a
-queue, so the launch frame carries no rig and the prop choreography plays from the queue's
-completion hook. It chains the roster's durability override ahead of the enemy scale and the spawn
-jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the
-readout's title, stamps the block's objective marker (flag and both label halves) onto the aeroplane
-it builds, and owns the one AI skills cache the voice adapter borrows. Read `FlightRoster.cs` next.
+model, controller, livery, loadout and ordnance, damage visuals, the positional engine and weapon
+voices that stand in for the own-ship `FlightAudio`, the optional crash runtime, then the node
+placed. That runtime is OPENED rather than built wherever the caller supplied a queue, so the launch
+frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the
+durability override ahead of the enemy scale and the spawn jitter, the engine's own order
+([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's title, stamps the
+block's objective marker, and owns the AI skills cache. Read `FlightRoster.cs` next.
 
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,

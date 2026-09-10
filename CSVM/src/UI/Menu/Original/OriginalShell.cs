@@ -541,17 +541,18 @@ public sealed partial class OriginalShell
         Open(OriginalScreen.TopLevel);
     }
 
-    /// <summary>Opens a screen directly, the screenshot aids' door. Any screen but the per-seat
-    /// one ends a seat walk in progress.</summary>
+    /// <summary>Opens a screen directly, the screenshot aids' door. Any screen the walk does not
+    /// stand on (<see cref="OnSeatWalk"/>) ends a seat walk in progress.</summary>
     public void Open(OriginalScreen screen)
     {
         _screen = screen;
         _hover = -1;
         _pressed = -1;
-        if (screen != OriginalScreen.SeatPlane)
+        if (!OnSeatWalk)
         {
             _pickingSeat = null;
             _seatPage = null;
+            _loadoutSeat = null;
         }
 
         _drag = null;
@@ -562,18 +563,25 @@ public sealed partial class OriginalShell
         }
     }
 
-    /// <summary>Applies one frame of one seat's commands. The pointer, when present, is in
-    /// authored pixels.</summary>
-    public OriginalStep Step(MenuCommands commands)
+    /// <summary>Applies one frame of seat 0's commands, under the rule <see cref="StepSeat"/>
+    /// applies to it: on the per-seat aircraft screen picking for another seat, only its pointer
+    /// counts. The pointer, when present, is in authored pixels.</summary>
+    public OriginalStep Step(MenuCommands commands) => StepSeat(0, commands);
+
+    // One seat's frame applied to the screen showing, the seat's own right to drive it already
+    // settled by StepSeat.
+    private OriginalStep ApplyFrame(MenuCommands commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
         var cues = new List<string>();
         MenuExit? exit = null;
         SyncCampaignField();
         bool changed = TypeName(commands, cues);
-        if (_screen == OriginalScreen.SeatPlane && _pickingSeat is not { Joined: true })
+        if (OnSeatWalk && _pickingSeat is not { Joined: true })
         {
-            // The seat this screen was picking for has gone: the walk moves on or ends.
+            // The seat this screen was picking for has gone: the walk moves on or ends, and a
+            // Weapon Loadout it had open on that seat's own fit goes with it.
+            DropLoadout();
             exit = AdvanceSeatWalk();
             changed = true;
         }
@@ -733,6 +741,7 @@ public sealed partial class OriginalShell
         return new OriginalStep(cues, exit, changed);
     }
 
+#pragma warning disable SA1202 // ApplyFrame above stays beside the Step that delegates to it.
     /// <summary>The screen as a composed board in the authored space, a standing dialog over it
     /// and the pointer drawn last.</summary>
     public ComposedBoard Compose()
@@ -827,6 +836,7 @@ public sealed partial class OriginalShell
         return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
+#pragma warning restore SA1202
 
     private static OriginalPreferencesInks ReadPreferencesInks(MenuLayout layout, OriginalInks inks)
     {

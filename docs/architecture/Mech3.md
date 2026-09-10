@@ -623,14 +623,14 @@ census is unchanged. `ResolveLibraryRoot` is the lazy pool behind a mission or d
 library root, keyed on the caller's anchor and the authored call event. Read `WorldBuilder.cs`.
 
 ## src/Mech3/AircraftStage.cs
-The aircraft-archive subtrees a story-mission intro, a hangar or chuteman drop cutscene or a
-wing-walk capture animates, staged into a chapter world before the animation bind: the
-`piratefighter` prop, the bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s
-parachutist, `balmoral`, and the `FigureNodes` and `PropNodes` groups. Each node's shipped active
-state and the holder it hangs under are on its own member, since those decide whether it draws in a
-mission that never names it. All carry a rebased gamez index (`PointerBaseOf`), which is what lets
-a compiled cross-archive symbol table bind them. `StageFlown` puts the flown airframe in the same
-table and parks its docking hook. Decode: docs/formats/anim-definitions/cutscenes.md.
+The aircraft-archive subtrees a story-mission intro, a hangar or chuteman drop, or a wing-walk
+capture animates, staged into a chapter world before the animation bind: the `piratefighter` prop,
+the bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s parachutist,
+`balmoral`, and the `FigureNodes`/`PropNodes` groups. Each node's shipped active state and the
+holder it hangs under are on its own member, which decide whether it draws in a mission that never
+names it. All carry a rebased gamez index (`PointerBaseOf`) a compiled cross-archive symbol table
+binds; `StageFlown` adds the flown airframe and parks its hook. A skinned subtree gets its own
+builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs
 `OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five

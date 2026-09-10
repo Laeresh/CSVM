@@ -236,9 +236,12 @@ public static class CampaignBoards
 
         // PS_B_SELLP and PS_B_SELLW are authored beside the two EXPORT buttons and are deliberately
         // absent: PLANESELECTION.SCRIPT deactivates both unconditionally at gui_create.
+        // ⚠ ChangeAmmo here is the remake picker's plaque over EXPORT's geometry (menu-inventory.md).
         [CampaignScreen.PlaneSelection] = new[]
         {
             new BoardSlot(BoardButton.ExportPlane, 0, CampaignLayout.PlaneSelectionSection, "PS_B_EXPORTP",
+                FlightPaperButton, 560, 168, true),
+            new BoardSlot(BoardButton.ChangeAmmo, 0, CampaignLayout.PlaneSelectionSection, "PS_B_EXPORTP",
                 FlightPaperButton, 560, 168, true),
             new BoardSlot(BoardButton.ExportPlane, 1, CampaignLayout.PlaneSelectionSection, "PS_B_EXPORTw",
                 FlightPaperButton, 560, 385, true),

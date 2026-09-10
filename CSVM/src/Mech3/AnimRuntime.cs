@@ -3680,17 +3680,45 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // The sequences a death plays, with the def each resolves its targets through: the def's own
-    // Initial sequences, its compiled destruction slot, and every sequence of a chained swap
-    // target (AuthorsSwap accepts its swap in an ON_CALL sequence too).
+    // Initial sequences, its compiled destruction slot, the ON_CALL sequences those two reach
+    // through CALL_SEQUENCE, and every sequence of a chained swap target (AuthorsSwap accepts its
+    // swap in an ON_CALL sequence too).
     private IEnumerable<(AnimDefinition Def, AnimSequence Seq)> DeathSequencesOf(AnimDefinition def)
     {
-        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+        foreach (var seq in OwnDeathSequencesOf(def))
             yield return (def, seq);
-        if (def.DeathSlot is { } slot)
-            yield return (def, slot);
         if (ChainedSwapTarget(def) is { } chained)
             foreach (var seq in chained.Sequences)
                 yield return (chained, seq);
+    }
+
+    // ⚠ Follow CALL_SEQUENCE into def's own ON_CALL sequences. Nothing replays a call in a pose
+    // applied without choreography, so a piece hidden from a called sequence is left standing:
+    // susp_bridge parks part1 and part5 in part1_fire_puffer and part5_fire_puffer. Breadth-first
+    // over a seen set, because the authored call graph is not required to be acyclic.
+    private IEnumerable<AnimSequence> OwnDeathSequencesOf(AnimDefinition def)
+    {
+        var seen = new HashSet<AnimSequence>();
+        var pending = new Queue<AnimSequence>();
+        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+            if (seen.Add(seq))
+                pending.Enqueue(seq);
+        if (def.DeathSlot is { } slot && seen.Add(slot))
+            pending.Enqueue(slot);
+        while (pending.Count > 0)
+        {
+            var seq = pending.Dequeue();
+            yield return seq;
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "CallSequence" || ev.Data.Str("name") is not { } called)
+                    continue;
+                foreach (var target in def.Sequences)
+                    if (target.Name.Equals(called, StringComparison.OrdinalIgnoreCase)
+                        && seen.Add(target))
+                        pending.Enqueue(target);
+            }
+        }
     }
 
     // Keeps a destructible's HP pool in step with a healthy/destroyed OBJECT_ACTIVE_STATE swap

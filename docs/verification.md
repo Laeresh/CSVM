@@ -363,6 +363,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   set; compare UV scale and vertex colour before assuming duality.** C5's flagged `cblock1/2/3`
   overlay differs from its unflagged `cblock4/5/6` base only in resolution and brightness, sharing
   an identical 256 m UV scale, y-plane and all-white vertex colours.
+- **WORLD-35** — **A suite world built with `collision: false` runs both `OBJECT_MOTION` contact
+  tiers structurally off, so it can play a whole breakup and say nothing about where any piece comes
+  to rest.** `gemini-gasbag-bays` drives `killgmzep` end to end over such a world while C2B/M04's
+  `gasbag1` and `gasbag4` were resting 13.1 m and 26.9 m under the sea.
 
 ## SHELL — Windows, PowerShell, and processes
 
@@ -562,6 +566,24 @@ one sentence of measured evidence; everything else belongs in the commit that la
   per lookup and cannot be closed under itself, while a zip-backed one holds a handle that can,
   which threw `ObjectDisposedException` out of `SessionSimulation.Step` for every sound the
   prewarm had missed.
+- **INSTR-47** — **A body's net world displacement is zero for as long as something is holding it in
+  place, so it cannot answer "is this body still travelling"; read the velocity of the frame it is
+  solved in.** Held on the sea by its own column read, C2B/M04's `gasbag4` measured 0.01 m of world
+  step a frame while the wreck carrying it fell 3.44 m a frame.
+
+- **INSTR-48** — **A sweep that stops at the FIRST obstruction it finds tests the geometry nearest
+  the instrument, not the geometry the report is about; choose the bearing by how much of the
+  subject the segment passes through.** `turret-hull-blocks-own-fire`'s first-hit sweep read 14 of
+  17 `piratezep` rings as blocked at 35 to 55 m panel edges, while the same rings' deepest in-arc
+  bearings, crossing 162 to 255 m of the same hull, fired straight through it.
+- **INSTR-49** — **A synchronous in-engine suite reads `GameClock.Current.Time` as a CONSTANT, so
+  anything behind a time-expiring cache runs its first verdict for the whole leg; install a clock
+  and call `BeginFrame(dt)` per step, then assert the elapsed game time.** Without one, an 8 s
+  turret leg spanning "several of the 1-2 s line-of-sight cache windows" was one cast per ring.
+- **INSTR-50** — **A collider that a simulation step moved trails its node by that step's motion
+  even in a live session, because Godot flushes transform notifications once a frame; read the lag
+  off `PhysicsServer3D.BodyGetState`, never off a ray.** `piratezep` on its net measures 0.25 m,
+  enough to slip a line-of-sight ray past a body grazed 6 m away and not enough to open a hull.
 
 ## SRC — sources and documents
 

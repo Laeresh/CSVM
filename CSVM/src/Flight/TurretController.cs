@@ -46,6 +46,13 @@ public sealed class TurretController
     /// platform speed past this discards the estimate for the frame.</summary>
     public const float MaxPlatformSpeed = 447f;
 
+    /// <summary>How much of an emplacement's line-of-sight ray, off its own muzzle, is not tested:
+    /// the body the gun stands in, which the original never counts as its own cover. Past it the
+    /// same hull DOES block. Clear of the mount's own bodies, which engulf a ring out to about
+    /// 1 m, and under the 2 m at which a hull skin stands over one (docs/formats/turrets.md
+    /// "Acquiring").</summary>
+    public const float MountSkirtM = 1.5f;
+
     private readonly FlightController? _host;
     private readonly IWorldQuery? _worldQuery; // the carried case's line-of-sight seam; null on an emplacement
     private readonly ProjectilePool _pool;
@@ -335,9 +342,8 @@ public sealed class TurretController
                     rig.TryGetValue(def.HealthyNode ?? "healthy", out var healthy);
                     healthy ??= site;
                     var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
-                    // No host, so no IWorldQuery either: an emplacement's line of sight stays on
-                    // WorldRayBlocked, the twin this item deliberately leaves alone (see its own
-                    // comment).
+                    // No host, so no IWorldQuery either: an emplacement's line of sight goes
+                    // through WorldRayBlocked, which skips the gun's own mounting clutter.
                     built.Add(new TurretController(def, weapon, host: null, worldQuery: null, pool,
                         yaw, pitch, fps.ToArray(), rng, def.TeamId,
                         def.Activated, healthy, site, PlatformOf(site, worldRoot), label));
@@ -349,10 +355,10 @@ public sealed class TurretController
 
     /// <summary>The structure an emplacement is mounted on: the node its site hangs off (a
     /// zeppelin ring's own gasbag group, a balloon's canopy), or the gun's own node when the site is
-    /// already a top-level world child. Its line-of-sight test must not treat this as cover
-    /// (docs/formats/turrets.md "Acquiring").
-    /// ⚠ Deliberately the section, not the whole vehicle. Excluding the whole vehicle lets a
-    /// zeppelin's rings shoot through their own hull.</summary>
+    /// already a top-level world child. What a round this gun fires owns, so its own flak neither
+    /// strikes nor splashes its mount (docs/formats/turrets.md "Hit resolution is geometric").
+    /// ⚠ Not the line-of-sight test's business. A mounting group holds the far side of the same
+    /// hull, so excluding it there is how a ring shoots through its own zeppelin.</summary>
     public static Node3D? PlatformOf(Node3D? site, Node3D? worldRoot)
     {
         if (site == null || worldRoot == null || site.GetParent() is not Node3D parent
@@ -418,6 +424,21 @@ public sealed class TurretController
     /// <see cref="IWorldQuery"/> with no live node in the process.</summary>
     public static bool WorldBlocksLine(IWorldQuery world, Vector3 from, Vector3 to) =>
         world.Ray(from, to, CollisionLayers.World, null, out _);
+
+    /// <summary>An emplacement's line-of-sight rule, as a query a suite can sweep bearing by
+    /// bearing: the world-layer ray, blind to its first <see cref="MountSkirtM"/> so the thing the
+    /// gun is bolted to is never its own cover, and solid over everything past that.
+    /// ⚠ Never separate the mount from its hull by node identity instead. A mounting group holds
+    /// the far side of the same hull, which is how a ring shoots through it.</summary>
+    public static bool WorldBlocksEmplacementLine(PhysicsDirectSpaceState3D space, Vector3 from,
+        Vector3 to)
+    {
+        var span = to - from;
+        float len = span.Length();
+        return len > MountSkirtM
+            && space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                from + span * (MountSkirtM / len), to, CollisionLayers.World)).Count > 0;
+    }
 
     /// <summary>Writes the team the acquisition gate runs on, for the fan a zeppelin record's team
     /// performs across its airship, guns included. Returns whether the value moved.
@@ -554,8 +575,8 @@ public sealed class TurretController
         _fireIn = RandRange(Def.FireRateMin, Def.FireRateMax);
     }
 
-    /// <summary>The mounting section's own colliders, collected once: the RIDs this gunner's
-    /// line-of-sight ray excludes. Internal so the suite can read the set rather than infer it
+    /// <summary>The mounting section's own colliders, collected once: the RIDs a round this gunner
+    /// fires owns. Internal so the suite can read the set rather than infer it
     /// from behaviour. RIDs are stable for the world's lifetime and the subtree gains no
     /// colliders after the build (a destroyed part hides, it is not re-parented). Empty for a
     /// section that resolved to nothing.</summary>
@@ -701,22 +722,11 @@ public sealed class TurretController
         return _losBlocked;
     }
 
-    // FlightController.WorldBlocksLine's twin for a gunner with no host rig: the same
-    // world-layer-only ray off the turret's own node, minus the section it is mounted on. A
-    // carried gunner needs no such exclusion because its host is an aircraft and aircraft are not
-    // on the world layer; an emplacement's mount IS world geometry, and a gun whose own mount
-    // counts as cover can never fire at anything. The REST of the hull still blocks, which is
-    // what stops a ring shooting through its own zeppelin.
-    private bool WorldRayBlocked(Vector3 from, Vector3 to)
-    {
-        var space = (YawNode ?? PitchNode).GetWorld3D()?.DirectSpaceState;
-        if (space == null)
-        {
-            return false;
-        }
-        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            from, to, CollisionLayers.World, PlatformColliderRids())).Count > 0;
-    }
+    // FlightController.WorldBlocksLine's twin for a gunner with no host rig, against the space its
+    // own node lives in.
+    private bool WorldRayBlocked(Vector3 from, Vector3 to) =>
+        (YawNode ?? PitchNode).GetWorld3D()?.DirectSpaceState is { } space
+        && WorldBlocksEmplacementLine(space, from, to);
 
     // The bounded slew: the barrel chases the clamped aim direction at SlewRate per second,
     // renormalised each tick, snapping whole once one frame covers the turn. Same degenerate

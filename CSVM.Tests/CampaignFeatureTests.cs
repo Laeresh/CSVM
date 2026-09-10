@@ -327,21 +327,62 @@ public class CampaignFeatureTests
     }
 
     [Fact]
-    public void ChangePlaneIsBarredUnderThreePlanesAndOnTheTwoGrantMissions()
+    public void ChangePlaneIsAnsweredPerCrewSlotAgainstTheOwnedCountLessOneOnTheGrantMissions()
     {
         var (feature, _, _) = Open();
         feature.ContinuePlayer(Pilot);
         feature.SetMission(3);
-        Assert.False(feature.ChangePlaneAllowed);
+        Assert.False(feature.ChangePlaneAllowed(0));
+        Assert.False(feature.ChangePlaneAllowed(1));
 
         feature.Profile!.Planes.Add(new OwnedPlane { Name = "Third", Airframe = 2 });
-        Assert.True(feature.ChangePlaneAllowed);
+        Assert.True(feature.ChangePlaneAllowed(0));
+        Assert.True(feature.ChangePlaneAllowed(1));
+
+        // Missions 13 and 17 bar the pilot's button outright and are counted one plane lower, so
+        // three owned falls under the floor there and takes the wingman's button with it.
         feature.SetMission(12);
-        Assert.False(feature.ChangePlaneAllowed);
+        Assert.False(feature.ChangePlaneAllowed(0));
+        Assert.False(feature.ChangePlaneAllowed(1));
+
+        feature.Profile.Planes.Add(new OwnedPlane { Name = "Fourth", Airframe = 2 });
+        Assert.False(feature.ChangePlaneAllowed(0));
+        Assert.True(feature.ChangePlaneAllowed(1));
+
         feature.SetMission(16);
-        Assert.False(feature.ChangePlaneAllowed);
+        Assert.False(feature.ChangePlaneAllowed(0));
+        Assert.True(feature.ChangePlaneAllowed(1));
         feature.SetMission(17);
-        Assert.True(feature.ChangePlaneAllowed);
+        Assert.True(feature.ChangePlaneAllowed(0));
+        Assert.True(feature.ChangePlaneAllowed(1));
+    }
+
+    [Fact]
+    public void TheFlightCheckGrantsTheMissionsOwnAircraftOnceAndSelectsItOnEveryEntry()
+    {
+        var (feature, store, _) = Open();
+        feature.ContinuePlayer(Pilot);
+        feature.SetMission(3);
+        Assert.False(feature.GrantMissionAircraft());
+        Assert.Equal(2, feature.Profile!.Planes.Count);
+
+        feature.SetMission(12);
+        Assert.True(feature.GrantMissionAircraft());
+        var granted = feature.Profile.Planes[2];
+        Assert.Equal("Red Hot Spender", granted.Name);
+        Assert.Equal(7, granted.Airframe);
+        Assert.True(granted.Special);
+        Assert.Equal(2, feature.Profile.SelectedPlane);
+        Assert.Equal(new[] { 7 }, feature.Profile.GrantedAircraft);
+        Assert.Equal(3, store.Load(Pilot)!.Planes.Count);
+
+        // A second entry grants nothing and writes nothing, and one made after the plane screen
+        // moved the pilot's pick puts the story aircraft back.
+        Assert.False(feature.GrantMissionAircraft());
+        feature.Profile.SelectedPlane = 0;
+        Assert.True(feature.GrantMissionAircraft());
+        Assert.Equal(2, feature.Profile.SelectedPlane);
+        Assert.Equal(3, feature.Profile.Planes.Count);
     }
 
     [Fact]
