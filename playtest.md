@@ -801,6 +801,22 @@ is a judgement on our own remake.
   ace that feels no different from the rest, mean the offset or the exemption is mis-wired, since
   the ratings themselves are the roster's own. *Blocks:* nothing; a fail mints a new `BL`.
 
+### CM18 (C4/M03) · the cargo zeppelin's first Fury waits for its hangar door
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:17
+```
+
+- `PT-136` `[Own]` **The first Fury leaves `cargozep1` only once its hangar door has nearly
+  opened, like the four behind it.** A generator credited minutes into the mission used to fire
+  its first launch on the same step its door started opening, so the Fury flew out through closed
+  panels; the cycle now waits out the door lead first, as the original's four-state door makes it
+  (`git log --grep=BL-771`). Play to the docking film where the five allied Furies drop about 4 s
+  apart and watch the first one only. *Look for:* the door panels roughly four fifths open before
+  the first Fury moves, and the four behind it unchanged. A Fury still leaving through a closed
+  door, or a first launch noticeably later than the door's full open, mints a new `BL`. *Blocks:*
+  nothing.
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own
