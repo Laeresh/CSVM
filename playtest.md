@@ -270,19 +270,6 @@ draws its authored 800x600 space one-to-one.
     steady through a slow turn instead of stepping or flickering between neighbours.
   *Blocks:* `BL-113`.
 
-- `PT-122` `[Own]` **Photo mode hands the aeroplane back to the view it borrowed the camera from
-  (`BL-649`).** Three callers took the camera without restoring the airframe's visibility, leaving
-  a pilot in cockpit view with the interior drawn over an outside vantage. All three now call
-  `FlightController.SetViewedFromOutside` at both edges; what is owed is the flight. *Look for:*
-  - (a) from `--view=cockpit`, pause and enter photo mode: the aeroplane is in the shot, not hidden
-    behind its own panel;
-  - (b) leaving photo mode returns the cockpit over a world that is still halted, with no frame of
-    the exterior model showing through the panel on the way back;
-  - (c) the same both ways from an outside view, where nothing should change at all.
-  *Blocks:* `BL-649`. The two debug callers (`--debug-spectate` and the weapon lab's free camera)
-  share the seam and are worth a glance in the same sitting: no automated check reaches them.
-  *Variations:* `--view=cockpit` is the case the item is about.
-
 ### C1 · Bloodhawk vs AI — the kill sequence, sound on
 
 ```powershell
@@ -730,17 +717,6 @@ is a judgement on our own remake.
     own airframe alone — the same behaviour, the other human.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
-
-- `PT-130` `[A/B: OriginalScreenshots/Videos/CM02.mkv]` **The fixed landing pose, watched again
-  (`BL-545`).** The report was CM02's auto-land seen with no hook deployed, the aeroplane too high
-  on the trapeze, and a Balmoral's wings unfolded where the original folds them. The fix landed:
-  the hookup definition now reaches the flown airframe's own subtree, so its per-airframe hook
-  extend and wing fold run instead of every `IF NODE_ACTIVE` arm reading false. Watch the auto-land
-  from outside. *Look for:*
-  - (a) the hook extends before the catch;
-  - (b) the aeroplane sits on the trapeze rather than above it;
-  - (c) a Balmoral folds its wings, which is the airframe the original's own footage shows.
-  *Blocks:* `BL-545`.
 
 ### CM14 (C2B/M04) · the Gemini, both kill orders
 
