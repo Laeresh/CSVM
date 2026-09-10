@@ -546,23 +546,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-222`). (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS`
   entry and named nowhere) — do not conflate the four groups.
 
-- `BL-227` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Blast knockback magnitude (D10, 2026-08-01).** The
-  splash falloff half of this item is closed: `Projectile.ApplyDamage` deals
-  `damage × (1 − d² / IMPACT_PROXIMITY²)` to both pools, cover-tested and capped at 32 targets, per
-  the decode in [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "Half two, the splash"
-  (`PLAN-ordnance-types` C10/C11). What stays open is the push: a directly struck rigid body takes
-  `BlastImpulsePerDamage = 1 N·s` per point of damage, an invented magnitude.
-  ⚠ **The impulse is decoded and is not a TUNE.** `FUN_004b9bc0` applies a per-hit impulse
-  (`FUN_0048f5e0`) whose two magnitudes are `damage × vehicle_def[+0xa0]` scaled by **0.005** and
-  **0.0333**, gated on the larger damage figure exceeding **5.0**
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). So the original scales with damage and
-  with a per-airframe constant, carries two magnitudes rather than one, and has a threshold below
-  which nothing moves. Read the constant and consume it; do not tune `BlastImpulsePerDamage`.
-  ⚠ Traps: do not retune the authored radius or fuse distance; `DAMAGE 0` specials carry large
-  effect radii and are deliberately excluded from blast damage. The per-round yield factor at
-  `+0x678` (scaling radius and both damage figures together) is not modelled; nothing observed writes
-  it other than 1.
-
 - `BL-230` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Near-miss trigger distance (B7, 2026-08-02).** `WarningShotCue.PassRadius` = **15 m**,
   the distance a round's swept step must pass within to sound `bullet_warning_sg`. Chosen, not read:
   the shipped `warning_shot_*` block rates the cue but says nothing about how close is close, and the

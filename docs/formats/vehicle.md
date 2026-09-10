@@ -553,6 +553,13 @@ the reading — an NPC's Dead Eye statistic sets the radius of a lead sphere it 
 **`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
 `bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).
 
+**`mass`** parses to the def at `+0x9c`, and the parser stores its reciprocal beside it at `+0xa0`
+(`0x0047afae`), which is the form every consumer reads. Three defs author it: `basic_airplane` at
+`0.6`, inherited by every aircraft, and the two surface vehicles at `40.5`. Both readers are
+ground-vehicle code that scales a push by the pushed vehicle's mass, the blast knockback decoded in
+[`../org/ordnanceTypes.md`](../org/ordnanceTypes.md) and the vehicle-to-vehicle collision transfer
+`FUN_004872d0`, so the key changes nothing an aeroplane does.
+
 **`mode`** — the dynamics class, and the one key that decides which AI behaviour an aircraft flies.
 Parsed from a string (`FUN_00479240`, `0x0047afe8`): `jet` 0, `heli` 1, `tank` 2, `ship` 3,
 `wingman` 4, `plane` 5. Only four defs author it and the rest inherit through `kind_of`:

@@ -1159,12 +1159,34 @@ would put a second writer on the same node transforms. `BL-797` carries the port
 
 ## Two answers this routine gives to other items
 
-**Blast knockback is authored, not invented.** Late in `FUN_004b9bc0`, when the victim is in vehicle
-state `+0x67c == 2` and the larger damage figure exceeds **5.0**, it calls `FUN_0048f5e0` with a
-direction and two magnitudes, both derived from `damage * vehicle_def[+0xa0]`: one scaled by
-**0.005** and one by **0.0333**. The direction is the hit point to source vector. So the original
-does apply a per-hit impulse, it scales with damage and with a per-airframe constant, it has a
-damage threshold below which nothing moves, and it carries two magnitudes rather than one.
+**Blast knockback is authored, and it is ground-vehicle code no shipped def reaches.** Late in
+`FUN_004b9bc0` (`0x004ba32c`) three gates stand in front of one call. The victim's `mode` class
+`+0x67c` must be **2** (`tank`), the larger of the two damage figures must exceed **5.0**
+(`0x006036bc`), and the hit record `FUN_005ad430` returns must carry two distinct points at `+0x00`
+and `+0x0c`. Past them the routine normalises the first point minus the second and calls
+`FUN_0048f5e0`, whose only caller this is, with that direction and two magnitudes:
+`damage * vehicle_def[+0xa0] * 0.005` (`0x00608d58`) and `damage * vehicle_def[+0xa0] * 0.0333`
+(`0x00608d5c`).
+
+`vehicle_def[+0xa0]` is **the reciprocal of `mass`**, not a knockback constant. The def parser builds
+it at `0x0047afae` as `1.0 / def[+0x9c]` immediately after reading the `mass` key (`0x0062807c`), so
+the only per-airframe term in the two magnitudes is the vehicle's own mass, and a heavier vehicle is
+moved less by the same damage. `basic_airplane` authors `mass 0.6` and the two surface vehicles
+author `40.5` ([`../formats/vehicle.md`](../formats/vehicle.md)).
+
+`FUN_0048f5e0` rotates the direction into the victim's own frame (`FUN_004d2080` then
+`FUN_0053cb10`) and adds four terms, discarding the Y component. The pitch angle `+0x1f8` takes
+`-z * first`, the roll angle `+0x200` takes `+x * first`, and the rate pair `+0x938` / `+0x940`
+takes `-x * second` and `-z * second`. That pair is the surface-driving integrator's drive and steer
+rates, damped in `FUN_0048f7d0` by the two `rate_damping` values at `def+0x90` / `def+0x94` and
+driven there from the steering input at `+0x110`. So the effect tips a driving vehicle's attitude
+and shoves what it is doing on the ground. It is not a linear impulse, and it reaches no aeroplane.
+
+⚠ **Nothing in the shipped data reaches this branch, so a blast in the original moves nothing.**
+`mode` `tank` is authored by no def, and the string `tank` does not occur in `vehicle.zrd` at all,
+so `+0x67c` is never 2. Neither an aeroplane nor a world object is pushed by a burst, and CSVM
+therefore applies no blast impulse of its own. Do not reintroduce one from these constants: they
+are a ground-vehicle law, and the airframe term in them is a mass.
 
 **Being hit has a direction cue with two variants.** Under a global gate (`DAT_0071c4e0`), the
 routine computes the bearing to the hit source as an `atan2` converted to degrees and calls
@@ -1238,6 +1260,9 @@ bit (`0x10`), plus the terrain cells it crosses, so it is the same database ever
 engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
 - Which nodes carry the runtime flag `0x400000` that opts them into the splash occlusion cast (see
   "Half two, the splash").
+- The per-round yield factor at `+0x678`, which scales the blast radius and both damage figures
+  together. Nothing observed writes it other than `1`, so CSVM does not model it; a writer would
+  make every blast quantity per-round rather than per-weapon.
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
   for ordnance.
@@ -1292,13 +1317,18 @@ engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
 - `FUN_00538ca0` (bearing), `FUN_0053e56d` (the intercept solve), `FUN_00538d70` (slerp) and
   `FUN_004c7630` (the terrain probe) were not opened; their roles are inferred from arguments and
   from the arithmetic around the call.
-- `FUN_0042c070`, `FUN_0048f5e0` and `FUN_004b8ce0` were not opened; their roles above are inferred
-  from their arguments and call sites, and are labelled as such. `FUN_004b15c0` and `FUN_004b1630`
-  **were** opened, along with the callback `LAB_00480820`, the release `FUN_004ebbb0`, the callback
+- `FUN_0042c070` and `FUN_004b8ce0` were not opened; their roles above are inferred from their
+  arguments and call sites, and are labelled as such. `FUN_004b15c0` and `FUN_004b1630` **were**
+  opened, along with the callback `LAB_00480820`, the release `FUN_004ebbb0`, the callback
   installer `FUN_004ee160`, the death routine `FUN_004b82d0`, the spawn/reset `FUN_0047b790` and the
   slot teardown `FUN_004b1580`; their two def keys were traced from the parse sites at `0x0047b13c`
   and `0x0047b163` to the authored `spinprops`/`stopprops`/`agyro_rotors` names in the shipped data,
   so "What the mask's bit-2 edges run" is decoded rather than inferred from the names.
+  `FUN_0048f5e0` **was** read in full, along with the surface integrator `FUN_0048f7d0` that damps
+  the rate pair it writes and the def parser at `0x0047af60`..`0x0047afc6` that builds `+0xa0` from
+  `mass`, so the knockback above is read rather than inferred. That `mode` `tank` ships nowhere
+  rests on two independent checks, the parser's string table and the absence of `tank` from
+  `vehicle.zrd`.
   `FUN_005aef40` **was** opened for the speed-cap seeding, and `FUN_005389a0` with it: it is
   `out = a + b * scale`, which is what makes the motion step's velocity rebuild
   `inherited + heading * speed`.
