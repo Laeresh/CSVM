@@ -472,6 +472,62 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- a carried pose reaches the pieces a called sequence hides -----------------------------
+
+    // C3's suspension bridge switches two of its spans off from ON_CALL sequences, which a pose
+    // applied without choreography reaches only by following CALL_SEQUENCE (`BL-791`).
+    // ⚠ Assert a rope the def's MAIN sequences hide in the same pass, or the check still passes on
+    // a pose that applied nothing at all.
+    [Suite("carried-pose-called-sequence",
+        "a carried destroyed state on C3's suspension bridge hides the spans its ON_CALL fire-puffer sequences switch off, not only the ropes its main sequences do, and leaves dbase standing under them")]
+    internal static void CarriedPoseCalledSequence(TestContext ctx)
+    {
+        ctx.WithWorld("C3", collision: false, mission: "M01", world =>
+        {
+            var runtime = world.Runtime;
+            var bridge = runtime.Destructibles.All.FirstOrDefault(i =>
+                i.Def.Name.Equals("susp_bridge", System.StringComparison.OrdinalIgnoreCase));
+            ctx.Check(bridge != null, $"C3/M01 ships the susp_bridge pool");
+            if (bridge is not { } span)
+            {
+                return;
+            }
+
+            var pieces = new[]
+            {
+                "rope1", "rope2", "part1", "part2", "part3a", "part3b", "part3c", "part4",
+                "part5", "dbase",
+            };
+            string Snap() => string.Join(" ", pieces.Select(p =>
+                $"{p}:{string.Join(string.Empty, runtime.FindNodes(p, span.Anchor).Select(n => n.Visible ? "1" : "0"))}"));
+            int Down(string piece) => runtime.FindNodes(piece, span.Anchor).Count(n => !n.Visible);
+
+            ctx.Note($"standing {Snap()}");
+            ctx.Check(Down("rope1") == 0 && Down("part5") == 0,
+                $"nothing is down before the carried state lands");
+
+            // ⚠ CarryState, never DamageAt: the persist log opens a mission on the pose a death
+            // ends in, and routing it through the kill would replay the choreography instead.
+            ctx.Check(runtime.CarryState(span, destroyed: true, 0f),
+                $"the carried destroyed state applies to the pool");
+            ctx.Note($"carried  {Snap()}");
+
+            // rope1 comes off an unnamed main sequence and is the control: it was already down
+            // before this fix, so it fails alongside the two below only if the pose applied nothing.
+            ctx.Check(Down("rope1") == 1, $"rope1 is down, off the def's own main sequence");
+
+            // part5 resolves to one node, part1 to four of that name under this anchor, and the
+            // death binds one of them. Both are switched off only in an ON_CALL fire-puffer
+            // sequence, so a pose that does not follow CALL_SEQUENCE leaves them standing.
+            ctx.Check(Down("part5") == 1, $"part5 is down, off part5_fire_puffer (ON_CALL)");
+            ctx.Check(Down("part1") >= 1, $"part1 is down, off part1_fire_puffer (ON_CALL)");
+
+            ctx.Check(runtime.FindNodes("dbase", span.Anchor) is { Count: > 0 } plinth
+                && plinth.All(n => n.Visible),
+                $"…and dbase still stands under the wreck");
+        });
+    }
+
     // ---- a carried state lands silently, on the pool and the pose ------------------------------
 
     // The persist log opens a later mission on the pose a death ends in, never on a replayed death:

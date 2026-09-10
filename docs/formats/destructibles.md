@@ -183,8 +183,12 @@ therefore goes through `AnimRuntime.CarryState`, not `DamageAt`: the pool is wri
 (`Health` 0 and `Destroyed`, or the carried HP at its `DAMAGE_SEQUENCE` stage) and the nodes take
 the pose the death ends in, read off the death's own sequences as the healthy-off and
 destroyed/`dbase`-on switches. No fireball, debris, sound or stage puffer plays, and a later hit
-on the object finds the pool dead and is a no-op. Regression: the `carried-state-silent` and
-`campaign-persistence` suites.
+on the object finds the pool dead and is a no-op. ⚠ That read follows `CALL_SEQUENCE` into the
+def's own `ON_CALL` sequences, because nothing replays a call when the pose arrives without
+choreography: C3's `susp_bridge` switches two of its spans off in `part1_fire_puffer` and
+`part5_fire_puffer`, and a pose stopping at the main sequences drops the ropes and leaves those
+two hanging in the air. Regression: the `carried-state-silent`, `carried-pose-called-sequence`
+and `campaign-persistence` suites.
 
 ## Definition binding
 
