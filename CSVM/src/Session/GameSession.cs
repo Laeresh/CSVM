@@ -567,6 +567,10 @@ public partial class GameSession : Node3D
                     // and its rows never raise the code, so an unbound seam is the right answer
                     // there rather than a guarded one here.
                     _cutscene.MissionComplete = () => _campaign?.Graph?.NotifyDockingComplete();
+                    // The result is banked the frame the ending lands, which is the frame the
+                    // leaving hold and its fade start on, so this reads true for every ending that
+                    // landed under a film whatever raised it.
+                    _cutscene.EndingLanded = () => _campaign?.Result != null;
                 }
             }
             ApplyDestroyOverride(state);

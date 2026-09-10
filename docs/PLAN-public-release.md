@@ -1068,10 +1068,6 @@ Anything A2 or a later wave closes comes off this list.
 - **In CM15 the Balmoral staged in the cutscene wears the stock skins instead of the livery the
   flyable aeroplane wears.** No workaround, and nothing about the mission changes. (`BL-690`; no
   landing commit, and `AircraftStage` still builds its subtree with no painter of any kind.)
-- **A mission that ends inside a docking film cuts back to the pilot's own view for the last hold,
-  so the fade to black runs over the cockpit instead of over the film.** No workaround, and the
-  mission still ends normally. (`BL-739`; no landing commit, the presentation still ends when the
-  definition does.)
 - **The cutscene movies do not play at all.** No workaround; the campaign reaches the cabin and
   every mission without them. (`BL-446`; no landing commit, and the tree contains no
   `VideoStreamPlayer` and no transcode step.)

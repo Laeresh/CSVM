@@ -63,6 +63,9 @@ internal static class CampaignSuites
     // off the host: what the presentation check asks of it is a property of the shipped data.
     private const int PresentationCode = 2;
 
+    // The docking film's own completion code, the only ending twenty of the shipped missions have.
+    private const int DockingCompleteCode = 13;
+
     // What the definition's `callback_sequence` authors, and what its RESET_STATE asserts as the
     // gameplay end state. Both lists are the shipped data, not this engine's choice.
     private static readonly int[] MovieCodes = { 20, 2, 11, 14, 913 };
@@ -310,7 +313,11 @@ internal static class CampaignSuites
         "the campaign mission-end flow against a BUILT world (D31): a scripted kill drives an "
         + "INACTIVEn condition off real node state, the graph's own end ends the mission, and "
         + "the result reaches the profile through CampaignProgression with the destruction log "
-        + "captured and the return-to-cabin exit raised")]
+        + "captured and the return-to-cabin exit raised; plus the three paths the mission-end fade "
+        + "can be reached by, since it runs over whatever frame was last on screen: a win raised by "
+        + "a docking film's own completion code and a loss landing under a film both keep the "
+        + "film's shot for the whole leaving hold, while a win in free flight fades the pilot's own "
+        + "view")]
     internal static void CampaignMissionEnd(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -373,6 +380,7 @@ internal static class CampaignSuites
         ctx.WithWorld(ctx.Chapter, collision: false, mission.MissionFolder,
             world => CampaignMissionLossKeepsObjectiveBits(ctx, world, script, mission, report));
 
+        EndingFadeRunsOverTheLastFrame(ctx, script, mission, report);
         ctx.WriteArtifact($"test-campaign-mission-end-{ctx.Chapter}.txt", report.ToString());
         ctx.Note($"flew {mission.ChapterFolder}/{mission.MissionFolder} to a graph-derived end");
     }
@@ -1310,6 +1318,144 @@ internal static class CampaignSuites
             $"the loss counted as attempt {attempts} and offered no skip on it");
         report.AppendLine($"loss leg: ended {result.Outcome}, mask 0x{result.Attempt.CompletedMask:x}, "
             + $"advanced={result.Recorded.Advanced}, attempt {attempts}");
+    }
+
+    // The mission-end fade runs over the frame that was last on screen, because the original fades
+    // a COPY of it (docs/formats/objectives.md, "The mission-end path"). Three paths reach it and
+    // they do not agree on what that frame is, so all three are driven: a win the docking film
+    // raises itself, a loss landing while a film plays, and a win in free flight.
+    private static void EndingFadeRunsOverTheLastFrame(
+        TestContext ctx, ObjectiveScript script, CampaignMission mission, StringBuilder report)
+    {
+        EndingUnderAFilm(ctx, script, mission, report, byDocking: true);
+        EndingUnderAFilm(ctx, script, mission, report, byDocking: false);
+        EndingInFreeFlight(ctx, script, mission, report);
+    }
+
+    // An ending raised while a film is presenting: the docking's own completion code, or a death
+    // reported from the anim side under any film. Both land at once, with no wrap-up the held world
+    // would have to run down, and both leave the episode presenting for the whole hold.
+    private static void EndingUnderAFilm(
+        TestContext ctx, ObjectiveScript script, CampaignMission mission, StringBuilder report,
+        bool byDocking)
+    {
+        string leg = byDocking ? "docking win" : "loss under a film";
+        var director = CampaignDirector.Create(
+            script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
+        director.Attach(new CampaignDirector.WorldInputs());
+        var graph = director.Graph!;
+        var host = new CutsceneController();
+        var stage = new Node3D { Name = "EndingFilmStage" };
+        var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+        ctx.Host.AddChild(host);
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            // An empty program, bound: the host asks the runtime whether its definition still runs,
+            // and a program carrying none answers "ended", which is the exit under test here.
+            runtime.Bind(stage, new AnimProgram());
+            host.BindWorld(runtime);
+            host.WorldHeld = director.HoldForCutscene;
+            host.MissionComplete = () => graph.NotifyDockingComplete();
+            host.EndingLanded = () => director.Result != null;
+            host.Host(CutsceneController.CodeHoldsWorld, IntroAnim);
+            host.Host(PresentationCode, IntroAnim);
+            ctx.Check(host.Playing && host.Presenting,
+                $"the film owns the session and the presentation before the ending ({leg})");
+
+            if (byDocking)
+            {
+                host.Host(DockingCompleteCode, IntroAnim);
+            }
+            else
+            {
+                ctx.Check(graph.NotifyPlayerLost(), $"the player's own death is reported once ({leg})");
+                graph.EndAfterPlayerLost();
+            }
+
+            ctx.Check(director.Result != null,
+                $"the ending landed on the frame it was raised on, under the held world ({leg})");
+            host.Tick();
+            ctx.Check(host.Playing && host.Presenting && host.HeldForEnding,
+                $"and the film keeps the shot at its own definition's end, so the fade has the film's frame to run over ({leg})");
+            ctx.Check(!host.Skip(), $"…which no skip can pull out from under the fade ({leg})");
+
+            bool heldThroughout = true;
+            for (float t = 0f; t < CampaignDirector.LeavingHoldS + 0.2f; t += 0.1f)
+            {
+                director.Step(0.1f);
+                host.Tick();
+                heldThroughout &= host.Playing && host.Presenting;
+            }
+
+            ctx.Check(heldThroughout,
+                $"the shot is the film's for every frame of the {CampaignDirector.LeavingHoldS:0.#}s hold ({leg})");
+            ctx.Check(director.ReturnToCabin && Mathf.Abs(director.LeavingFade - 1f) < 0.01f,
+                $"…and the hold ended fully black on it, fade={director.LeavingFade:0.###} ({leg})");
+            report.AppendLine($"fade leg '{leg}': ended {director.Result!.Value.Outcome} under the "
+                + $"film, presentation held={heldThroughout}");
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+            host.Free();
+        }
+    }
+
+    // The third path: the same ending with no film playing at all. There is nothing to keep, the
+    // host stays down, and the frame the fade runs over is the pilot's own view.
+    private static void EndingInFreeFlight(
+        TestContext ctx, ObjectiveScript script, CampaignMission mission, StringBuilder report)
+    {
+        var director = CampaignDirector.Create(
+            script, mission, CampaignProfileDef.NewProfile("Amelia"), null);
+        director.Attach(new CampaignDirector.WorldInputs());
+        var graph = director.Graph!;
+        var host = new CutsceneController();
+        var stage = new Node3D { Name = "EndingFreeFlightStage" };
+        var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+        ctx.Host.AddChild(host);
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, new AnimProgram());
+            host.BindWorld(runtime);
+            host.EndingLanded = () => director.Result != null;
+            int winner = EndObjective(script);
+            if (winner == 0)
+            {
+                // The suite above already reported the missing INSTANTWIN; nothing to drive here.
+                return;
+            }
+
+            graph.Wake(winner);
+            Advance(graph, 2f);
+            ctx.Check(director.Result != null, $"the free-flight win ended the mission");
+
+            bool downThroughout = true;
+            for (float t = 0f; t < CampaignDirector.LeavingHoldS + 0.2f; t += 0.1f)
+            {
+                director.Step(0.1f);
+                host.Tick();
+                downThroughout &= !host.Playing && !host.Presenting && !host.HeldForEnding;
+            }
+
+            ctx.Check(downThroughout,
+                $"no episode is kept over a win in free flight, so the fade runs over the pilot's own view");
+            ctx.Check(director.ReturnToCabin && Mathf.Abs(director.LeavingFade - 1f) < 0.01f,
+                $"…and that hold ends fully black too, fade={director.LeavingFade:0.###}");
+            report.AppendLine($"fade leg 'free-flight win': ended {director.Result!.Value.Outcome} "
+                + $"with no film, host down={downThroughout}");
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+            host.Free();
+        }
     }
 
     // Destroys (or deactivates) every node of one objective's INACTIVE paths, then ticks until it

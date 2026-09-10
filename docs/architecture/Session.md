@@ -296,7 +296,7 @@ session state those codes describe: the world and objectives held, the chrome of
 the aircraft, the humans out of flight with the episode owner posed on the staged `player` marker
 and the runtime's range gates reading where they last flew rather than where the film puts them,
 the AI parked (before any intro plays, whether or not its own data authors 913), the mid-mission
-airframe swap, the re-placement, and one restore at the definition's end or at a skip. A `Node`
+airframe swap, the re-placement, and one restore at the definition's end or at a skip, refused once the mission has ended under the episode so the leaving fade keeps the film's shot. A `Node`
 only so it can tick last in the frame, after the animation advance that poses `camera1`. Which
 definition and which human an episode belongs to is the slot `Own` claims, not the raiser of the first code. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 

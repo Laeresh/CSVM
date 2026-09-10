@@ -2977,22 +2977,6 @@ usual.
   the bay launch stamps it onto the aircraft like any roster spawn.
   *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`.
 
-- `BL-739` `[Bug]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **A mission that ends inside a
-  docking film cuts back to the pilot's own view for the leaving hold, and the fade to black runs
-  over that instead of over the film.** *Evidence:* reported at the controls on a successful
-  docking: the film's last frame is followed by the cockpit or chase view, and only then does the
-  fade start. `CutsceneController.Act`'s handoff ends the presentation when the definition ends
-  (`CSVM/src/Session/CutsceneController.cs:746-754`), while `CampaignDirector` holds the world for
-  `LeavingHoldS` and `MissionEndFade` ramps over that hold (`git log --grep=BL-727`); nothing keeps
-  the film's camera when code 13 landed inside the episode. The decode note on
-  `CampaignDirector.Leave` says the original fades over the last frame; which camera that frame is
-  on after a film-ending 13 is not read. *Fix shape:* read `FUN_00443090`'s caller for the camera
-  the fade runs over after a code 13 raised inside a definition; if it is the film's, keep
-  `Presenting` and the episode's camera until `Leave` whenever the result landed during the
-  episode. *⚠ Traps:* a loss inside a film and a win in free flight are separate paths; the fade
-  case in `CampaignSuites` should assert all three. *Playtest after fix:* CM14, dock with the
-  objectives complete. *Cross-refs:* `BL-727`'s closing commit.
-
 ## Tooling, platform & docs
 
 - `BL-677` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **CSVM starts a `CALL_ANIMATION` callee inside the caller's own tick; the

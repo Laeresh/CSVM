@@ -78,6 +78,12 @@ public sealed partial class CutsceneController : Node
     /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Action? MissionComplete;
 
+    /// <summary>Has the flown mission's ending already landed? An episode whose mission ended
+    /// under it keeps its shot: no handoff and no skip, so the leaving fade runs over the film's
+    /// last frame the way the original's does (docs/formats/objectives.md, "The mission-end
+    /// path"). Unbound, every episode hands off at its definition's end.</summary>
+    public Func<bool>? EndingLanded;
+
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
     // (docs/formats/anim-definitions/cutscenes.md).
@@ -177,6 +183,11 @@ public sealed partial class CutsceneController : Node
 
     /// <summary>Whether the chrome is hidden and the view is off the aircraft (code 2).</summary>
     public bool Presenting { get; private set; }
+
+    /// <summary>Whether this episode is being kept past its own definition's end because the
+    /// mission ended under it (<see cref="EndingLanded"/>). The shot the leaving fade ramps over
+    /// is the film's while this is true.</summary>
+    public bool HeldForEnding { get; private set; }
 
     /// <summary>Whether the player is out of flight: input suspended, the airframe pinned and
     /// undrawn, engine audio released (code 11).</summary>
@@ -425,6 +436,7 @@ public sealed partial class CutsceneController : Node
             _owner = null;
             _ownerRig = null;
             SeedRaisers();
+            HeldForEnding = false;
             _barsFlipsThisEpisode = 0;
             _lastBarsVisible = _bars?.Visible ?? false;
             GD.Print(Anim == animName
@@ -459,6 +471,11 @@ public sealed partial class CutsceneController : Node
         if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning
             && !AnyRaiserRunning())
         {
+            if (KeepsTheShot())
+            {
+                return;
+            }
+
             Restore("its definition ended");
         }
     }
@@ -471,7 +488,7 @@ public sealed partial class CutsceneController : Node
     /// skip, so who did is something the other players are owed rather than a detail.</summary>
     public bool Skip(int playerIndex = 0)
     {
-        if (!Playing || !Skippable)
+        if (!Playing || !Skippable || KeepsTheShot())
         {
             return false;
         }
@@ -698,6 +715,25 @@ public sealed partial class CutsceneController : Node
         // Last, with the state it was raised alongside already down: the panes come back to a
         // session that is flying again rather than to one still holding the world.
         FillsWindow?.Invoke(false);
+    }
+
+    // Whether this episode holds its shot instead of ending: the mission is already over, and the
+    // ending's fade belongs over the film's last frame rather than over a view of the world it cut
+    // back to. Latched into HeldForEnding so the reason is reported once and readable afterwards.
+    private bool KeepsTheShot()
+    {
+        if (EndingLanded?.Invoke() != true)
+        {
+            return false;
+        }
+
+        if (!HeldForEnding)
+        {
+            HeldForEnding = true;
+            Log.Info("anim", $"cutscene '{Anim}' keeps the shot: the mission ended under it, and the leaving fade runs over the film's own last frame");
+        }
+
+        return true;
     }
 
     private void Act(int code)

@@ -297,6 +297,36 @@ C3/M05 that catches the docking 0.06 s before `bal_wing_foldup`'s authored end, 
 folded but a few degrees short of their authored angle, and 0.85 s before `stopprops` would have
 finished spinning the Balmoral's propellers down. Neither is ever seen.
 
+**The frame a code-13 ending lands on is the film's, not the pilot's.** The docking's completion
+code is a case of the cutscene callback host at `0x0047e2ba`
+([anim-definitions/cutscenes.md](anim-definitions/cutscenes.md)), and it does four things in this
+order:
+
+1. `FUN_00494b20` **puts the player back in flight**: it re-reads the vehicle's position and
+   orientation off its node into `+0x1f8`..`+0x20c`, writes that pose into every saved camera slot
+   in the list from `+0x6a4` to `+0x6a8` (stride 0x24), takes the three view offsets at
+   `+0x6b0`..`+0x6b8` from `DAT_0075d1b8`, and CLEARS the flags callback 11 set (`+0x91d`, `+0x91e`)
+   along with the wreck flag `+0x91f`.
+2. `DAT_0071d290 = 1` at `0x0047e2c6`, one frame of the presenter park.
+3. `FUN_00463c10(1)`, the won flag.
+4. `FUN_00443090`, the mission-end path above.
+
+Step 2 is what decides which camera the fade runs over. The flying state's tick reads that park at
+`0x004a09f0`, **after** its own render call at `0x004a09e1`: a non-zero value is decremented and the
+frame is never handed to the present at `0x005a8550`, and only zero reaches it. So the single frame
+that would show the world cut back to the pilot's own view is rendered and thrown away. The Fade
+State's copy is taken before that anyway: `FUN_005b60d0` calls the pushed object's entry (vtable+8)
+synchronously before returning, so the framebuffer `FUN_0059e2e0` copies inside step 4 is still the
+last frame presented, which is the film's. `FUN_00443090`'s own `DAT_0071d290 = 5000` then keeps the
+flying state from ever presenting again, and from the next frame that state is off the top of the
+machine regardless.
+
+**A mission that ends inside a docking film fades out on the film's last frame.** The cut back to
+the cockpit is real (the flight flags are cleared and the vehicle pose re-synced) but it exists for
+exactly one unpresented frame. Nothing about this is particular to a win: the fade copies whatever
+was on screen, so an ending raised from the anim side while any film plays fades that film's frame,
+and an ending in free flight fades the pilot's own view.
+
 Every shipped campaign mission authors `INSTANTWIN`/`INSTANTLOSS` objectives to end on (the
 missions finishing on a hook or a drop reach code 13 first); the
 `WON`/`LOST` aggregate rule and the timer are unexercised by the data. **Four of the 21 campaign

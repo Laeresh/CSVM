@@ -360,6 +360,10 @@ public sealed class ObjectiveGraph
 
         PlayIfNamed(_script.ObjectivesWonSound);
         End(MissionOutcome.Won, DockingWrapUpS);
+        // ⚠ Landed here, never left to the next step: the world under the film that raised the code
+        // is held, so a graph waiting for a step of its own would not get one until the film ended
+        // and the view had cut back to the pilot (docs/formats/objectives.md).
+        StepWrapUp(0f);
         return true;
     }
 
