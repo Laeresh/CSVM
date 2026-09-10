@@ -2902,7 +2902,12 @@ usual.
   cylinder. Engaging is unchanged, `AiModeMachine.cs:321` gating that on
   `min(ActivationRange, AttackRange)`, so what is at stake is selection and pursuit range, not
   firing range. *Fix shape:* settle which volume each consumer should read, then align the consumer;
-  the answer decides whether `BL-565`'s widening should reach acquisition at all.
+  the answer decides whether `BL-565`'s widening should reach acquisition at all. **It also decides
+  half of `BL-565`'s own goal:** the pursue ENTRY gate is `min(activation, attack)` and no `DEDG`
+  widens the 2,000 m attack radius, so the widening keeps an engaged member engaged and does not make
+  one parked 8 km away set off, which is what "a watched group comes to the player from anywhere on
+  the map" asked for. Whether the original's own entry gate reads the widened triple is the same
+  question about `FUN_004897c0`.
   *⚠ Traps:* the negative half of this decode is the weak half. `FUN_00421ad0` was read as the only
   admission path and `FUN_004897c0` as the only reader of the activation triple; re-read both writers
   and map their offsets before acting, since a second reader would change the answer.

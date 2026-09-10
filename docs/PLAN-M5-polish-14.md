@@ -214,7 +214,13 @@ the picking seat's Back already takes, and it adds no row to a screen authored w
 BACK plaque was not taken, because A4 adds a Weapon Loadout row to this screen and a fourth plaque is
 better judged with that row's layout in hand.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `menu-player-setup-seats` presses seat 0's Down, Accept and Back on seat 1's
+screen and reads the row, the lock, the screen and the picking seat all standing still, and the
+`OriginalSeats` and `OriginalCoverage` units cover the mouse's own reach. Still owed at the controls,
+on E41's sortie: two pads, seat 0's stick and buttons moving nothing while seat 1 picks, and a
+pad-less second pilot picking with the mouse alone and leaving through CANCEL SELECTIONS.
 
 **Original approach (kept for reference).**
 
@@ -258,7 +264,14 @@ unwinds seat 0 to browsing, so the sortie screen does not reopen the walk, and a
 seat 0 picks again ends in the launch instead of a second wait. The launch also cannot race the
 walk's reopening, since `ApplyFrame` reads `BeginSeatWalkIfDue` only when the frame produced no exit.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `menu-player-setup-seats` walks the Free Flight leg with no map picked
+(nothing launches, FLY dark), then the map picked and seat 0's own press flying both, and
+`menu-launch-return` takes the Dogfight launch off the guest's confirm, which is where the one
+cross-suite regression showed before it was fixed. Still owed at the controls, on E41's sortie: two
+pads on Free Flight, the flight starting on seat 1's confirm, and Dogfight still withholding the
+launch until a second seat has joined.
 
 **Original approach (kept for reference).**
 
@@ -311,7 +324,14 @@ draws nothing new there.
 the pointer already has its way out through CANCEL SELECTIONS' second press, so a fourth would be a
 second exit rather than a first one.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `menu-player-setup-seats` opens a selected seat's WEAPON LOADOUT on its own
+fit and airframe with the walk and the seat's own reach kept there, restores on CANCEL LOADOUT, keeps
+on ACCEPT, and asserts the last confirm launching a Dogfight for both seats carrying seat 1's own
+loadout beside seat 0's stock fit, which is this item's goal end to end. `OriginalSeats` units run 14
+of 14. Still owed at the controls, on E41's sortie: two pilots picking different loadouts on Instant
+Action and again on Free Flight, and each aeroplane carrying its own pilot's weapons in the air.
 
 **Original approach (kept for reference).**
 
@@ -535,11 +555,16 @@ activation radius on the tick it is tested, and never narrows it again.
   acquires out to 9,000 m where the original would still gate acquisition at its attack cylinder.
   Both volumes ship at 2,000 m, which is why the mapping never showed before.
 
-**Verified.** <pending orchestrator run>
-
-**Original approach (kept for reference).**
-
-**Goal.** Each tick an awake DEDG objective raises every live member of the watched group to a
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `campaign-dedg-volume` reads C3/M05's two awake DEDG clauses widening groups
+1 and 5 and nothing else: the five watched members at 9,000 m (one pre-set to 12,000 left alone) and
+the other eight at the 2,000 m floor, with the disengage row reading patrol at the floor and pursue
+widened. ⚠ **What that does not buy is stated above and is what the sortie should watch:** the
+pursue ENTRY gate is still the 2,000 m attack radius, so this keeps an engaged survivor engaged
+rather than making one parked 8 km away set off, and the milestone's "comes to the player from
+anywhere on the map" waits on `BL-789`. Still owed at the controls, on E41's sortie: a campaign
+mission whose DEDG objective waits on a wave survivor, watched for whether the objective completes.
 9,000 m activation radius, so a watched group never disengages by distance and comes to the player
 from anywhere on the map.
 
@@ -655,7 +680,16 @@ the aeroplane it stands in for, on one route that serves every staged node carry
   (`[world] aircraft stage paint: 'balmoral' player_fortune (5 skin(s)), 'piratefighter'
   player_fortune (5 skin(s))`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical (`campaign-intro-fill` among them, over the newly painted prop), exit 0.
+`campaign-cm15-staged-paint` asserts the substitution reaching the staged materials, 69 of
+`balmoral`'s 122 re-resolved with 5 skins painted and 50 of `piratefighter`'s 99 with 5, while
+`chuteman` carries no prefix and takes no painter. ⚠ **The drop Balmoral is not proven by picture**
+and cannot be: it is a range-gated mid-mission cutscene no CLI flag plays, and a CM15 sweep sat
+inside its own noise floor. Still owed at the controls, on E41's sortie: CM15's intro with the drop
+Balmoral in frame against the flyable one, and `piratefighter`, `chuteman` and the wing-walk figures
+in the same pass.
 
 **Original approach (kept for reference).**
 
@@ -724,7 +758,14 @@ Instant Action traffic stays unmeasured. What the suite does settle is that noth
 default: every emitter is asserted at `DopplerTracking` Disabled and `PitchScale` 1.000, so a changed
 engine default or a copied line cannot add a shift without failing.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the tree carrying all nine code items and main:
+build clean, units 3,527 of 3,527, 273 of 273 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0. `ai-weapon-emitters` reads both AI aircraft building a positional weapon
+voice and logs the cull crossing it in both directions, audible at 54 m and 45 m against a 150 m
+`snd_30cal` cull and culled at 645 m, which is the pairing INSTR-45 asks for since no screenshot can
+answer for audio. Still owed at the controls, on E41's sortie: an Instant Action sortie flown past
+firing traffic, listened to for whether another aeroplane's guns come from where that aeroplane is
+and fall silent at the authored distance.
 
 **Original approach (kept for reference).**
 
