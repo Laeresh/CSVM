@@ -256,10 +256,19 @@ internal sealed class AiFlightAssembler
         var roster = spawn.RosterSkills ?? default;
         // The precedence the original's roster has: a block's own slot first, then the def's, then
         // the flat rating. --ai-attack= pins every slot (docs/formats/ai-rosters.md).
-        int SkillFor(int? authored, int fallback, int? rosterSlot = null) =>
+        int Authored(int? authored, int fallback, int? rosterSlot = null) =>
             rosterSlot ?? (_policy.AiAttackSkillExplicit
                     || (spawn.AttackRating != null && spawn.RosterSkills == null)
                 ? fallback : authored ?? fallback);
+
+        // The difficulty then shifts what the block authored, on every one of the nine stats, and
+        // an ace is exempt (docs/org/aiControlLaw.md "The skill scalar"). An explicit --ai-attack=
+        // is a pin and not a roster reading, so it is left where the flag put it.
+        int SkillFor(int? authored, int fallback, int? rosterSlot = null) =>
+            _policy.AiAttackSkillExplicit
+                ? Authored(authored, fallback, rosterSlot)
+                : Difficulty.SkillRatingForSpawn(Authored(authored, fallback, rosterSlot),
+                    spawn.Team, spawn.Ace, spawn.Difficulty, _policy.Difficulty);
 
         if ((spawn.AttackRating ?? _policy.AiAttackSkill) is { } skill && pilot.Gunner == null)
         {

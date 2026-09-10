@@ -92,8 +92,9 @@ public sealed class RosterSpawnPlan
     public bool Nitro { get; init; }
 
     /// <summary>The roster's own <c>ace</c> flag (slot 67): the block a mission script singles
-    /// out, whose kill the debrief credits into the starred tally instead of the plain one
-    /// (docs/org/debrief.md#what-the-tallies-count).</summary>
+    /// out. Its skill ratings are exempt from the difficulty offset
+    /// (<see cref="CSVM.Flight.Difficulty.SkillRatingForSpawn"/>) and its kill goes to the
+    /// debrief's starred tally (docs/org/debrief.md#what-the-tallies-count).</summary>
     public bool Ace { get; init; }
 
     /// <summary>The block's <c>init_health</c> (slot 7): the whole-vehicle health-pool override,
@@ -373,7 +374,7 @@ public sealed class CampaignRosterPlan
             AiDef: plan.AiDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
             Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: nodeName ?? plan.Name,
-            PilotName: plan.Title, InitHealth: plan.InitHealth, Armor: plan.Armor,
+            PilotName: plan.Title, InitHealth: plan.InitHealth, Armor: plan.Armor, Ace: plan.Ace,
             ObjectiveMarker: plan.ObjectiveTarget,
             ObjectiveTypeLabel: plan.CategoryLabel, ObjectiveCategory: plan.HelpLabel);
 

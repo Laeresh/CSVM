@@ -159,8 +159,8 @@ whole-vehicle pair a derived total. Its first line rejects the call when both ar
 and all 414 shipped roster blocks carry `-1` in all eight zone slots, so the sum-derivation is dead
 in this install and the def's own `health` stays authoritative.
 
-**3. The difficulty scale.** Still in `FUN_0047c210`, and only when the spawned vehicle's team
-differs from the player's: armour max and health max are multiplied by `1 + k * 0.125`
+**3. The difficulty scale.** Still in `FUN_0047c210`, and only when the spawned vehicle is
+**hostile**: armour max and health max are multiplied by `1 + k * 0.125`
 (`0x0047cc1b`-`0x0047cc2d`: `FILD` the integer `k`, `FMUL [0x0060802c]` = `0.125`,
 `FADD [0x006032dc]` = `1.0`), and a `k` of zero skips the whole block (`0x0047cc13`). Current is
 re-seeded from max afterwards. The same factor then multiplies each zone pair
@@ -181,6 +181,15 @@ and [`hangar.md`](hangar.md) previously gave the high tier as `1.125`; both are 
 side of 1.0, not one. The campaign selector's own labels are `IDS_DIFFICULTY` in
 `rof/ui_strings.json` ids 109-111, Normal / Hard / Hardest in that order, so the default campaign
 setting is difficulty 0 and enemies there carry **three quarters** of their authored pools.
+
+⚠ **The gate is hostility, not inequality with the player's team.** `0x0047ca79`-`0x0047ca8b`
+compares the spawned entity's side (`+0x8`) against the constant `1` that `FUN_004830c0` writes and
+leaves `k` at zero when they are equal **or when either is zero**, so a neutral (side 0) is not
+scaled either. ⚠ **The same `k` also shifts every one of that pilot's nine skill ratings**, in the
+same function and behind the same gate, and the roster's `ace` flag exempts the ratings from it
+while leaving this scale in force
+([aiControlLaw.md](aiControlLaw.md#the-rating-the-interpolation-receives-is-not-the-authored-one)).
+The difficulty setting therefore reaches two things at spawn, not one.
 
 **4. The per-spawn jitter, aircraft only.** At the end of `FUN_00476250`, a vehicle whose name is
 not `player`, in single player, and whose `mode` is `jet` (0) or `heli` (1), gets each

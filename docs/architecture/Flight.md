@@ -155,14 +155,13 @@ between the two flags. The consumers are the player's screen wash, the AI stun a
 and this module knows about none of them. Read `SmokeScreens.cs` next.
 
 ## src/Flight/Difficulty.cs
-The difficulty setting, as the engine's own 0/1/2, and the single thing it does: multiply an enemy
-vehicle's armour and health maxima at spawn, decoded in
-[../org/vehicleDamage.md](../org/vehicleDamage.md). `Parse` takes both shipped vocabularies, the
-campaign selector's and Instant Action's, which name the same three tiers. `FactorForSpawn` owns the
-team gate, which is inequality with the player's team rather than hostility, so a neutral or
-team-less spawn is scaled too; `PlaneStats.WithEnemyDurability` applies the factor and the per-spawn
-jitter bands around the scaled hull afterwards. The setting reaches nothing else, and no AI skill,
-accuracy or aggression is keyed to it. Read `PlaneStats.cs` next.
+The difficulty setting, as the engine's own 0/1/2, and the two things one integer `k` does at spawn:
+multiply a hostile vehicle's armour and health maxima
+([../org/vehicleDamage.md](../org/vehicleDamage.md)), and shift that pilot's nine skill ratings
+before they interpolate ([../org/aiControlLaw.md](../org/aiControlLaw.md)). `AppliesTo` owns the one
+gate both stand behind, which is hostility, so a neutral takes neither; `FactorForSpawn` and
+`SkillRatingForSpawn` are the two answers, the second exempting an `ace` block. `Parse` takes both
+shipped vocabularies, which name the same three tiers. Read `PlaneStats.cs` next.
 
 ## src/Flight/TanglerChoke.cs
 The choker's engine-dead duration, decoded in

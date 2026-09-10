@@ -217,8 +217,12 @@ Vehicle totals (`veh+0x2c4/+0x2c8` armour max/current, `+0x2cc/+0x2d0` structure
 recomputed on every zone write as the sum over zones of values > 0, so they are derived state,
 never independent. Difficulty scales an enemy's pools and totals by 0.75 / 1.0 / 1.25
 (`FUN_00440710` mapped through `k*0.125 + 1.0` at `0x0047cc00..0x0047cd10`, where `k` is -2 / 0 / +2
-and the middle tier skips the block; see [`vehicleDamage.md`](vehicleDamage.md)), suppressed when
-`CCEVeh+0xa4` is set; the player's plane is never scaled. Both pools feed combat: the
+and the middle tier skips the block; see [`vehicleDamage.md`](vehicleDamage.md)); the player's own
+side and a neutral are never scaled. ⚠ **The roster's `ace` flag (`CCEVeh+0xa4`) does not suppress
+this.** Its read is at `0x0047cde2`, past the armour block, and what it zeroes is the same `k`'s
+offset on the pilot's skill ratings
+([`aiControlLaw.md`](aiControlLaw.md#the-rating-the-interpolation-receives-is-not-the-authored-one)):
+an ace's hull scales like any other enemy's. Both pools feed combat: the
 damage-callout thresholds read `(armourCur + structCur) / (armourMax + structMax)` against
 0.3/0.5/0.7 (`FUN_00498170` at `0x00498513..59`), and the totals are read across the damage
 and HUD paths (`0x0047ee30`, `0x0049fa42`, `0x004b80d1..`, among others). The per-hit

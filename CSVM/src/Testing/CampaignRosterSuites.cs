@@ -63,6 +63,23 @@ internal static class CampaignRosterSuites
     private const float FarRingM = 1500f;
     private const float ScanRangeM = 3000f;
 
+    // The difficulty offset's worked mission. C1/M02 is the one mission carrying all three shapes
+    // at once: the ace bloodhawk_2 (slot 67, a uniform 6 across its vector), four hostile
+    // blakepeace_2_* with no flag and an authored 9 natural touch beside a 0 steady hand, and
+    // wingmen on the player's own side with an authored 1 dead eye.
+    private const string SkillAceBlock = "bloodhawk_2";
+    private const string SkillPlainBlock = "blakepeace_2_1";
+    private const string SkillFriendBlock = "wingman_3";
+    private const int AceNaturalTouch = 6;
+    private const int AceDeadEye = 6;
+    private const int PlainNaturalTouch = 9;
+    private const int PlainSteadyHand = 0;
+    private const int FriendDeadEye = 1;
+
+    // What Normal adds to a hostile pilot's every rating (Flight.Difficulty): the low tier's k.
+    private const int DifficultyStep = -2;
+    private const string SteadyHandKey = "steady_hand_chance";
+
     // BL-497: the one block in the extracted install that authors both talker and constitution
     // (7, 8) and carries an accent, so its resolved voice chances can be told apart from the
     // session's flat rating-5 fallback.
@@ -576,6 +593,105 @@ internal static class CampaignRosterSuites
     /// phase alone is under test, over <c>Spawner</c>'s lightweight rig factory.</summary>
     // BL-497: CampaignDirector passed null where a spawn's own talker/constitution ratings
     // would go, so every campaign pilot chattered at the session's flat rating-5 default.
+    /// <summary>The difficulty's skill offset and the ace exemption, over a shipped roster and the
+    /// session's own assembler. The session runs at Normal, where <c>k</c> is -2, so a hostile
+    /// block's authored ratings arrive two lower while the ace's arrive as authored.</summary>
+    [Suite("roster-skill-difficulty",
+        "BL-496's ace exemption over C1/M02's shipped roster at Normal (k = -2): the hostile "
+        + "blakepeace_2_1's authored natural touch of 9 reaches its pilot as 7 and its authored "
+        + "steady hand of 0 floors at 0 instead of going negative, the ace bloodhawk_2 (slot 67) "
+        + "keeps its authored 6 on both natural touch and dead eye, and wingman_3 on the player's "
+        + "own side keeps its authored dead eye of 1")]
+    internal static void RosterSkillDifficulty(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
+        ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        ctx.RequireData(texturesPath, $"{BiasChapter} textures");
+
+        var plans = CampaignRosterPlan.Build(
+            AiSkills.LoadRoster(missionZrdr),
+            VehicleDefs.Load(ctx.ZrdrPath),
+            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, BiasChapter)),
+            netDraw: _ => 0);
+        var acePlan = PlanNamed(plans, SkillAceBlock);
+        var plainPlan = PlanNamed(plans, SkillPlainBlock);
+        var friendPlan = PlanNamed(plans, SkillFriendBlock);
+        if (acePlan == null || plainPlan == null || friendPlan == null)
+        {
+            throw new SuiteSkippedException($"{BiasChapter}/{BiasMission} does not plan "
+                + $"{SkillAceBlock}/{SkillPlainBlock}/{SkillFriendBlock}");
+        }
+
+        // The authored side of the claim, read before anything is built: without these three the
+        // spawned readings below would agree with the wrong arithmetic for the wrong reason.
+        ctx.Check(acePlan.Ace && !plainPlan.Ace && !friendPlan.Ace,
+            $"'{SkillAceBlock}' carries slot 67 and the other two do not");
+        string authored = $"ace {Rating(acePlan.Skills.NaturalTouch)}/{Rating(acePlan.Skills.DeadEye)}, plain {Rating(plainPlan.Skills.NaturalTouch)}/{Rating(plainPlan.Skills.SteadyHand)}, friendly {Rating(friendPlan.Skills.DeadEye)}";
+        ctx.Check(acePlan.Skills.NaturalTouch == AceNaturalTouch && acePlan.Skills.DeadEye == AceDeadEye
+            && plainPlan.Skills.NaturalTouch == PlainNaturalTouch
+            && plainPlan.Skills.SteadyHand == PlainSteadyHand
+            && friendPlan.Skills.DeadEye == FriendDeadEye,
+            $"the three blocks author ace natural-touch/dead-eye, plain natural-touch/steady-hand and friendly dead-eye as {authored}");
+
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightRoster? roster = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            roster = Spawner(ctx, planesGamez, textures, live);
+
+            var ace = SpawnPlan(roster, acePlan, 0f).Pilot;
+            var plain = SpawnPlan(roster, plainPlan, 600f).Pilot;
+            var friend = SpawnPlan(roster, friendPlan, 1200f).Pilot;
+            if (ace?.Machine == null || plain?.Machine == null || friend?.Gunner == null
+                || ace.Gunner == null)
+            {
+                throw new SuiteSkippedException("the assembler armed no machine or gunner");
+            }
+
+            int shifted = PlainNaturalTouch + DifficultyStep;
+            float flooredChance = skills.At(SteadyHandKey, 0);
+            float aceCone = skills.DeadEyeAngleDeg(AceDeadEye);
+            float shiftedCone = skills.DeadEyeAngleDeg(AceDeadEye + DifficultyStep);
+            float friendCone = skills.DeadEyeAngleDeg(FriendDeadEye);
+
+            ctx.Check(plain.Machine.NaturalTouch == shifted,
+                $"the hostile '{SkillPlainBlock}' flies its authored natural touch {PlainNaturalTouch} shifted to {shifted} at Normal: {plain.Machine.NaturalTouch}");
+            ctx.Check(Mathf.IsEqualApprox(plain.Machine.SteadyHandChance, flooredChance),
+                $"…and its authored steady hand of {PlainSteadyHand} floors at rating 0 rather than going negative: {plain.Machine.SteadyHandChance:0.000} vs {flooredChance:0.000}");
+
+            ctx.Check(ace.Machine.NaturalTouch == AceNaturalTouch,
+                $"the ace '{SkillAceBlock}' flies its authored natural touch unshifted: {ace.Machine.NaturalTouch} vs {AceNaturalTouch} (a shifted ace would read {AceNaturalTouch + DifficultyStep})");
+            ctx.Check(Mathf.IsEqualApprox(ace.Gunner.DeadEyeAngleDeg, aceCone),
+                $"…and its dead-eye cone is the authored rating's: {ace.Gunner.DeadEyeAngleDeg:0.000}° vs {aceCone:0.000}° (shifted would be {shiftedCone:0.000}°)");
+            ctx.Check(!Mathf.IsEqualApprox(aceCone, shiftedCone),
+                $"…on a curve where the shifted rating is a different cone ({aceCone:0.000}° vs {shiftedCone:0.000}°), so the check above can fail");
+
+            ctx.Check(Mathf.IsEqualApprox(friend.Gunner.DeadEyeAngleDeg, friendCone),
+                $"'{SkillFriendBlock}' on the player's own side takes no offset either: {friend.Gunner.DeadEyeAngleDeg:0.000}° vs {friendCone:0.000}°");
+            ctx.Note($"{BiasChapter}/{BiasMission} at Normal: plain natural touch {PlainNaturalTouch} to {plain.Machine.NaturalTouch}, ace {AceNaturalTouch} to {ace.Machine.NaturalTouch}, friendly dead eye held at {FriendDeadEye}");
+        }
+        finally
+        {
+            var members = new List<FlightController>(roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            foreach (var rig in members)
+            {
+                rig.Free();
+            }
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     [Suite("roster-voice-ratings",
         "BL-497's voice hand-off over C5/M01's shipped roster: autogyro_1 authors both talker "
         + "and constitution (7, 8) and an accent, and its resolved chances each read their own "
@@ -1146,6 +1262,18 @@ internal static class CampaignRosterSuites
 
     private static string Bias(AiRatingBias? entry) =>
         entry?.Bias.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) ?? "-";
+
+    private static string Rating(int? slot) =>
+        slot?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unset";
+
+    // One planned block spawned on its own, far from the others, so the rig under inspection is
+    // the assembler's whole answer for that block and nothing else has touched it.
+    private static FlightController SpawnPlan(FlightRoster roster, RosterSpawnPlan plan, float offsetM)
+    {
+        var at = new Vector3(offsetM, 900f, 0f);
+        return roster.SpawnAi(CampaignRosterPlan.SpawnFor(
+            plan, at, at + Vector3.Forward, AiPilot.HoldingCourse(at, at + Vector3.Forward)));
+    }
 
     private static void Advance(CampaignDirector director, float seconds)
     {

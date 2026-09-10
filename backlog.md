@@ -1965,18 +1965,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and name FLY when only the press is left. *⚠ Traps:* the hint is remake-only text on a remake-only
   screen, so there is nothing to decode and nothing to match; keep it one short line, as the other
   arms are. *Cross-refs:* `BL-749`'s closing commit.
-- `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
-  does there.** *Evidence:* found by G75 while binding the pilot name. Slot 67 `ace` is read by the
-  block reader into `CCEVeh+0xa4` and carried by the spawn path into entity `+0x988`. That field has
-  four touches program-wide: the constructor default, that write, a read at `0x0047cde2` sitting
-  immediately ahead of the skill block, and a read in a runtime function that was not chased. So the
-  flag gates something in skill interpolation, and 26 blocks across the campaign carry it. CSVM
-  parses the slot and uses it for nothing. *Fix shape:* decode the `0x0047cde2` branch and the
-  runtime read before changing any rating, since what an ace gets is the question and "it is flagged"
-  is only the input. *⚠ Traps:* the flag is narrower than a complete skill vector (26 blocks against
-  29), so the two are not interchangeable and neither is a proxy for the other. Do not give aces a
-  blanket rating bonus on the strength of the flag alone; the branch may scale an interpolation
-  rather than add to it. *Cross-refs:* `PLAN-M5-polish` G75.
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).

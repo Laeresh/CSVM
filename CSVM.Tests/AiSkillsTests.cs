@@ -59,7 +59,11 @@ public class AiSkillsTests
     public void OutOfRangeRatingsClamp()
     {
         var s = Fixture;
-        Assert.Equal(s.At("dead_eye_angle", 1f), s.At("dead_eye_angle", 0f), 3);
+        // The floor is rating 0, which the difficulty offset reaches and the engine clamps to,
+        // so a 0 is the pair's own lo and not the rating-1 reading.
+        Assert.Equal(8.0f, s.At("dead_eye_angle", 0f), 3);
+        Assert.Equal(s.At("dead_eye_angle", 0f), s.At("dead_eye_angle", -3f), 3);
+        Assert.NotEqual(s.At("dead_eye_angle", 1f), s.At("dead_eye_angle", 0f), 3);
         Assert.Equal(s.At("dead_eye_angle", 9f), s.At("dead_eye_angle", 42f), 3);
     }
 
