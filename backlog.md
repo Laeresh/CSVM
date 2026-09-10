@@ -1205,6 +1205,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   belly. *Cross-refs:* `BL-714` (the pirate zeppelin's rings, cleared on a parked hull),
   `docs/architecture/Mech3.md` (`WorldCollision.cs`, `WorldBuilder.cs`).
 
+- `BL-800` `[Fidelity]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The world build applies a gamez node's `flags.active` only at world roots, while the original applies it to every node.**
+  *Evidence:* `WorldBuilder.Add` writes `built.Visible = node.Active` on each child of `world1`
+  and `SceneBuilder.BuildSubtree` never writes visibility, so a node below a world root builds
+  shown whatever its flag says. The original copies the flag straight through:
+  `gClsBlockReadNode` (`FUN_004e3690`, `cls_zbd.c`) reads the 212-byte node record and copies its
+  first 208 bytes into the live node object, so bit 2 of `node+0x24` is the record's own
+  `flags.active`, at every depth, and only `gwNodeSetActive` (`FUN_004cca30`) moves it afterwards.
+  32 world nodes across the eight chapters sit in that gap: `letterbox` and `sunlight` in all
+  eight, C1's nine barrage-balloon turret `healthy` variants (`lifesaver11`…`lifesaver33`, each
+  `bbtur<nn>/healthy`, which `attack_balloon<nn>` is what switches on), C3's three
+  `britbalmoral_<n>/markers/pylon8/bb_approach<n>/half_cone/land_on`, and C4's four parentless
+  `anim2_autogyro`/`anim2_warhawk`/`anim2_brigand`/`anim_warhawk` roots. *Fix shape:* apply the
+  flag where the subtree is built rather than at the walk root, then census what changes.
+  *⚠ Traps:* several of the 32 are already switched off by another mechanism (`letterbox` by
+  `WorldSession`, the destructible `healthy` variants by their own `RESET_STATE`), so the fix must
+  be measured against what the world actually draws, not against the flag count. `sunlight` is a
+  light rather than geometry and does not go through `Visible` at all. No prerequisite node is
+  affected: every one of the 784 REQUIRED `ACTIVATION_PREREQUISITE` node entries names a node
+  shipping `active: true`, so the animation gate reads the same state in both engines.
+  *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) ("The node
+  form reads the node's own live flag"), [`docs/formats/gamez.md`](docs/formats/gamez.md)
+  (`flags.active` as initial runtime visibility), `WorldBuilder.cs`, `SceneBuilder.cs`.
+
 ## Effects & animation runtime
 
 - `BL-796` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM01]` **The two hangar hand-over props cannot take the player's livery: their subtrees carry no decal placeholder.**
@@ -1371,24 +1394,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   so the per-sim-step query objects cost measurable physics time even though C21 showed they are
   1.6 % of allocation), `PLAN-perf-hitches`.
 
-- `BL-652` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: data]` **Why an authored fork's sensor nodes start inactive is not traced to a
-  rule, so a fork placed away from the world origin may start open.** *Evidence:* found while
-  verifying the node-active `ACTIVATION_PREREQUISITE` gate over C1C/M01 (`git log --grep=BL-525`).
-  A definition forks on a sensor node's active state, and the fork only starts closed because that
-  node reads INACTIVE at the world build: `wv_tailhook/dropoff_node` and `pickup_node` are both
-  inactive until OBJECTIVE11 and OBJECTIVE15 wake them, which is what keeps the wrong docking leg
-  from running. The nodes are `active: true` in C1C's gamez, so the state the gate reads comes from
-  the build's own hide-unplaced rule rather than from the data's flag, and the agreement between the
-  two was not traced. It holds today in both C1C/M01's docking and CM07's hangar drop.
-  *What would settle it:* find the build rule that decides a sensor node's initial visibility and
-  establish whether it keys on placement, on the node's own flag, or on something else, then check a
-  fork whose sensor is placed away from the world origin against it. 784 REQUIRED node entries
-  across 112 root definitions ride this, so a fork starting open is a whole authored branch running
-  when it should not. *⚠ Traps:* this is a question, not a defect: nothing observed is wrong today,
-  and a change made on the strength of the coincidence alone would move behaviour that is currently
-  correct. Do not "fix" the flag to match the observed state.
-  *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) (the
-  prerequisite's census and both parse paths).
 
 - `BL-720` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[CM24]` **The Dante's engine-explosion
   puffers drift between the engines, and some sit at the wrong place.** *Evidence:* reported at the
