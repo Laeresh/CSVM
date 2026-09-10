@@ -674,7 +674,9 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
   actually carved suppresses **both** animation slots below unless the weapon authors
   `ANIMATION_ALWAYS` (`+0x74` bit `0x800000`; nothing in this install does), so on the six
   `CRATER` weapons the ground effect is the crater rather than the ring where the terrain takes one.
-  This is `BL-412`/`BL-413`'s subsystem and CSVM builds none of it.
+  The randomisation never fires, because all six carriers author the block bare and every span is
+  zero; what the carve then builds, and why a carve is often refused outright, is
+  [`craters.md`](craters.md). CSVM builds none of it.
 - **The row's own bindings** follow: the sound through `FUN_005ad100`; the `ANIMATION` (row `+0x4`)
   spawned through `FUN_004edc10` with a zero rotation, and only when `FUN_005abcf0` returned 0; and
   the `SURFACE_ANIMATION` (row `+0x1c`) spawned with an orientation built from the hit record:

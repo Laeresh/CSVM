@@ -117,7 +117,7 @@ the whole install actually runs on:
 | `rotation_range` (+0x40…+0x54) | 0 | **no chapter** |
 | `align_normal` (+0x3c) | false | **no chapter** |
 | `min_slope` / `max_slope` (+0x5c / +0x58) | **+1.0 / −1.0**, i.e. no cull | **no chapter** |
-| `OnWeaponHit` / `OnCrater` / `OnCollide` | absent | **no chapter** |
+| `OnWeaponHit` / `OnCrater` / `OnCollide` | absent | **no chapter** (and `OnCrater` has no reader either: [`craters.md`](craters.md)) |
 
 ⚠ **This is the single most consequential negative in the whole system.** The three keys that could
 move or turn a decoration — `translate_uv_range` (step 5's jitter), `rotation_range` and

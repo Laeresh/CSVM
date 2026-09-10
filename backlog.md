@@ -769,28 +769,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scoping; ordnance launch is unlikely to be the only one.
   *Cross-refs:* `BL-406` (closed; the ordnance plan excluded `TORPEDO` for this reason).
 
-- `BL-412` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]` **What does `CRATER` do? Six weapons author it and it drives a whole
-  terrain-deformation subsystem.** *Evidence:* the flag sets weapon `+0x74` bit `0x2000` and parses a
-  sub-block into `+0x194` (`FUN_005ad630` at `0x005ada98`); the effect runtime reads the same
-  `CRATER` block at `FUN_004e5590`. The binary carries `D:\zipper\gamez\zdeclient\zdec_crater.cpp`
-  with three distinct failure strings ("Tesselation Failed", "Clip Failed", "Build Failed"), a
-  `Crater%d` instance name, an `OnCrater` hook and a `MAX_CRATER_RADIUS` key. That is mesh carving,
-  not a decal. Carriers: `wep_04`, `wep_12`, `wep_25`, `wep_26`, `wep_27`, `wep_28`.
-  *Fix shape:* decode `FUN_004e5590` and the `zdec_crater` routines into `docs/org/craters.md`:
-  what the sub-block authors, what `MAX_CRATER_RADIUS` bounds, whether the carve is persistent or
-  pooled, and what happens on the three failure paths.
-  ⚠ *Trap:* `+0x74` bit `0x2000` is **not** the extension struct's `0x2000` (`SHAKES_CAMERA`). The
-  two flag words are unrelated bit spaces.
-  *Cross-refs:* `BL-413` (the implementation), `BL-406` (closed; it excluded this).
-
-- `BL-413` `[Feature]` `[Blocked: BL-412]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Ground-attack ordnance leaves no crater.** *Evidence:*
-  six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. Blocked
-  on `BL-412` because the mechanism is unread, so neither the size nor the approach can be stated
-  yet.
+- `BL-413` `[Feature]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Ground-attack ordnance leaves no crater.** *Evidence:*
+  six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. The
+  mechanism is decoded in [`docs/org/craters.md`](docs/org/craters.md): every crater in the shipped
+  game is the same shape (a 7-vertex rim clipped against the ground, radius 20, floor 6 below the
+  impact), it destroys every decoration inside the radius, it is permanent for the mission, and a
+  second crater whose footprint comes within 5 units of an existing one is refused outright, so a
+  mission accumulates a bounded scatter of non-overlapping bowls rather than a growing mesh.
   ⚠ *Trap:* this is a **terrain and renderer** change triggered by ordnance, not an ordnance change.
   Scope it against the terrain system's constraints (chunking, LOD, the golden manifest's mesh
   counts), not against the weapon table.
-  *Cross-refs:* `BL-412`, `BL-406` (closed).
+  *Cross-refs:* `BL-406` (closed).
 
 - `BL-405` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Mounted ordnance should track the aim before it launches, not hang fixed
   along the pylon.** *Evidence:* the mount model is decoded
