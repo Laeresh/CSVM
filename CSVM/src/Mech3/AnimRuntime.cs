@@ -1945,6 +1945,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private static bool AuthoredInResetState(AnimDefinition def, AnimEvent ev) =>
         def.ResetState is { } reset && reset.Events.Contains(ev);
 
+    // Does this event come from the definition's own death choreography, the non-ON_CALL sequences
+    // and destruction slot RunDeathSequence plays? Reference identity again, and static rather than
+    // a look at what is dying: a death's later events land minutes after its burst has returned.
+    private static bool AuthoredInDeathChoreography(AnimDefinition def, AnimEvent ev)
+    {
+        foreach (var seq in def.Sequences)
+            if (!seq.OnCallOnly && seq.Events.Contains(ev))
+                return true;
+        return def.DeathSlot is { } slot && slot.Events.Contains(ev);
+    }
+
     // The name of def's own healthy-role node, for DestructibleKilled: the node an OBJECT_ACTIVE_
     // STATE switches off in def's own Initial sequences (the visible-death case), or else the one
     // RESET_STATE holds ACTIVE (the RESET-derived swap ApplyDeathSwap plays instead). Null for a
@@ -3725,7 +3736,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         else if ((active && healthyRole) || (!active && destroyedRole))
         {
-            if (inst.Status == DestructibleRegistry.State.Destroyed)
+            // Dying is not reviving. A wreck that clears itself away switches its own destroyed-role
+            // nodes back off, so only a baseline or another script may put the pool back.
+            if (inst.Status == DestructibleRegistry.State.Destroyed
+                && !AuthoredInDeathChoreography(def, ev))
             {
                 inst.Health = inst.MaxHealth;
                 inst.Status = DestructibleRegistry.State.Healthy;

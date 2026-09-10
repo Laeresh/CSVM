@@ -509,23 +509,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
-- `BL-733` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A killed installation whose death sequence switches its `dbase` node off is revived to full health by the pool sync.**
-  *Evidence:* `AnimRuntime.SyncDestructiblePool` classifies a `dbase`-role node going inactive as
-  the `destroyed`-role node going inactive, since `dbaseRole` implies `destroyedRole` there, and
-  takes its revival branch. The Barracuda's own death sequence (`extracted/C3/M03`, the
-  `subhealthy` installation) deactivates `dbase` as an ordinary step of dying, so right after a
-  live kill `RunDeathSequence`'s own dispatch of that event sets `inst.Status` back to `Healthy`
-  and `inst.Health` to full, after the visible death has played. Found while landing the
-  generator's host-death notification (`git log --grep=BL-729`), which fires before the revert
-  and is unaffected. *Fix shape:* tell a `dbase` deactivation inside the def's own death sequence
-  apart from a scripted revival, by the running sequence's identity or by the transition's
-  direction, and pin it on the Barracuda with an `ANIM_HEALTH` read after the kill. *⚠ Traps:*
-  the bay's shutdown is not evidence either way; only a health read or a later `CarryState`
-  snapshot shows the revert. Which other installations author their death this way is not
-  surveyed. *Playtest after fix:* none needed; a headless CM04 kill with a health read after it.
-  *Cross-refs:* `docs/formats/destructibles.md`, `BL-672` (a healthy node that still answers a
-  hit after its gunback died, the same pool state read from the other side).
-
 ## Weapons & combat
 
 - `BL-066` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist

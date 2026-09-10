@@ -83,6 +83,7 @@
     "death-slot": 0.026,
     "start-state-swap-pool": 0.009,
     "called-death-chain": 2.648,
+    "death-not-a-revival": 9.600,
     "carried-state-silent": 0.02,
     "wait-for-completion": 0.015,
     "emitter-host-deactivation": 0.016,
