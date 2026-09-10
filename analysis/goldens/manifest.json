@@ -141,14 +141,14 @@
     {
       "name": "menu-original-flag",
       "frame": 120,
-      "hash": "b5ae578d6989614fa6195f75cd59bd17",
+      "hash": "b6d9c7df9dfa41f59e1d90fe353780db",
       "exercises": "The Original top level over its decoded layout: the CrimFlag movie decoded from the install's own MPEG-1 and drawn as the backmost layer at the row's 250 percent, with the logo, button frame and plaques over it.",
       "args": ["--menu", "--presentation=original", "--det", "--mute"]
     },
     {
       "name": "menu-original-options-flag",
       "frame": 120,
-      "hash": "f1c7e067a178ae778b4094e1dbecc3cf",
+      "hash": "593748cbaf766f4043175e83f42b0a77",
       "exercises": "The Options screen over the decoded Preferences chrome with the same movie running under it: the page's four doors, its title and descriptions, and the flag at the layout row's own corner and scale.",
       "args": ["--menu=options", "--presentation=original", "--det", "--mute"]
     }
