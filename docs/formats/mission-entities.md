@@ -270,12 +270,15 @@ binary rather than inferred:
   the roster's pointer vector comparing each entry's own node (`+0x1c`) against the pair's node
   and returns the first match or 0. The fire routine `FUN_004bfe00` then walks the pairs in
   authored order: a pair with a zeppelin takes the gasbag branch below; a pair whose zeppelin is
-  0 (the `player` case) reads the node's world position through `FUN_004cf2c0` and runs the same
-  intercept solve and `> 0.707` arc test against it directly. No team, side or ally field is read
+  0 (`player`, and equally any world node that is no zeppelin) reads the node's world position
+  through `FUN_004cf2c0`, gives it no velocity of its own, and runs the same intercept solve and
+  `> 0.707` arc test against it directly. No team, side or ally field is read
   anywhere in that chain: the engage flag above is the whole of the gate, and a modified script
   running `COMPLETED_ZEPCANNONS` on a `targets [player]` record would fire on the aircraft. The
   remake's `ZeppelinRuntime.Cannons.ResolveTarget` (through `ZeppelinBroadside.FirstLiveTarget`)
-  keeps that walk unfiltered for the same reason.
+  keeps that walk unfiltered for the same reason, and a name matching neither `player` nor the
+  zeppelin roster resolves through the world's own node lookup and is aimed at by that node's
+  position, so a record naming a surface hull is engaged here as it is there.
 
 What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 `Session/ZeppelinRuntime.Cannons.cs`) added to the picture:

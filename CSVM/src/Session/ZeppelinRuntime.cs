@@ -29,6 +29,12 @@ public sealed partial class ZeppelinRuntime : Node
     public const float ArrivalFloorM = 50f;
 
     private readonly List<LiveZeppelin> _live = new();
+
+    // The world's own name-to-node lookup, the general table the original resolves a record's
+    // node and every `targets` name through. Kept so the broadside can aim at a name that is no
+    // zeppelin, and so nothing here builds a second index of its own.
+    private readonly Func<string, Node3D?> _resolveNode;
+
     private AnimRuntime? _runtime;
     private Func<Node3D, bool>? _transformDriven;
     private float _sinceLog;
@@ -46,6 +52,7 @@ public sealed partial class ZeppelinRuntime : Node
         Vector3? seatOverride = null)
     {
         Name = "zeppelins";
+        _resolveNode = resolveNode;
         _transformDriven = transformDriven;
         foreach (var def in defs)
         {

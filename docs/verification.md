@@ -591,6 +591,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   `WeatherRig.RegisterExtraLighting` and is aimed from the world sun in `CockpitOverlay.Sync`
   every frame, which a C1/IA1 cockpit shot proves by moving pixel md5 `50b5fcf1` to `274ed29c`
   when that third writer alone is cut.
+- **INSTR-53** — **Stubbing out a MEMOISED lookup does not turn a fix off: the first call still
+  fills the cache and every later one reads the answer back. Stub the cache fill as well, or the
+  red check passes and pins nothing.** A zeppelin broadside whose world-node resolve was stubbed to
+  return null still volleyed on that node, because the same call had already stored it.
 
 ## SRC — sources and documents
 

@@ -825,29 +825,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-681` `[Fidelity]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: decoded]` **A zeppelin broadside resolves only `player` and other zeppelins by name;
-  the original resolves any world node.** *Evidence (traced):* `ResolveOne` handles exactly two
-  cases, the literal name `player` and a name matched against the zeppelin roster by `Find`, and
-  logs `unresolved` for anything else
-  (`CSVM/src/Session/ZeppelinRuntime.Cannons.cs:315-336`). The original resolves each `targets`
-  name through the general node lookup `FUN_004d0280(7, name)` at load (`FUN_004bd8d0`), and
-  `FUN_004bfe00` fires on a stored pair whose zeppelin half is 0 by reading the node's world
-  position through `FUN_004cf2c0`, then running the same intercept solve and `> 0.707` arc test
-  ([`docs/formats/mission-entities.md`](docs/formats/mission-entities.md), "Steering"). So a record
-  naming a surface hull's node would be engaged in the original and warns here.
-  *Fix shape:* resolve an unmatched `targets` name through the world node table and aim at its
-  position, keeping the existing `player` and zeppelin cases as they are.
-  *⚠ Traps:* **currently unobservable, so do not manufacture a symptom for it.** No shipped record
-  names anything but `player` or another zeppelin, so nothing on screen changes; the value is that
-  a modified or later-decoded script would behave as the original does. This is a name-resolution
-  gap and **not** a candidate-set width gap: the broadside runs no candidate scan, and widening
-  `NearestHumanAircraft`'s `CollectAircraft` call is the disproven fix that `BL-667` proposed. Do
-  not re-derive that. Nothing here is a target-class rule either: no team, side or ally field is
-  read anywhere in the broadside chain, and the `DAMAGES_ZEPPELIN` gate lives in weapon-slot
-  selection, which the broadside does not use since it hardcodes `wep_28` by name.
-  *Cross-refs:* `BL-667`'s closing record in `PLAN-M5-polish-10` `A2`, `BL-517` and
-  `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
-
 - `BL-717` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The Pandora's turrets fire
   at the Balmoral the player is about to capture.** *Evidence:* reported at the controls on CM02
   (C3/M05): the player's own zeppelin's turrets shot at the last Balmoral, the bomber the mission
