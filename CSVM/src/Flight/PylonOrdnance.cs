@@ -44,9 +44,9 @@ public sealed class PylonOrdnance
             }
             model.Name = $"ordnance{hp.Index}";
             hp.Pylon.AddChild(model);
-            // Identity in the pylon's frame: the body's nose (local -Z) rides the pylon's -Z (the
-            // forward firing direction), tail at the mount — the same pose the round launches in, so
-            // the mounted body and the fired round are seamless.
+            // Identity in the pylon's frame: the body's nose (local -Z) rides the pylon's -Z, which
+            // is the direction a human's round leaves along. An AI's round leaves along its clamped
+            // mount aim instead, and the original does not slew its mounted body either.
             model.Transform = Transform3D.Identity;
             bool shown = hp.Armed(infiniteAmmo);
             model.Visible = shown;

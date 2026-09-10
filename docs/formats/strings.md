@@ -76,6 +76,10 @@ none exists.
 
 ## ID map
 
+⚠ **These ids are `langui.dll`'s alone.** A numeric message id hard-coded in `crimson.exe` addresses
+the `messages.json` table instead ([missions.md](missions.md#message-table)), which is a separate
+module with its own numbering; the two overlap in range and mean different things.
+
 Blocks are contiguous and stable, which is what makes the unnamed ranges usable:
 
 | IDs | Contents |
@@ -200,7 +204,7 @@ the hat-switch grid the design describes. `player.json`'s `autohead_turn_time` /
 |---|---|
 | `MSG_CMD_PAUSE_GAME` | **Pause/Quit/Objectives** — the objectives display shipped, folded onto the pause key |
 | `MSG_CMD_BAIL_OUT` | Bail Out |
-| `MSG_CMD_LAUNCH_AUTO_LAND` | Auto-Dock (also `MSG_PRESS_AUTOLAND` / `MSG_CLICK_AUTOLAND` prompts) |
+| `MSG_CMD_LAUNCH_AUTO_LAND` | Auto-Dock. The in-flight prompt is `MSG_PRESS_AUTOLAND` ("Press %1 to autodock") for a key or a joystick button and `MSG_CLICK_AUTOLAND` ("Click %1 to autodock") for a mouse one |
 | `MSG_CMD_INTERP` | Comm Interp |
 | `MSG_CMD_KEYMAP_DISP` | View Help |
 | `MSG_CMD_DISPLAY_SCORES` | Display Scores (Multiplayer Only) |

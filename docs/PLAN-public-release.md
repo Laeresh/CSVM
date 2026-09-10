@@ -177,18 +177,15 @@ confirmed still open: its `git log --grep` returns the filing commit `3af41b84`,
 retirement and this plan's own opening commit, with no landing among them, and its entry is already
 out of `backlog.md`, which now carries only cross-references to it from `BL-698` and `BL-695`.
 
-The four candidates that came closest, and why each failed the bar rather than being talked past
+The candidates that came closest, and why each failed the bar rather than being talked past
 it. `BL-717`, the Pandora's own turrets firing on the Balmoral CM02 wants captured, reads like it
 could destroy the only route to primary 3 (`OBJECTIVE18`, `ANIM_STATE wingwalk EXECUTED`), but the
 sitting that filed it walked CM02 through to CM24 (`git log --grep=BL-717`, commit `5b71d0ad`), so
-the mission was finished with the defect present. `BL-733`, a killed installation revived to full
-health by the pool sync, is real in the code (`AnimRuntime.cs:3717-3723` takes the revival branch
-because `dbaseRole` implies `destroyedRole`), but the revert lands after the death has played and
-its credit taken, and no objective completion reads `DestructibleRegistry.State`. `BL-689`, CM13's
+the mission was finished with the defect present. `BL-689`, CM13's
 flight check, withholds a plane grant and offers a button the original bars, which leaves the
 mission flyable in the aeroplane the profile already owns. `BL-565` plus `BL-523` can leave a
 survivor an objective is waiting on kilometres outside the mission area, which is a long flight
-rather than an impossible one. Each of the four is in the Known Issues appendix instead.
+rather than an impossible one. Each is in the Known Issues appendix instead.
 
 Three entries failed re-verification, which is the part of this item that earned its keep.
 `BL-079`'s opening claim, that all sound is own-plane and non-positional, is false: every AI
@@ -1092,9 +1089,6 @@ Anything A2 or a later wave closes comes off this list.
   from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
   (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed
   open for the moving-hull case it was reported on.)
-- **A destroyed ground installation can come back to full health after its death animation has
-  played.** Shoot it again, which replays the death. (`BL-733`; no landing commit, and
-  `AnimRuntime.SyncDestructiblePool` still classifies the death sequence's own step as a revival.)
 
 ## What the world looks and sounds like
 

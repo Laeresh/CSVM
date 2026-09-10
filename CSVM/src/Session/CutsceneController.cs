@@ -47,9 +47,9 @@ public sealed partial class CutsceneController : Node
     /// <summary>The definitions a story mission's start list plays as its opening movie: the
     /// bespoke C1/M04 intro, the one the other twelve share, and C3/M03's cargo zeppelin camera,
     /// which no list names (its start anim <c>calldestroy_the_cargozep</c> calls it). ⚠ The
-    /// authored codes do NOT identify a cutscene on their own: Instant Action's own
-    /// <c>player_setup</c> raises the same nine, and what the original does with them there is
-    /// undecoded (docs/formats/anim-definitions/cutscenes.md).</summary>
+    /// authored codes do NOT identify a cutscene on their own: <c>player_setup</c>, which every
+    /// mission opening without a movie bootstraps, raises the same nine and the original hosts
+    /// none of them (docs/formats/anim-definitions/cutscenes.md).</summary>
     public static readonly string[] IntroAnims =
         { "mission_intro_animation", "generic_intro", "cgzep_camera" };
 
@@ -255,8 +255,8 @@ public sealed partial class CutsceneController : Node
     /// <summary>Registers definitions this host answers for beyond the intros: what the landings
     /// trigger can start, plus what those definitions reach by <c>CALL_ANIMATION</c>. This is the
     /// original's per-instance host registration, resolved from the authored data instead.
-    /// ⚠ Pass definition names, never callback codes; Instant Action's <c>player_setup</c> raises
-    /// the same nine an intro does.</summary>
+    /// ⚠ Pass definition names, never callback codes; the no-movie bootstrap <c>player_setup</c>
+    /// raises the same nine an intro does.</summary>
     public void HostDefinitions(IEnumerable<string> animNames)
     {
         foreach (string name in animNames)

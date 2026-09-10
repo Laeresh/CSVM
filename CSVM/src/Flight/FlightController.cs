@@ -3575,9 +3575,9 @@ public partial class FlightController : Node3D
             struckRig.ArmCollisionGrace();
         }
 
-        // The block-5 kick. Crashed rides the same gate as the impulse: 0x48d3aa jumps the whole
-        // shake-and-decal branch when the player's crashed flag (obj+0x384) is set.
-        if (outcome.ShakeMagnitude > 0f && !Crashed)
+        // The block-5 kick. A positive severity on a human pilot's own airframe is the whole gate:
+        // 0x48d3aa's second guard is the fd developer switch, which no gameplay event sets.
+        if (outcome.ShakeMagnitude > 0f)
             Shake?.ContactHit(outcome.ShakeMagnitude);
         if (outcome.DamageFlashText is { } flash)
             _pilotHud.Flash(flash);

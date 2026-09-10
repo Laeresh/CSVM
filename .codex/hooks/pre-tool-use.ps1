@@ -30,8 +30,10 @@ if (Test-Path -LiteralPath $format -PathType Leaf) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-if ($command -notmatch 'git\s+commit') { exit 0 }
-
+# No trigger of its own. Whether a command is a commit is the gate's decision, made once in
+# CheckCommitContent.ps1 and covered by its self-test. The three harnesses each used to test for
+# 'git\s+commit' here, which required the two words to be adjacent and so skipped the gate
+# entirely for 'git -C <tree> commit', the form CLAUDE.md prescribes for naming a tree.
 $gate = Join-Path $here 'CheckCommitContent.ps1'
 if (-not (Test-Path -LiteralPath $gate -PathType Leaf)) { exit 0 }
 & $gate -Command $command

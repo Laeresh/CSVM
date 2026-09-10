@@ -380,6 +380,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 The things every subsystem depends on: the clock, the log, the seed. Changing one of these changes
 determinism repo-wide; read `docs/verification.md` first.
 
+- `src/Utils/AiStepCost.cs` — the wall cost of one AI roster walk and the aircraft it walked, the `--perf` term that attributes frame cost to the AI rather than to the whole frame.
 - `src/Utils/AudioBuses.cs` — the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
 - `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
@@ -398,7 +399,9 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
 - `src/Utils/PhysicsTickCost.cs` — the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
+- `src/Utils/GcTrace.cs` — the `--perf` GC readout: pause per wall second, collections, and the finalizable-object count that sets the pause, per ten-second window.
 - `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
+- `src/Utils/ProcessPassCost.cs` — the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
 - `src/Utils/RenderPoses.cs` — the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
 - `src/Utils/ResolutionSetting.cs` — the window size: the sizes a screen can hold, the saved one against the shipped default, and the one place the window size is set.
 - `src/Utils/Rng.cs` — the session's one master seed and the named subsystem generators every random draw derives from.

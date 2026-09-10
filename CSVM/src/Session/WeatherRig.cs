@@ -263,9 +263,10 @@ public sealed class WeatherRig
 
     /// <summary>Registers a second (sun, env) pair — a cockpit overlay's cloned copies — so every
     /// future zone change reaches it too, not only the zone live when it was built. Both lighting
-    /// arms mirror onto it. <paramref name="env"/> may be null (a suite rig with no Environment);
-    /// the shadow max distance is excluded, since a clone's camera has its own far plane to
-    /// respect (<c>CockpitOverlay</c>).</summary>
+    /// arms mirror the LEVELS and COLOURS they resolve. <paramref name="env"/> may be null (a suite
+    /// rig with no Environment). Excluded: the shadow max distance, a clone's camera having its own
+    /// far plane, and the bearing, which <c>CockpitOverlay.Sync</c> takes off the world sun every
+    /// frame in the pass's own basis.</summary>
     public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
         => _extraLighting.Add((sun, env));
 

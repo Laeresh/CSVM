@@ -45,7 +45,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
 | 7 | `init_health` | the whole-vehicle health-pool override, applied at spawn only when authored **greater than zero**; `0.0` and `-1` both mean "use the airframe default". Real values do occur (e.g. `216.0`), always raising a hostile's pool above its airframe default in the shipped campaign |
 | 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
-| 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)). **This is the targeting readout's name line**, and its only source: the spawn path resolves it into the AI entity's own name string, while the `vehicle.zrd` def's `title` goes to a different object the readout never reads ([`org/targeting.md`](../org/targeting.md#the-hud-the-label)). 175 of the 414 blocks author one; the other 239 show a marker with no name at all |
+| 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)). **This is the targeting readout's name line**, and its only source: the spawn path resolves it into the AI entity's own name string, while the `vehicle.zrd` def's `title` goes to a different object the readout never reads ([`org/targeting.md`](../org/targeting.md#the-hud-the-label)). 175 of the 414 blocks author one; the other 239 show a marker with no name at all. ⚠ **A `mode ship` hull takes this slot on the same path an aeroplane does**, the spawn being one function for every dynamics class; of the 23 ship blocks only C1B/M03's four author it (`MSG_VEH_PATROLBOAT`), so a nameless boat elsewhere is faithful |
 | 21 | `deactivated` | |
 | 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
 | 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600. Spelled `preferred_engagement_altitude` in `vehicle.json`, which is also the fallback when this slot is `-1.0` (`basic_airplane` authors 300.0). ⚠ **It is a maneuver-selection weight, not an altitude order:** its one reader (`FUN_004201a0`, `0x004204da`) adds 1.0 to a candidate evasive maneuver's weight when the aircraft is on the wrong side of it. Nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)) |
@@ -66,7 +66,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
 | 66 | `armor` | the whole-vehicle armour-pool override, applied at spawn whenever authored **zero or greater**; only `-1` means "use the airframe default". ⚠ **The gate differs from slot 7's**: `0.0` is a real override here (none is shipped), but a block too short to carry the slot (33 of 414) is unset, never `0.0` |
-| 67 | `ace` | `1` on **26 blocks** across the 53 rosters and `0` on the other 388. Every one of the 26 also authors a `MSG_*_NAME` in slot 20 and a complete skill vector, and each is the block the mission's own script singles out. **It is read**: the block reader stores it at the block struct's `+0xa4` (`0x00437ea0`) and the spawn path copies it to the AI entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`), where one read at `0x0047cde2` sits immediately before the skill block and gates skill interpolation. The Instant Action spawner sets the same field. **The second read, at `0x004ba23a`, is the scrapbook's**: it picks which of the mission's two per-airframe kill tallies a kill is credited to, and the ace tally is the one the debrief draws with a star ([org/debrief.md](../org/debrief.md#what-the-tallies-count)). ⚠ **What the skill-path gate does to a rating is still not decoded.** Narrower than the skill vector, see [below](#the-skill-vector) |
+| 67 | `ace` | `1` on **26 blocks** across the 53 rosters and `0` on the other 388. Every one of the 26 also authors a `MSG_*_NAME` in slot 20 and a complete skill vector, and each is the block the mission's own script singles out. **It is read twice.** The block reader stores it at the block struct's `+0xa4` (`0x00437ea0`) and the spawn path copies it to the AI entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`); the entity constructor's default at `0x004b0427` is the field's only other write, so a roster block is the only thing that can set it. The read at `0x0047cde2`, immediately ahead of the skill block, **zeroes the difficulty's skill offset**, so an ace's nine ratings interpolate exactly as authored at every tier while an ordinary enemy's are shifted by `-2` / `0` / `+2` ([org/aiControlLaw.md](../org/aiControlLaw.md#the-rating-the-interpolation-receives-is-not-the-authored-one)). It exempts nothing else: the hull still takes the armour scale, which is applied earlier in the same function. The read at `0x004ba23a` is the scrapbook's, picking which of the mission's two per-airframe kill tallies a kill is credited to, the ace tally being the one the debrief draws with a star ([org/debrief.md](../org/debrief.md#what-the-tallies-count)). Narrower than the skill vector, see [below](#the-skill-vector) |
 | 68–71 | `pattern decal1 decal2 decal3` | livery ([paint.md](paint.md)) |
 | 72–80 | `r1 g1 b1 r2 g2 b2 r3 g3 b3` | livery colours ([paint.md](paint.md)) |
 
@@ -176,7 +176,7 @@ be reopened without new evidence (a different build, or an authored non-zero val
 
 ### The skill vector
 
-Slots 22–30 are nine consecutive integers valued `-1` (unset) or **1–9**, in the exe's order:
+Slots 22–30 are nine consecutive integers valued `-1` (unset) or **0–9**, in the exe's order:
 
 | slot | stat |
 |---|---|
@@ -208,6 +208,16 @@ Three shipped cases corroborate the ordering, each landing on a different slot:
 - **89 generic blocks** carry `-1` in eight slots and a lone **`1` on `dead_eye`** — mooks that can
   barely shoot, which is the observed gameplay.
 
+⚠ **`0` is authored and `-1` is unset; the two are not the same slot value.** The spawn's
+fall-through test is `CMP EAX,-0x1`, so a `0` overrides the def rather than deferring to it. C1/M02's
+four `blakepeace_2_*` are the shipped case, a `steady_hand` of `0` beside a `dare_devil` and a
+`natural_touch` of `9`.
+
+⚠ **What a block authors is not what the pilot flies.** The difficulty adds `-2` / `0` / `+2` to
+every one of the nine before they interpolate, clamped to `[0, 9]`, and slot 67 is the exemption
+([org/aiControlLaw.md](../org/aiControlLaw.md#the-rating-the-interpolation-receives-is-not-the-authored-one)).
+Read an authored rating as the design's intent for the middle tier, never as the number in play.
+
 The vector also scales with fame across a recurring antagonist's appearances (the Black Swan reads
 6s at first contact and all nines in the final encounter). ⚠ **It is not monotonic in chapter-directory
 order** — the chapter directories are not story order.
@@ -224,9 +234,9 @@ string adjacency. CM02 (`C3/M05`, "The Great British Bomber Heist") is the worke
 - **The flag.** Slot 67 is `1` on `britpeace_7` and on no other block in the mission. The five other
   British Peacemakers author no slot-20 title either, so the roster distinguishes exactly one of the
   six. The engine carries the flag through to the AI entity and reads it twice
-  ([above](#field-table)): what the skill path does with it is undecoded, but the debrief counts an
-  ace kill into its own tally and stamps it with a star. CM02's own scrapbook page is the confirming
-  case, a starred `1 Peacemaker` beside the plain `3 Peacemaker` of the other five
+  ([above](#field-table)): the spawn exempts his nine ratings from the difficulty offset, and the
+  debrief counts an ace kill into its own tally and stamps it with a star. CM02's own scrapbook page
+  is the confirming case, a starred `1 Peacemaker` beside the plain `3 Peacemaker` of the other five
   ([org/debrief.md](../org/debrief.md#the-stamps-and-the-total)).
 - **The cohort and the mission script.** `britpeace_7` is the sole member of `group` 4, and the
   mission's SECONDARY objective is a `DEDG` over group 4 whose completion plays the ace's death

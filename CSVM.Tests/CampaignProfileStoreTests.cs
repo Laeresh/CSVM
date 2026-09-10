@@ -119,6 +119,30 @@ public class CampaignProfileStoreTests
         Assert.Null(store.Load("Zachary"));
     }
 
+    /// <summary>The three ways <c>Load</c>'s single null arises are told apart, and each answer
+    /// names the file it looked at: a profile written to an older schema is on disk and readable,
+    /// so reporting it as absent is what sends a reader looking for a path problem.</summary>
+    [Fact]
+    public void LoadProblem_TellsAnAbsentProfileFromARefusedOne()
+    {
+        var store = new CampaignProfileStore(TestData.TempDir());
+        Assert.StartsWith("no such profile", store.LoadProblem("Nobody"), StringComparison.Ordinal);
+
+        var path = store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        Assert.Equal(string.Empty, store.LoadProblem("Zachary"));
+
+        File.WriteAllText(path, CampaignProfileStore.Serialize(CampaignProfileDef.NewProfile("Zachary"))
+            .Replace($"\"version\": {CampaignProfileStore.Version}", "\"version\": 2"));
+        Assert.Null(store.Load("Zachary"));
+        var refused = store.LoadProblem("Zachary");
+        Assert.Contains("schema version 2", refused, StringComparison.Ordinal);
+        Assert.Contains($"reads version {CampaignProfileStore.Version}", refused, StringComparison.Ordinal);
+        Assert.Contains(path, refused, StringComparison.Ordinal);
+
+        File.WriteAllText(path, "{ not json at all");
+        Assert.Contains("not readable", store.LoadProblem("Zachary"), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void List_SortsByName_AndSkipsTheUnreadable()
     {

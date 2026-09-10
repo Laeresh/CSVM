@@ -413,7 +413,7 @@ public sealed class CockpitGauges
             {
                 if (gauges.Glyph(text[i]) is { } glyph)
                 {
-                    _cells[i].SetShaderParameter("albedo_tex", glyph);
+                    _cells[i].SetShaderParameter(Mech3.SceneBuilder.AlbedoTexParam, glyph);
                 }
             }
         }

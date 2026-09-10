@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using CSVM.Bindings;
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Flight;
@@ -127,6 +129,11 @@ public sealed class FlightHud
     /// <c>--debug-markers</c>. Built for every human pane in every flight session.</summary>
     public TargetHud? TargetHud;
 
+    /// <summary>The auto-land line this pane draws while the approach table's <c>auto</c> row
+    /// passes, composed once per rig by <see cref="ComposeAutoLandPrompt"/> from the seat's own
+    /// binding. Empty draws no line, which is what an unbound auto-land reads as.</summary>
+    public string AutoLandPrompt = AutoLandFallback;
+
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper
     // follows"); no TUNE left in them.
     private const float ReticleFlightTime = 0.5f;      // s of flight the pipper marks
@@ -135,9 +142,11 @@ public sealed class FlightHud
     private const float ReticleRatePerGap = 1.9848576f; // rate ceiling per metre of remaining gap
     private const float ReticleFarGap = 900f;          // m past which the ceiling is flat
     private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
-    // The original's line comes from a `langui` string this remake has not extracted; only the
-    // message id is decoded, not the text. This stand-in is plain English, not the shipped wording.
-    private const string AutoLandPrompt = "AUTO-LAND AVAILABLE — PRESS F9 (GAMEPAD L3) TO LAND";
+    // What the prompt reads when messages.json is absent, so a data-less rig still says the offer
+    // is live. Plain English, not the shipped wording, which only the message table carries.
+    private const string AutoLandFallback = "AUTO-LAND AVAILABLE";
+    private const string AutoLandPressKey = "MSG_PRESS_AUTOLAND";  // "Press %1 to autodock"
+    private const string AutoLandClickKey = "MSG_CLICK_AUTOLAND";  // the mouse-button wording
     private const float DamageFlashTime = 2.5f;        // s the text block shows the impact line
     private const int TextFontSize = 22;               // text block, full-screen (shrunk per pane)
     private const float AglRayLength = 1000f;          // m the altimeter's down ray reaches
@@ -209,6 +218,26 @@ public sealed class FlightHud
     /// <summary>The altimeter's feet conversion off the drawn world Y. Static so CSVM.Tests can
     /// assert it as a number rather than through a formatted string.</summary>
     public static float FeetFromWorldY(float y) => y * 3.28084f;
+
+    /// <summary>The auto-land prompt for a seat holding <paramref name="bindings"/>: the message
+    /// table's own wording with that seat's control in the <c>%1</c> slot, "Click" for a mouse
+    /// button and "Press" otherwise, and empty when nothing is bound
+    /// (docs/formats/anim-definitions/cutscenes.md).
+    /// ⚠ A false <paramref name="readsKeyboard"/> skips the keyboard and mouse bindings: a pad-only
+    /// splitscreen seat must not be told to press a key that does nothing for it.</summary>
+    public static string ComposeAutoLandPrompt(Messages? strings, IReadOnlyList<Binding> bindings,
+        bool readsKeyboard)
+    {
+        if (SelectAutoLandBinding(bindings, readsKeyboard) is not { } binding)
+        {
+            return string.Empty;
+        }
+
+        string control = BindingLabels.Describe(binding);
+        string key = binding.Control.Kind == ControlKind.Mouse ? AutoLandClickKey : AutoLandPressKey;
+        string template = strings?.Get(key) ?? key;
+        return template == key ? AutoLandFallback + " - " + control : Messages.Fill(template, control);
+    }
 
     /// <summary>The gun gauge's selected-slot readout: the SELECTED firable group's ammo and short
     /// weapon name and the belt fraction per firable group (<paramref name="slotsOut"/>, cleared
@@ -450,8 +479,9 @@ public sealed class FlightHud
         }
         if (!state.Held && state.Stalled)
             _textLines.Add("⚠ STALLED - SPEED UP");
-        if (!state.Held && !state.Crashed && !state.Halted && state.AutoLandOffered)
-            _textLines.Add(AutoLandPrompt);
+        if (!state.Held && !state.Crashed && !state.Halted && state.AutoLandOffered
+            && AutoLandPrompt is { Length: > 0 } autoLand)
+            _textLines.Add(autoLand);
         if (AdvanceDamageFlash(state.WallDt, state.Halted, state.Crashed) is { } flashLine)
             _textLines.Add(flashLine);
         if (state.DamageSummary is { Length: > 0 } dmgSummary)
@@ -472,6 +502,36 @@ public sealed class FlightHud
 #pragma warning disable SA1201, SA1202
     internal string? DrawnText => _text?.Text;
 #pragma warning restore SA1201, SA1202
+
+    // Which of an action's bindings the prompt names, in the original's own slot order: keyboard,
+    // then pad, then mouse. Keyboard and mouse are the desktop player's alone, so a pad-only seat
+    // skips both.
+    private static Binding? SelectAutoLandBinding(IReadOnlyList<Binding> bindings, bool readsKeyboard)
+    {
+        Binding? pad = null;
+        Binding? mouse = null;
+        for (int i = 0; i < (bindings?.Count ?? 0); i++)
+        {
+            var binding = bindings![i];
+            switch (binding.Control.Kind)
+            {
+                case ControlKind.Key when readsKeyboard:
+                    return binding;
+                case ControlKind.Mouse when readsKeyboard:
+                    mouse ??= binding;
+                    break;
+                case ControlKind.Button:
+                case ControlKind.Axis:
+                case ControlKind.Hat:
+                    pad ??= binding;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return pad ?? mouse;
+    }
 
     // Where a round of `weapon` fired from `origin` along `forward` (carrying `inheritVel`, the
     // plane's velocity) sits after travelling `distance` m of path — Ballistics.March, the SAME

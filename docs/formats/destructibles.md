@@ -175,6 +175,19 @@ kept out of the baseline. The one sequence-side activation that is not a death i
 `HEALTH` and drives no pool, so the rule never reaches it. Regression: the `destructible-census`
 suite asserts both cannons boot standing, and `called-death-chain` asserts the bridge does.
 
+⚠ The same swap read backwards is a revival, and a def's own death choreography is never one. A
+wreck that clears itself away switches its own destroyed-role nodes back off as a late step of
+dying, and `dbase` is a destroyed-role name here, so taking those events for a repair hands a
+killed pool full HP back after the visible death has played. The sweep finds fourteen defs
+authoring a revival-shaped `OBJECT_ACTIVE_STATE` inside a non-ON_CALL sequence, all of them a
+wreck removing itself: the Barracuda (`sub_destruction`, in both C3/M03 and C3/IA1) switches
+`dbase` off in the same block that hides `subhealthy` and shows `subdestroyed`, then sinks
+`subdestroyed` away 115 s later; C2/M01's four barges (`tugandbarge01` to `04`) drop `dbase1`
+some ten seconds into `barge_destroy0n`, once the hull has settled; and C1/M05's nine lifesavers
+(`lifesaver11` to `lifesaver33`) switch `healthy` and `destroyed` both off in one breath. No def
+in the install authors a genuine repair there, so a revival can only arrive from a `RESET_STATE`,
+an ON_CALL sequence, or another def's script. Regression: the `death-not-a-revival` suite.
+
 The cross-mission state log is the other way an object starts destroyed. The original opens a
 later mission of the chapter on the carried state itself, a destroyed pose (the `PERSIST_LOG`
 reader defs such as `ucamp_dest` and `tower_dest` are the silent destroyed variants), never on a

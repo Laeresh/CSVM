@@ -55,9 +55,9 @@ public sealed class ZeppelinBroadside
     /// 10/15/20 s).</summary>
     public const float FallbackFireDelaySeconds = 20f;
 
-    /// <summary>The one <c>targets</c> name that is not a zeppelin record: the human aircraft.
-    /// The original resolves it through the same world-node table as a zeppelin's node, but no
-    /// shipped script ever engages the cannons of a record naming it, so the arm is unreachable
+    /// <summary>The <c>targets</c> name standing for the human aircraft. The original resolves it
+    /// through the same world-node table as any other name, a zeppelin's or a surface hull's, but
+    /// no shipped script ever engages the cannons of a record naming it, so the arm is unreachable
     /// in the campaign (docs/formats/mission-entities.md "Broadside firing").</summary>
     public const string PlayerTarget = "player";
 

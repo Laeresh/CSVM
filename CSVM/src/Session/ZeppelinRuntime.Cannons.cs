@@ -22,6 +22,7 @@ public sealed partial class ZeppelinRuntime
 
     private readonly AimCandidateSet _aircraftScan = new();
     private readonly HashSet<string> _warnedTargets = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Node3D?> _targetNodes = new(StringComparer.OrdinalIgnoreCase);
     private ProjectilePool? _pool;
     private WeaponDef? _broadsideWeapon;
     private Random? _gasbagRng;
@@ -321,18 +322,47 @@ public sealed partial class ZeppelinRuntime
                 ? (plane.Pos, plane.Vel, name, null)
                 : null;
         }
-        if (Find(name) is { Dead: false } other)
+        // ⚠ Never fall a roster name through to the world-node arm below. The original binds the
+        // zeppelin half of the pair once at load, so that pair only ever takes the gasbag branch;
+        // a dead hull is passed over rather than aimed at by its hull position.
+        if (Find(name) is { } other)
         {
+            if (other.Dead)
+            {
+                return null;
+            }
             var vel = other.Dormant
                 ? Vector3.Zero
                 : other.Motion.Forward * other.Motion.Speed;
             return (other.Host.GlobalPosition, vel, name, other);
+        }
+        // The original resolves every authored name through the general node table and fires on a
+        // pair with no zeppelin behind it by reading that node's world position, so a record
+        // naming a surface hull is engaged. A world node carries no velocity into the solve.
+        if (TargetNode(name) is { } world
+            && GodotObject.IsInstanceValid(world) && world.IsInsideTree())
+        {
+            return (world.GlobalPosition, Vector3.Zero, name, null);
         }
         if (_warnedTargets.Add($"{zep.Def.Node}:{name}"))
         {
             GD.Print($"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
         }
         return null;
+    }
+
+    // A `targets` name through the world's general node table (`FUN_004d0280(7, name)`), resolved
+    // once and kept: the original resolves the whole list at load and drops a name that names no
+    // node there, which is what a cached null stands for here.
+    private Node3D? TargetNode(string name)
+    {
+        if (_targetNodes.TryGetValue(name, out var cached))
+        {
+            return cached;
+        }
+        var node = _resolveNode(name);
+        _targetNodes[name] = node;
+        return node;
     }
 
     private (Vector3 Pos, Vector3 Vel)? NearestHumanAircraft(Vector3 from)

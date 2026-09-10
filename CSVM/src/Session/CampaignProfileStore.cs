@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -444,6 +445,41 @@ public sealed class CampaignProfileStore
         }
     }
 
+    /// <summary>Why <paramref name="name"/> does not load, or "" when it does. <see cref="Load"/>
+    /// answers the same null to a profile that was never created and to one this build refuses to
+    /// read, and a caller reporting the first for the second sends its reader hunting for a
+    /// directory that is right there. The refusal is deliberate, not a fault: see
+    /// <see cref="Version"/>.</summary>
+    public string LoadProblem(string name)
+    {
+        string path;
+        try
+        {
+            path = Path.Combine(DirFor(name), FileName);
+        }
+        catch (ArgumentException)
+        {
+            return $"'{name}' cannot be a profile directory name";
+        }
+
+        if (!File.Exists(path))
+        {
+            return $"no such profile ({path} does not exist)";
+        }
+
+        if (Load(name) != null)
+        {
+            return string.Empty;
+        }
+
+        int stored = StoredVersion(path);
+        return stored < 0
+            ? $"{path} is not readable as a profile"
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{path} is schema version {stored}, and this build reads version {Version}");
+    }
+
     /// <summary>Writes <paramref name="def"/> to its name's directory, creating it on first save
     /// and overwriting any existing profile of the same name (the name IS the identity, same as
     /// <see cref="Flight.CustomPlaneStore"/>). Returns the file's absolute path.</summary>
@@ -520,6 +556,32 @@ public sealed class CampaignProfileStore
         }
 
         return Path.Combine(_dir, safe);
+    }
+
+    // The version claimed by the file at that path, or -1 when nothing readable claims one. Read
+    // straight off the JSON rather than through Deserialize, which rejects the whole file on a
+    // version it does not know and so can never report which version that was.
+    private static int StoredVersion(string path)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                ? ReadInt(doc.RootElement, "version", -1)
+                : -1;
+        }
+        catch (JsonException)
+        {
+            return -1;
+        }
+        catch (IOException)
+        {
+            return -1;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return -1;
+        }
     }
 
     private static CampaignProfileDef? TryRead(string path)

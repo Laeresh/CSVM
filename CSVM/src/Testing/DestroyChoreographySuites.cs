@@ -472,6 +472,74 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- a def's own death choreography is never a revival --------------------------------------
+
+    // The Barracuda (`sub_destruction`, C3/M03) switches its `dbase` node off as an ordinary step of
+    // dying and sinks `subdestroyed` away a minute later. SyncDestructiblePool reads a dbase-role
+    // node as a destroyed-role one, so both events reach its revival branch and hand the killed
+    // submarine full HP back after the visible death has played.
+    // ⚠ Read the pool twice, once in the frames after the kill and once past the sink. The two
+    // events are a minute apart, so a fix covering only the synchronous death burst passes the first.
+    [Suite("death-not-a-revival",
+        "the Barracuda's own death switches its dbase node off and sinks its destroyed hull away a minute later, and a lifesaver's switches `destroyed` itself off in the same breath as `healthy`; none of the three hands the killed pool its health back")]
+    internal static void OwnDeathIsNotARevival(TestContext ctx)
+    {
+        ctx.WithWorld("C3", collision: false, mission: "M03", world =>
+        {
+            var runtime = world.Runtime;
+            var sub = runtime.Destructibles.All.FirstOrDefault(i => string.Equals(
+                i.Def.AnimName, "sub_destruction", System.StringComparison.OrdinalIgnoreCase));
+            ctx.Check(sub != null, $"C3/M03 ships the Barracuda's pool def={sub?.Def.Name ?? "-"}");
+            if (sub is not { } boat)
+            {
+                return;
+            }
+
+            ctx.Check(boat.Status == DestructibleRegistry.State.Healthy,
+                $"the submarine boots standing hp={boat.Health:0.##}/{boat.MaxHealth:0.##} state={boat.Status}");
+            runtime.DamageAt(boat.Anchor, boat.MaxHealth + 1f);
+            for (int i = 0; i < 120; i++)
+            {
+                runtime.Advance(1f / 60f);
+            }
+
+            ctx.Check(boat.Status == DestructibleRegistry.State.Destroyed && boat.Health <= 0f,
+                $"the `dbase` its death switches off leaves the pool dead status={boat.Status} hp={boat.Health:0.##}");
+
+            // Past the 35 s hold and the 80 s sink the death ends `subdestroyed` off with.
+            for (int i = 0; i < 500; i++)
+            {
+                runtime.Advance(0.25f);
+            }
+
+            ctx.Check(boat.Status == DestructibleRegistry.State.Destroyed && boat.Health <= 0f,
+                $"and so does the hull sinking away status={boat.Status} hp={boat.Health:0.##}");
+        });
+
+        // C1/M05's nine lifesavers are the other authored shape: the role word is `destroyed`
+        // itself, and both switches land in one block, so the death is a kill immediately undone.
+        ctx.WithWorld("C1", collision: false, mission: "M05", world =>
+        {
+            var runtime = world.Runtime;
+            var raft = runtime.Destructibles.All.FirstOrDefault(i => string.Equals(
+                i.Def.Name, "lifesaver11", System.StringComparison.OrdinalIgnoreCase));
+            ctx.Check(raft != null, $"C1/M05 ships a lifesaver pool def={raft?.Def.Name ?? "-"}");
+            if (raft is not { } boat)
+            {
+                return;
+            }
+
+            runtime.DamageAt(boat.Anchor, boat.MaxHealth + 1f);
+            for (int i = 0; i < 120; i++)
+            {
+                runtime.Advance(1f / 60f);
+            }
+
+            ctx.Check(boat.Status == DestructibleRegistry.State.Destroyed && boat.Health <= 0f,
+                $"the lifesaver's own death leaves its pool dead status={boat.Status} hp={boat.Health:0.##}");
+        });
+    }
+
     // ---- a carried pose reaches the pieces a called sequence hides -----------------------------
 
     // C3's suspension bridge switches two of its spans off from ON_CALL sequences, which a pose

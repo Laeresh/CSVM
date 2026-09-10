@@ -22,7 +22,8 @@ public sealed class ZeppelinMotion
     // follower's 30 m. Only the zeppelin follower reads a node's halt flag at all.
     private const float StopApproachM = 250f;
 
-    // The dock glide's decay rate (FUN_004bf360 inside 30 m: pose ← node + (pose − node)·e^(−0.2·dt)).
+    // The dock glide's decay rate (FUN_004bf360 inside 30 m: pose ← node + (pose − node)·e^(−0.2·dt),
+    // and the pitch decayed toward level at the same rate).
     private const float DockDecayPerS = 0.2f;
 
     private readonly float _maxRateYaw;      // rad/s
@@ -170,8 +171,8 @@ public sealed class ZeppelinMotion
         }
 
         // Pitch at the node's altitude, the raw slope from here to it: the record's ±30 band
-        // never bounds it (constructor). A zeppelin holding on its stop point levels off
-        // instead (FUN_004bf500 asks for pitch 0 and keeps the heading it arrived on).
+        // never bounds it (constructor). A station-keeping hull asks for level instead
+        // (FUN_004bf500), through this same speed factor, so at a stop the ask does nothing.
         float desiredPitch = Follower.Holding ? 0f : Mathf.Atan2(to.Y, flat.Length());
         _pitchRate = Steer(_pitchRate, Mathf.AngleDifference(PitchRad, desiredPitch), dt,
             _maxRatePitch, _accelPitch);
@@ -183,8 +184,8 @@ public sealed class ZeppelinMotion
     }
 
     // FUN_004bf360's inside-30 m branch: within the hold distance of a halting node ahead the
-    // throttle is cut, the pitch holds, and the hull and its heading decay onto the node and the
-    // leg's own bearing at DockDecayPerS. This is what carries the hull the rest of the way onto
+    // throttle is cut and the hull, its heading and its pitch decay onto the node, the leg's own
+    // bearing and level at DockDecayPerS. This is what carries the hull the rest of the way onto
     // the node, in altitude as well as plan, rather than leaving it stopped a hold distance short.
     private void Dock(Vector3 toNode, float dt)
     {
@@ -196,6 +197,11 @@ public sealed class ZeppelinMotion
             YawRad = Mathf.Wrap(bearing + (Mathf.AngleDifference(bearing, YawRad) * keep),
                 -Mathf.Pi, Mathf.Pi);
         }
+
+        // ⚠ Do not move this decay onto the speed-scaled steer law; the original levels a docking
+        // hull outside the speed factor, which is the only reason a parked airship reads level at
+        // all. The station-keep law's own ask for level is inert once the throttle is cut.
+        PitchRad = Mathf.Wrap(PitchRad, -Mathf.Pi, Mathf.Pi) * keep;
         Position = Follower.CurrentTarget - (toNode * keep);
         _yawRate = 0f;
         _pitchRate = 0f;

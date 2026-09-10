@@ -155,14 +155,13 @@ between the two flags. The consumers are the player's screen wash, the AI stun a
 and this module knows about none of them. Read `SmokeScreens.cs` next.
 
 ## src/Flight/Difficulty.cs
-The difficulty setting, as the engine's own 0/1/2, and the single thing it does: multiply an enemy
-vehicle's armour and health maxima at spawn, decoded in
-[../org/vehicleDamage.md](../org/vehicleDamage.md). `Parse` takes both shipped vocabularies, the
-campaign selector's and Instant Action's, which name the same three tiers. `FactorForSpawn` owns the
-team gate, which is inequality with the player's team rather than hostility, so a neutral or
-team-less spawn is scaled too; `PlaneStats.WithEnemyDurability` applies the factor and the per-spawn
-jitter bands around the scaled hull afterwards. The setting reaches nothing else, and no AI skill,
-accuracy or aggression is keyed to it. Read `PlaneStats.cs` next.
+The difficulty setting, as the engine's own 0/1/2, and the two things one integer `k` does at spawn:
+multiply a hostile vehicle's armour and health maxima
+([../org/vehicleDamage.md](../org/vehicleDamage.md)), and shift that pilot's nine skill ratings
+before they interpolate ([../org/aiControlLaw.md](../org/aiControlLaw.md)). `AppliesTo` owns the one
+gate both stand behind, which is hostility, so a neutral takes neither; `FactorForSpawn` and
+`SkillRatingForSpawn` are the two answers, the second exempting an `ace` block. `Parse` takes both
+shipped vocabularies, which name the same three tiers. Read `PlaneStats.cs` next.
 
 ## src/Flight/TanglerChoke.cs
 The choker's engine-dead duration, decoded in
@@ -356,10 +355,10 @@ record's stage list, where every crossed threshold fires once. The zone pools li
 The kinematic zeppelin motion law: flies a `ZeppelinDef` along its net through `AiNetFollower`,
 forward-only along the facing, speed by `max_accel` toward `max_speed`, and yaw and pitch through the
 decoded per-axis steer law, whose commanded rate eases inside 25 degrees of error and whose angle
-advances scaled by the fraction of authored speed the hull is making, so a stopped hull cannot turn.
-There is no per-step pitch band, the record's pair being degree-valued and compared against radians.
-The stop-point half is the decoded approach, cutting the throttle inside the follower's hold distance
-and decaying the pose onto the node, while a follower still on its seat station-keeps. Steering:
+advances scaled by the speed fraction the hull is making, so a stopped hull cannot turn. There is no
+per-step pitch band, the record's pair being degrees compared against radians. The stop-point half is
+the decoded approach: throttle cut inside the follower's hold distance, then position, heading and
+pitch decayed onto the node, the leg's bearing and level; a seated follower station-keeps. Steering:
 [../formats/mission-entities.md](../formats/mission-entities.md). Pure state, no `Node`.
 
 ## src/Flight/AiPilot.cs
@@ -946,13 +945,13 @@ ground-blow write stay on `FlightController`, which has the live world a source 
 
 ## src/Flight/FlightHud.cs
 Everything one pane draws for its pilot, in one module the flight node holds privately: the heading
-tape, the cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker,
-the targeting HUD, the `--hud-font-test` overlay and the flight text block. Nothing outside this
-class writes one of them. With the cockpit interior on screen the dials, tape and text block come
-off (`SetCockpitView`), its panel carrying them; the pipper and marker HUDs stay. The per-frame
-entry is `Draw(in FlightHudState)`, a struct of aircraft STATE rather than readout values, so the
-text, dial positions and gates are composed here and assertable with no Godot `Control`, as statics
-(`ComputeStallWarning`, `MphFromSpeedMps`, `FeetFromWorldY`, `ComputeAgl`, `ComposeTextLines`).
+tape, the cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker, the
+targeting HUD, the `--hud-font-test` overlay and the flight text block, none written from outside.
+With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its
+panel carrying them; the pipper and marker HUDs stay. The per-frame entry is
+`Draw(in FlightHudState)`, a struct of aircraft STATE, so text, dials and gates compose here and
+assert with no Godot `Control`: `ComputeStallWarning`, `ComputeAgl`, `ComposeTextLines`, and
+`ComposeAutoLandPrompt`, `messages.json`'s own auto-land wording with the seat's control in it.
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

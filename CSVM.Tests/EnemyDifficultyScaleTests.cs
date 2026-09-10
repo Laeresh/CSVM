@@ -5,9 +5,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The difficulty setting's one effect: an enemy vehicle's armour and health maxima scaled at spawn.
-/// Full decode: <c>docs/org/vehicleDamage.md</c> "The difficulty scale". Pins the three factors, the
-/// team gate that decides who takes them, the two naming vocabularies, and the order against the
+/// The difficulty setting's two effects, both built from one k at one gate: a hostile vehicle's
+/// armour and health maxima scaled at spawn, and that pilot's nine skill ratings shifted before
+/// they interpolate. Full decode: <c>docs/org/vehicleDamage.md</c> "The difficulty scale" and
+/// <c>docs/org/aiControlLaw.md</c> "The skill scalar". Pins the three factors, the hostility gate,
+/// the ace exemption, the 0-9 clamp, the two naming vocabularies, and the order against the
 /// per-spawn jitter, which runs after this and bands around the scaled hull.
 /// </summary>
 public class EnemyDifficultyScaleTests
@@ -56,16 +58,72 @@ public class EnemyDifficultyScaleTests
         Assert.Null(Difficulty.Parse(null));
     }
 
-    /// <summary>The gate is the engine's: team differs from the player's. A spawn carrying no team
-    /// is scaled, because an AI rig's fallback team is its shooter id's band and never the
-    /// player's — a wingman is spared by carrying <see cref="AimAssist.PlayerTeam"/> explicitly.</summary>
+    /// <summary>The gate is the engine's, and it is hostility rather than inequality: the branch
+    /// spares a side equal to the player's constant 1 AND a side of 0, so a neutral takes nothing.
+    /// A spawn carrying no team is hostile here, because an AI rig's fallback team is its shooter
+    /// id's band and never the player's.</summary>
     [Fact]
-    public void OnlyThePlayersOwnTeamIsSpared()
+    public void ThePlayersOwnTeamAndTheNeutralsAreSpared()
     {
         Assert.Equal(1f, Difficulty.FactorForSpawn(AimAssist.PlayerTeam, null, Difficulty.Normal));
+        Assert.Equal(1f, Difficulty.FactorForSpawn(AimAssist.NeutralTeam, null, Difficulty.Normal));
         Assert.Equal(0.75f, Difficulty.FactorForSpawn(null, null, Difficulty.Normal));
         Assert.Equal(0.75f, Difficulty.FactorForSpawn(2, null, Difficulty.Normal));
-        Assert.Equal(0.75f, Difficulty.FactorForSpawn(AimAssist.NeutralTeam, null, Difficulty.Normal));
+        Assert.Equal(0.75f, Difficulty.FactorForSpawn(3, null, Difficulty.Normal));
+    }
+
+    /// <summary>The same k the durability factor is built from is ADDED to every one of a hostile
+    /// pilot's nine skill ratings before they interpolate: -2 at Normal, +2 at Hardest.</summary>
+    [Fact]
+    public void TheSameKShiftsAHostilePilotsSkillRatings()
+    {
+        Assert.Equal(3, Difficulty.SkillRatingForSpawn(5, 2, false, null, Difficulty.Normal));
+        Assert.Equal(5, Difficulty.SkillRatingForSpawn(5, 2, false, null, Difficulty.Hard));
+        Assert.Equal(7, Difficulty.SkillRatingForSpawn(5, 2, false, null, Difficulty.Hardest));
+    }
+
+    /// <summary>The ace flag (roster slot 67) zeroes the offset and nothing else: the read at
+    /// 0x0047cde2 sits between the armour block and the skill block, so a flagged pilot flies its
+    /// authored ratings at every tier while its hull still takes the scale.</summary>
+    [Fact]
+    public void AnAceKeepsItsAuthoredRatingsAtEveryTier()
+    {
+        Assert.Equal(9, Difficulty.SkillRatingForSpawn(9, 2, true, null, Difficulty.Normal));
+        Assert.Equal(9, Difficulty.SkillRatingForSpawn(9, 2, true, null, Difficulty.Hardest));
+        Assert.Equal(6, Difficulty.SkillRatingForSpawn(6, 2, true, null, Difficulty.Normal));
+        Assert.Equal(0.75f, Difficulty.FactorForSpawn(2, null, Difficulty.Normal));
+    }
+
+    /// <summary>The player's own side and a neutral take no offset either, off the one gate both
+    /// effects share. An ace flag on the player's side changes nothing, since there is nothing to
+    /// exempt from.</summary>
+    [Fact]
+    public void ASparedSideTakesNoSkillOffset()
+    {
+        Assert.Equal(5, Difficulty.SkillRatingForSpawn(5, AimAssist.PlayerTeam, false, null, Difficulty.Normal));
+        Assert.Equal(5, Difficulty.SkillRatingForSpawn(5, AimAssist.NeutralTeam, false, null, Difficulty.Hardest));
+        Assert.Equal(3, Difficulty.SkillRatingForSpawn(5, null, false, null, Difficulty.Normal));
+    }
+
+    /// <summary>The engine clamps the shifted rating to 0-9, not to 1-9: a rating of 1 at Normal
+    /// floors at 0 rather than staying 1, and a 9 at Hardest cannot climb past the table's top.
+    /// Rating 0 is a real point on the curve, which is why <c>AiSkills.At</c> reaches it.</summary>
+    [Fact]
+    public void TheShiftedRatingClampsToZeroAndNine()
+    {
+        Assert.Equal(0, Difficulty.SkillRatingForSpawn(1, 2, false, null, Difficulty.Normal));
+        Assert.Equal(0, Difficulty.SkillRatingForSpawn(2, 2, false, null, Difficulty.Normal));
+        Assert.Equal(9, Difficulty.SkillRatingForSpawn(9, 2, false, null, Difficulty.Hardest));
+        Assert.Equal(9, Difficulty.SkillRatingForSpawn(8, 2, false, null, Difficulty.Hardest));
+    }
+
+    /// <summary>A per-spawn setting outranks the session's for the ratings as well as the hull,
+    /// which is what an Instant Action wave's skill is.</summary>
+    [Fact]
+    public void APerSpawnSettingOutranksTheSessionsForRatingsToo()
+    {
+        Assert.Equal(7, Difficulty.SkillRatingForSpawn(5, 2, false, Difficulty.Hardest, Difficulty.Normal));
+        Assert.Equal(3, Difficulty.SkillRatingForSpawn(5, 2, false, Difficulty.Normal, Difficulty.Hardest));
     }
 
     /// <summary>A per-spawn setting outranks the session's, which is the whole of what an Instant

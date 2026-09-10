@@ -21,6 +21,11 @@ internal static class SurfaceVehicleSuites
     private const string BoatMission = "M03";
     private const int BoatGroup = 3;
     private const string BoatDef = "patrolboat";
+
+    // What the four blocks' slot-20 MSG_VEH_PATROLBOAT resolves to in the shipped string table,
+    // lowercase b and all. The only mode ship blocks in the install that author the slot.
+    private const string BoatTitle = "Patrol boat";
+
     private const float StepDt = 1f / 30f;
 
     private const string GenChapter = "C2";
@@ -48,10 +53,12 @@ internal static class SurfaceVehicleSuites
         + "only once woken, start their wake emitters on their own pt_emitter nodes, drive "
         + "their nets under the scripted-path law at the taxi speed with their height pinned "
         + "to the water, land on the HUD's Enemy cycle and the gun aim assist's VehicleList "
-        + "once woken, and die once through the chapter's destructible pool; CM12's eshipg31 "
+        + "once woken under their block's slot-20 'Patrol boat' name line, and die once "
+        + "through the chapter's destructible pool; CM12's eshipg31 "
         + "launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 on the "
         + "host's first take-off point kilometres from the world origin, runs the path "
-        + "westward at the taxi speed, never asks for an aircraft, and a realtime simulation "
+        + "westward at the taxi speed, never asks for an aircraft, draws no name line at all "
+        + "since its template block authors no slot 20, and a realtime simulation "
         + "request advances it once through the shared session owner")]
     internal static void CampaignSurfaceVehicles(TestContext ctx)
     {
@@ -89,7 +96,10 @@ internal static class SurfaceVehicleSuites
         {
             var worldRoot = world.Runtime.WorldRoot ?? world.Stage;
             var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
-                world.Runtime, defs, worldRoot);
+                world.Runtime, defs, worldRoot)
+            {
+                Strings = Messages.Load(ctx.MessagesPath),
+            };
             worldRoot.AddChild(vessels);
             int aircraftAsked = 0;
             director.BuildRoster(new CampaignDirector.RosterInputs
@@ -193,6 +203,25 @@ internal static class SurfaceVehicleSuites
                 onEnemyCycle |= ReferenceEquals(t.Source, marked);
             }
             ctx.Check(onEnemyCycle, $"'{marked.Name}' (team {marked.Team}) is on the Enemy cycle the HUD brackets");
+
+            // The name line: these four blocks are the only mode ship blocks in the install that
+            // author slot 20, and the original draws that title over the box (docs/org/targeting.md).
+            foreach (var t in pool.Enemy)
+            {
+                if (t.Source is not SurfaceVehicle named)
+                {
+                    continue;
+                }
+                var lines = new List<string>();
+                TargetHud.LabelLines(t, null, lines, keepSlots: false);
+                report.AppendLine($"{named.Name}: identity '{t.Name}' marker '{t.DisplayName}' lines [{string.Join("|", lines)}]");
+                ctx.Check(t.DisplayName == BoatTitle,
+                    $"'{named.Name}' prints its block's slot-20 title: '{t.DisplayName}'");
+                ctx.Check(t.Name == named.Name,
+                    $"'{named.Name}' keeps its block name as its identity: '{t.Name}'");
+                ctx.Check(lines.Count == 1 && lines[0] == BoatTitle,
+                    $"'{named.Name}' draws that title as the box's only label line");
+            }
 
             var shooterPos = marked.Position + new Vector3(0f, 0f, 100f);
             var aimScan = new AimScan
@@ -320,7 +349,10 @@ internal static class SurfaceVehicleSuites
         {
             var worldRoot = world.Runtime.WorldRoot ?? world.Stage;
             var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
-                world.Runtime, defs, worldRoot);
+                world.Runtime, defs, worldRoot)
+            {
+                Strings = Messages.Load(ctx.MessagesPath),
+            };
             worldRoot.AddChild(vessels);
             int aircraftAsked = 0;
             int ordinal = 0;
@@ -363,6 +395,33 @@ internal static class SurfaceVehicleSuites
             ctx.Check(new Vector2(at.X - start.X, at.Z - start.Z).Length() < 1f,
                 $"the hull launches on the host's first take-off point, not at the host node");
             ctx.Check(at.Length() > OriginClearanceM, $"the hull is nowhere near the world origin: {at.Length():0} m");
+
+            // The blank half of the name line. This generator's own template block authors no
+            // slot 20, so the original draws a box with no name over it and so must CSVM: a
+            // fallback to the def's title or to the block name would invent one.
+            var blankCandidates = new AimCandidateSet();
+            vessels.CollectVehicles(blankCandidates);
+            var blankPool = new TargetPool();
+            blankPool.Rebuild(blankCandidates, subParts: null, AimAssist.PlayerTeam, self: null);
+            var blankLines = new List<string>();
+            bool onCycle = false;
+            foreach (var t in blankPool.Enemy)
+            {
+                if (ReferenceEquals(t.Source, boat))
+                {
+                    onCycle = true;
+                    TargetHud.LabelLines(t, null, blankLines, keepSlots: false);
+                    ctx.Check(t.DisplayName.Length == 0,
+                        $"'{GenLaunch}' authors no slot 20 and so prints no name: '{t.DisplayName}'");
+                    ctx.Check(t.Name == GenLaunch,
+                        $"'{GenLaunch}' still keeps its launch name as its identity: '{t.Name}'");
+                }
+            }
+            report.AppendLine($"{GenLaunch}: marker '{boat.MarkerName}' lines [{string.Join("|", blankLines)}]");
+            ctx.Check(boat.MarkerName.Length == 0,
+                $"'{GenLaunch}' carries no marker name off its template block: '{boat.MarkerName}'");
+            ctx.Check(onCycle, $"'{GenLaunch}' is on the Enemy cycle to be labelled at all");
+            ctx.Same(0, blankLines.Count, $"'{GenLaunch}' draws no label line at all");
 
             // The realtime adapter and the shared session simulation together must still advance
             // one step. A concrete runtime callback here would make every interactive hull run 2x.

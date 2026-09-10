@@ -62,6 +62,14 @@ public sealed class SurfaceVehicle
     /// <summary>The roster block's name, or the generator's decoded launch name.</summary>
     public string Name { get; }
 
+    /// <summary>The name line the target box prints over this hull: its own roster block's slot-20
+    /// title, resolved through the string table. EMPTY where the block authors none, which draws no
+    /// name line at all and is what the original does (only C1B/M03's four boats author one of the
+    /// install's 23 <c>mode ship</c> blocks). ⚠ Never the vehicle def's own <c>MSG_VEH_*</c> title:
+    /// no author in the original reads it (docs/org/targeting.md). Set once by
+    /// <see cref="SurfaceVehicleRuntime"/> at spawn, where the table and the block meet.</summary>
+    public string MarkerName { get; internal set; } = "";
+
     public RosterSpawnPlan Plan { get; }
 
     /// <summary>The built hull, a copy of the chapter's library-root model.</summary>

@@ -140,8 +140,8 @@ public sealed class AiSkills
     // Roster slot 39: helpLabel, the MSG_OBJ_* key an objective-flagged block's own marker carries.
     private const int HelpLabelSlot = 39;
 
-    // Roster slot 67: ace, the flag the debrief's kill-crediting reads to choose the starred
-    // tally over the plain one (docs/formats/ai-rosters.md "Field table").
+    // Roster slot 67: ace, read twice — the spawn exempts the block's skill ratings from the
+    // difficulty offset, and the debrief credits its kill to the starred tally.
     private const int AceSlot = 67;
 
     private readonly Dictionary<string, (float At1, float At9)> _params =
@@ -186,7 +186,8 @@ public sealed class AiSkills
     /// authored <c>-1</c>, missing (blocks are not fixed-width) or non-numeric reads null =
     /// UNSET — the engine then falls back to the airframe def's own stat keys
     /// (docs/formats/vehicle.md "AI-combatant tuning"), so null must stay null here rather than
-    /// become an invented default.</summary>
+    /// become an invented default. ⚠ <c>0</c> is an authored rating and not unset: the engine's
+    /// own test is <c>CMP EAX,-0x1</c>.</summary>
     public static AiSkillVector RosterSkills(IReadOnlyList<object?> fields)
     {
         int? Slot(int offset)
@@ -195,7 +196,7 @@ public sealed class AiSkills
             if (idx >= fields.Count || fields[idx] is not float f)
                 return null;
             int v = (int)f;
-            return v >= 1 && v <= 9 ? v : null;
+            return v >= 0 && v <= 9 ? v : null;
         }
 
         return new AiSkillVector
@@ -321,8 +322,9 @@ public sealed class AiSkills
         fields.Count > ArmorSlot && fields[ArmorSlot] is float f && f >= 0f ? f : null;
 
     /// <summary>Reads a roster block's <c>ace</c> flag (slot 67): true on the 26 blocks a mission
-    /// script singles out, whose kill the debrief credits into the starred tally instead of the
-    /// plain one (docs/org/debrief.md#what-the-tallies-count).</summary>
+    /// script singles out. It exempts the block's skill ratings from the difficulty offset
+    /// (<see cref="Flight.Difficulty.SkillRatingForSpawn"/>) and sends its kill to the debrief's
+    /// starred tally (docs/org/debrief.md#what-the-tallies-count).</summary>
     public static bool RosterAce(IReadOnlyList<object?> fields) =>
         fields.Count > AceSlot && fields[AceSlot] is float f && f >= 1f;
 
@@ -406,15 +408,16 @@ public sealed class AiSkills
         return templates;
     }
 
-    /// <summary>The stat parameter at a 1–9 rating: the engine's own formula, <c>lo + (hi-lo) ·
+    /// <summary>The stat parameter at a 0–9 rating: the engine's own formula, <c>lo + (hi-lo) ·
     /// rating/9</c> — the pair's endpoints sit at rating 0 and 9, not 1 and 9, so a rating of 1
-    /// reads <c>lo + (hi-lo)/9</c> rather than <c>lo</c> outright. Out-of-range ratings clamp —
-    /// the shipped data authors nothing outside 1–9 (<c>ace_stats</c> caps at 9).</summary>
+    /// reads <c>lo + (hi-lo)/9</c> rather than <c>lo</c> outright. ⚠ The floor is 0, not 1: the
+    /// difficulty offset reaches rating 0 (<see cref="Flight.Difficulty.SkillRatingForSpawn"/>)
+    /// and the engine clamps there too.</summary>
     public float At(string key, float rating)
     {
         if (!_params.TryGetValue(key, out var pair))
             throw new KeyNotFoundException($"ai_skill_parameters has no '{key}' (natural_touch has none by design)");
-        float t = Math.Clamp(rating, 1f, 9f) / 9f;
+        float t = Math.Clamp(rating, 0f, 9f) / 9f;
         return pair.At1 + (pair.At9 - pair.At1) * t;
     }
 

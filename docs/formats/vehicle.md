@@ -33,7 +33,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `engine_sound` / `cockpit_engine_sound` / `prop_sound` | the three sound-def names (SETS in sounds.json) the engine audio's two slots draw from — see [The engine audio's slots](#the-engine-audios-slots) below. `prop_sound` is authored by no shipped def; `cockpit_engine_sound` is selected while the pilot's SELECTED view is the full Cockpit (`EngineAudioCurves.EngineDefFor`, `FlightAudio.UpdateEngineSlot`) |
 | `damaged_engine_sound` | `[[soundName, pitchLo, pitchHi]]` — an array of candidates that REPLACE the engine slot's definition while the airframe is damaged. One shared `basic_airplane` entry (`snd_damagedengine`, 0.0, 1.0) covers every plane; the two floats are the pitch-multiplier draw range |
 | `dynamics` | nested dict: `pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`, `ang_momentum_damp`, `rec_moments_inertia` (xyz), `fd_speed` (m/s), `drag_factor`, `veh_weight`, `ref_area`. The parser also accepts `level_off_rate`, which **no shipped def authors** — see below |
-| `spin_props_anim` / `stop_props_anim` | prop-disc anim names (plane_props.json) |
+| `spin_props_anim` / `stop_props_anim` | prop-disc anim names (plane_props.json), stored at `def+0x18c`/`def+0x190` and swapped on the disabled-systems mask's bit-`0x2` edges, at spawn and at death. The stop side carries the `snd_propstop` one-shot and a blur-disc-to-still-blade cross-fade; the spin side is silent and instant. CSVM plays the anim names directly rather than reading these keys. Decode: [org/ordnanceTypes.md](../org/ordnanceTypes.md#what-the-masks-bit-2-edges-run) |
 | `start_anims` | anims run at spawn (`wing_lights_blink`, `reset_bulletholes`) |
 | `injure_anims` | def-level damage thresholds (below) |
 | `destroyable_parts` | the damage model (below) |
@@ -552,6 +552,13 @@ the reading — an NPC's Dead Eye statistic sets the radius of a lead sphere it 
 
 **`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
 `bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).
+
+**`mass`** parses to the def at `+0x9c`, and the parser stores its reciprocal beside it at `+0xa0`
+(`0x0047afae`), which is the form every consumer reads. Three defs author it: `basic_airplane` at
+`0.6`, inherited by every aircraft, and the two surface vehicles at `40.5`. Both readers are
+ground-vehicle code that scales a push by the pushed vehicle's mass, the blast knockback decoded in
+[`../org/ordnanceTypes.md`](../org/ordnanceTypes.md) and the vehicle-to-vehicle collision transfer
+`FUN_004872d0`, so the key changes nothing an aeroplane does.
 
 **`mode`** — the dynamics class, and the one key that decides which AI behaviour an aircraft flies.
 Parsed from a string (`FUN_00479240`, `0x0047afe8`): `jet` 0, `heli` 1, `tank` 2, `ship` 3,

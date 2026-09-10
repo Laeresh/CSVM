@@ -164,11 +164,20 @@ a plain JSON object, not a nested list:
   "entries": [ { "key": "MSG_OBJ_DZ", "id": 461, "value": "Danger Zone" }, … ] }
 ```
 
-Look up by `key` (the `id` is the engine's numeric handle, unused here). Relevant stunt
-values: `MSG_OBJ_DZ` = "Danger Zone", `MSG_OBJ_FLYTHROUGH` = "Fly Through",
-`MSG_OBJ_FLYOVER` = "Fly Over", `MSG_OBJ_TRAINTUNNEL_M` = "Train Tunnel Mid",
+Look up by `key`. Relevant stunt values: `MSG_OBJ_DZ` = "Danger Zone", `MSG_OBJ_FLYTHROUGH` =
+"Fly Through", `MSG_OBJ_FLYOVER` = "Fly Over", `MSG_OBJ_TRAINTUNNEL_M` = "Train Tunnel Mid",
 `MSG_BRF_IASF_OBJ2` = "Fly through all the Danger Zones to win!" (the stunt intro line).
 An unknown key resolves to itself (visible, not blank).
+
+`id` is the row's Win32 STRINGTABLE id, and it is how the **exe itself** addresses these strings:
+its message formatter `FUN_0059cd70` calls `LoadStringA(<messages module>, id, …)` and hands the
+result to `FormatMessageA`, so a hard-coded numeric message id anywhere in the image is a row of
+*this* table. The auto-land prompt is the worked example: `0xb5` = 181 = `MSG_PRESS_AUTOLAND`,
+`0xb6` = 182 = `MSG_CLICK_AUTOLAND`
+([anim-definitions/cutscenes.md](anim-definitions/cutscenes.md#the-prompts-own-wording)).
+⚠ **The numbering is this table's alone.** `langui.dll`'s STRINGTABLE
+([strings.md](strings.md)) is a different module with its own ids, and carries no row at either
+181 or 182; a message id read out of the exe never resolves against it.
 
 ## Assembled marker text
 

@@ -407,10 +407,10 @@ public sealed record SessionSpec
     public bool AiAttackSkillExplicit { get; private set; }
 
     /// <summary><c>--difficulty=&lt;normal|hard|hardest&gt;</c> (or <c>game.difficulty</c>): the
-    /// setting enemy armour and health scale by at spawn, 0.75 / 1.0 / 1.25
+    /// setting a hostile spawn's armour and health scale by (0.75 / 1.0 / 1.25) and its pilot's
+    /// nine skill ratings shift by (-2 / 0 / +2), both from one k
     /// (<see cref="CSVM.Flight.Difficulty"/>). Defaults to Normal, which is what the executable's
-    /// own settings registration writes. ⚠ It reaches nothing but those pools: no AI skill,
-    /// accuracy or aggression is keyed to it in the original.</summary>
+    /// own settings registration writes.</summary>
     public int Difficulty { get; private set; } = CSVM.Flight.Difficulty.Normal;
 
     /// <summary>True when <c>--difficulty=</c> named a tier this parser took. The flag outranks
