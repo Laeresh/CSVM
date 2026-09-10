@@ -212,6 +212,15 @@ in the global `user://Planes/` store rather than copying it, so deleting a profi
 nothing. A file saved before a field existed reads it at rest rather than failing to load. Save
 format: [../formats/saved-games.md](../formats/saved-games.md).
 
+## src/Session/ChapterCinema.cs
+Which film plays before a campaign chapter, and the one handoff to the passenger cabin that
+follows it. The chapter is `seq / 5 + 1` over the profile's own position, so no screen passes a
+chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCount` reads the same
+story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
+folder. Playing is a delegate the caller supplies, `Session/Launcher.cs`'s `PlayCinema` being its
+shape, which leaves the film to `UI/CinemaScreen.cs` and keeps every decision here testable with no
+engine present. Films: [../formats/cinemas.md](../formats/cinemas.md).
+
 ## src/Session/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions
 of the SAME chapter, keyed by chapter, by the capturing mission's story position and by gamez node

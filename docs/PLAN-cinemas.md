@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Audio playback and A/V sync from the stream's presentation timestamps
 22. ☑ The boot sequence on a bare launch, with the skip and `--skip-intro`
-23. ☐ The chapter cinema and its passenger-cabin handoff
+23. ◐ The chapter cinema and its passenger-cabin handoff
 24. ☐ The closing cinema, its gate and its scrapbook handoff
 
 ## Dependency and parallelism notes
@@ -967,7 +967,60 @@ any argument plays nothing. `.\RunTests.ps1` wall time is unchanged, checked aga
 before they learn it, which is the cost Decision 8 accepted knowingly. ⚠ The names resolve
 case-insensitively or three of these four files are not found.
 
-## C23 ☐ The chapter cinema and its passenger-cabin handoff
+## C23 ◐ The chapter cinema and its passenger-cabin handoff
+
+**Landed so far.** `ChapterCinema` in `CSVM/src/Session/ChapterCinema.cs`, engine-free and
+unit-tested in `CSVM.Tests/ChapterCinemaTests.cs`, with its `docs/architecture/Session.md` entry and
+its index bullet. It answers what the flow has to answer and nothing more: which film a campaign
+position plays, whether the position plays one at all, that it plays once, and the single handoff
+that follows. `ChapterOf(seq)` is `seq / MissionsPerChapter + 1`, `OpensChapter(seq)` is true only at
+`seq` 0, 5, 10, 15 and 20, `NameOf(chapter)` is the identity `CAMPAIGNINTRO.SCRIPT` builds, and
+`OpenCabin(profile, showCabin)` reads the position through `CampaignProgression.NextMissionSeq`, so
+no screen passes a chapter number in. Playing is an injected delegate with `Launcher.PlayCinema`'s
+shape, which is what makes the decision testable with no engine present and what kept this item off
+`Launcher.cs` while `C22` held that file.
+
+**The campaign state does supply the chapter, and it was already being read.** `seq / 5 + 1` is the
+story chapter, settled twice over:
+[`docs/formats/campaign-sequence.md`](formats/campaign-sequence.md) states that rule and forbids
+deriving it from `area`, and `CampaignCabinPage.MapPinCount` already computes exactly that number
+for the cabin map's pins. Five chapters, five films, which is also why `chap6.mpg` has no file.
+⚠ `CampaignSequence.Chapter` is a different number and cannot serve: it answers the world folder, 1
+to 8, and chapter 2 alone spans `C1`, `C1B` and `C1C`.
+
+**The `EC` latch is pinned rather than reasoned about.** `Once` wraps the handoff before it is handed
+over, so the cabin opens once however many times the cinema reports stopping, which is what a skip
+landing on the playout frame produces. `TheCabinOpensOnceWhenASkipLandsOnThePlayoutFrame` drives the
+stand-in's end twice and asserts one cabin. Handing the continuation over unwrapped fails that check
+alone, 1 failed against 23 passed, and passing `CinemaScreen.ClosingKeys` in place of `ChapterKeys`
+fails only `TheChapterCinemaTakesSpaceAndReturnWhereTheClosingOneDoesNot`, also 1 against 23
+(METHOD-9). Both perturbations were restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
+
+**⚠ Nothing is wired, which is why this item is ◐ and not ☑.** No call site exists anywhere in
+`CSVM/src` outside the module itself: both cabin doors are untouched, `Launcher.cs` is untouched, and
+a campaign entered from the menu behaves exactly as it did. No film can reach a screen through this
+code yet.
+
+**The wiring contract.** Wire `CSVM.Session.ChapterCinema` into the campaign's two cabin doors.
+Construct one over `Launcher.PlayCinema`, as
+`new ChapterCinema((name, then, skip) => launcher.PlayCinema(name, then, skip))`, and hand that
+instance to the doors rather than letting them build one, since both are engine-free and neither can
+reach a `Launcher`. Then each door's body becomes its own current body wrapped in one call:
+`chapterCinema.OpenCabin(profile, () => <what the door does today>)`. The doors are
+`CampaignFlow.SelectProfile(CampaignProfileDef)` in `CSVM/src/UI/CampaignFlow.cs`, today
+`Feature.SelectProfile(profile); GoTo(CampaignScreen.Cabin);`, and
+`OriginalCampaign.ShowCabin(string)` in `CSVM/src/UI/Menu/Original/OriginalCampaign.cs`, today a
+`SeatProfile` followed by `ShowCampaign(OriginalScreen.CampaignCabin)`. `OpenCabin` takes a
+`CampaignProfileDef` and the action that opens the cabin, reads the story position itself, chooses
+the film, passes `CinemaScreen.ChapterKeys` on its own and returns whether a film played, so do not
+pass a chapter number, a film name or a skip set in. `ChapterCinema` is landed, unit-tested and
+documented, and it is **not wired**: no campaign entry plays a cinema today and both doors are
+exactly as they were. The one decision the wiring pass still owns is where the instance lives, since
+the latch that stops a film replaying is per instance: one held by `Launcher` replays a chapter only
+after a restart, one per presentation replays it on the next visit to the campaign, and which of
+those the original did is behind callback 2151, which this plan puts out of scope.
+
+**Verified.** <pending orchestrator run>
 
 **Goal.** Each chapter's cinema plays before its chapter and hands off to the passenger cabin, with
 the original's skip keys.
@@ -983,7 +1036,19 @@ than from callback 2151, which stays untraced and out of scope. The `CrimFlag.MP
 
 **Model recommendation.** Opus.
 
-**Verify.** <TODO: name the chapter to run and the handoff to confirm at the controls>
+**Verify.** Two runs at the controls once the wiring lands, both launched with
+`.\RunGame.ps1 -- --menu --volume=1.0`, since a repo run's developer gain is zero and a cinema then
+plays silent. First, **chapter 1 on a new pilot**: open Campaign, create a profile and pick it,
+`chap1.mpg` plays over the whole window and the passenger cabin is on screen the moment it ends.
+Repeat that pick four more times, pressing Space, Return, Escape and the left mouse button one per
+run, and each reaches the cabin at once. Then step into the briefing and back, and confirm no film
+plays a second time. Second, **chapter 2**, which is the run that shows the number is read from the
+campaign position rather than fixed at 1 (METHOD-1): set `missionsCompleted` to 5 in that profile's
+`user://Profiles/<name>/profile.json`
+(`%APPDATA%\Godot\app_userdata\CSVM\Profiles\<name>\profile.json`), which puts its next mission at
+`CM06`, the first of Northwest, and confirm the film is `chap2.mpg` and the cabin follows it. The
+negative control is a position inside a chapter: `--menu=campaign-cabin` seats a profile three
+missions in, and it must play nothing at all.
 
 **⚠ Traps.** ⚠ The skip keys differ from C24's and the asymmetry is the original's; put the reason on
 the member or someone will unify them as a bug fix. ⚠ The dead array at `0x0061e68c` is not the
