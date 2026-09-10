@@ -764,31 +764,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   counts), not against the weapon table.
   *Cross-refs:* `BL-406` (closed).
 
-- `BL-405` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Mounted ordnance should track the aim before it launches, not hang fixed
-  along the pylon.** *Evidence:* the mount model is decoded
-  ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md), "`gun_pitch`/`gun_yaw` clamp
-  the mount"): `FUN_004b7670` rotates the desired lead into the vehicle frame, clamps each axis
-  into its authored band and writes the result as the mount's actual aim (`+0x48`–`+0x50`), and a
-  mount carrying an animated node (`+0x34`/`+0x38`) slews toward that direction through
-  `FUN_00460840` instead of snapping to it. Our pylons do not move: `PylonOrdnance` parents the
-  body to the pylon marker at identity and never touches it again (`PylonOrdnance.cs:46-49`).
-  An AI round leaves along a launch direction up to the traverse limit off the pylon axis
-  (`AiRocketeer.LaunchDirWorld`), so the mounted body and the round it becomes point different
-  ways at the launch instant, which the mounting comment's "seamless" claim no longer covers.
-  ⚠ *Settle the data question first.* The slewing mechanism is decoded; whether any shipped
-  aircraft authors an animated node on the mount its ordnance hangs from is **not**. A fixed
-  forward gun has no node and reaches the clamped direction the same frame, and if the ordnance
-  mounts are the same, the original's rocket body does not visibly track either and this item is
-  closed by the census rather than by code.
-  *Fix shape (only if the census says yes):* the pylon marker takes the clamped direction the fire
-  decision already computes, with the mounted body riding it as it does today. Ours would snap
-  where the original slews unless `FUN_00460840`'s rate is read too.
-  *Size:* localized, and probably closed as no-change.
-  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch);
-  `FlightController.OrdnanceLaunchDir` (a player's round takes the aircraft's own axis with no aim
-  at all, so the mismatch is the AI's alone; [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md),
-  "Who aims ordnance, and who does not"); `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
-
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
   carries the def's `collision` list as rays from the previous pose, six points on the `p*` player
