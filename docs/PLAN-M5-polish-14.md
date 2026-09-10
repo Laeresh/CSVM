@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `BL-746` Back on the per-seat screen returns instead of unjoining
 2. ☑ `BL-747` Only the picking seat's device drives the per-seat screen
 3. ☑ `BL-749` A two-pilot Free Flight walk launches on the last confirm
-4. ☐ `BL-748` A joined pilot picks a weapon loadout
+4. ☑ `BL-748` A joined pilot picks a weapon loadout
 
 ### Wave B — Wrecks, hulls and reach over the mission map
 
@@ -285,7 +285,35 @@ seat has joined. Complete `.\RunTests.ps1`.
 **⚠ Traps.** Dogfight shares the sortie path and additionally withholds the launch until a second
 seat has joined; keep that gate.
 
-## A4 ☐ `BL-748` A joined pilot picks a weapon loadout
+## A4 ☑ `BL-748` A joined pilot picks a weapon loadout
+
+**Landed.** The open question below is answered: **the launch path already carries a per-seat
+loadout and needed no change at all.** `PlayerSetupFeature.Choices` builds each seat's
+`MenuSeatChoice` from `seat.Fit` (stock reported as null), and both sortie exits and the Instant
+Action exit go through it, so the item was one screen away from working rather than a change to the
+launch. Every seat has had its own `LoadoutChoice` all along; nothing but a door to it was missing.
+
+The per-seat picker gains a WEAPON LOADOUT plaque, standing only over a selection because a fit
+needs an aeroplane to hang on, and pressing it opens the existing `[@OrdinanceLayout@]` screen on
+that seat's own `Fit` and selected airframe, named for the seat. The loadout screen's three doors now
+share one `BeginLoadout`, and `_loadoutSeat` records which door opened it, so the exit returns to the
+picker rather than to Instant Action and the walk survives the trip. `OnSeatWalk` is the walk's own
+screen test, the picker plus a Weapon Loadout it opened, which A2's frame reduction, `StepSeat`'s
+ownership test and `Open`'s walk-ending arm all read: treating only the picker as the walk's screen
+made the picking seat's Back unjoin it from the loadout screen.
+
+The plaque borrows the pilot block's `PS_B_EXPORTP` geometry on the plane-selection board, since the
+remake's picker draws no EXPORT (a seat has no stored record to write) and the loadout plaque belongs
+in the block it acts on. The campaign's own plane-selection page never asks for that button, so it
+draws nothing new there.
+
+**No BACK plaque was added**, which A2 deferred to this item. The screen now has three plaques and
+the pointer already has its way out through CANCEL SELECTIONS' second press, so a fourth would be a
+second exit rather than a first one.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Every joined pilot picks a weapon loadout as well as an aircraft, on Instant Action and on
 Free Flight, and that choice reaches the launch.
@@ -312,8 +340,8 @@ unchanged. Complete `.\RunTests.ps1`.
 
 **⚠ Traps.** Nothing here is decoded, because the original has no second pilot; this is a remake
 decision and must not be written up as fidelity. The loadout screen is written against seat 0 and
-the wingman radio pair. `<TODO: confirm the launch path can read a per-seat loadout, or name what
-has to change in it, before the row is drawn.>`
+the wingman radio pair. The launch path was confirmed before the row was drawn and needed nothing:
+`PlayerSetupFeature.Choices` already emits each seat's own `Fit`.
 
 ---
 

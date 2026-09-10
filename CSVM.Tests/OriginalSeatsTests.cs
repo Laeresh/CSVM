@@ -13,13 +13,17 @@ namespace CSVM.Tests;
 /// The Original shell's sortie screens over the shared player setup, on the hand-authored layout
 /// fixture: the Dogfight door and its gate, seat 0's pick opening the per-seat aircraft screen
 /// for each joined seat in turn (its plane-selection shape, the list open while browsing, the
-/// picking seat's device and the mouse driving it and seat 0's stick nothing), the last seat's
+/// picking seat's device and the mouse driving it and seat 0's stick nothing), its WEAPON LOADOUT
+/// row over that seat's own fit and what the launch then carries per seat, the last seat's
 /// confirm as the launch on both sortie screens and on Instant Action, the sortie screen returning
 /// with FLY to press when FLY's own gate is unmet, the hint at each stage, and the aircraft window
 /// over a roster with saved customs.
 /// </summary>
 public class OriginalSeatsTests
 {
+    // The per-seat screen's WEAPON LOADOUT row, keyed by the board button it draws as.
+    private const string LoadoutRow = nameof(BoardButton.ChangeAmmo);
+
     private static readonly MenuCommands None = new();
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
@@ -95,7 +99,7 @@ public class OriginalSeatsTests
         Assert.True(second.Locked);
         Assert.Equal(1, second.Cursor);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
-        Assert.Equal(3, shell.Rows.Count);
+        Assert.Equal(4, shell.Rows.Count);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "P2  scripted   A again to confirm, B to change");
         Assert.Contains(shell.Compose().Lines, l => l.Text.StartsWith("AGILITY:", StringComparison.Ordinal));
 
@@ -315,12 +319,12 @@ public class OriginalSeatsTests
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         shell.StepSeat(1, Accept);
         Assert.True(second.Locked);
-        Assert.Equal(3, shell.Rows.Count);
+        Assert.Equal(4, shell.Rows.Count);
         shell.StepSeat(1, Back);
         Assert.False(second.Locked);
         Assert.True(second.Joined);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
-        Assert.True(shell.Rows.Count > 3);
+        Assert.True(shell.Rows.Count > 4);
 
         // Over the open list Back leaves the walk with both seats kept, seat 0's pick going with
         // it so the sortie screen does not put the walk straight back up.
@@ -346,7 +350,7 @@ public class OriginalSeatsTests
         Assert.True(second.Joined);
         Assert.Equal(2, setup.Seats.Count);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
-        Assert.True(shell.Rows.Count > 3);
+        Assert.True(shell.Rows.Count > 4);
 
         // With no selection left to drop, the same press leaves the walk, both seats kept: the one
         // exit a mouse has, Back belonging to the picking seat's device.
@@ -388,6 +392,94 @@ public class OriginalSeatsTests
         Assert.Equal("player_balmoral", launch.Seats[1].PlaneNode);
         Assert.Equal(new[] { 2 }, launch.Seats[1].Pads);
         Assert.True(setup.Seats[0].Confirmed && second.Confirmed);
+    }
+
+    [Fact]
+    public void EachPickingSeatsWeaponLoadoutRowEditsItsOwnFitAndTheLaunchCarriesEveryOne()
+    {
+        var shell = Shell(out var setup, out _);
+        shell.Step(Accept);
+        shell.Step(Accept);
+        shell.Step(Right);
+        shell.Step(Accept);
+        var second = setup.Join(new ScriptedMenuSeat())!;
+        var third = setup.Join(new ScriptedMenuSeat())!;
+        shell.Step(None);
+        Assert.Equal(1, shell.PickingSeat);
+
+        // While the seat browses there is no loadout row: a fit needs an aeroplane to hang on.
+        Assert.DoesNotContain(shell.Rows, r => r.Key == LoadoutRow);
+        shell.StepSeat(1, Accept);
+        Assert.True(second.Locked);
+        Assert.Equal(4, shell.Rows.Count);
+        Assert.Equal("WEAPON LOADOUT", shell.Rows.Single(r => r.Key == LoadoutRow).Label);
+
+        // The row opens the loadout screen on the picking seat's own fit and its own aeroplane.
+        shell.StepSeat(1, Down);
+        Assert.Equal(LoadoutRow, shell.FocusedKey);
+        shell.StepSeat(1, Accept);
+        Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
+        Assert.Equal(1, shell.LoadoutSeat);
+        Assert.Same(second.Fit, shell.LoadoutFit);
+        Assert.Equal(setup.Roster[second.Cursor].Node, shell.LoadoutNode);
+
+        // The walk stands on this screen too: seat 0's frame still moves nothing, and the picking
+        // seat's Back is CANCEL LOADOUT rather than an unjoin, so it lands back on its own row.
+        Assert.False(shell.Step(Back).Changed);
+        second.Fit.SetGunAmmo(1, "wep_ap");
+        shell.StepSeat(1, Back);
+        Assert.Equal(3, setup.Seats.Count);
+        Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
+        Assert.Equal(1, shell.PickingSeat);
+        Assert.Equal(LoadoutRow, shell.FocusedKey);
+        Assert.True(second.Fit.IsStock);
+
+        // ACCEPT LOADOUT keeps the picks, and on that seat's fit alone.
+        shell.StepSeat(1, Accept);
+        second.Fit.SetGunAmmo(1, "wep_ap");
+        var keep = shell.Rows.Single(r => r.Key == OriginalShell.LoadoutAcceptKey);
+        shell.Step(Pointer(keep.X + 4f, keep.Y + 4f, pressed: true, clicked: true));
+        Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
+        Assert.Equal(LoadoutRow, shell.FocusedKey);
+        Assert.Equal("wep_ap", second.Fit.GunAmmoFor(1));
+        Assert.True(setup.Seats[0].Fit.IsStock);
+        Assert.True(third.Fit.IsStock);
+
+        // Every seat's own fit reaches the launch, seat 0's carrying nothing because it picked none.
+        var confirm = shell.Rows.Single(r => r.Key == "AcceptSelections");
+        shell.Step(Pointer(confirm.X + 4f, confirm.Y + 4f, pressed: true, clicked: true));
+        Assert.True(second.Confirmed);
+        Assert.Equal(2, shell.PickingSeat);
+        shell.StepSeat(2, Accept);
+        third.Fit.SetPylon(1, "wep_rocket");
+        var launch = Assert.IsType<LaunchExit>(shell.StepSeat(2, Accept).Exit);
+        Assert.Null(launch.Seats[0].Fit);
+        Assert.Same(second.Fit, launch.Seats[1].Fit);
+        Assert.Same(third.Fit, launch.Seats[2].Fit);
+    }
+
+    [Fact]
+    public void AWalkLosingItsPickingSeatOverTheLoadoutScreenMovesOnWithoutIt()
+    {
+        var shell = Shell(out var setup, out _);
+        shell.Step(Accept);
+        shell.Step(Accept);
+        shell.Step(Right);
+        shell.Step(Accept);
+        var second = setup.Join(new ScriptedMenuSeat())!;
+        setup.Join(new ScriptedMenuSeat());
+        shell.Step(None);
+        shell.StepSeat(1, Accept);
+        shell.StepSeat(1, Down);
+        shell.StepSeat(1, Accept);
+        Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
+
+        setup.Unjoin(second);
+        Assert.True(shell.Step(None).Changed);
+        Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
+        Assert.Equal(1, shell.PickingSeat);
+        Assert.Equal(-1, shell.LoadoutSeat);
+        Assert.Null(shell.LoadoutFit);
     }
 
     [Fact]

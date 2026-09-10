@@ -528,17 +528,18 @@ public sealed partial class OriginalShell
         Open(OriginalScreen.TopLevel);
     }
 
-    /// <summary>Opens a screen directly, the screenshot aids' door. Any screen but the per-seat
-    /// one ends a seat walk in progress.</summary>
+    /// <summary>Opens a screen directly, the screenshot aids' door. Any screen the walk does not
+    /// stand on (<see cref="OnSeatWalk"/>) ends a seat walk in progress.</summary>
     public void Open(OriginalScreen screen)
     {
         _screen = screen;
         _hover = -1;
         _pressed = -1;
-        if (screen != OriginalScreen.SeatPlane)
+        if (!OnSeatWalk)
         {
             _pickingSeat = null;
             _seatPage = null;
+            _loadoutSeat = null;
         }
 
         _drag = null;
@@ -563,9 +564,11 @@ public sealed partial class OriginalShell
         MenuExit? exit = null;
         SyncCampaignField();
         bool changed = TypeName(commands, cues);
-        if (_screen == OriginalScreen.SeatPlane && _pickingSeat is not { Joined: true })
+        if (OnSeatWalk && _pickingSeat is not { Joined: true })
         {
-            // The seat this screen was picking for has gone: the walk moves on or ends.
+            // The seat this screen was picking for has gone: the walk moves on or ends, and a
+            // Weapon Loadout it had open on that seat's own fit goes with it.
+            DropLoadout();
             exit = AdvanceSeatWalk();
             changed = true;
         }

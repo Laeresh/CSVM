@@ -9,13 +9,13 @@ namespace CSVM.UI.Menu.Original;
 /// The remake-only per-seat aircraft screen: once seat 0 has picked on a sortie screen, or has
 /// pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in player
 /// order picks its own aircraft here, on the campaign plane-selection board's shape (its list field,
-/// ratings and weapon column, ACCEPT and CANCEL SELECTIONS) over the sortie roster. The list stands
-/// open while the seat browses; Accept selects and closes it, Accept again confirms and hands the
-/// screen to the next unconfirmed seat. Back and CANCEL SELECTIONS each drop a selection and reopen
-/// the list, and over the open list each leaves the walk with every seat kept; nothing here unjoins.
-/// The picking seat's own device drives the screen, and the mouse, which rides seat 0's source;
-/// nothing else of seat 0's reaches it. The last seat's confirm is the launch, on a sortie screen as
-/// on Instant Action, or the return of a screen whose FLY gate is unmet. Nothing is decoded here.
+/// ratings and weapon column, WEAPON LOADOUT over a selection, ACCEPT and CANCEL SELECTIONS) over
+/// the sortie roster. The list stands open while the seat browses; Accept selects and closes it,
+/// Accept again confirms and hands the screen on, and WEAPON LOADOUT opens the loadout screen on
+/// that seat's own fit. Back and CANCEL SELECTIONS each drop a selection and reopen the list, and
+/// over the open list each leaves the walk with every seat kept; nothing here unjoins. Only the
+/// picking seat's device drives the screen, and the mouse riding seat 0's source. The last seat's
+/// confirm is the launch, or the return of a screen whose FLY gate is unmet. Nothing is decoded.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -31,6 +31,14 @@ public sealed partial class OriginalShell
 
     /// <summary>The screen the per-seat walk returns to, meaningful while <see cref="PickingSeat"/> is not -1.</summary>
     public OriginalScreen SeatReturn => _seatReturn;
+
+    // The screens a per-seat walk stands on: the picker itself, and the Weapon Loadout it opens for
+    // the picking seat. ⚠ Both, not just the picker. The seat that opened the loadout still owns
+    // every frame while it is showing, and the walk has to survive the trip; treating only the
+    // picker as the walk's screen made the picking seat's Back unjoin it from the loadout screen.
+    private bool OnSeatWalk =>
+        _screen == OriginalScreen.SeatPlane
+        || (_screen == OriginalScreen.InstantActionLoadout && _loadoutSeat != null);
 
     /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
     /// showing, the screenshot aid's pose; with a joined seat still to confirm, the per-seat
@@ -57,12 +65,12 @@ public sealed partial class OriginalShell
         BeginSeatWalkIfDue();
     }
 
-    // Seat 0's frame as the screen showing takes it: whole, except on the per-seat screen while
+    // Seat 0's frame as the screen showing takes it: whole, except on a walk's screens while
     // another seat is picking, where only the pointer is kept. ⚠ Keep the pointer. The mouse rides
     // seat 0's source, so dropping the whole frame would take the one device a pilot without a pad
     // of their own can pick with; the seat's identity, never the device kind, is what decides here.
     private MenuCommands SeatZeroFrame(MenuCommands commands) =>
-        _screen == OriginalScreen.SeatPlane && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)
+        OnSeatWalk && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)
             ? new MenuCommands { Pointer = commands.Pointer }
             : commands;
 
@@ -227,6 +235,9 @@ public sealed partial class OriginalShell
                 }
 
                 return null;
+            case nameof(BoardButton.ChangeAmmo):
+                OpenSeatLoadout(seat);
+                return null;
             case nameof(BoardButton.AcceptSelections):
                 if (seat.Locked)
                 {
@@ -329,9 +340,9 @@ public sealed partial class OriginalShell
     /// <summary>
     /// One seat's picker as a campaign page, so <c>CampaignBoards.For</c> draws it in the
     /// plane-selection board's shape: the list field over the sortie roster, the silhouette of
-    /// the row under the cursor, its ratings and weapon column, ACCEPT and CANCEL SELECTIONS. The
-    /// page composes only; the shell applies every press itself, since the picks are the shared
-    /// setup's stages and not a profile's slots.
+    /// the row under the cursor, its ratings and weapon column, WEAPON LOADOUT over a selection, and
+    /// ACCEPT and CANCEL SELECTIONS. The page composes only; the shell applies every press itself,
+    /// since the picks are the shared setup's stages and not a profile's slots.
     /// </summary>
     private sealed class SeatPlanePage : ICampaignPage
     {
@@ -366,6 +377,17 @@ public sealed partial class OriginalShell
         private const float TitleFont = 20f;
         private const float BodyFont = 12f;
         private const int SilhouetteFrames = 12;
+
+        // The plaques after the list field, in the order the campaign board's own page puts them:
+        // the crew block's paper button, then the two commit strips. WEAPON LOADOUT stands only over
+        // a selection, because a fit needs an aeroplane to hang on and the seat has picked none
+        // while its list is open. Every lock and unlock parks the focus back on the list, so the row
+        // moving with the stage costs no cursor.
+        private static readonly BoardButton[] SelectedPlaques =
+            { BoardButton.ChangeAmmo, BoardButton.AcceptSelections, BoardButton.CancelSelections };
+
+        private static readonly BoardButton[] BrowsingPlaques =
+            { BoardButton.AcceptSelections, BoardButton.CancelSelections };
 
         private static readonly string[] RatingLabels = { "TOP SPEED:", "ARMOR:", "AGILITY:", "OFFENSE:" };
         private static readonly string[] RatingKeys = { "PS_T_TOPSPEEDP", "PS_T_ARMORP", "PS_T_AGILITYP", "PS_T_OFFENSEP" };
@@ -405,7 +427,7 @@ public sealed partial class OriginalShell
 
         public string Title => "PLANE SELECTION";
 
-        public int RowCount => 3;
+        public int RowCount => Plaques.Length + 1;
 
         public int OpeningRow => 0;
 
@@ -489,6 +511,8 @@ public sealed partial class OriginalShell
 
         private UiStrings Strings => _shell._campaign?.Strings ?? _shell._hangar?.Strings ?? UiStrings.Empty;
 
+        private BoardButton[] Plaques => _seat.Locked ? SelectedPlaques : BrowsingPlaques;
+
         // The roster row the screen stands for: the highlighted one while the list is open, the
         // selected one once it is closed.
         private MenuAircraft? Current
@@ -501,12 +525,11 @@ public sealed partial class OriginalShell
             }
         }
 
-        public BoardButtonRef Button(int row) => row switch
+        public BoardButtonRef Button(int row)
         {
-            1 => new BoardButtonRef(BoardButton.AcceptSelections),
-            2 => new BoardButtonRef(BoardButton.CancelSelections),
-            _ => BoardButtonRef.None,
-        };
+            var plaques = Plaques;
+            return row >= 1 && row <= plaques.Length ? new BoardButtonRef(plaques[row - 1]) : BoardButtonRef.None;
+        }
 
         public CampaignCombo? Combo(int row) => row == 0 ? List : null;
 
@@ -514,11 +537,12 @@ public sealed partial class OriginalShell
 
         public bool Focusable(int row) => true;
 
-        public string RowText(int row) => row switch
+        public string RowText(int row) => Button(row).Button switch
         {
-            0 => List.Text,
-            1 => "ACCEPT SELECTIONS",
-            _ => "CANCEL SELECTIONS",
+            BoardButton.ChangeAmmo => "WEAPON LOADOUT",
+            BoardButton.AcceptSelections => "ACCEPT SELECTIONS",
+            BoardButton.CancelSelections => "CANCEL SELECTIONS",
+            _ => List.Text,
         };
 
         public string Detail(int row) => string.Empty;

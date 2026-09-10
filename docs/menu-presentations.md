@@ -164,9 +164,12 @@ sortie with Back on the Instant Action screen or with their device. Joining stay
 screen. The last seat's confirm is the launch, on either sortie screen as on Instant Action, so seat
 0's pick is the ready and the walk is the launch; where FLY's own gate is unmet (Dogfight without a
 second seat, a sortie with no map picked) the screen the walk came from returns instead with FLY to
-press, FLY going live only when every joined seat is Confirmed. The picking seat's own device drives
-that screen,
-and the mouse, which rides seat 0's source and is the one device a pilot without a pad of their own
+press, FLY going live only when every joined seat is Confirmed. Over a selection the screen also
+offers WEAPON LOADOUT, which opens the loadout chrome on that seat's own fit and airframe and
+returns to the picker, so every joined pilot picks weapons as well as an aeroplane and the choice
+rides that seat's own `Fit` into the launch; the original has no second pilot, so this is a remake
+decision and not fidelity. The picking seat's own device drives that screen and the Weapon Loadout
+it opens, and the mouse, which rides seat 0's source and is the one device a pilot without a pad of their own
 can pick with; seat 0's stick, buttons and keyboard move nothing there, `StepSeat` reducing seat 0's
 frame to its pointer while another seat picks. CANCEL SELECTIONS is therefore the pointer's own Back,
 its second press leaving the walk once there is no selection left to drop. Nothing on that screen is

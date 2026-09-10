@@ -753,11 +753,11 @@ has joined. Remake-only by design: [../org/menu-inventory.md](../org/menu-invent
 The remake-only per-seat aircraft screen, a shell partial: once seat 0 has picked on a sortie
 screen, or pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in
 player order picks here. `SeatPlanePage` is an `ICampaignPage` over the sortie roster, so
-`CampaignBoards.For` draws it in the campaign plane-selection board's shape (its list field, ACCEPT
-and CANCEL SELECTIONS), the seat strip over it. The picking seat's own device drives it, and the
-mouse riding seat 0's source, nothing else of seat 0's. Accept selects, a second Accept confirms,
-and Back and CANCEL SELECTIONS drop a selection then leave the walk, every seat kept and nothing
-unjoined. The last seat's confirm is the launch: [../menu-presentations.md](../menu-presentations.md).
+`CampaignBoards.For` draws it in the plane-selection board's shape (its list field, WEAPON LOADOUT
+over a selection, ACCEPT and CANCEL SELECTIONS), the seat strip over it. The picking seat's own
+device drives it, and the mouse riding seat 0's source. Accept selects, a second Accept confirms,
+Back and CANCEL SELECTIONS drop a selection then leave the walk with every seat kept and nothing
+unjoined, and the last seat's confirm is the launch: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
@@ -770,13 +770,14 @@ return; a picked build flies its airframe's stock node with its def on the seat.
 wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/Menu/Original/OriginalLoadout.cs
-The Instant Action Weapon Loadout, the shell's partial over the decoded `[@OrdinanceLayout@]`
-section (the campaign's ammo chrome) and one shared `LoadoutChoice`: seat 0's for the pilot, the
-`InstantActionFeature`'s wingman fit for the wingmen, picked by the radio pair. It owns the
-mapping of the section's four ammunition and eight rocket fields onto the airframe's gun slots and
-pylons over the stock table's option lists, the snapshot CANCEL and Back restore, the airframe's
-diagram frames and the description pane. Rows and open lists reuse the Instant Action partial's
-dropdown machinery. What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
+The Weapon Loadout screen, the shell's partial over the decoded `[@OrdinanceLayout@]` section (the
+campaign's ammo chrome) and one aeroplane's `LoadoutChoice`: the Instant Action strip's seat (seat
+0's fit or the `InstantActionFeature`'s wingman fit, by the radio pair) or the per-seat picker's own
+`PlayerSeat.Fit`, `_loadoutSeat` deciding which screen the exit returns to. It owns the mapping of
+the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over
+the stock table's option lists, the snapshot CANCEL and Back restore, the airframe's diagram frames
+and the description pane; rows and open lists reuse the Instant Action partial's dropdown machinery.
+What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
 ## src/UI/Menu/Original/OriginalHangar.cs
 The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
