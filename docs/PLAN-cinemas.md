@@ -795,8 +795,13 @@ window: `APlayedCinemaTracksItsSoundToTheLastPicture` plays `crimflag.mpg` and `
 end under `CSVM_MOVIE_WALK`, and the worst gap between the picture's clock and the sound handed over
 is under a millisecond across both.
 
-**Verified.** `.\RunTests.ps1` on the plan tree, run by the orchestrator rather than reported by the
-agent: PASS, exit 0, 280.1 s. Build 3.8 s with zero StyleCop warnings; units 3774 passed, 0 failed,
+**Verified.** A whole cinema was watched at the controls and the sound holds its step to the end,
+which is the check Decision 7 puts with the author and the one no instrument here replaces. Anyone
+repeating it runs `.\RunGame.ps1 -- --movie=chap1 --volume=1.0` and watches a **whole** file, since
+drift accumulates and an opening proves nothing; `--volume=1.0` is required, because a repo run's
+developer gain is zero and the cinema then plays silent. `.\RunTests.ps1` on the plan tree, run by
+the orchestrator rather than reported by the agent: PASS, exit 0, 280.1 s.
+Build 3.8 s with zero StyleCop warnings; units 3774 passed, 0 failed,
 2 skipped of 3776, against `B12`'s 3766/0/1 of 3767, the second skip being this item's own opt-in
 whole-file walk; engine 265 passed, errors clean; goldens 20 shots hash-identical with
 `analysis/goldens/manifest.json` unmodified in `git diff` afterwards (GOLD-9), the two flag shots
@@ -812,12 +817,6 @@ with the decodes A1's walk already pays for, the way `A2`'s audio walk did. Four
 under load on the same machine during the battery, and the engine and golden stages moved with it in
 the same direction; the per-item measurement is the one that answers this item's question, and it
 answers it no.
-
-**⚠ What no instrument here can answer.** Whether the sound is in step with the picture at the
-controls is the user's judgement and Decision 7 puts it there. Run
-`.\RunGame.ps1 -- --movie=chap1 --volume=1.0`, or `RunProbe.ps1` with `--volume=1.0`, and watch a
-whole file: `chap0` is the longest at 145 s and `chap3` the shortest of the chapter set at 93 s.
-A check on the first thirty seconds proves nothing.
 
 ### Original approach (kept for reference)
 
