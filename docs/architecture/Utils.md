@@ -119,6 +119,15 @@ its next window instead. `PhysicsTickCost` above is the same shape around the ph
 `TIME_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-1.
 
+## src/Utils/AiStepCost.cs
+The wall cost of the session's AI roster walks and how many aircraft they walked, banked by an
+`Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft`. It is the only `--perf`
+term that attributes frame cost to the AI: `proc_ms` and `phys_tick_ms` bracket whichever callback
+the clock mode makes the walk ride, so a plane-count sweep otherwise reads only as a whole-frame
+differential. `Take()` drains the window as total milliseconds, the walk count and the summed plane
+count, and `ai_ms` divides that total by FRAMES rather than walks, since a parent-driven clock runs
+several walks in one rendered frame. Presentation for the same aircraft stays in `proc_ms`.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names

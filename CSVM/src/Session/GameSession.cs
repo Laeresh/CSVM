@@ -3933,10 +3933,15 @@ public partial class GameSession : Node3D
         public void StepGenerators(float dt) => session._generators?.SimStep(dt);
         public void StepSurfaceVehicles(float dt) => session._surfaceVehicles?.SimStep(dt);
 
+        // The one walk --perf's ai_ms measures (src/Utils/AiStepCost.cs): every AI aircraft's whole
+        // sim step, bracketed here rather than per aircraft so the count it divides by is the
+        // membership captured at step entry.
         public void StepCapturedAiAircraft(float dt)
         {
+            AiStepCost.Open();
             foreach (var aircraft in _eligibleAiAircraft)
                 aircraft.SimStep(dt);
+            AiStepCost.Close(_eligibleAiAircraft.Count);
         }
 
         public void StepLandingApproaches()

@@ -1079,10 +1079,11 @@ public partial class Launcher : Node3D
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
-        // Same boundary for both brackets: a build that spans the tail leaves a half-open tick or
-        // pass whose next close would charge the whole build to one step.
+        // Same boundary for all three brackets: a build that spans the tail leaves a half-open
+        // tick, pass or AI walk whose next close would charge the whole build to one step.
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
+        AiStepCost.Reset();
         // D10: same reasoning as HitchMonitor.Rearm above — the build's own stall must never read
         // as the readout's worst recent frame.
         _perfHud.Rearm();
@@ -1604,6 +1605,7 @@ public partial class Launcher : Node3D
         PerfSample.Reset();
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
+        AiStepCost.Reset();
         _perfHud.Rearm();
         ShowMenu(destination);
     }
@@ -1723,9 +1725,9 @@ public partial class Launcher : Node3D
     // --perf: the headless stand-in for the editor's profiler, meaned over the window so a
     // single hitch doesn't read as a regression — A/B two builds by comparing the same line.
     // `script_ms`/`physics_ms` are Godot's two worst-of-the-last-second monitors, kept only
-    // because older records hold them. The measured terms are `proc_ms` and `phys_tick_ms`
-    // (verification PERF-1, PERF-21). `max_ms`/`p95_ms` answer "how bad did it get"; no `p99_ms`
-    // since a 60-sample window's nearest-rank p99 is just `max_ms` (Perf95Index).
+    // because older records hold them. The measured terms are `proc_ms`, `phys_tick_ms` and
+    // `ai_ms` (verification PERF-1, PERF-21). `max_ms`/`p95_ms` answer "how bad did it get"; no
+    // `p99_ms` since a 60-sample window's nearest-rank p99 is just `max_ms` (Perf95Index).
     private void ReportPerf(double delta, in FrameCounters counters)
     {
         _perfFrames++;
@@ -1768,6 +1770,12 @@ public partial class Launcher : Node3D
         // tail lands in the next window.
         var (procTotalMs, procMaxMs, procPasses) = ProcessPassCost.Take();
         double procMs = procPasses > 0 ? procTotalMs / procPasses : 0;
+        // ⚠ The only term that attributes frame cost to the AI. Meaned over the window's FRAMES,
+        // not its walks, because a parent-driven clock runs several walks per rendered frame and
+        // the question is what the AI cost that frame. Zero with no AI spawned.
+        var (aiTotalMs, aiSteps, aiPlaneSum) = AiStepCost.Take();
+        double aiMs = aiTotalMs / n;
+        double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
         double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
         double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
         double draws = _perfDraws / n;
@@ -1778,7 +1786,7 @@ public partial class Launcher : Node3D
         System.Array.Sort(_perfFrameMsSorted);
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }

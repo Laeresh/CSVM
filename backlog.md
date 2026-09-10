@@ -3037,19 +3037,6 @@ usual.
   empty-stage rig this extends, which shipped deliberately without a net and whose `--ai=` squadron
   tokens and `--zep=` graft are documented in `docs/cli.md` (`git log --grep=BL-742`).
 
-- `BL-773` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`--perf` has no
-  term that attributes frame cost to the AI step, so a plane-count sweep can only be read as a
-  whole-frame differential.** *Evidence:* `FlightController` steps in `_Process`
-  (`FlightController.cs:1844`), so AI cost lands in the process pass; `proc_ms` measures that whole
-  pass and `phys_tick_ms` the physics tick (`ProcessPassCost.cs`, `PhysicsTickCost.cs`), which the
-  AI never enters, so the AI's share is a fraction of `proc_ms` with nothing to separate it from
-  every other `_Process` body. The other whole-frame terms are `p95_ms` and `max_ms`. *Fix shape:*
-  bracket the roster's per-frame AI walk the way `PhysicsTickCost` brackets the physics tick, and
-  report an `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `docs/verification.md` PERF-1 and PERF-21
-  on why the two `TIME_*` monitors are not the terms to build on; the
-  empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
-  term worth having (`docs/cli.md`, `git log --grep=BL-742`).
-
 - `BL-798` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **No golden shot renders the cockpit pass, so the shipped first-person view has no pixel tripwire.**
   *Evidence:* none of the 18 shots in `analysis/goldens/manifest.json` passes `--view=cockpit` or
   `--view=nose`, and a flight shot defaults to the chase camera, so the `SubViewport` the interior
