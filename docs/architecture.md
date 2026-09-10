@@ -395,6 +395,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
 - `src/Utils/PhysicsTickCost.cs` — the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
+- `src/Utils/GcTrace.cs` — the `--perf` GC readout: pause per wall second, collections, and the finalizable-object count that sets the pause, per ten-second window.
 - `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
 - `src/Utils/ProcessPassCost.cs` — the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
 - `src/Utils/RenderPoses.cs` — the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.

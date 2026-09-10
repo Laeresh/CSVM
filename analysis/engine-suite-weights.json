@@ -304,6 +304,7 @@
     "campaign-layout-parity": 0.28,
     "campaign-flight-check-plane-change": 0.05,
     "perf-hud-layout": 0.009,
+    "world-query-reuse": 0.015,
     "campaign-briefing-note": 0.161,
     "campaign-capture-group": 5.66,
     "campaign-capture-chutes": 4.6,

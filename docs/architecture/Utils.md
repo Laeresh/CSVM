@@ -127,6 +127,14 @@ the clock mode makes the walk ride, so a plane-count sweep otherwise reads only 
 differential. `Take()` drains the window as total milliseconds, the walk count and the summed plane
 count, and `ai_ms` divides that total by FRAMES rather than walks, since a parent-driven clock runs
 several walks in one rendered frame. Presentation for the same aircraft stays in `proc_ms`.
+## src/Utils/GcTrace.cs
+The `--perf` GC readout: one `[perf] gc` line per ten wall seconds carrying the pause the process
+spent, the collections it spent it in, the bytes allocated, and how many FINALIZABLE objects died,
+read off the runtime's own `GCHeapStats` event through an `EventListener` on the GC keyword. The
+finalizable count is the figure a change to the frame path moves, and pause per wall second the
+figure it is judged on; every line carries process uptime so the world-build regime is excluded by
+uptime rather than by guesswork. What the two numbers mean and why the per-collection pause is the
+wrong one to read is `docs/verification.md` PERF-19, PERF-20 and PERF-27.
 
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from

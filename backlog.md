@@ -896,8 +896,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   never wall seconds; state which mode a re-measurement flew (the numbers here are `--no-det` with
   nobody at the controls, so they under-weight projectiles and destruction cascades); and do not
   raise `max_physics_steps_per_frame`, which deepens the catch-up spiral rather than recovering
-  lost steps. *Cross-refs:* `PLAN-M5-polish-6` C22, `BL-606` (the same per-sim-step
-  suspects seen as an allocator), `docs/verification.md` PERF-21 and PERF-23.
+  lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
+  fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
+  *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-21, PERF-23 and PERF-27.
 
 ## Environment & world
 
@@ -1357,29 +1358,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   belongs on the definition's dt, not on the session's `PhysicsDt`. *Cross-refs:*
   `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `PLAN-M5-polish-2`
   E24 (the decode that made the two scenes unskippable).
-
-- `BL-606` `[Perf]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The settled GC pause is set by the finalizable-object count, and about 2000
-  finalizable Godot objects a second keep it there.** *Evidence (traced):* with the session's
-  build-settling transient excluded, a GC-verbose capture of a C1 cruise shows the pause tracking
-  the finalization-promoted COUNT at 0.4 to 0.5 ms per thousand objects, consistent across two
-  builds and 26k to 85k objects per collection, while ms per promoted MB varies several-fold over
-  the same collections. `MarkFinalizeQueueRoots` promotes 0.00 MB at every collection, so it is the
-  per-object queue walk and not resurrection marking, and queue registration happens at allocation,
-  outside the suspension window, so it cannot contribute. `Godot.StringName` is the largest single
-  source, ahead of the physics query parameters. *Fix shape:* reduce the RATE of finalizable Godot
-  object creation on the per-frame path, or take the objects off the finalization queue where the
-  binding allows it; caching `StringName` instances at their construction sites is the first move.
-  *⚠ Traps:* **cutting ordinary allocation does not shrink this pause, it only batches it.** Halving
-  the allocation rate moved the settled collection from gen0 every 13 s at 10 to 13 ms to gen1
-  every 31 to 36 s at 25 to 27 ms, leaving total pause per wall second unchanged at about 0.8 ms.
-  Judge any change on pause per second, never on per-collection pause or on collection frequency
-  alone. Exclude the first 50 s of process life, which is the world build tenuring and reproduces
-  to the byte. `docs/verification.md` PERF-13 (compare within one vsync mode) and PERF-19/PERF-20
-  apply. *Cross-refs:* `BL-536`'s closing commit (`git log --grep=BL-536`), which corrected the
-  premise this succeeds and landed the two allocator fixes, `BL-562` (the CM11 physics tick, now
-  rewritten onto single-tick spikes: its steady step is 1.81 ms and its ray casts are 13.4 % of it,
-  so the per-sim-step query objects cost measurable physics time even though C21 showed they are
-  1.6 % of allocation), `PLAN-perf-hitches`.
 
 
 - `BL-720` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[CM24]` **The Dante's engine-explosion

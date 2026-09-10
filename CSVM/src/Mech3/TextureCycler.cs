@@ -86,7 +86,7 @@ public sealed partial class TextureCycler : Node
             if (frame == c.Current)
                 continue; // the rates here are 4-12 fps, so most frames change nothing
             c.Current = frame;
-            c.Material.SetShaderParameter("albedo_tex", c.Frames[frame]);
+            c.Material.SetShaderParameter(SceneBuilder.AlbedoTexParam, c.Frames[frame]);
         }
     }
 

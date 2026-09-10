@@ -283,6 +283,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   a block sized by its data must be split along that data's grain; name the phase with no seam of
   its own first.** Splitting CM18's `cargozep1` crash rig one `effect_pools.json` slot a step took
   one 35 ms frame to a dozen of about 3 ms, leaving `AnimRuntime.PrewarmEmitters` at 15 to 103 ms.
+- **PERF-27** — **A Godot wrapper built per call on the frame path is a finalizable object, so look
+  for the ones a call MAKES (a string handed to a `StringName` parameter, a physics query parameter
+  object) and judge the fix on `[perf] gc`'s `fin_per_s`, not its `pause_per_s_ms`: the count
+  reproduces to a tenth of a percent, the pause it sets to a few.** Caching one per-frame
+  `StringName` and reusing the flight query objects took a 150 s C1 cruise from 1352/1353 objects a
+  second to 927/929, and its pause from 0.510/0.529 to 0.401/0.374 ms a wall second.
 
 - **PERF-26** — **A process-wide "nothing to do" guard is not a fast path in a real session; read
   its state at the moment you measure, not at process start.** `WorldCollision`'s live-faded-root

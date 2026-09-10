@@ -27,6 +27,11 @@ public static class ShaderTime
     /// a jump on every scrolling surface once an hour.</para></summary>
     public const double RolloverSecs = 3600.0;
 
+    // ⚠ Keep this cached. A string handed to a StringName parameter is converted at the call, and
+    // this one is on the per-frame path, so the literal would mint a finalizable wrapper a frame
+    // (docs/verification.md PERF-20).
+    private static readonly StringName ParamName = Param;
+
     private static double _time;
 
     /// <summary>Declares the uniform. Must run before the first shader that reads it is built —
@@ -43,7 +48,7 @@ public static class ShaderTime
     public static void Advance(GameClock? clock, double wallDelta)
     {
         _time = clock != null ? clock.Time : _time + wallDelta;
-        RenderingServer.GlobalShaderParameterSet(Param, (float)Wrap(_time));
+        RenderingServer.GlobalShaderParameterSet(ParamName, (float)Wrap(_time));
     }
 
     private static double Wrap(double t) => t - (Math.Floor(t / RolloverSecs) * RolloverSecs);

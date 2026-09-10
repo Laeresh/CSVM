@@ -243,6 +243,10 @@ public partial class Launcher : Node3D
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
 
+    // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
+    // without the flag subscribes to no runtime events at all.
+    private Utils.GcTrace? _gcTrace;
+
     // The always-on rate window (ReportRate). Separate accumulators from the --perf ones above
     // rather than shared: those are opt-in and reset on a frame count, these run every session.
     private double _rateWallMs;
@@ -876,7 +880,10 @@ public partial class Launcher : Node3D
         _perfHud?.Tick(frameMs, counters);
         _buildStamp?.Tick(_menuHost is { Shown: true });
         if (_spec.Perf)
+        {
+            (_gcTrace ??= new Utils.GcTrace()).Tick();
             ReportPerf(delta, counters);
+        }
 
         // Wall time, like the instruments above: the score is not part of the simulation, and a
         // paused or stepped session must not stall a fade halfway.
