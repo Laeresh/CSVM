@@ -2639,6 +2639,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
   both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
+- `BL-810` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A pad button does
+  not skip a cinema, so a player on a controller sits through all of one.** *Evidence:* reported at
+  the controls across the boot sequence, the chapter cinema and the closing cinema.
+  `CinemaScreen.Skips` reads `InputEventMouseButton` and `InputEventKey` and nothing else, so
+  `CinemaSkip.AnyKey` means any key rather than any input and no pad button reaches it. The cost is
+  worst exactly where the skip matters most: `chap0.mpg` runs 145 s in front of a bare launch, which
+  is a cost Decision 8 of the cinemas plan accepted on the understanding that a press moves on.
+  *Fix shape:* admit a pad button through the same predicate that already answers the three key sets,
+  so one member still decides what skips what. *⚠ Traps:* the three sets are authored and differ,
+  `ChapterKeys` taking Escape, Space, Return and the left mouse where `ClosingKeys` takes Escape and
+  the mouse alone, so a pad button must join a set rather than bypass them; the boot sequence's
+  `BootKeys` is the any-input case and is where "any" has to mean the pad too. ⚠ A `--det` or
+  pads-off run disables pads entirely, so a headless check cannot see this and the confirmation is at
+  the controls. *Cross-refs:* `git log --grep=CinemaScreen`, `docs/formats/cinemas.md`.
 
 ## Splitscreen
 
@@ -2867,35 +2881,6 @@ usual.
   data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
-
-- `BL-446` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The MPG movies do not play.** *Evidence:* Decision 2 of
-  `PLAN-M5-campaign` put them out of scope for the campaign milestone: plain MPG playback
-  is a codec and container problem orthogonal to the campaign flow, and the loop reaches the cabin
-  and the mission without one. **The decision this entry was waiting on is made and recorded in
-  [`docs/formats/cinemas.md`](docs/formats/cinemas.md); what remains is the work itself.** The ten
-  shipped files are MPEG-1 system streams, MPEG-1 video 320x240 at 856 to 1500 kbps with MPEG-1
-  audio layer II at 44.1 kHz, and Godot 4.7 compiles in exactly one video decoder, Ogg Theora, so
-  they cannot play as they ship. The decision is to transcode at extract time to `.ogv` and play
-  through a stock `VideoStreamPlayer`, with a C# `VideoStreamPlayback` subclass recorded as the
-  reversible alternative. *Fix shape:* the transcode step in the extraction pipeline and the player.
-  **This is two jobs of very different sizes, and the decode says so.** `crimflag.mpg` is not a
-  cinema: `ASSETS/LAYOUT.CSV` places it as a `movie` widget on `MainMenu`, `Save`, `Load` and
-  `Preferences` at X, Y and Z zero with `Loops` 0, so it is a looping backmost background, scaled
-  `250` per cent to fill the original's 800x600 authored space from its 320x240 source exactly.
-  The cinema sequence is the larger half: `fmv.zrd`'s `INTRO` and `CHAP0` blocks, the per-chapter
-  intro that hands off to the passenger cabin, and the final cinema that hands off to the scrapbook.
-  Both halves wait only on a decodable format and a look at the transcode.
-  *⚠ Traps:* two files break the otherwise uniform profile and a reader must not assume one
-  (`msopen1.mpg` is 29.97 fps at 1500 kbps, `crimflag.mpg` is mono). Four of the ten are named in a
-  case the on-disk names do not have, so a case-sensitive lookup fails on `msopen1.mpg`,
-  `chap0.mpg`, `crimflag.mpg` and `final.mpg`; `zipper.mpg` and the script-built chapter names match.
-  The chapter array at `0x0061e68c` is **dead** and is not where chapter names come from: its only
-  reference is a pointer at `0x0061daec` that no code touches, and `CAMPAIGNINTRO.SCRIPT` builds the
-  name as `"chap" conv$(FC) ".mpg"` from callback 2151, so chapter N plays `chapN.mpg` and the
-  missing `chap6.mpg` is a leftover nothing asks for. Nobody has judged a transcode at
-  the controls, which is a presentation call and not a technical one.
-  *Cross-refs:* `PLAN-M5-campaign` Decision 2, which filed it; `docs/formats/cinemas.md`, which
-  carries the naming, scaling, skip-key and handoff decode with its addresses.
 
 - `BL-463` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: spec]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
   `PLAN-M5-campaign` deferred it: the function is cosmetic and rests on the undecoded
@@ -3158,6 +3143,23 @@ usual.
   *Cross-refs:* `BL-657`'s closing commit (the credit rule and the callback host), `BL-699` (the
   per-launch hitch, which is a separate item and was not seen on these five),
   `docs/formats/mission-entities/enemy-generators.md`.
+- `BL-811` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **A campaign
+  position reached without flying leaves the scrapbook's mission list empty, with no floor under
+  it.** *Evidence:* seen at the controls on a profile whose `missionsCompleted` was set by hand,
+  which is what this project's own campaign verification prescribes for reaching a late position.
+  `CampaignPreviousMissionsPage.Seqs` reads `CampaignProgression.CompletedSeqs`, which lists a
+  mission only where `profile.MissionResults` holds a record whose best mask carries
+  `PrimaryObjectiveMask`, so a position advanced without a flown record lists nothing and no mission
+  can be viewed or replayed. In ordinary play the two move together: `MissionsCompleted` is raised
+  only by the advance rule, which runs on a recorded attempt, so no in-game path to the empty list
+  is known and finding one is part of this item. *Fix shape:* the proposal from the controls is that
+  the first mission always be listed. Before building that, settle what the original lists, since
+  `SCRAPBOOK.CSV` carries authored entries per mission and the book may be driven by the campaign
+  position rather than by a completion record; a floor invented here would be content this project
+  made up. *⚠ Traps:* REPLAY MISSION is offered only where a record holds a time, so a listed
+  mission with no record must not offer it; and the list is the same on both presentations, so a
+  change reaches Original through `EnterFromPage` as well. *Cross-refs:*
+  `git log --grep=CompletedSeqs`, `docs/formats/saved-games.md`.
 
 ## Tooling, platform & docs
 
