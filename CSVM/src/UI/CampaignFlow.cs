@@ -458,6 +458,15 @@ public sealed class CampaignFlow
             return true;
         }
 
+        // Backing onto the cabin is a cabin door like any other, so it takes OpenCabin rather than
+        // the pop: GoTo truncates to the cabin exactly as removing the top would, and the film a
+        // chapter opening is due plays in front of it.
+        if (_stack[^2] == CampaignScreen.Cabin)
+        {
+            OpenCabin();
+            return true;
+        }
+
         _stack.RemoveAt(_stack.Count - 1);
         Entered();
         return true;
@@ -535,9 +544,9 @@ public sealed class CampaignFlow
 
     /// <summary>Seats a profile, puts the cabin on the book's far side and opens the book the way a
     /// flown mission leaves it: the whole of the mission-end return.
-    /// ⚠ The feature's seat and a plain cabin, not <see cref="SelectProfile"/>: that door plays the
-    /// chapter cinema, which belongs to entering the campaign and would land the player on the cabin
-    /// instead of the book they just earned.</summary>
+    /// ⚠ The feature's seat and a plain <see cref="GoTo"/>, never <see cref="SelectProfile"/> or
+    /// <see cref="OpenCabin"/>: this cabin is stacked and not entered, and a chapter film in front
+    /// of it would land the player on the cabin instead of the book they just earned.</summary>
     public void OpenScrapbookAfterMission(CampaignProfileDef profile, int seq)
     {
         Feature.SelectProfile(profile);
@@ -577,9 +586,9 @@ public sealed class CampaignFlow
 
     /// <summary>Opens the cabin on the seated profile, playing that profile's chapter cinema first
     /// where one is due (<see cref="CampaignFeature.ChapterCinema"/>); the cabin then opens on the
-    /// frame the film stops. Every door onto the cabin from outside the campaign takes this one:
-    /// the roster's CONTINUE, <see cref="SelectProfile"/>'s flight return and the screenshot aids.
-    /// With no cinema, and for a position inside a chapter, it is the plain
+    /// frame the film stops. Every door onto the cabin takes this one, inside the campaign and out,
+    /// so the latch and the story position decide whether a film is due rather than which door was
+    /// taken. With no cinema, and for a position inside a chapter, it is the plain
     /// <see cref="GoTo"/>.</summary>
     public void OpenCabin()
     {

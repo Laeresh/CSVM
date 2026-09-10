@@ -12,11 +12,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The chapter cinema as both presentations' campaigns actually reach it: the roster's CONTINUE and
-/// the flight-return door in each, the cabin arriving on the frame the film stops, a position
-/// inside a chapter opening the cabin with no film, and one instance serving both so a chapter
-/// plays once. A campaign whose feature carries no cinema opens the cabin exactly as it always
-/// did, which is what every suite and every golden gets.
+/// The chapter cinema as both presentations' campaigns actually reach it: the roster's CONTINUE,
+/// the flight-return door and the in-campaign doors (RETURN TO CABIN and the back press) in each,
+/// the cabin arriving on the frame the film stops, a position inside a chapter opening the cabin
+/// with no film, and one instance serving both so a chapter plays once whichever door reached it.
+/// A campaign whose feature carries no cinema opens the cabin exactly as it always did, which is
+/// what every suite and every golden gets.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ChapterCinemaWiringTests : IDisposable
@@ -71,6 +72,76 @@ public class ChapterCinemaWiringTests : IDisposable
         Assert.Equal("chap2", cinema.Name);
         Assert.Equal(CampaignScreen.Roster, flow.Screen);
         cinema.Stop();
+        Assert.Equal(CampaignScreen.Cabin, flow.Screen);
+    }
+
+    // The case the original reaches and CSVM did not: win a chapter's last mission, land on the
+    // book, press RETURN TO CABIN. That is a cabin entry at a chapter-opening position, and
+    // PASSENGERCABIN.SCRIPT runs the chapter-intro script on every one of them.
+    [Fact]
+    public void BuiltInsReturnToCabinFromTheBookPlaysTheNextChaptersFilm()
+    {
+        var cinema = new Recorder();
+        var flow = Flow(cinema);
+
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4);
+        Assert.Equal(0, cinema.Plays);
+        PressReturnToCabin(flow);
+
+        Assert.Equal("chap2", cinema.Name);
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        cinema.Stop();
+        Assert.Equal(CampaignScreen.Cabin, flow.Screen);
+    }
+
+    // The same cabin, reached by the back press instead of the plaque: the door taken must not be
+    // what decides whether a film is due.
+    [Fact]
+    public void BuiltInsBackFromTheBookPlaysTheNextChaptersFilm()
+    {
+        var cinema = new Recorder();
+        var flow = Flow(cinema);
+
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4);
+        flow.Back();
+
+        Assert.Equal("chap2", cinema.Name);
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        cinema.Stop();
+        Assert.Equal(CampaignScreen.Cabin, flow.Screen);
+    }
+
+    // The negative control, and not a vacuous one: the same press on a profile inside a chapter
+    // plays nothing and still lands on the cabin.
+    [Fact]
+    public void AnInCampaignCabinDoorInsideAChapterPlaysNoFilm()
+    {
+        var cinema = new Recorder();
+        var flow = Flow(cinema);
+
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 3), 2);
+        PressReturnToCabin(flow);
+
+        Assert.Equal(0, cinema.Plays);
+        Assert.Equal(CampaignScreen.Cabin, flow.Screen);
+    }
+
+    // What the widening is for: the latch decides, not the door. The chapter watched on the way in
+    // does not play again on the way back from the book.
+    [Fact]
+    public void TheLatchAndNotTheDoorDecidesWhetherAFilmIsDue()
+    {
+        var cinema = new Recorder();
+        var flow = Flow(cinema);
+
+        flow.SelectProfile(Progressed("Zachary", 5));
+        cinema.Stop();
+        Assert.Equal(1, cinema.Plays);
+
+        flow.OpenScrapbook(4);
+        PressReturnToCabin(flow);
+
+        Assert.Equal(1, cinema.Plays);
         Assert.Equal(CampaignScreen.Cabin, flow.Screen);
     }
 
@@ -136,6 +207,59 @@ public class ChapterCinemaWiringTests : IDisposable
     }
 
     [Fact]
+    public void OriginalsReturnToCabinFromTheBookPlaysTheNextChaptersFilm()
+    {
+        _store.Save(Progressed("Zachary", 5));
+        var cinema = new Recorder();
+        var shell = Shell(cinema, out _);
+        shell.OpenCampaignOver(_store);
+        Assert.True(shell.ShowScrapbook("Zachary", 4));
+        Assert.Equal(0, cinema.Plays);
+
+        Assert.Equal(nameof(BoardButton.ReturnToCabin), shell.FocusedKey);
+        shell.Step(Accept);
+
+        Assert.Equal("chap2", cinema.Name);
+        Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
+        cinema.Stop();
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+    }
+
+    [Fact]
+    public void OriginalsBackFromTheBookPlaysTheNextChaptersFilm()
+    {
+        _store.Save(Progressed("Zachary", 5));
+        var cinema = new Recorder();
+        var shell = Shell(cinema, out _);
+        shell.OpenCampaignOver(_store);
+        Assert.True(shell.ShowScrapbook("Zachary", 4));
+
+        shell.Step(new MenuCommands { Back = true });
+
+        Assert.Equal("chap2", cinema.Name);
+        Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
+        cinema.Stop();
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+    }
+
+    // The negative control on Original, and not a vacuous one: the book of a profile inside a
+    // chapter still hands RETURN TO CABIN the cabin, with no film.
+    [Fact]
+    public void OriginalsInCampaignCabinDoorInsideAChapterPlaysNoFilm()
+    {
+        _store.Save(Progressed("Zachary", 3));
+        var cinema = new Recorder();
+        var shell = Shell(cinema, out _);
+        shell.OpenCampaignOver(_store);
+        Assert.True(shell.ShowScrapbook("Zachary", 2));
+
+        shell.Step(Accept);
+
+        Assert.Equal(0, cinema.Plays);
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+    }
+
+    [Fact]
     public void APositionInsideAChapterOpensOriginalsCabinWithNoFilm()
     {
         _store.Save(Progressed("Zachary", 3));
@@ -175,6 +299,23 @@ public class ChapterCinemaWiringTests : IDisposable
     }
 
     private static string Airframe(int airframe) => $"node{airframe}";
+
+    // The RETURN TO CABIN plaque on whatever screen the flow is showing, found by its authored
+    // button rather than by a row number, since each screen orders its own rows.
+    private static void PressReturnToCabin(CampaignFlow flow)
+    {
+        for (int row = 0; row < flow.Page.RowCount; row++)
+        {
+            if (flow.Page.Button(row).Button == BoardButton.ReturnToCabin)
+            {
+                flow.FocusRow(row);
+                Assert.True(flow.Accept());
+                return;
+            }
+        }
+
+        Assert.Fail($"{flow.Screen} carries no RETURN TO CABIN row");
+    }
 
     private static CampaignProfileDef Progressed(string name, int flown)
     {

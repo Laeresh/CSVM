@@ -473,7 +473,7 @@ public sealed partial class OriginalShell
     private void ResumeCampaign()
     {
         _campaign?.Resume();
-        ShowCampaign(OriginalScreen.CampaignCabin, keepFocus: true);
+        OpenCabin(keepFocus: true);
     }
 
     // The joined humans on the flight check, once a frame: the seats are the shared setup's.
@@ -946,6 +946,15 @@ public sealed partial class OriginalShell
             return null;
         }
 
+        // RETURN TO CABIN wherever it is pressed, one door on three screens. ⚠ Not the page's own
+        // press through PagePress. A film defers the arrival, and SyncAfterPage mirrors only a move
+        // already made, so a deferred one strands this graph on the screen just left.
+        if (row.Key == nameof(BoardButton.ReturnToCabin))
+        {
+            OpenCabin();
+            return null;
+        }
+
         switch (_screen)
         {
             case OriginalScreen.CampaignRoster:
@@ -1026,19 +1035,32 @@ public sealed partial class OriginalShell
         OpenCabin();
     }
 
-    // Every door onto the cabin from outside the campaign: CONTINUE above, the flight return and
-    // the screenshot aids through ShowCabin. The seated profile's chapter cinema plays first where
-    // one is due, and the cabin opens on the frame the film stops. A position inside a chapter, and
-    // a shell with no cinema (every suite), opens the cabin straight away.
-    private void OpenCabin()
+    // Every door onto the cabin, inside the campaign and out: CONTINUE above, the flight return and
+    // the screenshot aids through ShowCabin, and each screen's RETURN TO CABIN and back press. The
+    // seated profile's chapter cinema plays first where one is due, and the cabin opens on the frame
+    // the film stops. A position inside a chapter, and a shell with no cinema (every suite), opens
+    // the cabin straight away. keepFocus is the way back's, landing on the plaque that was left.
+    private void OpenCabin(bool keepFocus = false)
     {
         if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated)
         {
-            cinema.OpenCabin(seated, () => ShowCampaign(OriginalScreen.CampaignCabin));
+            cinema.OpenCabin(seated, () => ShowCampaign(OriginalScreen.CampaignCabin, keepFocus));
             return;
         }
 
-        ShowCampaign(OriginalScreen.CampaignCabin);
+        ShowCampaign(OriginalScreen.CampaignCabin, keepFocus);
+    }
+
+    // A way back that may land on the cabin, which is then a cabin door with its film in front.
+    private void BackTo(OriginalScreen screen)
+    {
+        if (screen == OriginalScreen.CampaignCabin)
+        {
+            OpenCabin(keepFocus: true);
+            return;
+        }
+
+        ShowCampaign(screen, keepFocus: true);
     }
 
     // The book as a finished mission leaves it, with the cabin on its far side. Separate from
@@ -1112,9 +1134,6 @@ public sealed partial class OriginalShell
             case nameof(BoardButton.ReplayBriefing):
                 _campaign?.Briefing?.Restart();
                 break;
-            case nameof(BoardButton.ReturnToCabin):
-                ShowCampaign(OriginalScreen.CampaignCabin);
-                break;
             case nameof(BoardButton.GoToFlightCheck):
                 ShowCampaign(OriginalScreen.CampaignFlightCheck);
                 break;
@@ -1186,10 +1205,10 @@ public sealed partial class OriginalShell
                 ShowCampaign(OriginalScreen.CampaignRoster, keepFocus: true);
                 break;
             case OriginalScreen.CampaignPreviousMissions:
-                ShowCampaign(OriginalScreen.CampaignCabin, keepFocus: true);
+                BackTo(OriginalScreen.CampaignCabin);
                 break;
             case OriginalScreen.CampaignBriefing:
-                ShowCampaign(_briefingReturn, keepFocus: true);
+                BackTo(_briefingReturn);
                 break;
             case OriginalScreen.CampaignFlightCheck:
                 if (_campaign.Field.Retreat())
@@ -1215,7 +1234,7 @@ public sealed partial class OriginalShell
 
                 break;
             case OriginalScreen.CampaignScrapbook:
-                ShowCampaign(_bookReturn, keepFocus: true);
+                BackTo(_bookReturn);
                 break;
             case OriginalScreen.CampaignScrapbookZoom:
                 ShowCampaign(OriginalScreen.CampaignScrapbook, keepFocus: true);

@@ -1067,11 +1067,24 @@ with `Launcher.PlayCinema`'s shape, so the whole decision tests with no engine p
 **The wiring is one instance and one seam.** `Launcher` builds a `ChapterCinema` over `PlayCinema`
 and hands it to the host's shared `CampaignFeature`, which is the one object both presentations'
 campaigns already read and the only place that reaches both without an engine type crossing into
-either. Every door onto the cabin from outside the campaign runs through it: Built-in's
-`CampaignFlow.OpenCabin` (the roster's CONTINUE, `SelectProfile`'s flight and debrief returns, the
-screenshot aids) and Original's `OriginalShell.OpenCabin` (CONTINUE, and `ShowCabin`'s flight return
-and aids). A campaign whose feature carries no cinema opens the cabin exactly as it did before, and
-that is what every engine suite and every golden gets, since nothing but `Launcher` hands one over.
+either. Every door onto the cabin runs through it, inside the campaign and out, so the latch and the
+story position decide whether a film is due rather than which door was taken, which is what
+`PASSENGERCABIN.SCRIPT:88` running `campaignintro.script` on every cabin entry means. Built-in's is
+`CampaignFlow.OpenCabin`: the roster's CONTINUE, `SelectProfile`'s flight and debrief returns, the
+screenshot aids, each screen's RETURN TO CABIN row, and `Back` where the pop lands on the cabin.
+Original's is `OriginalShell.OpenCabin`: CONTINUE, `ShowCabin`'s flight return and aids, the RETURN
+TO CABIN press `ActivateCampaign` takes ahead of its per-screen arms, `BackTo`'s three ways back and
+the hangar's resume. A campaign whose feature carries no cinema opens the cabin exactly as it did
+before, and that is what every engine suite and every golden gets, since nothing but `Launcher`
+hands one over.
+
+**⚠ Original's in-campaign press cannot be deferred where its pages are mirrored.** `SyncAfterPage`
+re-enters the destination a page named, and it can only see a move the host flow has already made,
+so a film that defers the arrival leaves that graph on the screen the player just left.
+`ActivateCampaign` therefore intercepts RETURN TO CABIN before the page ever sees it. Letting that
+press through to `PagePress` instead fails exactly
+`OriginalsReturnToCabinFromTheBookPlaysTheNextChaptersFilm`, 1 failed against 21 passed, with the
+right film played and the screen still the book after it stops (METHOD-9).
 
 **The instance lives on `Launcher`, so a chapter's film plays once per program run.** Entering the
 campaign plays it, leaving to the main menu and coming back does not, and a restart plays the
@@ -1113,22 +1126,50 @@ alone, 1 failed against 23 passed, and passing `CinemaScreen.ClosingKeys` in pla
 fails only `TheChapterCinemaTakesSpaceAndReturnWhereTheClosingOneDoesNot`, also 1 against 23
 (METHOD-9). Both perturbations were restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
 
-**The eight new checks in `CSVM.Tests/ChapterCinemaWiringTests.cs` drive both presentations' doors,
-and they can fail.** Putting Built-in's CONTINUE back to `Flow.GoTo(CampaignScreen.Cabin)` and
-Original's back to `ShowCampaign(OriginalScreen.CampaignCabin)` fails exactly the two CONTINUE
-checks, 2 failed against 30 passed, each reporting the film as null where `chap1` was expected
-(METHOD-9). Both perturbations were restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
+**⚠ The mission end's own door is not a cabin door, and must not become one.**
+`CampaignFlow.OpenScrapbookAfterMission(profile, seq)` seats the profile through the feature and
+puts a plain `GoTo(CampaignScreen.Cabin)` under the book, because winning a chapter's last mission
+lands the profile on a chapter-opening position and a film in front of that stacked cabin would
+leave the player on the cabin instead of the book they just earned. C24 re-seated it after this
+item's first wiring did exactly that.
+`ClosingCinemaWiringTests.TheMissionEndDoorPlaysNoChapterFilmOnAChapterOpeningPosition` fails
+against the old body, 1 failed against 6 passed (METHOD-9).
 
-**Verified.** The orchestrator's own `.\RunTests.ps1` on the fully merged plan tree: PASS, exit 0,
-206.4 s. Build 2.8 s with zero StyleCop warnings; units 21.3 s against a 30 s budget, 3850 passed,
-0 failed, 2 skipped of 3852; engine 140.5 s, 266 passed, errors clean; goldens 41.9 s, 20 shots
-hash-identical.
+**The checks in `CSVM.Tests/ChapterCinemaWiringTests.cs` drive both presentations' doors, and they
+can fail.** Putting Built-in's CONTINUE back to `Flow.GoTo(CampaignScreen.Cabin)` and Original's back
+to `ShowCampaign(OriginalScreen.CampaignCabin)` fails exactly the two CONTINUE checks, 2 failed
+against 30 passed, each reporting the film as null where `chap1` was expected. Putting the scrapbook
+page's RETURN TO CABIN back to `Flow.GoTo(CampaignScreen.Cabin)` fails exactly
+`BuiltInsReturnToCabinFromTheBookPlaysTheNextChaptersFilm`, 1 failed against 21 passed (METHOD-9).
+Every perturbation was restored and `git diff` over `CSVM/src` confirms it (METHOD-17).
 
-**⚠ One door was left narrower than the original, and `BL-801` carries it.**
-`PASSENGERCABIN.SCRIPT:88` runs `campaignintro.script`, so the original reaches the chapter cinema
-on every cabin entry and this item wired only the doors from outside the campaign. Winning a
-chapter's last mission and returning to the cabin from the scrapbook therefore plays nothing where
-the original plays the next chapter's film.
+**The controls on the in-campaign door, both directions.** The negative is
+`--menu=campaign-scrapbook:ReturnToCabin --skip-intro`, whose aid pilot is three missions in: zero
+`cinema` lines in the whole log on either presentation, and the shot is the passenger cabin, so the
+door worked and the control is not vacuous. The positive raises `CampaignAidProfiles.MissionsFlown`
+to 5 for one build, which puts that pilot on `seq` 5 with the book open on the mission that finished
+chapter 1; Original then logs `cinema chap2 playing skip=Escape, Space, Return, LeftMouse` and the
+film fills the board rectangle where the cabin stood. ⚠ Built-in's own aid cannot serve as that
+positive: `LaunchMenu.WalkCampaignAid` seats every campaign aid through `CampaignFlow.SelectProfile`,
+which is itself a cabin door and takes the latch before the book opens, so the line it logs is the
+other door's. Its half is the unit checks above. The perturbation was restored and `git diff` over
+`CSVM/src` confirms it (METHOD-17).
+
+**No harness launch played a film, counted over the right denominator.** The battery wrote 48 CSVM
+launch logs and none carries a `cinema` line, the mechanism being that `CampaignFeature` takes both
+cinemas as optional constructor arguments and only `Launcher` ever passes one. ⚠ The same sweep over
+that battery's 24 `*.godot.log` mirrors reports 24 of 24, every hit being the four deliberate
+control probes above replayed out of the one shared engine log (`docs/verification.md`'s LOG-21).
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Owed at the controls, and the in-campaign door is part of it.** Every run above played at gain 0
+on a hidden desktop, so nobody has watched a chapter film hand off to the cabin. Beyond the two runs
+the Verify below asks for, the door this section's wiring widened needs its own: fly and win the
+mission at `seq` 4 (the fifth, which finishes chapter 1), and from the scrapbook the flight leaves
+you on press RETURN TO CABIN. `chap2.mpg` must play there and the cabin arrive when it stops, and
+the same profile's later trips onto the cabin in that run must play nothing. The mission-end
+scrapbook itself must still arrive with no film in front of it.
 
 ### Original approach (kept for reference)
 

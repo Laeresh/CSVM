@@ -96,7 +96,7 @@ navigation; the launchscreen owns every Godot control. Screens are a stack rathe
 order, since the campaign's navigation is a graph, and `Registry` maps a `CampaignScreen` to its
 page factory. A page contributes pictures, strokes and captions and names which authored button
 each row presses; `CampaignBoards` supplies the geometry through `Layout`, which is Built-in's
-alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin from outside the campaign and `OpenScrapbookAfterMission` the mission end's door onto the book, each where one of the feature's two cinemas plays.
+alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each where one of the feature's two cinemas plays.
 
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
@@ -823,7 +823,7 @@ zoom and the briefing dialog. What each screen draws is the shared board compone
 hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
 into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
 screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
-cues and the dialogs are this file's, as are `OpenCabin` and `ShowScrapbook`, the doors onto the cabin and the book from outside the campaign and where the feature's two cinemas play. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
+cues and the dialogs are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page) and `ShowScrapbook`, where the feature's two cinemas play. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
