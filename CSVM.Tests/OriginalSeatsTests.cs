@@ -165,6 +165,7 @@ public class OriginalSeatsTests
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.False(Fly(shell).Enabled);
         Assert.False(setup.Seats[0].Confirmed);
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then FLY");
 
         // The map picked, FLY stands and seat 0's own press is the launch.
         var map = shell.Rows.Single(r => r.Key == "C1");
@@ -175,6 +176,35 @@ public class OriginalSeatsTests
             shell.Step(Pointer(fly.X + 4f, fly.Y + 4f, pressed: true, clicked: true)).Exit);
         Assert.Equal("C1", launch.Chapter);
         Assert.Equal(2, launch.Seats.Count);
+    }
+
+    [Fact]
+    public void TheSortieHintNamesWhatIsOutstandingRatherThanTheMapAlone()
+    {
+        var shell = Shell(out _, out _);
+        shell.Open(OriginalScreen.FreeFlight);
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then an aircraft");
+
+        // The aircraft picked and no map: the press is what is left, so the hint names FLY rather
+        // than the aircraft already chosen.
+        var plane = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
+        shell.Step(Pointer(plane.X + 4f, plane.Y + 4f, pressed: true, clicked: true));
+        Assert.Null(shell.PickedChapter);
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then FLY");
+
+        // The map picked, the hint stops naming it.
+        var map = shell.Rows.Single(r => r.Key == "C1");
+        shell.Step(Pointer(map.X + 4f, map.Y + 4f, pressed: true, clicked: true));
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready, or press START on a free pad to join");
+
+        // A Dogfight short of its second seat names that seat even with no map picked, the press
+        // being further off than one press.
+        var dogfight = Shell(out _, out _);
+        dogfight.Open(OriginalScreen.Dogfight);
+        var versusPlane = dogfight.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
+        dogfight.Step(Pointer(versusPlane.X + 4f, versusPlane.Y + 4f, pressed: true, clicked: true));
+        Assert.Null(dogfight.PickedDogfightChapter);
+        Assert.Contains(dogfight.Compose().Lines, l => l.Text.StartsWith("Dogfight needs a second seat", StringComparison.Ordinal));
     }
 
     [Fact]

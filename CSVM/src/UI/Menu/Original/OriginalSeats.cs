@@ -363,18 +363,16 @@ public sealed partial class OriginalShell
         return TryAirframeIndex(row.Key, out int index) && Seat0 is { Locked: true } seat && seat.Cursor == index;
     }
 
-    // What the screen is waiting for, in the order a pilot resolves it.
+    // What the screen is waiting for, in the order a pilot resolves it. The map is checked last
+    // because it is seat 0's own press at any moment, unlike a seat that has yet to pick. It rides
+    // the arm for whatever else is outstanding rather than taking one of its own.
     private string SortieHint()
     {
         var seats = _setup.Seats;
-        if (PickedChapterIndex < 0)
-        {
-            return "Pick a map, then an aircraft";
-        }
-
+        bool noMap = PickedChapterIndex < 0;
         if (Seat0 is not { Locked: true })
         {
-            return "Pick an aircraft";
+            return noMap ? "Pick a map, then an aircraft" : "Pick an aircraft";
         }
 
         if (seats.Count < PlayerSetupFeature.MinimumSeats(SortieMode))
@@ -388,6 +386,11 @@ public sealed partial class OriginalShell
             {
                 return $"Waiting for P{i + 1} to pick an aircraft";
             }
+        }
+
+        if (noMap)
+        {
+            return "Pick a map, then FLY";
         }
 
         return seats.Count >= PlayerSetupFeature.MaxSeats
