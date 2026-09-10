@@ -216,7 +216,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
 
 ## PERF — performance
 
-- **PERF-1** — **Do not interpret `script_ms` as literal frame cost.**
+- **PERF-1** — **`script_ms` is Godot's `TIME_PROCESS`: the WORST single `_Process` pass of the
+  last wall second, refreshed about 1 Hz, so it is neither a per-frame cost nor a mean; read
+  `proc_ms` for the measured pass and `proc_max_ms` for the worst one in the window.** Over 20
+  windows of a flown C1 it ran a 9.44 ms median against `proc_ms`'s **1.645 ms**, exceeded the
+  window's own worst frame in 17 of them, and held two distinct values across a 120-frame hitch
+  ring whose `frame_ms` spanned 5.93 to 47.51 ms (`Launcher.ReportPerf`).
 - **PERF-2** — **Capped metrics are floors, not costs.**
 - **PERF-3** — **Split broad timers before choosing what to optimize.**
 - **PERF-5** — **Ignore differences below measured noise and an absolute floor.**
@@ -261,7 +266,7 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **PERF-21** — **`physics_ms` is the WORST single physics tick of the last wall second, neither a
   per-frame cost nor a mean; read `phys_tick_ms` for the step cost and `phys_hz` for whether the sim
   keeps up.** Over 333 windows of a flown C2/M02 session `physics_ms` ran a 16.96 ms median against
-  `phys_tick_ms`'s **1.81 ms** (`Launcher.ReadFrameCounters`; `script_ms` is the same shape).
+  `phys_tick_ms`'s **1.81 ms** (`Launcher.ReadFrameCounters`; `script_ms` is the same shape, PERF-1).
 - **PERF-22** — **A memo whose entries are a pure function of their key belongs to the process, not
   to the builder instance; split fresh-key work from repeat-key work before optimising anything
   else.** Of a ~300 ms `ai_spawn` frame on CM18, 190 ms sat in the 13 to 15 `ShaderMaterial`

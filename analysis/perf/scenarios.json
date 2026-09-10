@@ -28,7 +28,10 @@
   "awarenessMetrics": [
     { "metric": "fps", "why": "paced by the display or driver, so it is a floor, not a cost (PERF-2)" },
     { "metric": "frame_ms", "why": "the same floor as fps; only a value ABOVE the cap means anything" },
-    { "metric": "script_ms", "why": "Godot's TIME_PROCESS, ~2.2x real (PERF-1), and it collapses onto the frame cap when the loop is paced" },
+    { "metric": "script_ms", "why": "Godot's TIME_PROCESS, which the engine refreshes about once a second and fills with the WORST single _Process pass of that second -- not a per-frame cost and not a mean, so it routinely exceeds max_ms in the same window (verification PERF-1). The earlier reading of it as a fixed ~2.2x of real cost was a ratio fitted to that behaviour, not a calibration; proc_ms is the measured term" },
+    { "metric": "proc_ms", "why": "the measured mean wall cost of one _Process pass, which is the honest form of script_ms -- awareness only until a same-build band for it is measured the way the verdict metrics' bands were (METHOD-2, PERF-5)" },
+    { "metric": "proc_max_ms", "why": "the worst single _Process pass in the window, the quantity script_ms actually holds; a per-window maximum has no meaningful ratio (same reasoning as max_ms)" },
+    { "metric": "proc_passes", "why": "how many passes the window's mean divides by, one fewer than frames in the first window after a session build since the reader sits inside the pass; a count, not a cost" },
     { "metric": "physics_ms", "why": "Godot's TIME_PHYSICS_PROCESS, which the engine refreshes about once a second and fills with the WORST single physics tick of that second -- not a per-frame cost and not a mean, so it routinely exceeds max_ms in the same window (verification PERF-21). Empty here on top of that, since --det makes the clock parent-driven and _PhysicsProcess consumers no-op" },
     { "metric": "phys_tick_ms", "why": "the measured mean wall cost of one physics tick, which is the honest form of physics_ms -- but --det empties the tick here the same way, so this reads near zero in this suite and is a number for a --no-det hand-run" },
     { "metric": "phys_tick_max_ms", "why": "the worst single tick in the window, the quantity physics_ms actually holds; same --det caveat as phys_tick_ms, and a per-window maximum has no meaningful ratio (same reasoning as max_ms)" },

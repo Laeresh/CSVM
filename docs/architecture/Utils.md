@@ -110,6 +110,15 @@ sim seconds a wall second bought, which is what shows a sim running at half spee
 `TIME_PHYSICS_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-21.
 
+## src/Utils/ProcessPassCost.cs
+The wall cost of one whole `_Process` pass, measured by two `ProcessPassBracket` nodes pinned to
+the extremes of the process priority order so the pair spans every `_Process` callback in the tree.
+`Take()` drains the window as total milliseconds, the worst single pass in it and the pass count
+the `--perf` window means over; a caller reading from inside the pass gets the frame in progress in
+its next window instead. `PhysicsTickCost` above is the same shape around the physics tick. Godot's
+`TIME_PROCESS` monitor answers neither question, and the misreading it invites is
+`docs/verification.md` PERF-1.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names

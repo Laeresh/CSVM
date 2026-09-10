@@ -395,6 +395,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
 - `src/Utils/PhysicsTickCost.cs` — the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
 - `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
+- `src/Utils/ProcessPassCost.cs` — the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
 - `src/Utils/RenderPoses.cs` — the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
 - `src/Utils/ResolutionSetting.cs` — the window size: the sizes a screen can hold, the saved one against the shipped default, and the one place the window size is set.
 - `src/Utils/Rng.cs` — the session's one master seed and the named subsystem generators every random draw derives from.

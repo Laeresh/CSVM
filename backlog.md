@@ -3020,22 +3020,6 @@ usual.
   confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF
   rules, `PLAN-fast-verification` C23.
 
-- `BL-617` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: data]` **`--perf`'s `script_ms` is the same once-a-second worst-frame monitor that
-  `physics_ms` turned out to be, so PERF-1's "about 2.2x real" is a symptom rather than a
-  calibration.** *Evidence (traced):* `physics_ms` is Godot's `TIME_PHYSICS_PROCESS`, which holds
-  the worst step of the last wall second and refreshes about 1 Hz, which is why a window can report
-  27.52 ms against a worst frame of 8.33 ms in the same window and why a flown log repeats one
-  value byte-for-byte across a second of records (`docs/verification.md` PERF-21, and `BL-562`'s
-  closing commit). `TIME_PROCESS` is set from the same block in the same engine pass, and a C1
-  window showed `script_ms` equal to `frame_ms` to the digit while another read 212 ms against an
-  8.33 ms frame cap. *Fix shape:* bracket the `_Process` pass the way `PhysicsTickCost` brackets
-  the physics tick, report a measured `proc_ms` beside it, then rewrite PERF-1 onto what the
-  monitor actually is rather than onto a ratio fitted to it. *⚠ Traps:* the 2.2x figure is quoted
-  in existing analysis, so anything resting on it needs re-reading once this lands rather than
-  silent correction. Keep the raw monitor reported alongside the measured value, since it is what
-  older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
-  `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
-  PERF-21.
 - `BL-772` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty-stage
   rig has no patrol net, and a `--ai=` plane never takes a net's volumes, so patrol and the
   netted-versus-netless fork of `AiPilot` cannot be watched there.** *Evidence:* `AiNet` requires
@@ -3056,13 +3040,13 @@ usual.
 - `BL-773` `[Perf]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`--perf` has no
   term that attributes frame cost to the AI step, so a plane-count sweep can only be read as a
   whole-frame differential.** *Evidence:* `FlightController` steps in `_Process`
-  (`FlightController.cs:1844`), so AI cost lands in script time; `script_ms` is `_perfProcess / n`
-  (`Launcher.cs:1721`), one of the two Godot `TIME_*` monitors `BL-617` establishes hold the worst
-  step of the last wall second rather than a mean; and `phys_tick_ms` brackets the physics tick
-  (`PhysicsTickCost.cs`), which the AI never enters. The honest terms left on the window line are
-  `p95_ms` and `max_ms` (`Launcher.cs:1735-1739`), both whole-frame. *Fix shape:* bracket the
-  roster's per-frame AI walk the way `PhysicsTickCost` brackets the physics tick, and report an
-  `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `BL-617` (the same misreading, on `script_ms`); the
+  (`FlightController.cs:1844`), so AI cost lands in the process pass; `proc_ms` measures that whole
+  pass and `phys_tick_ms` the physics tick (`ProcessPassCost.cs`, `PhysicsTickCost.cs`), which the
+  AI never enters, so the AI's share is a fraction of `proc_ms` with nothing to separate it from
+  every other `_Process` body. The other whole-frame terms are `p95_ms` and `max_ms`. *Fix shape:*
+  bracket the roster's per-frame AI walk the way `PhysicsTickCost` brackets the physics tick, and
+  report an `ai_ms` beside `phys_tick_ms`. *Cross-refs:* `docs/verification.md` PERF-1 and PERF-21
+  on why the two `TIME_*` monitors are not the terms to build on; the
   empty stage's `--ai=` squadron tokens, which make a plane-count sweep repeatable and so make this
   term worth having (`docs/cli.md`, `git log --grep=BL-742`).
 
