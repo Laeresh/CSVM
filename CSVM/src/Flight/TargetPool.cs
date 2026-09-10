@@ -119,6 +119,7 @@ public sealed class TargetPool
     internal static string NameOf(object? source) => source switch
     {
         FlightController fc => fc.Name,
+        SurfaceVehicle hull => hull.Name,
         ObjectiveSite site => site.Node,
         TurretController t => t.Label,
         ProjectilePool.Flyout f => f.Name,
@@ -155,6 +156,11 @@ public sealed class TargetPool
         string name = NameOf(c.Source);
         switch (kind)
         {
+            case AimTargetKind.Vehicle when c.Source is SurfaceVehicle hull:
+                // ⚠ The hull's own block slot 20 alone, and an EMPTY one draws no name line: most
+                // ship blocks author none and the original then labels nothing there (docs/org/
+                // targeting.md). Never the airframe-style fallback the aeroplane arm takes below.
+                return TargetRef.ForAircraft(c, cls, name, hull.MarkerName, objective: objective);
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;

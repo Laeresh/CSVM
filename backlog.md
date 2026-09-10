@@ -873,6 +873,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   turrets and structures in front of the flight law, and its `ZeppelinRuntime.WireZones` fan is
   the pattern a docked structure lacks.
 
+- `BL-799` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **An AI aeroplane
+  cannot rank a surface hull as a target at all, so a boat or a turret truck is invisible to every
+  AI pilot and the `patrolboat*` / `t_truck*` exclusions nine missions author are inert.**
+  *Evidence (decoded):* the original's target scan walks `VehicleList` (`DAT_0071dabc`)
+  unconditionally, and that list holds the AI ground and sea vehicles beside the aircraft, built by
+  the same spawn (`docs/org/targeting.md`, "Ships and vessels are in the turret's set, and they are
+  there as vehicles"). CSVM's ranked pick drops one: `FlightController.SelectRankedTarget`'s
+  vehicle loop skips every candidate with `c.Source is not FlightController`, so a hull never
+  reaches `_rankCandidates` and `AiTargetRanking.ObjectiveBiasFor` is never asked about it. The
+  turret path does admit hulls (`TurretController.AcquireTarget`), so this is the aeroplane's gap
+  alone. *Impact:* small today, since every shipped bias naming a hull is the hard exclusion
+  `-1.0` (C1B/M03's `wingman_1..3` and `devastator_2/3` on `patrolboat*`; C3/M01, C3/M04, C3/M05
+  and C4/M04 on `t_truck*`), so the fix mostly makes an authored "leave it alone" mean something.
+  *Fix shape:* admit a hull to the vehicle loop the way the turret and structure loop already
+  admits its sources. ⚠ It carries no `FlightController`, so the loop's `primary_target` name term,
+  the wingman and human flags and the allied-attacker count each need a source-typed read rather
+  than the `fc` cast they share now. *⚠ Traps:* do not register a hull as an aircraft to get it in;
+  the same page warns that a port reaching this by promoting a hull has ported the wrong mechanism.
+  *Cross-refs:* `BL-741` (the other half of `rating_biases` coverage), `git log --grep=BL-637`
+  (the hull's own name line, found through the same missing switch arm).
+
 ## Flight model & collision physics
 
 - `BL-443` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
@@ -2119,32 +2140,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
-- `BL-637` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A targeted patrol boat shows no name line. The answer is per roster
-  block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence
-  (traced):* first reported in CM12 (C2/M01), where the boats target but carry no text, and again in
-  CM08 (C1B/M03) at the controls — "they have no label, should be `Patrol Boat`" — which is the
-  sighting that settles it. The two missions author the field differently:
-  `extracted/C1B/M03/zrdr/aiv.zrd.json`'s `patrolboat_1..4` each author slot 20
-  `MSG_VEH_PATROLBOAT`, which `extracted/messages.json` resolves to "Patrol boat" (lowercase b), so
-  the original *does* draw a name in CM08; `extracted/C2/M01/zrdr/aiv.zrd.json`'s `patrolboat_eg0`,
-  the `eshipg31` generator's own template, authors slot 20 EMPTY, so CSVM's blank in CM12 is
-  faithful. That split is why the fault was invisible in the mission this item was filed against.
-  [`docs/org/targeting.md`](docs/org/targeting.md):660-670 gives slot 20 as the name line's only
-  campaign author, and 239 of the install's 414 roster blocks author it empty, so a nameless box is
-  the common case rather than a fault.
-  *The code gap:* `TargetPool.NameOf`'s source switch has no `SurfaceVehicle` arm and ends `_ => ""`
-  (`CSVM/src/Flight/TargetPool.cs:119-128`), and `Describe`'s Vehicle arm casts the source as
-  `FlightController`, null for a hull (`:157-166`), so both strings come out empty and `TargetHud`
-  omits the line. A hull does reach the pool correctly, so this is a missing switch arm.
-  *What is still open, and why this stays `[Research]`:* `docs/org/targeting.md`:660-666 traces slot
-  20 through `FUN_00437620`/`FUN_0047c210`, which is the AIRCRAFT spawn. Nothing yet says a surface
-  hull's spawn reads slot 20 at all, so the fix shape is not settled even though the data is.
-  *⚠ Traps:* the answer is the BLOCK's slot 20, never the `vehicle.zrd` def's own `MSG_VEH_*` title,
-  which `targeting.md:686` says none of the three authors read — CM08's blocks happen to name that
-  same message key themselves, which is a legitimate use of the per-block field and not a licence to
-  read the def. So do not "fall back to the class". The same page warns a fourth author is unfound
-  rather than ruled out.
-  *Cross-refs:* the same boats' own guns, which they now fire (`git log --grep=BL-687`); `BL-626`.
 
 - `BL-706` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The PLANE NAME dialog
   sits off-centre because its pane is drawn at a raw 0,0 and its rows are drawn as though their

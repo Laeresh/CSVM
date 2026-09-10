@@ -62,6 +62,11 @@ public sealed partial class SurfaceVehicleRuntime : Node
     /// with the same effect as <see cref="Projectiles"/>.</summary>
     public WeaponDefs? Weapons { get; set; }
 
+    /// <summary>The string table a block's slot-20 title resolves through into
+    /// <see cref="SurfaceVehicle.MarkerName"/>. Null leaves every hull unnamed, which is the
+    /// shipped case for all but four blocks anyway.</summary>
+    public Messages? Strings { get; set; }
+
     /// <summary>The hull a mission clause names, or null.</summary>
     public SurfaceVehicle? ByName(string name) =>
         _byName.TryGetValue(name, out var vessel) ? vessel : null;
@@ -106,7 +111,10 @@ public sealed partial class SurfaceVehicleRuntime : Node
             }
         }
         var vessel = new SurfaceVehicle(name, plan, body, _runtime, pool,
-            _defs.StartAnimsOf(plan.Def), _defs.InjureAnimsOf(plan.Def), waterY, heading);
+            _defs.StartAnimsOf(plan.Def), _defs.InjureAnimsOf(plan.Def), waterY, heading)
+        {
+            MarkerName = MarkerNameOf(plan),
+        };
         // The hull's own gun, from the def's own weapons block: the engine's weapon builder runs
         // for every vehicle it parses, so a boat is armed by the same path an aeroplane is
         // (docs/org/aiPilot.md "What a mode ship vehicle runs").
@@ -116,6 +124,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
         _byName[name] = vessel;
         GD.Print($"surface: '{name}' ({plan.Def}, {plan.Mode}) built at ({position.X:0},{waterY:0.##},{position.Z:0}){waterNote}" +
                  $" team={plan.Team?.ToString() ?? "-"} group={plan.Group}" +
+                 (vessel.MarkerName.Length > 0 ? $" marker '{vessel.MarkerName}'" : " unnamed") +
                  (pool != null ? $" pool '{pool.Def.Name}' HP {pool.MaxHealth:0}" : " no destructible pool") +
                  (vessel.Gunner != null ? $" armed {vessel.Gunner.Ammo} rounds" : " unarmed") +
                  (plan.Inert ? " DEACTIVATED" : ""));
@@ -151,6 +160,20 @@ public sealed partial class SurfaceVehicleRuntime : Node
             into.AddVehicle(vessel.Position, vessel.Velocity, vessel.Team ?? AimAssist.NeutralTeam,
                 !vessel.Inert && !vessel.IsDestroyed, vessel);
         }
+    }
+
+    // The hull's target-box name, resolved here because this is the seam where the string table
+    // and the block meet, the same reason the aircraft spawner resolves its own there
+    // (AiFlightAssembler.Assemble). An unresolved key is dropped rather than drawn: the raw
+    // MSG_* spelling on the HUD is worse than the blank line most blocks ask for anyway.
+    private string MarkerNameOf(RosterSpawnPlan plan)
+    {
+        if (plan.Title is not { Length: > 0 } key || Strings is not { } strings)
+        {
+            return "";
+        }
+        string text = strings.Get(key);
+        return text.StartsWith("MSG_", StringComparison.Ordinal) ? "" : text;
     }
 
     // The water surface under the authored spot: a downward probe on the world mask, carried on

@@ -262,13 +262,13 @@ registry. The following law is `Flight/PathFollower.cs`, the route `Mech3/Script
 
 ## src/Session/SurfaceVehicleRuntime.cs
 Builds and steps a mission's surface vehicles, the `mode ship` blocks (`patrolboat`, `t_truck`)
-that have no player airframe: each is a copy of the chapter's library-root model, parented under
-the world root at its authored spot with its height read off the water, and indexed on the world
-runtime so the chapter's own definitions anchor on it and register its destructible pool.
-`GameSession` builds one lazily for the roster phase and the generator block, and `SessionSimulation`
-steps it after the generators that may launch another hull. `CollectVehicles` offers every hull to
-the aim assist's vehicle list ([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles` and
-`Weapons` are the seams a hull's gun needs, either null arming none. Read `SurfaceVehicle.cs` next.
+with no player airframe: each is a copy of the chapter's library-root model under the world root
+at its authored spot, its height read off the water, indexed on the world runtime so the chapter's
+definitions anchor on it and register its destructible pool. `GameSession` builds one lazily for
+the roster phase and the generator block; `SessionSimulation` steps it after the generators that
+may launch another hull. `CollectVehicles` offers every hull to the aim assist's vehicle list
+([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons` arm its gun and `Strings`
+names it, resolving slot 20 into `MarkerName`. Read `SurfaceVehicle.cs` next.
 
 ## src/Session/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path

@@ -3834,7 +3834,10 @@ public partial class GameSession : Node3D
             return null;
         }
         _surfaceVehicles = new SurfaceVehicleRuntime(gamez, scene, runtime,
-            VehicleDefs.Load(state.ZrdrPath), runtime.WorldRoot ?? _worldRoot);
+            VehicleDefs.Load(state.ZrdrPath), runtime.WorldRoot ?? _worldRoot)
+        {
+            Strings = Messages.Load(state.MessagesPath),
+        };
         _worldRoot.AddChild(_surfaceVehicles);
         return _surfaceVehicles;
     }

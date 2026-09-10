@@ -705,6 +705,28 @@ the vehicle-definition parser, stores it at that definition's `+0xc` (`0x004792c
 a different object. ⚠ "No fourth author exists" is NOT established: the sweep covered the entity
 constructor's site and all five of its callers, not the whole image.
 
+**A surface hull is named by the same author, off its own block's slot 20.** `FUN_0047c210` is THE
+vehicle spawn and not the aeroplane's: it allocates the 0xa20-byte entity, links it into
+`VehicleList` and runs one body for every dynamics class. Its two arguments are the `vehicle.zrd`
+DEFINITION, matched by name out of the definition list `DAT_0071daac`…`DAT_0071dab0` with the
+record's trailing `_N` stripped, and the roster BLOCK; the campaign's record loop `FUN_004735b0`
+calls it once per mission vehicle record at `0x0047531e` with no class test on the way in. The
+definition's `mode` (def `+0xa4`, [`aiPilot.md`](aiPilot.md)) is read once inside, at `0x0047c2b4`,
+and its `ship`/`tank` arm (`0x0047c2ca`–`0x0047c2fa`) only prepares the model before rejoining the
+shared body at `0x0047c2fd`. The slot-20 read at `0x0047c9a2` and the assignment into entity
+`+0x10` sit in that shared body, so a boat reaches them exactly as an aeroplane does.
+
+The reader is class-blind at the other end too: `FUN_004579e0` takes the player's selection
+`+0x948`, dereferences the target wrapper's `+4` (the wrapped entity, written by `FUN_004a6330`)
+and reads the length at entity `+0x18` and the pointer at `+0x14`, with no RTTI test and no virtual
+call on that path.
+
+So the name line's split is per BLOCK and never per class. Of the install's 23 `mode ship` blocks
+(`patrolboat_*`, `t_truck_*`) only C1B/M03's four author the slot, as `MSG_VEH_PATROLBOAT` and so
+"Patrol boat"; C1/M05's twelve, C5/M01's six and C2/M01's `patrolboat_eg0` generator template leave
+it empty and draw a box with no name over it, which is the same silence 239 of the 414 blocks ask
+for.
+
 **Line 3** is the `%d o'clock` bearing. `FUN_0049d940` computes the hour and formats
 `MSG_N_OCLOCK` (`extracted/messages.json` id 132, `"%1!d! o'clock"`) into a 256-byte buffer, and
 `FUN_0049d8a0` produces the hour itself: the difference between the plane's world heading and the
@@ -770,7 +792,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | no box; a text tag only |
 | Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | one line **above** the projected point (`RefOnScreenLift`) |
 | Label content | `<name> [<category>] -` / proper name / `%d o'clock` | `HostileTag` cuts the node name at the first `_` to get `AI1` |
-| Name line's source | the roster block's `title` alone; an unnamed block shows no name | a campaign spawn takes the block's `title` (`AiSpawn.PilotName`), and where it has none the remake keeps an airframe title the original does not print there |
+| Name line's source | the roster block's `title` alone, aeroplane and surface hull alike; an unnamed block shows no name | a campaign spawn takes the block's `title` (`AiSpawn.PilotName`), and where it has none the remake keeps an airframe title the original does not print there. A hull takes the same slot through `SurfaceVehicleRuntime`'s own resolve into `SurfaceVehicle.MarkerName` and prints NOTHING where its block authors none, which is the original exactly |
 | Colour | red hostile, green friendly, blue non-destructive objective | HUD red for hostiles, HUD blue for own team under `--debug-markers` |
 | Off screen | edge position plus the same three lines, clamped with a 3 px margin | edge arrow plus a one-line tag (`DrawOpponent`) |
 
