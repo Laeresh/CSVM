@@ -255,7 +255,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
                 Flow.GoTo(CampaignScreen.PreviousMissions);
                 return true;
             case RowKind.ReturnToCabin:
-                Flow.GoTo(CampaignScreen.Cabin);
+                Flow.OpenCabin();
                 return true;
             default:
                 if (ScrapAt(row) is not { } scrap)

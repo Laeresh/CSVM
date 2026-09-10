@@ -2,9 +2,10 @@ CSVM third-party notices
 ========================
 
 This file carries the notices that the third-party software inside this build is
-licensed on condition of carrying. It is not CSVM's own licence: CSVM is under the
-GNU General Public License v3, whose text is in LICENSE beside this file, and the
-extractor tools\unzbd.exe is under the EUPL-1.2, whose text is in LICENSE-unzbd.
+licensed on condition of carrying, and one notice for third-party source CSVM's own
+code is ported from. It is not CSVM's own licence: CSVM is under the GNU General
+Public License v3, whose text is in LICENSE beside this file, and the extractor
+tools\unzbd.exe is under the EUPL-1.2, whose text is in LICENSE-unzbd.
 
 This archive contains no Crimson Skies code, data or artwork. The game files a
 player extracts with Extract.ps1 stay on their own machine.
@@ -16,8 +17,9 @@ against what it packages before it will build a zip:
   .NET runtime version: 8.0.30
   mech3ax cs-anim commit: afc9a7f0929843e4ed3085f35f1f33ada8be7688
 
-Regenerate with packaging\BuildThirdPartyNotices.ps1, which reads every text below
-out of the shipped artefacts themselves.
+Regenerate with packaging\BuildThirdPartyNotices.ps1, which reads every text in
+sections 1 to 6 out of the shipped artefacts themselves. Section 7 is the one
+exception and says so in its own text: pl_mpeg publishes no licence file to read.
 
 Sections
 --------
@@ -28,6 +30,7 @@ Sections
   4. .NET runtime, published self-contained into data_CSVM_windows_x86_64\
   5. .NET runtime third-party notices
   6. Rust crates linked into tools\unzbd.exe
+  7. pl_mpeg, the MPEG-1 decoder CSVM's video code is ported from
 
 ==============================================================================
 1. Godot Engine, the engine linked into CSVM.exe
@@ -7071,4 +7074,46 @@ As shipped by: zopfli 0.8.3 (COPYING)
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+==============================================================================
+7. pl_mpeg, the MPEG-1 decoder CSVM's video code is ported from
+==============================================================================
+
+CSVM's MPEG-1 video and MP2 audio decoding is a port of pl_mpeg, a single-header
+C library by Dominic Szablewski (https://phoboslab.org), published at
+https://github.com/phoboslab/pl_mpeg. The C source is not in this archive and no
+pl_mpeg binary is shipped: the code that runs is C# derived from it, so this
+notice is carried for the source CSVM's own decoder is written from rather than
+for a component inside a binary here.
+
+pl_mpeg declares its terms as the line SPDX-License-Identifier: MIT in its
+header. It publishes no LICENSE file and reproduces no licence block in the
+header itself, so there is no upstream text to copy. What follows is therefore
+the standard MIT licence with pl_mpeg's author named as the copyright holder,
+kept in this project as packaging\LICENSE-plmpeg, and not a verbatim copy of a
+file upstream distributes. No copyright year is given because upstream states
+none.
+
+MIT License
+
+Copyright (c) Dominic Szablewski
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 

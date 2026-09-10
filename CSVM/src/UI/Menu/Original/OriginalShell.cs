@@ -291,6 +291,19 @@ public sealed partial class OriginalShell
     private const int SliderInsetRight = 1;
     private const int SliderInsetBottom = -10;
 
+    // The layout key every screen that authors a background movie spells it under, [@FinalCinema@]
+    // and [@CampaignIntro@] excepted; those two are cinemas rather than screens with one behind them.
+    private const string MovieKey = "MOVIE";
+
+    // The screens whose section authors a background movie Original composes. Save and Load author
+    // the same row and take an entry here whenever Original composes them, needing nothing else.
+    private static readonly IReadOnlyDictionary<OriginalScreen, string> MovieSections =
+        new Dictionary<OriginalScreen, string>
+        {
+            [OriginalScreen.TopLevel] = OriginalAvailability.MainMenuSection,
+            [OriginalScreen.Options] = PreferencesSection,
+        };
+
     private static readonly string[] TopLevelButtons =
     {
         "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT",
@@ -747,6 +760,7 @@ public sealed partial class OriginalShell
         var plaques = new List<BoardPlaque>();
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
+        ComposeMovie(backdrop);
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
             or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video
@@ -1087,6 +1101,25 @@ public sealed partial class OriginalShell
                     break;
             }
         }
+    }
+
+    // The screen's background movie, under everything else it draws. The row places it at its own
+    // corner and scales the picture by a percentage of the picture's own size, which the measurer
+    // answers and no number here does; a movie that does not measure composes nothing, which is
+    // this screen with its background missing and the rest of it intact.
+    private void ComposeMovie(List<BoardPicture> backdrop)
+    {
+        if (!MovieSections.TryGetValue(_screen, out string? section)
+            || _layout.Screen(section)?.Widget(MovieKey) is not { Art.Count: > 0 } row
+            || Measure(row.Art[0]) is not { } size)
+        {
+            return;
+        }
+
+        backdrop.Add(new BoardPicture(
+            new BoardArt(BoardArtLibrary.Movie, row.Art[0]), row.Int("X"), row.Int("Y"),
+            Width: size.Width * row.Int("ScaleX", 100) / 100f,
+            Height: size.Height * row.Int("ScaleY", 100) / 100f));
     }
 
     // The Options screen's chrome, [@Preferences@]'s own: its logo and background panes, its title
@@ -1458,9 +1491,9 @@ public sealed partial class OriginalShell
 
     // A slider as drawn: the slot, then the thumb at the value's own place on it. The thumb is one
     // frame with no focused or pressed state, so focus is the focus box and the wash under it.
-    // ⚠ Do not drop the box and keep the wash alone; the box is the readable half, and the wash
-    // over a three-pixel slot's press region is a faint band. Why, and the unmeasurable-art case:
-    // docs/menu-presentations.md.
+    // ⚠ Do not drop either half of that pair, nor the unmeasured-art rectangles. The box is the
+    // readable half, the wash is the region it encloses, and the rectangles are how the level
+    // still shows. docs/menu-presentations.md and docs/org/menu-inventory.md hold the readings.
     private void ComposeSlider(OriginalRow row, bool focused, List<BoardFill> fills, List<BoardPicture> pictures)
     {
         if (row.Slider is not { } slider)

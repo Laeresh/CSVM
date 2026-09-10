@@ -2469,6 +2469,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
   both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
+- `BL-810` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A pad button does
+  not skip a cinema, so a player on a controller sits through all of one.** *Evidence:* reported at
+  the controls across the boot sequence, the chapter cinema and the closing cinema.
+  `CinemaScreen.Skips` reads `InputEventMouseButton` and `InputEventKey` and nothing else, so
+  `CinemaSkip.AnyKey` means any key rather than any input and no pad button reaches it. The cost is
+  worst exactly where the skip matters most: `chap0.mpg` runs 145 s in front of a bare launch, which
+  is a cost Decision 8 of the cinemas plan accepted on the understanding that a press moves on.
+  *Fix shape:* admit a pad button through the same predicate that already answers the three key sets,
+  so one member still decides what skips what. *⚠ Traps:* the three sets are authored and differ,
+  `ChapterKeys` taking Escape, Space, Return and the left mouse where `ClosingKeys` takes Escape and
+  the mouse alone, so a pad button must join a set rather than bypass them; the boot sequence's
+  `BootKeys` is the any-input case and is where "any" has to mean the pad too. ⚠ A `--det` or
+  pads-off run disables pads entirely, so a headless check cannot see this and the confirmation is at
+  the controls. *Cross-refs:* `git log --grep=CinemaScreen`, `docs/formats/cinemas.md`.
 
 - `BL-802` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The pause screen
   marks a completed objective with a red check drawn over the row's number, and the row's text stays
@@ -2817,24 +2831,6 @@ usual.
   the automatic-screenshot sting, not a zone-cleared cue — formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
-- `BL-446` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The MPG movie cinemas do not play.** *Evidence:* Decision 2 of
-  `PLAN-M5-campaign` put them out of scope for the campaign milestone: plain MPG playback
-  is a codec and container problem orthogonal to the campaign flow, and the loop reaches the cabin
-  and the mission without one. **The decision this entry was waiting on is made and recorded in
-  [`docs/formats/cinemas.md`](docs/formats/cinemas.md); what remains is the work itself.** The ten
-  shipped files are MPEG-1 system streams, MPEG-1 video 320x240 at 856 to 1500 kbps with MPEG-1
-  audio layer II at 44.1 kHz, and Godot 4.7 compiles in exactly one video decoder, Ogg Theora, so
-  they cannot play as they ship. The decision is to transcode at extract time to `.ogv` and play
-  through a stock `VideoStreamPlayer`, with a C# `VideoStreamPlayback` subclass recorded as the
-  reversible alternative. *Fix shape:* the transcode step in the extraction pipeline and the player.
-  *⚠ Traps:* two files break the otherwise uniform profile and a reader must not assume one
-  (`msopen1.mpg` is 29.97 fps at 1500 kbps, `crimflag.mpg` is mono). `fmv.zrd`'s `PLAYAVI` actions
-  name `MSopen1.mpg`, `zipper.mpg` and `Chap0.mpg` in a case the on-disk names do not have, so a
-  case-sensitive lookup fails on all three. The chapter array at `0x0061e68c` names `chap1.mpg`
-  through `chap6.mpg` and `chap6.mpg` has no file in the install. Nobody has judged a transcode at
-  the controls, which is a presentation call and not a technical one.
-  *Cross-refs:* `PLAN-M5-campaign` Decision 2, which filed it; `docs/formats/cinemas.md`.
-
 - `BL-463` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: spec]` **The cabin ships without Change Memento.** *Evidence:* Decision 3 of
   `PLAN-M5-campaign` deferred it: the function is cosmetic and rests on the undecoded
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
@@ -3084,6 +3080,23 @@ usual.
   *Cross-refs:* `BL-657`'s closing commit (the credit rule and the callback host), `BL-699` (the
   per-launch hitch, which is a separate item and was not seen on these five),
   `docs/formats/mission-entities/enemy-generators.md`.
+- `BL-811` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **A campaign
+  position reached without flying leaves the scrapbook's mission list empty, with no floor under
+  it.** *Evidence:* seen at the controls on a profile whose `missionsCompleted` was set by hand,
+  which is what this project's own campaign verification prescribes for reaching a late position.
+  `CampaignPreviousMissionsPage.Seqs` reads `CampaignProgression.CompletedSeqs`, which lists a
+  mission only where `profile.MissionResults` holds a record whose best mask carries
+  `PrimaryObjectiveMask`, so a position advanced without a flown record lists nothing and no mission
+  can be viewed or replayed. In ordinary play the two move together: `MissionsCompleted` is raised
+  only by the advance rule, which runs on a recorded attempt, so no in-game path to the empty list
+  is known and finding one is part of this item. *Fix shape:* the proposal from the controls is that
+  the first mission always be listed. Before building that, settle what the original lists, since
+  `SCRAPBOOK.CSV` carries authored entries per mission and the book may be driven by the campaign
+  position rather than by a completion record; a floor invented here would be content this project
+  made up. *⚠ Traps:* REPLAY MISSION is offered only where a record holds a time, so a listed
+  mission with no record must not offer it; and the list is the same on both presentations, so a
+  change reaches Original through `EnterFromPage` as well. *Cross-refs:*
+  `git log --grep=CompletedSeqs`, `docs/formats/saved-games.md`.
 
 ## Tooling, platform & docs
 
@@ -3162,6 +3175,33 @@ usual.
   effect, but it is a behaviour change to announce rather than slip in. *Cross-refs:* the
   empty-stage rig this extends, which shipped deliberately without a net and whose `--ai=` squadron
   tokens and `--zep=` graft are documented in `docs/cli.md` (`git log --grep=BL-742`).
+
+- `BL-785` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TestData.TempDir()`
+  mints a GUID directory per call and nothing ever deletes one, so the unit suite leaks directories
+  into the OS temp tree until every run that touches it crawls.** *Evidence:*
+  `CSVM.Tests/TestData.cs:52-57` creates `%TEMP%\csvm-tests\<guid>` and returns it, with no disposal
+  on the test, no fixture teardown and no sweep anywhere; more than twenty test files call it.
+  `CleanScratch.ps1` does not mention `csvm-tests` and never has, so nothing in the repo removes
+  them. Measured on the author's machine: **377692 top-level directories**, the oldest created
+  2026-07-25, growing by **452 per full `RunTests.ps1` run**, so about 835 runs over six weeks.
+  **No performance cost has been demonstrated and one was looked for:** the units stage ran 77.2 s
+  on 3688 tests with the accumulation present and 74.0 s on the same 3688 immediately after it was
+  cleared, a difference inside run-to-run noise. NTFS indexes directories as a B-tree, so a large
+  entry count is cheap to add to. Treat this as unbounded disk and inode waste with an unknown
+  ceiling, not as a live slowdown, and do not cite it as the cause of a slow run without measuring
+  that run both ways. *Fix shape:* delete the
+  directory when the test that made it finishes, which means an `IDisposable` fixture or a
+  `TempDir` handle type rather than a bare string, and have `CleanScratch.ps1` sweep
+  `%TEMP%\csvm-tests` as a backstop for what escapes. *⚠ Traps:* renaming the directory and deleting
+  the rename afterwards is the only fast way to clear an accumulation this size; a recursive delete
+  in place takes far longer than the rename plus a background `rd /s /q`. Do not "fix" this by
+  pointing the tests at the repo's `.scratch/`, which is what `CleanScratch.ps1` already owns and
+  what would put test scratch inside a worktree. ⚠ **Do not repeat the misdiagnosis this entry was
+  first filed on.** A subagent that appeared to run for six hours was assumed to be crawling over
+  this accumulation; it had in fact been suspended along with an idle parent session, and its real
+  working time was under an hour. Wall clock since dispatch is not working time, and this leak was
+  not the cause. *Impact:* none on correctness and none measured on speed. The suite passes
+  throughout.
 
 - `BL-798` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **No golden shot renders the cockpit pass, so the shipped first-person view has no pixel tripwire.**
   *Evidence:* none of the 18 shots in `analysis/goldens/manifest.json` passes `--view=cockpit` or

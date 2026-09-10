@@ -226,7 +226,7 @@ public sealed class CampaignBriefingPage : CampaignPage
                 Briefing?.Restart();
                 return true;
             case CabinRow:
-                Flow.GoTo(CampaignScreen.Cabin);
+                Flow.OpenCabin();
                 return true;
             case FlightCheckRow:
                 Flow.GoTo(CampaignScreen.FlightCheck);

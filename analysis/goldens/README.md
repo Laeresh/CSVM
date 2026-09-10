@@ -1,9 +1,15 @@
 # The golden-image tripwire
 
-Eighteen pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
+Twenty pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
 a mismatch names the shot and leaves the actual PNG in `.scratch/goldens/` next to that run's engine
 log. Nothing here is a picture — `manifest.json` holds command lines and hashes only, which is what
 keeps it inside the repo's no-game-assets rule.
+
+A shot's `frame` is checked before its hash, off the `frame=N clock=<sim|render>` field the capture
+prints: photographing a different moment is a clock regression rather than a pixel one. The capture
+names its own counter. A run with a session reports its sim clock; a menu screen has none and
+reports the rendered frames its countdown waited, which is the coordinate an animated background's
+picture is a function of.
 
 ## How to run it
 
@@ -69,7 +75,7 @@ perturbation (`c1-targeting-hud` 48.18 %, `c1-flight` 34.52 %, `campaign-4p-grid
 `empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %, `campaign-intro-fill` 3.89 %,
 `c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
 
-**The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of sim
+**The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of clock
 (`viewer-bhawk` 30, `c1-crash` 20), so anything whose period is seconds long is barely sampled: the
 ground-vehicle route animations loop on 1.0 s and up, and two rollovers do not move a car far enough
 to change a hash. A change to authored animation *timing* can pass all 13 untouched and still be
@@ -80,8 +86,9 @@ a campaign mission's later minutes.
 **Not covered, deliberately.** The `TextureCycler` flipbooks are below screenshot resolution — the
 water frames differ by ~2/255 and no pose in this set moves more than 9 px across a full cycle
 (SHOT-3), so `--debug-anim`'s per-flipbook frame log remains the only instrument for them. Sound is
-muted in every shot. The launchscreen and the labs are unrepresented; add a shot rather than
-assuming they are watched. `campaign-4p-grid` and `campaign-intro-fill` cover a co-op campaign
+muted in every shot. The labs are unrepresented; add a shot rather than assuming they are watched.
+Of the front end, only Original's top level and its Options screen are pinned, both for the movie
+running behind them. `campaign-4p-grid` and `campaign-intro-fill` cover a co-op campaign
 launch and its intro collapse alone — a mid-mission cutscene trigger, a guest capture, a downed
 pilot's spectator camera and a cutscene skip all need a human at the controls (`playtest.md`
 `PT-90`–`PT-93`) rather than a scripted frame.

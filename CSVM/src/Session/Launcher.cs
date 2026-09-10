@@ -221,6 +221,17 @@ public partial class Launcher : Node3D
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
+    // The process's one chapter cinema, so a chapter's film plays once per program run. Entering
+    // the campaign plays it; leaving to the main menu and coming back does not. A restart plays the
+    // current chapter's film again until that chapter's first mission has been flown. This is a
+    // chosen behaviour, not a decoded one: the original's rule sits behind GUI callback 2151, which
+    // nothing here decodes. Do not replace it with a latch persisted in the profile.
+    private ChapterCinema? _chapterCinema;
+    // The process's one closing cinema, so the campaign's last film plays once per program run
+    // however often the player reopens the book afterwards. Its gate is the seated profile's own
+    // completion, not a flag stored anywhere, so a second profile that finishes in the same run
+    // does not get it again. Do not replace it with a latch persisted in the profile.
+    private ClosingCinema? _closingCinema;
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
     // cabin track would restart every time the player left a board. See docs/org/music.md.
@@ -728,6 +739,14 @@ public partial class Launcher : Node3D
         // wiring contract, step 1).
         BuildMusic();
 
+        // --movie=: one cinema, then quit. No world, no menu, and no session behind it, which is
+        // what makes the audio sync judgeable at the controls before any flow plays a cinema.
+        if (_spec.MovieName is { } cinemaName)
+        {
+            PlayCinema(cinemaName, () => GetTree().Quit());
+            return;
+        }
+
         // No content-selecting arg (or explicit --menu): show the launchscreen. Its selection
         // derives the session spec and calls LaunchSession, so there is one downstream build
         // path; Esc from a menu-launched flight returns here (ReturnToMenu).
@@ -742,6 +761,12 @@ public partial class Launcher : Node3D
             }
 
             _menuDriven = true;
+            if (_spec.PlaysBootSequence)
+            {
+                PlayBootSequence(() => ShowMenu(MenuReturnDestination.TopLevel));
+                return;
+            }
+
             ShowMenu(MenuReturnDestination.TopLevel);
             return;
         }
@@ -914,8 +939,47 @@ public partial class Launcher : Node3D
         // After everything above, which is where the launchscreen's own process callback ran when
         // it was a child ticking itself: the capture director reads the menu as it stood before
         // this frame's presses, as it always did.
-        _menuHost?.Tick((float)delta);
+        _menuHost?.Tick(MenuStep(delta));
     }
+
+    /// <summary>Plays one cinema over the whole window and runs <paramref name="then"/> on the
+    /// frame it stops, whether it played out or was skipped. A name that resolves to no readable
+    /// file runs the continuation straight away, so a flow costs a screen rather than stalling on
+    /// a cinema this install does not carry. This is the seam every movie sequence goes
+    /// through.</summary>
+    public void PlayCinema(string name, System.Action then, UI.CinemaSkip skip = UI.CinemaScreen.BootKeys)
+    {
+        if (UI.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
+        {
+            Log.Warn("ui", $"cinema {name} not played; looked under {SessionPaths.CinemaFolder(_dataRoot)}");
+            then();
+            return;
+        }
+
+        // A repo run's developer gain defaults to zero, and a cinema whose whole point is its
+        // sound track is the one place that reads as a defect rather than as a quiet run.
+        if (MasterVolume.Resolve(_spec.Volume, _exported) <= 0f)
+        {
+            Log.Warn("sound", $"cinema {name} is playing at master volume 0 — pass --volume=1.0 to hear it");
+        }
+
+        Log.Info("ui", $"cinema {name} playing skip={skip}");
+        cinema.Ended = then;
+        AddChild(cinema);
+    }
+
+    // The boot sequence in fmv.zrd's own order, its card and waits and fade included: the reader's
+    // eight actions live in BootSequence and not one of them is written down here. A press ends the
+    // action it lands in and the next begins. Whether the original abandoned the rest of the block
+    // instead is not decoded (docs/formats/cinemas.md).
+    private void PlayBootSequence(System.Action then) =>
+        UI.BootCard.Play(this, _dataRoot, PlayCinema, then);
+
+    // The step the menus advance on. A deterministic run gives them the sim's own, for the reason
+    // the sim takes it: what a capture shows must be a function of the frame count and nothing
+    // else, and the screens that animate (the briefing's reveal, a board's background movie)
+    // otherwise land wherever this machine's frame times put them.
+    private float MenuStep(double delta) => _spec.Det ? GameClock.FixedDt : (float)delta;
 
     // The process's one music channel and the archive it streams from. Everything here is
     // optional: an install without soundsh or without a readable sounds.json leaves the game
@@ -1288,7 +1352,12 @@ public partial class Launcher : Node3D
         host.Features.Add(new PlayerSetupFeature());
         var strings = UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
-        host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode));
+        // The campaign feature carries both cinemas because both presentations already read that
+        // one feature, and neither of them can reach a Launcher to play a film through.
+        _chapterCinema ??= new ChapterCinema((name, then, skip) => PlayCinema(name, then, skip));
+        _closingCinema ??= new ClosingCinema((name, then, skip) => PlayCinema(name, then, skip));
+        host.Features.Add(new CampaignFeature(
+            strings, PlanePickerRoster.AirframeNode, _chapterCinema, _closingCinema));
         // The keymap editor writes through C21's per-player store. The write is injected rather
         // than reached for, so the feature itself stays engine-free and a suite can hold a
         // different one.

@@ -33,7 +33,7 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 ## src/Session/Launcher.cs
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits,
-and what outlives a session (camera, sun, audio, music, the perf and hitch instruments). It owns the
+and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
 menu as one `MenuHost` built on the first show, the presentation resolution, the only options write,
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`),
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
@@ -211,6 +211,25 @@ the granted aircraft awards and the cross-mission destruction log. An owned plan
 in the global `user://Planes/` store rather than copying it, so deleting a profile orphans
 nothing. A file saved before a field existed reads it at rest rather than failing to load. Save
 format: [../formats/saved-games.md](../formats/saved-games.md).
+
+## src/Session/ChapterCinema.cs
+Which film plays before a campaign chapter, and the one handoff to the passenger cabin that
+follows it. The chapter is `seq / 5 + 1` over the profile's own position, so no screen passes a
+chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCount` reads the same
+story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
+folder. Playing is a delegate the caller supplies, `Session/Launcher.cs`'s `PlayCinema` being its
+shape, which leaves the film to `UI/CinemaScreen.cs` and keeps every decision here testable with no
+engine present. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaign.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
+
+## src/Session/ClosingCinema.cs
+Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
+handoff to that book. The gate is `CampaignProgression.Complete` over the seated profile, so an
+unfinished campaign reaches the book with no film, which is what the original's own script does when
+its completion callback answers false. The film is the `FinalCinema` screen's layout row's name, and
+the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on purpose.
+Playing is a delegate the caller supplies, `Session/Launcher.cs`'s `PlayCinema` being its shape;
+`Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how
+both presentations' mission-end doors reach it. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions
@@ -485,7 +504,8 @@ line, exe hash, fork commit, schema integer) and compares its schema against thi
 boot, each naming the fix, which is to re-run the extraction. Warn rather than block, because a dev
 tree holds valid extractions older than the stamp. `Behind` is the same read for a caller that
 blocks instead of warning: true only when the stamp is present, carries a schema and is under what
-the caller asked for, so an unstamped or unreadable tree still runs.
+the caller asked for, so an unstamped or unreadable tree still runs. `Schema` also lives in both
+extraction scripts, and `CSVM.Tests/ExtractionStampTests.cs` refuses a bump that moves fewer than all three.
 
 ## src/Session/MenuAudioService.cs
 The host's `IMenuAudio` over the process's playback. `BeginNarration` ducks the music and restarts the narration player on
