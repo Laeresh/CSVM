@@ -2552,21 +2552,6 @@ usual.
   *Cross-refs:* `PLAN-M5-polish` G77, whose `campaign-bomber-formation` suite is the harness to
   extend.
 
-- `BL-502` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`SET_AI_NET` and `SET_AI_TEAM` reach no zeppelin.** *Evidence:* found by
-  G80, which wired both clauses for roster-spawned aircraft and could not carry the same lookup to
-  airships. Six clauses across four missions name one: `blackswanzep` (C1C/M01), `blackhatzep`
-  (C4/M05), `piratezep` (C5/M04) and `cargozep2`/`cargozep3` (C2/M05 and C4/M05). None is in CM02,
-  so no mission the player is currently trying to finish depends on this. `ZeppelinMotion` holds its
-  net follower and `LiveZeppelin.Team` read-only, so this is a change to `ZeppelinRuntime` rather
-  than to the director's lookup. Those names surface through the `Gap` line today, so a mission
-  hitting this says so. *Fix shape:* give `ZeppelinRuntime` the same two writes the aircraft arm
-  got, re-seating the follower from the airship's current position rather than restarting its route.
-  *⚠ Traps:* a zeppelin is not a vehicle in the original and does not run the nose-aligned edge pick
-  (`PLAN-M5-polish` G77), so a re-seat here keeps the nearest-node rule and must not inherit the
-  aircraft path's heading argument. The record's own team fans across the whole airship including
-  its guns, so a script-side team write has to fan the same way or half the hull keeps the old side.
-  *Cross-refs:* `PLAN-M5-polish` G80, which landed the aircraft arm.
-
 - `BL-469` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
   in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34

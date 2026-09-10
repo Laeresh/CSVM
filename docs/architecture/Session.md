@@ -356,14 +356,14 @@ grace. Every drop, launch and door prints an `egen:` line. Decode:
 [../formats/mission-entities/enemy-generators.md](../formats/mission-entities/enemy-generators.md).
 
 ## src/Session/ZeppelinRuntime.cs
-Runs a mission's zeppelins behind `--zeppelins`: each `ZeppelinDef` whose world node and net resolve
-has its hull switched on, is placed at its authored pose, and is flown kinematically by a
-`ZeppelinMotion` over `AiNetFollower` with no `FlightController`. A hull an animation motion drives
-is neither placed nor stepped. `WireDamage` builds the per-part pools, `PollDamage` owns the kill,
-the engine count Instant Action wins on and the generator disable, and `CollectTargetParts` is the
-only channel by which a structure becomes selectable; a def whose net does not resolve is held out
-of the live list, zones unwired, so `--zep=` grafts one on a synthetic net. `SetStopPoint`, `Hold`
-and `Wake` are the script's arms. Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
+Runs a mission's zeppelins behind `--zeppelins`: a `ZeppelinDef` whose world node and net resolve has
+its hull switched on, is placed at its authored pose and flown by `ZeppelinMotion` over
+`AiNetFollower`; an animation-driven hull is neither placed nor stepped. `WireDamage` builds the
+per-part pools, `PollDamage` owns the kill, the Instant Action engine count and the generator
+disable; `CollectTargetParts` alone makes a structure selectable. A def whose net does not resolve is
+held out, zones unwired; `--zep=` grafts one on a synthetic net. Script arms: `SetStopPoint`, `Hold`,
+`Wake`, `SetNet` (nearest-node seat from where the hull stands) and `SetTeam` (one side over every
+pool and gun). Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
 
 ## src/Session/ZeppelinRuntime.Cannons.cs
 The broadside half of `ZeppelinRuntime`, the second file of that partial class. `WireCannons`

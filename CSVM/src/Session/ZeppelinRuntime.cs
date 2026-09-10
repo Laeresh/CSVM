@@ -35,6 +35,16 @@ public sealed partial class ZeppelinRuntime : Node
     // zeppelin, and so nothing here builds a second index of its own.
     private readonly Func<string, Node3D?> _resolveNode;
 
+    // What a mission-script net reassignment needs long after the constructor's inputs have gone
+    // out of scope: the chapter's nets by name, and the trailer resolver a re-seated follower needs
+    // for an anchored net to keep riding its target.
+    private readonly IReadOnlyList<AiNet> _chapterNets;
+    private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
+
+    // The emplacements the record team already fans onto, kept so a script team write can fan the
+    // same way; null in a build with no turret runtime, where a hull simply carries no guns.
+    private TurretEmplacementRuntime? _turrets;
+
     private AnimRuntime? _runtime;
     private Func<Node3D, bool>? _transformDriven;
     private float _sinceLog;
@@ -53,6 +63,8 @@ public sealed partial class ZeppelinRuntime : Node
     {
         Name = "zeppelins";
         _resolveNode = resolveNode;
+        _chapterNets = chapterNets;
+        _trailerTarget = trailerTarget;
         _transformDriven = transformDriven;
         foreach (var def in defs)
         {
@@ -144,6 +156,7 @@ public sealed partial class ZeppelinRuntime : Node
     /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved.</summary>
     public int FanTeamsOntoTurrets(TurretEmplacementRuntime turrets)
     {
+        _turrets = turrets;
         int moved = 0;
         foreach (var zep in _live)
         {
@@ -228,6 +241,62 @@ public sealed partial class ZeppelinRuntime : Node
                      $"{(halts ? "armed" : "released")} at node {node}");
         }
         return hit;
+    }
+
+    /// <summary>The zeppelin arm of <c>SET_AI_NET</c> (<c>FUN_004bd7a0</c>): a fresh follower on the
+    /// named net, seated from where the hull stands, so a reassignment captures the new route
+    /// instead of restarting it at node 0. ⚠ Offer the seat no heading: the nose-aligned edge pick
+    /// is the aeroplane AI's, and a zeppelin is not a vehicle in the original. A net this chapter
+    /// does not carry leaves the airship on its route. Returns whether the name is a zeppelin of
+    /// this mission, so a caller can report a name that addressed nothing.</summary>
+    public bool SetNet(string node, string netName)
+    {
+        if (Find(node) is not { } zep)
+        {
+            return false;
+        }
+
+        if (AiNets.ByName(_chapterNets, netName) is not { } net)
+        {
+            Log.Info("flight", $"zep: '{zep.Def.Node}' SET_AI_NET '{netName}' is not a net this chapter carries, so it keeps '{zep.Motion.Follower.Net.Name}'");
+            return true;
+        }
+
+        // The hull's live pose, not the record's seat and not the motion's own field: while a
+        // scripted motion owns the transform the hull is wherever that script has put it.
+        var from = zep.Host.GlobalPosition;
+        var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), ArrivalFloorM,
+            _trailerTarget?.Invoke(net), observesStopPoints: true);
+        follower.Update(from);
+        zep.Motion.Follower = follower;
+        Log.Info("flight", $"zep: '{zep.Def.Node}' onto net '{net.Name}#{net.Id}' by the mission script, seated at node {follower.CurrentIndex} of {net.Nodes.Count} from ({from.X:0},{from.Y:0},{from.Z:0})");
+        return true;
+    }
+
+    /// <summary>The zeppelin arm of <c>SET_AI_TEAM</c> (<c>FUN_00469e20</c> into the record fan
+    /// <c>FUN_004bee80</c>): the script's raw integer replaces the record's own team and reaches
+    /// every part the record fan reaches, the gasbag, engine and cannon pools and every emplacement
+    /// standing on the hull. ⚠ Fan all of it or none: a write that stopped at the pools would leave
+    /// the guns shooting for the side the airship has just left. Returns whether the name is a
+    /// zeppelin of this mission.</summary>
+    public bool SetTeam(string node, int team)
+    {
+        if (Find(node) is not { } zep)
+        {
+            return false;
+        }
+
+        zep.Team = team;
+        int pools = 0;
+        foreach (var inst in ZonePools(zep))
+        {
+            inst.Team = team;
+            pools++;
+        }
+
+        int guns = _turrets?.SetTeamUnder(zep.Host, team) ?? 0;
+        Log.Info("flight", $"zep: '{zep.Def.Node}' team {team} by the mission script, onto {pools} damage pool(s) and {guns} gun(s)");
+        return true;
     }
 
     /// <summary>Current surviving healthy-entry count, or -1 for an unknown/unwired node.</summary>
@@ -811,8 +880,9 @@ public sealed partial class ZeppelinRuntime : Node
         /// altogether rather than merely stopped, which is what <see cref="Held"/> is.</summary>
         public bool Dormant { get; set; }
 
-        /// <summary>The record's authored team, or null on a record authoring none.</summary>
-        public int? Team { get; }
+        /// <summary>The record's authored team, or null on a record authoring none. Writable
+        /// because <c>SET_AI_TEAM</c> replaces it mid-mission, and every read below is live.</summary>
+        public int? Team { get; set; }
 
         /// <summary>One motion for the zeppelin's life; a scripted hand-back re-seats it in
         /// place (<see cref="ZeppelinMotion.ResumeAt"/>), engines and limits as they stand.</summary>
