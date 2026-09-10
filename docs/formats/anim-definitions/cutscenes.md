@@ -820,13 +820,20 @@ Each case does the same five things, in this order.
    `+0x2fc` slot), re-registers the collision and landing sound handles, restores the saved motion
    state and re-applies the camera-parameter profile. It clears `+0x91d`/`+0x91e`/`+0x91f` on the
    way through, which is why step 4 re-asserts them.
-3. **Write the new airframe's tables.** The twelve ints at `DAT_0062ae28` are the player's
-   ammunition table, four gun-group counts then eight hardpoint counts, `−1` for a slot the airframe
-   has none of. The Bloodhawk takes 40/30 and two hardpoints of six, the Warhawk 70/50 and six
-   hardpoints of six, the Balmoral 50/50/30/30 and eight of six; the four bytes at `DAT_0062ae58`
-   ride the four gun slots. `FUN_004b24d0` pushes the table onto the player and `FUN_004b2350`
-   re-picks the selected gun and the selected hardpoint as the first slot in each half with a
-   positive count, so the readouts follow. `FUN_0047bd90(name, armour, −1)` then sets each of the
+3. **Write the new airframe's weapon table.** The twelve ints at `DAT_0062ae28` are the player's
+   weapon table, four gun slots then eight hardpoints, `−1` for a slot the airframe has none of.
+   They are `wep_NN` **ids**, not counts: `FUN_004b2550` renders the value's two digits into the
+   template `wep_??` at `0x0062ae5c`, resolves that name, and derives the round count from the
+   resolved weapon through `FUN_004bad90` whenever the caller passes `−1` for it, which all three
+   cases do. The Bloodhawk case (`0x0047e7d4`) writes 40, 30, −1, −1 and six into two hardpoints;
+   the Warhawk (`0x0047ea55`) 70, 50, −1, −1 and six into all eight; the Balmoral (`0x0047ed00`)
+   50, 50, 30, 30 and six into all eight. In the `wep_30`–`wep_73` gun matrix the low digit is the
+   ammunition (`0` slug, `1` dumdum, `2` armour-piercing, `3` magnesium), so every case hands over
+   **slug guns and `wep_06` high-explosive rockets**, each airframe's own stock fit, and the
+   sortie's Ammo Selection picks reach none of it. The four bytes at `DAT_0062ae58` ride the four
+   gun slots. `FUN_004b24d0` pushes the table onto the player and `FUN_004b2350`
+   re-picks the selected gun and the selected hardpoint as the first slot in each half carrying a
+   weapon, so the readouts follow. `FUN_0047bd90(name, armour, −1)` then sets each of the
    four hull sections to that airframe's own armour, max and current together: 20 across for the
    Bloodhawk, 30 across for the Warhawk, 40/35/25/25 for the Balmoral, which is the same row CSVM's
    own stat table carries for `player_balmoral`. Last, `FUN_00449140(<airframe id>)` reads a scalar
@@ -867,7 +874,11 @@ counted group as one live member, which is what keeps `C3/M05`'s `DEDG [5, 0]` f
 and napping the instant loss once the player is flying the last bomber. `Session/AirframeSwap.cs`'s
 `AirframeHandover` carries the mission gate, the 100 m / −45° placement and the capture test;
 `FlightRoster.RunSwap` runs the whole order, and the definition's root node reaches it through
-`AnimRuntime.CallbackHost`. Three divergences, each deliberate:
+`AnimRuntime.CallbackHost`. Step 3's table is also why the rebuild reads no `LoadoutChoice`
+(`HumanFlightAdapter.MenuFitFor`): the sortie's Ammo Selection picks belong to the aeroplane the
+pilot left, and composing them over the handed-over airframe would fly the pilot's own rockets
+where the case writes `wep_06`, which is what the `campaign-hangar-handover` suite reads for all
+three codes. Three divergences, each deliberate:
 
 - **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
   them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which

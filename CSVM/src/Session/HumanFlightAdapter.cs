@@ -215,7 +215,7 @@ internal sealed class HumanFlightAdapter
             var baseDef = custom != null && _policy.LoadoutOverride == null
                 ? Flight.CustomPlaneBuild.LoadoutFor(custom, stockDef)
                 : stockDef;
-            var ldef = MenuFitFor(pi) is { } choice ? choice.ApplyTo(baseDef) : baseDef;
+            var ldef = MenuFitFor(pi, swap) is { } choice ? choice.ApplyTo(baseDef) : baseDef;
             try
             {
                 // The weapon lab flies the FULL-RIG loadout instead: every firepoint and
@@ -555,10 +555,12 @@ internal sealed class HumanFlightAdapter
     /// <summary>Pane <paramref name="pi"/>'s menu-chosen fit, or null to fly the stock one. An
     /// explicit <c>--loadout=</c> takes the whole choice away rather than merging with it, so the
     /// flag names the fit outright the way a playtest row needs; <c>--rocket=</c> needs no test
-    /// here because it is applied after the bind and wins by arriving later.</summary>
-    private LoadoutChoice? MenuFitFor(int pi)
+    /// here because it is applied after the bind and wins by arriving later. ⚠ A swap takes it
+    /// away too: the sortie's picks belong to the aeroplane the pilot left, and the airframe a
+    /// mission hands over carries its own fit (see <see cref="AirframeSwapRequest"/>).</summary>
+    private LoadoutChoice? MenuFitFor(int pi, AirframeSwapRequest? swap)
     {
-        if (_policy.LoadoutOverride != null || pi < 0 || pi >= _policy.MenuLoadouts.Count)
+        if (swap != null || _policy.LoadoutOverride != null || pi < 0 || pi >= _policy.MenuLoadouts.Count)
         {
             return null;
         }

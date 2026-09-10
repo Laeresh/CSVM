@@ -853,23 +853,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
 
-- `BL-718` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` `[CM07]` **The Blue Streak the 965
-  swap hands over carries the player's chosen rockets instead of its own HE load.** *Evidence:*
-  reported at the controls on CM07 (C1/M02): "the blood hawk has my rocket loadout, should be
-  default all boom" (`BOOM` is `wep_06`'s NAME, the high-explosive rocket,
-  `extracted/zrdr/weapons.zrd.json`). The decode writes the swap's own table onto the player, two
-  hardpoints of six, and the def's own fit (`docs/formats/anim-definitions/cutscenes.md`, "The
-  airframe swap codes 965, 966 and 967", step 3); nothing in it reads the sortie's ammo-screen
-  choices. CSVM rebuilds from `CampaignProgression.AwardBuild(3)` (`FlightRoster.RunSwap`,
-  `CSVM/src/Session/FlightRoster.cs:346`), whose pylons come through `CustomPlaneBuild.HardpointsFor`
-  off the stock fit's `wep_06`; where the sortie's per-pylon choice overrides that on the rebuilt
-  rig is not yet traced. *Fix shape:* trace the rebuilt rig's `Loadout.Bind` inputs, skip the
-  sortie's choice for a swap that carries a build, and pin it in `AirframeSwapSuites`. *⚠ Traps:*
-  `BL-394` is the AI fit and is not this; the Balmoral (967) and Warhawk (966) swaps go through the
-  same code and should be asserted too. *Playtest after fix:* CM07 with flak rockets bought, take
-  the Bloodhawk, read the hardpoint readout. *Cross-refs:* `BL-394`,
-  `docs/org/hangar.md` ("special-plane template").
-
 - `BL-741` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **A roster
   `rating_biases` exclusion naming a mission structure never reaches the structure's parts, so
   C4/M03's Black Swan wingman attacks the cargo zeppelin its own block excludes instead of the

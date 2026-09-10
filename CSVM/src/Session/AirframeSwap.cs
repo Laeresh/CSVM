@@ -36,15 +36,16 @@ public readonly record struct AirframeSwapResult(bool Swapped, Flight.FlightCont
 
 /// <summary>What one mid-mission airframe swap replaces on a player's rig: the planes.zbd node to
 /// build, and the flight state the replacement starts in, lifted off the aircraft being left.
-/// ⚠ Three things a swap deliberately does NOT rebuild. A custom plane, whose bought armour and
+/// ⚠ Four things a swap deliberately does NOT rebuild. A custom plane, whose bought armour and
 /// pylon counts belong to the airframe the pilot bought rather than to the one a mission handed
-/// them. A stunt run, which belongs to the pilot. And the spawn list, since the aircraft being left
-/// is where the replacement begins. <c>Scheme</c> is null outside a 967 whose capture root resolved,
-/// and also null INSIDE one when the captured rig's own <c>ShippedSkins</c> resolution painted
-/// nothing: <c>ShippedSkins</c> carries that reading so the rebuild draws the captured rig's own
-/// result rather than falling back to this pilot's default livery. <c>Build</c> is the custom
-/// plane the replacement flies in place of the airframe's stock fit (965's Blue Streak); null
-/// keeps the stock one.</summary>
+/// them. The sortie's Ammo Selection picks, for the same reason: each case writes the handed-over
+/// airframe's own weapon ids over every slot, slug guns and <c>wep_06</c> pylons. A stunt run,
+/// which belongs to the pilot. And the spawn list, since the aircraft being left is where the
+/// replacement begins. <c>Scheme</c> is null outside a resolved 967 capture, and null inside one
+/// whose captured rig painted nothing; <c>ShippedSkins</c> carries that null, so the rebuild draws
+/// the captured rig's own result rather than this pilot's default livery. <c>Build</c> is the
+/// custom plane the replacement flies in place of the airframe's stock fit (965's Blue Streak);
+/// null keeps the stock one.</summary>
 internal sealed record AirframeSwapRequest(
     string PlaneNode, FlightStart Start, Mech3.PaintScheme? Scheme = null, bool ShippedSkins = false,
     Flight.CustomPlaneDef? Build = null);
