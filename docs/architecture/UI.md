@@ -150,8 +150,8 @@ The scrapbook's per-spread scrap layout, read from the shipped `SCRAPBOOK.CSV` r
 does; `Pictures` gates each row against the mission's merged best-to-date mask and stacks the
 survivors by draw order; `Openable` narrows the same gate to the rows that open a detail view;
 `ZoomFamily` reads a family's three text boxes. A player capture resolves through a caller-supplied
-path rather than the asset library and is skipped when no file is there. Rows are cached per file.
-The columns and the gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+path rather than the asset library and is skipped when no file is there. Parsed rows are cached
+per file behind a lock. The columns and the gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/UI/ScrapbookExport.cs
 EXPORT TO DESKTOP's copy: the open scrap's own file to the desktop under its own base name,

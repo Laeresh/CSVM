@@ -33,6 +33,18 @@
     prunes the stale metadata git keeps after a worktree directory is deleted by
     hand (`git worktree list` reports those as "prunable").
 
+    UNIT-TEST SCRATCH. The xUnit suite builds throwaway input under
+    %TEMP%\csvm-tests\run-<pid>-<id>, and the test host deletes its own run root
+    as it exits. This script is the backstop for the roots a killed or crashed
+    run leaves behind, and for the flat pile older builds left before the run
+    roots existed. A root whose process is still alive is never touched: the
+    whole folder is spared while any test run is going, because deleting it
+    would pull the input out from under a suite running in another window.
+
+    The folder is renamed aside and deleted by a detached `rd /s /q`, not
+    deleted in place. An accumulation here reaches six figures of directories,
+    and a recursive delete of one takes far longer than the rename does.
+
     Worktree safety rules, in order:
       * Only worktrees under .claude/worktrees/ are ever considered. The main
         worktree and the one you are standing in are never touched.
@@ -57,6 +69,11 @@
 
 .PARAMETER SkipWorktrees
     Leave .claude/worktrees/ alone entirely; sweep only .scratch/.
+
+.PARAMETER SkipTestTemp
+    Leave %TEMP%\csvm-tests alone. The sweep already stands down on its own while
+    a test run owns a root in there, so this is for the case where you want the
+    abandoned roots kept, e.g. to read a failed run's fixtures.
 
 .PARAMETER IncludeDirtyWorktrees
     Also remove worktrees with uncommitted changes. Destroys uncommitted work.
@@ -106,6 +123,7 @@ param(
     [string[]] $Keep = @(),
     [switch]   $IncludeBackups,
     [switch]   $SkipWorktrees,
+    [switch]   $SkipTestTemp,
     [switch]   $IncludeDirtyWorktrees,
     [switch]   $PruneBranches,
     [switch]   $Force
@@ -115,6 +133,7 @@ $ErrorActionPreference = "Stop"
 
 $ScratchDir   = Join-Path $PSScriptRoot ".scratch"
 $WorktreeRoot = Join-Path $PSScriptRoot ".claude\worktrees"
+$TestTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-tests"
 
 # Backups parked in .scratch/ are safety nets, not probe output. Protected unless asked for.
 $BackupPatterns = @('*.bundle', '*.worktree-backup')
@@ -171,6 +190,31 @@ function Get-SweepInventory([string]$Root) {
 # Deletes the link itself; the target directory and its contents are untouched.
 function Remove-ReparseLink([string]$Path) {
     [System.IO.Directory]::Delete($Path)
+}
+
+# What is sitting in the unit suite's temp scratch, and whether anyone still
+# needs it. Counting is capped: the number is only ever printed, and a pile left
+# by builds from before the run roots existed reaches six figures. The liveness
+# probe is separate and cheap -- the kernel filters the enumeration down to
+# run-* names, of which there are only ever one per concurrent test host.
+function Get-TestTempState([string]$Root) {
+    $state = [pscustomobject]@{ Present = $false; Count = 0; Capped = $false; Live = 0 }
+    if (-not (Test-Path -LiteralPath $Root)) { return $state }
+    $state.Present = $true
+
+    foreach ($entry in [System.IO.Directory]::EnumerateFileSystemEntries($Root)) {
+        $state.Count++
+        if ($state.Count -ge 2000) { $state.Capped = $true; break }
+    }
+
+    foreach ($dir in [System.IO.Directory]::EnumerateDirectories($Root, 'run-*')) {
+        if ((Split-Path $dir -Leaf) -notmatch '^run-(\d+)-') { continue }
+        $running = $null
+        try { $running = Get-Process -Id ([int]$Matches[1]) -ErrorAction Stop } catch { $running = $null }
+        if ($running) { $state.Live++ }
+    }
+
+    return $state
 }
 
 $inventory = Get-SweepInventory $ScratchDir
@@ -301,6 +345,14 @@ if ($PruneBranches -and $isGitRepo) {
     }
 }
 
+# --- The unit suite's temp scratch -----------------------------------------
+$tempState = if ($SkipTestTemp) {
+    [pscustomobject]@{ Present = $false; Count = 0; Capped = $false; Live = 0 }
+} else {
+    Get-TestTempState $TestTempRoot
+}
+$tempDoomed = $tempState.Present -and $tempState.Live -eq 0
+
 $doomedBytes = ($doomed | Measure-Object Length -Sum).Sum
 if (-not $doomedBytes) { $doomedBytes = 0 }
 
@@ -355,8 +407,15 @@ if ($brDoomed.Count -gt 0) {
     foreach ($b in $brDoomed) { Write-Host "  $b" }
 }
 
+if ($tempState.Present -and $tempState.Live -gt 0) {
+    Write-Host "Test scratch: keeping it -- $($tempState.Live) test run(s) are still using it" -ForegroundColor Green
+} elseif ($tempDoomed) {
+    $tempCount = if ($tempState.Capped) { "$($tempState.Count)+" } else { "$($tempState.Count)" }
+    Write-Host "Test scratch: removing $TestTempRoot ($tempCount entries)" -ForegroundColor Cyan
+}
+
 if ($doomed.Count -eq 0 -and $wtDoomed.Count -eq 0 -and $brDoomed.Count -eq 0 -and
-    $junctions.Count -eq 0) {
+    $junctions.Count -eq 0 -and -not $tempDoomed) {
     Write-Host "Nothing to delete." -ForegroundColor Green
     exit 0
 }
@@ -371,6 +430,7 @@ if (-not $Force -and -not $WhatIfPreference) {
     if ($junctions.Count -gt 0) { $what += "$($junctions.Count) junction link(s)" }
     if ($wtDoomed.Count -gt 0)  { $what += "$($wtDoomed.Count) worktree(s)" }
     if ($brDoomed.Count -gt 0)  { $what += "$($brDoomed.Count) branch(es)" }
+    if ($tempDoomed)            { $what += "the unit suite's temp scratch" }
     # A non-interactive host (scheduled task, CI, an agent shell) cannot prompt and
     # throws here. Fail CLOSED with an actionable message rather than a raw .NET
     # exception -- deleting on the grounds that nobody could be asked is the wrong
@@ -414,6 +474,22 @@ foreach ($j in $junctions) {
         } catch {
             Write-Warning "Could not unlink $($j.FullName): $($_.Exception.Message)"
         }
+    }
+}
+
+# Renamed aside and handed to a detached `rd`, never deleted in place: see the
+# unit-test scratch note in the header. A rename fails while any process holds a
+# handle below the folder, which is one more guard on a live test run.
+$tempSwept = $false
+if ($tempDoomed -and $PSCmdlet.ShouldProcess($TestTempRoot, "Remove the unit suite's temp scratch")) {
+    $aside = "$TestTempRoot.sweep-" + [guid]::NewGuid().ToString('N')
+    try {
+        [System.IO.Directory]::Move($TestTempRoot, $aside)
+        $null = Start-Process -FilePath $env:ComSpec `
+            -ArgumentList '/c', 'rd', '/s', '/q', "`"$aside`"" -WindowStyle Hidden
+        $tempSwept = $true
+    } catch {
+        Write-Warning "Could not sweep ${TestTempRoot}: $($_.Exception.Message)"
     }
 }
 
@@ -510,6 +586,9 @@ if ($junctionsUnlinked -gt 0) {
 }
 if ($wtRemoved -gt 0) {
     Write-Host "Removed $wtRemoved worktree(s)." -ForegroundColor Green
+}
+if ($tempSwept) {
+    Write-Host "Swept the unit suite's temp scratch; the delete runs on in the background." -ForegroundColor Green
 }
 if ($brDeleted -gt 0) {
     Write-Host "Deleted $brDeleted merged branch(es)." -ForegroundColor Green

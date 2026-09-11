@@ -2619,23 +2619,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-812`, `BL-813`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
   `CSVM/src/UI/CampaignBriefingPage.cs` (the map and pin drawer to share).
 
-- `BL-818` `[Bug]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`ScrapbookComposition`'s
-  three static memos are plain `Dictionary` instances written without a lock, so two callers on
-  different threads corrupt them.** *Evidence:* `Files`, `ZoomFamilies` and `Symbols`
-  (`ScrapbookComposition.cs:84-91`) are read through `TryGetValue` and written through the indexer
-  at the end of `Load`, `LoadZoomFamilies` and `LoadSymbols` with nothing guarding either. Two unit
-  classes reach them, `ScrapbookCompositionTests` and `CampaignLayoutTests`, and xUnit runs test
-  classes in parallel, so a full `dotnet test` throws
-  `InvalidOperationException: Operations that change non-concurrent collections must have exclusive
-  access` out of `Dictionary.TryInsert` under `LoadZoomFamilies`, seen once in three runs with the
-  suite slowed enough to widen the overlap. In the game every caller is a menu page on the UI
-  thread, which is why nothing has been seen in play. *Fix shape:* `ConcurrentDictionary`, or a
-  `lock` around each memo's read and write; the entries are a pure function of their path, so a
-  racing double-load is harmless once the store itself is safe. *⚠ Traps:* the memos cache a null
-  for a missing file, which a `ConcurrentDictionary` value cannot be unless the value type stays
-  nullable and `TryGetValue`'s found-but-null case is kept distinct from not-found.
-  *Cross-refs:* `CSVM/src/UI/ScrapbookComposition.cs`, `CSVM.Tests/CampaignLayoutTests.cs`.
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -3050,33 +3033,6 @@ usual.
   holds a roster position without producing input came to take the seat `AssignPads` fills by
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
-
-- `BL-785` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TestData.TempDir()`
-  mints a GUID directory per call and nothing ever deletes one, so the unit suite leaks directories
-  into the OS temp tree until every run that touches it crawls.** *Evidence:*
-  `CSVM.Tests/TestData.cs:52-57` creates `%TEMP%\csvm-tests\<guid>` and returns it, with no disposal
-  on the test, no fixture teardown and no sweep anywhere; more than twenty test files call it.
-  `CleanScratch.ps1` does not mention `csvm-tests` and never has, so nothing in the repo removes
-  them. Measured on the author's machine: **377692 top-level directories**, the oldest created
-  2026-07-25, growing by **452 per full `RunTests.ps1` run**, so about 835 runs over six weeks.
-  **No performance cost has been demonstrated and one was looked for:** the units stage ran 77.2 s
-  on 3688 tests with the accumulation present and 74.0 s on the same 3688 immediately after it was
-  cleared, a difference inside run-to-run noise. NTFS indexes directories as a B-tree, so a large
-  entry count is cheap to add to. Treat this as unbounded disk and inode waste with an unknown
-  ceiling, not as a live slowdown, and do not cite it as the cause of a slow run without measuring
-  that run both ways. *Fix shape:* delete the
-  directory when the test that made it finishes, which means an `IDisposable` fixture or a
-  `TempDir` handle type rather than a bare string, and have `CleanScratch.ps1` sweep
-  `%TEMP%\csvm-tests` as a backstop for what escapes. *⚠ Traps:* renaming the directory and deleting
-  the rename afterwards is the only fast way to clear an accumulation this size; a recursive delete
-  in place takes far longer than the rename plus a background `rd /s /q`. Do not "fix" this by
-  pointing the tests at the repo's `.scratch/`, which is what `CleanScratch.ps1` already owns and
-  what would put test scratch inside a worktree. ⚠ **Do not repeat the misdiagnosis this entry was
-  first filed on.** A subagent that appeared to run for six hours was assumed to be crawling over
-  this accumulation; it had in fact been suspended along with an idle parent session, and its real
-  working time was under an hour. Wall clock since dispatch is not working time, and this leak was
-  not the cause. *Impact:* none on correctness and none measured on speed. The suite passes
-  throughout.
 
 ## Misc
 

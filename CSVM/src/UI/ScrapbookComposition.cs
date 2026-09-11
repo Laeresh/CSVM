@@ -81,6 +81,11 @@ public static class ScrapbookComposition
 
     private static readonly BoardArt GrimeArt = new(BoardArtLibrary.Ui, "SB_P_Grime.Png", 10);
 
+    // One gate over all three memos. A menu page reads them on the UI thread, but xUnit runs test
+    // classes in parallel, and a Dictionary insert racing a read corrupts it. Held across the file
+    // read as well, which CampaignLayout does too, so a racing double-load cannot happen.
+    private static readonly object Gate = new();
+
     private static readonly Dictionary<string, Dictionary<string, string[]>?> Files =
         new(StringComparer.Ordinal);
 
@@ -234,28 +239,31 @@ public static class ScrapbookComposition
     // out would buy nothing. Cached per file path, misses included.
     private static Dictionary<string, int>? LoadSymbols(string path)
     {
-        if (Symbols.TryGetValue(path, out var cached))
+        lock (Gate)
         {
-            return cached;
-        }
-
-        Dictionary<string, int>? symbols = null;
-        if (File.Exists(path))
-        {
-            symbols = new Dictionary<string, int>(StringComparer.Ordinal);
-            foreach (var line in File.ReadAllLines(path))
+            if (Symbols.TryGetValue(path, out var cached))
             {
-                var fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-                if (fields.Length >= 3 && fields[0] == "#define"
-                    && int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out int id))
+                return cached;
+            }
+
+            Dictionary<string, int>? symbols = null;
+            if (File.Exists(path))
+            {
+                symbols = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var line in File.ReadAllLines(path))
                 {
-                    symbols[fields[1]] = id;
+                    var fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                    if (fields.Length >= 3 && fields[0] == "#define"
+                        && int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out int id))
+                    {
+                        symbols[fields[1]] = id;
+                    }
                 }
             }
-        }
 
-        Symbols[path] = symbols;
-        return symbols;
+            Symbols[path] = symbols;
+            return symbols;
+        }
     }
 
     private static List<ScrapbookScrap> Filtered(
@@ -353,35 +361,38 @@ public static class ScrapbookComposition
     // TitleResID/TextResID columns and would misalign every naive split past it.
     private static Dictionary<string, string[]>? Load(string path)
     {
-        if (Files.TryGetValue(path, out var cached))
+        lock (Gate)
         {
-            return cached;
-        }
-
-        Dictionary<string, string[]>? rows = null;
-        if (File.Exists(path))
-        {
-            rows = new Dictionary<string, string[]>(StringComparer.Ordinal);
-            foreach (var line in File.ReadAllLines(path))
+            if (Files.TryGetValue(path, out var cached))
             {
-                string trimmed = line.Trim();
-                if (trimmed.Length == 0 || trimmed[0] == ';' || trimmed[0] == '[')
-                {
-                    continue;
-                }
-
-                int eq = trimmed.IndexOf('=');
-                if (eq < 0)
-                {
-                    continue;
-                }
-
-                rows[trimmed[..eq]] = SplitRespectingQuotes(trimmed[(eq + 1)..]);
+                return cached;
             }
-        }
 
-        Files[path] = rows;
-        return rows;
+            Dictionary<string, string[]>? rows = null;
+            if (File.Exists(path))
+            {
+                rows = new Dictionary<string, string[]>(StringComparer.Ordinal);
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.Length == 0 || trimmed[0] == ';' || trimmed[0] == '[')
+                    {
+                        continue;
+                    }
+
+                    int eq = trimmed.IndexOf('=');
+                    if (eq < 0)
+                    {
+                        continue;
+                    }
+
+                    rows[trimmed[..eq]] = SplitRespectingQuotes(trimmed[(eq + 1)..]);
+                }
+            }
+
+            Files[path] = rows;
+            return rows;
+        }
     }
 
     // A comma split that treats one "..." run as a single field, unquoted -- this file's shape,
@@ -418,67 +429,70 @@ public static class ScrapbookComposition
     // a BoardLine has no colour column of its own to hand one to regardless).
     private static Dictionary<char, ScrapbookZoomFamily>? LoadZoomFamilies(string path)
     {
-        if (ZoomFamilies.TryGetValue(path, out var cached))
+        lock (Gate)
         {
-            return cached;
-        }
-
-        Dictionary<char, ScrapbookZoomFamily>? families = null;
-        if (File.Exists(path))
-        {
-            var titles = new Dictionary<char, (float X, float Y, float W)>();
-            var captions = new Dictionary<char, (float X, float Y, float W)>();
-            var texts = new Dictionary<char, (float X, float Y, float W)>();
-            foreach (var line in File.ReadAllLines(path))
+            if (ZoomFamilies.TryGetValue(path, out var cached))
             {
-                string trimmed = line.Trim();
-                int eq = trimmed.IndexOf('=');
-                if (eq < 0)
-                {
-                    continue;
-                }
-
-                string key = trimmed[..eq].TrimEnd();
-                Dictionary<char, (float X, float Y, float W)>? target = key switch
-                {
-                    _ when key.StartsWith("SBZ_T_TITLE", StringComparison.Ordinal) => titles,
-                    _ when key.StartsWith("SBZ_T_CAPTION", StringComparison.Ordinal) => captions,
-                    _ when key.StartsWith("SBZ_T_TEXT", StringComparison.Ordinal) => texts,
-                    _ => null,
-                };
-                if (target == null || key[^1] is < 'A' or > 'Z')
-                {
-                    continue;
-                }
-
-                var fields = trimmed[(eq + 1)..].Split(',');
-                if (fields.Length < 7)
-                {
-                    continue;
-                }
-
-                target[key[^1]] = (
-                    float.Parse(fields[2].Trim(), CultureInfo.InvariantCulture),
-                    float.Parse(fields[3].Trim(), CultureInfo.InvariantCulture),
-                    float.Parse(fields[5].Trim(), CultureInfo.InvariantCulture));
+                return cached;
             }
 
-            families = new Dictionary<char, ScrapbookZoomFamily>();
-            foreach (var letter in titles.Keys)
+            Dictionary<char, ScrapbookZoomFamily>? families = null;
+            if (File.Exists(path))
             {
-                if (!captions.TryGetValue(letter, out var caption) || !texts.TryGetValue(letter, out var text))
+                var titles = new Dictionary<char, (float X, float Y, float W)>();
+                var captions = new Dictionary<char, (float X, float Y, float W)>();
+                var texts = new Dictionary<char, (float X, float Y, float W)>();
+                foreach (var line in File.ReadAllLines(path))
                 {
-                    continue;
+                    string trimmed = line.Trim();
+                    int eq = trimmed.IndexOf('=');
+                    if (eq < 0)
+                    {
+                        continue;
+                    }
+
+                    string key = trimmed[..eq].TrimEnd();
+                    Dictionary<char, (float X, float Y, float W)>? target = key switch
+                    {
+                        _ when key.StartsWith("SBZ_T_TITLE", StringComparison.Ordinal) => titles,
+                        _ when key.StartsWith("SBZ_T_CAPTION", StringComparison.Ordinal) => captions,
+                        _ when key.StartsWith("SBZ_T_TEXT", StringComparison.Ordinal) => texts,
+                        _ => null,
+                    };
+                    if (target == null || key[^1] is < 'A' or > 'Z')
+                    {
+                        continue;
+                    }
+
+                    var fields = trimmed[(eq + 1)..].Split(',');
+                    if (fields.Length < 7)
+                    {
+                        continue;
+                    }
+
+                    target[key[^1]] = (
+                        float.Parse(fields[2].Trim(), CultureInfo.InvariantCulture),
+                        float.Parse(fields[3].Trim(), CultureInfo.InvariantCulture),
+                        float.Parse(fields[5].Trim(), CultureInfo.InvariantCulture));
                 }
 
-                var title = titles[letter];
-                families[letter] = new ScrapbookZoomFamily(
-                    title.X, title.Y, title.W, caption.X, caption.Y, caption.W, text.X, text.Y, text.W);
-            }
-        }
+                families = new Dictionary<char, ScrapbookZoomFamily>();
+                foreach (var letter in titles.Keys)
+                {
+                    if (!captions.TryGetValue(letter, out var caption) || !texts.TryGetValue(letter, out var text))
+                    {
+                        continue;
+                    }
 
-        ZoomFamilies[path] = families;
-        return families;
+                    var title = titles[letter];
+                    families[letter] = new ScrapbookZoomFamily(
+                        title.X, title.Y, title.W, caption.X, caption.Y, caption.W, text.X, text.Y, text.W);
+                }
+            }
+
+            ZoomFamilies[path] = families;
+            return families;
+        }
     }
 }
 

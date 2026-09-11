@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using Xunit;
 
@@ -30,6 +32,10 @@ public static class TestData
         "the whole-file video walk is opt-in and costs about a minute: run "
         + "$env:CSVM_MOVIE_WALK=1; .\\RunTests.ps1";
 
+    // The one folder under the OS temp tree this suite ever writes to, so a sweep from outside
+    // (CleanScratch.ps1) has a single name to look for.
+    private const string TempFolder = "csvm-tests";
+
     // Where the ten .mpg cinemas sit inside the retail install, relative to a data root.
     private static readonly string[] MoviePathParts =
         { "CrimsonSkiesGame", "GOSDATA", "ASSETS", "GRAPHICS", "MPG" };
@@ -41,6 +47,9 @@ public static class TestData
         DataRoot = ExtractedRoot == null ? null : Directory.GetParent(ExtractedRoot)?.FullName;
         MovieRoot = FindMovies();
         FullMovieWalk = IsSet(Environment.GetEnvironmentVariable("CSVM_MOVIE_WALK"));
+        TempRoot = Path.Combine(
+            Path.GetTempPath(), TempFolder, $"run-{Environment.ProcessId}-{Guid.NewGuid():N}");
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => RemoveTempRoot();
     }
 
     /// <summary>The repo checkout this assembly was built from.</summary>
@@ -57,6 +66,13 @@ public static class TestData
     /// <summary>The install folder holding the ten <c>.mpg</c> cinemas, or null when none is
     /// reachable.</summary>
     public static string? MovieRoot { get; }
+
+    /// <summary>This run's own scratch root under the OS temp tree, which every
+    /// <see cref="TempDir"/> is created inside and which goes away with the test host. Named for
+    /// the process so two runs never share one, and so a root an abandoned run left behind is
+    /// recognisable. <c>CleanScratch.ps1</c> sweeps the parent folder as the backstop for those.
+    /// </summary>
+    public static string TempRoot { get; }
 
     /// <summary>Whether the whole-file video walk was asked for. Decoding all ten cinemas to the
     /// last frame costs about a minute of the unit stage's 30 second budget, which is why it is
@@ -77,13 +93,87 @@ public static class TestData
         return path;
     }
 
-    /// <summary>A fresh empty directory under the OS temp tree, for tests that must build their
-    /// input (a zip, a directory of names) rather than commit it.</summary>
+    /// <summary>A fresh empty directory under <see cref="TempRoot"/>, for tests that must build
+    /// their input (a zip, a directory of names) rather than commit it. Every caller is cleaned up
+    /// by the root going away at process exit, which is why this still hands back a bare string:
+    /// most call sites pass it straight into a constructor and could not hold a handle.</summary>
     public static string TempDir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "csvm-tests", Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(TempRoot, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         return dir;
+    }
+
+    /// <summary>⚠ Renames this run's <see cref="TempRoot"/> aside and hands the rename to a detached
+    /// delete; never delete it in place here. A full run mints five hundred directories, and the
+    /// process-exit hook this runs from is torn down before an inline delete of that many finishes.
+    /// A rename is one metadata operation, so it always completes. Answers whether the run's own
+    /// root is gone, which the background delete cannot affect.</summary>
+    internal static bool RemoveTempRoot()
+    {
+        if (!Directory.Exists(TempRoot))
+        {
+            return true;
+        }
+
+        string aside = TempRoot + ".sweep";
+        try
+        {
+            Directory.Move(TempRoot, aside);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        Detach(aside);
+        return !Directory.Exists(TempRoot);
+    }
+
+    /// <summary>Removes a directory, answering nothing and throwing nothing: a read-only attribute
+    /// or a file another process still holds must not fail a run that is already over.</summary>
+    internal static void DeleteDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    // A shell that outlives this process is what finishes the delete, since the test host is torn
+    // down moments after the exit hook starts. An inline delete is the fallback for a host with no
+    // ComSpec; nothing here may throw, because the run it belongs to is already over.
+    private static void Detach(string path)
+    {
+        string? shell = Environment.GetEnvironmentVariable("ComSpec");
+        if (shell == null)
+        {
+            DeleteDirectory(path);
+            return;
+        }
+
+        try
+        {
+            using var sweep = Process.Start(new ProcessStartInfo(shell, $"/c rd /s /q \"{path}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch (Win32Exception)
+        {
+            DeleteDirectory(path);
+        }
     }
 
     // Walks up from the build output until the engine solution appears; falls back to the
