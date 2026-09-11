@@ -79,7 +79,7 @@ public static class PlaneRatings
         return Word(weight / OffenseDivisor);
     }
 
-    // The original clamps the top alone, and prints an empty line for an index its string table has
-    // no word for. Nothing in the shipped tables reaches below zero, so the floor is a guard.
+    // The original clamps the top alone, so an index below zero names a langui id outside the five
+    // rating words. No plane record drives it there (docs/org/hangar.md), so the floor is a guard.
     private static int Word(int value) => Math.Clamp(value, 0, Best);
 }

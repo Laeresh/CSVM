@@ -2857,43 +2857,6 @@ usual.
   the roll's threshold before the count says which way it errs. *Cross-refs:* `BL-558`,
   `docs/org/aiControlLaw.md`.
 
-- `BL-811` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **A campaign
-  position reached without flying leaves the scrapbook's mission list empty, with no floor under
-  it.** *Evidence:* seen at the controls on a profile whose `missionsCompleted` was set by hand,
-  which is what this project's own campaign verification prescribes for reaching a late position.
-  `CampaignPreviousMissionsPage.Seqs` reads `CampaignProgression.CompletedSeqs`, which lists a
-  mission only where `profile.MissionResults` holds a record whose best mask carries
-  `PrimaryObjectiveMask`, so a position advanced without a flown record lists nothing and no mission
-  can be viewed or replayed. In ordinary play the two move together: `MissionsCompleted` is raised
-  only by the advance rule, which runs on a recorded attempt, so no in-game path to the empty list
-  is known and finding one is part of this item. *Fix shape:* the proposal from the controls is that
-  the first mission always be listed. Before building that, settle what the original lists, since
-  `SCRAPBOOK.CSV` carries authored entries per mission and the book may be driven by the campaign
-  position rather than by a completion record; a floor invented here would be content this project
-  made up. *⚠ Traps:* REPLAY MISSION is offered only where a record holds a time, so a listed
-  mission with no record must not offer it; and the list is the same on both presentations, so a
-  change reaches Original through `EnterFromPage` as well. *Cross-refs:*
-  `git log --grep=CompletedSeqs`, `docs/formats/saved-games.md`.
-
-- `BL-817` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The plane
-  selection screen's reference capture prints no TOP SPEED word for the one aircraft carrying a
-  nitrous engine, which the decoded formula cannot produce.** *Evidence:*
-  `OriginalScreenshots/Campaign Flight Check Change Plane.png` shows the awarded Blue Streak
-  (airframe 3, engine id 4) with `ARMOR: Average`, `AGILITY: Excellent` and `OFFENSE: Fair`, all
-  three of which the decode reproduces, and `TOP SPEED:` followed by nothing. The rating helper's
-  speed case is `ftol(power x factor - 1.0) / 0x55` over 300 and 1.33, which is 4, and the same
-  block's AGILITY line proves langui 505 `Excellent` loads. The value string is a plain lookup of
-  `0x1f5 + index`, so an empty line means an index outside 0 to 4; the case clamps the top alone, so
-  only a negative index reaches one, and only a negative or indefinite `ftol` result gives that.
-  CSVM ports the arithmetic and prints `Excellent` there (`CSVM/src/UI/PlaneRatings.cs`).
-  *What to settle:* what makes that one line empty in the original: a plane record whose engine
-  field is not the template's 4, or an x87 state the menu inherits (a full stack makes `FILD` return
-  an indefinite, and `ftol` then returns `INT_MIN`). *⚠ Traps:* the two other captures of the same
-  screen show the seeded Devastators, neither of which has a nitrous engine, so nothing in the
-  stills separates "nitrous engines print blank" from "that one record was odd"; do not conclude the
-  first from a single aircraft. *Cross-refs:* `docs/org/hangar.md` ("The four rating words"),
-  `docs/formats/campaign-screens.md`.
-
 - `BL-819` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **The original's
   typed cheats (the hidden mission menu, the cash grant, the gallery reveal and the one-mission
   invincibility) do nothing in CSVM, because no screen reads a typed prefix.** *Evidence:* three of
@@ -2947,6 +2910,21 @@ usual.
   bottom-left symbol and type `ispy`. *Cross-refs:* `BL-781` (the credits easter egg, the same
   script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
   PlaneConstruction rows), `docs/org/hangar.md`.
+
+- `BL-822` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The scrapbook's
+  contents list has no career row, so the original's ordinal-0 page is unreachable in CSVM.**
+  *Evidence:* `uiData` 2409's ordinal 0 is not a mission but `SCRAPBOOK.CSV` slot 0, the
+  not-yet-started career: icon frame 11 (the card fan past the eleven airframes), and the lines
+  `langui` 1217 `Starting My Career`, 1218 `Above the clouds` and 511 `Gypsy Magic`
+  (`0x0040a5b6` to `0x0040a62e`, `docs/org/debrief.md`, "The contents list is the campaign
+  position"). It stands in the list from a brand-new profile onwards, so the original's table of
+  contents is never empty. CSVM's list is missions alone and `CampaignScrapbookPage` browses slots
+  1 to 24, so both the row and the page behind it are absent. *Fix shape:* a row above the missions
+  that carries no `seq`, and a book position for slot 0 that `Previous()` falls back to and
+  `Next()` climbs out of; the results card has no record to draw, so spread 1 is a story page
+  there. *⚠ Traps:* REPLAY MISSION must not be offered on it, and the page arrows must not read a
+  mission-result record at slot 0, which the original's array does not have (indexed from 1).
+  *Cross-refs:* `docs/formats/campaign-screens.md` (`SCRAPBOOK.CSV`, "Mission slots and spreads").
 
 ## Tooling, platform & docs
 

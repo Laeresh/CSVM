@@ -280,19 +280,21 @@ public static class CampaignProgression
     }
 
     /// <summary>The story positions this profile has completed, in sequence order, which is what
-    /// the cabin's Previous Missions list offers.</summary>
+    /// the cabin's Previous Missions list offers: every position below the profile's own. The
+    /// original counts that list's rows off the campaign position alone and reads a completion
+    /// record for nothing but a row's icon and plane name, so a position reached without a flown
+    /// record still lists its missions (<c>docs/org/debrief.md</c>, "The contents list is the
+    /// campaign position").</summary>
     public static List<int> CompletedSeqs(CampaignProfileDef profile)
     {
-        var seqs = new List<int>();
-        foreach (var result in profile.MissionResults)
+        ArgumentNullException.ThrowIfNull(profile);
+        int listed = Math.Clamp(profile.MissionsCompleted, 0, CampaignSequence.MissionCount);
+        var seqs = new List<int>(listed);
+        for (int seq = 0; seq < listed; seq++)
         {
-            if ((result.Best.CompletedMask & PrimaryObjectiveMask) != 0)
-            {
-                seqs.Add(result.Seq);
-            }
+            seqs.Add(seq);
         }
 
-        seqs.Sort();
         return seqs;
     }
 

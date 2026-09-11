@@ -593,9 +593,10 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return true;
     }
 
-    // The finished seqs, in story order, per CampaignProgression.CompletedSeqs. Read fresh every
-    // call rather than cached: a replay recorded through the briefing/flight-check screens must
-    // show up here the next time this page draws.
+    // The listed seqs, in story order, per CampaignProgression.CompletedSeqs: every position below
+    // the campaign's own, which is what uiData 2409 counts its rows off. Read fresh every call
+    // rather than cached: a replay recorded through the briefing/flight-check screens must show up
+    // here the next time this page draws.
     private List<int> Seqs() =>
         Flow.Profile is { } profile ? CampaignProgression.CompletedSeqs(profile) : new List<int>();
 

@@ -13,22 +13,47 @@ namespace CSVM.Tests;
 /// cabin.</summary>
 public class CampaignPreviousMissionsPageTests
 {
+    /// <summary>The list is the campaign's own position: <c>uiData</c> 2409 counts its rows off
+    /// that alone, so the missions below it are listed in story order whatever the profile's
+    /// records hold.</summary>
     [Fact]
-    public void ListsOnlyFinishedMissionsInSeqOrder()
+    public void ListsEveryMissionBelowTheCampaignPositionInSeqOrder()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
-        CampaignProgression.Record(profile, Attempt(2));
         CampaignProgression.Record(profile, Attempt(0));
-        CampaignProgression.Record(profile, Attempt(1, mask: 4)); // no primary: not "finished"
+        CampaignProgression.Record(profile, Attempt(1));
+        CampaignProgression.Record(profile, Attempt(2, mask: 4)); // no primary: the position holds
         var flow = OpenedOnPreviousMissions(profile);
 
-        // Two finished missions (0 and 2), then VIEW SELECTED, REPLAY MISSION, the forward page
+        // Two missions below the position, then VIEW SELECTED, REPLAY MISSION, the forward page
         // tab, the CURRENT MISSION bookmark and RETURN TO CABIN.
+        Assert.Equal(2, profile.MissionsCompleted);
         Assert.Equal(7, flow.Page.RowCount);
         Assert.Equal(string.Empty, flow.Page.RowText(0)); // a mission row draws its own three lines
         Assert.Equal("VIEW SELECTED", flow.Page.RowText(2));
         Assert.Equal("Mission 1", flow.Page.Detail(0)); // seq 0 (1-based ordinal 1) comes first
-        Assert.Equal("Mission 3", flow.Page.Detail(1)); // seq 2 (1-based ordinal 3) comes second
+        Assert.Equal("Mission 2", flow.Page.Detail(1)); // seq 1 comes second
+    }
+
+    /// <summary>A position reached without flying still lists its missions, which is what the
+    /// original's row count does: the rows draw with no record behind them, REPLAY MISSION is not
+    /// offered on one whose record holds no time, and the book still opens there.</summary>
+    [Fact]
+    public void APositionReachedWithoutFlyingStillListsItsMissions()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.MissionsCompleted = 3;
+        var flow = OpenedOnPreviousMissions(profile);
+
+        // Three mission rows, and the four buttons a profile with no timed record carries.
+        Assert.Equal(7, flow.Page.RowCount);
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+        Assert.Equal("Mission 3", flow.Page.Detail(2));
+        Assert.Equal(string.Empty, flow.Page.Captions[4].Text); // the plane line of a mission never flown
+        Assert.Equal(0, flow.Page.Pictures[0].Frame); // and its icon, the record's zeroed airframe
+
+        Assert.True(flow.Secondary());
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
     }
 
     /// <summary>A row is the icon at the listbox's own X, then three lines 20 apart from 10 down

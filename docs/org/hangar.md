@@ -207,8 +207,9 @@ tail: the index becomes `langui` 0x1f5 + index, the five-word run 501 to 505 `ID
 plane screen's `uiData` 2015 at `0x004096ab`, which calls it four times over the profile's plane
 slot (`0x0064b78c` + 204×slot) and copies each answer into one of the script's four out-strings.
 
-Every case clamps at 4 and none clamps at 0, so an index the arithmetic drives below zero names no
-string and prints an empty line.
+Every case clamps at 4 and none clamps at 0, so an index the arithmetic drives below zero names an
+id outside the five rating words: -1 is `langui` 500 and everything lower is absent from the table,
+which appends nothing visible after the caption.
 
 | Word | Case | Value, C-truncating throughout |
 |---|---|---|
@@ -225,10 +226,23 @@ times, at 250/85, 199/73, 9/4 and 4200/2060; the awarded Blue Streak (airframe 3
 units, twin .40 and twin .30, two hardpoints) reads Average, Excellent and Fair, at 159/73, 18/4
 and 2280/2060.
 
-⚠ **The Blue Streak's TOP SPEED line prints no word in that capture, which this arithmetic cannot
-produce.** Its 300 × 1.33 comes to Excellent, and the neighbouring AGILITY line proves that word
-loads. An empty line means an index outside 0 to 4, which only the missing floor allows, and only a
-negative or indefinite `ftol` result reaches it. `BL-817` holds what is left to settle.
+⚠ **The Blue Streak's TOP SPEED line prints no word in that capture, and no plane record can do
+that.** Its 300 × 1.33 comes to Excellent, and the neighbouring AGILITY line proves that word
+loads, so the index is not 4. Reaching an id `langui` has no string for takes an index of -2 or
+lower: -1 is `langui` 500 `Nathan Zachary`, the default player name, while 215 to 499 are absent
+from the table, so anything from -2 down appends nothing visible after the caption. The record
+cannot drive the index there. Engine id 6 is short-circuited to `Poor` at `0x0040fb1f` without the
+arithmetic, and every other id indexes the factor table unchecked
+(`FMUL double ptr [EAX*0x8 + 0x619e38]` at `0x0040fb2e`): the dwords on both sides of its six
+doubles read as tiny positive denormals, so an out-of-range id gives `power × ~0 - 1.0`, an `ftol`
+of -1, and `-1 / 0x55` truncating to 0, which is `Poor` again. An index of -2 needs `ftol` at or
+below -170, so a factor at or below -0.5633, and no slot within reach holds a negative double. What
+is left is an `ftol` of `INT_MIN`, which the CRT's `ftol` returns for an indefinite: a full x87
+stack makes the case's `FILD` at `0x0040fb27` produce one, and `INT_MIN / 0x55` is -25264513, whose
+id is -25264012. The capture's other three words are the Blue Streak template's own fields, and that
+template's engine is 4 (`0x0061ab80`), so the record is the template and the blank line is the FPU
+state the menu inherited, not a field. `CSVM/src/UI/PlaneRatings.cs` clamps at both ends and cannot
+reproduce it.
 
 ## Into the mission: what the build changes on the spawned vehicle
 

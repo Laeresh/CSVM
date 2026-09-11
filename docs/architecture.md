@@ -329,7 +329,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignPlaneSelectionPage.cs` — the PLANE SELECTION screen: a drop-down, silhouette, ratings and weapon lists per slot, EXPORT, and its refusal.
 - `src/UI/Menu/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter that runs a state's beat sheet.
 - `src/UI/Menu/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which a reveal opcode indexes.
-- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's contents list, one row per completed mission, plus the results page a mission's records compute.
+- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's contents list, one row per mission below the campaign's position, plus the results page a mission's records compute.
 - `src/UI/CampaignScrapbookPage.cs` — the scrapbook itself: the browsed spread's scraps, the results card with its tabs and stamps, and the page arrows.
 - `src/UI/CampaignScrapbookZoomPage.cs` — one scrap's detail view: the zoom family's background, the inset image, its three text lines, and EXPORT TO DESKTOP.
 - `src/UI/ScrapbookComposition.cs` — the scrapbook's per-spread scrap layout read from the shipped CSV, gated on the mission's own progress mask.

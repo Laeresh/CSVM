@@ -353,7 +353,7 @@ at that mission's spread 1.
 **The cabin path does not reach the book at all.** `LAYOUT.CSV`'s `PC_B_PREVIOUS` row carries
 `ScriptToExe = ScrapBook_TOC`, one of the layout-declared transitions
 [`formats/campaign-screens.md`](../formats/campaign-screens.md) already established for this
-screen family: pressing PREVIOUS MISSIONS opens `SCRAPBOOK_TOC.SCRIPT`, the 25-row mission list,
+screen family: pressing PREVIOUS MISSIONS opens `SCRAPBOOK_TOC.SCRIPT`, the mission list (below),
 and `SCRAPBOOK.SCRIPT` itself does not run until a row is picked from there. `SBTOC_B_RETURN` and
 `SB_B_RETURNPC` both carry `ScriptToExe = PassengerCabin` the same way, which is why neither
 appears in either script's `gui_mailbox`: this whole family of transitions is authored in
@@ -413,12 +413,46 @@ the flow above is exhaustive and not a sample of it:
 | `SCRAPBOOK_TOC.SCRIPT` | `sbtoc_b_replay` | end itself, then the Replay Mission fork above |
 | `SCRAPBOOK_TOC.SCRIPT` | `gui_destroy` | end `scrapbook.script` if it is still paused |
 
+### The contents list is the campaign position
+
+`SCRAPBOOK_TOC.SCRIPT` owns none of the list's content. `sbtoc_l_toclist` carries `TJ = 2409` and
+the engine fills it row by row, so what the table of contents offers is whatever `uiData` 2409
+(`0x0040a4b8`) answers.
+
+**The row count is the campaign position plus one, and no completion record is consulted.** Asked
+with the count sentinel -1, the handler answers 24 when the unlock flag at `0x00647b80` is set and
+otherwise `UIData +0x338`, the completed-mission count at `0x0064b678`, then increments it
+(`0x0040a4be` to `0x0040a4d4`). The script sizes its row arrays at 25 (`@globals@AR = 25` before
+the list is created), which is exactly what a finished campaign asks for. A row's ordinal is the
+mission slot itself, so the `uiData` 2405 mode 1 that opens the book on a picked row and the 2411
+that gates Replay Mission both take it unchanged.
+
+**Ordinal 0 is the career page, not a mission.** It answers icon frame 11, the card fan past the
+eleven airframes in `FC_PlaneIcons.png`, and the three lines `langui` 1217 `Starting My Career`,
+1218 `Above the clouds` and 511 `Gypsy Magic`, the default pilot plane name, with the one-space pad
+at `0x0061f300` after it (`0x0040a5b6` to `0x0040a62e`). It is `SCRAPBOOK.CSV`'s slot 0, the
+not-yet-started career, and it stands in the list from a brand-new profile onwards.
+
+**Ordinal 1 to 24 is a mission row, and the record supplies only two of its four columns.** The
+icon is the merged best half's airframe id at `0x0064cc28 + 168 x m` and the third line is that
+half's plane name at `0x0064cc2c + 168 x m`, the mission-result array's `+0x80` and `+0x84`
+([`../formats/saved-games.md`](../formats/saved-games.md), "The mission-result array"). The first
+line is `langui 3479 + m`, the mission's short name, and the second `langui 1219 + chapter` over
+the mission's own story chapter 1 to 5, which is `langui` 1220 to 1224, Hawaii through Manhattan.
+Nothing in the row tests a completion mask, so a mission the position covers but no attempt filled
+draws with airframe 0 and an empty plane line.
+
+**Past the position the row says so.** A row whose ordinal exceeds `0x0064b678`, which only the
+unlock flag's 25 rows reach, takes `langui` 1219 `Not yet flown` as its third line and a random
+icon, `rand() % 11` at `0x0040a595`.
+
 ### So this item reuses a board CSVM already has
 
 CSVM keeps the original's two screens apart, one class each.
 `CampaignPreviousMissionsPage` is the table of contents: `SBTOC_L_TOCList`'s own four-row window
-over the missions the profile has finished, with VIEW SELECTED, REPLAY MISSION, the CURRENT MISSION
-bookmark and RETURN TO CABIN under it. `CampaignScrapbookPage` is the book, reached exactly the
+over the missions below the campaign's position, with VIEW SELECTED, REPLAY MISSION, the CURRENT
+MISSION bookmark and RETURN TO CABIN under it. It omits the original's ordinal-0 career row, which
+is `BL-822`. `CampaignScrapbookPage` is the book, reached exactly the
 three ways the original reaches it: a mission ending, a row picked in the table of contents, and
 either bookmark, all through `CampaignFlow.OpenScrapbook`, which is `uiData` 2405 mode 1. The cabin's
 PREVIOUS MISSIONS button still opens the table of contents alone, never the book.

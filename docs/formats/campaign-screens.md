@@ -542,7 +542,8 @@ not in keeps the last pick it described.
 
 The scrapbook is the two-page book a finished campaign mission ends on. Three scripts share it:
 `SCRAPBOOK.SCRIPT` draws one spread, `SCRAPBOOKZOOM.SCRIPT` is the detail view of a single scrap,
-and `SCRAPBOOK_TOC.SCRIPT` is the 25-row mission list behind VIEW ALL MISSIONS. The three hand off
+and `SCRAPBOOK_TOC.SCRIPT` is the mission list behind VIEW ALL MISSIONS, sized for 25 rows and
+filled from the campaign position by `uiData` 2409. The three hand off
 by pausing rather than ending, so a spread survives a trip into a scrap or the table of contents
 and back. **The cabin's PREVIOUS MISSIONS button does not open the book**: `PC_B_PREVIOUS`'s
 `ScriptToExe` is `ScrapBook_TOC`, so it opens the table of contents, and the book is reached only
@@ -788,7 +789,7 @@ with the rule above: byte at `0x0040f788 + (id - 2100)`, then dword at `0x0040f5
 | 2406 | `0x0040a7d4` | the outcome line and four result values for a tab, above |
 | 2407 | `0x0040aa52` | walk to the next drawable item of this spread, returning type 5 for an image and 6 for text |
 | 2408 | `0x0040a453` | the page title, out through `ESA.BC`: langui 1215 (`%1!s! - %2!s!`) over the player's name and the mission's short name (langui `3480 + m - 1`), which is the "Zachary - The Lost Treasure" both scrapbook reference shots carry |
-| 2409 | `0x0040a4b8` | a table-of-contents row: given an ordinal, out a plane-icon selector and three text lines (mission name, area, plane flown) |
+| 2409 | `0x0040a4b8` | a table-of-contents row: given an ordinal, out a plane-icon selector and three text lines (mission name, area, plane flown). Ordinal -1 answers the row count, which is the campaign position plus one, or 25 under the unlock flag; ordinal 0 is the career page rather than a mission. [`org/debrief.md`](../org/debrief.md) has the fields and the addresses |
 | 2410 | `0x0040a935` | the zoom view: background, inset image and position, layout letter, and the title, caption and text ids |
 | 2411 | `0x0040a408` | is Replay Mission offered, which is true once either half of the mission's record holds a time |
 | 2412 | `0x0040a3d9` | export the open scrap to the desktop, below |
@@ -862,7 +863,7 @@ corroborate but do not establish them.
 | Cabin | the six buttons and their targets, the deactivated SAVE GAME, the plane photo path, the memento source, the pin count, the `idaho` dropdown, the intro trigger | five buttons and no SAVE GAME, the painted cabin, the framed memento, the map | whether anything on the screen animates or loops, and how the pin frames read; both need the cabin capture |
 | Chapter intro | the movie name, the skip gesture, the one-shot guard | not covered by any screenshot | the MPG decode itself, deliberately out of scope |
 | Flight check | both slots, all four lists, the wingman gate, both plane-change rules, the grant table, both exits | the title, plane lines, six of eight gun rows filled and two blank, the objectives note, the calibre label's string block, both buttons | the `10018`/`10000` state art |
-| Plane selection | both blocks and their gates, the dropdown fill, the rollover preview, the duplicate rule and its revert, the export and cancel paths, the deactivated SELL pair | the widget positions, the list rows, the rating words and their captions, both message boxes verbatim, the preview following the pointer | why the reference's nitrous-engined aircraft prints no top speed word (`BL-817`), and what `gosCallback` 22 writes |
+| Plane selection | both blocks and their gates, the dropdown fill, the rollover preview, the duplicate rule and its revert, the export and cancel paths, the deactivated SELL pair | the widget positions, the list rows, the rating words and their captions, both message boxes verbatim, the preview following the pointer | what `gosCallback` 22 writes |
 | Ammo selection | both callers, the working-copy commit, the greyed empty group, the pylon deactivation, all six string blocks | the greyed fourth group, two of four pylons per wing, both description panes, both plane diagrams | the rocket table's unread second field |
 | Scrapbook | every button's transition, the composition file, the results rows, the kill stamps, the table of contents, the Replay Mission fork | the three reference spreads scrap for scrap, the stamps and total on two of them | the native side of the cabin entry and of `$$SR$$`, both in `crimson.exe`, unreached this session |
 
