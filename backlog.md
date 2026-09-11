@@ -3082,6 +3082,47 @@ usual.
   first from a single aircraft. *Cross-refs:* `docs/org/hangar.md` ("The four rating words"),
   `docs/formats/campaign-screens.md`.
 
+- `BL-819` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **The original's
+  typed cheats (the hidden mission menu, the cash grant, the gallery reveal and the one-mission
+  invincibility) do nothing in CSVM, because no screen reads a typed prefix.** *Evidence:* three of
+  the cheats are script-side and share one shape: a left click inside the screen's own region gives
+  the script focus, `gui_char` appends each typed character and resets the buffer on the first
+  character that leaves the target's prefix, and the full word fires. `idaho`
+  (`PASSENGERCABIN.SCRIPT:107-133`) arms on a click in the cabin's authored region 5,336 to 85,479
+  (`:67`, the microphone side of the screen) and activates `QMA`, the `pc_d_missions` pull-down
+  (`:69-80`, list id 2038 over `@shareditems@BUA`, seeded from `$$KP$$` with 24 clamped to 23); a
+  New Mission with the buffer full then launches the picked row through `callback($$E$$, 2104,
+  QMA.QG + 1)` instead of the default `-2` (`:140-149`). `ispy` (`SCRAPBOOK_TOC.SCRIPT:52-75`,
+  region 42,426 to 136,523 at `:41`) sets `$$USA$$` and re-initialises the `sbtoc_l_toclist` list
+  (list id 2409); the only script-side reader of that flag is `SCRAPBOOK.SCRIPT:445-453`, which prints
+  a white `mission: N spread: N` line at 10,570, so whether the contents list itself widens to every
+  spread sits in the engine's list-2409 callback. `gimme` (`PLANECONSTRUCTION.SCRIPT:167-194`) adds
+  25000 to `$$DOA$$` while it is under 50000 and re-initialises the hub. A fourth word the
+  walkthroughs do not list, `crashcheat!`, is compared against the pilot name on the new-campaign
+  name entry (`CAMPAIGN.SCRIPT:100-130`): it sets `$$SB$$`, restores the previous name and re-runs
+  the accept callback, and no script reads `$$SB$$` again. The invincibility code `I AM THE ACE!!`
+  is in no script's `gui_char` (`ORDINANCELAYOUT.SCRIPT` and `FLIGHTCHECK.SCRIPT` have none) and is
+  not a plain ASCII or UTF-16 string in `crimson.exe`, so its compare is engine-side and obfuscated
+  or hashed. *What to settle first:* the exe side: where the ACE compare lives and what it sets,
+  what `$$SB$$` does, what list 2409 does with `$$USA$$`, and whether the engine holds further
+  hidden words. *Fix shape:* one typed-prefix matcher owned by each of the three screens, with the
+  scripts' reset-on-miss rule, and a cheat store the campaign carries (a mission pick for the next
+  launch, a cash grant, a gallery reveal, an invincibility flag cleared when the flight ends); the
+  pull-down is the existing mission list activated where the script places it. *⚠ Traps:* the
+  walkthroughs say right-click the microphone, but the script arms on `button_clicked == mouse.left`
+  inside the region; do not add a right-button read for it (that seam is `BL-781`'s). The words are
+  case-sensitive and the buffer restarts from empty on a miss, so a partial retype starts over.
+  Keep the buffer per screen; do not route typed words through `MenuCommands`, which is
+  device-neutral by contract. The invincibility is one mission only; a flag that survives the
+  wrap-up is a different cheat. Do not write "see all pictures" into our behaviour until the 2409
+  decode says what the original reveals. *Playtest after fix:*
+  `./RunGame.ps1 --presentation=original --menu=campaign`, click the microphone side, type `idaho`
+  and check the mission pull-down appears and New Mission flies the picked row; in the hangar type
+  `gimme` and check the cash rises by 25000 while under 50000; on Previous Missions click the
+  bottom-left symbol and type `ispy`. *Cross-refs:* `BL-781` (the credits easter egg, the same
+  script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
+  PlaneConstruction rows), `docs/org/hangar.md`.
+
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
