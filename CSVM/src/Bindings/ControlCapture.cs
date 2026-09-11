@@ -15,13 +15,12 @@ namespace CSVM.Bindings;
 /// <see cref="MoveThreshold"/>, since a resting stick drifts.</summary>
 public sealed class ControlCapture
 {
-    /// <summary>The key that cancels a capture instead of being captured. A screen with no way out
-    /// is worse than an unbindable Escape, and Escape keeps its shipped bindings either way.
-    /// </summary>
-    public const Key CancelKey = Key.Escape;
-
-    /// <summary>The pad button that cancels, on the same reasoning as <see cref="CancelKey"/>. It
-    /// is the seat's own Back, so the gesture is the one every other screen uses.</summary>
+    /// <summary>The pad button that cancels a capture instead of being captured. It is the seat's
+    /// own Back, so the gesture is the one every other screen uses, and it leaves a pad-only seat a
+    /// way out of an armed cell.
+    /// ⚠ The keyboard has no such key. Escape is captured like any other key, because the original
+    /// writes it into an armed cell (`docs/org/menu-inventory.md`); a keyboard seat leaves a capture
+    /// by binding something and then leaving through Cancel, which drops every staged edit.</summary>
     public const JoyButton CancelButton = JoyButton.B;
 
     /// <summary>How near centre an axis must sit before the capture will accept a move on it, so a
@@ -116,14 +115,10 @@ public sealed class ControlCapture
     }
 
     /// <summary>Whether the player is asking to abandon the capture rather than to bind something.
-    /// Checked once a frame before <see cref="Poll"/>, since neither cancel control is ever
-    /// captured and both are masked by <see cref="Arm"/> like any other.</summary>
-    public bool Cancelled(IDeviceState state)
-    {
-        bool key = Fresh(_maskedKeys, (int)CancelKey, KeyDown(state, CancelKey));
-        bool button = Fresh(_maskedButtons, (int)CancelButton, state.IsButtonDown(_pad, (int)CancelButton));
-        return key || button;
-    }
+    /// Checked once a frame before <see cref="Poll"/>, since the cancel control is never captured
+    /// and is masked by <see cref="Arm"/> like any other.</summary>
+    public bool Cancelled(IDeviceState state) =>
+        Fresh(_maskedButtons, (int)CancelButton, state.IsButtonDown(_pad, (int)CancelButton));
 
     /// <summary>The control the player pressed since <see cref="Arm"/>, or null while none has
     /// been. Keys first, then pad buttons, then the mouse, then the axes, so a frame holding
@@ -132,7 +127,7 @@ public sealed class ControlCapture
     {
         foreach (var key in Keys)
         {
-            if (key != CancelKey && Fresh(_maskedKeys, (int)key, KeyDown(state, key)))
+            if (Fresh(_maskedKeys, (int)key, KeyDown(state, key)))
                 return new Binding(DeviceId.Keyboard, BindingControl.Key((int)key));
         }
 

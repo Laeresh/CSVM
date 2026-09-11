@@ -662,6 +662,11 @@ public class OriginalShellTests
         shell.OpenGameOptions();
         shell.Step(Accept);
         Assert.Equal(OriginalShell.DifficultyKey, shell.OpenGameOption);
+        // The open list is only as tall as its own items: three tiers, three rows, and the panel
+        // under them no taller, which is how the original draws a list shorter than its box allows.
+        var open = Assert.Single(shell.Compose().Overlays);
+        Assert.Equal(3, open.Lines.Count);
+        Assert.Equal(3f * 17f, open.Fills[0].Height);
         shell.Step(Back);
         Assert.Null(shell.OpenGameOption);
         Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
@@ -829,8 +834,12 @@ public class OriginalShellTests
         Assert.Equal((135f, 295f, 144f, 17f), (difficulty.X, difficulty.Y, difficulty.Width, difficulty.Height));
         var menu = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
         Assert.Equal((135f, 355f, 144f, 17f), (menu.X, menu.Y, menu.Width, menu.Height));
+        // The exit pair side by side on one line, ACCEPT left of CANCEL, which is the arrangement
+        // this section authors and the film shows; the VIDEO page's own section stacks them instead.
         var accept = shell.Rows.Single(r => r.Key == OriginalShell.GameOptionsAcceptKey);
         Assert.Equal((200f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
+        var cancel = shell.Rows.Single(r => r.Key == OriginalShell.GameOptionsCancelKey);
+        Assert.Equal((450f, 470f, 240f, 50f), (cancel.X, cancel.Y, cancel.Width, cancel.Height));
 
         var board = shell.Compose();
         // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its

@@ -642,7 +642,7 @@ halves riding `CAP-52`.
 | ID | What it still owes | What it unblocks |
 |---|---|---|
 | `CAP-50` | VIEW STORY pressed on the Instant Action page | `BL-807` |
-| `CAP-51` | the AUDIO page with sound, and a leaf re-entered after CANCEL CHANGES | the AUDIO page's preview against the decoded script, `BL-806` |
+| `CAP-51` | the AUDIO page with sound, and a leaf re-entered after CANCEL CHANGES | the AUDIO page's preview against the decoded script, and whether a leaf's CANCEL CHANGES reverts a setting |
 | `CAP-52` | the whole menu walk with sound routed, a keyboard and pad pressed on each screen, REPLAY BRIEFING and DELETE PLAYER pressed | A4's audio and input contracts, D33's cue work, `BL-805` |
 | `CAP-53` | the tab bar out of order, Purchase, the cleared default box, the two refusals | C23's Original hangar navigation, `BL-808` |
 
@@ -701,9 +701,15 @@ standing at once, CONTROLS live, and RETURN TO MAIN MENU as its only exit, no AC
 with the movie playing behind it; a leaf's description text stands, following neither the pointer
 nor a selection; a dropdown opens under its box and draws only as many rows as it has items; the
 Video page stacks ACCEPT over CANCEL, the Keys page draws CANCEL left of ACCEPT, and Escape
-inside an armed rebind cell binds Escape. The chooser row is ours, and the four doors' disabled
-frames are a state the original never shows. Where Original differs from the film today is
-`BL-805` and `BL-806`. Still unfilmed: every sound; whether any keyboard or pad focus exists at
+inside an armed rebind cell binds Escape. Original takes all four from its own data: the exit
+pairs at their authored corners (`VP_B_ACCEPTCHANGES` over `VP_B_CANCELCHANGES` on one column,
+`GO_B_ACCEPTCHANGES` left of `GO_B_CANCELCHANGES` on one line, `KB_B_CANCELCHANGES` left of
+`KB_B_ACCEPTCHANGES` for whoever builds that page), an open list one row per item, and a rebind
+capture that writes Escape into the cell, the pad's Back being what abandons one. The chooser row
+is ours, and the four doors' disabled frames are a state the original never shows. Where Original
+differs from the film today is `BL-805`, the CONTROLS door it draws disabled with neither page
+behind it (`BL-696`), and an open list on a leaf outrunning its authored window (`BL-823`).
+Still unfilmed: every sound; whether any keyboard or pad focus exists at
 all (no take pressed a key outside an edit box, so Original's focus walk stays a remake
 equivalence); whether a setting reverts on CANCEL CHANGES (no leaf was re-entered after one);
 whether Preferences is reachable in flight; and whether a disabled button ever draws or sounds.

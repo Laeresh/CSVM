@@ -474,6 +474,30 @@ public class ControlsFeatureTests
         }
     }
 
+    /// <summary>An armed cell takes Escape as the control it was waiting for, which is what the
+    /// original writes into one. It goes through the steal rule like any other key, since the
+    /// shipped flight set already holds it; the pad's Back is what abandons a capture instead.
+    /// </summary>
+    [Fact]
+    public void AnArmedCellTakesEscapeAsItsControl()
+    {
+        var feature = new ControlsFeature();
+        var devices = new FakeCaptureDevices(_ => Pad);
+        feature.AddSeat(1, BindingProfile.Defaults(Pad, readsKeyboard: true), devices, true);
+        feature.Context = InputContext.Flight;
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        feature.MoveSlot(9);
+        feature.BeginCapture();
+        devices.State(InputContext.Flight).Keys.Add((int)Godot.Key.Escape);
+
+        Assert.True(feature.Poll());
+
+        Assert.False(feature.Capturing);
+        Assert.Equal(Key(Godot.Key.Escape), feature.Pending!.Binding);
+        feature.ConfirmSteal();
+        Assert.Contains(Key(Godot.Key.Escape), feature.Bindings(InputAction.Nitro));
+    }
+
     /// <summary>The whole hop the author exercises, in one fact: a pad button captured on the
     /// Flight rows, accepted, saved through the real serializer, read back the way
     /// <c>FlightController.LoadSavedKeymap</c> reads it, and resolved through a device state

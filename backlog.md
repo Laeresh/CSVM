@@ -634,7 +634,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the reason has expired. The feature, the capture, the staged Accept/Cancel, the steal rule and the
   persistence are all shared and built, so what is missing is the presentation's screen graph alone.
   *Fix shape:* the two pages over the extracted artwork, the seven tabs, the two control columns, the
-  three buttons, and `PF_B_CONTROLS` wired live.
+  three buttons, and `PF_B_CONTROLS` wired live. The Keys page's exit pair is authored the other way
+  round from every other leaf's, `KB_B_CANCELCHANGES` at X=202 left of `KB_B_ACCEPTCHANGES` at X=511
+  on one line at Y=550 (`extracted/rof/menu_layout.json`), which is the order `CAP-51` t=96 shows;
+  take it from the data rather than from the sibling pages.
   *⚠ Traps:* **The seven tabs are the original's action groups, not this port's three input
   contexts.** Movement, Throttle, Weapons, Targeting, Views 1, Views 2 and Other have no home for the
   menu and free-camera actions, which the original does not bind at all, so a faithful tab strip
@@ -2306,29 +2309,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the keyboard and pad focus walk stays a remake equivalence, since no take pressed a key on any
   screen; the takes are silent, so nothing here touches a sound. *Playtest after fix:*
   `./RunGame.ps1 --presentation=original`, hold a plaque down and release off it, against
-  `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-806` to `BL-808` (the
+  `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-807` and `BL-808` (the
   same takes' page-level corrections), `docs/org/menu-inventory.md` Part 4.
-
-- `BL-806` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Preferences and
-  its leaves: Video stacks ACCEPT over CANCEL, Keys draws CANCEL left of ACCEPT, a dropdown draws
-  only as many rows as it has items, and Escape inside an armed rebind cell binds Escape.**
-  *Evidence:* `CAP-51.mkv` (`playtest/CAP-51/`, one still per page). The Preferences page draws the
-  logo, the panel, the title, the four doors with all four descriptions standing at once, CONTROLS
-  live, and RETURN TO MAIN MENU as its only exit (t=3.0). Game Options offers Difficulty Normal,
-  Hard, Hardest reading Normal, Default View Cockpit, First Person, Exterior, and an eye toggle for
-  Auto Head Turn, ACCEPT left of CANCEL (t=6 to 7.5). Audio has the In-Game Music toggle, three
-  sliders and Sound Quality Low or High (t=26, 67). Video is a taller panel of nine rows with
-  ACCEPT above CANCEL at bottom right (t=75). Controls offers Keyboard Only, Joystick/Key,
-  Mouse/Keyboard, a Mouse Sensitivity slider and KEYS AND BUTTONS (t=84). Keys and Buttons draws
-  seven category plaques, an Action / Control A / Control B list with the category row in red,
-  RESET TO DEFAULT, and CANCEL left of ACCEPT (t=96); clicking a cell arms it as an empty outlined
-  box and the next key is written in, Escape included (t=125). The difficulty list draws three rows,
-  the skill list on Instant Action three (CAP-50 t=62.6), so a short list is only as tall as its
-  items. *Fix shape:* check each page of `OriginalGameOptions.cs`, `OriginalVideo.cs` and the
-  controls pages against the stills and align the exit pair's order and stacking, the list height
-  and the rebind capture. *⚠ Traps:* whether a setting reverts on CANCEL is unfilmed, since no page
-  was re-entered after one (`CAP-51`'s re-record); the Audio page's sound is unfilmed, the track
-  being silent. *Cross-refs:* `BL-805`, `CAP-51`, `docs/org/menu-inventory.md` Part 4.
 
 - `BL-807` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The Instant
   Action screen keeps the ace duel's enemy boxes, its paging button and its "[continued ...]" text
@@ -2494,6 +2476,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   build the drawer once. Instant Action pauses are unfilmed. *Cross-refs:* `BL-814` (the same
   map and parchment on the load screen), `BL-802`'s closing commit (the check), `CAP-45`,
   `docs/formats/objectives.md`, `docs/org/menu-inventory.md`.
+
+- `BL-823` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The three
+  Preferences leaves draw an open dropdown at its full item count, ignoring the window their own
+  layout row authors, so a list longer than the window has neither a window nor a way to scroll.**
+  *Evidence:* every `D` row carries `TotalDisplayed` (`extracted/rof/menu_layout.json`):
+  `GO_D_DIFFICULTY` 4, `AP_D_SQuality` 4, `VP_D_Device` 4, `VP_D_Display` 8. The Instant Action
+  screen, the hangar, the campaign screens and the sortie screen all read it
+  (`OriginalInstantAction.cs`'s `OpenListRows` clamps it to the item count and hangs the arrows and
+  the thumb off `ListWindow`), but `OriginalGameOptions.cs` and `OriginalVideo.cs` build one row per
+  word and `ComposeOptionList` draws a panel as tall as the rows it was given. The original's own
+  content never reached a window (three difficulty tiers, two sound qualities), which is why the
+  film shows no bar on a leaf; ours does, the Resolution row offering every standard size the
+  screen holds, up to thirteen against the authored eight, and the Monitor row one per screen.
+  *Fix shape:* the option pages take the Instant Action screen's window rule and its arrows and
+  thumb, so a short list stays exactly as tall as its items and a long one windows and scrolls.
+  *⚠ Traps:* the rows are the shell's hit-test surface, so a windowed row outside the window has to
+  be built and hidden rather than dropped, the way `AddOpenListRows` does it, or a pointer hits a
+  row it cannot see. *Cross-refs:* `BL-807` (the same bar on the Instant Action screen),
+  `docs/org/menu-inventory.md` Part 4, `CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`,
+  `CSVM/src/UI/Menu/Original/OriginalVideo.cs`.
 
 ## Splitscreen
 

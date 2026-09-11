@@ -92,8 +92,8 @@ masks everything already held so the press that opened the capture is not read a
 Every pad control is stamped with the seat's own identity rather than a hardware GUID. An axis
 carries the release-first rule as a rest-then-move rule, since a resting stick drifts, and takes a
 fixed `CapturedDeadzone` rather than the travel the crossing happened to report. Hats are not
-scanned, and the cancel controls are never captured. Read `ICaptureDevices.cs` for what it reads
-through.
+scanned, nor is the pad's Back, the one control that cancels a capture; Escape is captured like any
+other key, as the original writes it into an armed cell. Read `ICaptureDevices.cs` next.
 
 ## src/Bindings/ICaptureDevices.cs
 The hardware a rebinding screen captures through: one `IDeviceState` per `InputContext`, together
