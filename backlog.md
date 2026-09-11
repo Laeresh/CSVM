@@ -2413,21 +2413,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
   both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
-- `BL-810` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A pad button does
-  not skip a cinema, so a player on a controller sits through all of one.** *Evidence:* reported at
-  the controls across the boot sequence, the chapter cinema and the closing cinema.
-  `CinemaScreen.Skips` reads `InputEventMouseButton` and `InputEventKey` and nothing else, so
-  `CinemaSkip.AnyKey` means any key rather than any input and no pad button reaches it. The cost is
-  worst exactly where the skip matters most: `chap0.mpg` runs 145 s in front of a bare launch, which
-  is a cost Decision 8 of the cinemas plan accepted on the understanding that a press moves on.
-  *Fix shape:* admit a pad button through the same predicate that already answers the three key sets,
-  so one member still decides what skips what. *⚠ Traps:* the three sets are authored and differ,
-  `ChapterKeys` taking Escape, Space, Return and the left mouse where `ClosingKeys` takes Escape and
-  the mouse alone, so a pad button must join a set rather than bypass them; the boot sequence's
-  `BootKeys` is the any-input case and is where "any" has to mean the pad too. ⚠ A `--det` or
-  pads-off run disables pads entirely, so a headless check cannot see this and the confirmation is at
-  the controls. *Cross-refs:* `git log --grep=CinemaScreen`, `docs/formats/cinemas.md`.
-
 - `BL-802` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The pause screen
   marks a completed objective with a red check drawn over the row's number, and the row's text stays
   black.** *Evidence:* the four `OriginalScreenshots/CAP-45 Mission Pause with objective*.png` stills

@@ -100,6 +100,7 @@ specified in [`cli.md`](cli.md).
 | `F11` | | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | | at the launchscreen: back, and quit from the Mode screen. In flight it opens the pause board instead — a board menu's Exit item is what leaves a session, so a pad can reach it too |
+| `Esc` · `Space` · `Return` · LMB | any button | end a cinema early. The sets are the original's own: the chapter cinema takes all four, the closing cinema `Esc` or a click alone, and the boot sequence's films and stills take any press at all. A pad button is in every set, because a player holding one has no key to offer |
 | mouse | | at the launchscreen (Built-in): the pointer over a row moves the cursor onto it, a press and release on the same row confirms it (letting go elsewhere confirms nothing), the wheel steps the cursor over a list, and the right button goes back a screen on its press. The Mode screen is the exception: Back there is the quit, which stays on `Esc` so a stray click cannot take it. Player 1's device, so on a split aircraft screen only player 1's pane takes it; the campaign boards under Built-in stay on the keys. Original's own pointer is described in `docs/menu-presentations.md` |
 
 ## `--viewer`

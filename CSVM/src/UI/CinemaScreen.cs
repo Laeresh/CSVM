@@ -9,7 +9,9 @@ namespace CSVM.UI;
 /// <summary>Which presses end a cinema before it has played out. The sets differ per cinema and
 /// the difference is the original's own: <c>CAMPAIGNINTRO.SCRIPT</c> takes Escape, Space, Return
 /// and a left mouse press, where <c>FINALCINEMA.SCRIPT</c> takes Escape and the mouse alone.
-/// ⚠ Do not unify them. Space and Return doing nothing on the closing cinema is authored.</summary>
+/// ⚠ Do not unify them. Space and Return doing nothing on the closing cinema is authored.
+/// A pad button is in every set, since a player holding one has no other press to offer, and
+/// <see cref="CinemaSkips"/> is where a set meets a press.</summary>
 [Flags]
 public enum CinemaSkip
 {
@@ -28,9 +30,13 @@ public enum CinemaSkip
     /// <summary>A left mouse press, which both cinema scripts take.</summary>
     LeftMouse = 8,
 
-    /// <summary>Any key at all, which is what the boot sequence offers a player who has not been
-    /// taught a key yet.</summary>
-    AnyKey = 16,
+    /// <summary>Any press at all, key, mouse or pad button alike, which is what the boot sequence
+    /// offers a player who has not been taught a key yet.</summary>
+    AnyPress = 16,
+
+    /// <summary>A gamepad button, any of them. Read only where pad input counts at all, since a
+    /// pad reports its first button pressed as it arrives.</summary>
+    PadButton = 32,
 }
 
 /// <summary>
@@ -44,15 +50,18 @@ public enum CinemaSkip
 /// </summary>
 public sealed partial class CinemaScreen : Node
 {
-    /// <summary>Escape, Space, Return or a left mouse press, the chapter cinema's set.</summary>
-    public const CinemaSkip ChapterKeys =
-        CinemaSkip.Escape | CinemaSkip.Space | CinemaSkip.Return | CinemaSkip.LeftMouse;
+    /// <summary>Escape, Space, Return or a left mouse press, the chapter cinema's set, and a pad
+    /// button with them.</summary>
+    public const CinemaSkip ChapterKeys = CinemaSkip.Escape | CinemaSkip.Space | CinemaSkip.Return
+        | CinemaSkip.LeftMouse | CinemaSkip.PadButton;
 
-    /// <summary>Escape or a left mouse press, the closing cinema's set and no more.</summary>
-    public const CinemaSkip ClosingKeys = CinemaSkip.Escape | CinemaSkip.LeftMouse;
+    /// <summary>Escape or a left mouse press, the closing cinema's set and no more, and a pad
+    /// button with them.</summary>
+    public const CinemaSkip ClosingKeys =
+        CinemaSkip.Escape | CinemaSkip.LeftMouse | CinemaSkip.PadButton;
 
-    /// <summary>Any key or a left mouse press, the boot sequence's set.</summary>
-    public const CinemaSkip BootKeys = CinemaSkip.AnyKey | CinemaSkip.LeftMouse;
+    /// <summary>Any press whatsoever, the boot sequence's set.</summary>
+    public const CinemaSkip BootKeys = CinemaSkip.AnyPress;
 
     /// <summary>Raised once, on the frame the cinema stops, whether it played out or was skipped.
     /// The flow that opened it hands off here.</summary>
@@ -160,7 +169,7 @@ public sealed partial class CinemaScreen : Node
     /// <inheritdoc/>
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (_ended || !Skips(@event))
+        if (_ended || !_skip.Skips(CinemaSkips.PressOf(@event, !Pads.InputBlocked)))
         {
             return;
         }
@@ -269,26 +278,5 @@ public sealed partial class CinemaScreen : Node
         var fit = BoardFit.For(size.X, size.Y);
         _screen.Position = new Vector2(fit.X(0f), fit.Y(0f));
         _screen.Size = new Vector2(fit.Length(BoardFit.AuthoredWidth), fit.Length(BoardFit.AuthoredHeight));
-    }
-
-    private bool Skips(InputEvent @event)
-    {
-        if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
-        {
-            return _skip.HasFlag(CinemaSkip.LeftMouse);
-        }
-
-        if (@event is not InputEventKey { Pressed: true, Echo: false } key)
-        {
-            return false;
-        }
-
-        return key.Keycode switch
-        {
-            Key.Escape => _skip.HasFlag(CinemaSkip.Escape) || _skip.HasFlag(CinemaSkip.AnyKey),
-            Key.Space => _skip.HasFlag(CinemaSkip.Space) || _skip.HasFlag(CinemaSkip.AnyKey),
-            Key.Enter or Key.KpEnter => _skip.HasFlag(CinemaSkip.Return) || _skip.HasFlag(CinemaSkip.AnyKey),
-            _ => _skip.HasFlag(CinemaSkip.AnyKey),
-        };
     }
 }

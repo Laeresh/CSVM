@@ -344,6 +344,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ComposedBoardView.cs` — the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
 - `src/UI/MovieSurface.cs` — a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
 - `src/UI/CinemaScreen.cs` — one cinema over the whole window: the picture in the board's own rectangle, the sound pushed to a generator on the Voice bus, and the skip.
+- `src/UI/CinemaSkips.cs` — the one member that decides what skips what, and the reading of a device event that feeds it: the three authored sets against a press, a pad button among them.
 - `src/UI/BootSequence.cs` — `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
 - `src/UI/BootCard.cs` — the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.

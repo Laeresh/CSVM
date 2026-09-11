@@ -307,6 +307,7 @@
     "menu-original-campaign": 0.6,
     "menu-launch-return": 0.6,
     "options-difficulty-launch": 0.1,
+    "cinema-skip-pad": 0.05,
     "display-monitor": 0.05,
     "display-vsync": 0.05,
     "display-mode": 0.05,

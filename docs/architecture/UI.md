@@ -229,6 +229,17 @@ board into, so a cinema and the screen it hands off to own one area of the windo
 null for a file that will not read, `Ended` is how a flow learns it stopped, and `CinemaSkip` is
 which presses end it early, the per-cinema differences there being the original's own. It mounts
 itself on `HudLayers.Cinema` and frees itself; `Session/Launcher.cs`'s `PlayCinema` is the seam.
+The three authored sets live here as constants and `CinemaSkips` answers them.
+
+## src/UI/CinemaSkips.cs
+Which press ends a cinema, for every screen that offers a skip. `Skips` is the one member that
+decides, and it takes a `CinemaPress` rather than a device event, so all three sets are pinned off
+engine; `PressOf` is the engine's half, reading a key, a click or a pad button into one of those
+and holding no policy of its own. A pad button is in every set, because a player holding one has no
+other press to offer and would otherwise sit through a 145-second film. It is read only where pad
+input counts at all (`--no-pads`, an unfocused window), since a pad reports its first button
+pressed as it connects. What each cinema's set is, and why they differ, is
+[../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/UI/BootSequence.cs
 `fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
@@ -242,8 +253,9 @@ settled; `Held` is the one member that says how much of an authored hold reaches
 
 ## src/UI/BootCard.cs
 The boot sequence's engine half, and the only file that knows a boot still is drawn at all: the
-black the block runs on, a `ComposedBoardView` for the card, a countdown per hold, and the key or
-click that ends a hold early. It mounts on `HudLayers.Board`, the launchscreen's own layer, so a
+black the block runs on, a `ComposedBoardView` for the card, a countdown per hold, and the press
+that ends a hold early, read through `CinemaSkips` against the films' own set so a still and a film
+answer one rule. It mounts on `HudLayers.Board`, the launchscreen's own layer, so a
 film at `HudLayers.Cinema` covers it; the card goes down with the first film and the black outlives
 it, and a hold of no seconds runs on without a frame of its own. `Play` is the whole surface: it
 mounts the node, runs a `BootSequence` over the caller's film call, and frees everything before the

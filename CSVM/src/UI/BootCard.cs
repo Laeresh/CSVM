@@ -126,11 +126,11 @@ public sealed partial class BootCard : Node
         }
     }
 
-    // Any key or a left click, which is CinemaScreen.BootKeys read at a screen with no playback of
-    // its own to ask. The stills take the films' set so the sequence has one rule.
+    // Any press at all, which is CinemaScreen.BootKeys read at a screen with no playback of its own
+    // to ask. The stills take the films' set through the films' own member, so the sequence has one
+    // rule and a pad button ends a still exactly as it ends a film.
     private static bool Skips(InputEvent @event) =>
-        @event is InputEventKey { Pressed: true, Echo: false }
-        or InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left };
+        CinemaScreen.BootKeys.Skips(CinemaSkips.PressOf(@event, !Pads.InputBlocked));
 
     private void Advance()
     {
