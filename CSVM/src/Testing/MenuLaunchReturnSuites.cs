@@ -295,7 +295,7 @@ internal static class MenuLaunchReturnSuites
             ctx.Check(quit != null, $"the top level carries Quit");
             if (quit != null)
             {
-                run.Press(Pointer(fit, quit.X + 5f, quit.Y + 5f, pressed: true, clicked: true));
+                run.Click(Pointer(fit, quit.X + 5f, quit.Y + 5f, pressed: true, clicked: true));
                 ctx.Check(run.Expect<QuitExit>() != null, $"a click on Quit leaves as one QuitExit");
             }
 
@@ -320,7 +320,7 @@ internal static class MenuLaunchReturnSuites
                 return;
             }
 
-            run.Press(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+            run.Click(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
             var row = Row(shell, $"{OriginalShell.ContentsKey}:{preset}");
             if (row == null)
             {
@@ -328,9 +328,9 @@ internal static class MenuLaunchReturnSuites
                 return;
             }
 
-            run.Press(Pointer(fit, row.X + 5f, row.Y + 5f, pressed: true, clicked: true));
+            run.Click(Pointer(fit, row.X + 5f, row.Y + 5f, pressed: true, clicked: true));
             var fly = Row(shell, OriginalShell.FlyMissionKey)!;
-            run.Press(Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+            run.Click(Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
             var launch = run.Expect<LaunchExit>();
             ctx.Check(launch is { Mode: MenuMode.Stunt } && launch.InstantAction?.MissionType == mission,
                 $"Fly Mission leaves as one Instant Action LaunchExit with the {mission} def ({launch?.InstantAction?.MissionType})");
@@ -349,7 +349,7 @@ internal static class MenuLaunchReturnSuites
             return;
         }
 
-        run.Press(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        run.Click(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.Dogfight, $"the door opens Dogfight ({shell.Screen})");
         run.Press(Accept);
         run.Press(Right);
@@ -379,7 +379,7 @@ internal static class MenuLaunchReturnSuites
             return;
         }
 
-        run.Press(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        run.Click(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && ReferenceEquals(campaign.Store, store),
             $"the Campaign door opens the profile screen over the scratch store ({shell.Screen})");
         if (shell.RosterName != Pilot)
@@ -436,7 +436,7 @@ internal static class MenuLaunchReturnSuites
             {
                 var size = ctx.Host.GetViewport().GetVisibleRect().Size;
                 var fit = BoardFit.For(size.X, size.Y);
-                run.Press(Pointer(fit, quit.X + 5f, quit.Y + 5f, pressed: true, clicked: true));
+                run.Click(Pointer(fit, quit.X + 5f, quit.Y + 5f, pressed: true, clicked: true));
                 ctx.Check(run.Expect<QuitExit>() != null, $"Quit leaves as one QuitExit");
                 run.Show(MenuReturnDestination.TopLevel);
                 ctx.Check(shell is { Screen: OriginalScreen.TopLevel } && !campaign.IsOpen,
@@ -494,7 +494,7 @@ internal static class MenuLaunchReturnSuites
     {
         if (Row(shell, key) is { } row)
         {
-            run.Press(Pointer(fit, row.X + 5f, row.Y + 5f, pressed: true, clicked: true));
+            run.Click(Pointer(fit, row.X + 5f, row.Y + 5f, pressed: true, clicked: true));
         }
     }
 
@@ -562,6 +562,14 @@ internal static class MenuLaunchReturnSuites
         }
 
         public void Press(MenuCommands frame) => Press(Seat, frame);
+
+        // One click as the Original shell reads it: the press arms the row it lands on and the
+        // release still on that row is what fires, so a click is two frames rather than one.
+        public void Click(MenuCommands frame)
+        {
+            Press(frame);
+            Press(frame with { Pointer = frame.Pointer!.Value with { Pressed = false, Clicked = false } });
+        }
 
         // Seat 0's frame, or a guest's: a Built-in guest is polled by the launchscreen's own frame,
         // which the host's tick runs, and an Original guest by the presentation's poll.

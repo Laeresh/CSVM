@@ -70,15 +70,60 @@ public class OriginalShellTests
         var shell = Shell(out _);
         var door = shell.Rows[0];
 
-        shell.Step(Pointer(door.X + 2f, door.Y + 2f, pressed: true));
+        shell.Step(Pointer(door.X + 2f, door.Y + 2f, pressed: true, clicked: true));
         var plaque = shell.Compose().Plaques.Single(p => p.Label == "FREE FLIGHT");
         Assert.Equal(3, plaque.Frame);
         Assert.Equal(BoardInk.LabelActivate, plaque.Ink);
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
 
-        var step = shell.Step(Pointer(door.X + 2f, door.Y + 2f, pressed: true, clicked: true));
+        var step = shell.Step(Pointer(door.X + 2f, door.Y + 2f));
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.Contains(OriginalCues.Click, step.Cues);
         Assert.Null(step.Exit);
+    }
+
+    [Fact]
+    public void APressReleasedOffTheRowItLandedOnFiresNothingAndDropsTheHeldFrame()
+    {
+        var shell = Shell(out _);
+        var door = shell.Rows[0];
+        var other = shell.Rows.First(r => r.Key == "MM_B_PREFERENCES");
+
+        shell.Step(Pointer(door.X + 2f, door.Y + 2f, pressed: true, clicked: true));
+        Assert.Equal(door.Key, shell.ArmedKey);
+
+        // Still held, the pointer leaves for another live plaque: neither draws held, and the
+        // release there activates neither of them.
+        shell.Step(Pointer(other.X + 2f, other.Y + 2f, pressed: true));
+        Assert.Empty(shell.Compose().Plaques.Where(p => p.Frame == 3));
+        var step = shell.Step(Pointer(other.X + 2f, other.Y + 2f));
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Assert.Equal(string.Empty, shell.ArmedKey);
+        Assert.DoesNotContain(OriginalCues.Click, step.Cues);
+    }
+
+    [Fact]
+    public void ThePointerBitmapAnswersAnEnterOrALeaveAndNotWhateverTheScreenPutsUnderIt()
+    {
+        var shell = Shell(out _);
+        var door = shell.Rows[0];
+        float x = door.X + 2f;
+        float y = door.Y + 2f;
+
+        shell.Step(Pointer(1f, 1f));
+        Assert.Equal("passivepointerz.png", PointerArt(shell));
+        shell.Step(Pointer(x, y));
+        Assert.Equal("activepointerz.png", PointerArt(shell));
+
+        // A screen drawn under a still pointer is no enter, so the bitmap it arrived with stands
+        // even where nothing live is under it now.
+        shell.Open(OriginalScreen.Options);
+        Assert.Equal(string.Empty, HitTestKey(shell, x, y));
+        shell.Step(Pointer(x, y));
+        Assert.Equal("activepointerz.png", PointerArt(shell));
+
+        shell.Step(Pointer(x + 1f, y));
+        Assert.Equal("passivepointerz.png", PointerArt(shell));
     }
 
     [Fact]
@@ -148,7 +193,7 @@ public class OriginalShellTests
         Assert.Equal("C3", shell.FocusedKey);
         Assert.Empty(step.Cues);
 
-        step = shell.Step(Pointer(hawaii.X + 10f, hawaii.Y + 5f, pressed: true, clicked: true));
+        step = Click(shell, hawaii.X + 10f, hawaii.Y + 5f);
         Assert.Equal("C3", shell.PickedChapter);
         Assert.Empty(step.Cues);
         Assert.Contains(shell.Compose().Fills, f => f.X == hawaii.X && f.Y == hawaii.Y && !f.Border);
@@ -815,7 +860,7 @@ public class OriginalShellTests
         Assert.Equal(new MenuLayoutColor(0xFF, 0xC0, 0xBA, 0xAD), shell.PreferencesInks.Title);
 
         // A click on RETURN TO MAIN MENU leaves; Back leaves too.
-        shell.Step(Pointer(back.X + 2f, back.Y + 2f, pressed: true, clicked: true));
+        Click(shell, back.X + 2f, back.Y + 2f);
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
         shell.Open(OriginalScreen.Options);
         shell.Step(Back);
@@ -1063,6 +1108,18 @@ public class OriginalShellTests
 
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+
+    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // step that carries the activation is the second one.
+    private static OriginalStep Click(OriginalShell shell, float x, float y)
+    {
+        shell.Step(Pointer(x, y, pressed: true, clicked: true));
+        return shell.Step(Pointer(x, y));
+    }
+
+    // The bitmap the composed pointer overlay draws, which is the last overlay's one picture.
+    private static string PointerArt(OriginalShell shell) =>
+        shell.Compose().Overlays[^1].Pictures[0].Art.Name;
 
     // The key of the topmost row a point lands on, the shell's own last-hit-wins reading.
     private static string HitTestKey(OriginalShell shell, float x, float y)

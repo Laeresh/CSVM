@@ -2288,38 +2288,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
 
-- `BL-805` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The original's
-  menus fire a press on the release, colour a plaque's lettering gold, orange and red for its three
-  states, draw no version text, swap the pointer bitmap only on an enter or leave, and keep the
-  flag movie looping behind Preferences.** *Evidence:* `CAP-49.mkv` and
-  `CAP-52.mkv` (`playtest/CAP-49/`, `playtest/CAP-52/`, stills and a 6 fps pointer track). A press
-  acts on the frame after the release, never on the button-down: QUIT held red for 1.4 s did nothing
-  until released (CAP-49 t=52.7 to 54.1), and four presses in CAP-52 land one to two frames after the
-  pressed art ends. A plaque's three states differ only in lettering colour, measured on the same
-  bitmap as gold #B99950 at rest, orange #A85B26 under the pointer and red #A32620 while held, the
-  rollover arriving on the frame the hot point enters the box. Multiplayer lights and takes the
-  active pointer like the other five; no take draws any plaque disabled. Nothing is drawn at
-  `mm_t_title`: a static-pixel map over ten seconds of the moving movie leaves only the logo, the
-  six plaques and the frame. The movie fills the 4:3 frame edge to edge, loops on a cycle near 8 s,
-  and keeps running in phase behind Preferences and every leaf page. The active pointer stands over a
-  live button, a plaque, an edit box and an open dropdown's rows, the passive one over a roster row,
-  a scrap and dead space, hotspot at the bitmap's top-left; and a pointer already inside a button
-  when a screen is drawn keeps the bitmap it arrived with (CANCEL PURCHASE at CAP-52 t=143.7 to
-  145.3 stays passive through its rollover and press). Ours fires on the button-down and swaps
-  the pointer by where it stands (`CSVM/src/UI/Menu/Original/OriginalShell.cs`,
-  `PointerSeat.cs`). *Fix shape:* fire on the release with the held frame drawn until then; read
-  the three lettering colours off the layout's colour tail and check the drawn frames against the
-  measured values; draw no title text; swap the pointer bitmap on enter and leave events only;
-  leave the movie's place black, since the extraction carries no `CrimFlag.MPG`, and record that
-  as the missing asset. *⚠ Traps:* Multiplayer stays in its disabled frame by the user's decision
-  until multiplayer is implemented, a deliberate departure from the live plaque the film shows;
-  the keyboard and pad focus walk stays a remake equivalence, since no take pressed a key on any
-  screen; the takes are silent, so nothing here touches a sound. *Playtest after fix:*
-  `./RunGame.ps1 --presentation=original`, hold a plaque down and release off it, against
-  `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-808` (the same
-  takes' hub corrections; the Instant Action page's landed with `git log --grep=BL-807`),
-  `docs/org/menu-inventory.md` Part 4.
-
 - `BL-809` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **An opened scrap
   reads differently from the original's: the typeface differs, and where ours shows the scrap's
   picture the original shows a newspaper-header-like image and then the text.** *Evidence:* reported
@@ -2450,6 +2418,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`git log --grep=BL-807`), which is the shape to copy;
   `docs/org/menu-inventory.md` Part 4, `CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`,
   `CSVM/src/UI/Menu/Original/OriginalVideo.cs`.
+
+- `BL-825` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: footage]` **Whether the
+  build stamp stays in the corner of the Original menu, where the original draws no text at all.**
+  *Evidence:* `BuildStamp.cs` writes `v<version>` in the bottom-right corner whenever the menu is
+  up, on every presentation, so a screenshot a stranger sends carries the build it was taken on
+  (`CSVM/src/UI/BuildStamp.cs:6-12`). The original's top level draws no text outside the art: the
+  script creates `mm_t_title` and fills it from `uiData` 2152, and CAP-49's static-pixel map over
+  ten seconds leaves only the logo, the six plaques and the frame. Original draws nothing at
+  `mm_t_title` and never did; what the film contradicts is the corner stamp, which is ours and
+  which no take can speak to. *Fix shape:* either keep it (the stamp is a fact about the binary,
+  and the presentation most likely to be screenshot is the one that would lose it) or hide it under
+  `PresentationId.Original` alone, which costs one condition in `BuildStamp.Tick`. *⚠ Traps:* the
+  stamp's placement is deliberate and cross-presentation, so hiding it on one presentation is a
+  decision about what a bug report carries, not a fidelity fix. *Cross-refs:* `BL-805`'s closing
+  commit (the rest of the top level's reading), `docs/org/menu-inventory.md` Part 4.
 
 ## Splitscreen
 

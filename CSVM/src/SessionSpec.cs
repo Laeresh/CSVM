@@ -691,6 +691,11 @@ public sealed record SessionSpec
     /// open on the wizard's step 1, so the FILLED wizard is screenshot-able. −1 = not asked for,
     /// since preset 0 ("Girl Trouble") is a real request unlike a 0 wave or wingman count.</summary>
     public int DebugPreset { get; private set; } = -1;
+    /// <summary><c>--debug-pointer=x,y[,down]</c> (the Original presentation only): stand seat 0's
+    /// pointer at that authored 800x600 point, held down with <c>down</c>, so a plaque's rollover
+    /// and held states are screenshot-able with nobody at the controls. Authored rather than window
+    /// pixels, so a shot lands on the same widget whatever the window. Null = not asked for.</summary>
+    public (float X, float Y, bool Down)? DebugPointer { get; private set; }
     public bool MarkersOverlay { get; private set; }
     public bool WeaponLab { get; private set; }
     public string? WeaponSelect { get; private set; }
@@ -894,6 +899,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-waves=")) { s.DebugWaves = int.Parse(arg["--debug-waves=".Length..]); }
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
             else if (arg.StartsWith("--debug-preset=")) { s.DebugPreset = int.Parse(arg["--debug-preset=".Length..]); }
+            else if (arg.StartsWith("--debug-pointer=")) { s.DebugPointer = ParseDebugPointer(arg["--debug-pointer=".Length..]); }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
             else if (arg.StartsWith("--paint-decal=")) { s.PaintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]); }
@@ -1481,6 +1487,22 @@ public sealed record SessionSpec
 
     /// <summary>Parse <c>--paint-decal=</c>: up to three comma-separated indices (nose / tail /
     /// wing); a missing slot repeats the last one given.</summary>
+    /// <summary>Parse <c>--debug-pointer=</c>: "x,y" or "x,y,down" in authored 800x600 pixels. A
+    /// spec without two numbers stands no pointer at all, since a shot of a half-read one would
+    /// read as an answer about where the pointer goes.</summary>
+    public static (float X, float Y, bool Down)? ParseDebugPointer(string spec)
+    {
+        var parts = (spec ?? string.Empty).Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length < 2
+            || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
+            || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+        {
+            return null;
+        }
+
+        return (x, y, parts.Length > 2 && parts[2].Equals("down", StringComparison.OrdinalIgnoreCase));
+    }
+
     public static int[] ParsePaintDecals(string spec)
     {
         var parts = spec.Split(',', StringSplitOptions.TrimEntries);

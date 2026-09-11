@@ -328,6 +328,13 @@ public sealed partial class OriginalShell
     private OriginalScreen _screen;
     private int _hover = -1;
     private int _pressed = -1;
+    // The key of the row a press landed on. A press activates nothing: the row draws its held
+    // frame while the button is down and fires only when the button comes up still on it, so a
+    // press released anywhere else fires nothing.
+    private string? _armed;
+    // Which bitmap the pointer wears. It answers an enter or a leave and is recomputed only when
+    // the pointer moves, so a screen drawn under a still pointer keeps the bitmap it arrived with.
+    private bool _pointerLive;
     private (float X, float Y)? _pointer;
     // A thumb drag in progress: which list, where the pointer took hold and where the window stood.
     private (string Key, float StartY, int StartTop)? _drag;
@@ -440,6 +447,15 @@ public sealed partial class OriginalShell
     /// <summary>The row under the pointer, or -1.</summary>
     public int Hover => _hover;
 
+    /// <summary>Whether the pointer wears the active bitmap. Set on an enter or a leave and on
+    /// nothing else, so it can disagree with <see cref="Hover"/> on a screen the pointer did not
+    /// move onto.</summary>
+    public bool PointerLive => _pointerLive;
+
+    /// <summary>The key of the row a press is holding, or "". It fires when the button comes up
+    /// still on it and never otherwise.</summary>
+    public string ArmedKey => _armed ?? string.Empty;
+
     /// <summary>The screen's scrolling lists as the pointer sees them, the topmost first: none
     /// under a dialog, an open dropdown's list alone while one stands, else the screen's own.</summary>
     public IReadOnlyList<OriginalList> Lists
@@ -548,6 +564,7 @@ public sealed partial class OriginalShell
         _screen = screen;
         _hover = -1;
         _pressed = -1;
+        _armed = null;
         if (!OnSeatWalk)
         {
             _pickingSeat = null;
@@ -592,7 +609,8 @@ public sealed partial class OriginalShell
 
         if (commands.Pointer is { } pointer)
         {
-            changed |= _pointer != (pointer.X, pointer.Y);
+            bool pointerMoved = _pointer != (pointer.X, pointer.Y);
+            changed |= pointerMoved;
             _pointer = (pointer.X, pointer.Y);
             // The thumb, the slider and the wheel come before the rows: a held one owns the
             // pointer until it is let go, and a wheel step moves the rows the hit test then reads.
@@ -612,6 +630,13 @@ public sealed partial class OriginalShell
             rows = Rows;
             focus = EnsureFocus(rows);
             int over = dragging ? -1 : HitTest(rows, pointer.X, pointer.Y);
+            if (pointerMoved)
+            {
+                bool live = over >= 0 && rows[over].Enabled;
+                changed |= live != _pointerLive;
+                _pointerLive = live;
+            }
+
             if (over != _hover)
             {
                 _hover = over;
@@ -636,15 +661,27 @@ public sealed partial class OriginalShell
                 }
             }
 
-            int pressed = pointer.Pressed && over >= 0 && rows[over].Enabled ? over : -1;
+            if (pointer.Clicked && !dragging && over >= 0 && rows[over].Enabled)
+            {
+                _armed = rows[over].Key;
+            }
+
+            bool onArmed = _armed != null && over >= 0 && rows[over].Enabled && rows[over].Key == _armed;
+            int pressed = onArmed ? over : -1;
             changed |= pressed != _pressed;
             _pressed = pressed;
+            bool fires = onArmed && !pointer.Pressed;
+            if (!pointer.Pressed)
+            {
+                _armed = null;
+            }
+
             if (dragging)
             {
                 // A drag's click was spent on the thumb or the slider it took hold of; nothing
                 // under the pointer is activated.
             }
-            else if (pointer.Clicked && over >= 0 && rows[over].Enabled)
+            else if (fires)
             {
                 if (!HoverOnly(rows[over]))
                 {
@@ -827,10 +864,9 @@ public sealed partial class OriginalShell
 
         if (_pointer is { } at)
         {
-            bool live = _hover >= 0 && _hover < rows.Count && rows[_hover].Enabled;
             overlays.Add(new BoardPanel(
                 Array.Empty<BoardFill>(),
-                new[] { new BoardPicture(live ? _activePointer : _passivePointer, at.X, at.Y) },
+                new[] { new BoardPicture(_pointerLive ? _activePointer : _passivePointer, at.X, at.Y) },
                 Array.Empty<BoardLine>()));
         }
 

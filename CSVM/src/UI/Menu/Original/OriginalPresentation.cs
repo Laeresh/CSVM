@@ -137,6 +137,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     private BoardPalette _hangarPalette = BoardPalette.Paper;
     private bool _shown;
     private bool _joiningOpen;
+    private bool _debugPointerDown;
 
     // The narration bookkeeping: how many starts the briefing had asked for when playback last
     // began (0 while nothing plays), and whether the reveal was running last frame, so the frame
@@ -163,6 +164,11 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The shell while built, for the suites that read the screen back.</summary>
     public OriginalShell? Shell => _shell;
+
+    /// <summary>The screenshot aid's pointer (<c>--debug-pointer=</c>) in authored pixels, which
+    /// stands in for seat 0's own for the run: a rollover and a held plaque are then shot with
+    /// nobody at the controls. Null leaves the mouse alone.</summary>
+    public (float X, float Y, bool Down)? DebugPointer { get; set; }
 
     /// <summary>The pad bookkeeping while built, for the suites that read seat 0's claim back.</summary>
     public MenuSeatDevices? Devices => _devices;
@@ -449,6 +455,16 @@ public sealed class OriginalPresentation : IMenuPresentation
                         Y = (pointer.Y - fit.OriginY) / fit.Scale,
                     },
                 };
+            }
+
+            // The aid's pointer is already in the authored space, so it replaces seat 0's mapped
+            // one rather than being mapped again. Its press arrives as an edge once, which is what
+            // arms the plaque under it; it is never released, so the held state is what gets shot.
+            if (i == 0 && DebugPointer is { } aid)
+            {
+                bool edge = aid.Down && !_debugPointerDown;
+                _debugPointerDown = aid.Down;
+                commands = commands with { Pointer = new MenuPointer(aid.X, aid.Y, aid.Down, edge) };
             }
 
             var step = _shell.StepSeat(i, commands);

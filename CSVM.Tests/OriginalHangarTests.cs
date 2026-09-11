@@ -56,7 +56,7 @@ public class OriginalHangarTests : IDisposable
         var door = shell.Rows.Single(r => r.Key == OriginalShell.BuildKey);
         Assert.True(door.Enabled);
 
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(door.X + 2f, door.Y + 2f, true, true) });
+        Click(shell, door.X + 2f, door.Y + 2f);
 
         Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
         Assert.True(hangar.IsOpen);
@@ -256,7 +256,7 @@ public class OriginalHangarTests : IDisposable
         Click(shell, "AR_D_POINT1");
         Assert.Equal(CustomPlaneDef.MaxArmourUnits + 1, shell.Rows.Count);
         var three = shell.Rows.Single(r => r.Key == "AR_D_POINT1:3");
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(three.X + 2f, three.Y + 2f, true, true) });
+        Click(shell, three.X + 2f, three.Y + 2f);
         Assert.Equal(3, hangar.Scratch.ArmourTail);
         Assert.Equal("15 units", shell.Rows.Single(r => r.Key == "AR_D_POINT1").Label);
 
@@ -506,7 +506,7 @@ public class OriginalHangarTests : IDisposable
     private static void Click(OriginalShell shell, string key)
     {
         var row = shell.Rows.Single(r => r.Key == key);
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(row.X + 2f, row.Y + 2f, true, true) });
+        Click(shell, row.X + 2f, row.Y + 2f);
     }
 
     // The way in: the top level's Instant Action row, then the screen's Build Custom Plane.
@@ -544,6 +544,14 @@ public class OriginalHangarTests : IDisposable
         _ when art.StartsWith("PM_B_", StringComparison.Ordinal) => (240, 200),
         _ => null,
     };
+
+    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // step that carries the activation is the second one.
+    private static OriginalStep Click(OriginalShell shell, float x, float y)
+    {
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, true, true) });
+        return shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, false, false) });
+    }
 
     // The Instant Action door's Pilot Plane pick is what a default-configuration build inherits, so
     // every shell here states the pick it opens the door from; the Devastator is the suite's.

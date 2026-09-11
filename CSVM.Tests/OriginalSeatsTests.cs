@@ -58,7 +58,7 @@ public class OriginalSeatsTests
         shell.Step(Up);
         Assert.Equal(OriginalShell.AirframeKey(10), shell.FocusedKey);
         var fly = Fly(shell);
-        var step = shell.Step(Pointer(fly.X + 4f, fly.Y + 4f, pressed: true, clicked: true));
+        var step = Click(shell, fly.X + 4f, fly.Y + 4f);
         Assert.Null(step.Exit);
         Assert.False(setup.Seats[0].Confirmed);
     }
@@ -152,7 +152,7 @@ public class OriginalSeatsTests
         var shell = Shell(out var setup, out _);
         shell.Open(OriginalScreen.FreeFlight);
         var first = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        shell.Step(Pointer(first.X + 4f, first.Y + 4f, pressed: true, clicked: true));
+        Click(shell, first.X + 4f, first.Y + 4f);
         Assert.Null(shell.PickedChapter);
         var second = setup.Join(new ScriptedMenuSeat())!;
         shell.Step(None);
@@ -169,11 +169,11 @@ public class OriginalSeatsTests
 
         // The map picked, FLY stands and seat 0's own press is the launch.
         var map = shell.Rows.Single(r => r.Key == "C1");
-        shell.Step(Pointer(map.X + 4f, map.Y + 4f, pressed: true, clicked: true));
+        Click(shell, map.X + 4f, map.Y + 4f);
         var fly = Fly(shell);
         Assert.True(fly.Enabled);
         var launch = Assert.IsType<LaunchExit>(
-            shell.Step(Pointer(fly.X + 4f, fly.Y + 4f, pressed: true, clicked: true)).Exit);
+            Click(shell, fly.X + 4f, fly.Y + 4f).Exit);
         Assert.Equal("C1", launch.Chapter);
         Assert.Equal(2, launch.Seats.Count);
     }
@@ -188,13 +188,13 @@ public class OriginalSeatsTests
         // The aircraft picked and no map: the press is what is left, so the hint names FLY rather
         // than the aircraft already chosen.
         var plane = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        shell.Step(Pointer(plane.X + 4f, plane.Y + 4f, pressed: true, clicked: true));
+        Click(shell, plane.X + 4f, plane.Y + 4f);
         Assert.Null(shell.PickedChapter);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then FLY");
 
         // The map picked, the hint stops naming it.
         var map = shell.Rows.Single(r => r.Key == "C1");
-        shell.Step(Pointer(map.X + 4f, map.Y + 4f, pressed: true, clicked: true));
+        Click(shell, map.X + 4f, map.Y + 4f);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready, or press START on a free pad to join");
 
         // A Dogfight short of its second seat names that seat even with no map picked, the press
@@ -202,7 +202,7 @@ public class OriginalSeatsTests
         var dogfight = Shell(out _, out _);
         dogfight.Open(OriginalScreen.Dogfight);
         var versusPlane = dogfight.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        dogfight.Step(Pointer(versusPlane.X + 4f, versusPlane.Y + 4f, pressed: true, clicked: true));
+        Click(dogfight, versusPlane.X + 4f, versusPlane.Y + 4f);
         Assert.Null(dogfight.PickedDogfightChapter);
         Assert.Contains(dogfight.Compose().Lines, l => l.Text.StartsWith("Dogfight needs a second seat", StringComparison.Ordinal));
     }
@@ -242,11 +242,11 @@ public class OriginalSeatsTests
         // Seat 0's pointer still drives the screen, one mouse at the desk serving whoever picks: a
         // click on a list entry selects it for the picking seat, ACCEPT SELECTIONS confirms.
         var entry = shell.Rows.Single(r => r.Key == "ENTRY:2");
-        shell.Step(Pointer(entry.X + 4f, entry.Y + 4f, pressed: true, clicked: true));
+        Click(shell, entry.X + 4f, entry.Y + 4f);
         Assert.True(third.Locked);
         Assert.Equal(2, third.Cursor);
         var accept = shell.Rows.Single(r => r.Key == "AcceptSelections");
-        var last = shell.Step(Pointer(accept.X + 4f, accept.Y + 4f, pressed: true, clicked: true));
+        var last = Click(shell, accept.X + 4f, accept.Y + 4f);
         Assert.True(third.Confirmed);
 
         // The last seat confirmed, so that press is the launch for all three, whichever device it
@@ -276,7 +276,7 @@ public class OriginalSeatsTests
 
         // CANCEL SELECTIONS over the open list is the pointer's own way out of the walk.
         var cancel = shell.Rows.Single(r => r.Key == "CancelSelections");
-        Assert.Null(shell.Step(Pointer(cancel.X + 4f, cancel.Y + 4f, pressed: true, clicked: true)).Exit);
+        Assert.Null(Click(shell, cancel.X + 4f, cancel.Y + 4f).Exit);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.Null(shell.PickedAirframe);
         Assert.True(second.Joined);
@@ -317,13 +317,13 @@ public class OriginalSeatsTests
         var first = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
         var third = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(2));
 
-        shell.Step(Pointer(first.X + 4f, first.Y + 4f, pressed: true, clicked: true));
+        Click(shell, first.X + 4f, first.Y + 4f);
         Assert.Equal("player_autogyro", shell.PickedAirframe);
-        shell.Step(Pointer(first.X + 4f, first.Y + 4f, pressed: true, clicked: true));
+        Click(shell, first.X + 4f, first.Y + 4f);
         Assert.Equal("player_autogyro", shell.PickedAirframe);
         Assert.True(setup.Seats[0].Locked);
 
-        shell.Step(Pointer(third.X + 4f, third.Y + 4f, pressed: true, clicked: true));
+        Click(shell, third.X + 4f, third.Y + 4f);
         Assert.Equal("player_balmoral", shell.PickedAirframe);
         Assert.True(setup.Seats[0].Locked);
         Assert.Contains(shell.Compose().Fills, f => f.X == third.X && f.Y == third.Y);
@@ -375,7 +375,7 @@ public class OriginalSeatsTests
         shell.StepSeat(1, Accept);
         Assert.True(second.Locked);
         var cancel = shell.Rows.Single(r => r.Key == "CancelSelections");
-        shell.Step(Pointer(cancel.X + 4f, cancel.Y + 4f, pressed: true, clicked: true));
+        Click(shell, cancel.X + 4f, cancel.Y + 4f);
         Assert.False(second.Locked);
         Assert.True(second.Joined);
         Assert.Equal(2, setup.Seats.Count);
@@ -385,7 +385,7 @@ public class OriginalSeatsTests
         // With no selection left to drop, the same press leaves the walk, both seats kept: the one
         // exit a mouse has, Back belonging to the picking seat's device.
         var again = shell.Rows.Single(r => r.Key == "CancelSelections");
-        Assert.Null(shell.Step(Pointer(again.X + 4f, again.Y + 4f, pressed: true, clicked: true)).Exit);
+        Assert.Null(Click(shell, again.X + 4f, again.Y + 4f).Exit);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.True(second.Joined);
         Assert.Equal(2, setup.Seats.Count);
@@ -403,7 +403,7 @@ public class OriginalSeatsTests
         Assert.Contains(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text == "P2  scripted");
 
         var fly = shell.Rows.Single(r => r.Key == OriginalShell.FlyMissionKey);
-        Assert.Null(shell.Step(Pointer(fly.X + 4f, fly.Y + 4f, pressed: true, clicked: true)).Exit);
+        Assert.Null(Click(shell, fly.X + 4f, fly.Y + 4f).Exit);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.Equal(1, shell.PickingSeat);
         Assert.Equal(OriginalScreen.InstantAction, shell.SeatReturn);
@@ -468,7 +468,7 @@ public class OriginalSeatsTests
         shell.StepSeat(1, Accept);
         second.Fit.SetGunAmmo(1, "wep_ap");
         var keep = shell.Rows.Single(r => r.Key == OriginalShell.LoadoutAcceptKey);
-        shell.Step(Pointer(keep.X + 4f, keep.Y + 4f, pressed: true, clicked: true));
+        Click(shell, keep.X + 4f, keep.Y + 4f);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.Equal(LoadoutRow, shell.FocusedKey);
         Assert.Equal("wep_ap", second.Fit.GunAmmoFor(1));
@@ -477,7 +477,7 @@ public class OriginalSeatsTests
 
         // Every seat's own fit reaches the launch, seat 0's carrying nothing because it picked none.
         var confirm = shell.Rows.Single(r => r.Key == "AcceptSelections");
-        shell.Step(Pointer(confirm.X + 4f, confirm.Y + 4f, pressed: true, clicked: true));
+        Click(shell, confirm.X + 4f, confirm.Y + 4f);
         Assert.True(second.Confirmed);
         Assert.Equal(2, shell.PickingSeat);
         shell.StepSeat(2, Accept);
@@ -607,4 +607,12 @@ public class OriginalSeatsTests
 
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+
+    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // step that carries the activation is the second one.
+    private static OriginalStep Click(OriginalShell shell, float x, float y)
+    {
+        shell.Step(Pointer(x, y, pressed: true, clicked: true));
+        return shell.Step(Pointer(x, y));
+    }
 }

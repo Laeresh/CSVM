@@ -141,7 +141,7 @@ internal static class MenuOriginalCampaignSuites
         }
 
         audio.Cues.Clear();
-        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && campaign.IsOpen && ReferenceEquals(campaign.Store, store),
             $"a click on Campaign opens the profile screen over the scratch store ({shell.Screen}, open={campaign.IsOpen})");
         ctx.Check(audio.Cues.Contains(OriginalCues.Click), $"with a click cue ({string.Join(",", audio.Cues)})");
@@ -206,7 +206,7 @@ internal static class MenuOriginalCampaignSuites
         }
 
         audio.Reset();
-        Press(host, seat, Pointer(fit, next.X + 5f, next.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, next.X + 5f, next.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignBriefing && campaign.MissionSeq == 0,
             $"NEXT MISSION opens the briefing of the next story position ({shell.Screen}, seq {campaign.MissionSeq})");
         ctx.Check(shell.Rows.Count == 3 && shell.FocusedKey == "ReplayBriefing", $"three plaques, focus on REPLAY BRIEFING ({shell.FocusedKey})");
@@ -274,7 +274,7 @@ internal static class MenuOriginalCampaignSuites
         }
 
         int endsBefore = audio.Ends;
-        Press(host, seat, Pointer(fit, go.X + 5f, go.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, go.X + 5f, go.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && audio.Ends == endsBefore + 1,
             $"GO TO FLIGHT CHECK opens the check and ends the narration ({shell.Screen}, ends {audio.Ends})");
         ctx.Check(shell.FocusedKey == "ChangeAmmo" && Row(shell, "FlyMission") != null,
@@ -289,7 +289,7 @@ internal static class MenuOriginalCampaignSuites
             $"two debug-joined seats put three humans on the field, the seated player's check showing ({campaign.Field.Players}, {campaign.Field.Current})");
 
         var fly = Row(shell, "FlyMission")!;
-        Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && campaign.Field.Current == 1 && campaign.Field.Locked,
             $"FLY MISSION on the seated player's check advances to P2's ({campaign.Field.Current}, locked {campaign.Field.Locked})");
         ctx.Check(HasLine(shell.Compose(), "FLIGHT CHECK P2"), $"headed for the guest");
@@ -302,15 +302,15 @@ internal static class MenuOriginalCampaignSuites
         Press(host, padded, Back);
         ctx.Check(campaign.Field.Current == 0, $"the guest's own Back retreats to the seated player's check ({campaign.Field.Current})");
         fly = Row(shell, "FlyMission")!;
-        Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
         fly = Row(shell, "FlyMission")!;
         Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: false, clicked: false));
-        Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
         ctx.Check(campaign.Field.Current == 2, $"and again onto P3's ({campaign.Field.Current})");
         fly = Row(shell, "FlyMission")!;
         var profile = campaign.Profile!;
         Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: false, clicked: false));
-        Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
         ctx.Check(exits.Count == 1 && exits[0] is CampaignMissionExit, $"the last check's FLY MISSION leaves through the host as one CampaignMissionExit ({exits.Count})");
         if (exits.Count == 1 && exits[0] is CampaignMissionExit exit)
         {
@@ -385,12 +385,12 @@ internal static class MenuOriginalCampaignSuites
             return;
         }
 
-        Press(host, seat, Pointer(fit, tab.X + 4f, tab.Y + 4f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, tab.X + 4f, tab.Y + 4f, pressed: true, clicked: true));
         ctx.Check(Row(shell, "BestTab") != null && Row(shell, "MostTab") == null,
             $"a press on it puts Best to Date on the card ({shell.FocusedKey})");
         if (UnselectedTab(shell) is { } other)
         {
-            Press(host, seat, Pointer(fit, other.X + 4f, other.Y + 4f, pressed: true, clicked: true));
+            Click(host, seat, Pointer(fit, other.X + 4f, other.Y + 4f, pressed: true, clicked: true));
             ctx.Check(Row(shell, "MostTab") != null, $"and a press on the other reads Most Recent again");
         }
 
@@ -432,7 +432,7 @@ internal static class MenuOriginalCampaignSuites
             return;
         }
 
-        Press(host, seat, Pointer(fit, go.X + 5f, go.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, go.X + 5f, go.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignAmmo && campaign.AmmoSlot == 0,
             $"CHANGE AMMO opens ammo selection on the pilot's aircraft ({shell.Screen}, slot {campaign.AmmoSlot})");
@@ -465,7 +465,7 @@ internal static class MenuOriginalCampaignSuites
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignAmmo && shell.Rows.Count == rows.Count, $"Back closes the list and stays ({shell.Rows.Count} rows)");
         var accept = Row(shell, "AcceptLoadout")!;
-        Press(host, seat, Pointer(fit, accept.X + 5f, accept.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, accept.X + 5f, accept.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && store.Load(Pilot)!.Planes[0].Ammo[group] == 1,
             $"ACCEPT LOADOUT returns to the check and the profile file carries the pick ({shell.Screen}, {store.Load(Pilot)!.Planes[0].Ammo[group]})");
 
@@ -475,7 +475,7 @@ internal static class MenuOriginalCampaignSuites
         host.Show(new CabinReturn(Pilot));
         Press(host, seat, Accept);
         go = Row(shell, "GoToFlightCheck")!;
-        Press(host, seat, Pointer(fit, go.X + 5f, go.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, go.X + 5f, go.Y + 5f, pressed: true, clicked: true));
         var change = Row(shell, "ChangePlane");
         ctx.Check(change != null, $"with three planes the check offers CHANGE PLANE");
         if (change == null)
@@ -483,20 +483,20 @@ internal static class MenuOriginalCampaignSuites
             return;
         }
 
-        Press(host, seat, Pointer(fit, change.X + 5f, change.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, change.X + 5f, change.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignPlaneSelection && campaign.PlaneSlot == 0 && shell.FocusedKey == "FIELD:0",
             $"CHANGE PLANE opens plane selection on the pilot's combo ({shell.Screen}, {shell.FocusedKey})");
         Press(host, seat, Left);
         ctx.Check(shell.Rows[0].Label.Contains("Test Bird", StringComparison.Ordinal) && store.Load(Pilot)!.SelectedPlane == 0,
             $"Left wraps the pick onto the new plane and writes nothing yet ({shell.Rows[0].Label})");
         var acceptPlanes = Row(shell, "AcceptSelections")!;
-        Press(host, seat, Pointer(fit, acceptPlanes.X + 5f, acceptPlanes.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, acceptPlanes.X + 5f, acceptPlanes.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && store.Load(Pilot)!.SelectedPlane == 2,
             $"ACCEPT SELECTIONS writes the pilot's pick into the profile ({store.Load(Pilot)!.SelectedPlane})");
         var brief = Row(shell, "ReturnToBriefing")!;
-        Press(host, seat, Pointer(fit, brief.X + 5f, brief.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, brief.X + 5f, brief.Y + 5f, pressed: true, clicked: true));
         var cabin = Row(shell, "ReturnToCabin")!;
-        Press(host, seat, Pointer(fit, cabin.X + 5f, cabin.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, cabin.X + 5f, cabin.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"RETURN TO BRIEFING then RETURN TO CABIN land on the cabin ({shell.Screen})");
     }
 
@@ -572,21 +572,21 @@ internal static class MenuOriginalCampaignSuites
         }
 
         var hangar = host.Features.Get<HangarFeature>();
-        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet != null,
             $"PLANE CONSTRUCTION opens the name screen over the profile's wallet ({shell.Screen}, wallet {hangar.Wallet != null})");
 
         Press(host, seat, new MenuCommands { Typed = "Decalled" });
         var ok = Row(shell, OriginalShell.NameOkKey)!;
-        Press(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
         var paint = Row(shell, "PX_B_PAINT")!;
-        Press(host, seat, Pointer(fit, paint.X + 5f, paint.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, paint.X + 5f, paint.Y + 5f, pressed: true, clicked: true));
         var decals = Row(shell, "PT_D_DECALS0");
         ctx.Check(shell.Screen == OriginalScreen.HangarPaint && decals != null,
             $"the Paint tab carries the first decal box ({shell.Screen})");
         if (decals != null)
         {
-            Press(host, seat, Pointer(fit, decals.X + 5f, decals.Y + 5f, pressed: true, clicked: true));
+            Click(host, seat, Pointer(fit, decals.X + 5f, decals.Y + 5f, pressed: true, clicked: true));
             ctx.Check(shell.OpenHangarDropdown == "PT_D_DECALS0", $"a click opens its list ({shell.OpenHangarDropdown ?? "none"})");
             WheelAndDrag(ctx, host, seat, shell, fit, "PT_D_DECALS0", "Plane Construction's decal list");
             Press(host, seat, Back);
@@ -621,7 +621,7 @@ internal static class MenuOriginalCampaignSuites
         profiles.Save(seated);
 
         var hangar = host.Features.Get<HangarFeature>();
-        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(ReferenceEquals(hangar.Store, planes) && hangar.Wallet != null,
             $"PLANE CONSTRUCTION builds into the campaign's own store, never a second one (wallet {hangar.Wallet != null})");
         Press(host, seat, Back);
@@ -792,6 +792,14 @@ internal static class MenuOriginalCampaignSuites
         }
 
         return null;
+    }
+
+    // One click as the Original shell reads it: the press arms the row it lands on and the
+    // release still on that row is what fires, so a click is two frames rather than one.
+    private static void Click(MenuHost host, ScriptedSeat seat, MenuCommands frame)
+    {
+        Press(host, seat, frame);
+        Press(host, seat, frame with { Pointer = frame.Pointer!.Value with { Pressed = false, Clicked = false } });
     }
 
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)

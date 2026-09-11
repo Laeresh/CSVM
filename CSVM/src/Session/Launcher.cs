@@ -1352,7 +1352,10 @@ public partial class Launcher : Node3D
         registry.Register(PresentationId.BuiltIn,
             () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _menuAid ?? string.Empty, builtInSeat.Input));
         registry.Register(PresentationId.Original,
-            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _menuAid ?? string.Empty, builtInSeat.Input, _spec.DebugJoin));
+            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _menuAid ?? string.Empty, builtInSeat.Input, _spec.DebugJoin)
+            {
+                DebugPointer = _spec.DebugPointer,
+            });
         var host = new MenuHost(registry, _menuAudio, OnMenuExit);
         host.Availability = OriginalAvailable;
         host.Features.Add(new FreeFlightFeature());

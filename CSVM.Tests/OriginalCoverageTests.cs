@@ -334,9 +334,10 @@ public class OriginalCoverageTests : IDisposable
         return width > 0 && height > 0 ? (width, height) : null;
     }
 
-    // A click lands on the row's centre, since two authored plaques may share an edge pixel.
-    private static MenuCommands Pointer(OriginalRow row) =>
-        new() { Pointer = new MenuPointer(row.X + (row.Width / 2f), row.Y + (row.Height / 2f), true, true) };
+    // A click lands on the row's centre, since two authored plaques may share an edge pixel. The
+    // press arms the row and the release on it fires, so a click is two of these frames.
+    private static MenuCommands Pointer(OriginalRow row, bool pressed = false) =>
+        new() { Pointer = new MenuPointer(row.X + (row.Width / 2f), row.Y + (row.Height / 2f), pressed, pressed) };
 
     private static MenuCommands Move(Family family, bool vertical) => family == Family.Keyboard
         ? (vertical ? new MenuCommands { MoveY = 1 } : new MenuCommands { MoveX = 1 })
@@ -524,6 +525,7 @@ public class OriginalCoverageTests : IDisposable
         {
             Assert.True(target.Visible && target.Width > 0f && target.Height > 0f, $"{key} has a rectangle to click on {shell.Screen}");
             var before = shell.Screen;
+            shell.Step(Pointer(target, pressed: true));
             var step = shell.Step(Pointer(target));
             Assert.True(step.Changed || shell.Screen != before, $"a click on {key} changed nothing");
             return step.Exit;

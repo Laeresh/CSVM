@@ -582,8 +582,9 @@ original plays where is `CAP-52`'s to confirm.
 screen degrades locally and stays usable. The runtime manifest
 (`CSVM/src/UI/Menu/Original/OriginalAssetManifest.cs`) derives that classification from the decoded
 layout on every start, so this section is the reading and the manifest is the enforcement. Over the
-install's own layout it classifies **99 required** and **63 optional** files; the two optional
-absences it reports are `CrimFlag.MPG` and `Final.MPG`.
+install's own layout it classifies **99 required** and **63 optional** files, and over a complete
+extraction it reports no absence at all: `ExtractRof.ps1` copies the loose MPGs in, so the two
+movies the layout names are on disk with everything else.
 
 ⚠ **The manifest cannot be generated from `LAYOUT.CSV` alone.** The layout names 124 distinct art
 files; the archive ships 681 PNG, 143 TGA, 107 JPG and 25 TIF. The rest are named by scripts
@@ -619,7 +620,7 @@ which is why the required count is 94 layout names plus the five the scripts nam
 | `PX_0..10_BLUEPRINT.TGA` | 11 | not classified | assembled at runtime; `IHangarPage.Art` already returns null on a miss |
 | scrapbook art | 238 files | not classified | assembled at runtime; a `Snap_*` row is already skipped when the file is not on disk |
 | paint `.BM` masks | 184 | not classified | assembled at runtime per pattern; 14 pattern folders, `FORTUNE` has all 62 skins, `BLCKSWAN` 5 |
-| `CrimFlag.MPG`, `Final.MPG` | 2 | optional, and absent | `LAYOUT.CSV` names both and `extracted/rof/ASSETS/GRAPHICS/MPG/` is empty; no screen plays a movie, so they are the two absences every start reports (`BL-446`) |
+| `CrimFlag.MPG`, `Final.MPG` | 2 | optional | `LAYOUT.CSV` names both under `extracted/rof/ASSETS/GRAPHICS/MPG/`, where `ExtractRof.ps1` puts the install's loose MPGs; `CrimFlag.MPG` is the top level's and Preferences' backdrop, on an 8.0 s loop ([`../formats/cinemas.md`](../formats/cinemas.md)), and a screen whose movie is missing draws whole without it |
 | `MM_BackGround.png`, `MM_SplashBackground.jpg` | 2 | not classified | neither appears in any layout row, and the shipped `MM_BackGround.png` is a placeholder reading "CS BACKGROUND" |
 
 **Not classified** means the manifest carries no entry: the name is assembled at runtime from a
@@ -643,7 +644,7 @@ halves riding `CAP-52`.
 |---|---|---|
 | `CAP-50` | VIEW STORY pressed on the Instant Action page | what that button opens, the one Instant Action state no take holds |
 | `CAP-51` | the AUDIO page with sound, and a leaf re-entered after CANCEL CHANGES | the AUDIO page's preview against the decoded script, and whether a leaf's CANCEL CHANGES reverts a setting |
-| `CAP-52` | the whole menu walk with sound routed, a keyboard and pad pressed on each screen, REPLAY BRIEFING and DELETE PLAYER pressed | A4's audio and input contracts, D33's cue work, `BL-805` |
+| `CAP-52` | the whole menu walk with sound routed, a keyboard and pad pressed on each screen, REPLAY BRIEFING and DELETE PLAYER pressed | A4's audio and input contracts, D33's cue work, the focus walk this page still calls a remake equivalence |
 | `CAP-53` | the tab bar out of order, Purchase, the cleared default box, the two refusals | C23's Original hangar navigation |
 
 ### Where Built-in and the original disagree
@@ -682,7 +683,13 @@ stacked frames imply a rollover state under the pointer and a depressed state wh
 the plaque under the pointer draws frame 2 and draws frame 3 while the button is held; the two
 pointer bitmaps the globals script names are drawn as the pointer, the active one over a live
 button and the passive one elsewhere; the two wavs the control library binds play on a rollover
-and on a press. The film (`CAP-49`, `CAP-52`, both silent) shows the top level this way: the
+and on a press. ⚠ **A main-menu plaque's three lettering colours are in the art, not in a colour
+tail.** The `MM_B_` rows carry no `ResID` and so no `ColorActive`/`ColorRollover`/`ColorDepressed`
+("Colors should only be specified if ResID is specified", the file's own comment block), and the
+words are painted into the four frames: measured over the frames that differ, `MM_B_Preferences.png`
+inks its glyph cores `FEDE91` at rest, `FFA741` under the pointer and `F83F3F` while held. Only a
+row whose text the engine draws, a paper plaque such as `FC_B_CHANGEPLANE`, reads its states off a
+tail. The film (`CAP-49`, `CAP-52`, both silent) shows the top level this way: the
 movie fills the 4:3 frame edge to edge behind the plaques, loops on a cycle near eight seconds,
 keeps running in phase behind Preferences and every leaf page, and nothing but the plaque under
 the pointer changes; a plaque has three states that differ only in lettering colour, gold at
@@ -708,10 +715,14 @@ pairs at their authored corners (`VP_B_ACCEPTCHANGES` over `VP_B_CANCELCHANGES` 
 capture is the one deliberate departure: the original writes Escape into an armed cell, CSVM keeps
 Escape (and the pad's Back) as the way out of one in both presentations, by the user's decision,
 since a keyboard seat must be able to abandon a capture without a controller. The chooser row
-is ours, and the four doors' disabled frames are a state the original never shows. Where Original
-differs from the film today is `BL-805`, the CONTROLS door it draws disabled with neither page
-behind it (`BL-696`), and an open list on a leaf outrunning its authored window (`BL-823`).
-Still unfilmed: every sound; whether any keyboard or pad focus exists at
+is ours, and the four doors' disabled frames are a state the original never shows. Original reads
+the main menu's film too: a press arms the plaque it lands on and draws its held frame, and only
+the release still on it activates anything, so a press released elsewhere fires nothing; the
+pointer's bitmap is set on an enter or a leave and never recomputed from what a new screen put
+under a still pointer; and `CrimFlag.MPG` plays behind the top level and Preferences,
+`ExtractRof.ps1` copying the install's loose MPGs in. Where Original differs from the film today
+is the CONTROLS door it draws disabled with neither page behind it (`BL-696`) and an open list on
+a leaf outrunning its authored window (`BL-823`). Still unfilmed: every sound; whether any keyboard or pad focus exists at
 all (no take pressed a key outside an edit box, so Original's focus walk stays a remake
 equivalence); whether a setting reverts on CANCEL CHANGES (no leaf was re-entered after one);
 whether Preferences is reachable in flight; and whether a disabled button ever draws or sounds.

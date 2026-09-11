@@ -332,7 +332,15 @@ public class ChapterCinemaWiringTests : IDisposable
     private static void OpenCampaign(OriginalShell shell)
     {
         var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(row.X + 2f, row.Y + 2f, true, true) });
+        Click(shell, row.X + 2f, row.Y + 2f);
+    }
+
+    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // step that carries the activation is the second one.
+    private static void Click(OriginalShell shell, float x, float y)
+    {
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, true, true) });
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, false, false) });
     }
 
     private static PlayerSetupFeature Setup()

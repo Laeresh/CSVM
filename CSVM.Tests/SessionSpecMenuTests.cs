@@ -397,6 +397,21 @@ public class SessionSpecMenuTests
         Assert.Equal("player_kestrel", Session.PlaneRoster.InstantActionOverride(spec, "player_kestrel"));
     }
 
+    /// <summary>The screenshot aid's pointer, which stands in for seat 0's on the Original
+    /// presentation: two authored numbers, an optional held button, and no pointer at all from a
+    /// spec that spells fewer than two, since a half-read point would shoot the wrong widget.</summary>
+    [Fact]
+    public void TheDebugPointerTakesTwoAuthoredNumbersAndAnOptionalHeldButton()
+    {
+        Assert.Null(Cli().DebugPointer);
+        Assert.Equal((400f, 454f, false), Cli("--debug-pointer=400,454").DebugPointer);
+        Assert.Equal((400f, 454.5f, true), Cli("--debug-pointer=400,454.5,down").DebugPointer);
+        Assert.Equal((400f, 454f, false), Cli("--debug-pointer=400,454,up").DebugPointer);
+        Assert.Null(Cli("--debug-pointer=400").DebugPointer);
+        Assert.Null(Cli("--debug-pointer=left,454").DebugPointer);
+        Assert.Null(Cli("--debug-pointer=").DebugPointer);
+    }
+
     private static InstantActionDef WizardDef(string missionType) => new()
     {
         MissionType = missionType,

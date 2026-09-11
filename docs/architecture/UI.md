@@ -731,14 +731,14 @@ missions with every objective bit set, plus the scratch build store the export a
 `user://Profiles` or `user://Planes`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
-The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and
-the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the art
-measurer and the flight-devices answer injected. It owns the top level composed from `[MainMenu]`'s
-own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome,
-and the messagebox idiom every refusal and confirm goes through; the other screens are its ten
-partials, below. `Step` applies one seat's frame, `Compose` is the screen as a `ComposedBoard` whose
-backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
-`OriginalSlider` among them. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free
+Flight, player-setup, Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer
+injected. It owns the top level composed from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options
+screen over the decoded Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
+screens are its ten partials, below. `Step` applies one seat's frame, `Compose` is the screen as a `ComposedBoard` whose
+backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here, `OriginalSlider` among them.
+A pointer press arms a row and only the release still on it activates (`ArmedKey`); the pointer's bitmap answers an
+enter or leave (`PointerLive`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -856,8 +856,8 @@ bookkeeping once, refreshes the roster from the saved-plane store on every call,
 return destination onto it and applies the `--menu=` aid on the first show. `Tick` keeps the pads in step (seat 0's claim
 while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer into the
 authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends the
-preview on every door out and on `Hide`, drives the briefing's reveal, and runs the board's movies on the step the host was
-given. `Measure` reads a strip's size off its file once and a movie's off its sequence header; `PaletteFor` is the inks.
+preview on every door out and on `Hide`, drives the briefing's reveal, and runs the board's movies on the step the host was given,
+`DebugPointer` standing in for seat 0's pointer when the screenshot aid asks. `Measure` reads a strip's size off its file once and a movie's off its sequence header; `PaletteFor` is the inks.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses

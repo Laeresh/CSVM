@@ -117,7 +117,7 @@ public class OriginalInstantActionTests
         var shell = Open(out var ia);
         var luau = shell.Rows[3];
 
-        var step = shell.Step(Click(luau));
+        var step = Click(shell, luau);
 
         Assert.Empty(step.Cues);
         Assert.Equal(3, ia.PresetIndex);
@@ -135,7 +135,7 @@ public class OriginalInstantActionTests
         Assert.Contains(shell.Compose().Fills, f => f.X == luau.X && f.Y == luau.Y && !f.Border);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "Enemy:" && l.Y == 330f);
 
-        shell.Step(Click(Row(shell, OriginalShell.ViewStoryKey)));
+        Click(shell, Row(shell, OriginalShell.ViewStoryKey));
 
         Assert.Equal("The Angry Luau", shell.StoryTitle);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "The Angry Luau" && l.X == 420f && l.Y == 150f);
@@ -147,7 +147,7 @@ public class OriginalInstantActionTests
         var shell = Open(out _);
         float thumbAtTop = Thumb(shell).Y;
 
-        shell.Step(Click(Row(shell, OriginalShell.ContentsDownKey)));
+        Click(shell, Row(shell, OriginalShell.ContentsDownKey));
         Assert.Equal(1, shell.ContentsTop);
         Assert.Equal($"{OriginalShell.ContentsKey}:1", shell.Rows[0].Key);
         Assert.Equal("Sour Grapes", shell.Rows[0].Label);
@@ -156,14 +156,14 @@ public class OriginalInstantActionTests
 
         for (int i = 0; i < 20; i++)
         {
-            shell.Step(Click(Row(shell, OriginalShell.ContentsDownKey)));
+            Click(shell, Row(shell, OriginalShell.ContentsDownKey));
         }
 
         Assert.Equal(9, shell.ContentsTop);
         Assert.False(Row(shell, OriginalShell.ContentsDownKey).Enabled);
         Assert.Equal("The Hollywood Brawl", shell.Rows[9].Label);
 
-        shell.Step(Click(Row(shell, OriginalShell.ContentsUpKey)));
+        Click(shell, Row(shell, OriginalShell.ContentsUpKey));
         Assert.Equal(8, shell.ContentsTop);
     }
 
@@ -173,7 +173,7 @@ public class OriginalInstantActionTests
         var shell = Open(out var ia);
         var mission = Row(shell, OriginalShell.MissionKey);
 
-        var step = shell.Step(Click(mission));
+        var step = Click(shell, mission);
 
         Assert.Contains(OriginalCues.Click, step.Cues);
         Assert.Equal(OriginalShell.MissionKey, shell.OpenDropdown);
@@ -190,7 +190,7 @@ public class OriginalInstantActionTests
         Assert.Contains(panel.Fills, f => f.X == 520f && f.Y == 280f && f.Height == 80f && !f.Border);
         Assert.Contains(board.Fills, f => f.X == 520f && f.Y == 260f && !f.Border);
 
-        step = shell.Step(Click(shell.Rows[1]));
+        step = Click(shell, shell.Rows[1]);
 
         Assert.Empty(step.Cues);
         Assert.Null(shell.OpenDropdown);
@@ -216,7 +216,7 @@ public class OriginalInstantActionTests
         shell.OpenInstantAction();
         Assert.Equal(21, shell.PilotRoster.Count);
 
-        shell.Step(Click(Row(shell, OriginalShell.PlayerPlaneKey)));
+        Click(shell, Row(shell, OriginalShell.PlayerPlaneKey));
 
         // The fixture's window is twenty rows, so the twenty-first entry puts the list on its own
         // bar: an arrow at each end of the box's right edge, live only towards more list, and the
@@ -231,7 +231,7 @@ public class OriginalInstantActionTests
     public void AClickOffAnOpenListClosesItWithoutPicking()
     {
         var shell = Open(out var ia);
-        shell.Step(Click(Row(shell, OriginalShell.EnvironmentKey)));
+        Click(shell, Row(shell, OriginalShell.EnvironmentKey));
         Assert.Equal(OriginalShell.EnvironmentKey, shell.OpenDropdown);
 
         shell.Step(Pointer(10f, 10f, pressed: true, clicked: true));
@@ -279,11 +279,11 @@ public class OriginalInstantActionTests
     public void TheEnemyPagesFlipByTheirButtonsAndTheAceDuelBlanksEveryEnemyControl()
     {
         var shell = Open(out var ia);
-        shell.Step(Click(shell.Rows[0]));
+        Click(shell, shell.Rows[0]);
         Assert.Equal("dogfight_squadron", ia.MissionType.Key);
         Assert.Contains(shell.Rows, r => r.Key == "IA_D_PLANEE0");
 
-        shell.Step(Click(Row(shell, OriginalShell.PageDownKey)));
+        Click(shell, Row(shell, OriginalShell.PageDownKey));
 
         Assert.Equal(1, shell.EnemyPage);
         Assert.Equal(OriginalShell.PageUpKey, shell.FocusedKey);
@@ -304,12 +304,12 @@ public class OriginalInstantActionTests
         Assert.Equal(3, board.Lines.Count(l => l.Text == "Enemy:"));
         Assert.DoesNotContain(board.Lines, l => l.Text == "Plane:");
 
-        shell.Step(Click(Row(shell, OriginalShell.PageUpKey)));
+        Click(shell, Row(shell, OriginalShell.PageUpKey));
         Assert.Equal(0, shell.EnemyPage);
         Assert.Contains(shell.Rows, r => r.Key == OriginalShell.PlayerPlaneKey);
 
-        shell.Step(Click(Row(shell, OriginalShell.MissionKey)));
-        shell.Step(Click(shell.Rows[0]));
+        Click(shell, Row(shell, OriginalShell.MissionKey));
+        Click(shell, shell.Rows[0]);
         Assert.True(ia.IsAceDuel);
 
         // The duel keeps all four enemy boxes in place, blank and inert, the count among them,
@@ -342,7 +342,7 @@ public class OriginalInstantActionTests
         var mission = Row(shell, OriginalShell.MissionKey);
         Assert.Contains(board.Fills, f => f.X == mission.X && f.Y == mission.Y && f.Border && f.R == 0);
 
-        shell.Step(Click(environment));
+        Click(shell, environment);
         Assert.Equal(OriginalShell.EnvironmentKey, shell.OpenDropdown);
         shell.Step(Hover(shell.Rows[2]));
         var panel = shell.Compose().Overlays[0];
@@ -364,7 +364,7 @@ public class OriginalInstantActionTests
         Assert.Equal(5, board.Plaques.Single(p => p.Art.Name == "PI_B_Radio.png" && p.X == 440f).Frame);
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PI_B_Radio.png" && p.X == 520f).Frame);
 
-        shell.Step(Click(Row(shell, OriginalShell.WingmanRadioKey)));
+        Click(shell, Row(shell, OriginalShell.WingmanRadioKey));
         Assert.Equal(1, shell.LoadoutTarget);
         // The click frame holds the button down, so the marked wingman radio draws its pressed
         // frame; the release frame drops it to the marked rollover frame.
@@ -383,7 +383,7 @@ public class OriginalInstantActionTests
     public void BackClosesAnOpenListFirstAndExitOrASecondBackReturnsToTheTopLevel()
     {
         var shell = Open(out _);
-        shell.Step(Click(Row(shell, OriginalShell.WingmenKey)));
+        Click(shell, Row(shell, OriginalShell.WingmenKey));
         Assert.NotNull(shell.OpenDropdown);
 
         var step = shell.Step(Back);
@@ -396,7 +396,7 @@ public class OriginalInstantActionTests
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
 
         shell.OpenInstantAction();
-        shell.Step(Click(Row(shell, OriginalShell.ExitKey)));
+        Click(shell, Row(shell, OriginalShell.ExitKey));
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
     }
 
@@ -404,10 +404,10 @@ public class OriginalInstantActionTests
     public void FlyMissionLeavesAsTheFeaturesExitForSeatZero()
     {
         var shell = Open(out var ia);
-        shell.Step(Click(shell.Rows[1]));
+        Click(shell, shell.Rows[1]);
         Assert.Equal("stunt_flying", ia.MissionType.Key);
 
-        var step = shell.Step(Click(Row(shell, OriginalShell.FlyMissionKey)));
+        var step = Click(shell, Row(shell, OriginalShell.FlyMissionKey));
 
         Assert.Contains(OriginalCues.Click, step.Cues);
         var launch = Assert.IsType<LaunchExit>(step.Exit);
@@ -426,10 +426,10 @@ public class OriginalInstantActionTests
     public void WeaponLoadoutWithTheRadioOnWingmanEditsTheWingmenFitAndCancelRestoresIt()
     {
         var shell = Open(out var ia, stock: true);
-        shell.Step(Click(Row(shell, OriginalShell.WingmanRadioKey)));
+        Click(shell, Row(shell, OriginalShell.WingmanRadioKey));
         Assert.Equal(1, shell.LoadoutTarget);
 
-        var step = shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
+        var step = Click(shell, Row(shell, OriginalShell.WeaponLoadoutKey));
 
         Assert.Contains(OriginalCues.Click, step.Cues);
         Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
@@ -451,31 +451,31 @@ public class OriginalInstantActionTests
         Assert.Equal("dumdum", ia.WingmanFit.GunAmmoFor(1));
         Assert.Equal("Dum-dum", Row(shell, OriginalShell.LoadoutAmmoPrefix + "0").Label);
 
-        shell.Step(Click(Row(shell, OriginalShell.LoadoutCancelKey)));
+        Click(shell, Row(shell, OriginalShell.LoadoutCancelKey));
         Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
         Assert.Equal(OriginalShell.WeaponLoadoutKey, shell.FocusedKey);
         Assert.Null(shell.LoadoutFit);
         Assert.True(ia.WingmanFit.IsStock);
 
-        shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
-        shell.Step(Click(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
+        Click(shell, Row(shell, OriginalShell.WeaponLoadoutKey));
+        Click(shell, Row(shell, OriginalShell.LoadoutAmmoPrefix + "0"));
         Assert.Equal(OriginalShell.LoadoutAmmoPrefix + "0", shell.OpenDropdown);
         Assert.Equal(5, shell.Rows.Count);
         Assert.Equal("Armor-piercing", shell.Rows[2].Label);
         step = shell.Step(Back);
         Assert.Null(shell.OpenDropdown);
         Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
-        shell.Step(Click(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
-        shell.Step(Click(shell.Rows[2]));
+        Click(shell, Row(shell, OriginalShell.LoadoutAmmoPrefix + "0"));
+        Click(shell, shell.Rows[2]);
         Assert.Equal("ap", ia.WingmanFit.GunAmmoFor(1));
-        shell.Step(Click(Row(shell, OriginalShell.LoadoutAcceptKey)));
+        Click(shell, Row(shell, OriginalShell.LoadoutAcceptKey));
         Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
         Assert.Equal("ap", ia.WingmanFit.GunAmmoFor(1));
 
         // The def carries the wingman fit only where wingmen fly: a squadron with one.
         ia.SelectMissionType(1);
         ia.SetWingmen(1);
-        step = shell.Step(Click(Row(shell, OriginalShell.FlyMissionKey)));
+        step = Click(shell, Row(shell, OriginalShell.FlyMissionKey));
         var launch = Assert.IsType<LaunchExit>(step.Exit);
         Assert.Same(ia.WingmanFit, launch.InstantAction!.WingmanLoadout);
         Assert.Null(Assert.Single(launch.Seats).Fit);
@@ -487,7 +487,7 @@ public class OriginalInstantActionTests
         var shell = Open(out var ia, stock: true, seated: out var setup);
         var seat = setup.Seats[0];
 
-        shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
+        Click(shell, Row(shell, OriginalShell.WeaponLoadoutKey));
 
         Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
         Assert.Same(seat.Fit, shell.LoadoutFit);
@@ -495,9 +495,9 @@ public class OriginalInstantActionTests
         shell.Step(Hover(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
         shell.Step(Left);
         Assert.Equal("none", seat.Fit.GunAmmoFor(1));
-        shell.Step(Click(Row(shell, OriginalShell.LoadoutAcceptKey)));
+        Click(shell, Row(shell, OriginalShell.LoadoutAcceptKey));
 
-        var step = shell.Step(Click(Row(shell, OriginalShell.FlyMissionKey)));
+        var step = Click(shell, Row(shell, OriginalShell.FlyMissionKey));
         var launch = Assert.IsType<LaunchExit>(step.Exit);
         Assert.Same(seat.Fit, Assert.Single(launch.Seats).Fit);
         Assert.True(ia.WingmanFit.IsStock);
@@ -513,8 +513,8 @@ public class OriginalInstantActionTests
     public void BackOnTheLoadoutScreenRestoresThePicksAndBuildIsDisabledWithoutAStore()
     {
         var shell = Open(out var ia, stock: true);
-        shell.Step(Click(Row(shell, OriginalShell.WingmanRadioKey)));
-        shell.Step(Click(Row(shell, OriginalShell.WeaponLoadoutKey)));
+        Click(shell, Row(shell, OriginalShell.WingmanRadioKey));
+        Click(shell, Row(shell, OriginalShell.WeaponLoadoutKey));
         shell.Step(Hover(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")));
         shell.Step(Right);
         Assert.False(ia.WingmanFit.IsStock);
@@ -611,5 +611,11 @@ public class OriginalInstantActionTests
 
     private static MenuCommands Hover(OriginalRow row) => Pointer(row.X + 3f, row.Y + 3f);
 
-    private static MenuCommands Click(OriginalRow row) => Pointer(row.X + 3f, row.Y + 3f, pressed: true, clicked: true);
+    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // step that carries the activation is the second one.
+    private static OriginalStep Click(OriginalShell shell, OriginalRow row)
+    {
+        shell.Step(Pointer(row.X + 3f, row.Y + 3f, pressed: true, clicked: true));
+        return shell.Step(Pointer(row.X + 3f, row.Y + 3f));
+    }
 }

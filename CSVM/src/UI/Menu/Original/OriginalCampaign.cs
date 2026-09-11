@@ -548,6 +548,7 @@ public sealed partial class OriginalShell
         _dialog = new OriginalDialog(message, icon, answers);
         _hover = -1;
         _pressed = -1;
+        _armed = null;
         // A box opens on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain
         // 0x4 mask. Back still takes the declining one, so a mistake has a way out.
         _focus[(int)_screen] = 0;

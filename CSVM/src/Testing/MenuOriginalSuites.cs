@@ -33,6 +33,8 @@ internal static class MenuOriginalSuites
         "Original Free Flight through the presentation boundary over the install's decoded layout: "
         + "selected by the CLI override, shown at the top level with the pointer hidden and the "
         + "Free Flight door focused, a pointer frame over Quit takes focus and cues the rollover, a "
+        + "press on a plaque arms it and opens nothing while the pointer over it draws the active "
+        + "bitmap, a release on another plaque activates neither, a "
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
@@ -173,7 +175,18 @@ internal static class MenuOriginalSuites
         var board = shell.Compose();
         ctx.Check(board.Overlays.Count == 1 && board.Overlays[0].Pictures.Count == 1,
             $"the pointer is composed as the last overlay ({board.Overlays.Count})");
-        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        // The press arms the plaque and opens nothing: what fires is the release still on it.
+        Press(host, seat, Pointer(fit, campaign.X + 5f, campaign.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && shell.ArmedKey == OriginalShell.CampaignKey,
+            $"a press on Campaign arms it and opens nothing ({shell.Screen}, {shell.ArmedKey})");
+        string bitmap = shell.Compose().Overlays[^1].Pictures[0].Art.Name;
+        ctx.Check(bitmap == "activepointerz.png", $"the pointer over a live plaque is the active bitmap ({bitmap})");
+        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true));
+        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f));
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && shell.ArmedKey == string.Empty,
+            $"and a release on another plaque activates neither of them ({shell.Screen}, {shell.ArmedKey})");
+
+        Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.FreeFlight,
             $"a click on the door opens the Free Flight screen ({shell.Screen})");
         ctx.Check(audio.Cues.Contains(OriginalCues.Click), $"with a click cue ({string.Join(",", audio.Cues)})");
@@ -263,11 +276,11 @@ internal static class MenuOriginalSuites
         if (down != null)
         {
             int top = shell.ContentsTop;
-            Press(host, seat, Pointer(fit, down.X + 2f, down.Y + 2f, pressed: true, clicked: true));
+            Click(host, seat, Pointer(fit, down.X + 2f, down.Y + 2f, pressed: true, clicked: true));
             ctx.Check(shell.ContentsTop == top + 1,
                 $"and the arrow still steps the window one row, the wheel having changed nothing about it ({top} -> {shell.ContentsTop})");
             var up = Row(shell, OriginalShell.ContentsUpKey)!;
-            Press(host, seat, Pointer(fit, up.X + 2f, up.Y + 2f, pressed: true, clicked: true));
+            Click(host, seat, Pointer(fit, up.X + 2f, up.Y + 2f, pressed: true, clicked: true));
             ctx.Check(shell.ContentsTop == top, $"and the up arrow steps it back ({shell.ContentsTop})");
         }
 
@@ -742,6 +755,14 @@ internal static class MenuOriginalSuites
         }
 
         return null;
+    }
+
+    // One click as the Original shell reads it: the press arms the row it lands on and the
+    // release still on that row is what fires, so a click is two frames rather than one.
+    private static void Click(MenuHost host, ScriptedSeat seat, MenuCommands frame)
+    {
+        Press(host, seat, frame);
+        Press(host, seat, frame with { Pointer = frame.Pointer!.Value with { Pressed = false, Clicked = false } });
     }
 
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)

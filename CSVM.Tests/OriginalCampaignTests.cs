@@ -55,7 +55,7 @@ public class OriginalCampaignTests : IDisposable
         var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);
         Assert.True(row.Enabled);
 
-        var step = shell.Step(Pointer(row.X + 2f, row.Y + 2f, pressed: true, clicked: true));
+        var step = Click(shell, row.X + 2f, row.Y + 2f);
 
         Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
         Assert.True(campaign.IsOpen && shell.CampaignOpen);
@@ -118,7 +118,7 @@ public class OriginalCampaignTests : IDisposable
         OpenCampaign(shell);
         var start = shell.Rows.Single(r => r.Key == "Continue");
 
-        shell.Step(Pointer(start.X + 2f, start.Y + 2f, pressed: true, clicked: true));
+        Click(shell, start.X + 2f, start.Y + 2f);
 
         Assert.NotNull(shell.Dialog);
         Assert.Equal(campaign.Strings.Text(200, "You must enter a player name."), shell.Dialog!.Message);
@@ -134,7 +134,7 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal((int)DialogIcon.Warning, DialogIconTests.IconFrame(panel));
         Assert.Null(_store.Load(string.Empty));
 
-        shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
+        Click(shell, ok.X + 2f, ok.Y + 2f);
         Assert.Null(shell.Dialog);
         Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
         Assert.Equal(4, shell.Rows.Count);
@@ -155,7 +155,7 @@ public class OriginalCampaignTests : IDisposable
         var step = shell.Step(Pointer(nathan.X + 4f, nathan.Y + 4f));
         Assert.Empty(step.Cues);
         Assert.Contains(shell.Compose().Fills, f => f.Border && f.X == nathan.X && f.Y == nathan.Y);
-        step = shell.Step(Pointer(nathan.X + 4f, nathan.Y + 4f, pressed: true, clicked: true));
+        step = Click(shell, nathan.X + 4f, nathan.Y + 4f);
         Assert.Equal("Nathan", shell.RosterName);
         Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
         Assert.Empty(step.Cues);
@@ -163,7 +163,7 @@ public class OriginalCampaignTests : IDisposable
         Assert.DoesNotContain(shell.Compose().Lines, l => l.Text.StartsWith("✓", StringComparison.Ordinal));
 
         shell.Step(Pointer(nathan.X + 4f, nathan.Y + 4f, pressed: false, clicked: false));
-        shell.Step(Pointer(nathan.X + 4f, nathan.Y + 4f, pressed: true, clicked: true));
+        Click(shell, nathan.X + 4f, nathan.Y + 4f);
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
         Assert.Equal("Nathan", campaign.Profile?.Name);
     }
@@ -179,7 +179,7 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal("Zachary", shell.RosterName);
 
         var delete = shell.Rows.Single(r => r.Key == "DeletePlayer");
-        shell.Step(Pointer(delete.X + 2f, delete.Y + 2f, pressed: true, clicked: true));
+        Click(shell, delete.X + 2f, delete.Y + 2f);
         Assert.NotNull(shell.Dialog);
         Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
@@ -223,10 +223,11 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(new[] { OriginalCues.Rollover }, step.Cues);
         var plaque = shell.Compose().Plaques.Single(p => p.Art.Name == "PM_B_Previous.png");
         Assert.Equal(2, plaque.Frame);
-        shell.Step(Pointer(previous.X + 3f, previous.Y + 3f, pressed: true));
-        Assert.Equal(3, shell.Compose().Plaques.Single(p => p.Art.Name == "PM_B_Previous.png").Frame);
-
         shell.Step(Pointer(previous.X + 3f, previous.Y + 3f, pressed: true, clicked: true));
+        Assert.Equal(3, shell.Compose().Plaques.Single(p => p.Art.Name == "PM_B_Previous.png").Frame);
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+
+        shell.Step(Pointer(previous.X + 3f, previous.Y + 3f));
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
         Assert.Equal("ViewMission", shell.FocusedKey);
         shell.Step(Back);
@@ -293,7 +294,7 @@ public class OriginalCampaignTests : IDisposable
         Seat(shell, "Zachary");
         shell.Step(Accept);
         var go = shell.Rows.Single(r => r.Key == "GoToFlightCheck");
-        shell.Step(Pointer(go.X + 2f, go.Y + 2f, pressed: true, clicked: true));
+        Click(shell, go.X + 2f, go.Y + 2f);
         Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
         // The pilot heading is text the cursor steps over; CHANGE PLANE is barred under three planes.
         Assert.Equal(new[] { "ROW:0", "ChangeAmmo", "ReturnToBriefing", "FlyMission" }, shell.Rows.Select(r => r.Key));
@@ -321,7 +322,7 @@ public class OriginalCampaignTests : IDisposable
 
         var fly = shell.Rows.Single(r => r.Key == "FlyMission");
         var profile = campaign.Profile!;
-        var step = shell.Step(Pointer(fly.X + 2f, fly.Y + 2f, pressed: true, clicked: true));
+        var step = Click(shell, fly.X + 2f, fly.Y + 2f);
         var exit = Assert.IsType<CampaignMissionExit>(step.Exit);
         Assert.Equal(("Zachary", 0, 1), (exit.Profile, exit.MissionSeq, exit.Seats.Count));
         Assert.Equal("node5", exit.Seats[0].PlaneNode);
@@ -341,7 +342,7 @@ public class OriginalCampaignTests : IDisposable
         setup.Join(new ScriptedMenuSeat());
         shell.Step(Accept);
         var go = shell.Rows.Single(r => r.Key == "GoToFlightCheck");
-        shell.Step(Pointer(go.X + 2f, go.Y + 2f, pressed: true, clicked: true));
+        Click(shell, go.X + 2f, go.Y + 2f);
         Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
 
         // Seat 0's own check takes its whole frame, into ammo selection and back out.
@@ -354,7 +355,7 @@ public class OriginalCampaignTests : IDisposable
         // FLY MISSION hands the screen to the guest, and seat 0's cursor, Accept and Back then
         // move nothing: no row, no ammo screen, no retreat off the guest's check.
         var fly = shell.Rows.Single(r => r.Key == "FlyMission");
-        Assert.Null(shell.Step(Pointer(fly.X + 2f, fly.Y + 2f, pressed: true, clicked: true)).Exit);
+        Assert.Null(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
         Assert.Equal((1, 2), (campaign.Field.Current, campaign.Field.Players));
         Assert.Equal("ChangeAmmo", shell.FocusedKey);
         Assert.False(shell.Step(Down).Changed);
@@ -377,7 +378,7 @@ public class OriginalCampaignTests : IDisposable
         // their own has, so the last check's FLY MISSION is the launch for both seats.
         fly = shell.Rows.Single(r => r.Key == "FlyMission");
         var exit = Assert.IsType<CampaignMissionExit>(
-            shell.Step(Pointer(fly.X + 2f, fly.Y + 2f, pressed: true, clicked: true)).Exit);
+            Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
         Assert.Equal(2, exit.Seats.Count);
     }
 
@@ -388,7 +389,7 @@ public class OriginalCampaignTests : IDisposable
         Seat(shell, "Zachary");
         var door = shell.Rows.Single(r => r.Key == "PlaneConstruction");
 
-        shell.Step(Pointer(door.X + 2f, door.Y + 2f, pressed: true, clicked: true));
+        Click(shell, door.X + 2f, door.Y + 2f);
         Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
         Assert.True(hangar.IsOpen);
         Assert.NotNull(hangar.Wallet);
@@ -454,18 +455,18 @@ public class OriginalCampaignTests : IDisposable
         Assert.Contains(shell.Rows, r => r.Key == "ViewMission" && r.X == 440f && r.Y == 500f);
 
         var second = shell.Rows[1];
-        shell.Step(Pointer(second.X + 5f, second.Y + 5f, pressed: true, clicked: true));
+        Click(shell, second.X + 5f, second.Y + 5f);
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
         Assert.Contains(shell.Compose().Fills, f => f.Y == second.Y && !f.Border);
         var view = shell.Rows.Single(r => r.Key == "ViewMission");
-        shell.Step(Pointer(view.X + 2f, view.Y + 2f, pressed: true, clicked: true));
+        Click(shell, view.X + 2f, view.Y + 2f);
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
         Assert.Equal(1, campaign.MissionSeq);
         shell.Step(Back);
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
 
         var replay = shell.Rows.Single(r => r.Key == "ReplayMission");
-        shell.Step(Pointer(replay.X + 2f, replay.Y + 2f, pressed: true, clicked: true));
+        Click(shell, replay.X + 2f, replay.Y + 2f);
         Assert.Equal(OriginalScreen.CampaignBriefing, shell.Screen);
         shell.Step(Back);
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
@@ -493,7 +494,7 @@ public class OriginalCampaignTests : IDisposable
         var best = Assert.Single(shell.Rows, r => r.X == 432f && r.Y == 283f);
         Assert.Equal((113f, 34f, true), (best.Width, best.Height, best.Visible));
 
-        shell.Step(Pointer(best.X + 2f, best.Y + 2f, pressed: true, clicked: true));
+        Click(shell, best.X + 2f, best.Y + 2f);
 
         Assert.Contains(shell.Rows, r => r.Key == nameof(BoardButton.BestTab));
         Assert.DoesNotContain(shell.Rows, r => r.Key == nameof(BoardButton.MostTab));
@@ -526,7 +527,7 @@ public class OriginalCampaignTests : IDisposable
         Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 2);
 
         // Held under the pointer it takes the depressed frame and the black that reads on it.
-        shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true));
+        shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
         panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
         Assert.Equal(BoardInk.DialogPressed, Assert.Single(panel.Lines, l => l.Text == ok.Label).Ink);
         Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 3);
@@ -568,7 +569,7 @@ public class OriginalCampaignTests : IDisposable
     private static void OpenCampaign(OriginalShell shell)
     {
         var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);
-        shell.Step(Pointer(row.X + 2f, row.Y + 2f, pressed: true, clicked: true));
+        Click(shell, row.X + 2f, row.Y + 2f);
     }
 
     // A player typed into the box and started, landing on the cabin.
@@ -591,6 +592,14 @@ public class OriginalCampaignTests : IDisposable
 
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+
+    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // step that carries the activation is the second one.
+    private static OriginalStep Click(OriginalShell shell, float x, float y)
+    {
+        shell.Step(Pointer(x, y, pressed: true, clicked: true));
+        return shell.Step(Pointer(x, y));
+    }
 
     private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar) =>
         Shell(out campaign, out hangar, out _);
