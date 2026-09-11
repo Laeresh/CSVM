@@ -112,7 +112,14 @@ public class EffectPoolsTests
         var pools = Load();
         var roots = StageRoots();
         int depth = pools.DepthFor(roots, players: 1);
-        Assert.Equal(pools.SlotsFor("partial_damage_obj", 1), depth);
+        // The deepest root, whichever the file currently sizes deepest: naming one here pins the
+        // assertion to today's tuning instead of to the rule it is about.
+        int deepest = 0;
+        foreach (string root in roots)
+        {
+            deepest = System.Math.Max(deepest, pools.SlotsFor(root, 1));
+        }
+        Assert.Equal(deepest, depth);
         Assert.True(depth > pools.Default.Base);
     }
 

@@ -843,6 +843,30 @@ is a judgement on our own remake.
   door, or a first launch noticeably later than the door's full open, mints a new `BL`. *Blocks:*
   nothing.
 
+
+### CM24 (C5/M04) · the Dante's engine bank, external view
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:23
+```
+
+- `PT-139` `[Own]` **Every engine the Dante loses keeps its own burning nacelle for the authored
+  half minute (`BL-720`).** Each engine's `destroy_dtz?engNN` calls `large_30sec_fire` WITH that
+  engine's own `supports` node, and one broadside kill works through four engines about eight
+  seconds apart, so four fires overlap for a dozen seconds and a whole bank is fourteen. The
+  world-effects stage staged four copies of that template, so the fifth burning engine took the
+  first one's copy back and its fire moved to the newest kill; the stage now carries one copy per
+  engine of the largest hull (`git log --grep=BL-720`). Kill a broadside cannon, then shoot
+  engines by hand, and watch from the chase or external view. *Look for:*
+  - (a) each dead engine holding its own fire and smoke at its own nacelle until it burns out,
+    with none of them stepping across to another engine as the next one dies;
+  - (b) an engine that has been dead a while still burning while newer ones catch, rather than
+    going dark the moment a fifth engine dies;
+  - (c) the skin fires along a burning gasbag's flank, which run through a different template
+    family (`zepskinfire_1/2/3` over eight burn points a side) and are not covered by the fix.
+  *Blocks:* `BL-720`. A fire still hopping between engines means the pool is still short of the
+  concurrency and reopens the item; (c) failing mints a new `BL` against the skin-fire roots.
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own

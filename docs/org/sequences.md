@@ -50,6 +50,7 @@ bottom rather than hidden.
 | `004eb3e0`–`004eb56d` | The `CALL_ANIMATION` handler. Undefined in the database; the block is the citable unit. `PUSH 0x0` at `004eb53d` is the anchor argument, which is what makes the callee keep its own |
 | `FUN_004edf80` | The animation start the handler calls: parks the call site's node at `callee+0x7c` (`INPUT_NODE`) with a position snapshot at `+0x80`, plus a second node/position pair at `+0x8c`/`+0x90` |
 | `FUN_004ed8c0` | The start gate, i.e. the restart refusal: the callee's own run state at `+0xa0`, the concurrency bit `0x100` in `+0x9c`, and the instance chain at `+0x10c` |
+| `FUN_004ed600` / `FUN_00520910` | The per-start reset that RECOMPUTES the concurrency bit (`004ed65a` clears, `004ed672` sets), and the instance clone it exempts a template into: a fresh `0x110` record plus a deep copy of the template's node tree |
 | `FUN_004ccde0` / `FUN_004d04e0` | Arming a record's action callback, and the list append it makes: the new node's `prev` takes the old tail and the old tail's `next` is stored at `004d050d`, so a started definition joins at the **tail** |
 | `FUN_004d0010` / `FUN_004cffa0` | The per-frame action dispatcher and the list walk it runs: each node's callback, then a re-read of that node's `next` at `004cffee`, which is what lets the pass reach a node appended during it |
 | `FUN_004ecd20` | The per-instance callback the walk calls: charges `+0xb0` the frame delta, publishes it as `DAT_009fd1a8`, then runs the tick walk over the sequence array. Undefined in the database; the entry is the citable unit |
@@ -647,13 +648,14 @@ the placement of a template root.
 ### The restart refusal is keyed on the callee's own run state, with no anchor in it
 
 `FUN_004ed8c0(callee, anchor)` decides the whole question, and `CALL_ANIMATION` always reaches it
-with a zero anchor. Under that zero anchor the decision reads the run state byte at `+0xa0` and
-nothing else (`004ed8d5`–`004ed8fe`):
+with a zero anchor (`004eb53d` pushes the literal 0 as that argument, immediately before the
+`CALL 0x004edf80`). Under that zero anchor the decision reads the run state byte at `+0xa0`
+(`004ed8d5`–`004ed8fe`), and for the running state also the concurrency bit below:
 
 | `+0xa0` | State | A call |
 |---|---|---|
 | 0, 1 | idle: never started, or torn down after a run | starts it, and `004edaa1` writes state 2 |
-| 2 | running | refused, returning 0 at `004edab1` |
+| 2 | running | refused, returning 0 at `004edab1`, unless bit `0x100` is set (below) |
 | 3 | parked at rest | starts it |
 | 4 | paused, entered from state 3 | refused |
 | 5 | dead: load failure or teardown | refused |
@@ -686,11 +688,38 @@ decoded and inert rather than as a rule to reproduce.
 
 Given a NON-zero anchor, which `CALL_ANIMATION` never passes, the gate instead walks the instance
 chain at `+0x10c` and refuses only an instance that is both running and already on that anchor,
-otherwise reusing a stopped chain entry or cloning through `FUN_00520910`; with bit `0x100` set it
-always clones, so concurrent instances are allowed. This is the decoded form of the semantic
-`formats/anim-definitions.md` derives observationally from C1/MP1's rearm-door poll, and it is
-**stricter** than that derivation: the original refuses a second call while the callee runs
-anywhere, not merely on the same anchor.
+otherwise reusing a stopped chain entry or cloning through `FUN_00520910`. This is the decoded form
+of the semantic `formats/anim-definitions.md` derives observationally from C1/MP1's rearm-door poll,
+and where the refusal applies it is **stricter** than that derivation: the original refuses a second
+call while the callee runs anywhere, not merely on the same anchor.
+
+### The concurrency bit is the effect template's exemption, and it is per start
+
+⚠ **The refusal above is the bit-CLEAR branch only.** The zero-anchor early return sits inside
+`if ((*(def + 0x9c) & 0x100) == 0)`; the bit-SET branch never looks at the anchor. It walks the
+`+0x10c` chain to the first entry not in state 2 and, finding none, clones unconditionally through
+`FUN_00520910(entry, anchor)` with that same zero anchor. So a `CALL_ANIMATION` on a running callee
+either is refused silently or gets a **whole new instance**, and the bit alone decides which.
+
+The bit is not authored and not compiled: it is recomputed at every start. `FUN_004ed600`, which the
+gate runs just before writing state 2, clears it at `004ed65a` and sets it again at `004ed672` when
+the def's `+0x48` node's TREE ROOT (walked by `FUN_004cf730`, which climbs `+0x58` while the parent
+count at `+0x54` is 1 and errors on a node with several parents) carries a type at `+0x34` that is
+neither 1 nor 2, with `+0x9c` bit `0x800000` clear. An effect template's root is a parentless gamez
+record, so the root the walk reaches is the template itself and its own type decides; a definition
+anchored inside the world tree reaches the world's root instead. The two type values are not pinned
+down here, and the third guard in that condition is a call whose return Ghidra types as `void`, so
+the guard cannot be read off the decompiler.
+
+What the clone actually copies is the reason this matters for effects. `FUN_00520910` allocates a
+fresh `0x110`-byte definition record, copies the original's fields into it, clears the new record's
+own `0x100`, and for a ZERO anchor deep-copies the template's node tree through `FUN_004d8610`,
+marking the clone `0x80000`; the failure path logs *"ERROR: Copying Animation Node Tree"* from
+`zeff_ani*.c` line `0x33a7`. Each concurrent call of an effect definition therefore runs on its own
+copy of the template's nodes, with no cap in the mechanism. That is the original behind the remake's
+finite effect-template pool (`CSVM/data/effect_pools.json`): the pool is one copy per slot rather
+than one per call, so a pool shorter than the concurrency a mission authors hands a live effect's
+copy to a later call and the running effect moves to the new site.
 
 CSVM's guard (`AnimRuntime`'s `CallAnimation` arm, `!IsLive(target, startAnchor) || movedAway`) is
 keyed on `(def, anchor)`, which is the pair the original deliberately leaves out. That makes ours
@@ -1019,10 +1048,7 @@ reading a dedicated address, which is a weaker kind of confirmation than the res
 animation-frame tick keeps a hypothesis the decode cannot rule out (`min(render rate, 60)`) alongside
 its confirmation.
 
-Three residuals around `CALL_ANIMATION`. **Nothing found sets bit `0x100` of `+0x9c`**, the
-concurrency bit `FUN_004ed8c0` consults: no keyword in `FUN_0051dcf0` writes it, so it comes from the
-compiled `.zbd` or from somewhere not traced, and until that is known the "concurrent instances are
-allowed" branch is decoded but unattributed. The meanings of the remaining call-event flag bits
+Two residuals around `CALL_ANIMATION`. The meanings of the remaining call-event flag bits
 (`+0x2e` bits `0x2`/`0x4`, `+0x2f` bits `0x1`/`0x2`/`0x8`, the offset variants and any
 caller-inherited nodes) are not pinned down; the anchor reading at `004eb53d` is directly readable
 and does not depend on them. And the handler block itself has no Ghidra function boundary, so it was

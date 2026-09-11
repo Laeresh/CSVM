@@ -1346,20 +1346,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   E24 (the decode that made the two scenes unskippable).
 
 
-- `BL-720` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[CM24]` **The Dante's engine-explosion
-  puffers drift between the engines, and some sit at the wrong place.** *Evidence:* reported at the
-  controls on CM24 (C5/M04): "puffers moving between engine explosions of dante" and "some puffers
-  on the wrong position". The Dante's engine damage stages are the shared `damage1_..3_pz?engNN`
-  and `destroy_pz?engNN` definitions (`extracted/C5/M04/mis_anim/`), the rig every pirate zeppelin
-  plays. *Fix shape:* freeze a Dante engine kill in the anim lab, list the puffers that spawn with
-  their anchor node and world position each frame, and read whether an anchor resolves to a sibling
-  engine, whether a puffer keeps a world position while its anchor moves with the zeppelin, or
-  whether a `TopLevel` anchor is missing on a moving hull. *⚠ Traps:* the Dante moves during the
-  fight, so a puffer authored in hull-local space that is spawned in world space reads as "moving
-  between engines" from the chase view. Check on a parked Dante first and then on a moving one.
-  *Playtest after fix:* CM24, kill two adjacent engines on one side and watch the smoke from the
-  external view. *Cross-refs:* `BL-121` (the `trail-world-anchor` suite), `BL-700` (the same
-  zeppelin family's wreck rest).
+- `BL-720` `[Bug]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM24]` **The Dante's
+  engine fires moved between the engines because the effect-template pool was shorter than the
+  engine bank; the sizing is fixed and the report is owed a look.** *Evidence:* the mechanism is
+  settled from the mission data and measured headless. The Dante has its OWN engine definitions,
+  not the pirate zeppelin's: `damage1_..3_dtz?engNN` and `destroy_dtz?engNN`
+  (`extracted/C5/M04/mis_anim/`), each binding its engine's nodes by compiled pointer, so no anchor
+  ever resolved to a sibling engine. An engine death plays `dt?eng_destroyed.flt` WITH its
+  `lengNN`, `dtzep_rocks{left,right}`, `zep_engine_boom` AT that engine at 0 s and again at 5 s,
+  and `large_30sec_fire` WITH that engine's own `supports`. Only the last of those carries a
+  lasting puffer (`fire_n_smoke` at `INPUT_NODE`, half a minute with no authored stop), so the
+  concurrency is one template copy per burning engine and the bank is fourteen. `effect_pools.json`
+  sized `fire_here` at the default four, and that pool being finite at all is the remake's own
+  approximation: the original's start gate refuses a repeat call only while the concurrency bit
+  `0x100` at `+0x9c` is clear, and the per-start reset sets that bit for a template-rooted
+  definition, at which point every further call clones a whole record and deep-copies the template's
+  nodes with no cap (`docs/org/sequences.md`, which had the bit recorded as unattributed).
+  `dante-engine-fires` reads the whole bank killed in turn
+  and logged ten pool recycles with four fires alive for fourteen dead engines, the first engine's
+  fire having moved to the newest kill; the same suite is green at one copy per engine. *⚠ Traps:*
+  the hull's own `dtzep_rocks*` roll swings an engine at the ends of the hull metres per frame, so
+  a fire's fed position must be read against its `supports` node at the SAME instant; a stale
+  expected position reads as a misplaced puffer. `large_10sec_fire` shares the `fire_here` root and
+  therefore its cursor, and `TemplateStage.TakeNextSlot`'s liveness test is per definition, so a
+  crate's ten-second fire can still wrap onto a live thirty-second one; that hole is untouched here
+  and is what to suspect if the symptom survives with the pool deep enough. *Playtest:* `PT-139`.
+  *Cross-refs:* `BL-231` (the pool's tuning entry), `BL-121` (the `trail-world-anchor` suite),
+  `BL-700` (the same zeppelin family's wreck rest).
 
 - `BL-797` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
   *Evidence:* the disabled-systems mask's bit-`0x2` edges call `FUN_004b15c0` and `FUN_004b1630`,

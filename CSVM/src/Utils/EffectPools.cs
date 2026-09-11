@@ -28,6 +28,7 @@ public sealed class EffectPools
             ["dum_gunhit"] = new Entry(1, 0),
             ["mag_gunhit"] = new Entry(1, 0),
             ["partial_damage_obj"] = new Entry(8, 1),
+            ["fire_here"] = new Entry(16, 0),
         },
         _localCallDefault = new Entry(1, 0),
         _localCallRoots =
