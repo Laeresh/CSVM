@@ -2312,30 +2312,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-807` and `BL-808` (the
   same takes' page-level corrections), `docs/org/menu-inventory.md` Part 4.
 
-- `BL-807` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The Instant
-  Action screen keeps the ace duel's enemy boxes, its paging button and its "[continued ...]" text
-  drawn but inert, highlights the hovered dropdown row beside the current one, and scrolls a list
-  past its window with a bar.** *Evidence:* `CAP-50.mkv` (`playtest/CAP-50/`, 36 stills). The ace
-  duel empties the four enemy boxes in place with pale arrows and keeps `[continued ...]` and the
-  down button live (t=13.0); at zero wingmen the wingman-plane box blanks while the Wingmen count
-  stays live, and the radio stays with its Wingmen option greyed (t=13.0, 77.5). The up/down
-  buttons replace the whole right page with the three later waves under `[go back ...]` (t=70.0),
-  a zero-count wave's boxes blanked. A dropdown opens flush under its box at its width with the
-  current value and the hovered row both highlighted, and the pilot-plane list scrolls with its own
-  bar at 21 entries in a 20-row window (t=28.8). A closed box lightens under the pointer (t=47.6).
-  WEAPON LOADOUT opens AMMO SELECTION for whichever of Pilot or Wingmen the radio holds (t=78,
-  99.5, 117.5), and FLY MISSION opens a loading spread titled by the mission type, not the preset
-  (t=142). Ours omits the wave rows and the page-down button under the ace duel
-  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs:417-421`), and draws BUILD CUSTOM PLANE
-  and WEAPON LOADOUT live already, as the film does. The film also opens on preset 0 with its row
-  selected and writes the preset's name on select rather than on VIEW STORY; ours opens and names
-  differently by the user's decision, a deliberate departure and not a defect. *Fix shape:* keep
-  the enemy boxes, the paging button and the text drawn and disabled under the ace duel; add the
-  hover highlight to an open dropdown, the lightened closed box, and the scrollbar once a list
-  outgrows its window. *⚠ Traps:* keyboard and pad stay unfilmed; the profile in the take carried
-  ten custom planes, which is what pushed the pilot-plane list past its window. *Cross-refs:*
-  `BL-805`, `BL-808`, `CAP-50`, `docs/formats/instant-action.md`, `docs/org/menu-inventory.md`
-  Part 4.
 
 - `BL-808` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The plane
   construction hub's default build is not the Devastator, its running total sits on the top rail,
@@ -2364,7 +2340,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gave two different ones and langui 3005 names the Devastator; draw the standing tab raised
   rather than disabled. *⚠ Traps:* out-of-order tabs,
   Purchase, the cleared default box, string 206 on a customised build and string 203 are all
-  unfilmed (`CAP-53`). *Cross-refs:* `BL-807`, `CAP-53`, `docs/org/hangar.md`,
+  unfilmed (`CAP-53`). *Cross-refs:* `CAP-53`, `docs/org/hangar.md`,
   `docs/org/menu-inventory.md` Part 4.
 
 - `BL-809` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **An opened scrap

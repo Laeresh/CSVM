@@ -71,7 +71,8 @@ internal static class MenuInstantActionSuites
         "Original Instant Action through the presentation boundary over the install's decoded "
         + "layout: the top level's Instant Action row is live and a click opens the decoded screen "
         + "with the environment's def loaded, its rows are the layout's contents window, dropdowns "
-        + "and buttons, keyboard frames cross to a dropdown and step and pick its value, four "
+        + "and buttons, the ace duel's enemy boxes and the wingman plane at zero wingmen standing "
+        + "blank and inert beside both paging buttons, keyboard frames cross to a dropdown and step and pick its value, four "
         + "representative presets (an ace duel, a squadron, a stunt run and a zeppelin run) each "
         + "leave through Fly Mission as one LaunchExit whose def derives the matching session spec, "
         + "the setup surviving each return to the top level, a build saved to the user's store "
@@ -547,8 +548,11 @@ internal static class MenuInstantActionSuites
         ctx.Check(contents == 14, $"the contents window shows the layout's fourteen rows ({contents})");
         ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey) is { Label: "Stock Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
             $"the player plane dropdown stands at its authored line with the first airframe as its stock row ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
-        ctx.Check(Row(shell, OriginalShell.MissionKey)?.Label == "Dogfighting an Ace" && Row(shell, "IA_D_NENEMY0") == null,
-            $"the ace duel opens with no enemy row ({Row(shell, OriginalShell.MissionKey)?.Label})");
+        ctx.Check(Row(shell, OriginalShell.MissionKey)?.Label == "Dogfighting an Ace"
+            && Row(shell, "IA_D_NENEMY0") is { Enabled: false, Label: "" } && Row(shell, "IA_D_PLANEE0") is { Enabled: false, Label: "" },
+            $"the ace duel opens with its enemy boxes drawn blank and inert ({Row(shell, OriginalShell.MissionKey)?.Label}, {Row(shell, "IA_D_NENEMY0")?.Enabled}, {Row(shell, "IA_D_PLANEE0")?.Enabled})");
+        ctx.Check(Row(shell, OriginalShell.PageUpKey) is { Enabled: false } && Row(shell, OriginalShell.PageDownKey) is { Enabled: true },
+            $"with both paging buttons drawn and only the down one live ({Row(shell, OriginalShell.PageUpKey)?.Enabled}, {Row(shell, OriginalShell.PageDownKey)?.Enabled})");
         ctx.Check(Row(shell, OriginalShell.ExitKey) is { Enabled: true, Width: 200f, Height: 32f },
             $"Exit is the measured four-frame strip ({Row(shell, OriginalShell.ExitKey)?.Width}x{Row(shell, OriginalShell.ExitKey)?.Height})");
         ctx.Check(Row(shell, OriginalShell.BuildKey) is { Enabled: true } && Row(shell, OriginalShell.WeaponLoadoutKey) is { Enabled: true },
@@ -579,11 +583,11 @@ internal static class MenuInstantActionSuites
         Press(host, seat, Down);
         ctx.Check(shell.FocusedKey == OriginalShell.WingmenKey, $"Down walks the right page ({shell.FocusedKey})");
         Press(host, seat, Right);
-        ctx.Check(ia.NumWingmen == 1 && Row(shell, OriginalShell.WingmanPlaneKey) != null,
-            $"one wingman shows the wingman plane dropdown ({ia.NumWingmen})");
+        ctx.Check(ia.NumWingmen == 1 && Row(shell, OriginalShell.WingmanPlaneKey) is { Enabled: true },
+            $"one wingman fills the wingman plane dropdown ({ia.NumWingmen})");
         Press(host, seat, Left);
-        ctx.Check(ia.NumWingmen == 0 && Row(shell, OriginalShell.WingmanPlaneKey) == null,
-            $"and zero hides it again ({ia.NumWingmen})");
+        ctx.Check(ia.NumWingmen == 0 && Row(shell, OriginalShell.WingmanPlaneKey) is { Enabled: false, Label: "" },
+            $"and zero leaves its box standing blank and inert ({ia.NumWingmen}, {Row(shell, OriginalShell.WingmanPlaneKey)?.Enabled})");
     }
 
     // Four presets, one per mission type, each flown through Fly Mission: the exit is the

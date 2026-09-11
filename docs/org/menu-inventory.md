@@ -641,7 +641,7 @@ halves riding `CAP-52`.
 
 | ID | What it still owes | What it unblocks |
 |---|---|---|
-| `CAP-50` | VIEW STORY pressed on the Instant Action page | `BL-807` |
+| `CAP-50` | VIEW STORY pressed on the Instant Action page | what that button opens, the one Instant Action state no take holds |
 | `CAP-51` | the AUDIO page with sound, and a leaf re-entered after CANCEL CHANGES | the AUDIO page's preview against the decoded script, and whether a leaf's CANCEL CHANGES reverts a setting |
 | `CAP-52` | the whole menu walk with sound routed, a keyboard and pad pressed on each screen, REPLAY BRIEFING and DELETE PLAYER pressed | A4's audio and input contracts, D33's cue work, `BL-805` |
 | `CAP-53` | the tab bar out of order, Purchase, the cleared default box, the two refusals | C23's Original hangar navigation, `BL-808` |
@@ -741,10 +741,11 @@ The Instant Action screen is built from what the layout and the script evidence:
 their authored positions over `IA_BackGround`, the contents list's 14-row window with its own
 `UpArrow`/`DownArrow`/`Slider` art, a dropdown's box `Width` wide and `ItemHeight` high showing its
 picked value with the `DropDown` arrow strip, the enemy rows on two pages keyed off `IA_B_UP`/
-`IA_B_DOWN` (the script's mailbox 20002), the ace duel hiding every enemy dropdown (the script's
-`0 == WT` branch), the wingman plane hidden at zero wingmen, a changed militia resetting its
-aircraft (`AV[BA].QG = 0`), stunt flying clearing the clouds (`FUN_004103b0`'s mask), a contents
-row applying its preset on select (callback 2302) and View Story writing the preset's name as the
+`IA_B_DOWN` (the script's mailbox 20002), the ace duel blanking every enemy dropdown in place (the
+script's `0 == WT` branch deactivates them), the wingman plane blanking at zero wingmen, a changed
+militia resetting its aircraft (`AV[BA].QG = 0`), stunt flying clearing the clouds
+(`FUN_004103b0`'s mask), a contents row applying its preset on select (callback 2302) and View
+Story writing the preset's name as the
 story title (the `IDS_IA_STORYTITLE` format). The film (`CAP-50`, silent) shows the screen this
 way: the contents list and the dropdown half show together on one background; the screen opens on
 preset 0 with its row selected and every field reading that preset, not on stored defaults; a
@@ -757,13 +758,16 @@ has items, and scrolls with its own bar once the list outgrows the authored wind
 pilot-plane list at 21 entries in a 20-row window); a closed box lightens under the pointer; the
 ace duel empties the four enemy boxes in place with pale arrows and keeps "[continued ...]" and
 the down button live; at zero wingmen the wingman-plane box blanks while the Wingmen count stays
-live and the radio stays with its Wingmen option greyed; the up/down buttons replace the whole
-right page with the three later waves under "[go back ...]", a zero-count wave's boxes blanked;
-BUILD CUSTOM PLANE opens the plane-name dialog and WEAPON LOADOUT opens AMMO SELECTION for
+live and the radio pair draws exactly as it does with wingmen set, its Wingmen label as dark as
+the Pilot one; the up/down buttons replace the whole right page with the three later waves under
+"[go back ...]", a zero-count wave's boxes blanked; BUILD CUSTOM PLANE opens the plane-name
+dialog and WEAPON LOADOUT opens AMMO SELECTION for
 whichever of Pilot or Wingmen the radio holds, both live; and FLY MISSION opens a loading spread
-titled by the mission type. Original already draws BUILD CUSTOM PLANE and WEAPON LOADOUT live;
-it opens the page and names the preset differently by the user's decision, a deliberate departure
-recorded here, not a defect; where it differs from the film otherwise is `BL-807`. Still
+titled by the mission type. Original draws each of those states, BUILD CUSTOM PLANE and WEAPON
+LOADOUT live among them; the list's paper, the band under its picked row, the lighter band under
+the row the pointer is on and the cream a closed box's outline takes under the pointer are measured
+off the film, no layout row authoring any of them. It opens the page and names the preset
+differently by the user's decision, a deliberate departure recorded here, not a defect. Still
 unfilmed: VIEW STORY; whether keyboard or pad input reaches the screen at all (Original walks the
 widgets in two columns and steps a dropdown's value sideways, a remake equivalence); and every
 sound.

@@ -30,7 +30,7 @@ short lists equals the item count. Two rows are windows onto a longer list rathe
 |---|---|---|---|
 | `ia_d_planep` | 2312 / 2313 | 20 | the 11 airframes, plus the player's saved custom planes |
 | `ia_d_nwing` | 2314 / 2315 | 6 | 0 to 5 wingmen |
-| `ia_d_planew` | 2316 / 2317 | 11 | the wingman aircraft, hidden entirely when the wingman count is 0 |
+| `ia_d_planew` | 2316 / 2317 | 11 | the wingman aircraft; at a wingman count of 0 the box stands blank and inert while the count box beside it stays live |
 | `ia_d_misstype` | 2318 / 2319 | 4 | the four mission types |
 | `ia_d_environment` | 2320 / 2321 | 7 | the seven environments |
 | `ia_d_nenemyN` (N in 0..3) | 2322 | 7 | 0 to 6 enemies, one per wave |
@@ -40,12 +40,16 @@ short lists equals the item count. Two rows are windows onto a longer list rathe
 | `ia_tl_contents` | 2300 / 2302 | 14 visible | the Table of Contents, 19 preset scenarios (decoded below; the screen itself is `BL-352`) |
 
 Two behaviours matter beyond the option sets, both confirmed directly in the script. Selecting
-mission type 0 (dogfighting an ace) hides every enemy control — `gui_init`'s per-wave loop tests
-`0 == WT` and deactivates `ia_d_nenemyN`/`ia_d_egroupN`/`ia_d_planeeN`/`ia_d_difficultyN`, and the
-`20001` mailbox handler (fired on a mission-type change) repeats the same test to re-hide or
-re-show them — which is the script's own statement that **dogfighting an ace takes no wave
-configuration**. And the enemy rows are paged: mailbox `20002` shows wave 0's row alone on page 1
-and waves 1 to 3 on page 2, keyed off which of the `ia_b_up`/`ia_b_down` buttons was pressed.
+mission type 0 (dogfighting an ace) deactivates every enemy control — `gui_init`'s per-wave loop
+tests `0 == WT` and deactivates `ia_d_nenemyN`/`ia_d_egroupN`/`ia_d_planeeN`/`ia_d_difficultyN`, and
+the `20001` mailbox handler (fired on a mission-type change) repeats the same test to deactivate or
+revive them — which is the script's own statement that **dogfighting an ace takes no wave
+configuration**. ⚠ A deactivated box is not a removed one: it keeps its place on the page, blank,
+with its arrow in the disabled frame (`CAP-50.mkv` t=13.0). A wave whose own count is 0 deactivates
+its militia, skill and aircraft the same way and keeps its count box live (t=70.0), which is the
+film's reading, not the script's. And the enemy rows are paged: mailbox `20002` shows wave 0's row
+alone on page 1 and waves 1 to 3 on page 2, keyed off which of the `ia_b_up`/`ia_b_down` buttons was
+pressed; both buttons draw on both pages, the one with nowhere to go in its disabled frame.
 
 **⚠ `ia_d_planep`'s 20 is not twenty aircraft.** The script sizes that list from
 `callback($$A$$, 1024)` (the player's saved-plane count) `+ 11`, and `gui_continue` re-checks the

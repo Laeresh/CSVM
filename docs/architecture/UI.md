@@ -811,13 +811,13 @@ unjoined, and the last seat's confirm is the launch: [../menu-presentations.md](
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
-section and the shared `InstantActionFeature`. Its rows are the section's own widgets keyed by
-their layout keys: the contents list in its authored window with its arrows and thumb, the
-dropdowns at their authored boxes, the enemy rows on two pages, the radio pair and the buttons.
-The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named
-`Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's
-return; a picked build flies its airframe's stock node with its def on the seat. Build opens the
-wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
+section and the shared `InstantActionFeature`. Its rows are the section's own widgets keyed by their
+layout keys: the contents list in its authored window with its arrows and thumb, the dropdowns at
+their authored boxes, the enemy rows on two pages under both paging buttons, the radio pair and the
+buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an
+open list bands its picked row and the row under the pointer, and a closed box redraws its outline
+in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat.
+Build opens the wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/Menu/Original/OriginalLoadout.cs
 The Weapon Loadout screen, the shell's partial over the decoded `[@OrdinanceLayout@]` section (the

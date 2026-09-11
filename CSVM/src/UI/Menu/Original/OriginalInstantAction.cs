@@ -14,8 +14,8 @@ public sealed record OriginalInstantActionInks(
 /// The Original Instant Action screen, composed from the decoded <c>[@InstantAction@]</c> rows over
 /// the shared <see cref="InstantActionFeature"/>: the contents window and its arrows, the dropdowns,
 /// the paged enemy rows, the radio pair and the five buttons. Decoded rules bound here: a contents
-/// row applies its preset, View Story writes its name, the ace duel hides every enemy control, the
-/// wingman plane hides at zero wingmen, a changed militia resets its aircraft, stunt flying bars
+/// row applies its preset, View Story writes its name, the ace duel blanks every enemy control, the
+/// wingman plane blanks at zero wingmen, a changed militia resets its aircraft, stunt flying bars
 /// the clouds. The Pilot Plane list is the sortie screens' roster (<c>Stock Fury</c>, <c>&lt;build
 /// name&gt; Fury</c>); the wingman list stays stock. Build opens the hangar wallet-free and returns
 /// here with the list re-read; Weapon Loadout opens the loadout screen for the seat the radio
@@ -84,6 +84,14 @@ public sealed partial class OriginalShell
     private const float LabelFont = 14f;
     private const float InstructionFont = 12f;
     private const float StoryFont = 18f;
+
+    // The four colours a list and a box mark with, measured off the film: no layout row authors a
+    // dropdown's paper, the band under its picked row, the lighter band under the row the pointer
+    // is on, or the cream a closed box's outline is redrawn in while the pointer stands on it.
+    private const byte ListPaperR = 216, ListPaperG = 200, ListPaperB = 166;
+    private const byte PickedRowR = 200, PickedRowG = 151, PickedRowB = 80;
+    private const byte HoveredRowR = 220, HoveredRowG = 181, HoveredRowB = 124;
+    private const byte LitBoxR = 246, LitBoxG = 237, LitBoxB = 214;
 
     // A widget's size when the layout row is missing or its art cannot be measured.
     private const float FallbackItemHeight = 18f;
@@ -264,6 +272,13 @@ public sealed partial class OriginalShell
         return names;
     }
 
+    // The item index an open list's row carries, or -1 for its arrows and for any other key.
+    private static int ListRowIndex(string key)
+    {
+        int colon = key.LastIndexOf(':');
+        return colon > 0 && int.TryParse(key[(colon + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : -1;
+    }
+
     private static int ContentsIndex(string key)
     {
         if (!key.StartsWith(ContentsKey + ":", StringComparison.Ordinal))
@@ -402,35 +417,29 @@ public sealed partial class OriginalShell
         AddStrip(screen, rows, ViewStoryKey, OriginalRowKind.TextButton, true, 0);
         AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, _hangar != null && _planes != null, 0);
 
-        bool ace = _instantAction.IsAceDuel;
+        // A box a setting has nothing to say through keeps its place blank and inert rather than
+        // leaving the page: the wingman plane at zero wingmen, every enemy box under the ace duel
+        // and a wave's militia, skill and aircraft while it carries nobody.
         if (_iaPage == 0)
         {
             AddDropdown(screen, rows, PlayerPlaneKey);
             AddDropdown(screen, rows, WingmenKey);
-            if (_instantAction.NumWingmen > 0)
-            {
-                AddDropdown(screen, rows, WingmanPlaneKey);
-            }
-
+            AddDropdown(screen, rows, WingmanPlaneKey, live: _instantAction.NumWingmen > 0);
             AddDropdown(screen, rows, MissionKey);
             AddDropdown(screen, rows, EnvironmentKey);
-            if (!ace)
-            {
-                AddWave(screen, rows, 0);
-                AddStrip(screen, rows, PageDownKey, OriginalRowKind.Button, true, 1);
-            }
+            AddWave(screen, rows, 0);
         }
         else
         {
-            if (!ace)
-            {
-                AddWave(screen, rows, 1);
-                AddWave(screen, rows, 2);
-                AddWave(screen, rows, 3);
-            }
-
-            AddStrip(screen, rows, PageUpKey, OriginalRowKind.Button, true, 1);
+            AddWave(screen, rows, 1);
+            AddWave(screen, rows, 2);
+            AddWave(screen, rows, 3);
         }
+
+        // Both paging buttons stand on both pages, the one with nowhere to go in its disabled
+        // frame; the ace duel still pages, its later waves blank like the first.
+        AddStrip(screen, rows, PageUpKey, OriginalRowKind.Button, _iaPage > 0, 1);
+        AddStrip(screen, rows, PageDownKey, OriginalRowKind.Button, _iaPage == 0, 1);
 
         AddStrip(screen, rows, PlayerRadioKey, OriginalRowKind.Radio, true, 1);
         AddStrip(screen, rows, WingmanRadioKey, OriginalRowKind.Radio, true, 1);
@@ -439,15 +448,23 @@ public sealed partial class OriginalShell
         AddStrip(screen, rows, ExitKey, OriginalRowKind.Button, true, 1);
     }
 
+    // One wave's four boxes. The ace duel takes no wave configuration at all, so even the count
+    // goes blank; an empty wave still offers its count and blanks only what a militia would fill.
     private void AddWave(MenuLayoutScreen screen, List<OriginalRow> rows, int wave)
     {
-        foreach (string prefix in WaveKeyPrefixes)
+        bool counted = !_instantAction.IsAceDuel;
+        bool configured = counted && _instantAction.Waves[wave].Count > 0;
+        string n = wave.ToString(CultureInfo.InvariantCulture);
+        AddDropdown(screen, rows, WaveKeyPrefixes[0] + n, live: counted);
+        for (int i = 1; i < WaveKeyPrefixes.Length; i++)
         {
-            AddDropdown(screen, rows, prefix + wave.ToString(CultureInfo.InvariantCulture));
+            AddDropdown(screen, rows, WaveKeyPrefixes[i] + n, live: configured);
         }
     }
 
-    private void AddDropdown(MenuLayoutScreen screen, List<OriginalRow> rows, string key, int column = 1)
+    // A dropdown that is not live still stands where the layout puts it, with no value written
+    // and its arrow in the disabled frame, which is how the page reads a setting as unavailable.
+    private void AddDropdown(MenuLayoutScreen screen, List<OriginalRow> rows, string key, int column = 1, bool live = true)
     {
         if (screen.Widget(key) is not { } widget || DropdownFor(key) is not { } list)
         {
@@ -455,9 +472,9 @@ public sealed partial class OriginalShell
         }
 
         var box = DropBox(widget);
-        string value = list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
+        string value = live && list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
         rows.Add(new OriginalRow(key, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
-            true, column, StripArt(widget.Art, 4)));
+            live, column, StripArt(widget.Art, 4)));
     }
 
     private void AddStrip(MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled, int column)
@@ -912,7 +929,6 @@ public sealed partial class OriginalShell
                 background.Int("X"), background.Int("Y")));
         }
 
-        bool ace = _instantAction.IsAceDuel;
         AddText(screen, lines, "IA_T_TABLETITLE", TitleFont);
         AddText(screen, lines, "IA_T_TABLEINSTR", InstructionFont);
         AddText(screen, lines, "IA_T_STORYINSTR", InstructionFont);
@@ -925,21 +941,14 @@ public sealed partial class OriginalShell
             AddText(screen, lines, "IA_T_WINGMANTITLE", LabelFont);
             AddText(screen, lines, "IA_T_MISSIONTITLE", LabelFont);
             AddText(screen, lines, "IA_T_ENVIRONMENTTITLE", LabelFont);
-            if (!ace)
-            {
-                AddText(screen, lines, "IA_T_ENEMY0", LabelFont);
-                AddText(screen, lines, "IA_T_CONTINUED", InstructionFont);
-            }
+            AddText(screen, lines, "IA_T_ENEMY0", LabelFont);
+            AddText(screen, lines, "IA_T_CONTINUED", InstructionFont);
         }
         else
         {
-            if (!ace)
-            {
-                AddText(screen, lines, "IA_T_ENEMY1", LabelFont);
-                AddText(screen, lines, "IA_T_ENEMY2", LabelFont);
-                AddText(screen, lines, "IA_T_ENEMY3", LabelFont);
-            }
-
+            AddText(screen, lines, "IA_T_ENEMY1", LabelFont);
+            AddText(screen, lines, "IA_T_ENEMY2", LabelFont);
+            AddText(screen, lines, "IA_T_ENEMY3", LabelFont);
             AddText(screen, lines, "IA_T_GOBACK", InstructionFont);
         }
 
@@ -964,10 +973,17 @@ public sealed partial class OriginalShell
             }
         }
 
+        // The pointer's own row is named rather than indexed, since with a list open the page under
+        // it is a rebuilt set of closed widgets whose indices are not the hit-tested rows'; the hit
+        // is re-checked, since an activation can swap the row set out from under an earlier index.
+        string? under = _hover >= 0 && _hover < rows.Count && _pointer is { } at && rows[_hover].Contains(at.X, at.Y)
+            ? rows[_hover].Key
+            : null;
         ComposeContentsThumb(screen, pictures);
         for (int i = 0; i < widgets.Count; i++)
         {
-            ComposeInstantActionRow(widgets[i], i == widgetFocus, i == widgetPressed, i, fills, lines, plaques, pictures);
+            ComposeInstantActionRow(widgets[i], i == widgetFocus, i == widgetPressed, i, fills, lines, plaques, pictures,
+                lit: widgets[i].Key == under);
         }
 
         if (_iaOpen != null)
@@ -1005,10 +1021,14 @@ public sealed partial class OriginalShell
 
         if (top < bottom)
         {
-            panelFills.Add(new BoardFill(left, top, width, bottom - top, 255, 255, 255, 0.94f));
+            panelFills.Add(new BoardFill(left, top, width, bottom - top, ListPaperR, ListPaperG, ListPaperB));
             panelFills.Add(new BoardFill(left, top, width, bottom - top, 0, 0, 0, 1f, Border: true));
         }
 
+        // The list carries two bands at once, the picked value's and the row the cursor is on.
+        // The picked one wins where they meet, so a row never wears two and an untouched list
+        // still says what is picked; the words stay the page's own ink under either.
+        int picked = _iaOpen != null && DropdownFor(_iaOpen) is { } open ? open.Current : -1;
         for (int i = 0; i < rows.Count; i++)
         {
             var item = rows[i];
@@ -1024,13 +1044,17 @@ public sealed partial class OriginalShell
                 continue;
             }
 
-            if (i == focus)
+            if (picked >= 0 && ListRowIndex(item.Key) == picked)
             {
-                panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f));
+                panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, PickedRowR, PickedRowG, PickedRowB));
+            }
+            else if (i == focus)
+            {
+                panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, HoveredRowR, HoveredRowG, HoveredRowB));
             }
 
             panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, itemFont,
-                item.Enabled ? (i == focus ? BoardInk.RowFocused : BoardInk.Row) : BoardInk.Detail, i));
+                item.Enabled ? BoardInk.Row : BoardInk.Detail, i));
         }
 
         if (OpenListWindow(screen) is { } window && _iaOpen != null && screen.Widget(_iaOpen) is { } widget
@@ -1051,7 +1075,7 @@ public sealed partial class OriginalShell
     private void ComposeInstantActionRow(
         OriginalRow row, bool focused, bool pressed, int index,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures,
-        float itemFont = ItemFont, bool boxOnFocus = false)
+        float itemFont = ItemFont, bool boxOnFocus = false, bool lit = false)
     {
         switch (row.Kind)
         {
@@ -1084,12 +1108,17 @@ public sealed partial class OriginalShell
                 }
                 else
                 {
-                    if (focused)
+                    // Under the pointer the printed black box is redrawn in the page's own cream,
+                    // which is the whole of the rollover: the fill inside it does not move. The wash
+                    // stays for a row a keyboard or pad walked onto, so the two never land together.
+                    if (focused && !lit)
                     {
                         fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
                     }
 
-                    fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 1f, Border: true));
+                    fills.Add(lit
+                        ? new BoardFill(row.X, row.Y, row.Width, row.Height, LitBoxR, LitBoxG, LitBoxB, 1f, Border: true)
+                        : new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 1f, Border: true));
                 }
 
                 float arrowWidth = 0f;
@@ -1097,7 +1126,7 @@ public sealed partial class OriginalShell
                 {
                     var size = StripSize(row.Art, FallbackArrowWidth, FallbackArrowHeight);
                     arrowWidth = size.Width;
-                    int frame = ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed);
+                    int frame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
                     pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
                 }
 

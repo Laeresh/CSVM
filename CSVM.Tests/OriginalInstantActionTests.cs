@@ -13,9 +13,10 @@ namespace CSVM.Tests;
 /// opening it, the rows it composes on its opening state, a contents row applying its preset and
 /// View Story writing the title, the contents window scrolling by its arrows, a dropdown opening
 /// as its list and picking by click or by a sideways step (a barred environment skipped), the enemy
-/// pages, the ace duel hiding every enemy control, the radio pair, Weapon Loadout opening the
-/// loadout screen for the seat the radio names, Back and Exit, and Fly Mission leaving as the
-/// feature's exit with the pilot's fit on the seat. Every rectangle is the fixture's invented geometry.
+/// pages, the ace duel blanking every enemy control, the bands an open list and a closed box take
+/// under the pointer, the radio pair, Weapon Loadout opening the loadout screen for the seat the
+/// radio names, Back and Exit, and Fly Mission leaving as the feature's exit with the pilot's fit
+/// on the seat. Every rectangle is the fixture's invented geometry.
 /// </summary>
 public class OriginalInstantActionTests
 {
@@ -44,7 +45,7 @@ public class OriginalInstantActionTests
     }
 
     [Fact]
-    public void TheOpeningStateComposesTheContentsWindowThePilotDropdownsAndTheButtonsWithNoEnemyRow()
+    public void TheOpeningStateComposesTheContentsWindowThePilotDropdownsAndTheButtonsWithTheEnemyRowBlank()
     {
         var shell = Open(out _);
 
@@ -54,11 +55,24 @@ public class OriginalInstantActionTests
             new[]
             {
                 OriginalShell.ContentsUpKey, OriginalShell.ContentsDownKey, OriginalShell.ViewStoryKey, OriginalShell.BuildKey,
-                OriginalShell.PlayerPlaneKey, OriginalShell.WingmenKey, OriginalShell.MissionKey, OriginalShell.EnvironmentKey,
+                OriginalShell.PlayerPlaneKey, OriginalShell.WingmenKey, OriginalShell.WingmanPlaneKey, OriginalShell.MissionKey,
+                OriginalShell.EnvironmentKey, "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
+                OriginalShell.PageUpKey, OriginalShell.PageDownKey,
                 OriginalShell.PlayerRadioKey, OriginalShell.WingmanRadioKey, OriginalShell.WeaponLoadoutKey,
                 OriginalShell.FlyMissionKey, OriginalShell.ExitKey,
             },
             keys.Skip(10));
+
+        // The opening preset is an ace duel with no wingmen, so every enemy box and the wingman
+        // plane stand blank and inert, the count box included, and only the down button can page.
+        foreach (string blank in new[] { OriginalShell.WingmanPlaneKey, "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0" })
+        {
+            Assert.False(Row(shell, blank).Enabled);
+            Assert.Equal(string.Empty, Row(shell, blank).Label);
+        }
+
+        Assert.False(Row(shell, OriginalShell.PageUpKey).Enabled);
+        Assert.True(Row(shell, OriginalShell.PageDownKey).Enabled);
 
         var contents = shell.Rows[0];
         Assert.Equal((70f, 170f, 280f, 20f), (contents.X, contents.Y, contents.Width, contents.Height));
@@ -88,8 +102,8 @@ public class OriginalInstantActionTests
         Assert.Equal("PI_IA_Back.jpg", Assert.Single(board.Backdrop).Art.Name);
         Assert.Contains(board.Lines, l => l.Text == "Contents" && l.X == 150f && l.Y == 90f);
         Assert.Contains(board.Lines, l => l.Text == "Set the details below." && l.Ink == BoardInk.Dialog);
-        Assert.DoesNotContain(board.Lines, l => l.Text == "Enemy:");
-        Assert.DoesNotContain(board.Lines, l => l.Text == "[more ...]");
+        Assert.Contains(board.Lines, l => l.Text == "Enemy:");
+        Assert.Contains(board.Lines, l => l.Text == "[more ...]");
         Assert.Equal(0, board.Plaques.Single(p => p.Art.Name == "PI_B_Build.png").Frame);
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PI_B_Exit.png").Frame);
         Assert.Contains(board.Fills, f => f.X == 70f && f.Y == 170f && f.Border);
@@ -188,6 +202,32 @@ public class OriginalInstantActionTests
     }
 
     [Fact]
+    public void ThePilotListPastItsWindowScrollsOnItsOwnBar()
+    {
+        var store = new CustomPlaneStore(TestData.TempDir());
+        for (int i = 1; i <= 10; i++)
+        {
+            store.Save(new CustomPlaneDef { Name = "Built " + i, Airframe = 5, Engine = 1 });
+        }
+
+        var ia = new InstantActionFeature(_ => InstantActionFeatureTests.InstantActionDefFor("Test Ace"));
+        var shell = new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), new PlayerSetupFeature(), Measure,
+            instantAction: ia, planes: store);
+        shell.OpenInstantAction();
+        Assert.Equal(21, shell.PilotRoster.Count);
+
+        shell.Step(Click(Row(shell, OriginalShell.PlayerPlaneKey)));
+
+        // The fixture's window is twenty rows, so the twenty-first entry puts the list on its own
+        // bar: an arrow at each end of the box's right edge, live only towards more list, and the
+        // thumb between them.
+        Assert.Equal(20, shell.Rows.Count(r => r.Kind == OriginalRowKind.ListRow && r.Visible));
+        Assert.False(Row(shell, OriginalShell.PlayerPlaneKey + ":up").Enabled);
+        Assert.True(Row(shell, OriginalShell.PlayerPlaneKey + ":down").Enabled);
+        Assert.Contains(shell.Compose().Overlays[0].Pictures, p => p.Art.Name == "PI_B_ScrollBar.png");
+    }
+
+    [Fact]
     public void AClickOffAnOpenListClosesItWithoutPicking()
     {
         var shell = Open(out var ia);
@@ -236,7 +276,7 @@ public class OriginalInstantActionTests
     }
 
     [Fact]
-    public void TheEnemyPagesFlipByTheirButtonsAndTheAceDuelHidesEveryEnemyControl()
+    public void TheEnemyPagesFlipByTheirButtonsAndTheAceDuelBlanksEveryEnemyControl()
     {
         var shell = Open(out var ia);
         shell.Step(Click(shell.Rows[0]));
@@ -252,6 +292,12 @@ public class OriginalInstantActionTests
         Assert.Equal("2", Row(shell, "IA_D_NENEMY1").Label);
         Assert.Equal("Black Swan", Row(shell, "IA_D_EGROUP1").Label);
         Assert.Equal("0", Row(shell, "IA_D_NENEMY3").Label);
+        // An empty wave keeps its count live and blanks the three boxes a militia would fill.
+        Assert.True(Row(shell, "IA_D_NENEMY3").Enabled);
+        Assert.False(Row(shell, "IA_D_EGROUP3").Enabled);
+        Assert.Equal(string.Empty, Row(shell, "IA_D_PLANEE3").Label);
+        Assert.True(Row(shell, "IA_D_EGROUP1").Enabled);
+        Assert.False(Row(shell, OriginalShell.PageDownKey).Enabled);
         Assert.Equal((490f, 200f, 40f, 20f), Rect(Row(shell, "IA_D_NENEMY1")));
         var board = shell.Compose();
         Assert.Contains(board.Lines, l => l.Text == "[back ...]" && l.Justify == BoardJustify.Right);
@@ -265,9 +311,48 @@ public class OriginalInstantActionTests
         shell.Step(Click(Row(shell, OriginalShell.MissionKey)));
         shell.Step(Click(shell.Rows[0]));
         Assert.True(ia.IsAceDuel);
-        Assert.DoesNotContain(shell.Rows, r => r.Key.StartsWith("IA_D_NENEMY", System.StringComparison.Ordinal));
-        Assert.DoesNotContain(shell.Rows, r => r.Key == OriginalShell.PageDownKey);
+
+        // The duel keeps all four enemy boxes in place, blank and inert, the count among them,
+        // and still pages: the down button and the [more ...] line stay live under them.
+        foreach (string prefix in new[] { "IA_D_NENEMY", "IA_D_EGROUP", "IA_D_DIFFICULTY", "IA_D_PLANEE" })
+        {
+            Assert.False(Row(shell, prefix + "0").Enabled);
+            Assert.Equal(string.Empty, Row(shell, prefix + "0").Label);
+        }
+
+        Assert.True(Row(shell, OriginalShell.PageDownKey).Enabled);
         Assert.Contains(shell.Rows, r => r.Key == OriginalShell.WingmenKey);
+        var duel = shell.Compose();
+        Assert.Contains(duel.Lines, l => l.Text == "Enemy:");
+        Assert.Contains(duel.Lines, l => l.Text == "[more ...]");
+    }
+
+    [Fact]
+    public void AnOpenListBandsThePickedRowAndTheRowUnderThePointerAndAClosedBoxLightensUnderIt()
+    {
+        var shell = Open(out _);
+        var environment = Row(shell, OriginalShell.EnvironmentKey);
+
+        // A closed box under the pointer redraws its outline in the page's cream, with no wash
+        // inside it; every other box keeps the printed black one.
+        shell.Step(Hover(environment));
+        var board = shell.Compose();
+        Assert.Contains(board.Fills, f => f.X == environment.X && f.Y == environment.Y && f.Border && f.R == 246 && f.G == 237 && f.B == 214);
+        Assert.DoesNotContain(board.Fills, f => f.X == environment.X && f.Y == environment.Y && !f.Border);
+        var mission = Row(shell, OriginalShell.MissionKey);
+        Assert.Contains(board.Fills, f => f.X == mission.X && f.Y == mission.Y && f.Border && f.R == 0);
+
+        shell.Step(Click(environment));
+        Assert.Equal(OriginalShell.EnvironmentKey, shell.OpenDropdown);
+        shell.Step(Hover(shell.Rows[2]));
+        var panel = shell.Compose().Overlays[0];
+
+        // The picked row and the row under the pointer both band, in their own colours, and the
+        // list's own paper stands under them.
+        Assert.Contains(panel.Fills, f => f.Y == shell.Rows[0].Y && !f.Border && f.R == 200 && f.G == 151 && f.B == 80);
+        Assert.Contains(panel.Fills, f => f.Y == shell.Rows[2].Y && !f.Border && f.R == 220 && f.G == 181 && f.B == 124);
+        Assert.Contains(panel.Fills, f => !f.Border && f.R == 216 && f.G == 200 && f.B == 166);
+        Assert.All(panel.Lines, l => Assert.True(l.Ink is BoardInk.Row or BoardInk.Detail));
     }
 
     [Fact]
