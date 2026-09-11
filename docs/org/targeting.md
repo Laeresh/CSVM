@@ -170,6 +170,28 @@ selectable when, and only when, its mission structure carries `otherTarget` or `
 entry in one of the four global pools. Engines and cannons appear only if the mission authors them
 as their own `MStruct` entries; the decode does not show the engine walking a zeppelin's parts.
 
+### A Stunt Flying Danger Zone is the player's own target, not a HUD of its own
+
+`FUN_004579e0` is the only function that formats `"%s [%s] -"` (`0x006253ac`), and it draws off the
+local player's `+0x948` selection alone. So the marker on
+`OriginalScreenshots/C1 IA1 Cloudcoverage 1.png` (an edge arrow beside `Danger Zone [Fly Through] -`
+over `Train Tunnel Mid` over `1 o'clock`) is the ordinary target label with a Danger Zone in the
+target slot. Its blue is `Target::GetColor`'s answer for a category that is not one of the four
+destructive ones, which is what `MSG_OBJ_DZ` resolves to. The three lines are the `targets.zrd`
+record's own `category_label`, `help_label` and `description`, the same triple every objective site
+is labelled from.
+
+⚠ **How a zone reaches the selection was not traced.** No `dzN` entry in any of the eight shipped
+`IA1` `targets.zrd` files carries `objective` or `other_target`, and `FUN_004a2e00` stamps
+`+0x4c`/`+0x4d` from those two keys alone, so the class filter `FUN_004b5cd0` would refuse the
+object that record builds. Every writer of `+0x948` was read and none is stunt-specific: the AI's
+own acquisition `FUN_0041fe10`, the eleven action handlers between `0x00488737` and `0x00488cd3`,
+the save restores `FUN_00472770` and `FUN_0047fd50`, the death and teardown clears, and the
+per-frame re-resolve `FUN_004b5fb0`. Something outside that sweep sets the flag. CSVM offers each
+unflown zone to the flying pilot's own pool as an objective-flagged candidate, which reproduces the
+marker, the colour and the cycle position; a zone the pilot has cleared is simply not offered again,
+so the re-resolve drops to the head like any other departed target.
+
 ## The team space
 
 The engine has **one** team space, one field, and one hostility predicate. Aircraft, turrets and

@@ -401,26 +401,30 @@ internal sealed class HumanFlightAdapter
         }
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
         // independent copy of the same zones — own progress, own clock. Never on a swap, which
-        // would restart the clock and stack a second marker HUD (see AirframeSwapRequest).
+        // would restart the clock and stack a second run HUD (see AirframeSwapRequest).
         if (swap == null && _human.StuntZones != null)
         {
-            controller.Stunt = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
-            controller.Stunt.LogTag = tag; // "P2 " in a race — one shared world, four runs
+            var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
+            controller.Stunt = run;
+            run.LogTag = tag; // "P2 " in a race — one shared world, four runs
             controller.DebugCompleteStunt = _policy.DebugScoreboard;
-            // The objective marker HUD, one per pane: projects that player's
-            // active danger zone through THEIR camera, with the edge arrow + clock
-            // bearing + run status.
-            var marker = MarkerHud.Build(controller.Stunt, rig.Camera);
-            pilotHud.Marker = marker;
+            // This pilot's own unflown zones, on their own target cycle. Bound per controller
+            // rather than through FlightRoster's roster-wide channel: each pane races its own copy
+            // of the run, and a shared feed would put one pilot's cleared zones on another's HUD.
+            controller.TargetObjectives = into => run.CollectTargets(into);
+            // The run HUD, one per pane: clock, zones cleared, banners. The zone MARKER is the
+            // targeting HUD's, since a zone is an objective like any other.
+            var runHud = StuntRunHud.Build(run);
+            pilotHud.StuntRun = runHud;
             if (_human.Race is { } race)
             {
                 // Racing: no per-player splits board — the shared ranked board
-                // below covers the whole window when the last pilot is in. The marker
+                // below covers the whole window when the last pilot is in. The run
                 // HUD shows this player's placing meanwhile.
                 race.Add(pi, controller.Stunt, planeDisplay);
                 controller.Race = race;
-                marker.Race = race;
-                marker.PlayerIndex = pi;
+                runHud.Race = race;
+                runHud.PlayerIndex = pi;
             }
             else if (_human.InstantActionActive)
             {
@@ -443,7 +447,7 @@ internal sealed class HumanFlightAdapter
             }
             if (verbose)
             {
-                GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
+                GD.Print("stunt run HUD: clock + zones cleared + banners; zones ride the target cycle");
                 WhatSuffix += $" [stunt: {controller.Stunt.TotalCount} zones]";
             }
         }

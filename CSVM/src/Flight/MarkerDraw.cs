@@ -3,13 +3,11 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The world-marker's drawing primitives, the one home for what <see cref="MarkerHud"/>
-/// carried privately: the target reticle, the off-screen arrow, and the centred text block with
-/// its drop shadow and its clamped variant. <see cref="EdgeMarker"/> decides WHERE a marker goes;
-/// this decides what it looks like once placed, so a second HUD drawing the same marker over a
-/// different subject (the campaign's objective sites) reproduces the look instead of copying it.
-/// The caller owns the colour and the scaled sizes, which is why none of them are baked in
-/// here.</summary>
+/// <summary>The world-marker's drawing primitives: the target reticle, the off-screen arrow, and
+/// the centred text block with its drop shadow and its clamped variant. <see cref="EdgeMarker"/>
+/// decides WHERE a marker goes; this decides what it looks like once placed, so every HUD that
+/// draws one reproduces the look instead of copying it. The caller owns the colour and the scaled
+/// sizes, which is why none of them are baked in here.</summary>
 public static class MarkerDraw
 {
     /// <summary>1440p reference arrowhead length; scale by <see cref="HudMetrics"/> first.</summary>

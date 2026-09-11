@@ -526,7 +526,7 @@ original's reader search path, and `ByNode` exposes the whole table for a consum
 starting flags rather than one key's labels. Schema: [../formats/missions.md](../formats/missions.md).
 
 ## src/Flight/MarkerDraw.cs
-The world marker's drawing primitives, shared by `MarkerHud` and `TargetHud`: the shadowed
+The world marker's drawing primitives, shared by `TargetHud` and `StuntRunHud`: the shadowed
 reticle, the edge arrow with its tail stroke, and the centred text block with the pane-clamped
 variant an off-screen marker needs. Owns the marker blue and the drop shadow, while colour and
 scaled sizes stay with the caller, since each HUD scales through its own `HudMetrics.Scale`.
@@ -535,12 +535,13 @@ looks like.
 
 ## src/Flight/StuntMission.cs
 Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list from a mission's
-ia.json `dzones` (HUD positions, gate polygons, strings through `MissionTargets` and `Messages`,
-null where a mission authors none), `Update` requires both polygon-plane crossings in either order
-and advances the target, and `Elapsed`, `CompletedAt`, `CompletionOrder` and `InCompletionOrder`
-carry the clock and the splits. `ForAnotherPlayer()` clones an independent run so the archives
-parse once per session. Engine-free apart from its logging, which is what lets its coverage run
-off the engine. Read `MarkerHud` for what a run draws and `StuntScoreboard` for what it scores.
+ia.json `dzones` (marker positions, gate polygons, strings through `MissionTargets` and `Messages`,
+null where a mission authors none), `Update` requires both polygon-plane crossings in either order,
+`CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives, and
+`Elapsed`, `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits.
+`ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
+apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
+rest of what a run draws, and `StuntScoreboard` for what it scores.
 
 ## src/Flight/HudMetrics.cs
 The one place the flight HUD decides how big it draws: `Scale(control, reference = 1440)` is
@@ -578,15 +579,16 @@ The off-screen edge marker's placement rules, engine-free and pure: `Resolve(pro
 paneSize, margin)` answers on-screen against edge-clamped as a `Placement` (the margin-inset rect
 test, the behind-the-camera mirror, the degenerate-direction fallback and the clamp to the inset
 boundary), and `ClockHour` is the bearing in hours. Owns `RefEdgeMargin`. The camera stays with
-the callers: `MarkerHud`, `VersusHud` and `TargetHud` project through their own pane and keep
+the callers: `VersusHud` and `TargetHud` project through their own pane and keep
 their own arrow, tag and label styling. `MarkerDraw` draws what this places; off-engine coverage
 is `CSVM.Tests/EdgeMarkerTests.cs`.
 
-## src/Flight/MarkerHud.cs
-The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle and
-text block, the off-screen edge arrow with its bearing, the run status line and the completion
-banners, one per player and sized through `HudMetrics.Scale`. Placement is `EdgeMarker`'s and the
-primitives are `MarkerDraw`'s; what it reports is `StuntMission`'s.
+## src/Flight/StuntRunHud.cs
+The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`: the clock and
+zones-cleared status line, the one-shot intro banner, the zone-cleared flash, and the completion
+banner, which in a race becomes this pilot's placing and who they are still waiting on. It draws
+no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
+every other one. What it reports is `StuntMission`'s.
 
 ## src/Flight/ResultsBoard.cs
 The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
@@ -645,7 +647,7 @@ is the host-fed match clock, `MatchCompleted` fires once on the kill threshold o
 
 ## src/Flight/VersusHud.cs
 The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths,
-the leader's tag) in `MarkerHud`'s run-status slot, a transient kill banner, and one marker per
+the leader's tag) in `StuntRunHud`'s run-status slot, a transient kill banner, and one marker per
 living opponent rig, either an on-screen tag or `EdgeMarker`'s arrow and bearing in that
 opponent's own `SplitScreen.PlayerColor`. `Build` binds the match and this pane's own camera;
 `HumanFlightAdapter` attaches the live rig list and `FlightController` feeds the pose each frame.

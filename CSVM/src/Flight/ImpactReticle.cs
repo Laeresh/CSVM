@@ -7,7 +7,7 @@ namespace CSVM.Flight;
 /// The gun aiming reticle: the game's own <c>impact_point.png</c> pipper, a viewport-filling
 /// <see cref="Control"/> fed a world impact point each frame by <see cref="FlightController"/>,
 /// projected through the live camera at <see cref="_Draw"/> time (never cached, mirrors
-/// <see cref="MarkerHud"/>). Fixed screen size scaled by <see cref="HudMetrics"/>.
+/// <see cref="TargetHud"/>). Fixed screen size scaled by <see cref="HudMetrics"/>.
 /// ⚠ Deliberately not pinned to screen centre, and it marks the nose axis, not the aim assist's
 /// line, so an assisted round does not go where the pipper points — the assist is meant to be
 /// felt, not seen (docs/org/aim-assist.md "What the gun pipper follows").</summary>
@@ -69,7 +69,7 @@ public sealed partial class ImpactReticle : Control
         {
             return;
         }
-        // A point behind the camera unprojects mirrored through centre — never draw it (as MarkerHud).
+        // A point behind the camera unprojects mirrored through centre — never draw it (as TargetHud).
         if (_camera.IsPositionBehind(ImpactPoint))
         {
             return;

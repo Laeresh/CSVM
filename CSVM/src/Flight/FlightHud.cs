@@ -60,7 +60,7 @@ public struct FlightHudState
     /// <summary>The damage ledger's summary line, or null/empty for no DMG line.</summary>
     public string? DamageSummary;
 
-    /// <summary>The stunt run's status line, supplied only when there is no marker HUD to carry
+    /// <summary>The stunt run's status line, supplied only when there is no run HUD to carry
     /// it (see <see cref="FlightHud.NeedsStuntStatusLine"/>); null otherwise.</summary>
     public string? StuntStatusLine;
 
@@ -121,9 +121,10 @@ public sealed class FlightHud
     /// point. Null when the plane carries no firable gun, or the reticle texture was absent.</summary>
     public ImpactReticle? Reticle;
 
-    /// <summary>The stunt objective marker HUD: projected marker / screen-edge arrow + clock
-    /// bearing, run status, banners. Null in free flight.</summary>
-    public MarkerHud? Marker;
+    /// <summary>The stunt run HUD: run status, intro and completion banners, zone-cleared flash.
+    /// Null in free flight. The zone MARKER is the targeting HUD's, since a zone is an objective.
+    /// </summary>
+    public StuntRunHud? StuntRun;
 
     /// <summary>The targeting HUD: the pilot's sticky selection, the tracked-hostile fallback and
     /// <c>--debug-markers</c>. Built for every human pane in every flight session.</summary>
@@ -186,8 +187,8 @@ public sealed class FlightHud
 
     /// <summary>Whether the stunt run's status line has to come through
     /// <see cref="FlightHudState.StuntStatusLine"/>: only where there is a text block to hold it
-    /// and no marker HUD, which normally carries it instead.</summary>
-    public bool NeedsStuntStatusLine => _text != null && Marker == null;
+    /// and no run HUD, which normally carries it instead.</summary>
+    public bool NeedsStuntStatusLine => _text != null && StuntRun == null;
 
     /// <summary>Height over ground from the last <see cref="StepAgl"/>, or
     /// <see cref="float.MaxValue"/> where the ray reached nothing (or there are no dials to hold
@@ -307,8 +308,8 @@ public sealed class FlightHud
             canvas.AddChild(Gauges);
         if (Reticle != null)
             canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
-        if (Marker != null)
-            canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
+        if (StuntRun != null)
+            canvas.AddChild(StuntRun); // stunt run status + banners, drawn on top of the dials
         if (versusHud != null)
             canvas.AddChild(versusHud); // dogfight HUD: status line, kill banner, opponent markers
         if (TargetHud != null)
@@ -344,11 +345,6 @@ public sealed class FlightHud
     {
         if (Compass != null)
             Compass.HeadingDeg = state.HeadingDeg;
-        if (Marker != null)
-        {
-            Marker.PlanePos = state.Position;
-            Marker.HeadingDeg = state.HeadingDeg;
-        }
         if (TargetHud != null)
         {
             TargetHud.PlanePos = state.Position;
@@ -486,7 +482,7 @@ public sealed class FlightHud
             _textLines.Add(flashLine);
         if (state.DamageSummary is { Length: > 0 } dmgSummary)
             _textLines.Add($"DMG {dmgSummary}");
-        // Fallback only: stunt run status normally lives in the marker HUD.
+        // Fallback only: stunt run status normally lives in the run HUD.
         if (state.StuntStatusLine is { } stuntStatus)
             _textLines.Add(stuntStatus);
         if (state.Halted)
@@ -560,8 +556,8 @@ public sealed class FlightHud
             Compass.Visible = overlay;
         if (_text != null)
             _text.Visible = overlay;
-        if (Marker != null)
-            Marker.Visible = _shown;
+        if (StuntRun != null)
+            StuntRun.Visible = _shown;
         if (TargetHud != null)
             TargetHud.Visible = _shown;
     }

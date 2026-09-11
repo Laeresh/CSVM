@@ -198,7 +198,8 @@ public sealed class FlightRoster
     /// <summary>Binds the campaign mission's objective-site feed. Its own channel rather than a
     /// second assignment to <see cref="SetTargetSubParts"/>, which the zeppelin runtime already
     /// holds; the two feeds carry different mission flags and ride different cycles. Human panes
-    /// only: an AI rig does no targeting of its own.</summary>
+    /// only: an AI rig does no targeting of its own. One session has either this or the per-pane
+    /// stunt feed, never both, so this assigns rather than defers.</summary>
     public void SetTargetObjectives(Action<List<AimCandidate>> source)
     {
         _targetObjectives = source;
@@ -423,7 +424,10 @@ public sealed class FlightRoster
         controller.SmokeScreens = _human.SmokeScreens;
         controller.PauseState = _human.PauseState;
         controller.TargetSubParts = _targetSubParts;
-        controller.TargetObjectives = _targetObjectives;
+        // ⚠ Never overwrite a feed the assembler already bound. A stunt pane gets its OWN run's
+        // unflown zones there, and the session-wide campaign feed (null in that session) would
+        // silently take the pilot's Danger Zone markers away.
+        controller.TargetObjectives ??= _targetObjectives;
     }
 
     // Step 5: the aeroplane the player just left is given to wingman_4, placed off the nose with

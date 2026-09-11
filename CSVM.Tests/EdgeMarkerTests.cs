@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The off-screen edge marker's placement rules (<see cref="EdgeMarker"/>), shared by MarkerHud,
+/// The off-screen edge marker's placement rules (<see cref="EdgeMarker"/>), shared by
 /// VersusHud and TargetHud: the margin-inset on-screen test, the behind-the-camera mirror, the
 /// degenerate-direction fallback, the clamp to the inset pane boundary, and the clock-hour
 /// bearing. These pin the semantics the HUD goldens witness end-to-end, including

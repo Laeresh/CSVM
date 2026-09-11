@@ -38,7 +38,6 @@ public enum InputAction
     TargetNextNonAircraft,
     TargetNearest,
     TargetClear,
-    CycleStuntTarget,
 
     // Views and the head. The snap-look diagonals are one control on two actions, which is what a
     // binding list expresses and four typed slots cannot.

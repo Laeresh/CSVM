@@ -121,6 +121,7 @@ public sealed class TargetPool
         FlightController fc => fc.Name,
         SurfaceVehicle hull => hull.Name,
         ObjectiveSite site => site.Node,
+        StuntZone zone => zone.DzName,
         TurretController t => t.Label,
         ProjectilePool.Flyout f => f.Name,
         DestructibleRegistry.Instance inst =>
@@ -212,6 +213,16 @@ public sealed class TargetPool
                 {
                     return TargetRef.ForStructure(c, cls, name, site.TypeLabel, site.Category,
                         objective: true, displayName: site.DisplayName);
+                }
+
+                // A Danger Zone is labelled off the same targets.zrd triple every other objective
+                // site is, so it reads "Danger Zone [Fly Through] - Train Tunnel Mid" and takes the
+                // non-destructive objective's blue, which is the original's own stunt marker.
+                if (c.Source is StuntZone zone)
+                {
+                    return TargetRef.ForStructure(c, cls, name, zone.Category, zone.Help,
+                        objective: true,
+                        displayName: zone.Description.Length > 0 ? zone.Description : zone.DzName);
                 }
 
                 var inst = c.Source as DestructibleRegistry.Instance;

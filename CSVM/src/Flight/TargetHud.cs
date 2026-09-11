@@ -49,7 +49,7 @@ public sealed partial class TargetHud : Control
     /// aircraft of its own (a spectator) should see.</summary>
     public FlightController? Own;
 
-    // 1440p reference metrics (scaled by HudMetrics — matches MarkerHud's/VersusHud's calibration).
+    // 1440p reference metrics (scaled by HudMetrics — matches VersusHud's calibration).
     private const int RefMarkerFont = 14;
     private const float RefArrowLen = 18f;
     private const float RefArrowHalf = 8f;
@@ -97,7 +97,7 @@ public sealed partial class TargetHud : Control
     private bool _bracketed;   // last frame's gate answer, for the hysteresis
 
     /// <summary>This pane's own world pose, fed every frame by FlightController — the tracked
-    /// hostile's clock bearing reads off it, exactly like MarkerHud's PlanePos/HeadingDeg.</summary>
+    /// hostile's clock bearing reads off it, exactly like VersusHud's PlanePos/HeadingDeg.</summary>
     public Vector3 PlanePos { get; set; }
 
     /// <summary>This pane's own nose heading, 0 = north (−Z) — see <see cref="PlanePos"/>.</summary>
@@ -373,7 +373,7 @@ public sealed partial class TargetHud : Control
 
     public override void _Draw()
     {
-        // Same zero-size guard as MarkerHud/VersusHud: a draw can land before _Process has sized
+        // Same zero-size guard as VersusHud: a draw can land before _Process has sized
         // this pane.
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)

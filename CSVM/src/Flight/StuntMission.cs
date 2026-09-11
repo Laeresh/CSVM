@@ -60,8 +60,9 @@ public sealed class StuntGate
 ///
 /// The zone list is the mission ia.json's <c>dzones</c> (<c>[dzpathN, dzN]</c> pairs); each
 /// <c>dzN</c>'s world position comes straight from the chapter gamez (a point marker under the
-/// identity World root), and its display strings from targets.json → messages.json. Detection
-/// and completion only — the marker HUD and timed scoring build on this.
+/// identity World root), and its display strings from targets.json → messages.json. Detection,
+/// completion and the objective-target feed (<see cref="CollectTargets"/>); the run HUD and timed
+/// scoring build on this.
 /// </summary>
 public sealed class StuntMission
 {
@@ -84,13 +85,7 @@ public sealed class StuntMission
     private Vector3 _lastPlanePos;
     private bool _haveLastPlanePos;
 
-    private int _active = -1;
-
-    private StuntMission(List<StuntZone> zones)
-    {
-        _zones = zones;
-        AdvanceActive();
-    }
+    private StuntMission(List<StuntZone> zones) => _zones = zones;
 
     /// <summary>Fired once per zone the moment it is flown through (scoring records a split).</summary>
     public event Action<StuntZone>? ZoneCompleted;
@@ -115,10 +110,6 @@ public sealed class StuntMission
     /// <summary>The one-shot run-start line the marker HUD shows ("Fly through all the Danger
     /// Zones to win!"), resolved at load from the message table. Empty if the table is absent.</summary>
     public string IntroLine { get; private set; } = "";
-
-    /// <summary>The zone the HUD points at: the first still-incomplete zone in list order
-    /// (manual cycling overrides the displayed one). Null once the run is complete.</summary>
-    public StuntZone? ActiveZone => _active >= 0 && _active < _zones.Count ? _zones[_active] : null;
 
     /// <summary>Builds the stunt run for a mission: reads its ia.json <c>dzones</c>, resolves each
     /// <c>dzN</c>'s world position from <paramref name="worldGamez"/> and its display strings from
@@ -253,24 +244,29 @@ public sealed class StuntMission
             Elapsed += dt;
     }
 
-    /// <summary>Manual target cycling: point the HUD at the next still-incomplete zone in
-    /// list order (wrapping). No-op once the run is complete. Whichever zone ends up displayed is
-    /// still auto-advanced when it (or the displayed one) completes.</summary>
-    public void CycleTarget()
+    /// <summary>Appends this run's still-unflown zones as objective-flagged candidates, the feed
+    /// the pilot's own <see cref="TargetSelection"/> files on its Enemy/Objective cycle. A cleared
+    /// zone is not offered again, so the re-resolve fails to find it and drops to the cycle's head.
+    /// ⚠ Per RUN, never per session. Each pilot flies their own <see cref="ForAnotherPlayer"/> copy
+    /// and its own <see cref="StuntZone"/> objects, and the selection is held by source identity,
+    /// so one pane's pick cannot reach another's.</summary>
+    public void CollectTargets(List<AimCandidate> into)
     {
-        if (AllComplete || _active < 0)
-            return;
-        int n = _zones.Count;
-        for (int k = 1; k <= n; k++)
+        foreach (var z in _zones)
         {
-            int i = (int)Mathf.PosMod(_active + k, n);
-            if (!_zones[i].Completed)
+            if (z.Completed)
+                continue;
+            into.Add(new AimCandidate
             {
-                if (i != _active)
-                    Log.Info("flight", $"stunt: target → {_zones[i].DzName} ({_zones[i].MarkerText()})");
-                _active = i;
-                return;
-            }
+                Position = z.Position,
+                // Neutral, as the original builds an object for a targets.zrd record standing on an
+                // ordinary node (docs/org/targeting.md). The objective flag is what makes it
+                // selectable; the team only decides who may shoot at it, and nobody shoots a zone.
+                Team = AimAssist.NeutralTeam,
+                Live = true,
+                ConeOverride = AimAssist.NoConeOverride,
+                Source = z,
+            });
         }
     }
 
@@ -291,8 +287,6 @@ public sealed class StuntMission
         Elapsed = 0f;
         _crossedGates.Clear();
         _haveLastPlanePos = false;
-        _active = -1;
-        AdvanceActive();
     }
 
     /// <summary>Debug/testing only (--debug-scoreboard): instantly complete the whole run with
@@ -328,13 +322,13 @@ public sealed class StuntMission
                 yield return z;
     }
 
-    /// <summary>Compact HUD status: "2/5 zones — Danger Zone [Fly Through] - Train Tunnel Mid",
-    /// or "COMPLETE" once the run is done. (A placeholder-but-playable readout; the marker HUD
-    /// replaces it with the projected marker + edge arrow.)</summary>
+    /// <summary>Compact HUD status: "STUNT 2/5", or "COMPLETE" once the run is done. The fallback
+    /// for a pane with no run HUD; which zone the pilot is pointed at is their own target selection
+    /// and is not a property of the run.</summary>
     public string StatusLine() =>
         AllComplete
             ? $"STUNT {CompletedCount}/{TotalCount} — COMPLETE"
-            : $"STUNT {CompletedCount}/{TotalCount} — {ActiveZone?.MarkerText() ?? ""}";
+            : $"STUNT {CompletedCount}/{TotalCount}";
 
     // The anchor point for a dzone whose ia.json record names world geometry rather than a `dzN`
     // point marker, or null for an ordinary marker (docs/formats/missions.md, the `sghangar` case).
@@ -521,32 +515,11 @@ public sealed class StuntMission
         CompletedCount++;
         Log.Info("flight", $"stunt: {LogTag}completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
         ZoneCompleted?.Invoke(z);
-        // Keep pointing at the manually-cycled target unless it was the zone just
-        // completed; otherwise auto-advance to the next incomplete in list order.
-        if (_active < 0 || _zones[_active].Completed)
-            AdvanceActive();
         if (CompletedCount >= _zones.Count && !AllComplete)
         {
             AllComplete = true;
             Log.Info("flight", $"stunt: {LogTag}ALL DANGER ZONES COMPLETE");
             RunCompleted?.Invoke();
         }
-        else if (ActiveZone is { } next)
-        {
-            Log.Info("flight", $"stunt: {LogTag}next target → {next.DzName} ({next.MarkerText()})");
-        }
-    }
-
-    // The displayed target is the first still-incomplete zone in list order (auto-advance on
-    // completion; CycleTarget layers manual cycling on top).
-    private void AdvanceActive()
-    {
-        for (int i = 0; i < _zones.Count; i++)
-            if (!_zones[i].Completed)
-            {
-                _active = i;
-                return;
-            }
-        _active = -1;
     }
 }

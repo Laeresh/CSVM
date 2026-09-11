@@ -15,16 +15,14 @@ public class DefaultBindingsTests
     private static readonly DeviceId Pad = DeviceId.Joypad("030000004c050000c405000000010000");
 
     // The controls the shipped set deliberately puts on two actions, which is what a binding list
-    // expresses and the original's four typed slots cannot. The four numpad diagonals are one key
-    // driving two look directions (Kp7 is Look Up and Look Left); d-pad up cycles the stunt marker
-    // as well as the target, because a stunt target is an objective marker (`BL-686`).
+    // expresses and the original's four typed slots cannot: the four numpad diagonals, each one key
+    // driving two look directions (Kp7 is Look Up and Look Left).
     private static readonly Binding[] Shared =
     {
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp7)),
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp9)),
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp1)),
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp3)),
-        new(Pad, BindingControl.Button((int)JoyButton.DpadUp)),
     };
 
     /// <summary>The coverage gate: a migrating polling site must never discover a missing default

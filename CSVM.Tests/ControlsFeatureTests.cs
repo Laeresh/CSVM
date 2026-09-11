@@ -161,16 +161,16 @@ public class ControlsFeatureTests
         feature.Focus(IndexOf(feature, InputAction.Respawn));
         feature.MoveSlot(9);
 
-        // D-pad up is deliberately on two flight actions (C21's defaults, B15's stunt marker).
-        Assert.True(feature.Offer(Button(JoyButton.DpadUp)));
+        // Numpad 7 is deliberately on two flight actions: it is Look Up and Look Left at once.
+        Assert.True(feature.Offer(Key(Godot.Key.Kp7)));
 
         var pending = Assert.IsType<RebindSteal>(feature.Pending);
         Assert.Equal(
-            new[] { InputAction.TargetNextEnemy, InputAction.CycleStuntTarget },
+            new[] { InputAction.LookUp, InputAction.LookLeft },
             pending.Losers);
-        Assert.Contains("Target Next Enemy and Cycle Stunt Target", feature.Status);
-        Assert.Contains(Button(JoyButton.DpadUp), feature.Bindings(InputAction.TargetNextEnemy));
-        Assert.DoesNotContain(Button(JoyButton.DpadUp), feature.Bindings(InputAction.Respawn));
+        Assert.Contains("Look Up and Look Left", feature.Status);
+        Assert.Contains(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookUp));
+        Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.Respawn));
     }
 
     [Fact]
@@ -179,14 +179,14 @@ public class ControlsFeatureTests
         var (feature, _) = Flight();
         feature.Focus(IndexOf(feature, InputAction.Respawn));
         feature.MoveSlot(9);
-        feature.Offer(Button(JoyButton.DpadUp));
+        feature.Offer(Key(Godot.Key.Kp7));
 
         feature.ConfirmSteal();
 
         Assert.Null(feature.Pending);
-        Assert.DoesNotContain(Button(JoyButton.DpadUp), feature.Bindings(InputAction.TargetNextEnemy));
-        Assert.DoesNotContain(Button(JoyButton.DpadUp), feature.Bindings(InputAction.CycleStuntTarget));
-        Assert.Contains(Button(JoyButton.DpadUp), feature.Bindings(InputAction.Respawn));
+        Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookUp));
+        Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookLeft));
+        Assert.Contains(Key(Godot.Key.Kp7), feature.Bindings(InputAction.Respawn));
         Assert.Contains("lost it", feature.Status);
     }
 
@@ -194,16 +194,16 @@ public class ControlsFeatureTests
     public void DiscardingTheStealLeavesEveryActionsControlsAlone()
     {
         var (feature, _) = Flight();
-        var before = new List<Binding>(feature.Bindings(InputAction.TargetNextEnemy));
+        var before = new List<Binding>(feature.Bindings(InputAction.LookUp));
         feature.Focus(IndexOf(feature, InputAction.Respawn));
         feature.MoveSlot(9);
-        feature.Offer(Button(JoyButton.DpadUp));
+        feature.Offer(Key(Godot.Key.Kp7));
 
         feature.DiscardSteal();
 
         Assert.Null(feature.Pending);
-        Assert.Equal(before, feature.Bindings(InputAction.TargetNextEnemy));
-        Assert.DoesNotContain(Button(JoyButton.DpadUp), feature.Bindings(InputAction.Respawn));
+        Assert.Equal(before, feature.Bindings(InputAction.LookUp));
+        Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.Respawn));
     }
 
     [Fact]
@@ -342,13 +342,13 @@ public class ControlsFeatureTests
     public void UnbindingDropsOneControlAndTouchesNoOtherAction()
     {
         var (feature, _) = Flight();
-        feature.Focus(IndexOf(feature, InputAction.TargetNextEnemy));
-        var dropped = feature.Bindings(InputAction.TargetNextEnemy)[0];
+        feature.Focus(IndexOf(feature, InputAction.LookUp));
+        var dropped = feature.Bindings(InputAction.LookUp)[0];
 
         feature.UnbindSlot();
 
-        Assert.DoesNotContain(dropped, feature.Bindings(InputAction.TargetNextEnemy));
-        Assert.Contains(Button(JoyButton.DpadUp), feature.Bindings(InputAction.CycleStuntTarget));
+        Assert.DoesNotContain(dropped, feature.Bindings(InputAction.LookUp));
+        Assert.Contains(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookLeft));
         Assert.Contains("lost", feature.Status);
     }
 

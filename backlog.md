@@ -1825,7 +1825,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
   fidelity sign-off.** Playtested 2026-07-30
-  (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): `MarkerHud`/`StuntScoreboard` placement,
+  (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): the stunt run HUD and scoreboard placement,
   fonts and distance units "work for now." The verdict is explicitly contingent: it says these read
   acceptably in isolation, and a fidelity sign-off needs them read against the chrome the rest of the
   game's UI uses, which does not exist yet. ⚠ **The composed campaign boards do not discharge this,
@@ -1834,7 +1834,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   units and no shared font choice for an in-flight overlay to match. What this waits on is a UI
   surface that defines those three things for chrome the original did not paint, which is what the
   menu-hub milestone was standing in for. Blocked on that surface, not on data.
-  *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
+  *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
 - `BL-351` `[Feature]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` **Generalise the targeting HUD: target-cycling keybindings for the
@@ -1851,30 +1851,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
-
-- `BL-686` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **One target HUD: the stunt marker and the objective marker are the same
-  thing shown by two systems.** *Evidence:* the user's call, made while `PLAN-input-rebinding`'s
-  `B11` was migrating `FlightController`. A stunt target IS an objective marker, so cycling one is
-  the same action as stepping the objective cycle, and the two should not be separate features with
-  separate keys and separate drawing. Today they are: `CycleStuntTarget` is its own action on `Tab`
-  (`docs/controls.md`) driving the stunt marker, while `TargetNextEnemy` steps the targeting HUD's
-  enemy/objective cycle on `T` and `D-pad Up` (tap), and the two draw through different code.
-  *Fix shape:* fold the stunt marker into the targeting HUD's objective class so one cycle, one
-  marker style and one keybinding cover both, and the stunt modes stop needing a private marker at
-  all. `BL-400`'s curated non-aircraft list and `BL-351`'s class-cycling generalisation are the
-  neighbouring pieces of the same HUD, so whoever takes this should read all three together.
-  ⚠ **The one thing that does not unify: stunt markers are per player, never shared.** Each pilot
-  has their own set, so in splitscreen each pane shows and cycles its own and a pick made in one
-  pane must not move another's. Folding the marker into the targeting HUD's objective class must
-  therefore keep the per-pane selection the targeting HUD already has (`TargetSelection.Current` is
-  per player), and must not promote the stunt marker to a session-wide objective the way a mission
-  objective is shared. A unification that makes every pane agree has broken the feature.
-  ⚠ Trap: the original's own `targets.zrd` cycle is decoded in `docs/org/targeting.md` and is the
-  reference for what belongs in a cycle; do not invent a class the original has no equivalent of.
-  ⚠ Until this lands, `CycleStuntTarget` shares `D-pad Up` with `TargetNextEnemy` as an interim,
-  which is a deliberate two-actions-on-one-control case (see `PLAN-input-rebinding`'s note on
-  `ActionMap.Assign` stealing from only the first owner it finds).
-  *Cross-refs:* `BL-351`, `BL-400`, `BL-397`, `docs/org/targeting.md`, `docs/controls.md`.
 
 - `BL-431` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
   first person, and whether it should is undecided.** The drive itself has landed:

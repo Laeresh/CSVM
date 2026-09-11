@@ -37,7 +37,7 @@ public sealed class ActionMap
     /// <summary>Gives a control to an action, taking it off every action that held it, and returns
     /// those in enum order so a screen can name each loss rather than performing it silently.
     /// ⚠ Every owner, not the first. <see cref="Add"/> deliberately puts one control on two actions
-    /// (a numpad snap-look diagonal, d-pad up in flight), and a steal stopping at the first owner
+    /// (each numpad snap-look diagonal), and a steal stopping at the first owner
     /// would leave it on the other, which is the state the original forbids (`FUN_005371d0`,
     /// `FUN_00535fb0`).</summary>
     public IReadOnlyList<InputAction> Assign(InputAction action, Binding binding)

@@ -169,7 +169,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/EdgeMarker.cs` — the off-screen marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp, and the o'clock bearing.
 - `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
-- `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
+- `src/Flight/StuntRunHud.cs` — the stunt run's readouts: clock and zones cleared, intro banner, cleared flash, completion or race placing; one per player.
 - `src/Flight/ResultsBoard.cs` — the shared shell every results board is built on: backdrop and panel, the palette, the halt contract, and the standard menu.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a per-pane panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntSplits.cs` — the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.

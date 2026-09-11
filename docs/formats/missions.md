@@ -188,10 +188,11 @@ The three sources combine into the original's marker string
 <category_label> [<help_label>] - <description>   →   "Danger Zone [Fly Through] - Train Tunnel Mid"
 ```
 
-The remake's marker HUD (Milestone 2.5 item 2, `src/Flight/MarkerHud.cs`) appends the relative
-clock bearing (`… 7 o'clock`) — computed from the plane's heading, not stored in the data — and
-renders the assembled string either as a projected on-screen marker (at the zone's screen
-position) or, when the zone is off screen/behind, as a screen-edge arrow pointing toward it.
+The remake draws that string through the targeting HUD (`src/Flight/TargetHud.cs`), since a zone
+is an objective on the pilot's own target cycle like any other: the category and help labels make
+line 1, the description line 2, and off screen a screen-edge arrow carries the block plus the
+relative clock bearing (`… 7 o'clock`), which is computed from the plane's heading rather than
+stored in the data.
 
 ## Evidence & limits
 

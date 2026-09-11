@@ -198,6 +198,7 @@
     "target-selection": 0.014,
     "target-input": 0.748,
     "target-flag": 0.026,
+    "stunt-target-cycle": 2.57,
     "splitscreen-listeners": 0.006,
     "world-lights-nearest-viewer": 0.002,
     "campaign-persistence": 3.761,

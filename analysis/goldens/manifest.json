@@ -125,6 +125,13 @@
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
+      "name": "c1-stunt-marker",
+      "frame": 90,
+      "hash": "f940f76c5d58e141debad1c25fb4a112",
+      "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen edge arrow and the category/name/clock label block in the non-destructive objective's blue, over the run HUD's clock, zone count and intro banner.",
+      "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
+    },
+    {
       "name": "c1-ai-wreck",
       "frame": 280,
       "hash": "0553ae7880e57d22872acbf22760b5cf",

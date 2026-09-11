@@ -2,7 +2,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The off-screen edge marker's placement rules, the one home for what MarkerHud,
+/// <summary>The off-screen edge marker's placement rules, the one home for what
 /// VersusHud and TargetHud each used to carry privately (docs/architecture.md): a world target's
 /// marker sits at its projected point on screen, else clamps to the margin-inset screen edge with
 /// an outward arrow direction; the edge tag carries a clock-hour bearing. Engine-free — the

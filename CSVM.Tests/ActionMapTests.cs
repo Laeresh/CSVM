@@ -28,9 +28,9 @@ public class ActionMapTests
         Assert.Single(map.Bindings(InputAction.FireRockets));
     }
 
-    /// <summary>The defect D31 inherited: two actions deliberately share several shipped controls
-    /// (a numpad snap-look diagonal, d-pad up in flight), and a steal that stopped at the first
-    /// owner left the control on the second one, which is the state the original forbids.</summary>
+    /// <summary>The defect D31 inherited: two actions deliberately share a shipped control (each
+    /// numpad snap-look diagonal), and a steal that stopped at the first owner left the control on
+    /// the second one, which is the state the original forbids.</summary>
     [Fact]
     public void AControlHeldByTwoActionsIsTakenFromBothAndBothAreNamed()
     {
@@ -54,32 +54,32 @@ public class ActionMapTests
     {
         var map = new ActionMap();
         var button = new Binding(Pad, BindingControl.Button(11));
-        map.Add(InputAction.CycleStuntTarget, button);
-        map.Add(InputAction.TargetNextEnemy, button);
+        map.Add(InputAction.LookLeft, button);
+        map.Add(InputAction.LookUp, button);
 
         Assert.Equal(
-            new[] { InputAction.TargetNextEnemy, InputAction.CycleStuntTarget },
+            new[] { InputAction.LookUp, InputAction.LookLeft },
             map.Assign(InputAction.Respawn, button));
     }
 
-    /// <summary>A steal from two owners takes only that one control from each: the shared d-pad
-    /// direction goes and every other binding both actions hold stays.</summary>
+    /// <summary>A steal from two owners takes only that one control from each: the shared numpad
+    /// diagonal goes and every other binding both actions hold stays.</summary>
     [Fact]
     public void AStealFromTwoOwnersLeavesEachOwnersOtherBindingsAlone()
     {
         var map = new ActionMap();
-        var shared = new Binding(Pad, BindingControl.Button(11));
-        var tab = new Binding(DeviceId.Keyboard, BindingControl.Key(9));
-        var t = new Binding(DeviceId.Keyboard, BindingControl.Key(84));
-        map.Add(InputAction.TargetNextEnemy, t);
-        map.Add(InputAction.TargetNextEnemy, shared);
-        map.Add(InputAction.CycleStuntTarget, tab);
-        map.Add(InputAction.CycleStuntTarget, shared);
+        var shared = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.Kp7));
+        var up = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.Kp8));
+        var left = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.Kp4));
+        map.Add(InputAction.LookUp, up);
+        map.Add(InputAction.LookUp, shared);
+        map.Add(InputAction.LookLeft, left);
+        map.Add(InputAction.LookLeft, shared);
 
         map.Assign(InputAction.Respawn, shared);
 
-        Assert.Equal(new[] { t }, map.Bindings(InputAction.TargetNextEnemy));
-        Assert.Equal(new[] { tab }, map.Bindings(InputAction.CycleStuntTarget));
+        Assert.Equal(new[] { up }, map.Bindings(InputAction.LookUp));
+        Assert.Equal(new[] { left }, map.Bindings(InputAction.LookLeft));
     }
 
     /// <summary>The trigger-deadzone alias B15 landed, unchanged on purpose: boost gates the same

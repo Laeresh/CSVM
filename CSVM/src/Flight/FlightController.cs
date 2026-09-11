@@ -284,11 +284,12 @@ public partial class FlightController : Node3D
     /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
     public System.Action<List<AimCandidate>>? TargetSubParts;
 
-    /// <summary>Appends the campaign mission's live objective sites to the targeting pool each
-    /// frame (<c>ObjectiveSites.Collect</c>, bound by <c>GameSession</c>). Null outside a campaign
-    /// session. A channel of its own rather than <see cref="TargetSubParts"/>: a site carries the
-    /// mission's <c>objectiveTarget</c> flag and rides the Enemy cycle, while a sub-part carries
-    /// <c>otherTarget</c> and rides the Non-Aircraft one.</summary>
+    /// <summary>Appends this pilot's live objective sites to the targeting pool each frame: the
+    /// campaign mission's (<c>ObjectiveSites.Collect</c>, bound by <c>GameSession</c>) or a stunt
+    /// run's unflown Danger Zones (<see cref="StuntMission.CollectTargets"/>, bound per pane). Null
+    /// in a session with neither. A channel of its own rather than <see cref="TargetSubParts"/>: a
+    /// site carries the mission's <c>objectiveTarget</c> flag and rides the Enemy cycle, while a
+    /// sub-part carries <c>otherTarget</c> and rides the Non-Aircraft one.</summary>
     public System.Action<List<AimCandidate>>? TargetObjectives;
 
     /// <summary><c>--target=</c>'s spec, or null for an unscripted session. Applied ONCE, on
@@ -519,7 +520,6 @@ public partial class FlightController : Node3D
     private IFlightInputSource? _suppliedInputSource;
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
-    private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private ImmediateMesh? _probe;               // debug collision-probe line
     // The rest pose of every node the crash def flings (the destroyed wreck's pieceN meshes) and
     // the BUILT visibility of every plane-model node, both captured before the first crash so
@@ -2011,15 +2011,6 @@ public partial class FlightController : Node3D
         // heading of the nose: 0 = north (−Z), 90 = east (+X) — shared by the compass and the marker
         var nose = -_model.Attitude.Z;
         float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
-        // Stunt objective marker: cycle the displayed target (Tab / gamepad X, edge-detected) before
-        // the HUD feed, so the marker and the status line show this frame's choice, not last one's.
-        if (Stunt != null)
-        {
-            bool cycle = CycleTargetPressed();
-            if (cycle && !_cyclePrev)
-                Stunt.CycleTarget();
-            _cyclePrev = cycle;
-        }
         // Player target selection: rebuild-then-input, the original's own order — the
         // per-frame candidate pass runs first and a handler then steps the list it just built.
         if (Targeting != null && IsHumanPiloted)
@@ -3012,10 +3003,6 @@ public partial class FlightController : Node3D
         }
         return halted;
     }
-
-    // Cycles the stunt marker's displayed target (caller edge-detects). Keyboard only: the shipped
-    // keymap gives this no pad control, because every free face button already carries one.
-    private bool CycleTargetPressed() => _actions.Held(InputAction.CycleStuntTarget);
 
     /// <summary>One frame of player targeting: rebuild the pool and re-resolve, prune the
     /// attacker queue, then dispatch this frame's input. That order is the original's — its

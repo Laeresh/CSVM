@@ -123,11 +123,6 @@ public static class DefaultBindings
         b.Keys(InputAction.TargetNextNonAircraft, Key.U);
         b.Keys(InputAction.TargetNearest, Key.I);
         b.Keys(InputAction.TargetClear, Key.O);
-        // D-pad up deliberately drives this as well as TargetNextEnemy, through Add rather than
-        // Assign: a stunt target is an objective marker, so cycling one is the objective cycle
-        // (`BL-686`, which carries the fold-together and the rule that markers stay per player).
-        b.Keys(InputAction.CycleStuntTarget, Key.Tab)
-            .Buttons(InputAction.CycleStuntTarget, JoyButton.DpadUp);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
         b.Keys(InputAction.SelectChaseView, Key.F6).Buttons(InputAction.SelectChaseView, JoyButton.Back);
         // F7 is the original's own key for this camera ("Access Chase View", which its own decode

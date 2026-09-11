@@ -8,7 +8,7 @@ namespace CSVM.Flight;
 /// <summary>Per-pane Dogfight HUD, <c>--vs</c> only (docs/architecture.md): a status line (time,
 /// this pane's own K/D, the leader), a transient kill banner on every Downed report anywhere in the
 /// match, and an edge-arrow + clock-bearing marker per living opponent in that opponent's identity
-/// colour — the splitscreen answer to the original's radar, extending MarkerHud's visual language.
+/// colour — the splitscreen answer to the original's radar, in the marker HUDs' visual language.
 /// The single-target marker this shape came from is <see cref="TargetHud"/>'s, which draws in every
 /// flight session rather than only <c>--vs</c>.
 /// ⚠ Read opponent positions off <see cref="Rigs"/> and project through THIS pane's camera. Never
@@ -24,11 +24,11 @@ public sealed partial class VersusHud : Control
     /// session — nothing to mark.</summary>
     public IReadOnlyList<PlayerRig>? Rigs;
 
-    // 1440p reference metrics (scaled by HudMetrics — matches MarkerHud's calibration).
+    // 1440p reference metrics (scaled by HudMetrics — matches TargetHud's calibration).
     private const int RefStatusFont = 19;
     private const int RefBannerFont = 24;
     private const int RefMarkerFont = 14;
-    private const float RefStatusY = 100f;    // same slot as MarkerHud's run-status line
+    private const float RefStatusY = 100f;    // same slot as StuntRunHud's run-status line
     private const float RefBannerYFrac = 0.30f;
     private const float BannerDuration = 3f;  // s the banner shows
     private const float BannerFadeTail = 0.6f; // s of that spent fading out
@@ -48,7 +48,7 @@ public sealed partial class VersusHud : Control
     private Color _bannerColor = HudBlue;
 
     /// <summary>This pane's own world pose, fed every frame by FlightController — opponent clock
-    /// bearings read off it, exactly like MarkerHud's PlanePos/HeadingDeg.</summary>
+    /// bearings read off it, exactly like TargetHud's PlanePos/HeadingDeg.</summary>
     public Vector3 PlanePos { get; set; }
 
     /// <summary>This pane's own nose heading, 0 = north (−Z) — see <see cref="PlanePos"/>.</summary>
@@ -100,7 +100,7 @@ public sealed partial class VersusHud : Control
 
     public override void _Draw()
     {
-        // Same zero-size guard as MarkerHud: a draw can land before _Process has sized this pane.
+        // Same zero-size guard as TargetHud: a draw can land before _Process has sized this pane.
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
@@ -190,7 +190,7 @@ public sealed partial class VersusHud : Control
     }
 
     // Draws one horizontally-centred line at `anchor`.X, top-anchored
-    // at .Y, with a 1 px drop shadow — MarkerHud's DrawLines, single-line.
+    // at .Y, with a 1 px drop shadow — MarkerDraw's Lines, single-line.
     private void DrawCentered(Font font, Vector2 anchor, string text, int fontSize, Color color)
     {
         float ascent = font.GetAscent(fontSize);
