@@ -82,7 +82,8 @@ internal static class MenuHangarSuites
 
     [Suite("menu-original-hangar",
         "Original's hangar through the presentation boundary over the install's decoded layout: the "
-        + "Instant Action screen's Build Custom Plane opens the decoded name screen wallet-free, typed "
+        + "Instant Action screen's Build Custom Plane opens the decoded name screen wallet-free on its "
+        + "centred pane, OK on the empty box raises the one-button refusal and puts the cursor back, typed "
         + "frames name the plane and OK opens the Plane Construction hub on the default configuration, "
         + "the tabs are siblings a click and the keyboard reach out of order, a dropdown steps and picks "
         + "through the shared feature with the running total following, READY TO PURCHASE and Purchase "
@@ -554,6 +555,31 @@ internal static class MenuHangarSuites
         ctx.Check(menu.ShownScreen == "Mode", $"Back leaves for the Mode screen ({menu.ShownScreen})");
     }
 
+    // OK pressed on an empty box: PLANENAME.SCRIPT's own refusal, the one-button messagebox on
+    // langui 203 under the warning icon, drawn over the dialog and leaving the cursor in the box.
+    private static void OriginalEmptyNameRefusal(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
+    {
+        var ok = Row(shell, OriginalShell.NameOkKey);
+        if (ok == null)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Dialog is { Icon: DialogIcon.Warning } && shell.Screen == OriginalScreen.PlaneName,
+            $"OK on an empty box raises the refusal over the dialog ({shell.Dialog?.Icon.ToString() ?? "none"})");
+        ctx.Check(!host.Seats[0].CapturingText, $"and the box behind it takes no typing while it stands");
+        var answer = Row(shell, OriginalShell.DialogOkKey);
+        if (answer == null)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, answer.X + 5f, answer.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Dialog == null && shell.FocusedKey == OriginalShell.NameFieldKey,
+            $"its one OK closes it and puts the cursor back in the box ({shell.FocusedKey})");
+    }
+
     private static void OriginalNameScreen(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, string scratch)
     {
         ctx.Check(Row(shell, "HANGAR") == null, $"the top level carries no hangar door of its own");
@@ -568,9 +594,14 @@ internal static class MenuHangarSuites
         Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet == null,
             $"a click opens the decoded name screen over a wallet-free build ({shell.Screen})");
-        ctx.Check(Row(shell, OriginalShell.NameFieldKey) is { X: 23f, Y: 40f, Width: 211f } && Row(shell, OriginalShell.NameOkKey) is { Enabled: false },
-            $"the edit box stands at its authored line and OK waits for a name");
+        // The 264x177 pane centres at 268,211 on the board, and the section's rows are drawn from
+        // that corner: the edit box's authored 23,40 lands at 291,251.
+        ctx.Check(shell.Compose().Backdrop.Any(p => p.Art.Name == "PX_PlaneNameBackground.Png" && p.X == 268f && p.Y == 211f),
+            $"the dialog's pane is centred on the board");
+        ctx.Check(Row(shell, OriginalShell.NameFieldKey) is { X: 291f, Y: 251f, Width: 211f } && Row(shell, OriginalShell.NameOkKey) is { X: 342f, Y: 341f, Enabled: true },
+            $"the edit box and OK ride the centred pane, OK live on an empty box");
         ctx.Check(host.Seats[0].CapturingText, $"seat 0 captures text on the name screen");
+        OriginalEmptyNameRefusal(ctx, host, seat, shell, fit);
         Press(host, seat, new MenuCommands { Typed = scratch });
         ctx.Check(shell.HangarName == scratch && Row(shell, OriginalShell.NameOkKey) is { Enabled: true },
             $"typed frames name the plane and OK stands ({shell.HangarName})");

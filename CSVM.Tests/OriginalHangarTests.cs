@@ -19,6 +19,9 @@ namespace CSVM.Tests;
 /// </summary>
 public class OriginalHangarTests : IDisposable
 {
+    // The name screen's own refusal, langui 203, which the empty string table falls back to.
+    private const string EmptyNameRefusal = "You must enter a name for your new plane.";
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -45,7 +48,7 @@ public class OriginalHangarTests : IDisposable
     }
 
     [Fact]
-    public void TheDoorOpensTheNameScreenWhoseOkWaitsForAName()
+    public void TheDoorOpensTheNameScreenWhoseOkAnswersAnEmptyBoxWithAMessageBox()
     {
         var shell = Shell(out var hangar, out _);
         Assert.DoesNotContain(shell.Rows, r => r.Key == "HANGAR");
@@ -61,16 +64,101 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(
             new[] { OriginalShell.NameFieldKey, OriginalShell.NameDefaultsKey, OriginalShell.NameOkKey, OriginalShell.NameCancelKey },
             shell.Rows.Select(r => r.Key));
-        Assert.False(shell.Rows.Single(r => r.Key == OriginalShell.NameOkKey).Enabled);
         Assert.True(shell.LoadDefaultsChecked);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "You must enter a name for your new plane.");
+
+        // OK stands on an empty box and the refusal is the press's answer, not a standing line.
+        Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.NameOkKey).Enabled);
+        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text == EmptyNameRefusal);
+        Click(shell, OriginalShell.NameOkKey);
+        Assert.Equal(EmptyNameRefusal, shell.Dialog!.Message);
+        Assert.Equal(DialogIcon.Warning, shell.Dialog!.Icon);
+        Assert.Equal(new[] { OriginalShell.DialogOkKey }, shell.Rows.Select(r => r.Key));
+        Assert.False(shell.CapturingText);
+        Assert.Contains(shell.Compose().Overlays, o => o.Lines.Any(l => l.Text == EmptyNameRefusal));
+        Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+
+        // Its one OK puts the cursor back in the box, which is where the script leaves it.
+        Click(shell, OriginalShell.DialogOkKey);
+        Assert.Null(shell.Dialog);
+        Assert.Equal(OriginalShell.NameFieldKey, shell.FocusedKey);
+        Assert.True(shell.CapturingText);
 
         shell.Step(new MenuCommands { Typed = "Ace/1" });
         Assert.Equal("Ace1", shell.HangarName);
         shell.Step(new MenuCommands { Erase = true });
         Assert.Equal("Ace", shell.HangarName);
-        Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.NameOkKey).Enabled);
         Assert.Equal(8, shell.Rows.Single(r => r.Key == OriginalShell.NameDefaultsKey).Art!.Frames);
+
+        // The box writes its text alone and hangs the caret off it in its own CursorColor.
+        var box = shell.Rows.Single(r => r.Key == OriginalShell.NameFieldKey);
+        var typed = shell.Compose().Lines.Single(l => l.Text == "Ace" && l.Caret != null);
+        Assert.Equal(new BoardCaret(0xEF, 0x00, 0x10, 2f, box.Height - 2f), typed.Caret);
+        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text.EndsWith('_'));
+    }
+
+    [Fact]
+    public void TheNameDialogAndItsRowsRideThePaneCentredOnTheBoard()
+    {
+        var shell = Shell(out _, out _);
+        OpenName(shell, "Ace");
+
+        // The fixture's pane is 260x180 on the 800x600 board, so it centres at 270,210 and every
+        // row and text of the section is drawn from that corner rather than from the screen's.
+        var board = shell.Compose();
+        Assert.Contains(board.Backdrop, p => p.Art.Name == "PH_NamePanel.png" && p.X == 270f && p.Y == 210f);
+        Assert.Contains(board.Backdrop, p => p.Art.Name == "PH_Back.jpg" && p.X == 0f && p.Y == 0f);
+        var field = shell.Rows.Single(r => r.Key == OriginalShell.NameFieldKey);
+        Assert.Equal((290f, 250f), (field.X, field.Y));
+        var ok = shell.Rows.Single(r => r.Key == OriginalShell.NameOkKey);
+        Assert.Equal((330f, 350f), (ok.X, ok.Y));
+        var defaults = shell.Rows.Single(r => r.Key == OriginalShell.NameDefaultsKey);
+        Assert.Equal((290f, 300f), (defaults.X, defaults.Y));
+        Assert.Contains(board.Lines, l => l.X == 300f && l.Y == 230f);
+    }
+
+    [Fact]
+    public void TheHubsNameBoxRenamesTheScratchPlaneInPlace()
+    {
+        var shell = Shell(out var hangar, out _);
+        OpenHub(shell, "Ace");
+
+        // The box runs from the title's end to the script's own 302, at the row's own line.
+        var box = shell.Rows.Single(r => r.Key == OriginalShell.HubNameFieldKey);
+        Assert.Equal(OriginalRowKind.TextField, box.Kind);
+        Assert.Equal((120f, 12f, 182f, 17f), (box.X, box.Y, box.Width, box.Height));
+        Assert.Equal("Ace", box.Label);
+        Assert.False(shell.CapturingText);
+
+        Click(shell, OriginalShell.HubNameFieldKey);
+        Assert.Equal(OriginalShell.HubNameFieldKey, shell.FocusedKey);
+        Assert.True(shell.CapturingText);
+        shell.Step(new MenuCommands { Typed = "2" });
+
+        Assert.Equal("Ace2", hangar.Scratch.Name);
+        Assert.Null(hangar.DefaultsAsk);
+        Assert.Empty(_store.List());
+
+        // Emptying the box commits nothing: the totals page refuses a nameless plane in the
+        // screen's own words, which is the refusal the feature already carried.
+        for (int i = 0; i < 4; i++)
+        {
+            shell.Step(new MenuCommands { Erase = true });
+        }
+
+        Assert.Equal(string.Empty, hangar.Scratch.Name);
+        Assert.False(hangar.CanCommit);
+        shell.Step(new MenuCommands { Typed = "Ace2" });
+        var board = shell.Compose();
+        var line = board.Lines.Single(l => l.Text == "Ace2" && l.Caret != null);
+        Assert.Equal(new BoardCaret(0xEF, 0x00, 0x10, 2f, 15f), line.Caret);
+        Assert.Equal(BoardInk.Dialog, line.Ink);
+        Assert.Contains(board.Fills, f => f.Border && f.R == 0x73 && f.G == 0x69 && f.B == 0x9C && f.X == box.X);
+
+        // A box nobody is in draws no caret, on this tab or the next.
+        Click(shell, "PX_B_ENGINE");
+        Assert.False(shell.CapturingText);
+        Assert.Equal("Ace2", shell.Rows.Single(r => r.Key == OriginalShell.HubNameFieldKey).Label);
+        Assert.DoesNotContain(shell.Compose().Lines, l => l.Caret != null);
     }
 
     [Fact]
@@ -90,7 +178,7 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(HangarFeature.DefaultAirframe, hangar.Scratch.Airframe);
         Assert.Equal(1, hangar.Scratch.Engine);
         Assert.Equal(
-            new[] { OriginalShell.AirframeDropKey, "PX_B_AIRFRAME", "PX_B_ENGINE", "PX_B_ARMOR", "PX_B_GUNS", "PX_B_HARDPOINTS", "PX_B_PAINT", OriginalShell.SellPlanesKey, OriginalShell.ReadyKey, OriginalShell.CancelBuildKey },
+            new[] { OriginalShell.AirframeDropKey, "PX_B_AIRFRAME", "PX_B_ENGINE", "PX_B_ARMOR", "PX_B_GUNS", "PX_B_HARDPOINTS", "PX_B_PAINT", OriginalShell.SellPlanesKey, OriginalShell.ReadyKey, OriginalShell.CancelBuildKey, OriginalShell.HubNameFieldKey },
             shell.Rows.Select(r => r.Key));
         Assert.False(shell.Rows.Single(r => r.Key == "PX_B_AIRFRAME").Enabled);
         Assert.Equal("Airframe 5", shell.Rows.Single(r => r.Key == OriginalShell.AirframeDropKey).Label);
@@ -400,9 +488,10 @@ public class OriginalHangarTests : IDisposable
 
     // The fixture's strips: the tabs and buttons four frames each, the checkbox eight, the paper
     // plaque 160x112, the decal sheet fifty 66-pixel tiles, the blueprint and icon sets present,
-    // the pages unmeasured.
+    // the name dialog's pane smaller than the board and the full-page backgrounds unmeasured.
     private static (int Width, int Height)? Measure(string art) => art switch
     {
+        "PH_NamePanel.png" => (260, 180),
         "PM_B_Paper.png" or "PH_B_Paper.png" => (160, 112),
         "PH_Tab.png" => (120, 120),
         "PH_B_OkCancel.png" => (80, 96),

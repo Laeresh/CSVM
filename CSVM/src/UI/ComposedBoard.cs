@@ -175,6 +175,11 @@ public enum BoardButton
 /// white region mask: the mask carries the shape in its alpha, the tint is the picked colour.</summary>
 public readonly record struct BoardTint(byte R, byte G, byte B);
 
+/// <summary>An edit box's text cursor: the bar's authored colour and its size in authored pixels,
+/// the colour being the box's own <c>CursorColor</c> field rather than a palette role. Where along
+/// the line it stands is a font measurement, so the line carrying one says no more than that.</summary>
+public readonly record struct BoardCaret(byte R, byte G, byte B, float Width, float Height);
+
 /// <summary>One bitmap a board draws, and how many stacked frames it holds. A button strip is four
 /// frames (disabled, normal, rollover, depressed, in that order); everything else is one.</summary>
 public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1);
@@ -213,10 +218,11 @@ public sealed record BoardPlaque(
 /// (0 for no wrap). <paramref name="Row"/> is the page row it stands for, or -1 for chrome.
 /// <paramref name="Italic"/> is the <c>I</c> of a langui row's own <c>[FONTID]</c> tag, which is
 /// how the original names a slanted face; the renderer decides what it draws that with.
-/// <paramref name="Justify"/> needs a width to mean anything, since it is measured from one.</summary>
+/// <paramref name="Justify"/> needs a width to mean anything, since it is measured from one.
+/// <paramref name="Caret"/> is the blinking cursor an edit box draws after its text.</summary>
 public sealed record BoardLine(
     string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1,
-    bool Italic = false, BoardJustify Justify = BoardJustify.Left);
+    bool Italic = false, BoardJustify Justify = BoardJustify.Left, BoardCaret? Caret = null);
 
 /// <summary>
 /// A list widget's entries and the box they flow inside, in authored pixels: the briefing

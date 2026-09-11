@@ -109,6 +109,9 @@ public class OriginalCoverageTests : IDisposable
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }),
         new("empty-name-refusal", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey, EraseStep, "Continue" }, new[] { OriginalShell.DialogOkKey, "CancelProfile" },
             Expect: new[] { OriginalShell.DialogOkKey }),
+        new("empty-plane-name-refusal", OriginalScreen.PlaneName, Then(Build, OriginalShell.NameOkKey),
+            new[] { OriginalShell.DialogOkKey, OriginalShell.NameCancelKey, OriginalShell.ExitKey },
+            Expect: new[] { OriginalShell.DialogOkKey }),
         new("sell-confirm", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey, OriginalShell.InventorySellKey),
             Then(new[] { OriginalShell.DialogNoKey, OriginalShell.InventoryDoneKey }, CancelBuild),
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }),
@@ -290,6 +293,7 @@ public class OriginalCoverageTests : IDisposable
     // 160x112 (four 28-pixel frames), the hangar's own sizes as its tests measure them.
     private static (int Width, int Height)? FixtureMeasure(string art) => art switch
     {
+        "PH_NamePanel.png" => (260, 180),
         "PM_B_Paper.png" or "PH_B_Paper.png" => (160, 112),
         "PH_Tab.png" => (120, 120),
         "PH_B_OkCancel.png" => (80, 96),

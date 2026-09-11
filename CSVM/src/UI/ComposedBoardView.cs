@@ -35,6 +35,10 @@ public sealed partial class ComposedBoardView : Control
     // value is chosen to read like the reference screenshot's note, not decoded from anything.
     private const float Slant = 0.25f;
 
+    // How long a text caret stays lit and then dark. Nothing in the layout or the shipped scripts
+    // states a period, so this one reads like a text cursor rather than being decoded from any.
+    private const double CaretBlinkSeconds = 0.5;
+
     private readonly Dictionary<string, Texture2D?> _textures = new();
 
     // The movies behind the boards, one per file, kept beside the texture cache rather than in it
@@ -43,6 +47,12 @@ public sealed partial class ComposedBoardView : Control
     private readonly Dictionary<string, MovieSurface?> _movies = new();
 
     private FontVariation? _slanted;
+
+    // The caret's blink: how far into the current half-period the board is, whether that half is
+    // the lit one, and whether anything on the board carries a caret at all.
+    private double _caretClock;
+    private bool _caretLit = true;
+    private bool _caretOnBoard;
 
     private ComposedBoard? _board;
     private string _dataRoot = string.Empty;
@@ -95,9 +105,38 @@ public sealed partial class ComposedBoardView : Control
         return changed;
     }
 
+    /// <summary>Advances the text caret's blink by that many seconds, answering whether the picture
+    /// changed and the board wants repainting. Takes its step from the caller for the reason
+    /// <see cref="AdvanceMovies"/> does: a clock read here would make the frame a capture lands on
+    /// a property of the machine.</summary>
+    public bool AdvanceCaret(double elapsedSeconds)
+    {
+        _caretClock += elapsedSeconds;
+        bool flipped = false;
+        while (_caretClock >= CaretBlinkSeconds)
+        {
+            _caretClock -= CaretBlinkSeconds;
+            _caretLit = !_caretLit;
+            flipped = true;
+        }
+
+        return flipped && _caretOnBoard;
+    }
+
     /// <summary>Puts a composed board on screen, with the two lines the shell adds under it.</summary>
     public void Show(ComposedBoard board, BoardPalette palette, string detail, string footer)
     {
+        ArgumentNullException.ThrowIfNull(board);
+        bool caret = HasCaret(board);
+        if (caret && !_caretOnBoard)
+        {
+            // A box that has just taken the focus shows its caret at once, so the blink starts
+            // from the press rather than from wherever the last one left the phase.
+            _caretClock = 0d;
+            _caretLit = true;
+        }
+
+        _caretOnBoard = caret;
         _board = board;
         _palette = palette;
         _detail = detail;
@@ -185,6 +224,32 @@ public sealed partial class ComposedBoardView : Control
     {
         string one = text.Replace('\n', ' ').Replace('\r', ' ');
         return one.Length <= HintCap ? one : one[..HintCap] + "…";
+    }
+
+    // Whether any text on the board carries a caret, which is what decides that the blink is worth
+    // a repaint. An overlay's lines count: a dialog's own edit box would draw there.
+    private static bool HasCaret(ComposedBoard board)
+    {
+        foreach (var line in board.Lines)
+        {
+            if (line.Caret != null)
+            {
+                return true;
+            }
+        }
+
+        foreach (var panel in board.Overlays)
+        {
+            foreach (var line in panel.Lines)
+            {
+                if (line.Caret != null)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // One frame of a stacked strip, in texture pixels. A strip's frames divide its height evenly,
@@ -337,13 +402,19 @@ public sealed partial class ComposedBoardView : Control
 
     private void DrawText(BoardFit fit, Font? font, BoardLine line)
     {
-        if (font == null || line.Text.Length == 0)
+        if (font == null)
         {
             return;
         }
 
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(line.Size)));
         var at = new Vector2(fit.X(line.X), fit.Y(line.Y) + points);
+        DrawCaret(fit, font, line, points);
+        if (line.Text.Length == 0)
+        {
+            return;
+        }
+
         if (line.Width <= 0f)
         {
             DrawString(font, at, line.Text, HorizontalAlignment.Left, -1f, points, InkOf(line.Ink));
@@ -360,6 +431,30 @@ public sealed partial class ComposedBoardView : Control
         };
         DrawMultilineString(font, at, line.Text, justify, fit.Length(line.Width),
             points, -1, InkOf(line.Ink));
+    }
+
+    // The edit box's cursor after the text it follows, on the lit half of the blink. The text is
+    // measured here because the board cannot: a caret that counted characters would sit wrong on
+    // every proportional face. It stays inside the box, so a full line does not push it off.
+    private void DrawCaret(BoardFit fit, Font font, BoardLine line, int points)
+    {
+        if (line.Caret is not { } caret || !_caretLit)
+        {
+            return;
+        }
+
+        float left = fit.X(line.X);
+        float x = left + (line.Text.Length > 0
+            ? font.GetStringSize(line.Text, HorizontalAlignment.Left, -1f, points).X
+            : 0f);
+        if (line.Width > 0f)
+        {
+            x = Mathf.Min(x, left + fit.Length(line.Width - caret.Width));
+        }
+
+        DrawRect(
+            new Rect2(x, fit.Y(line.Y), fit.Length(caret.Width), fit.Length(caret.Height)),
+            new Color(caret.R / 255f, caret.G / 255f, caret.B / 255f));
     }
 
     private void DrawNote(BoardFit fit, Font? font, BoardNote note)

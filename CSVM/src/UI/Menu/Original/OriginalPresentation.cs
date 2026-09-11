@@ -493,6 +493,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The board's own movies run on the step the host was given. A new picture repaints without
         // recomposing: nothing about the screen changed, only the pixels behind it.
         bool picture = _view.AdvanceMovies(dt);
+        // An edit box's caret blinks on the same step, and repaints for the same reason: the
+        // screen has not changed, only the pixels the box draws.
+        picture |= _view.AdvanceCaret(dt);
         if (changed)
         {
             Redraw();

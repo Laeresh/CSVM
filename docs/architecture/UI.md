@@ -186,11 +186,11 @@ nearest are in [../org/campaign-board.md](../org/campaign-board.md), and bind ev
 What a composed campaign screen is made of, engine-free: the screen's fixed backdrop, the fills a
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
 plaques and flowed list widgets, each in draw order. The backdrop is a layer of its own so a fill
-can sit over the painted background and still stay under the page's pictures, which is where a
-list's selection bar goes. `BoardNote` is a widget's entries plus its wrap box, flowed by a caller
-that can measure text. `PlaqueFrame` and `PlaqueInk` are the two state rules a plaque draws by.
-`BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries
-is a movie, which is how a background film reaches the backdrop with no engine type entering here.
+can sit over the painted background and stay under the page's pictures, where a selection bar goes.
+`BoardNote` is a widget's entries plus its wrap box and `BoardCaret` an edit box's cursor on the
+line it follows, both placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a
+plaque's states. `BoardArt` names a file and its frame count and the renderer resolves it; one of
+its four libraries is a movie, so a background film reaches the backdrop with no engine type here.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -215,11 +215,11 @@ keys: [../formats/menu-layout.md](../formats/menu-layout.md).
 The Godot half of the campaign boards: draws one `ComposedBoard` over the whole window through
 `BoardFit`, with texture filtering pinned to Nearest so the authored pixel grid stays hard. Owns the
 texture cache and the only art resolution there is, mission art and screen chrome under their own
-extraction roots, and caches a miss so an absent extraction is probed once per name. A movie
-resolves to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place,
-so the picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's
-own step and says whether to repaint. Supplies the font metric a flowed `BoardNote` cannot take for
-itself, and the one piece of chrome that is not the original's, the two-line hint band a pad needs.
+extraction roots, and caches a miss so an absent extraction is probed once per name. A movie resolves
+to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
+picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step
+and `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font
+metric a flowed `BoardNote` and a caret cannot take, and the two-line hint band a pad needs.
 
 ## src/UI/CinemaScreen.cs
 One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
@@ -826,10 +826,10 @@ The Original hangar, the shell's partial over the shared `HangarFeature` and the
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
 the cabin. It owns the plane picture over the four blueprint panes (the airframe's blueprint, else
-the picked pattern's region masks tinted under its plate), the running total, the cash note over a
-wallet with the mark on a dropdown row the funds cannot cover, the tab bar read off the layout's
-own edges, every dropdown's list under its box, and the airframe-switch ask as a dialog over the
-page; every pick binds straight to the feature. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+the picked pattern's masks tinted under its plate), the running total, the cash note with its mark
+on an unaffordable row, the tab bar off the layout's own edges, every dropdown's list, the two name
+boxes with their authored caret, and the airframe-switch ask. `PaneOrigin` centres a section's pane
+when its art is smaller than the board and places the section's rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

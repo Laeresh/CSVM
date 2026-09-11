@@ -30,6 +30,9 @@ public sealed partial class OriginalShell
     /// <summary>The layout section the name screen is composed from.</summary>
     public const string PlaneNameSection = "PlaneName";
 
+    /// <summary>The name screen's own pane, the dialog its rows are placed on.</summary>
+    public const string PlaneNamePaneKey = "PN_P_BACKGROUND";
+
     /// <summary>The layout section the hub's chrome is composed from.</summary>
     public const string PlaneConstructionSection = "PlaneConstruction";
 
@@ -41,6 +44,9 @@ public sealed partial class OriginalShell
 
     /// <summary>The name screen's edit box.</summary>
     public const string NameFieldKey = "PN_E_NAME";
+
+    /// <summary>The hub's own edit box, which renames the build in place.</summary>
+    public const string HubNameFieldKey = "PX_E_NAME";
 
     /// <summary>The name screen's Load Default Configuration checkbox.</summary>
     public const string NameDefaultsKey = "PN_B_DEFAULT";
@@ -94,9 +100,19 @@ public sealed partial class OriginalShell
     private const float PlaneX = 16f;
     private const float PlaneY = 44f;
 
-    // Where the typed name sits in the hub's name box, whose authored row carries no width.
+    // Where the hub's name box begins and ends, its authored row carrying neither. The script sets
+    // both: the box starts at the end of the PLANE NAME title (R = px_t_planename's x plus its
+    // drawn width) and runs from there to 302 (SNA.WB = 302 - R, PLANECONSTRUCTION.SCRIPT). The
+    // right edge is therefore the script's own; the left stands in for a title measurement this
+    // engine-free half cannot make.
     private const float HubNameX = 120f;
-    private const float HubNameY = 12f;
+    private const float HubNameRight = 302f;
+
+    // The caret an edit box draws after its text, in the box's own CursorColor: two authored pixels
+    // wide and a pixel clear of the box top and bottom, which is how it stands in the reference
+    // shot of the PLANE NAME dialog.
+    private const float CaretWidth = 2f;
+    private const float CaretInset = 1f;
 
     // Text sizes against the authored 15-pixel item height and the page's own text rows.
     private const float HubTitleFont = 16f;
@@ -150,9 +166,13 @@ public sealed partial class OriginalShell
     public bool IsHangarScreen => _screen >= OriginalScreen.PlaneName;
 
     /// <summary>Whether seat 0's typed characters feed a text field right now: the name screen's
-    /// edit box, and the campaign roster's name box while no dialog stands over it.</summary>
+    /// edit box, the hub's own box while the focus stands in it, and the campaign roster's name
+    /// box. None of the three while a dialog stands over the screen.</summary>
     public bool CapturingText =>
-        _screen == OriginalScreen.PlaneName || (_screen == OriginalScreen.CampaignRoster && _dialog == null);
+        _dialog == null
+        && (_screen == OriginalScreen.PlaneName
+            || _screen == OriginalScreen.CampaignRoster
+            || (IsHub && FocusedKey == HubNameFieldKey));
 
     /// <summary>The name typed on the name screen so far.</summary>
     public string HangarName => _hangarName;
@@ -440,14 +460,6 @@ public sealed partial class OriginalShell
         }
     }
 
-    private static void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key)
-    {
-        if (screen.Widget(key) is { Art.Count: > 0 } pane)
-        {
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)), pane.Int("X"), pane.Int("Y")));
-        }
-    }
-
     // A text row at its authored place in a chosen ink; the hangar's pages author black text the
     // shared reader would otherwise draw in the heading colour.
     private static void AddHangarText(MenuLayoutScreen screen, List<BoardLine> lines, string key, float size, BoardInk ink)
@@ -459,6 +471,77 @@ public sealed partial class OriginalShell
 
         lines.Add(new BoardLine(Fill(widget.Text), widget.Int("X"), widget.Int("Y"), widget.Int("Width"), size,
             IsWhite(widget) ? BoardInk.Dialog : ink, -1, false, Justify(widget)));
+    }
+
+    // Moves rows built at their authored coordinates onto the section's own pane, every row from
+    // the given one on. A section whose pane is centred authors its rows relative to that corner.
+    private static void Relocate(List<OriginalRow> rows, int first, (float X, float Y) origin)
+    {
+        for (int i = first; i < rows.Count; i++)
+        {
+            rows[i] = rows[i] with { X = rows[i].X + origin.X, Y = rows[i].Y + origin.Y };
+        }
+    }
+
+    // One frame of typing into a plane-name box.
+    private static bool TypeInto(ref string text, MenuCommands commands, List<string> cues)
+    {
+        bool changed = false;
+        foreach (char c in commands.Typed)
+        {
+            if (HangarFeature.AcceptsNameChar(c) && text.Length < HangarFeature.MaxNameLength)
+            {
+                text += c;
+                changed = true;
+                cues.Add(OriginalCues.Text);
+            }
+            else
+            {
+                cues.Add(OriginalCues.TextError);
+            }
+        }
+
+        if (commands.Erase && text.Length > 0)
+        {
+            text = text[..^1];
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    // Where a section's pane lands on the board, which for art smaller than the board is centred
+    // rather than left at the corner it is authored at. PLANENAME.SCRIPT initializes
+    // pn_p_background with relative = 1 and then sets the screen's own location to
+    // ((getresx() - its width) / 2, (getresy() - its height) / 2); the messagebox does the same,
+    // its 410x300 pane landing on the 195,150 the reference shots measure. A pane that fills the
+    // board centres onto its own corner, and one authored away from the corner keeps it.
+    private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key)
+    {
+        if (screen.Widget(key) is not { Art.Count: > 0 } pane)
+        {
+            return (0f, 0f);
+        }
+
+        float x = pane.Int("X");
+        float y = pane.Int("Y");
+        if (x != 0f || y != 0f || Measure(pane.Art[0]) is not { } size)
+        {
+            return (x, y);
+        }
+
+        return (
+            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredWidth - size.Width) / 2f)),
+            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredHeight - size.Height) / 2f)));
+    }
+
+    private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key)
+    {
+        if (screen.Widget(key) is { Art.Count: > 0 } pane)
+        {
+            var at = PaneOrigin(screen, key);
+            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)), at.X, at.Y));
+        }
     }
 
     // Enters one of the hub's screens: the tabs remember themselves for the inventory's Done and
@@ -475,11 +558,23 @@ public sealed partial class OriginalShell
     }
 
     // The name screen's OK: the typed name onto a bare or default-configuration build, then the
-    // first tab. An empty name is refused in the screen's own words (langui 203).
+    // first tab. An empty box is refused at the press, which is PLANENAME.SCRIPT's own else arm:
+    // langui 203 raised under a 0x1 mask, so the box wears the warning icon and one OK, and the
+    // focus goes back into the box behind it. A box of nothing but spaces is refused with it, the
+    // store naming a file after what was typed.
     private void AcceptName()
     {
-        if (_hangar == null || string.IsNullOrWhiteSpace(_hangarName))
+        if (_hangar == null)
         {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_hangarName))
+        {
+            RaiseDialog(
+                _hangar.Strings.Text(203, "You must enter a name for your new plane."),
+                DialogIcon.Warning,
+                Ok(() => FocusKey(NameFieldKey)));
             return;
         }
 
@@ -554,9 +649,9 @@ public sealed partial class OriginalShell
     }
 
     // Typed characters and Backspace into whichever edit box is showing, each box's own rule: the
-    // hangar name's character set and cap on the name screen, the campaign name's on the roster.
-    // A taken character cues the edit box's keystroke sound and a refused one its reject sound,
-    // the two wavs the globals script binds to the box.
+    // hangar name's character set and cap on the name screen and on the hub, the campaign name's
+    // on the roster. A taken character cues the edit box's keystroke sound and a refused one its
+    // reject sound, the two wavs the globals script binds to the box.
     private bool TypeName(MenuCommands commands, List<string> cues)
     {
         if (_screen == OriginalScreen.CampaignRoster)
@@ -564,33 +659,22 @@ public sealed partial class OriginalShell
             return TypeRosterName(commands, cues);
         }
 
-        if (_screen != OriginalScreen.PlaneName)
+        if (_screen == OriginalScreen.PlaneName)
+        {
+            return TypeInto(ref _hangarName, commands, cues);
+        }
+
+        if (!IsHub || _hangar == null || FocusedKey != HubNameFieldKey)
         {
             return false;
         }
 
-        bool changed = false;
-        foreach (char c in commands.Typed)
-        {
-            if (HangarFeature.AcceptsNameChar(c) && _hangarName.Length < HangarFeature.MaxNameLength)
-            {
-                _hangarName += c;
-                changed = true;
-                cues.Add(OriginalCues.Text);
-            }
-            else
-            {
-                cues.Add(OriginalCues.TextError);
-            }
-        }
-
-        if (commands.Erase && _hangarName.Length > 0)
-        {
-            _hangarName = _hangarName[..^1];
-            changed = true;
-        }
-
-        return changed;
+        // The hub's box renames the build in place: the scratch plane's own name, so no second
+        // plane is started and no pick is re-asked.
+        string name = _hangar.Scratch.Name;
+        bool typed = TypeInto(ref name, commands, cues);
+        _hangar.Scratch.Name = name;
+        return typed;
     }
 
     private bool CloseHangarDropdown()
@@ -717,6 +801,7 @@ public sealed partial class OriginalShell
             return;
         }
 
+        int first = rows.Count;
         if (screen.Widget(NameFieldKey) is { } field)
         {
             rows.Add(new OriginalRow(NameFieldKey, _hangarName, OriginalRowKind.TextField, field.Int("X"), field.Int("Y"),
@@ -731,8 +816,11 @@ public sealed partial class OriginalShell
                 size.Width, size.Height, true, 0, art));
         }
 
-        AddStrip(screen, rows, NameOkKey, OriginalRowKind.TextButton, !string.IsNullOrWhiteSpace(_hangarName), 0);
+        // OK stands whatever the box holds: PLANENAME.SCRIPT deactivates nothing and answers an
+        // empty box at the press instead.
+        AddStrip(screen, rows, NameOkKey, OriginalRowKind.TextButton, true, 0);
         AddStrip(screen, rows, NameCancelKey, OriginalRowKind.TextButton, true, 0);
+        Relocate(rows, first, PaneOrigin(screen, PlaneNamePaneKey));
     }
 
     // The hub's rows in focus order: the page's dropdowns (or the totals page's Purchase Now),
@@ -774,6 +862,14 @@ public sealed partial class OriginalShell
         AddStrip(hub, rows, SellPlanesKey, OriginalRowKind.Button, true, 0);
         AddStrip(hub, rows, ReadyKey, OriginalRowKind.Button, _screen != OriginalScreen.HangarPurchase, 0);
         AddStrip(hub, rows, CancelBuildKey, OriginalRowKind.Button, true, 0);
+        // The name box comes last so the page still opens on its own first control; it sits at the
+        // top left of the page, which is where the pointer finds it.
+        if (hub.Widget(HubNameFieldKey) is { } name)
+        {
+            rows.Add(new OriginalRow(HubNameFieldKey, _hangar!.Scratch.Name, OriginalRowKind.TextField,
+                HubNameX, name.Int("Y"), HubNameRight - HubNameX, name.Int("Height", 16), true, 0, null));
+        }
+
         if (_hangar!.Wallet == null)
         {
             // The wallet-free door wears the export strips the stills show on the Instant Action
@@ -1142,6 +1238,8 @@ public sealed partial class OriginalShell
         switch (row.Key)
         {
             case NameFieldKey:
+            case HubNameFieldKey:
+                // An edit box takes the focus and nothing else; the typing is the screen's.
                 return null;
             case NameDefaultsKey:
                 _hangarDefaults = !_hangarDefaults;
@@ -1265,21 +1363,20 @@ public sealed partial class OriginalShell
         }
 
         AddPane(screen, backdrop, "PX_P_BACKGROUND");
-        AddPane(screen, backdrop, "PN_P_BACKGROUND");
+        AddPane(screen, backdrop, PlaneNamePaneKey);
+        int first = lines.Count;
         AddHangarText(screen, lines, "PN_T_TITLE", HubLabelFont, BoardInk.Row);
         AddHangarText(screen, lines, "PN_T_DEFAULT", HubTextFont, BoardInk.Row);
+        var origin = PaneOrigin(screen, PlaneNamePaneKey);
+        for (int i = first; i < lines.Count; i++)
+        {
+            lines[i] = lines[i] with { X = lines[i].X + origin.X, Y = lines[i].Y + origin.Y };
+        }
+
+        // The rows were placed on the pane when they were built, so they draw where they are.
         for (int i = 0; i < rows.Count; i++)
         {
             ComposeHangarRow(rows[i], i == focus, i == _pressed, i, fills, lines, plaques, pictures);
-        }
-
-        if (string.IsNullOrWhiteSpace(_hangarName) && screen.Widget(NameFieldKey) is { } field
-            && rows.Count > 0 && rows[rows.Count - 1] is { } last)
-        {
-            // The screen's own refusal (langui 203), shown under the panel's buttons before OK is
-            // pressed rather than after.
-            lines.Add(new BoardLine(_hangar!.Strings.Text(203, "You must enter a name for your new plane."),
-                field.Int("X"), last.Y + last.Height + 8f, 0f, DescFont, BoardInk.Dialog));
         }
     }
 
@@ -1299,7 +1396,6 @@ public sealed partial class OriginalShell
         var scratch = hangar.Scratch;
         var bill = hangar.Bill;
         AddHangarText(hub, lines, "PX_T_PLANENAME", HubLabelFont, BoardInk.Dialog);
-        lines.Add(new BoardLine(scratch.Name, HubNameX, HubNameY, 0f, HubLabelFont, BoardInk.Dialog));
         if (hub.Widget("PX_T_PLANECOST") is { } cost)
         {
             lines.Add(new BoardLine(Fill(cost.Text ?? "PLANE COST:  $%1!d!", bill.Total.Cost), cost.Int("X"), cost.Int("Y"), 0f, HubLabelFont, BoardInk.Dialog));
@@ -1661,9 +1757,7 @@ public sealed partial class OriginalShell
         switch (row.Kind)
         {
             case OriginalRowKind.TextField:
-                fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 255, 255, 255, 0.85f));
-                fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0x73, 0x69, 0x9C, 1f, Border: true));
-                lines.Add(new BoardLine(row.Label + (focused ? "_" : string.Empty), row.X + 4f, row.Y + 1f, row.Width - 8f, HubItemFont, BoardInk.Row, index));
+                ComposeHangarField(row, focused, index, fills, lines);
                 return;
             case OriginalRowKind.Radio when row.Art != null:
                 // An eight-state checkbox strip: the four button states unmarked, then the same four marked.
@@ -1681,6 +1775,29 @@ public sealed partial class OriginalShell
 
         ComposeInstantActionRow(row, focused, pressed, index, fills, lines, plaques, pictures);
     }
+
+    // An edit box in the three colours its own row authors: the frame where one is named, the text
+    // in the box's colour, and the caret while the box holds the focus. Nothing is filled behind
+    // it, the pane under the box carrying its ground.
+    private void ComposeHangarField(OriginalRow row, bool focused, int index, List<BoardFill> fills, List<BoardLine> lines)
+    {
+        var box = EditBox(row.Key);
+        if (box != null && box.TryColor("FrameColor", out var frame))
+        {
+            fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, frame.R, frame.G, frame.B, 1f, Border: true));
+        }
+
+        BoardCaret? caret = focused && box != null && box.TryColor("CursorColor", out var cursor)
+            ? new BoardCaret(cursor.R, cursor.G, cursor.B, CaretWidth, Math.Max(1f, row.Height - (2f * CaretInset)))
+            : null;
+        lines.Add(new BoardLine(
+            row.Label, row.X, row.Y + CaretInset, row.Width, HubItemFont,
+            box != null && IsWhite(box, "TextColor") ? BoardInk.Dialog : BoardInk.Row, index, false, BoardJustify.Left, caret));
+    }
+
+    // The layout row an edit box was built from, whose own colour fields it draws in.
+    private MenuLayoutWidget? EditBox(string key) =>
+        _layout.Screen(_screen == OriginalScreen.PlaneName ? PlaneNameSection : PlaneConstructionSection)?.Widget(key);
 
     private void ComposeHangarDropdown(OriginalRow row, bool focused, bool pressed, int index, List<BoardFill> fills, List<BoardLine> lines, List<BoardPicture> pictures)
     {

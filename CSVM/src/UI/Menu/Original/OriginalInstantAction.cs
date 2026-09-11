@@ -215,8 +215,8 @@ public sealed partial class OriginalShell
             fly != null && fly.TryColor("ColorDepressed", out var d) ? d : white);
     }
 
-    private static bool IsWhite(MenuLayoutWidget widget) =>
-        widget.TryColor("Color", out var c) && c.R == 255 && c.G == 255 && c.B == 255;
+    private static bool IsWhite(MenuLayoutWidget widget, string field = "Color") =>
+        widget.TryColor(field, out var c) && c.R == 255 && c.G == 255 && c.B == 255;
 
     private static BoardJustify Justify(MenuLayoutWidget widget) => widget.Int("Justify") switch
     {

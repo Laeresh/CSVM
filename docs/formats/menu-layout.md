@@ -144,6 +144,29 @@ painted into the plaque art on rows without one.
 `Volatile` marks a pane whose picture is replaced at runtime. `Loops` on an `M` row is `0` for a
 continuous loop and `1` for play-once, matching the sound object's documented `0 = continuous`.
 
+### A sub-screen's pane is centred, and its section's rows are relative to it
+
+A section whose art is smaller than the 800x600 board authors that pane at `0, 0` all the same,
+and its script centres it: `PLANENAME.SCRIPT` initializes `pn_p_background` with `relative = 1`
+and then sets the screen's own `location` to `((getresx() - LA.WB) / 2, (getresy() - LA.DD) / 2)`,
+its width and height. Every other row of the section carries `relative = 1` too, so the small
+coordinates on them (`PN_E_NAME` `23, 40`, `PN_B_OK` `74, 130`) are measured from that corner and
+not from the screen's. `PX_PlaneNameBackground.Png` is 264x177, so the dialog lands at `268, 211`.
+
+The messagebox is the same rule read off a screenshot rather than a script: its 410x300
+`MB_Background.png` is authored at `0, 0` and drawn at `195, 150`, and `MB_P_ICON` `36, 65` and
+`MB_T_MESSAGE` `94, 70` sit on the pane. A section's full-page background (`PX_BackGround.jpg`,
+`PS_BackGround.jpg`) is board-sized and centres onto its own corner, which is why the two rules
+cannot be told apart there.
+
+### An `E` row's `X` and `Width` may be the script's, not the file's
+
+`PX_E_NAME` is authored `X=0`, `Width=0` on a screen where the box plainly is neither, because
+`PLANECONSTRUCTION.SCRIPT` computes both after `initialize`: `R = QNA.location.x + QNA.WB` (the
+PLANE NAME title's corner plus its drawn width), `SNA.WB = 302 - R`, `SNA.location.x = R`. So the
+box begins where the title's text ends and runs to 302. A zero in either column on an `E` row is a
+placeholder for a runtime value, not a control of no width at the board's edge.
+
 ### Lists: `ItemHeight`, not box height
 
 The `Height` column of a `D` or `L` row is **one item's height**, not the control's. The visible

@@ -1997,26 +1997,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   subtree apart from the crash rig's narrow subset — so nothing animates the panel per frame.
 
 
-- `BL-706` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The PLANE NAME dialog
-  sits off-centre because its pane is drawn at a raw 0,0 and its rows are drawn as though their
-  authored coordinates were the screen's.** *Evidence:* reported at the controls over E44's pointer
-  sweep, "Plane Construction: The PLANE NAME Dialog should be centered", and settled over
-  `PLAN-M5-polish-13`'s closing sortie against `OriginalScreenshots/CustomPlane Name Dialog.png`,
-  which puts the panel in the middle of the board. The data is right and the fit is wrong:
-  `PN_P_BACKGROUND` is authored at 0,0 over `PX_PlaneNameBackground.Png`, whose extracted art is
-  264x177 and so centres on the 800x600 board at 268,211, and every other row in the section carries
-  a small coordinate that lands on that centred pane and nowhere else (`PN_E_NAME` 23,40,
-  `PN_B_DEFAULT` 27,83, `PN_B_OK` 74,130, `PN_B_CANCEL` 161,130, `extracted/rof/menu_layout.json`).
-  Ours draws the pane at the raw authored corner (`AddPane`,
-  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:443-449`) and each row at its own, so the whole dialog
-  sits against the screen's top-left. *Fix shape:* the section's pane is placed centred when its art
-  is smaller than the board, and the section's rows are drawn relative to it. *⚠ Traps:* **do not
-  centre the rows by hand-tuned constants**, which would hide the same fault on every other
-  sub-screen pane. The centring rule is proved on one case here: `PX_P_BACKGROUND` is 800x600 and
-  centres to 0,0 either way, so it agrees with the rule without testing it; check the other sections'
-  small panes before generalising. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7, `BL-769`
-  (the same screen's refusal), `BL-759` (the name box on the hub behind it).
-
 - `BL-750` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Instant Action's list
   arrows and scrollbar thumb sit on the page background rather than clear of the list.**
   *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "Instant Action:
@@ -2054,7 +2034,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ours, not the layout's. *Fix shape:* drop the tab label's baseline within its strip. *⚠ Traps:*
   the strip geometry is decoded; move the text inside it, never the strip. Every other paper
   button shares the same draw arm, so a change there has to leave OK, Cancel and the export
-  variants where they are. *Cross-refs:* `BL-706` (the same screen's PLANE NAME dialog).
+  variants where they are. *Cross-refs:* the same screen's PLANE NAME dialog, centred on its own
+  pane by the rule in [`docs/formats/menu-layout.md`](docs/formats/menu-layout.md).
 
 - `BL-754` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Plane Construction's
   CURRENT WEIGHT line stays in the ordinary ink when the build is over its airframe's capacity.**
@@ -2100,35 +2081,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`UseMissionSky`, `:1129-1134`), so a blank has to be undone on a launch rather than left standing.
   ⚠ **No headless run may pay for it**, the rule `BlankAndQuit` already carries.
   *Cross-refs:* `BL-710`'s landing (`git log --grep=BL-710`), the same sky at the quit exits.
-
-- `BL-758` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A name box draws a
-  trailing underscore in the text ink where the layout authors a red cursor.** *Evidence:* reported
-  at the controls over `PLAN-M5-polish-13`'s closing sortie, "Plane Construction: Text Input cursor
-  is a red blinking line in the original". Both edit rows carry `CursorColor=0xFFEF0010` as their own
-  field: `PN_E_NAME` on the PLANE NAME screen and `PX_E_NAME` on the construction hub
-  (`extracted/rof/menu_layout.json`), and the editbox type's field table names that column, so the
-  colour is decoded rather than guessed. Ours draws the label plus `"_"` while focused, in
-  `BoardInk.Row` and without a blink (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1663-1667`).
-  *Fix shape:* a caret drawn from the row's own `CursorColor` as a filled bar at the text's end, on a
-  fixed blink period. *⚠ Traps:* one draw arm serves every `E` row, so read the colour off the widget
-  instead of writing a literal; the same arm already takes its border from `FrameColor`. A caret is
-  not part of the text, so it must not shift the string or count against `MaxChars`, which is 16 on
-  both rows. *Cross-refs:* `BL-711`'s landing (`git log --grep=BL-711`), the same box's refusal.
-
-- `BL-759` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Plane
-  Construction hub draws the plane's name as a static line where the layout authors an edit box.**
-  *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "The PLANE NAME is
-  still editable in the original. Textbox where the name is". The hub section authors `PX_E_NAME`, an
-  editbox with its own frame and cursor colours and `MaxChars=16`
-  (`extracted/rof/menu_layout.json`), and ours writes the scratch plane's name as a plain `BoardLine`
-  at constants of ours instead (`HubNameX`/`HubNameY`,
-  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:97-99`, `:1301-1302`), so the only place a name can be
-  typed is the PLANE NAME screen the build opens with. *Fix shape:* the hub's name becomes a text
-  field row over `PX_E_NAME`, writing `HangarFeature`'s scratch name. *⚠ Traps:* the authored row
-  carries no width, which is why ours is a constant; take the width from the box art or the name
-  title's row rather than inventing one. A rename must not create a second plane or re-raise the
-  defaults ask. *Cross-refs:* `BL-758` (the caret the field would draw), `BL-706` (the screen that
-  takes the name first).
 
 - `BL-760` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **PLANE COST and CURRENT
   WEIGHT do not follow the row the cursor is on in an open list.** *Evidence:* reported at the
@@ -2243,21 +2195,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   cannot simply stop drawing. Whether frame 2 of `MB_B_Buttons.Png` is the rollover at all is worth
   reading off the strip before its look is called wrong. *Cross-refs:* `BL-744`'s landing
   (`git log --grep=BL-744`), the same box's icon.
-
-- `BL-769` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The PLANE NAME
-  screen's empty-name refusal stands as a line under the buttons instead of being raised as a
-  message box when OK is pressed.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s
-  closing sortie, "no name should not be text below but a dialog on ok", with
-  `OriginalScreenshots/CustomPlane Name Dialog No Name.png` showing the original's own message box,
-  its warning icon and a single OK, raised over the screen. Ours writes langui 203 as a `BoardLine`
-  under the panel's buttons whenever the field is empty, before OK is pressed at all
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1276-1283`), and draws OK disabled while it is empty
-  (`:734`), so the press the refusal answers cannot happen. *Fix shape:* OK stays live on an empty
-  field and raises the one-button box carrying string 203; the standing line goes. *⚠ Traps:* the
-  icon is the message box rule's, not a choice made here, so take the frame the way `BL-744`'s
-  landing settled it. The screen is itself a panel, so the raised box is a second overlay over the
-  first and has to be drawn after it. *Cross-refs:* `BL-706` (the same dialog's placement),
-  `BL-744`'s landing (`git log --grep=BL-744`).
 
 - `BL-779` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Original's
   credits screen draws ABOUT disabled, because the box it raises wants a widget set the shared
