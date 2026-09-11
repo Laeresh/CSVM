@@ -36,7 +36,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "2f871f2548e2ad675165b2ad525e7fba",
+      "hash": "17506a01a8986c59cab882be47dcf22c",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, and the harbour wake spray the boat start anims emit, alpha sprites lit like the rest; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -64,8 +64,8 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "652069b267ba51789d5b5bf42d839651",
-      "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
+      "hash": "75aa4ac95aca01f723243522cf8952cf",
+      "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, 51 beacons blinking on their authored periods off the sim clock, lit window skins, moon and stars; near-static, a beacon toggle is the only motion.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {

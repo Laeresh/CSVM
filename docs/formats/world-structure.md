@@ -103,10 +103,54 @@ Part of the [format documentation](README.md) (see also [gamez.md](gamez.md), [c
   a matte-black `gun`, a `b_interior`, the `letterbox` bars), and neither is the name — it is the
   1-poly/3-vertex/untextured conjunction that is exact. **Suppress the mesh, not the node:**
   animations attach puffers and sounds to precisely these nodes by name.
-- Point-sprite lights also sit on world meshes (validated on C1): red tower beacons (`rc2_h`/`rc3_h`, `g1183` ×6 instances), a string of 8 orange/red lights (`g1245`), a zeppelin beacon (a `healthy` mesh), plus black/white lights on runtime effect prototypes (`bit1–3`, `lens_flash`) that WorldBuilder never places. All render as camera-facing soft glow sprites via the generic mesh-lights path. **The visible lamp sprites are a separate mechanism:** single-quad flare *meshes* the engine camera-billboards — C1: `refinery_flare` ×6 (16 m quad, `oil_liteflare.tif`), `gen_flare_yellow` ×22 (4 m, same texture), `docklight_flare` ×6 (9.6 m, `dock_liteflare.tif`, blue), lighthouse `litehsflare` (19.2 m, `poleflare.tif`), plus per-chapter `flare_red`/`flare_green`/`yellow_flare`/`fireflare1`/`light_flare*` variants (C5's street/bridge lights are dozens of 1-poly `flare_red`/`flare_green` quads). The flare textures are soft alpha ramps on black. The chapter light readers (`st_light.json`/`dock_light.json`) wire them: `reflight*`/`docklight*` ANIMATION_DEFINITIONs activate the flare child at startup and attach a dynamic `LIGHT_STATE` (range 7–22 m, the warm `0.88/0.78/0.36` color) under LOD gating. Caveats for renderers: the same flare textures also skin polys *inside* regular meshes (a placed C4 Brigand's wing carries an `oil_liteflare` poly), and some flare meshes are multi-poly *strings* (6-poly `flare_green` rows spanning 22–72 m) — only single-poly all-flare meshes are safe to billboard as a unit. Decoded per-light fields (C1 value survey): `unk08` = size scale (0 default / 1 / 2 / 5 — the lighthouse), `unk64` = max sprite size in px (30 wherever set), `unk68` (else `unk52`) = visibility range in metres (1500 / 2500 / 4000). Colored examples: 64 gray-white `(218.7)³` stars, 4 orange-yellow `(255,170,0)` refinery tarmac lamps, bluish-white `(215,205,255)` pier lights, red beacons, one `(255,69,69)` size-5 lighthouse lamp. Still undecoded: `flags` (523 etc.), `unk48`, the horizon lights' 0.17 float.
+- Point-sprite lights also sit on world meshes (validated on C1): red tower beacons (`rc2_h`/`rc3_h`, `g1183` ×6 instances), a string of 8 orange/red lights (`g1245`), a zeppelin beacon (a `healthy` mesh), plus black/white lights on runtime effect prototypes (`bit1–3`, `lens_flash`) that WorldBuilder never places. All render as camera-facing soft glow sprites via the generic mesh-lights path. **The visible lamp sprites are a separate mechanism:** single-quad flare *meshes* the engine camera-billboards — C1: `refinery_flare` ×6 (16 m quad, `oil_liteflare.tif`), `gen_flare_yellow` ×22 (4 m, same texture), `docklight_flare` ×6 (9.6 m, `dock_liteflare.tif`, blue), lighthouse `litehsflare` (19.2 m, `poleflare.tif`), plus per-chapter `flare_red`/`flare_green`/`yellow_flare`/`fireflare1`/`light_flare*` variants (C5's street/bridge lights are dozens of 1-poly `flare_red`/`flare_green` quads). The flare textures are soft alpha ramps on black. The chapter light readers (`st_light.json`/`dock_light.json`) wire them: `reflight*`/`docklight*` ANIMATION_DEFINITIONs activate the flare child at startup and attach a dynamic `LIGHT_STATE` (range 7–22 m, the warm `0.88/0.78/0.36` color) under LOD gating. Caveats for renderers: the same flare textures also skin polys *inside* regular meshes (a placed C4 Brigand's wing carries an `oil_liteflare` poly), and some flare meshes are multi-poly *strings* (6-poly `flare_green` rows spanning 22–72 m) — only single-poly all-flare meshes are safe to billboard as a unit. The per-light record is decoded in full under [Mesh point lights](#mesh-point-lights) below. Colored examples: 64 gray-white `(218.7)³` stars, 4 orange-yellow `(255,170,0)` refinery tarmac lamps, bluish-white `(215,205,255)` pier lights, red beacons, one `(255,69,69)` lighthouse lamp that blinks every five seconds.
 - Cloud/sky geometry (`cloud1`/`cloud2`/`cloudlayer` at y≈960–1350) renders but is **not** collidable; it's identified by texture, not node name (a `cloudlayer.tif` plane sits under the generic node `g27517`). Terrain tiles are named `a3`/`a5`/…; a downward probe reads terrain height ≈150 m (and 0 over the harbor water).
 - **The overcast cloud deck, per chapter:** C1/C1C/C2B ship 144 `cloudlayer.tif` single-quad 1024 m tiles at y=960; **C4's deck is 144 `Sky1.tif` quads at y=1050** (parentless partition-referenced nodes `g1720..g1863`, bit-for-bit C1's flat-quad signature); C1B and C3 ship no deck. A deck is the only flat-tile altitude bucket whose footprint covers ~100% of the world `area` — every other flat-tile bucket in the install (water, city-block bases) tops out under 10%. The deck is *not* "the highest thing in the world": C4's tallest non-tile root reaches y=1490, above its own deck.
 - **`skywal*` is a BUILDING wall texture, not sky**, despite the name: C4's sky-city pods (`pod2_hi`, `pod6_hi`, `g74`) and several C1/C1B/C2/C3 structures mix `skywal*` faces with unmistakable building textures (`jim_floor01`, `jim_rail1`, `bhfbuild03`, `flaghut2`), and three C4 terrain roots carry a `skywal01` polygon alongside cliff/rail/bridge ones. Any `sky*` prefix rule (collision exemption, deck detection) will misclassify solid architecture. C5 ships no `sky*` texture at all.
+
+## Mesh point lights
+
+A model's point-light array is `model+0x20` (count) and `model+0x40` (pointer), 76 bytes per record,
+read by `gmod_const.c`'s model reader `FUN_00560dc0` and walked by both model draws: the software
+one `FUN_005524d0` over `00552bf5`-`00552d1c` and the hardware one `FUN_00554550` over
+`00554619`-`00554730`, which share the per-light plot `FUN_00558b30`. The blink lives at
+`00552cb6` and `005546c8`, the fade in `FUN_00558b30` at `00558d53`. mech3ax's `unkNN` names are byte offsets, so the table below reads
+against `PointLightC` in `crates/gamez/src/model/common.rs`.
+
+| Offset | mech3ax | What the original does with it |
+| --- | --- | --- |
+| `0x00` | `unk00` | Draw mode. 0 plots the first vertex; 1 walks the vertex list one step per interval and also plots the step behind it in the stashed colour. **Mode 1 is authored nowhere in this install** (0 on all 715 lights), so the walking form is untestable data. |
+| `0x04` | `unk04` | Blink gate for mode 0: 1 makes the light flash, 0 leaves it steady. 56 of the install's 715 lights carry it, all of them in C1 (5) and C5 (51). |
+| `0x08` | `unk08` | **Seconds between toggles**, not a size. 1.0 (30 lights), 2.0 (25) and 5.0 (the C1 lighthouse lamp). Read only inside the `unk04` branch, so the 659 steady lights that carry a value here never elapse it. |
+| `0x0c` | `vertex_count` | Positions in the record's own vertex list. 1 on every light in this install. |
+| `0x10` | `zero16` | **Runtime only**: the seconds accumulator, advanced by the frame delta `DAT_009ad744` and zeroed on each toggle. 0 on disk. |
+| `0x14` | `zero20` | **Runtime only**: low half the current vertex index, high half the stashed alternate colour. 0 on disk, which is what makes a blink read as on/off rather than as two colours. |
+| `0x18` | `unk24` | Low signed 16 bits are the **draw-priority bias**, applied as `screen_z *= priority * PRIORITY + 1` exactly as a polygon's own `priority` is. |
+| `0x1c` | `color` | Three 0..255 floats. The loader packs them into the 16-bit frame-buffer colour at `0x28`. |
+| `0x28` | `rgb` | **Runtime only**: that packed colour. 0 on disk. |
+| `0x2a` | `flags` | **Read by nothing.** No instruction in the binary loads this halfword, and its value does not behave like a field: the 64-star horizon mesh is bit-identical between chapters in every other field while carrying 1030 in C1, 904 in C1B, 889 in C1C/C5 and 930 in C4. Treat it as uninitialised export memory, stable within one export run. |
+| `0x2c` | `vertices_ptr` | The vertex list. |
+| `0x30` | `unk48` | The fade band's near edge. Not read directly: it is the distance at which the slope below reaches full alpha. |
+| `0x34` | `unk52` | The distance the light is fully gone at. **0 disables the fade outright** — the draw tests it against zero first and plots the light opaque at any range — so an unfaded light is not one with a zero-length fade. |
+| `0x38` | `unk56` | The fade slope: `alpha = (unk52 − distance) × unk56`, in 0..255 alpha units, opaque at 255. Authored as `255 / (unk52 − unk48)`, which is where 0.17 (a 1500 m band), 0.102 (2500 m) and 0.255 (1000 m) come from. |
+| `0x3c` | `unk60` | 1 marks the light a **lens flare**. `FUN_004d6a10` casts a ray from the camera to it each frame and, when nothing blocks it, `FUN_0057cc00` draws the four-element flare of `FUN_0057ca80`: a glow on the light plus ghosts at 0.5, 0.1 and −1.0 along the vector to screen centre, sized off viewport width. 18 lights in the install carry it. |
+| `0x40` | `unk64` | **Read by nothing.** The flare path takes the field block at `0x30` and touches only `0x30`, `0x34`, `0x3c`, `0x44` and `0x48` inside it. |
+| `0x44` | `unk68` | Flare-only: the distance the flare is still at full brightness. |
+| `0x48` | `unk72` | Flare-only: the distance the flare is gone at, ramping `(unk72 − d) / (unk72 − unk68)` in between. Dead on any light whose `unk60` is 0, which is 697 of 715. |
+
+⚠ **`unk68` is not a point light's visibility range.** It is 4000 on most of the install and reads
+like one, but the flare gate at `0x3c` is clear on all but 18 lights, so for everything else it is
+never loaded. The point light's own reach is `unk52`, and on most lights that is zero.
+
+**The blink is on/off, not two-coloured.** The toggle swaps the packed colour at `0x28` with the
+high half of `0x14`, and `0x14` is zero on disk, so the first toggle stashes the colour and leaves
+black behind. Every light's accumulator starts at load and nothing reseeds it, so lights sharing a
+period blink in unison.
+
+**The light is one screen pixel.** The software flush `FUN_00584330` writes a single 16-bit texel;
+the hardware draw batches one point per light. Neither has a size to copy, so a renderer drawing
+soft sprites is choosing its own and needs a horizon fade the original does not, since an unfaded
+pixel is swallowed by fog and an unfaded sprite is not.
 
 ## Evidence & limits
 

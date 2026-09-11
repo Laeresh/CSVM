@@ -187,22 +187,33 @@ public sealed class SceneBuilder
     private const string LightShaderCode = @"
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
-uniform float size_scale = 1.0;   // data unk08 (0 -> 1)
-uniform float max_size_px = 30.0; // data unk64
-uniform float range_far = 0.0;    // data unk68/unk52; 0 = no distance fade
+uniform float range_far = 0.0;    // data unk52; 0 = the data authors no fade
+uniform float fade_slope = 0.0;   // data unk56 in 0..1 units
+uniform float blink_period = 0.0; // data unk08 under unk04; 0 = steady
 #include ""res://shaders/csky_instance_uniforms.gdshaderinc""
 // ^ reads csky_light_fade (0 = skydome stars, no range fade) and csky_opacity
 //   (OBJECT_OPACITY_STATE); node_bias and csky_fog_on come along unused, which is the
 //   price of one shared ordered block and costs nothing per instance.
+#include ""res://shaders/csky_time.gdshaderinc""
 void vertex() {
     float dist = max(length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz), 1.0);
     // A fixed world diameter projected to pixels, clamped: far lights stay visible
-    // star-sized dots, near lights cap at the data's max sprite size. TUNE: 6 m glow.
-    float px = 6.0 * size_scale * PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y / (2.0 * dist);
-    POINT_SIZE = clamp(px, 3.0, max_size_px);
+    // star-sized dots, near lights stop growing. TUNE: 6 m glow, 3..30 px.
+    float px = 6.0 * PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y / (2.0 * dist);
+    POINT_SIZE = clamp(px, 3.0, 30.0);
+    // The original's law where the data authors a fade, and a renderer-only horizon fade where
+    // it does not: an unfaded light is one screen pixel there, which the fog and the 16-bit
+    // frame buffer swallow, but is a soft sprite with a floor here and would litter the horizon.
     float fade = (range_far > 0.0)
-        ? 1.0 - smoothstep(0.6 * range_far, range_far, dist) : 1.0;
-    COLOR.a = mix(1.0, fade, csky_light_fade);
+        ? clamp((range_far - dist) * fade_slope, 0.0, 1.0)
+        : 1.0 - smoothstep(2400.0, 4000.0, dist);
+    // Lit for the first half of each 2x period, dark for the second, off one clock shared by
+    // every light — which is what the original's per-light timers do, since they all start
+    // together at load and none of them is ever reseeded.
+    float lit = (blink_period > 0.0)
+        ? 1.0 - step(0.5, fract(csky_time / (2.0 * blink_period)))
+        : 1.0;
+    COLOR.a = mix(1.0, fade, csky_light_fade) * lit;
 }
 void fragment() {
     float r = length(POINT_COORD - vec2(0.5)) * 2.0;
@@ -308,7 +319,7 @@ void fragment() {
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, List<(string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)>> _colliderCache = new();
-    private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
+    private readonly Dictionary<(float Far, float Slope, float Blink), ShaderMaterial> _lightMaterialCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
     private readonly Dictionary<(int Material, bool Fogged, bool ClampUv), Material> _glowMaterialCache = new();
@@ -1010,24 +1021,22 @@ void fragment() {
     }
 
     // Point-sprite lights: camera-facing soft radial glows, additive so they shine over whatever is
-    // behind them. Per-light data drives size and reach — SizeScale scales the sprite, MaxSizePx
-    // caps it on approach, Range fades it with distance, which also stops in-map beacons punching
-    // through the fog from kilometres outside. One POINTS surface per (size, range) group per mesh.
-    // The camera-anchored skydome's stars sit past any data range, so BuildHorizon exempts them
-    // through the csky_light_fade instance uniform.
+    // behind them. The data drives reach and blink — FadeFar/FadeSlope are the original's own
+    // distance fade, BlinkPeriod its beacon flash; the sprite's size is this renderer's, since the
+    // original draws one screen pixel and has no size to copy. One POINTS surface per
+    // (fade, blink) group per mesh. The camera-anchored skydome's stars sit past any data range,
+    // so BuildHorizon exempts them through the csky_light_fade instance uniform.
     private ArrayMesh GetLightPoints(int meshIndex)
     {
         if (_lightMeshCache.TryGetValue(meshIndex, out var cached))
             return cached;
 
-        // Group the mesh's lights by their size/range params → one POINTS surface +
+        // Group the mesh's lights by their fade/blink params → one POINTS surface +
         // shared material per group (a mesh's lights are uniform in practice).
-        var groups = new Dictionary<(float Size, float MaxPx, float Range), (List<Vector3> P, List<Color> C)>();
+        var groups = new Dictionary<(float Far, float Slope, float Blink), (List<Vector3> P, List<Color> C)>();
         foreach (var l in _gamez.Meshes[meshIndex].Lights)
         {
-            var key = (l.SizeScale <= 0f ? 1f : l.SizeScale,
-                       l.MaxSizePx <= 0f ? 30f : l.MaxSizePx,
-                       l.Range);
+            var key = (l.FadeFar, l.FadeSlope, l.BlinkPeriod);
             if (!groups.TryGetValue(key, out var g))
                 groups[key] = g = (new List<Vector3>(), new List<Color>());
             g.P.Add(l.Position);
@@ -1047,9 +1056,9 @@ void fragment() {
             {
                 _lightShader ??= new Shader { Code = LightShaderCode };
                 mat = new ShaderMaterial { Shader = _lightShader };
-                mat.SetShaderParameter("size_scale", key.Size);
-                mat.SetShaderParameter("max_size_px", key.MaxPx);
-                mat.SetShaderParameter("range_far", key.Range);
+                mat.SetShaderParameter("range_far", key.Far);
+                mat.SetShaderParameter("fade_slope", key.Slope);
+                mat.SetShaderParameter("blink_period", key.Blink);
                 _lightMaterialCache[key] = mat;
             }
             mesh.SurfaceSetMaterial(mesh.GetSurfaceCount() - 1, mat);

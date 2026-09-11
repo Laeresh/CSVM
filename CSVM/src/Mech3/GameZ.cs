@@ -8,14 +8,26 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>One point-sprite light baked into a mesh (stars, nav beacons); see
-/// <see cref="GameZMesh.Lights"/>.</summary>
+/// <see cref="GameZMesh.Lights"/>. Every field is decoded off the original's own reader and draw
+/// in docs/formats/world-structure.md; the record's remaining words are read by nothing there and
+/// so are absent here.</summary>
 public struct GameZLight
 {
     public Vector3 Position;
     public Color Color;
-    public float SizeScale;  // source unk08: 0 (default) / 1 / 2 / 5 — relative sprite size
-    public float MaxSizePx;  // source unk64: max sprite size in pixels (30 where set)
-    public float Range;      // source unk68 (else unk52): visibility range in metres, 0 = unset
+
+    /// <summary>Seconds lit, then as many dark, from source <c>unk08</c> under its <c>unk04</c>
+    /// gate. 0 is a steady light, which is what 659 of the install's 715 lights are.</summary>
+    public float BlinkPeriod;
+
+    /// <summary>Source <c>unk52</c>: the distance the light is fully gone at. 0 means the data
+    /// authors no fade at all, not a zero-length one.</summary>
+    public float FadeFar;
+
+    /// <summary>Source <c>unk56</c> rescaled to 0..1: alpha per metre nearer than
+    /// <see cref="FadeFar"/>. Authored as the reciprocal of the fade band, so the light is opaque
+    /// from the camera out to the band's near edge without that edge being stored twice.</summary>
+    public float FadeSlope;
 }
 
 /// <summary>
@@ -564,13 +576,13 @@ public sealed class GameZ
                         || extra.ValueKind != JsonValueKind.Array || extra.GetArrayLength() == 0)
                         continue;
                     var c = l.GetProperty("color");
-                    // Field meanings per the C1 value survey; see GameZLight's field comments.
+                    // Field meanings are decoded off the original's own draw; see GameZLight.
                     float F(string name) =>
                         l.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
                             ? v.GetSingle() : 0f;
-                    float range = F("unk68");
-                    if (range <= 0f)
-                        range = F("unk52");
+                    // ⚠ unk08 is a period, never a size. It is read only inside the unk04 branch,
+                    // so a light with unk04 clear carries a period nothing will ever elapse.
+                    float blink = F("unk04") == 1f ? F("unk08") : 0f;
                     mesh.Lights.Add(new GameZLight
                     {
                         Position = ParseVec3(extra[0]),
@@ -578,9 +590,10 @@ public sealed class GameZ
                             c.GetProperty("r").GetSingle() / 255f,
                             c.GetProperty("g").GetSingle() / 255f,
                             c.GetProperty("b").GetSingle() / 255f),
-                        SizeScale = F("unk08"),
-                        MaxSizePx = F("unk64"),
-                        Range = range,
+                        BlinkPeriod = blink,
+                        FadeFar = F("unk52"),
+                        // The original's slope is in 0..255 alpha units per metre.
+                        FadeSlope = F("unk56") / 255f,
                     });
                 }
             }

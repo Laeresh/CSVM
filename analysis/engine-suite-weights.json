@@ -5,7 +5,8 @@
   "defaultSeconds": 1.5,
   "groupsReadme": "Suites that must share one shard. The eight-chapter censuses build the same eight chapters, so whichever runs after the first reads them out of that process DecodeCache; splitting them costs about 3 s of decode each.",
   "groups": [
-    ["collision-visibility", "destructible-census", "world-ground-solid"]
+    ["collision-visibility", "destructible-census", "world-ground-solid"],
+    ["mesh-light-blink", "mesh-light-fade"]
   ],
   "suites": {
     "emitter-lifetime": 3.093,
@@ -332,6 +333,8 @@
     "campaign-balmoral-hidden": 2.77,
     "campaign-cm15-staged-paint": 3.20,
     "ace-wake-terrain": 3.60,
-    "campaign-launch-hook-prop": 3.05
+    "campaign-launch-hook-prop": 3.05,
+    "mesh-light-blink": 2.70,
+    "mesh-light-fade": 2.64
   }
 }

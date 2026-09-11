@@ -882,9 +882,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `poleflare` and `lightpole` decoration models carry it is read off the templates, not fitted.
   What remains here is the billboard-axis question, and it still needs the A/B.
 
-- `BL-076` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
-  render as fixed-size soft sprites, no twinkle.
-
 - `BL-331` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Aircraft cast no ground shadow; the original draws one, straight down**
   (split out of `BL-324`, 2026-08-09). **Fully decoded 2026-08-13, in
   [`docs/org/shadows.md`](docs/org/shadows.md).** The original rasterises each aircraft's
