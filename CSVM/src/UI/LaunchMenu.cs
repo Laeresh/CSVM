@@ -2789,7 +2789,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string ControlsFooter()
     {
         if (_controls.Capturing)
-            return "Press a control, Escape included       B  Cancel";
+            return "Press a control       Esc / B  Cancel";
         if (_controls.Pending != null)
             return "Enter / A  Take it       Esc / B  Leave it alone";
         if (!IsControlsActionRow(_controlsIndex))

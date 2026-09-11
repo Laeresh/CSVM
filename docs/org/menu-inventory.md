@@ -704,8 +704,10 @@ Video page stacks ACCEPT over CANCEL, the Keys page draws CANCEL left of ACCEPT,
 inside an armed rebind cell binds Escape. Original takes all four from its own data: the exit
 pairs at their authored corners (`VP_B_ACCEPTCHANGES` over `VP_B_CANCELCHANGES` on one column,
 `GO_B_ACCEPTCHANGES` left of `GO_B_CANCELCHANGES` on one line, `KB_B_CANCELCHANGES` left of
-`KB_B_ACCEPTCHANGES` for whoever builds that page), an open list one row per item, and a rebind
-capture that writes Escape into the cell, the pad's Back being what abandons one. The chooser row
+`KB_B_ACCEPTCHANGES` for whoever builds that page) and an open list one row per item. The rebind
+capture is the one deliberate departure: the original writes Escape into an armed cell, CSVM keeps
+Escape (and the pad's Back) as the way out of one in both presentations, by the user's decision,
+since a keyboard seat must be able to abandon a capture without a controller. The chooser row
 is ours, and the four doors' disabled frames are a state the original never shows. Where Original
 differs from the film today is `BL-805`, the CONTROLS door it draws disabled with neither page
 behind it (`BL-696`), and an open list on a leaf outrunning its authored window (`BL-823`).

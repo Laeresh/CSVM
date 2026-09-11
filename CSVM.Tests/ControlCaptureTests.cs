@@ -206,15 +206,15 @@ public class ControlCaptureTests
     }
 
     [Fact]
-    public void EscapeIsCapturedAndOnlyPadBCancels()
+    public void EscapeAndPadBCancelRatherThanBinding()
     {
         var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
         state.Keys.Add((int)Key.Escape);
-        Assert.False(capture.Cancelled(state));
-        Assert.Equal((int)Key.Escape, capture.Poll(state)!.Value.Control.Index);
+        Assert.True(capture.Cancelled(state));
+        Assert.Null(capture.Poll(state));
 
         state.Keys.Clear();
         state.Buttons.Add((Seat, (int)JoyButton.B));
@@ -223,36 +223,19 @@ public class ControlCaptureTests
     }
 
     [Fact]
-    public void AnEscapeStillHeldFromOpeningTheCaptureIsNotItsAnswer()
+    public void AnEscapeStillHeldFromOpeningTheCaptureDoesNotCancelIt()
     {
         var state = new FakeDevices(Seat);
         state.Keys.Add((int)Key.Escape);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
-        Assert.Null(capture.Poll(state));
+        Assert.False(capture.Cancelled(state));
 
         state.Keys.Clear();
-        Assert.Null(capture.Poll(state));
+        Assert.False(capture.Cancelled(state));
 
         state.Keys.Add((int)Key.Escape);
-        Assert.Equal((int)Key.Escape, capture.Poll(state)!.Value.Control.Index);
-    }
-
-    [Fact]
-    public void APadBStillHeldFromOpeningTheCaptureDoesNotCancelIt()
-    {
-        var state = new FakeDevices(Seat);
-        state.Buttons.Add((Seat, (int)JoyButton.B));
-        var capture = new ControlCapture(Seat, readsKeyboard: true);
-        capture.Arm(state);
-
-        Assert.False(capture.Cancelled(state));
-
-        state.Buttons.Clear();
-        Assert.False(capture.Cancelled(state));
-
-        state.Buttons.Add((Seat, (int)JoyButton.B));
         Assert.True(capture.Cancelled(state));
     }
 

@@ -2309,8 +2309,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the keyboard and pad focus walk stays a remake equivalence, since no take pressed a key on any
   screen; the takes are silent, so nothing here touches a sound. *Playtest after fix:*
   `./RunGame.ps1 --presentation=original`, hold a plaque down and release off it, against
-  `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-807` and `BL-808` (the
-  same takes' page-level corrections), `docs/org/menu-inventory.md` Part 4.
+  `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-808` (the same
+  takes' hub corrections; the Instant Action page's landed with `git log --grep=BL-807`),
+  `docs/org/menu-inventory.md` Part 4.
 
 
 - `BL-808` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The plane
@@ -2469,7 +2470,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   thumb, so a short list stays exactly as tall as its items and a long one windows and scrolls.
   *⚠ Traps:* the rows are the shell's hit-test surface, so a windowed row outside the window has to
   be built and hidden rather than dropped, the way `AddOpenListRows` does it, or a pointer hits a
-  row it cannot see. *Cross-refs:* `BL-807` (the same bar on the Instant Action screen),
+  row it cannot see. *Cross-refs:* the Instant Action page's own bar, landed
+  (`git log --grep=BL-807`), which is the shape to copy;
   `docs/org/menu-inventory.md` Part 4, `CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`,
   `CSVM/src/UI/Menu/Original/OriginalVideo.cs`.
 
