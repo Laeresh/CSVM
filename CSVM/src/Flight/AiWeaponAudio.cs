@@ -103,7 +103,7 @@ public sealed partial class AiWeaponAudio : Node3D
         {
             return;
         }
-        float distSq = NearestListenerDistanceSq();
+        float distSq = AudioListeners.NearestDistanceSq(this, Listeners);
         bool culled = distSq > _gunLoopCullSq;
         SetCulled(culled, distSq);
         if (culled)
@@ -230,25 +230,4 @@ public sealed partial class AiWeaponAudio : Node3D
     // Which aircraft every line here is about: the controller this component hangs under, whose name
     // the spawner already logged. Never this node's own name, which is "WeaponAudio" on all of them.
     private string Aircraft() => GetParent()?.Name.ToString() ?? Name.ToString();
-
-    // Squared range to the nearest listener, or 0 when there is none to measure from: an aircraft with
-    // no listener is not evidence that it should be silent, and culling it would hide a
-    // missing-listener bug behind a working-looking silence.
-    private float NearestListenerDistanceSq()
-    {
-        var here = GlobalPosition;
-        var ears = Listeners?.Invoke();
-        if (ears is { Count: > 0 })
-        {
-            float best = float.MaxValue;
-            foreach (var ear in ears)
-            {
-                best = Mathf.Min(best, here.DistanceSquaredTo(ear));
-            }
-            return best;
-        }
-        return GetViewport()?.GetCamera3D() is { } camera
-            ? here.DistanceSquaredTo(camera.GlobalPosition)
-            : 0f;
-    }
 }

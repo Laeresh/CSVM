@@ -97,7 +97,7 @@ public sealed partial class AiEngineAudio : Node3D
         bool engineDead = false)
     {
         SetEngineDamaged(EngineAudioCurves.EngineDamaged(healthFrac, engineDead));
-        float distSq = NearestListenerDistanceSq();
+        float distSq = AudioListeners.NearestDistanceSq(this, Listeners);
         bool culled = distSq > EngineAudioCurves.CullDistanceSq;
         if (culled != _culled)
         {
@@ -194,27 +194,6 @@ public sealed partial class AiEngineAudio : Node3D
     // name the spawner already logged. Never this node's own name, which is "EngineAudio" on all
     // of them.
     private string Aircraft() => GetParent()?.Name.ToString() ?? Name.ToString();
-
-    // Squared range to the nearest listener, or 0 when there is none to measure from: an aircraft
-    // with no listener is not evidence that it should be silent, and culling it would hide a
-    // missing-listener bug behind a working-looking silence.
-    private float NearestListenerDistanceSq()
-    {
-        var here = GlobalPosition;
-        var ears = Listeners?.Invoke();
-        if (ears is { Count: > 0 })
-        {
-            float best = float.MaxValue;
-            foreach (var ear in ears)
-            {
-                best = Mathf.Min(best, here.DistanceSquaredTo(ear));
-            }
-            return best;
-        }
-        return GetViewport()?.GetCamera3D() is { } camera
-            ? here.DistanceSquaredTo(camera.GlobalPosition)
-            : 0f;
-    }
 
     // The engine slot's damage EDGE, decided by the same helper the own-ship path uses so the two
     // cannot drift. Only the healthy direction swaps here. The damaged direction just silences the

@@ -281,8 +281,11 @@ internal sealed class HumanFlightAdapter
         // stock loadout — the gunner's weapon comes from its ai.zrd row, not from a gun slot.
         if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
         {
+            // ⚠ A human's carried gunner IS positional, unlike the pilot's own forward guns: the
+            // original's turret path hands its sound slot a world position whoever owns the mount.
             controller.Turrets = TurretController.BuildCarried(
-                turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles);
+                turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles,
+                new GunVoiceHome(controller, _world.Sounds, _world.SoundDefs, _world.HumanPositions));
             if (verbose && controller.Turrets.Length > 0)
             {
                 var descs = new List<string>();

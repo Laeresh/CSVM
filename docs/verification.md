@@ -664,6 +664,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   inside a synchronous suite, which yields no frame for the server to flush: build a world the
   object already stands in rather than showing it and casting.** Showing `multiplayer1zep` left all
   six axis rays from every belly ring reading open air with 146 of its 196 shapes enabled.
+- **INSTR-55** — **Time a lease from the event that renewed it, never from wherever the previous
+  check ended: a step count started mid-lease measures the remainder and reads a working lease as an
+  expired one.** The turret gun voice's 0.5 s lease was called dead at "0.4 s" because 0.25 s of
+  continuity checks had already run since the shot; stepping to a fresh round first and timing from
+  that frame put both edges where the decode says they are.
 
 ## SRC — sources and documents
 

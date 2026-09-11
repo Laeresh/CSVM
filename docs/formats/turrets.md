@@ -149,6 +149,24 @@ turret does not play it as an isolated clip: the firing path owns one reusable s
 refreshes its expiry to 0.5 seconds after every shot. The sound manager releases that handle only
 after the lease expires.
 
+**The handle is one slot per turret INSTANCE, not per owner.** The entry loader takes its slot id
+from a global counter that only increments (`FUN_0045e460`, `DAT_0071b1fc`, called at `0x004aa1e0`
+and stored at turret `+0x208`), and the lease helper keys a map on that id, so seventeen rings on
+one zeppelin hull hold seventeen independent voices. The lease call (`0x004ab1d9`) hands the helper
+the turret's firepoint position (`+0x188`, the same vector the projectile spawner is given) and its
+velocity (`+0x194`) with the Doppler argument **zero**, so the voice is a point at the muzzle a round
+just left and carries no pitch shift. Attenuation is the definition's own `RANGE` pair, silent past
+1.1 x its audible distance (`FUN_00597c20`).
+
+⚠ **Eleven of the 42 entries are silent by the data's own two gates, and that is not a defect.**
+The lease call is guarded on `SOUNDS.CANNON` being present AND on the entry's weapon carrying the
+`CANNON` flag; there is no fallback to the weapon's own `LOOPED_SOUND_NAME`. Five entries author no
+`SOUNDS` block at all (`MSG_TUR_AAA` on `aagun**`, `MSG_TUR_THUG`, `MSG_TUR_TRAIN`, `MSG_TUR_TRUCK`,
+`MSG_TUR_8_INCH`), and six more name `snd_chaingun` over a weapon that is not a cannon (`wep_27` on
+`MSG_TUR_NOSE`, `MSG_TUR_HEAVY`, `MSG_TUR_MAIN`, `MSG_TUR_BALLOON_TOP` and `MSG_TUR_ZEP_CANNON`,
+`wep_06` on the other `MSG_TUR_NOSE`). A turret truck and a zeppelin's twin cannon therefore fire
+with no gun voice, and a build that gives them one is louder than the original.
+
 ⚠ **`PITCH` is authored at top level on 37 entries, not the raw count of 38**: the train turret
 (`MSG_TUR_TRAIN`) nests its one `PITCH [20,80]` **inside its `WEAPON` block**, where the turret
 parser does not read it — that turret ships with no elevation arc at all. A census that greps the
@@ -407,3 +425,11 @@ its expiry to sound-clock-now + 0.5; `FUN_0045e360` stops and clears the handle 
 sound clock passes that expiry. These executable paths settle the projectile/audio distinction;
 the `snd_chaingun` `LOOPED` flag and the Firebrand's 0.4-second scalar come from the shipped reader
 data.
+
+The slot the helper keys on is minted at `0x004aa1e0` from the only writer of `DAT_0071b1fc`, which
+just returns and increments, so no two turrets share one. `FUN_0045e470` creates the handle on the
+FIRST shot (`FUN_00593590` at volume 1.0) and thereafter only repositions it through `FUN_00597af0`,
+whose 3D branch `FUN_00597c20` writes the handed position and velocity and takes its fourth argument
+as the Doppler enable, which the turret call passes as zero. The `CANNON`-flag half of the gate is
+read at the call site off the weapon record's parsed flags (bit `0x40`, `FUN_004ba6f0`); which
+entries that leaves silent is a census of the shipped `ai.zrd` and `weapons.zrd`, not a decode.

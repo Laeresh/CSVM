@@ -79,7 +79,8 @@ public sealed class TurretController
     private TurretController(TurretDef def, WeaponDef weapon, FlightController? host,
         IWorldQuery? worldQuery, ProjectilePool pool, Node3D? yawNode, Node3D pitchNode,
         Node3D[] firepoints, RandomNumberGenerator rng, int team, bool activated,
-        Node3D? healthyNode, Node3D? site, Node3D? platform, string label)
+        Node3D? healthyNode, Node3D? site, Node3D? platform, string label,
+        GunVoiceHome? voices = null)
     {
         Def = def;
         Weapon = weapon;
@@ -98,6 +99,10 @@ public sealed class TurretController
         Label = label;
         _yawRest = yawNode?.Transform ?? Transform3D.Identity;
         _pitchRest = pitchNode.Transform;
+        // The fire routine's own gate: the entry's SOUNDS.CANNON, and only while the mount's weapon
+        // carries the CANNON flag. Five shipped entries author no SOUNDS at all and three calibres
+        // are not cannon, so a silent mount here is the data's answer (docs/formats/turrets.md).
+        Voice = weapon.IsCannon ? GunVoice.Attach(voices, def.CannonSound, label) : null;
         Ammo = def.Ammo;
         Attacking = true;
         _windowLeft = RandRange(def.AttackMin, def.AttackMax);
@@ -122,6 +127,11 @@ public sealed class TurretController
     public Node3D PitchNode { get; }
 
     public Node3D[] Firepoints { get; }
+
+    /// <summary>This gunner's own firing voice, or null when its entry authors no cue, its calibre
+    /// is not a cannon, or the session built no sound archive. One per gunner rather than one per
+    /// owner, which is what the original's per-turret sound slot is.</summary>
+    public GunVoice? Voice { get; }
 
     /// <summary>Remaining rounds — real state (the original save/restores it), effectively
     /// unlimited at the shipped 9999/12000.</summary>
@@ -200,9 +210,10 @@ public sealed class TurretController
     /// against the built plane model. <c>firstp</c> mounts are the cockpit-view rig, which CSVM
     /// does not render — skipped on purpose. A mount whose def, weapon or nodes do not resolve
     /// is skipped with a warning, never a throw: an unarmed turret ring is a degraded plane,
-    /// not a broken session.</summary>
+    /// not a broken session. <paramref name="voices"/> left null leaves every gunner silent.</summary>
     public static TurretController[] BuildCarried(TurretDefs defs, PlaneStats stats,
-        Node3D planeModel, WeaponDefs weapons, FlightController host, ProjectilePool pool)
+        Node3D planeModel, WeaponDefs weapons, FlightController host, ProjectilePool pool,
+        GunVoiceHome? voices = null)
     {
         var built = new List<TurretController>();
         var nodesByName = CollectNamedNodes(planeModel);
@@ -265,7 +276,7 @@ public sealed class TurretController
             // sight goes through IWorldQuery, not through a cast back to the host's own type.
             built.Add(new TurretController(def, weapon, host, new GodotWorldQuery(host), pool, yaw,
                 pitch, fps.ToArray(), rng, host.Team, activated: true, healthyNode: null, site: null,
-                platform: null, label: mount.Title));
+                platform: null, label: mount.Title, voices));
         }
         return built.ToArray();
     }
@@ -274,10 +285,10 @@ public sealed class TurretController
     /// <c>NODES</c> patterns resolved against the built world (docs/formats/turrets.md "Field table";
     /// <paramref name="findNodes"/> is <c>AnimRuntime.FindNodes</c>). One entry instantiates as many
     /// turrets as there are matching nodes. A matched node whose <c>PARTS</c> do not resolve is
-    /// skipped with a warning.</summary>
+    /// skipped with a warning. <paramref name="voices"/> left null leaves every gun silent.</summary>
     public static TurretController[] BuildEmplacements(TurretDefs defs, WeaponDefs weapons,
         Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool,
-        Node3D? worldRoot = null)
+        Node3D? worldRoot = null, GunVoiceHome? voices = null)
     {
         var built = new List<TurretController>();
         foreach (var def in defs.All)
@@ -346,7 +357,7 @@ public sealed class TurretController
                     // through WorldRayBlocked, which skips the gun's own mounting clutter.
                     built.Add(new TurretController(def, weapon, host: null, worldQuery: null, pool,
                         yaw, pitch, fps.ToArray(), rng, def.TeamId,
-                        def.Activated, healthy, site, PlatformOf(site, worldRoot), label));
+                        def.Activated, healthy, site, PlatformOf(site, worldRoot), label, voices));
                 }
             }
         }
@@ -471,6 +482,9 @@ public sealed class TurretController
     /// emplacement takes no tick at all — <c>ACTIVATED</c> gates tracking as well as fire.</summary>
     public void SimStep(float dt)
     {
+        // Ahead of every gate: the voice must run down its lease on the ticks this gunner does not
+        // fire, or a turret that stops shooting holds its loop for good.
+        Voice?.Tick(dt);
         if (!Activated || !Alive)
         {
             Gate = Activated ? TurretGate.Dead : TurretGate.Asleep;
@@ -566,10 +580,10 @@ public sealed class TurretController
             _firstShotLogged = true; // verification breadcrumb: WHICH emplacements actually engage
             GD.Print($"turret {Label}: engaging (first shot, team {_team})");
         }
-        if (Def.CannonSound is { } snd)
-        {
-            _pool.PlayShotSound(snd, fp.GlobalPosition);
-        }
+        // ⚠ The voice is renewed, never restarted per round: restarting chaingun.wav at each
+        // projectile keeps the ballistic rate but turns an audible firing spell into isolated shots
+        // (docs/formats/turrets.md).
+        Voice?.Shot(fp.GlobalPosition);
         Ammo--;
         ShotsFired++;
         _fireIn = RandRange(Def.FireRateMin, Def.FireRateMax);

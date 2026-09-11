@@ -71,6 +71,14 @@ position at all, which its play entry takes as flat ([weaponFire.md](../org/weap
 authorises a pitch term: `RANGE` is a gain model, and `CAP-09` measured no Doppler on the original's
 world emitters at all.
 
+⚠ **A turret's gun voice is a different cue on a different clock from an aircraft's.** It is the
+`ai.zrd` entry's own `SOUNDS.CANNON` (`snd_chaingun`, `RANGE [30, 200]`) rather than its weapon's
+`LOOPED_SOUND_NAME`, it plays from the firepoint the round just left, and it is held by a 0.5-second
+lease each shot renews instead of by a trigger, so a mount firing slower than that lapses between
+rounds. Eleven of the 42 shipped entries reach neither gate and fire silently, the turret trucks
+among them. `snd_turretgun` belongs to `wep_23`/`wep_29` and is reached only through the vehicle fire
+path, which is what a patrol boat and a turret truck run ([turrets.md](turrets.md)).
+
 Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_sound`
 (see [vehicle.md](vehicle.md)) — e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
 `damaged_engine_sound` is an array of swap candidates for that same slot (`snd_damagedengine`

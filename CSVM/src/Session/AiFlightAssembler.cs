@@ -179,7 +179,8 @@ internal sealed class AiFlightAssembler
             if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
             {
                 controller.Turrets = TurretController.BuildCarried(
-                    turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles);
+                    turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles,
+                    new GunVoiceHome(controller, _world.Sounds, _world.SoundDefs, _world.HumanPositions));
                 if (controller.Turrets.Length > 0)
                 {
                     Log.Info("weapons", $"ai: '{stats.DefName}' carries {controller.Turrets.Length} turret gunner(s) under shooter id {controller.PlayerIndex}");

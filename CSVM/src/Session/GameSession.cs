@@ -2870,9 +2870,15 @@ public partial class GameSession : Node3D
         if (state.WorldRuntime is { } worldRt && turretDefs != null)
         {
             var placedRt = worldRt;
+            // A world gun's voice hangs under the world's own sound node, never inside the subtree
+            // it fires from: the animation runtime's node memoization holds only while nothing adds
+            // to a world subtree at runtime. Null home leaves every gun silent, as --mute does.
+            var gunVoices = placedRt.Sounds is { } soundHome
+                ? new GunVoiceHome(soundHome, state.Sounds, state.SoundDefs, PlayerPositionsSnapshot)
+                : null;
             _turretEmplacements = new TurretEmplacementRuntime(turretDefs, weaponDefs,
                 (pattern, scope) => placedRt.FindNodes(pattern, scope), projectiles,
-                placedRt.WorldRoot);
+                placedRt.WorldRoot, gunVoices);
             // ⚠ Into the tree AFTER the zeppelin runtime: the physics tick follows tree order, so
             // this is what lets a slung mount read its ride's moved pose on a realtime clock.
             _worldRoot!.AddChild(_turretEmplacements);

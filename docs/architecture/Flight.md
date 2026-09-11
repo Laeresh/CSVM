@@ -112,8 +112,8 @@ per matched `NODES` pattern node, ticked by `Session/TurretEmplacementRuntime`).
 the nearest hostile out of the vehicle list and then the mission structures in the decoded pass
 order, solves the lead through `AimAssist.TryIntercept`, slews the PARTS nodes inside the authored
 arcs, and runs the fire gates: activation, the attack window, the barrel-on-solution cone, a cached
-line of sight and the `FIRE_RATE` redraw. Aliveness, teams, and what a gun's own mount is to its
-sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
+line of sight and the `FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`.
+Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
@@ -733,6 +733,24 @@ tick puts its own ([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle o
 cue's own authored audible distance and rides `StartGunLoop`, which the fire path already calls every
 frame the loop is wanted; the listeners are the human pilots, the one seam `AiEngineAudio` and
 `ProjectilePool` read too. No `3D` flag means no world player, and the `sound` log names each verdict.
+
+## src/Flight/GunVoice.cs
+One mounted gun's firing voice: a single `AudioStreamPlayer3D` on the mount's own cue, moved to the
+muzzle each round leaves from and held sounding by a lease that shot renews, so a firing spell is one
+continuous burst rather than a clip restarted per projectile. `Attach` takes a `GunVoiceHome`, the
+parent-plus-archive-plus-listeners bundle a session builds once and every mount is handed, which is
+what keeps four audio parameters off the turret builders. One voice per mount and never one per
+owner, since the original mints a sound slot per turret. The cue comes from `WeaponAudioCues` and the
+cull is its own authored audible distance; the `sound` log names the build and every cull transition.
+Which mounts get one, and why five entries get none: [../formats/turrets.md](../formats/turrets.md).
+
+## src/Flight/AudioListeners.cs
+Where the session's audio listeners are, for every positional flight-audio path: the human pilots'
+own positions, falling back to the node's viewport camera and then to zero range, which is what keeps
+a missing-listener defect from reading as a correct silence. `AiEngineAudio`, `AiWeaponAudio` and
+`GunVoice` all cull through this one call, so an aircraft cannot answer one listener model for its
+engine and another for its guns. The same nearest-human seam `ProjectilePool` measures its one-shots
+against.
 
 ## src/Flight/WeaponAudioCues.cs
 The weapon-sound selection both audio paths read, `EngineAudioCurves`' counterpart for guns: a

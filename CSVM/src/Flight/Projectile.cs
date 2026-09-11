@@ -831,12 +831,6 @@ public sealed partial class ProjectilePool : Node3D
     public void RegisterWorldTurrets(IReadOnlyList<TurretController> turrets) =>
         _worldTurrets.AddRange(turrets);
 
-    /// <summary>A non-player fire source's launch bark (the turret gunners' <c>SOUNDS.CANNON</c>)
-    /// through the pool's own one-shot pool — the same resolve-through-groups path a weapon's
-    /// FIRE sound takes. <paramref name="worldPos"/> is the firing muzzle's position, feeding the
-    /// same distance term a player's own shots get.</summary>
-    public void PlayShotSound(string sndName, Vector3 worldPos) => PlaySound(sndName, worldPos);
-
     /// <summary>The muzzle flashes lit this frame, as world position, range, colour and energy.
     /// A second world drawing the cockpit interior (<see cref="CockpitOverlay"/>) has no view of
     /// these nodes and mirrors them from this list instead.</summary>
