@@ -85,7 +85,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "3e8bac0e39813d09dd974166364a8915",
+      "hash": "6292e7de78bab4baebf630825ea1bbb0",
       "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, pipper, exhaust, SpeedCue, the plane under the zone's SUNLIGHT over a world-lit C1; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
@@ -120,7 +120,7 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "ba0a22fe28bb8fee866c0b18d23dd3fb",
+      "hash": "ef81a5cd458cf767ed9169f7980d4cca",
       "exercises": "Targeting a live AI in flight: its quaternion-driven pose and crewed rear turret feed fixed antialiased in-range brackets, the label below the plane, --debug-markers identity/health text, world-lit C1 beneath; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -134,7 +134,7 @@
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "2da527b3a6a5d68522fb830c8ae87c51",
+      "hash": "5fce732d723d9407ca36525579d36373",
       "exercises": "Four humans launch a co-op campaign mission abreast on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light in every pane; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
