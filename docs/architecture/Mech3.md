@@ -657,3 +657,8 @@ Callers are serial by construction. An instance lives as long as its holder.
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
 for a chapter world so flight and ballistics runs boot in about 2 s with nothing else in the frame.
+It also carries the one patrol net a session on this stage has: `PatrolNet`, a closed eight-node ring
+of 1000 m about the grid origin at the spawn altitude, authoring 2500/1500/700 m volumes so a vehicle
+put on it runs on a net's gates rather than the mode machine's defaults. `--ai=<plane>:grid` and
+`--zep=...:net=grid` reach it through `ResolveNet`, which answers before the chapter `neindex` lookup
+on a name no shipped index carries. Built in code, like the grid texture: no chapter assets are here.

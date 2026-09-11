@@ -3109,23 +3109,6 @@ usual.
   confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF
   rules, `PLAN-fast-verification` C23.
 
-- `BL-772` `[Tooling]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty-stage
-  rig has no patrol net, and a `--ai=` plane never takes a net's volumes, so patrol and the
-  netted-versus-netless fork of `AiPilot` cannot be watched there.** *Evidence:* `AiNet` requires
-  only `Id`, `Name`, `Nodes` and `Edges` (`AiNets.cs:250-261`) and leaves `Volumes` a plain `init`
-  property, so a synthetic net needs no file, but the `--ai=` net lookup reads the chapter's
-  `neindex` (`GameSession.cs:2413`), which an empty stage does not have. Separately,
-  `ApplyVolumes` is called only from `CampaignDirector` (`CampaignDirector.cs:380`), so a CLI
-  plane runs on `AiModeMachine`'s decoded defaults (2000/1200, `AiModeMachine.cs:141`) whatever
-  net it is given. *Fix shape:* a built-in circular net above the grid origin at patrol altitude
-  that `--ai=<plane>:<net>` and `--zep=` can name the way a chapter's `neindex` net is named, and
-  the net's volumes applied to the CLI spawn through `CampaignRosterPlan.ApplyVolumes`. *⚠ Traps:*
-  applying volumes on the `--ai=` path changes behaviour for existing command lines that name a
-  chapter net, which today take the machine defaults instead; that is the fix rather than a side
-  effect, but it is a behaviour change to announce rather than slip in. *Cross-refs:* the
-  empty-stage rig this extends, which shipped deliberately without a net and whose `--ai=` squadron
-  tokens and `--zep=` graft are documented in `docs/cli.md` (`git log --grep=BL-742`).
-
 - `BL-785` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TestData.TempDir()`
   mints a GUID directory per call and nothing ever deletes one, so the unit suite leaks directories
   into the OS temp tree until every run that touches it crawls.** *Evidence:*

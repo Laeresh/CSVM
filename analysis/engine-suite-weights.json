@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "readme": "Per-suite engine wall time in seconds, the weights RunTests.ps1 -Shards divides the catalog by. Regenerate from a warm serial run: .\\RunTests.ps1 -Shards 1 -SkipUnits -SkipGoldens -SkipHitch, then take seconds per suite out of .scratch/test-report.json. These numbers are awareness for the balancer alone: a stale weight costs balance, never correctness, since every shard still reports its own verdicts and the merge checks the shards cover the selection exactly once.",
-  "measuredFrom": "warm serial full-catalog run on the development machine, 153/153 passing; launch-direction-cache and generator-launch-danger-zone weighed from their own targeted runs",
+  "measuredFrom": "warm serial full-catalog run on the development machine, 153/153 passing; launch-direction-cache, generator-launch-danger-zone and empty-stage-net weighed from their own targeted runs",
   "defaultSeconds": 1.5,
   "groupsReadme": "Suites that must share one shard. The eight-chapter censuses build the same eight chapters, so whichever runs after the first reads them out of that process DecodeCache; splitting them costs about 3 s of decode each.",
   "groups": [
@@ -69,6 +69,7 @@
     "ai-weapon-emitters": 1.5,
     "ai-engine-listeners": 0.93,
     "ai-net-follow": 0.510,
+    "empty-stage-net": 0.450,
     "zeppelin-motion": 0.157,
     "zeppelin-pandora-dead-end": 2.046,
     "zeppelin-scripted-pose": 3.0,

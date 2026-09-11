@@ -3113,6 +3113,165 @@ internal static class AiSuites
         }
     }
 
+    // The netted half of the AI fork, watched on a stage with no chapter behind it. Everything here
+    // is the production path rather than a stand-in: EmptyStage.ResolveNet is the lookup a --ai=
+    // net token makes before it tries a chapter's neindex, the spawn goes through the real
+    // FlightRoster so the gates under test are the ones the assembler seated from the shipped
+    // tables, and the volume write is CampaignRosterPlan.ApplyVolumes, the one call the CLI spawn
+    // and a campaign net assignment share.
+    [Suite("empty-stage-net",
+        "the empty stage's built-in patrol net: its reserved name resolves to a ring the stage "
+        + "builds in code, which no chapter's neindex answers to and which does not swallow a "
+        + "chapter net name, the ring closes over the grid origin at the stage's own altitude, a "
+        + "plane spawned onto it through the real AI assembler captures node after node with every "
+        + "hop an EDGE of the graph, and the net's own volumes reach that plane's mode machine, "
+        + "replacing all three of the gates player.json and the airframe def seated")]
+    internal static void EmptyStageNet(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(chapterZrdr, $"C1 zrdr");
+
+        // The built-in has to answer first, since --stage=empty has no index to fall back on, and
+        // it may not shadow an authored name while doing so.
+        var net = EmptyStage.ResolveNet(EmptyStage.PatrolNetName);
+        ctx.Check(net != null && ReferenceEquals(net, EmptyStage.ResolveNet("GRID")),
+            $"'{EmptyStage.PatrolNetName}' resolves to the built-in ring, case-insensitively");
+        ctx.Check(EmptyStage.ResolveNet("M4ReinfAce") == null,
+            $"…and a chapter net name falls straight through to the neindex lookup");
+        var chapterNets = AiNets.Load(chapterZrdr);
+        ctx.Check(AiNets.Resolve(chapterNets, EmptyStage.PatrolNetName) == null,
+            $"…while none of C1's {chapterNets.Count} nets carries that name to be hidden");
+        if (net == null)
+            return;
+
+        ctx.Check(net.Nodes.Count == EmptyStage.PatrolRingNodes && net.Trailer == null,
+            $"the ring holds {net.Nodes.Count} nodes and no trailer, so it rides nothing and repeats");
+        bool onRing = true;
+        foreach (var node in net.Nodes)
+        {
+            onRing &= Mathf.Abs(new Vector2(node.Position.X, node.Position.Z).Length()
+                - EmptyStage.PatrolRingRadius) < 1f
+                && Mathf.IsEqualApprox(node.Position.Y, EmptyStage.SpawnAltitude);
+        }
+        ctx.Check(onRing,
+            $"…every node {EmptyStage.PatrolRingRadius:0} m from the grid origin at {EmptyStage.SpawnAltitude:0} m");
+        var degree = new int[net.Nodes.Count];
+        foreach (var (a, b) in net.Edges)
+        {
+            degree[a]++;
+            degree[b]++;
+        }
+        bool closed = net.Edges.Count == EmptyStage.PatrolRingNodes && degree.All(d => d == 2);
+        ctx.Check(closed,
+            $"…and its {net.Edges.Count} edges close the loop, every node degree 2, so the walk never dead-ends");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, ctx.PlaneName, null);
+        var textures = new TextureArchive(texturesPath);
+        Node3D? stageRoot = null;
+        ProjectilePool? pool = null;
+        FlightController? ai = null;
+        try
+        {
+            // The stage itself, collider and all, so the plane patrols over the same ground a
+            // --stage=empty launch gives it rather than through empty space.
+            stageRoot = EmptyStage.Build(collision: true).Root;
+            ctx.Host.AddChild(stageRoot);
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(new[] { "--stage=empty" });
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new AircraftAssemblyResources
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                Textures = textures,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            // worldEffects null!: never dereferenced, as in inert-aircraft above.
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host,
+                inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
+                new HumanRosterBindings());
+
+            // The --ai= net branch, step for step: a follower over the resolved net, the spawn
+            // seated on node 0 looking at node 1, then the net's volumes onto the armed machine.
+            var follower = new AiNetFollower(net, new System.Random(1));
+            var pos = follower.NodePosition(0);
+            var look = follower.NodePosition(1);
+            var pilot = AiPilot.HoldingCourse(pos, look);
+            pilot.Patrol = follower;
+            ai = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, pos, look, pilot,
+                Team: InstantActionRuntime.EnemyTeam));
+            ctx.Check(pilot.Machine != null, $"the assembler arms a mode machine on the CLI spawn");
+            if (pilot.Machine is not { } machine)
+                return;
+            ctx.Check(Mathf.IsEqualApprox(machine.ActivationRange, skills.MinAiActiveDist)
+                && Mathf.IsEqualApprox(machine.AttackRange, stats.AiAttackRange)
+                && Mathf.IsEqualApprox(machine.ReturnRange, stats.AiReturnRange),
+                $"…seated on the shipped defaults so far: activation {machine.ActivationRange:0} m, attack {machine.AttackRange:0} m, return {machine.ReturnRange:0} m");
+            CampaignRosterPlan.ApplyVolumes(machine, net.Volumes, skills.MinAiActiveDist);
+            ctx.Check(Mathf.IsEqualApprox(machine.ActivationRange, net.Volumes.Activation.Radius)
+                && Mathf.IsEqualApprox(machine.AttackRange, net.Volumes.Attack.Radius)
+                && Mathf.IsEqualApprox(machine.ReturnRange, net.Volumes.Return.Radius),
+                $"…and takes the NET's volumes over every one of them: activation {machine.ActivationRange:0} m, attack {machine.AttackRange:0} m, return {machine.ReturnRange:0} m");
+            ctx.Check(machine.ActivationRange > skills.MinAiActiveDist
+                && machine.AttackRange < stats.AiAttackRange
+                && machine.ReturnRange < stats.AiReturnRange,
+                $"…three gates no unnetted spawn could be sitting on");
+            ctx.Note($"gates: {skills.MinAiActiveDist:0}/{stats.AiAttackRange:0}/{stats.AiReturnRange:0} m unnetted, {machine.ActivationRange:0}/{machine.AttackRange:0}/{machine.ReturnRange:0} m on the ring");
+
+            // Fly it, logging each target change, so a hop off the edge list cannot hide.
+            var hops = new List<(int From, int To)>();
+            int last = follower.CurrentIndex;
+            const int wanted = 5;
+            int steps = 0, budget = 120 * 60;
+            while (follower.Advances < wanted && steps < budget)
+            {
+                steps++;
+                ai.SimStep(1f / 60f);
+                if (follower.CurrentIndex != last)
+                {
+                    if (last >= 0)
+                        hops.Add((last, follower.CurrentIndex));
+                    last = follower.CurrentIndex;
+                }
+            }
+            ctx.Check(follower.Advances >= wanted,
+                $"the plane captures {wanted} nodes of the built-in ring advances={follower.Advances} in {steps / 60f:0} s of sim");
+            bool allEdges = hops.Count > 0;
+            foreach (var (from, to) in hops)
+            {
+                if (!net.Edges.Contains((from, to)) && !net.Edges.Contains((to, from)))
+                    allEdges = false;
+            }
+            ctx.Check(allEdges,
+                $"every hop is an EDGE of the ring hops={string.Join(" ", hops.ConvertAll(h => $"{h.From}→{h.To}"))}");
+            float flown = new Vector2(ai.WorldPosition.X, ai.WorldPosition.Z).Length();
+            ctx.Check(Mathf.Abs(flown - EmptyStage.PatrolRingRadius) < 400f,
+                $"…and it is still lapping the ring about the grid origin r={flown:0} m, y={ai.WorldPosition.Y:0} m");
+            ctx.Note($"walk: {follower.Advances} advance(s) in {steps / 60f:0.0} s of sim, hops {string.Join(" ", hops.ConvertAll(h => $"{h.From}>{h.To}"))}");
+        }
+        finally
+        {
+            ai?.Free();
+            pool?.Free();
+            stageRoot?.Free();
+            textures.Dispose();
+        }
+    }
+
     // One aircraft's weapon voice: the emitters it holds, where they are, and whose distance model
     // they took. The position is compared against the CONTROLLER, not against the spawn point, since
     // a stepped rig has flown since it spawned.

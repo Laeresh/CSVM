@@ -1,3 +1,4 @@
+using System;
 using CSVM.Utils;
 using Godot;
 
@@ -23,13 +24,47 @@ public sealed class EmptyStage
     /// hands-off run has room to fly before the ground arrives.</summary>
     public const float SpawnAltitude = 300f;
 
+    /// <summary>The name a <c>--ai=&lt;plane&gt;:&lt;net&gt;</c> or <c>--zep=…:net=</c> token spells to put
+    /// a vehicle on <see cref="PatrolNet"/>, the way either flag spells a chapter <c>neindex</c>
+    /// name. Reserved: no shipped chapter indexes it, so resolving the built-in first hides no
+    /// authored net.</summary>
+    public const string PatrolNetName = "grid";
+
+    /// <summary>The patrol ring's radius, metres. The squadron ring's radius too, so a plane
+    /// patrolling the net crosses the sides an <c>--ai=</c> sortie starts on.</summary>
+    public const float PatrolRingRadius = 1000f;
+
+    /// <summary>Nodes on the ring. Eight puts a 45 degree turn and a 765 m leg between neighbours,
+    /// which every airframe in the table turns inside.</summary>
+    public const int PatrolRingNodes = 8;
+
     /// <summary>The freecam eye when nothing placed it: back and above the origin, looking at it.</summary>
     public static readonly Vector3 CameraPos = new(0f, 120f, 300f);
+
+    // Not a file id: the ring comes from no ne0NNNNN, and a negative one cannot collide with a
+    // chapter's, so a log line naming net#-1 says which net it is.
+    private const int PatrolNetId = -1;
 
     private const int TextureSize = 256;      // one grid square
     private const float GroundThickness = 400f;
 
     private EmptyStage() { }
+
+    /// <summary>The ring's own activation, attack and return radii: 2500 m, 1500 m and 700 m, none
+    /// of them a value the mode machine would otherwise hold (2000 / the airframe's 2000 / 1200), so
+    /// a plane assigned this net is visibly running on the NET's volumes. The 700 m return is the
+    /// radius 46 of the 52 volume-carrying shipped nets author. The altitude bands stay zero, as
+    /// they are on every shipped net with a consumer.</summary>
+    public static AiVolumeSet PatrolVolumes { get; } = new(
+        new AiVolume(2500f, 0f, 0f), new AiVolume(1500f, 0f, 0f), new AiVolume(700f, 0f, 0f));
+
+    /// <summary>The stage's own patrol net: a closed ring of <see cref="PatrolRingNodes"/> nodes
+    /// about the grid origin at <see cref="SpawnAltitude"/>, carrying <see cref="PatrolVolumes"/>.
+    /// It is what makes the netted half of the AI fork reachable here, since this stage has no
+    /// chapter and therefore no <c>neindex</c> to name. Unanchored, so the ring never rides
+    /// anything and a run repeats. ⚠ Built in code, like the grid texture: the stage must boot with
+    /// no chapter assets present.</summary>
+    public static AiNet PatrolNet { get; } = BuildPatrolNet();
 
     /// <summary>The stage subtree — the caller adds it to the session root exactly as it adds a
     /// built world.</summary>
@@ -84,6 +119,38 @@ public sealed class EmptyStage
 
         Log.Info("world", $"stage empty: {HalfExtent * 2f / 1000f:0.#} km ground grid, cell={CellMetres:0} m, collision={(collision ? "on" : "off")}");
         return stage;
+    }
+
+    /// <summary><see cref="PatrolNet"/> when <paramref name="idOrName"/> names it, else null, so a
+    /// caller resolves the built-in before it falls back to a chapter's nets. Case-insensitive, the
+    /// comparison <see cref="AiNets.ByName"/> makes.</summary>
+    public static AiNet? ResolveNet(string idOrName) =>
+        PatrolNetName.Equals(idOrName, StringComparison.OrdinalIgnoreCase) ? PatrolNet : null;
+
+    // Node 0 sits due north of the origin and the loop runs clockwise seen from above. The edge
+    // list closes the ring, so the walk never reaches a dead end and never turns back: a route a
+    // scripted run can watch for as long as it likes.
+    private static AiNet BuildPatrolNet()
+    {
+        var nodes = new AiNetNode[PatrolRingNodes];
+        var edges = new (int A, int B)[PatrolRingNodes];
+        for (int i = 0; i < PatrolRingNodes; i++)
+        {
+            float angle = Mathf.Tau * i / PatrolRingNodes;
+            nodes[i] = new AiNetNode(
+                new Vector3(Mathf.Sin(angle) * PatrolRingRadius, SpawnAltitude,
+                    -Mathf.Cos(angle) * PatrolRingRadius),
+                Array.Empty<float>());
+            edges[i] = (i, (i + 1) % PatrolRingNodes);
+        }
+        return new AiNet
+        {
+            Id = PatrolNetId,
+            Name = PatrolNetName,
+            Nodes = nodes,
+            Edges = edges,
+            Volumes = PatrolVolumes,
+        };
     }
 
     private static StandardMaterial3D GridMaterial()

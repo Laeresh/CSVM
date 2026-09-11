@@ -60,9 +60,11 @@ public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int
 /// two overrides the stage needs. <c>Team</c> reaches the hull as the borrowed def's own team id,
 /// so it arrives through <c>ZeppelinRuntime.AuthoredTeam</c> rather than as a stamp on the part
 /// pools, and the rule that gives a zone the team its flagged <c>panels</c> child carries still
-/// runs. <c>Pos</c> replaces the record's authored seat, world metres.</summary>
+/// runs. <c>Pos</c> replaces the record's authored seat, world metres. <c>Net</c> is its
+/// <c>net=</c>: name <see cref="Mech3.EmptyStage.PatrolNetName"/> and the hull flies the stage's
+/// built-in ring instead of station-keeping on the one-node net the graft otherwise builds.</summary>
 public readonly record struct ZepStageSpec(string Chapter, string Mission, string Record,
-    int? Team = null, Vector3? Pos = null);
+    int? Team = null, Vector3? Pos = null, string? Net = null);
 
 /// <summary>
 /// One immutable value for everything the command line settles about a session: parsed once,
@@ -1079,14 +1081,17 @@ public sealed record SessionSpec
                 {
                     int? zepTeam = null;
                     Vector3? zepPos = null;
+                    string? zepNet = null;
                     for (int si = 2; si < zepSegments.Length; si++)
                     {
                         if (zepSegments[si].StartsWith("team="))
                             zepTeam = int.Parse(zepSegments[si]["team=".Length..]);
                         else if (zepSegments[si].StartsWith("pos="))
                             zepPos = ParseVec3Slashed(zepSegments[si]["pos=".Length..]);
+                        else if (zepSegments[si].StartsWith("net="))
+                            zepNet = zepSegments[si]["net=".Length..];
                     }
-                    s.Zep = new ZepStageSpec(zepWhere[0], zepWhere[1], zepSegments[1], zepTeam, zepPos);
+                    s.Zep = new ZepStageSpec(zepWhere[0], zepWhere[1], zepSegments[1], zepTeam, zepPos, zepNet);
                     s.HasContentArg = true;
                 }
             }

@@ -227,6 +227,16 @@ public class SessionSpecParserTests
         });
         Assert.Equal(new Vector3(100f, 700f, -50f), p.Zep!.Value.Pos);
         Assert.Null(p.Zep!.Value.Team);
+        Assert.Null(p.Zep!.Value.Net);
+
+        // net= names the stage's built-in ring, the one patrol net a chapter-less session has, so
+        // a grafted airship can fly a route instead of station-keeping on its seat.
+        var n = SessionSpec.Parse(new[]
+        {
+            "--stage=empty", "--fly", $"--zep=C2/M01:hk_zep:net={EmptyStage.PatrolNetName}",
+        });
+        Assert.Equal(EmptyStage.PatrolNetName, n.Zep!.Value.Net);
+        Assert.NotNull(EmptyStage.ResolveNet(n.Zep!.Value.Net!));
 
         // A chapter world places its own airships; grafting one on again would be two hulls under
         // one node name, so the flag is dropped rather than obeyed.

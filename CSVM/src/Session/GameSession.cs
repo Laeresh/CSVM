@@ -847,12 +847,12 @@ public partial class GameSession : Node3D
         return anchors;
     }
 
-    // --zep=: the named record alone, on a one-node net at the stage seat. The net is synthetic
-    // rather than the chapter's because a chapter net would fly the hull off to its own authored
-    // coordinates, thousands of metres from the squadron ring. ⚠ It must have a net at all: a def
-    // whose net does not resolve is placed but held OUT of the live list, so its zones never wire
-    // and nothing on it can be shot. The seat defaults to the grid origin at the record's own
-    // altitude, which is what puts it inside the ring rather than at its mission coordinates.
+    // --zep=: the named record alone, on a one-node net at the stage seat unless net= names the
+    // stage's built-in ring (EmptyStage.PatrolNet). The net is synthetic rather than the chapter's
+    // because a chapter net would fly the hull off to its own authored coordinates, thousands of
+    // metres from the squadron ring. ⚠ It must have a net at all: a def whose net does not resolve
+    // is placed but held OUT of the live list, so its zones never wire and nothing on it can be
+    // shot. The seat defaults to the grid origin at the record's own altitude, inside that ring.
     private static (List<ZeppelinDef> Defs, IReadOnlyList<AiNet> Nets, Vector3? Seat) GraftedZeppelin(
         IReadOnlyList<ZeppelinDef> all, ZepStageSpec graft)
     {
@@ -869,18 +869,31 @@ public partial class GameSession : Node3D
             return (only, System.Array.Empty<AiNet>(), null);
         }
         var seat = graft.Pos ?? new Vector3(0f, only[0].Position.Y, 0f);
+        // net= puts the hull on the stage's built-in ring rather than the one-node net above, so a
+        // grafted airship patrols the same graph an --ai= plane can be named onto. It is rebadged
+        // with the record's own net name, since the runtime resolves a def's route BY that name.
+        var ring = graft.Net != null ? EmptyStage.ResolveNet(graft.Net) : null;
+        if (graft.Net != null && ring == null)
+        {
+            GD.Print($"zep: net '{graft.Net}' is not the built-in '{EmptyStage.PatrolNetName}' " +
+                     $"ring; '{graft.Record}' station-keeps at its seat instead");
+        }
         var nets = new List<AiNet>
         {
             new AiNet
             {
-                Id = 0,
+                Id = ring?.Id ?? 0,
                 Name = only[0].Net,
-                Nodes = new[] { new AiNetNode(seat, System.Array.Empty<float>()) },
-                Edges = System.Array.Empty<(int A, int B)>(),
+                Nodes = ring is { } onRing
+                    ? onRing.Nodes
+                    : new[] { new AiNetNode(seat, System.Array.Empty<float>()) },
+                Edges = ring?.Edges ?? System.Array.Empty<(int A, int B)>(),
+                Volumes = ring?.Volumes ?? AiVolumeSet.None,
             },
         };
         GD.Print($"zep: graft '{graft.Record}' from {graft.Chapter}/{graft.Mission} seated at " +
                  $"({seat.X:0},{seat.Y:0},{seat.Z:0}), " +
+                 (ring != null ? $"flying the '{EmptyStage.PatrolNetName}' ring, " : "") +
                  (graft.Team is { } t ? $"team {t}" : "team as the record authors it"));
         return (only, nets, seat);
     }
@@ -2552,7 +2565,11 @@ public partial class GameSession : Node3D
                 AiNet? net = null;
                 if (entry.Net != null)
                 {
-                    if (!netsTried)
+                    // The stage's built-in ring answers first, since --stage=empty has no chapter
+                    // index to name and its name is reserved against every shipped one. A chapter
+                    // net is still named the way it always was, on any stage.
+                    net = EmptyStage.ResolveNet(entry.Net);
+                    if (net == null && !netsTried)
                     {
                         netsTried = true;
                         try
@@ -2564,10 +2581,11 @@ public partial class GameSession : Node3D
                             GD.PushWarning($"--ai: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
                         }
                     }
-                    net = nets != null ? AiNets.Resolve(nets, entry.Net) : null;
+                    net ??= nets != null ? AiNets.Resolve(nets, entry.Net) : null;
                     if (net == null)
-                        GD.PushWarning($"--ai: net '{entry.Net}' not in {_spec.Chapter}'s neindex; " +
-                                       $"'{planeName}' spawns without a patrol");
+                        GD.PushWarning($"--ai: net '{entry.Net}' is neither the built-in " +
+                                       $"'{EmptyStage.PatrolNetName}' ring nor a net in " +
+                                       $"{_spec.Chapter}'s neindex; '{planeName}' spawns without a patrol");
                 }
                 for (int k = 0; k < entry.Count; k++)
                 {
@@ -2589,6 +2607,10 @@ public partial class GameSession : Node3D
                         pilot.Patrol = follower;
                         var spawnedOnNet = flightRoster.SpawnAi(new AiSpawn(
                             planeName, pos, look, pilot, Team: entry.Team, AiDef: aiDef));
+                        // The net's own volumes over the gates the assembler took from the airframe
+                        // def, the same write a campaign net assignment makes. Before this, a CLI
+                        // plane kept the machine's decoded defaults whatever net it was given.
+                        CampaignRosterPlan.ApplyVolumes(pilot.Machine, net.Volumes, MinAiActiveDist());
                         RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
                         ApplyAiHullPreset(spawnedOnNet);
                     }
