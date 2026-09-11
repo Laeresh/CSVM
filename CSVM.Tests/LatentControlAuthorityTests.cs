@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 /// Neither can be exercised on a stock airframe, so every binding case here flies a SYNTHETIC
 /// airframe that authors the term into reach, and each has a stock-data control beside it showing
 /// the same instrument reading neutral (METHOD-9/METHOD-10). The stock envelope's own proof is the
-/// eleven-airframe dump, which this change leaves byte-identical.
+/// eleven-airframe dump.
 /// </summary>
 public class LatentControlAuthorityTests
 {
@@ -167,6 +167,45 @@ public class LatentControlAuthorityTests
     {
         var m = new FlightModel(Limited());
         Assert.Equal(expected, m.OpposingCommandLimitAt(100f, 1f, bodyUpG, 1f), 4);
+    }
+
+    /// <summary>The ramp reads the load factor THIS step delivers, not the one the step before left
+    /// behind: the original builds its forces and reads the ramp in one pass, before any torque
+    /// accumulates and before its integrator rotates anything. Flown on the synthetic airframe whose
+    /// ramp is in reach, and checked every step against the scalar rebuilt from the state that step
+    /// entered with and the load factor it delivered.</summary>
+    [Fact]
+    public void TheGRampReadsTheSameStepsDeliveredLift()
+    {
+        var m = new FlightModel(Limited());
+        m.Reset(Vector3.Zero, Basis.Identity, 300f * Mph, 1f);
+        var s = m.Stats;
+        int inRamp = 0, lateReadWouldDiffer = 0;
+        for (int i = 0; i < 120; i++)
+        {
+            float entrySpeed = m.Speed;
+            float lastStepsLoadFactor = m.BodyUpLoadFactor;
+            m.Step(new FlightInput { Pitch = 1f, Throttle = 1f }, Dt);
+
+            // Alpha and BodyUpLoadFactor both report the step just flown: α off the attitude it
+            // entered with, the load factor off the lift that same entering attitude produced.
+            float cosAlpha = Mathf.Cos(Mathf.DegToRad(m.Alpha));
+            Assert.Equal(m.OpposingCommandLimitAt(entrySpeed, cosAlpha, m.BodyUpLoadFactor, 1f),
+                         m.CommandLimit, 4);
+
+            if (m.BodyUpLoadFactor > s.HighGStart || m.BodyUpLoadFactor < s.LowGStart)
+                inRamp++;
+            if (Mathf.Abs(m.OpposingCommandLimitAt(entrySpeed, cosAlpha, lastStepsLoadFactor, 1f)
+                          - m.CommandLimit) > 1e-3f)
+                lateReadWouldDiffer++;
+        }
+
+        // Able to fail: the ramp really is in reach over this pull, and a limiter handed the
+        // PREVIOUS step's load factor would have applied a visibly different scalar, so the
+        // comparison above is measuring the alignment rather than agreeing with itself.
+        Assert.True(inRamp > 10, $"the G ramp was in reach on only {inRamp} of 120 steps");
+        Assert.True(lateReadWouldDiffer > 10,
+            $"a one-step-late read would have differed on only {lateReadWouldDiffer} of 120 steps");
     }
 
     /// <summary>The smaller of the two is what applies. At 30° α (window 0.561) against 3 G (ramp

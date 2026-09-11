@@ -53,6 +53,9 @@ public class ParityLedgerTests
         ("the pitch-only high-speed fade", Decoded, "0x48be22-0x48be68, 0x0071c400 / 0x0071c404"),
         ("the opposing-command limiter's AOA window", Decoded, "0x48c9f4-0x48ca18, 0x0071c42c"),
         ("the opposing-command limiter's G ramp", Decoded, "0x48ca1e-0x48ca61, min at 0x48ca69"),
+        ("the G ramp reads the SAME tick's delivered lift", Decoded,
+            "0x48c883 writes it before the 0x48ca1e read, and FUN_0048e580 integrates both halves "
+            + "afterwards, so Step builds its forces from the entering attitude too"),
         ("the limiter's separating-command sign rule", Decoded, "FUN_0053fd40 at 0x48c9ae, pitch at 0x48cb52"),
         ("bank coupling into yaw and into pitch", Decoded, "0x48ccb3, 0x48cd36"),
         ("weathervane centring, player only", Decoded, "FUN_00490f70, applied at 0x48ce3d"),
@@ -97,8 +100,6 @@ public class ParityLedgerTests
         ("the Fury's rudder animates", Exception,
             "CSVM also matches l_rudder_rotate and a digitless l_elevator, which the %d lookups miss"),
 
-        ("the G ramp reads the SAME tick's delivered lift", Unsupported,
-            "0x48c883 writes it before 0x48ca1e; Step rotates before it translates, so CSVM is one step late"),
         ("a live producer for an AI's nitro injector", Unsupported,
             "AiSpawn.Nitro reads roster slot 34; the mission spawner does not read roster blocks yet"),
         ("the mouse-flying arm's is_autogyro roll/yaw exchange", Unsupported,

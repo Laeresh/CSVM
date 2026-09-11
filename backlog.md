@@ -770,14 +770,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-443` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
-  late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
-  `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
-  and reads the previous step's. Porting is the force-from-entering-attitude order of `Step`, which
-  moves every envelope row, so it needs its own eleven-airframe `--dump-flight=all` A/B with each
-  moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
-  5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md).
 - `BL-447` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The mouse-flying arm's `is_autogyro` roll/yaw exchange has
   nowhere to land: CSVM has no mouse flight-control mode.** `0x4876f4` sits inside
   `FUN_00487460`'s mouse arm, reached only with the mouse control bit of `DAT_0071c2a0` set and the

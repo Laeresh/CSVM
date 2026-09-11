@@ -241,12 +241,12 @@ public sealed class FlightModel
     // How much of the opposing-command limiter's decoded AOA window is spent. 1 is the decode and
     // the default; 0 is the A/B seam that holds the window off. The window is continuous rather
     // than a threshold, so at 1 it binds on every stock airframe and the sustained pitch-rate row
-    // reads 22.51 °/s against a filmed 33.00, a recorded conflict, not a tuning input.
+    // reads 24.01 °/s against a filmed 33.00, a recorded conflict, not a tuning input.
     // docs/org/flightModel.md, "The α a full pull holds".
     // ⚠ Any value between is a blend with no original behind it.
     private const float AoaLimiterFactorDefault = 1f;
 
-    // The delivered lift's component along the BODY UP axis, in G, as the last completed step left
+    // The delivered lift's component along the BODY UP axis, in G, as this step's force build left
     // it — the signed load factor the original's G limiter reads, which is why it is kept rather
     // than derived from LoadFactorDemand: that one is a length and cannot go negative, while this
     // one goes negative in an outside pull and is the only thing that can reach lowGs.
@@ -286,10 +286,10 @@ public sealed class FlightModel
     /// a flight unreproducible.</summary>
     public float AoaLimiterFactor { get; init; } = AoaLimiterFactorDefault;
 
-    /// <summary>The delivered lift's body-up component in G, left by the last completed step: the
-    /// signed load factor the <c>highGs</c>/<c>lowGs</c> limiter is measured on. Positive in an
-    /// ordinary pull and negative in an outside one. Reported for instruments and for
-    /// <c>ControlLimiterTests</c>' reachability measurement.
+    /// <summary>The delivered lift's body-up component in G, built from the attitude the last step
+    /// entered with and read by that same step's limiter: the signed load factor the
+    /// <c>highGs</c>/<c>lowGs</c> ramp is measured on, positive in an ordinary pull and negative in
+    /// an outside one. Reported for instruments and for <c>ControlLimiterTests</c>.
     /// ⚠ Not interchangeable with <see cref="LoadFactorDemand"/>: this is post-clamp, signed and
     /// projected on one axis, that one is the pre-clamp demand's length.</summary>
     public float BodyUpLoadFactor => _bodyUpLoadFactor;
@@ -576,6 +576,92 @@ public sealed class FlightModel
         FarFieldPlant = UsesAiForcePath
                         && input.NearestHumanDistSqM > FarFieldRangeM * FarFieldRangeM;
 
+        // --- forces, built from the attitude and velocity direction this step ENTERS with, which is
+        // the original's order. ⚠ Moving this back under the rotated attitude puts a one-step lag
+        // into the G ramp's read below and moves every airframe's envelope.
+        var nose = -Attitude.Z;
+
+        // α off the entering state, so everything keyed on the pull reads one value for the frame.
+        // ⚠ An emergent LAG, not modelled incidence; the clamped Acos keeps it defined at α → 0,
+        // where the Slerp below has no axis.
+        Alpha = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f)));
+
+        var velocity = VelocityDir * Speed;
+        Vector3 accel;
+        if (FarFieldPlant)
+        {
+            // The far-field plant: hold throttle · fd_speed (plus the AI's flat bonus) along the
+            // nose, spending the gap as acceleration at a rate of 1/s. No lift, no drag, no thrust
+            // and no gravity are computed, so the whole aerodynamic build is skipped.
+            accel = (nose * ((s.FdSpeed * Throttle) + FarFieldAiSpeedBonus)) - velocity;
+
+            // ⚠ LoadFactorDemand and _bodyUpLoadFactor are deliberately left where the last
+            // near-field step put them: the original writes neither here, so an aircraft returning
+            // inside the boundary spends one step on the reading it left with.
+        }
+        else
+        {
+            // --- lift: a DEMANDED acceleration, not a fraction of gravity. Step 1 fakes the airflow
+            // toward the nose across the authored liftAOAs window, blending on cos α because the
+            // authored degrees are cosined at load. ⚠ Player-only — the AI wind is always nose-aligned.
+            float cosAlpha = Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f);
+            float cosSpan = s.LiftAoaCosLo - s.LiftAoaCosHi;
+            float windBlend = UsesAiForcePath
+                ? 1f
+                : cosSpan > 1e-6f
+                    ? Mathf.Clamp((s.LiftAoaCosLo - cosAlpha) / cosSpan, 0f, 1f)
+                    : (cosAlpha < s.LiftAoaCosLo ? 1f : 0f);
+            var relativeWind = velocity.Lerp(nose * Speed, windBlend);
+
+            // Step 2 — the demand: swing the velocity onto that airflow at the authored rate and carry
+            // weight on top, projected onto the body X/Y plane because only that part acts through the
+            // wings. ⚠ The projection's length is a load factor in G, never an incidence angle.
+            var demand = (relativeWind - velocity) * s.LiftAccelRate;
+            demand.Y += s.Gravity;
+            var noseAxis = Attitude.Z;
+            var liftDir = demand - noseAxis * demand.Dot(noseAxis);
+            LoadFactorDemand = liftDir.Length() / StandardG;
+            float loadFactor = Mathf.Clamp(LoadFactorDemand, liftGMin, liftGMax);
+
+            // Step 3 — cap the delivered force at the aerodynamic ceiling, C_L·q·RefArea in weight
+            // units, which is the same as capping the load factor at C_L·q·RefArea / Weight. This is
+            // where a slow aircraft stops being able to carry itself.
+            float speedFps = Speed * FeetPerMetre;
+            float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
+            float mach = Speed / (SpeedOfSoundFps * MetresPerFoot);
+            // q·RefArea, in weight units (lb/ft² × ft²) — the scale a coefficient converts to a force,
+            // and the divisor the delivered C_L (drag, below) comes back out through.
+            float qRefArea = dynPressure * s.RefArea;
+            float loadCap = LiftCapAt(Speed);
+            loadFactor = Mathf.Clamp(loadFactor, -loadCap, loadCap);
+            var liftAccel = liftDir.LengthSquared() > 1e-12f
+                ? liftDir.Normalized() * (loadFactor * StandardG)
+                : Vector3.Zero;
+            // What the opposing-command limiter reads a few lines below, in the same step and before
+            // any torque accumulates, which is where the original reads it.
+            _bodyUpLoadFactor = liftAccel.Dot(Attitude.Y) / StandardG;
+
+            // Thrust pulls along the nose and drag opposes the motion; the along-path shares fall out of
+            // the vector sum. ⚠ Gravity acts at full strength in every attitude and carries no
+            // climb-retention scale — the lift demand above already carries weight.
+            float cd = DragPolarScale
+                       * (DragPolarParasite + DragPolarLinear * mach + DragPolarQuad * mach * mach);
+            // Force (weight units) → acceleration is × StandardG / Weight, the same conversion lift uses.
+            if (Boosting)
+                cd *= BoostDragFactor;
+            float dragAccel = s.VehWeight > 1e-3f
+                ? qRefArea * s.DragFactor * cd * StandardG / s.VehWeight
+                : 0f;
+            // A choked engine contributes no thrust and nothing else: no drag term, no lift term and no
+            // airspeed clamp are touched (docs/org/ordnanceTypes.md, "The choker, settled").
+            float lever = Boosting ? BoostLever : Throttle;
+            float thrustAccel = EngineDead ? 0f : ThrustAccelAt(Speed, lever) * AttitudeThrustScale(Attitude.Z.Y);
+            accel = nose * thrustAccel
+                    - VelocityDir * dragAccel
+                    + Vector3.Down * s.Gravity
+                    + liftAccel;
+        }
+
         // --- rotation: torque·recInertia against momentum damping, plus the bank coupling and the
         // weathervane into the same accumulator. Each axis carries its own authored authority curve
         // from airspeed alone, unless the far branch forces all three to 1 as the original does.
@@ -586,8 +672,7 @@ public sealed class FlightModel
         // The axis that closes the nose onto the flight path, in body coordinates and read off the
         // attitude this step ENTERS with, as the original reads it. A command projecting negatively
         // on it swings the nose further off the path, and only that kind is softened below.
-        var enteringNose = -Attitude.Z;
-        var separationAxis = enteringNose.Cross(VelocityDir);
+        var separationAxis = nose.Cross(VelocityDir);
         float separationSin = separationAxis.Length();
         var closingAxis = separationSin > 1e-6f
             ? Attitude.Transposed() * (separationAxis / separationSin)
@@ -596,7 +681,7 @@ public sealed class FlightModel
         // computing it: no AOA window and no G ramp reaches a distant aircraft's commands.
         CommandLimit = FarFieldPlant
             ? 1f
-            : OpposingCommandLimitAt(Speed, enteringNose.Dot(VelocityDir), _bodyUpLoadFactor, aoaLimiter);
+            : OpposingCommandLimitAt(Speed, nose.Dot(VelocityDir), _bodyUpLoadFactor, aoaLimiter);
 
         // ⚠ The authority scalars multiply the STICK COMMAND only. The bank coupling, the
         // weathervane and the ground blow are summed in below carrying none, which is the original's
@@ -657,99 +742,23 @@ public sealed class FlightModel
         // that job and gives the original's own shape, and a second term keyed on wing verticality
         // double-counts it and fights every wings-level pull too. docs/org/flightModel.md.
 
-        // --- translation: forces integrate on the velocity VECTOR, so speed can pass through zero
-        // and a vertical zoom tail-slides out downward instead of freezing mid-air at a clamped 0.
-        var nose = -Attitude.Z;
+        // --- translation: the forces built above integrate on the velocity VECTOR, so speed can
+        // pass through zero and a vertical zoom tail-slides out downward instead of freezing mid-air
+        // at a clamped 0.
+        var vel = velocity + accel * dt;
 
-        // α is read here, before this step's forces move VelocityDir, so everything keyed on the
-        // pull reads the same value for the frame. ⚠ It is an emergent LAG, not modelled incidence,
-        // and a clamped Acos keeps it well-defined at α → 0 where Slerp's axis below is not.
-        Alpha = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f)));
-
-        var velocity = VelocityDir * Speed;
-        Vector3 vel;
-        if (FarFieldPlant)
-        {
-            // The far-field plant: hold throttle · fd_speed (plus the AI's flat bonus) along the
-            // nose, spending the gap as acceleration at a rate of 1/s. No lift, no drag, no thrust
-            // and no gravity are computed, so the whole aerodynamic build is skipped.
-            var target = nose * ((s.FdSpeed * Throttle) + FarFieldAiSpeedBonus);
-            vel = velocity + (target - velocity) * dt;
-
-            // ⚠ LoadFactorDemand and _bodyUpLoadFactor are deliberately left where the last
-            // near-field step put them: the original writes neither here, so an aircraft returning
-            // inside the boundary spends one step on the reading it left with.
-        }
-        else
-        {
-            // --- lift: a DEMANDED acceleration, not a fraction of gravity. Step 1 fakes the airflow
-            // toward the nose across the authored liftAOAs window, blending on cos α because the
-            // authored degrees are cosined at load. ⚠ Player-only — the AI wind is always nose-aligned.
-            float cosAlpha = Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f);
-            float cosSpan = s.LiftAoaCosLo - s.LiftAoaCosHi;
-            float windBlend = UsesAiForcePath
-                ? 1f
-                : cosSpan > 1e-6f
-                    ? Mathf.Clamp((s.LiftAoaCosLo - cosAlpha) / cosSpan, 0f, 1f)
-                    : (cosAlpha < s.LiftAoaCosLo ? 1f : 0f);
-            var relativeWind = velocity.Lerp(nose * Speed, windBlend);
-
-            // Step 2 — the demand: swing the velocity onto that airflow at the authored rate and carry
-            // weight on top, projected onto the body X/Y plane because only that part acts through the
-            // wings. ⚠ The projection's length is a load factor in G, never an incidence angle.
-            var demand = (relativeWind - velocity) * s.LiftAccelRate;
-            demand.Y += s.Gravity;
-            var noseAxis = Attitude.Z;
-            var liftDir = demand - noseAxis * demand.Dot(noseAxis);
-            LoadFactorDemand = liftDir.Length() / StandardG;
-            float loadFactor = Mathf.Clamp(LoadFactorDemand, liftGMin, liftGMax);
-
-            // Step 3 — cap the delivered force at the aerodynamic ceiling, C_L·q·RefArea in weight
-            // units, which is the same as capping the load factor at C_L·q·RefArea / Weight. This is
-            // where a slow aircraft stops being able to carry itself.
-            float speedFps = Speed * FeetPerMetre;
-            float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
-            float mach = Speed / (SpeedOfSoundFps * MetresPerFoot);
-            // q·RefArea, in weight units (lb/ft² × ft²) — the scale a coefficient converts to a force,
-            // and the divisor the delivered C_L (drag, below) comes back out through.
-            float qRefArea = dynPressure * s.RefArea;
-            float loadCap = LiftCapAt(Speed);
-            loadFactor = Mathf.Clamp(loadFactor, -loadCap, loadCap);
-            var liftAccel = liftDir.LengthSquared() > 1e-12f
-                ? liftDir.Normalized() * (loadFactor * StandardG)
-                : Vector3.Zero;
-            // Kept for the next step's opposing-command limiter, which is where the original reads it.
-            _bodyUpLoadFactor = liftAccel.Dot(Attitude.Y) / StandardG;
-
-            // Thrust pulls along the nose and drag opposes the motion; the along-path shares fall out of
-            // the vector sum. ⚠ Gravity acts at full strength in every attitude and carries no
-            // climb-retention scale — the lift demand above already carries weight.
-            float cd = DragPolarScale
-                       * (DragPolarParasite + DragPolarLinear * mach + DragPolarQuad * mach * mach);
-            // Force (weight units) → acceleration is × StandardG / Weight, the same conversion lift uses.
-            if (Boosting)
-                cd *= BoostDragFactor;
-            float dragAccel = s.VehWeight > 1e-3f
-                ? qRefArea * s.DragFactor * cd * StandardG / s.VehWeight
-                : 0f;
-            // A choked engine contributes no thrust and nothing else: no drag term, no lift term and no
-            // airspeed clamp are touched (docs/org/ordnanceTypes.md, "The choker, settled").
-            float lever = Boosting ? BoostLever : Throttle;
-            float thrustAccel = EngineDead ? 0f : ThrustAccelAt(Speed, lever) * AttitudeThrustScale(Attitude.Z.Y);
-            var accel = nose * thrustAccel
-                        - VelocityDir * dragAccel
-                        + Vector3.Down * s.Gravity
-                        + liftAccel;
-            vel = VelocityDir * Speed + accel * dt;
-        }
+        // The nose AFTER this step's rotation. Everything below reads the flown attitude, which is
+        // the side of the integrator these three steps sit on in the original; the force build above
+        // is the side that reads the entering one.
+        var flownNose = -Attitude.Z;
 
         // The AI's nose-axis floor (see AiNoseSpeedFloor) sits here because the original applies it
         // here: after the velocity integration and before |v| is recomputed and the position steps.
         if (UsesAiForcePath)
         {
-            float alongNose = vel.Dot(nose);
+            float alongNose = vel.Dot(flownNose);
             if (alongNose < AiNoseSpeedFloor)
-                vel += nose * (AiNoseSpeedFloor - alongNose);
+                vel += flownNose * (AiNoseSpeedFloor - alongNose);
         }
 
         Speed = Mathf.Min(vel.Length(), MaxDiveSpeedFrac * s.FdSpeed);
@@ -763,13 +772,13 @@ public sealed class FlightModel
         // ⚠ Keep the near-parallel lerp branch, which is the normal cruise state. Slerp builds its
         // axis from a cross product whose float error swamps a sub-degree angle, and Godot then
         // throws "Argument is not normalized", aborting the physics frame: the plane stops flying.
-        float pathDot = nose.Dot(VelocityDir);
+        float pathDot = flownNose.Dot(VelocityDir);
         if (align > 0f && pathDot > -0.999f)
         {
             float t = 1f - Mathf.Exp(-align * dt);
             VelocityDir = (pathDot > 0.999f
-                ? VelocityDir + (nose - VelocityDir) * t
-                : VelocityDir.Slerp(nose, t)).Normalized();
+                ? VelocityDir + (flownNose - VelocityDir) * t
+                : VelocityDir.Slerp(flownNose, t)).Normalized();
         }
 
         Position += VelocityDir * Speed * dt;

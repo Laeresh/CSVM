@@ -448,6 +448,14 @@ one sentence of measured evidence; everything else belongs in the commit that la
   call is unaffected, which is why the idiom survives everywhere the command happens not to write
   to stderr.
 
+- **SHELL-21** — **`[IO.File]::Copy` preserves the SOURCE file's last-write time, so swapping a
+  baseline file in for an A/B can leave the build stale and measure the same binary twice.** The
+  format hook's `-t:Rebuild` runs BEFORE the command that does the swap, and the swapped-in file is
+  then older than the outputs, so the incremental build that follows has nothing to do. A limiter
+  margin table taken that way agreed to two decimals on all eleven airframes, reading as "the change
+  moves nothing", where the real A/B moved every row. Swap in one command and measure in the next,
+  or set `LastWriteTime` to now after the copy.
+
 ## INSTR — building instruments
 
 - **INSTR-3** — **Share derived predicates with production code.**

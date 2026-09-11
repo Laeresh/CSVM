@@ -766,16 +766,16 @@ index, so two aircraft at equal range still get distinct turns and neither is un
 ## src/Flight/FlightModel.cs
 The decoded, data-driven aircraft plant. Rotation sums stick torque, bank coupling, the
 `return_rate` weathervane and the ground blow before exponential `ang_momentum_damp` decay;
-`BodyRates` stores the original's quaternion half-angle rate, and `PhysicalBodyRates` and the
+`BodyRates` holds the original's quaternion half-angle rate, and `PhysicalBodyRates` and the
 attitude update double it. Authored speed curves scale the stick command alone, and
-`OpposingCommandLimitAt` softens the pitch and yaw commands that swing the nose off the flight path,
-on the decoded G ramp and AOA window. Translation composes the original's own chain: a clamped lift
-demand plus decoded Mach drag, thrust and gravity, with the velocity direction rotating only through
-that lift and the ground-blow steer. `FarFieldPlant` is the original's level-of-detail branch,
-re-decided every step off `FlightInput.NearestHumanDistSqM`; `Collide` is the decoded contact
-response, the placement and the human-only normal impulse, with the lifecycle left to
-`AircraftContactResolver`. `FlightInput.Boost` is the nitro flag, replacing the thrust lever and
-scaling drag. Full decode and the parity ledger: [../org/flightModel.md](../org/flightModel.md).
+`OpposingCommandLimitAt` softens a pitch or yaw command that separates nose from path, on the
+decoded G ramp and AOA window. Every force and torque term comes off the attitude the step ENTERS
+with, so that ramp reads this step's own delivered lift. Translation is a clamped lift demand plus
+decoded Mach drag, thrust and gravity, the velocity direction rotating only through that lift and
+the ground-blow steer. `FarFieldPlant` is the original's LOD branch, re-decided each step off
+`FlightInput.NearestHumanDistSqM`; `Collide` is the decoded contact response, placement and
+human-only normal impulse, lifecycle left to `AircraftContactResolver`. `FlightInput.Boost`
+replaces the thrust lever and scales drag. Decode and ledger: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/StickRamp.cs
 The original's keyboard stick as an accumulator rather than an on/off flag: a held key ramps the

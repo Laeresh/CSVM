@@ -1146,18 +1146,17 @@ holds the window off). The window is not a threshold and binds on the shipped da
 and why the filmed pitch rate is discarded rather than chased, are in "Corrected — the G ramp
 grazes and the AOA window binds" and "The α a full pull holds" below.
 
-⚠ **The original reads the limiter's G on the SAME tick; the remake reads it one tick late.** In
+⚠ **The G read is the SAME tick's delivered lift, which is what fixes the order of `Step`.** In
 `FUN_0048c470` the force build `FUN_0048fc40` writes the delivered body-up load factor into its
 seventh argument (`&param_1`, the call at `0x48c883`) and the ramp compares that value a few
-instructions later (`0x48ca1e`), all before the torques accumulate and before the integrator runs;
-α is read from the entering velocity and attitude in the same call. `FlightModel.Step` runs the
-rotation before the translation, so its limiter reads `_bodyUpLoadFactor` as the previous step
-left it. The lag is one sim step (16.7 ms) on the G term only; α is the entering state on both.
-It is unported because the port is the whole rotation/translation order of `Step` (forces built
-from the entering attitude), which moves every row on every airframe and needs its own A/B. What
-it can cost is bounded by reach: the pull instrument below peaks at 5.83 G against `highGs[0]` 9,
-so no stock envelope row reads the G ramp at all, and the only place the delay is visible is the
-outside-push graze at −6 G, one step late on a 92–97 % factor.
+instructions later (`0x48ca1e`, `FCOMP [EBP + 0x8]` against `highGs[0]`), all before the torques
+accumulate; α comes off the entering velocity and attitude in the same call. The caller
+`FUN_0048e580` then integrates both halves that one pass produced: the torque into the angular
+velocity and the attitude quaternion first, the force onto the velocity vector second. So the
+whole force and torque set is built from the attitude the tick ENTERS with, and only the AI's
+nose-axis floor, the path alignment and the position step read the flown attitude.
+`FlightModel.Step` is ordered the same way, and `LatentControlAuthorityTests` pins the alignment
+by rebuilding each step's scalar from the state that step entered with.
 
 ⚠ **A fourth consumer exists and is unreachable.** The same scalar multiplies the `level_off`
 torque (`obj+0x650`, the `level_off_rate` key, read at `0x48cedc`) when that torque opposes the
@@ -2388,8 +2387,7 @@ which is the shape the footage's figure was binned in.
   placeholder direction) is a low-speed cut on the lift build. The pull never goes below 140 mph.
 - **The limiter's G read** is the same tick's delivered lift (see "Torques and the limiters"),
   and it is out of reach here: the pull peaks at 5.83 G against `highGs[0]` 9, so the AOA window
-  is the whole of the limiter in this manoeuvre and the one-step delay in the remake's read of the
-  G term cannot move it.
+  is the whole of the limiter in this manoeuvre.
 
 So nothing clamps α directly. α in a held pull is an equilibrium: the nose rate, which is the
 elevator torque times the window at α (`0x48c9f4`) minus the weathervane's `return_rate · α/2`,
@@ -3231,8 +3229,8 @@ original's 2.05 s ADI stopwatch reading.
 
 | Constant | Value | Standing |
 |---|---:|---|
-| `PitchTune` | was **0.89** | **No counterpart in the binary**, now 1. With the quaternion correction the sustained physical pitch rate is **24.11 °/s**; faster nose motion opens the AOA window further, so this axis is not a simple 2× output |
-| `YawTune` | was **1.57** | **No counterpart in the binary**, now 1. With the quaternion correction yaw-360 is **30.20 s** against the original's 28.60, rather than the invalid half-angle reading of 49.12 s |
+| `PitchTune` | was **0.89** | **No counterpart in the binary**, now 1. With the quaternion correction the sustained physical pitch rate is **24.01 °/s**; faster nose motion opens the AOA window further, so this axis is not a simple 2× output |
+| `YawTune` | was **1.57** | **No counterpart in the binary**, now 1. With the quaternion correction yaw-360 is **30.45 s** against the original's 28.60, rather than the invalid half-angle reading of 49.12 s |
 | `RollTune` | **1.0** | already retired on this evidence; a 2.12 that used to sit here is gone |
 
 The retired 2.12 `RollTune` almost exactly compensated for the missed quaternion double angle. Its
@@ -3686,6 +3684,7 @@ which are findings rather than code.
 | the pitch-only high-speed fade | decoded | `0x48be22`–`0x48be68`, `0x0071c400` / `0x0071c404` |
 | the opposing-command limiter's AOA window | decoded | `0x48c9f4`–`0x48ca18`, `0x0071c42c` |
 | the opposing-command limiter's G ramp | decoded | `0x48ca1e`–`0x48ca61`, min at `0x48ca69` |
+| the G ramp reads the SAME tick's delivered lift | decoded | `0x48c883` writes it before the `0x48ca1e` read, and `FUN_0048e580` integrates both halves afterwards, so `Step` builds its forces from the entering attitude too |
 | the limiter's separating-command sign rule | decoded | `FUN_0053fd40` at `0x48c9ae`, pitch at `0x48cb52` |
 | bank coupling into yaw and into pitch | decoded | `0x48ccb3`, `0x48cd36` |
 | weathervane centring, player only | decoded | `FUN_00490f70`, applied at `0x48ce3d` |
@@ -3712,7 +3711,6 @@ which are findings rather than code.
 | far-field range is measured to the NEAREST human pilot | exception | plan Decision 3; the original presumes one player |
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
-| the G ramp reads the SAME tick's delivered lift | unsupported | `0x48c883` writes it before `0x48ca1e`; `Step` rotates before it translates, so CSVM is one step late |
 | a live producer for an AI's nitro injector | unsupported | `AiSpawn.Nitro` reads roster slot 34; the mission spawner does not read roster blocks yet |
 | the mouse-flying arm's `is_autogyro` roll/yaw exchange | unsupported | `0x4876f4`; CSVM has no mouse flight-control mode at all, so there is no arm to exchange in |
 
