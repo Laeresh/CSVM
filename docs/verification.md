@@ -201,6 +201,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   implementing the wall figure runs it 39 % fast.** Neither a build nor a golden can tell the two
   apart, only a dwell or duration logged in sim time: `BL-184`'s 168.7 °/sim-s arrow sweep and
   `BL-148`'s 643 ms stall-lamp half-period carry the wall figure beside them in the source.
+  ⚠ **It applies to a measurement, never to a rate the binary itself denominates.** Where a decode
+  puts a constant on a dt the engine builds from the system clock (`DAT_009ad744`, a
+  `GetTickCount()` delta at `0059c0c0`), that constant is already per real second and converting it
+  is the error. The chase camera's relaxation carried a converted 0.65 against an authored
+  `dist_catch_up` of 1.0, because the clip's raw 0.90 /wall-s was converted before the comparison.
 - **DET-12** — **An angle measured off footage cannot confirm a decode; at best it ranks two
   readings, and it will happily rank a third one you have not thought of.** `CAP-16`'s wing-panel
   strip measured 20 to 30 °/s and was recorded as confirming `forward_rotation` as a total angle

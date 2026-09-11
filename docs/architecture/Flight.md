@@ -214,13 +214,13 @@ frame, and the `--view=` spelling. Engine-free, so the decisions unit-test witho
 
 ## src/Flight/CameraController.cs
 The flown aircraft's camera: the roll-following chase pose, the numpad fixed views, the look-behind,
-the right-stick look-around, the authored crash cut and the weapon lab's held-airframe orbit, plus
-the pilot's selected view mode (`PilotViewMode` decides, this class holds the state and the camera).
-The chase radius is per plane and dynamic, `Dist + DistFactor·V` with an acceleration transient, and
-`ExternalRadius` bounds it and carries the numpad zoom outward from the near bound. Cockpit and Nose
-mount rigidly at the authored `cockpit_camera` marker with `Head`'s angles composed in and their own
-FOV; every other pose restores the FOV the camera carried at construction. Steers a `Camera3D` it
-does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+the right-stick look-around, the authored crash cut, the weapon lab's held-airframe orbit and the
+pilot's selected view mode (`PilotViewMode` decides, this class holds the state and the camera).
+The chase radius is per plane and dynamic, `Dist + DistFactor·V` plus `DistTransient`'s authored
+throttle term (`DistVary` on a speed copy lagging at `DistCatchUp`); `ExternalRadius` bounds it and
+carries the numpad zoom outward from the near bound. Cockpit and Nose mount rigidly at the authored
+`cockpit_camera` marker with `Head`'s angles and their own FOV, and every other pose restores the
+FOV it was built with. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/HeadLook.cs
 The pilot's head in the two first-person views, decoded from the original's shared look controller.

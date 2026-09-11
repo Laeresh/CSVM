@@ -139,7 +139,8 @@ bounds pair, then the pilot's zoom added outward on top. What that settles about
   `dist_min` so that the bound and the rest pose are the same number.
 - **`dist_vary` is the throttle transient's gain and `dist_catch_up` its relaxation rate.** The
   term is `dist_vary·(V − V̄)`, with `V̄` a lagged copy of speed eased at `dist_catch_up` on the
-  engine's per-frame dt. Under steady acceleration that settles at `dist_vary/dist_catch_up`
+  engine's per-frame dt, which is wall time (`0059c0c0`, a `GetTickCount()` delta). Under steady
+  acceleration that settles at `dist_vary/dist_catch_up`
   metres of excess per m/s², i.e. the shipped 0.1, against CAP-21's measured **0.105** — 5%
   agreement. The clip's raw relaxation figure, **0.90 per wall-second**, is within 10% of the
   shipped `dist_catch_up` 1.0 in the same clock.
@@ -160,29 +161,30 @@ help there either: at 0.29° it is far too small to be the offset's own elevatio
 
 Beyond the authored `d = dist + dist_factor·V`, the original's chase distance carries a **transient
 in the along-path acceleration**: slam the throttle open and the camera falls back, cut it and the
-camera closes in, both relaxing back onto the speed law. Every number below is **measured off the
-Bloodhawk staircase clips (`CAP-21`)**, and it is what the engine carries today. The mechanism is
-now decoded as `dist_vary`/`dist_catch_up` (see "The distance law"), which the measurements
-corroborate to 5% and 10%; swapping the engine over to the two authored fields is `BL-816`.
+camera closes in, both relaxing back onto the speed law. It is `dist_vary`/`dist_catch_up` (see
+"The distance law"), and the engine reads the two fields off `CamParams`. The Bloodhawk staircase
+clips (`CAP-21`) are corroboration, not the source, and they agree to 5% and 10%:
 
-| Quantity | Measured | Note |
+| Quantity | Authored | Measured on the clips |
 |---|---|---|
-| Relaxation rate | **0.65 /sim-s** (τ = 1.55 sim-s) | first-order decay of the excess distance |
-| — the same, in wall time | τ = **1.11 wall-s** (0.90 /wall-s) | the raw clip figure, before conversion |
-| Wall→sim conversion | **k = 1.390** | the project-wide constant, same one the STALL lamp's dwells use |
-| Steady-state excess | **+0.28 % of `d` per mph/sim-s** = **0.105 m per m/s²** | residual-vs-`dV/dt` correlation **−0.79 to −0.85** in all four takes |
-| Peak excursion | **≈ +15 % of the radius** on a full-throttle slam, **≈ −7 %** on a full cut | this is the part the eye actually sees |
+| Relaxation rate | `dist_catch_up` = **1.0 /s** (τ = 1.0 s) | **0.90 /wall-s** (τ = 1.11 wall-s) |
+| Steady-state excess | `dist_vary`/`dist_catch_up` = **0.1 m per m/s²** | **0.105 m per m/s²**, residual-vs-`dV/dt` correlation **−0.79 to −0.85** in all four takes |
+| Peak excursion | — | **≈ +15 % of the radius** on a full-throttle slam, **≈ −7 %** on a full cut, which is the part the eye actually sees |
 
-⚠ **Apply it on the SIM clock.** Using the wall figure (0.90 /wall-s) runs the relaxation **39 %
-fast** — the same 1.390 trap that governs every measured dwell in this project (verification
-`DET-11`). The engine advances the radius once per sim step, never per render frame, so the
-acceleration derivative is clean and a halted or crashed sim freezes the radius with everything
-else.
+⚠ **`dist_catch_up` is a REAL-second rate, and `k = 1.390` does not belong on it.** The engine eases
+the lagged speed on `DAT_009ad744`, which `0059c0c0` builds from a `GetTickCount()` delta in
+seconds, so the rate is per wall second and the clips' raw 0.90 is directly comparable to it. The
+sim-converted 0.65 the engine used to carry compared the wrong pair of numbers; verification
+`DET-11`'s conversion applies to a duration read off a world that runs fast, not to an easing rate
+the engine itself denominates in wall time. CSVM's own sim clock advances by the wall frame delta
+in realtime mode and replays that same axis under `--det`, so the authored 1.0 goes in unconverted.
 
-⚠ **The engine's own rate is the measured one, on the sim clock.** The decode puts the original's
-relaxation at `dist_catch_up` on its per-frame dt, and the raw clip figure (0.90 /wall-s) is the
-one that matches it; the sim-converted 0.65 does not. Which clock CSVM should run it on is part of
-`BL-816`, so until that lands the two figures must not be mixed.
+The radius still advances once per SIM step and never per render frame, so the lag sees one cadence
+and a halted or crashed sim freezes the radius with everything else.
+
+⚠ **The look-behind inversion is not ported.** The original multiplies the transient by the view
+direction factor, which the look-behind arm hard-codes to `−1`, so a slam pushes that view's camera
+*in*. CSVM's look-behind takes the forward radius whole and has no direction factor to invert.
 
 ## Engine-read fields
 
@@ -190,8 +192,9 @@ one that matches it; the sim-converted 0.65 does not. Which clock CSVM should ru
 `CSVM/src/Flight/CameraController.cs` applies:
 
 - `dist` + `dist_factor` — the dynamic chase radius (shared by the numpad fixed views, so both
-  cameras move together — dynamics included). The throttle transient's 0.65 /sim-s relaxation
-  there is a CAP-21 **measurement**, not yet a reading of `dist_vary`/`dist_catch_up` (`BL-816`).
+  cameras move together, dynamics included).
+- `dist_vary` + `dist_catch_up` — the throttle transient on top of that radius (`DistTransient`),
+  both per real second.
 - `dist_min` / `dist_max` — the bounds that radius is held inside for every forward-facing pose,
   and so the pose the view rests at (`ExternalRadius`).
 - `crash_horiz` / `crash_y` — the crash camera's hard-cut pose (`CrashView`).

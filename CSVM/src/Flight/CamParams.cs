@@ -23,14 +23,17 @@ public sealed class CamParams
     /// the Bloodhawk's slope as 0.0105 against this shipped 0.01 — 5% agreement).</summary>
     public float DistFactor = 0.01f;
 
-    /// <summary>The bounds the speed-driven distance is held inside for a forward-facing camera,
-    /// so <see cref="DistMin"/> is also the pose the view rests at. <see cref="DistVary"/> is the
-    /// throttle transient's gain, which the engine does not read yet.</summary>
+    /// <summary>The throttle transient's gain: metres of extra distance per (m/s) of gap between
+    /// speed and its own lagged copy, the copy easing at <see cref="DistCatchUp"/>. The bounds
+    /// below hold the speed-driven distance for a forward-facing camera, so <see cref="DistMin"/>
+    /// is also the pose the view rests at.</summary>
     public float DistVary = 0.1f;
     public float DistMin = 15.7f;
     public float DistMax = 25f;
 
     // Catch-up rates, per frame-second, in the same exponential (docs/formats/camparam.md).
+    // ⚠ Per REAL second: the original eases these on its per-frame wall dt, so no measured-to-sim
+    // conversion belongs on them.
     public float DistCatchUp = 1f;
     public float PosCatchUp = 2f;
     public float LookCatchUp = 3f;

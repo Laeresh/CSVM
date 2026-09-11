@@ -57,18 +57,6 @@ public sealed class CameraController
 
     private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
 
-    // The throttle transient's relaxation rate, in 1/SIM-second. MEASURED off the original's
-    // Bloodhawk staircase clips, NOT authored, and it matches no authored camparam constant.
-    // ⚠ Applied per SIM dt: the equivalent wall-second figure is 0.90, so feeding wall time here
-    // would run the relaxation 39% off. See docs/formats/camparam.md.
-    private const float DistTransientRelax = 0.65f;
-
-    // Steady-state excess distance per unit of along-path acceleration, from the same clips:
-    // +0.28% of d per (mph/sim-s) = 0.105 m per (m/s²), residual-vs-dV/dt correlation −0.79 to
-    // −0.85 in all four takes. MEASURED, not authored — a full-throttle slam peaks ~+15% of the
-    // radius and a full cut ~−7%, which is the term the eye actually sees.
-    private const float DistTransientPerAccel = 0.105f;
-
     // The numpad +/- zoom axis: the target moves at 2/s, clamped [0, 1]; the shown trim chases
     // it at 1.5/s. 0 is the pose the view rests at, never a mid-point (docs/org/cameraViews.md).
     private const float ZoomAxisRate = 2f, ZoomSmoothRate = 1.5f;
@@ -137,6 +125,12 @@ public sealed class CameraController
     // (camparam `dist_min`/`dist_max`, per plane). The near one is the pose the view rests at.
     private readonly float _distMin, _distMax;
 
+    // The authored throttle transient (camparam `dist_vary`/`dist_catch_up`, per plane): the gain
+    // in metres per (m/s) of speed lag, and the rate the lagged copy chases the real speed at.
+    // ⚠ `dist_catch_up` is per REAL second, not a converted figure: the original eases it on its
+    // per-frame wall dt and so does this clock. See docs/formats/camparam.md.
+    private readonly float _distVary, _distCatchUp;
+
     // The plane-local offset of this aircraft's authored cockpit_camera marker (PlaneBuilder,
     // fallback (0,0,0) when the plane has none) — both first-person views share it, there is no
     // separate nose marker (docs/org/cameraViews.md).
@@ -148,11 +142,11 @@ public sealed class CameraController
     // into that global's own home.
     private readonly float _externalFovDeg;
 
-    // The dynamic chase radius: _dist + _distFactor·V + the acceleration transient. Advanced by
+    // The dynamic chase radius: _dist + _distFactor·V + the throttle transient. Advanced by
     // UpdateDynamics on the sim clock; read by both the chase camera and the fixed views.
     private float _radius;
-    private float _distExcess;                   // the transient's state, metres beyond d(V)
-    private float _prevSpeed;                    // last sim step's speed (accel derivative)
+    private float _laggedSpeed;                  // the transient's state: speed's own lagged copy
+    private float _distExcess;                   // this step's transient, metres beyond d(V)
     private float _simTime, _logAccum;           // chase breadcrumb bookkeeping
 
     // The numpad +/- zoom axis's own state: target then shown, both [0, 1], 0 = the rest pose.
@@ -180,6 +174,8 @@ public sealed class CameraController
         _radius = cam.Dist;
         _distMin = cam.DistMin;
         _distMax = cam.DistMax;
+        _distVary = cam.DistVary;
+        _distCatchUp = cam.DistCatchUp;
         _crashHoriz = cam.CrashHoriz;
         _crashY = cam.CrashY;
         _backMin = cam.BackDistMin;
@@ -420,6 +416,19 @@ public sealed class CameraController
     /// clamp unit-test without a camera.</summary>
     public static float ZoomTarget(float target, bool zoomIn, bool zoomOut, float dt) =>
         Mathf.Clamp(target + (((zoomOut ? 1f : 0f) - (zoomIn ? 1f : 0f)) * ZoomAxisRate * dt), 0f, 1f);
+
+    /// <summary>The throttle transient in metres, <c>dist_vary·(V − V̄)</c>, with <c>V̄</c> the
+    /// lagged copy of speed handed back for the next step (docs/formats/camparam.md).
+    /// ⚠ Read the term BEFORE easing the lag, the order the original uses, and do not convert
+    /// <paramref name="distCatchUp"/>: it is authored per real second, which this dt is. The
+    /// original's look-behind inversion has no port here. Pure, so the whole law unit-tests
+    /// without a camera.</summary>
+    public static float DistTransient(float laggedSpeed, float speed, float distVary,
+        float distCatchUp, float dt, out float laggedNext)
+    {
+        laggedNext = HeadLook.Approach(laggedSpeed, speed, distCatchUp, dt);
+        return distVary * (speed - laggedSpeed);
+    }
 #pragma warning restore SA1204
 
     /// <summary>Advance the numpad +/- zoom axis one frame: the target via <see
@@ -435,20 +444,18 @@ public sealed class CameraController
     }
 
     /// <summary>Advance the dynamic chase radius one SIM step: <c>d = dist + dist_factor·V</c>
-    /// (both authored) plus a first-order acceleration transient relaxing at the measured 0.65
-    /// /sim-s — see docs/formats/camparam.md. Raw here; <see cref="ExternalRadius"/> is what
-    /// applies the authored bounds. Called by the host once per SIM step, never per render frame,
-    /// so the acceleration derivative stays clean; a halted or crashed sim takes no steps.</summary>
+    /// plus the authored throttle transient <see cref="DistTransient"/>, every term from camparam
+    /// (docs/formats/camparam.md). Raw here; <see cref="ExternalRadius"/> is what applies the
+    /// authored bounds. Called by the host once per SIM step, never per render frame, so the
+    /// speed lag advances on one cadence; a halted or crashed sim takes no steps.</summary>
     public void UpdateDynamics(float dt, float speed)
     {
         if (dt <= 0f)
         {
             return;
         }
-        float accel = (speed - _prevSpeed) / dt;
-        _prevSpeed = speed;
-        float t = 1f - Mathf.Exp(-DistTransientRelax * dt);
-        _distExcess += ((DistTransientPerAccel * accel) - _distExcess) * t;
+        _distExcess = DistTransient(_laggedSpeed, speed, _distVary, _distCatchUp, dt,
+            out _laggedSpeed);
         _radius = _dist + (_distFactor * speed) + _distExcess;
 
         // Measurement breadcrumb (file sink always writes debug): a sim-time series of the
@@ -494,7 +501,7 @@ public sealed class CameraController
     /// the given speed with the transient zeroed: a teleport is not an acceleration.</summary>
     public void Snap(Vector3 planePos, Basis attitude, float speed, in Transform3D renderPose)
     {
-        _prevSpeed = speed;
+        _laggedSpeed = speed;
         _distExcess = 0f;
         _radius = _dist + (_distFactor * speed);
         // A settle-immediately pose starts the pilot looking where the aircraft is going; a head

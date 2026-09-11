@@ -1733,9 +1733,9 @@ public partial class FlightController : Node3D
         _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
 
-        // The dynamic chase radius advances on the sim step, not the render frame: the
-        // acceleration derivative needs the fixed dt, and the transient's relaxation is a
-        // SIM-time rate. A crash or halt stops the calls, freezing the radius too.
+        // The dynamic chase radius advances on the sim step, not the render frame: the transient's
+        // speed lag must see one cadence, and the authored relaxation rate is per real second,
+        // which this clock is. A crash or halt stops the calls, freezing the radius too.
         _cam?.UpdateDynamics(dt, _model.Speed);
 
         // The AI gunner: acquire/hold the target and decide this tick's trigger and lead

@@ -319,9 +319,19 @@ Three sites put the axis back to `0`: camera init (`FUN_0042b730` at `0042b779`)
 mode `0` from any other mode (`FUN_0042c280` at `0042c33d`), and the head-look centre key `0x3e`
 in free-look. Nothing else writes it, so a mode change always returns the pilot to the near end.
 
-CSVM's port is `CameraController.ExternalRadius` (steps 2 and 3) and `UpdateDynamics` (step 1's
-speed law; the transient there is still a measured pair rather than these two authored fields,
-which `BL-816` carries).
+⚠ **The easing dt is WALL time, not a fixed step.** `FUN_00460490` multiplies its rate by
+`DAT_009ad744`, and `FUN_0059c0c0` (`0059c0c0`-`0059c141`) builds that global once per rendered
+frame as a `GetTickCount()` delta in seconds, optionally held between a min and max frame time
+(`0063b160` gates the clamp, `0063b158`/`0063b15c` are its ends) and multiplied by a one-shot scale
+that resets to `1.0` every frame. The only writer of that scale is `FUN_0059c1f0`, called with
+`2.0` from the toggled double-speed key at `0048810f`. So every rate in this page, the head-look
+smoothing and the zoom included, is **per real second**, and no measured-to-sim conversion belongs
+on one.
+
+CSVM's port is `CameraController.ExternalRadius` (steps 2 and 3), `UpdateDynamics` (step 1's speed
+law) and `DistTransient` (step 1's transient, reading `dist_vary`/`dist_catch_up` straight off
+`CamParams`). The direction factor `f` has no port: CSVM's look-behind takes the forward radius
+whole, so the transient is never inverted and the blended bounds are never formed.
 
 ## Head-look controller
 
