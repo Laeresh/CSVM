@@ -972,25 +972,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   brightness knob beside `FogVolumeClutter`'s `CardVertexColorTune`.
   *Playtest after fix:* the C1B night spawn above, against `playtest/CAP-11/`'s t5 and t16
   frames, saying for every measured puff which side of the moon it faces.
-  *Cross-refs:* `docs/formats/effects.md`'s speed-cue section (the third population), `BL-327` (whether `lighting` gates `WorldLight`
-  on a cloud card at all — if it does not, this item's arithmetic changes), `CAP-11`.
+  *Cross-refs:* `docs/formats/effects.md`'s speed-cue section (the third population),
+  `docs/org/vertexLighting.md`'s facade section, `CAP-11`.
+  ⚠ **The lighting gate cannot supply this item's direction, decoded.** Every placed `cloudparent`
+  card in every deck chapter (C1's 626, C1B's 1,620, C1C's 1,056, C4's 1,453) is authored
+  `lighting: false` and carries no normal array at all, so the original's directional light reaches
+  none of them and `SceneBuilder`, which honours the flag, does not multiply them by
+  `csky_world_light` either. Re-check what the measured p90 above is actually reading (fog mix, not
+  the world light) before building on it. A directional term for this population has to come from
+  some other mechanism; the flag does buy a per-vertex `N·L` on the `fvol` cards, which C1B ships
+  none of.
 
-- `BL-327` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **Is `lighting: true` on a `Facade` cloud card a `WorldLight` gate at all —
-  and what else does the original apply to cloud sprites?** (minted at `BL-118`'s close,
-  PLAN-overcast-match `C24`, 2026-08-09; the fifth candidate `C23` raised and deliberately did not
-  guess at.) One item, because all three open questions below are the same question — *what does
-  the original apply to a cloud sprite* — and any answer to one constrains the others.
-  *Evidence (the flag):* C1/C4 `fvol` cards author `lighting: false`; **C1C/C2B author
-  `lighting: true`** (`docs/formats/fogvol.md`) and we honour both, so their field renders
-  `222.7 × 0.784 = 174.6` where C1's renders 222.7. The `C23` fork's `M-a` landing (2026-08-09)
-  darkened every card by `225/240` and un-dimmed the above-band deck floor, and at C1C/C2B that
-  made the frame **worse**, exactly as predicted and stated rather than tuned around: C1C's
-  above-band frame now holds placed `cloudparent` facades **235.25**, an un-dimmed deck floor
-  **195.8** and `fvol` cards **163.7** (measured 163.24 / 163.83; C2B 163.24) — cloud-population
-  spread **60.7 → 71.6**, deck-floor↔card **−19.8 → +32.1**. If the flag is *not* a `WorldLight`
-  gate, C1C's field is 208.8 with the same TUNE and sits ~26 units under its own placed clouds —
-  the relationship C1 already has (236.65 vs 208.8). Moves C1C/C2B/C5 and nothing about C1's two
-  reference stills.
+- `BL-327` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **What else the original applies to a cloud sprite: the far
+  field's fade and the 209 plateau** (minted at `BL-118`'s close, PLAN-overcast-match `C24`,
+  2026-08-09; the fifth candidate `C23` raised and deliberately did not guess at.) One item,
+  because both open questions below are the same question (*what does the original apply to a
+  cloud sprite*), and any answer to one constrains the other.
+  *The flag half is decoded and closed* (`docs/org/vertexLighting.md`'s facade section, the
+  function addresses and populations there). `lighting: true` on a `Facade` card **is** a gate on
+  the same per-vertex sun the rest of the world takes, reached by the same draw, but what it admits
+  is `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated per vertex on the card's own three authored
+  normals carried through the billboard basis, so a lit card is shaded across its face and swings
+  with the heading rather than being multiplied by one `WorldLight`. Two consequences stand here.
+  (a) **It does not explain the plateau:** C1 and C4, whose frames the 208.8 measurement comes
+  from, author `lighting: false`, so no lighting term reaches their cards at all. (b) **It does
+  change what we should do at C1C/C2B/C5**, where the cards are lit and we apply a flat
+  `csky_world_light` instead of the per-vertex term; that is a look change on a visible population,
+  owed a verdict at the controls (`PT-47` (d)) before any code moves, and it replaces the current
+  reading rather than stacking on it. Today's frame at C1C is the flat-multiply one: placed
+  `cloudparent` facades **235.25**, un-dimmed deck floor **195.8**, `fvol` cards **163.7**
+  (measured 163.24 / 163.83; C2B 163.24), cloud-population spread **71.6**.
   *Evidence (the far field):* at the CAP-12 1700 m rung `tops-L`/`tops-R` sit **+14.9 / +29.0**
   over the altitude-matched `t97` original (were +20.1 / +30.4 before `M-a`, which neither fixed
   nor worsened it), and at the pinned above-deck pose the original frame carries **74 dead-flat
@@ -1006,7 +1017,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   full is one `ANIMATION_DEFINITION` naming `cloudparent` only, C1 is the only chapter shipping a
   `clouds.zrd`, and a sweep of every `zrdr/*.json` in all eight chapters names `cloudsprite` only
   in the eight `fogvol.zrd` files. (2) *`WorldLight` on C1's cards:* 0.802 puts them at 178.6,
-  *below* the original's own 204.9–213.3 at the 1160 m rung. (3) *Fogging the cards:* the same
+  *below* the original's own 204.9–213.3 at the 1160 m rung, and the decode settles it outright,
+  since C1's cards author `lighting: false` and the original's gate never admits a light to them. (3) *Fogging the cards:* the same
   clutter reader's tree templates all author `fog: true`, the world's placed cloud facades author
   `fog: true`, and `B16` verified the flag is honoured — `fog: false` on the card is a deliberate
   authored distinction. (4) *Carrying the field up with the relocated deck:* puts card tops at
@@ -1022,7 +1034,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* C1C and C2B above their band (`--chapter=C1C --pos=-7323,1192,-3829
   --direction=0,0,-1`, and C2B's `-3843,1500,-1101 / -0.391,0,-0.921`), plus a C1 re-check that
   the two reference stills did not move; and the CAP-12 1700 m rung for the far-field half.
-  *Cross-refs:* `PT-47` (d) judges the C1C split at the controls, `BL-325`, `docs/formats/fogvol.md`.
+  *Cross-refs:* `PT-47` (d) judges the C1C split at the controls, `BL-325`,
+  `docs/formats/fogvol.md`, `docs/org/vertexLighting.md` (the facade decode).
 
 - `BL-328` `[Tuning]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: data]` **The deck floor's 20,480 m annulus half-span was sized against a mechanism
   that no longer exists — re-derive it, or decide it does not need one** (minted at

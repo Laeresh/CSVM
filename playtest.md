@@ -234,8 +234,10 @@ draws its authored 800x600 space one-to-one.
   - (d) **C1C above its band** (`--chapter=C1C`, climb past 1082 m) — this one is **expected to
     look WORSE than C1**, and judging how much worse is the point. Its `fvol` cards author
     `lighting: true` where C1's do not, so its frame holds three cloud tones at once: placed cloud
-    facades 235, deck floor 196, `fvol` cards 164. `BL-327` asks whether that flag is a
-    `WorldLight` gate at all; your verdict on how bad it reads is what prioritises it;
+    facades 235, deck floor 196, `fvol` cards 164. The flag is decoded: the original shades a lit
+    card per vertex from its own normals, brighter across the top and swinging with the heading,
+    where we apply one flat `csky_world_light` (`docs/org/vertexLighting.md`). Your verdict on how
+    bad the flat version reads is what prioritises replacing it;
   - (e) **density and character against the original** — cloud spacing and size versus `CAP-12`'s
     own climb, at grazing angles along the tops and along the base: no lattice or comb at any
     angle, no visible field edge over the base map, and the sheet's mottling reading as

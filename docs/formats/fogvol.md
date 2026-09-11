@@ -228,6 +228,14 @@ placed `cloudparent` facades keep vertex colour 255 and their range-gated `0.6` 
 | C1C, C2B | 132.3 × 132.3 m | `true` | `false` |
 | C5 | 70.0 × 70.0 m | `true` | `false` |
 
+⚠ **`lighting: true` admits a per-vertex directional term, not a brightness scalar.** The card
+carries three authored normals (`normal_indices [1, 1, 0, 2]`, the top two corners sharing the one
+that runs up the card and the bottom two the pair that points out of it), the billboard basis turns
+them with the camera, and the original evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on
+them. So a lit card is shaded across its face and swings with the heading, where the remake applies
+one flat `csky_world_light`; the decode and what it implies are in
+[`../org/vertexLighting.md`](../org/vertexLighting.md).
+
 ⚠ Every card is authored `fog: false` — the sprites are exempt from the mission distance fog and
 carry `far_fade_range` instead. That is a deliberate reversal of what `CloudPuffs` did (it fogged
 its puffs); the fade band replaces the fog wall.
@@ -252,9 +260,13 @@ degenerate ranges).
 - **The card's RENDERED brightness — vertex colour 240 scaled to 225 (`CardVertexColorTune`).**
   The authored 240 is decoded and unchanged; the scale is a TUNE calibrated to the original's
   measured 209 plateau, with no mechanism behind it and four candidates refuted. Full statement
-  under [The sprite templates](#the-sprite-templates) above. ⚠ The most likely *next* mechanism is
-  not on this list at all: whether `lighting: true` on a `Facade` cloud card is a `WorldLight` gate
-  (it is what puts C1C/C2B's own two cloud populations 60–70 units apart in one frame).
+  under [The sprite templates](#the-sprite-templates) above. ⚠ The card's `lighting` flag is not the
+  missing mechanism, and it is decoded rather than open: it gates the sun on a facade exactly as it
+  does on any model, but what it admits is a per-vertex `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated
+  on the card's own three authored normals carried through the billboard basis, never a flat
+  `WorldLight` multiply ([`../org/vertexLighting.md`](../org/vertexLighting.md)'s facade section).
+  C1 and C4, whose footage the 208.8 plateau was measured in, author `lighting: false`, so no
+  lighting term reaches their cards at all and this TUNE still has nothing behind it.
 - **`distance` is the scatter's mean spacing — an areal density, not a lattice period.** Each
   volume is cut into `distance` × `distance` cells anchored on the world origin and each cell gets
   **one placement drawn uniformly inside it**, with `perturb_dist_range` applied on top. The

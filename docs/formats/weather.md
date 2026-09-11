@@ -446,7 +446,9 @@ to `FOG_COLOR` at the horizon.
 
 #### Deck tiles carry two SUNLIGHT-dimmed variants
 
-The deck tiles author `lighting: false` like the dome and the `fvol` cloud cards, but the deck
+The deck tiles author `lighting: false` like the dome and C1's and C4's `fvol` cloud cards (C1C,
+C2B and C5 author theirs `true`, which buys them a per-vertex directional term rather than a
+brightness scalar; see [`../org/vertexLighting.md`](../org/vertexLighting.md)), but the deck
 alone was measured to be SUNLIGHT-dimmed in the original — `Flight/Weather.cs`'s `SunIncidence`
 was calibrated on this exact texture. `WorldBuilder.Add` therefore force-lights the deck's own
 tiles (`forceLit: isDeck`) regardless of the authored flag, applying `csky_world_light` deck-local,
@@ -653,9 +655,12 @@ average up-facing sun incidence — **one TUNE constant** calibrated to the C1/I
 →~57). It then self-scales from the data: C1/IA1 → 0.80, C1B night → 0.43, C1C day →
 clamp 1.0. **Matched-pose footage supports the calibration** (`CAP-11`, at
 0.426 / 0.784 / clamp 1.0 — C1B terrain −12%, C2B deck tops −9%, C2 suburb +5–15%;
-`git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). Two exemptions the original
-applies that we don't yet: water renders unmodulated (`BL-304`), and night cloud sprites are
-directionally moonlit rather than uniformly dimmed (`BL-325`). `Weather.WorldLightFactor` computes it (`ZoneWeather.WorldLight`); `WeatherRig` sets
+`git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). One exemption the original applies
+that we do not: water renders unmodulated (`BL-304`). A second reading, that night cloud sprites are
+directionally moonlit rather than uniformly dimmed (`BL-325`), is open on its footage but cannot
+come from the lighting gate: C1B's clouds are placed `cloudparent` facades and every one of them in
+every deck chapter is authored `lighting: false`, so the original's sun reaches none of them
+([`../org/vertexLighting.md`](../org/vertexLighting.md)). `Weather.WorldLightFactor` computes it (`ZoneWeather.WorldLight`); `WeatherRig` sets
 the global shader scalar `csky_world_light` — **linearised** first, so the shader's
 linear-space `ALBEDO ×` lands the dimming in gamma space (matching the DX7 chain
 texel×vertex×light, all sRGB-space; a raw linear ×0.80 only reaches 210→190, gamma-space

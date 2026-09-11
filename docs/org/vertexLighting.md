@@ -59,6 +59,12 @@ else; `soil` never reaches the lighting code.
 | `FUN_00472ea0` | The zone apply, which calls all three of the above on the `sunlight` node |
 | `FUN_0054d9c0` | The render-module init: every global this page names, and the `GfxFlags_SW` lookup |
 | `FUN_0054e040` | The `SetPaletteShading` GameGen command's setter |
+| `FUN_00553700` | The model-type dispatch every draw opens with: `Default` draws as authored, `Facade` gets a camera-facing basis, `Points` draws its vertices as screen points |
+| `FUN_00552180` | The mean of a model's polygon vertices, the pivot the centroid-rotating facades turn about |
+| `FUN_0053cba0` | Transforms a model's normals by the current matrix's rotation, after the facade basis is installed; `FUN_00422690` renormalizes each one |
+| `FUN_00568790` | Per model, sorts the lights that reach it into the directional, the `0x04`-flagged and the remaining lists `FUN_005688a0` walks |
+| `FUN_0054e070` | The `SetVertexShading` GameGen setter (`DAT_00a05f08`), which boot sets to the hardware flag |
+| `FUN_005669b0` / `FUN_00566ae0` | The `DirectedLightFluctuate` enable, and the per-frame scroll of its lookup offsets |
 
 ## The light array (`FUN_00566be0`)
 
@@ -226,6 +232,91 @@ blending on and z-write off, and it excludes the polygon from the projected-shad
 passes. The two globals the submit reads beside it, the opacity `DAT_00a06f98` (default 1.0, set by
 `FUN_0054e0e0`) and the overwrite flag `DAT_00a06f94`, are routing too and never a brightness term.
 
+## Facades: the same gate, a different `N`
+
+A billboard is not a separate renderer. A facade node reaches the draw by the same route as any
+other geometry (`FUN_004d4a20` dispatches on the node's render type, `FUN_004d39c0` handles the
+Object3d case and calls the installed model draw through `DAT_00a07020`), and a `fvol` clutter
+instance reaches that same function through the per-instance clutter draw `FUN_004d5de0`. So gate 1
+above applies to a facade unchanged: `FUN_00552020` reads bit `0x01` of the model's flag word at
+`+0x08`, and with it clear no light is even considered.
+
+What the facade path changes is the **geometry the gate admits**, in three steps:
+
+1. `FUN_00553700` runs first, before any vertex is transformed. It switches on the model's type
+   word at `+0x00` (`0` Default, `1` Facade, `2` Points, the values mech3ax spells `model_type`;
+   the GameGen command `Object3DSetFacade` takes a node, reads its model pointer at node `+0x3c`
+   through `FUN_004cccf0` and writes a `1` into that word through `FUN_00562140`). For a facade
+   it replaces the model's basis with a camera-facing one chosen by the mode word at `+0x04`
+   (`0` CylindricalY through `FUN_005408e0`, `1` SphericalY through `FUN_00539390`, which caches
+   its quaternion on the node at `+0xc8`, `2` and `3` through `FUN_005398b0` / `FUN_00539c70`).
+   When the model carries flag bit `0x80` the rotation is wrapped in a translate to and from the
+   centroid `FUN_00552180` averages out of the polygon vertices.
+2. `FUN_00554550` then skips, for a facade whose mode is `0` or `1`, the per-polygon block that
+   builds a face normal from the first three transformed vertices and rejects back-facing polygons.
+   Such a model therefore has **no face normal of its own** and is never backface-culled.
+3. The normals it does have are its authored per-vertex ones. `FUN_0053cba0` transforms the model's
+   normal array by the current matrix's rotation, which by then is the billboard basis, and
+   `FUN_00422690` renormalizes each one; the polygon gets that array when it carries the normals bit
+   `0x1000` and the global `DAT_00a05f08` is armed. That global is the `SetVertexShading` GameGen
+   variable (`FUN_0054e070`), and boot sets it to the hardware flag, so it is on for every retail
+   capture.
+
+`FUN_005688a0` reads the face normal at the submit record's `+0x08` and the per-vertex array at
+`+0x0c`, preferring the array. A lit facade is therefore shaded per vertex from normals that
+**rotate with the camera**, which is a directional term that tracks where the player is looking, not
+a constant per-mission multiply.
+
+### The ambient-only bit
+
+Model flag bit `0x40` is the one exemption inside the lit path. `FUN_00554550` turns it into the
+submit record's flag `0x80` at `+0x1c`, and `FUN_005688a0` then drops the `max(N·L, 0)` term
+outright, leaving each directional light contributing exactly `ambient × colour`. The same flag
+suppresses the fluctuation term below. A model carrying it is lit, flatly.
+
+⚠ **Two mech3ax flag names mislead here, and the bit values are what to trust.** The extractor's
+`facade_centroid` is bit `0x40`, the ambient-only bit above, and its `hardware_render` is bit
+`0x80`, the bit that actually makes `FUN_00553700` rotate about the centroid. The shipped
+populations agree with the binary rather than with the names: **477 models carry `0x80` and every
+one of them is a `Facade`** (and every one `lighting: false`), while **369 carry `0x40`, 161 of them
+`Default`-typed**, and every one of those is `lighting: true`, which is the only state in which the
+bit does anything. `planes.zbd` carries neither.
+
+### The fluctuation term, which no shipped file turns on
+
+Between the dot product and the accumulator, `FUN_005688a0` multiplies the directional term by a
+lookup into a 128-entry table at `0x006091b4`, indexed by the vertex's world X and Z through a pair
+of scrolling offsets that `FUN_00566ae0` advances and wraps each frame. The whole term is gated on
+`DAT_00639818`, whose only writer is the `DirectedLightFluctuate` GameGen setter `FUN_005669b0`.
+That command name appears in **no shipped archive** (searched over `interp.zbd` and all eight
+chapters' `gamez.zbd`, where the neighbouring `GameGenSetSubfacePriorityOffset` does hit), so the
+factor is 1 in play and the drifting light-dapple the code can do never runs.
+
+### The cloud sprites, which is what the flag decides for
+
+The `fvol` sprite card is one tri-strip quad lying in the model's XY plane (132.27 m square in C1,
+C1C, C2B and C4, with its corners wobbling between `z = −24.2` and `z = +17.6`, and 70 m square in
+C5), vertex colours 240, and every chapter's copy carries the same three authored normals under the
+same `normal_indices [1, 1, 0, 2]`. The **top two corners share the normal that points along the
+card's own `+Y`** (0.999 of it) and the **bottom two carry the two that point out of the card along
+`+Z`** (0.947 and 0.989). Under the
+SphericalY basis that is a normal running up the screen against two running at the viewer, so a lit
+card is not dimmed, it is Gouraud-shaded top to bottom with the bottom half swinging as the heading
+changes.
+
+Which cards are lit is a per-chapter authoring decision, and the two cloud populations differ:
+
+| Population | Chapters | `lighting` | normals |
+|---|---|---|---|
+| `fvol` clutter cards (`cloudsprite1`/`cloudsprite2`) | C1, C4 | false | per vertex, unused |
+| `fvol` clutter cards | C1C, C2B, C5 | **true** | per vertex, used |
+| placed `cloudparent` facades | C1, C1B, C1C, C4 | false | none at all |
+
+The placed clusters are unanimous: **every one of the 626 / 1,620 / 1,056 / 1,453 card nodes under
+C1's 28, C1B's 70, C1C's 30 and C4's 45 `cloudparent` parents is `lighting: false`**, carries no
+normal array, and is authored `fog: true` at vertex colour 255. The sun never touches them in the
+original, so a directional look on that population cannot come from this mechanism.
+
 ## Where CSVM stands
 
 The remake renders the world fullbright and dims it by one `csky_world_light` scalar, the
@@ -236,6 +327,16 @@ surface takes the `csky_world_light` term whatever its texture's alpha class, an
 sprite card. `TextureArchive` still reads the extractor's `alpha` field out of the archive's
 `manifest.json` and publishes it as an alpha class, which is the right reader for anything that
 needs the texture's own bit rather than its pixels.
+
+⚠ **On a facade the gate is reproduced and the term behind it is not.** `csky_world_light` is the
+collapse `AMBIENT + DIFFUSE × 0.46` calibrated on the predominantly up-facing world
+([`weather.md`](weather.md)), and a camera-facing card is the one surface that averaging does not
+describe: the original shades it per vertex from normals that turn with the camera, between
+`AMBIENT` where a corner faces away from the sun and `AMBIENT + DIFFUSE` where one faces it. So
+honouring the flag with a flat multiply, which is what `SceneBuilder` does today, is right about
+*which* cards are lit (C1C, C2B and C5's `fvol` field, and nothing in C1, C4 or any placed
+`cloudparent` cluster) and wrong about the value on all of them. Acting on that is a look change on
+a visible population and is owed a verdict at the controls, not a luminance distance.
 
 ⚠ **The PNG alpha channel is not a substitute for the field.** It distinguishes `Full` from `None`
 but loses the one to ten `Simple` textures per chapter, which carry the bit too, so the pixel
