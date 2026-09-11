@@ -701,6 +701,21 @@ if ($SkipUnits) {
     $ErrorActionPreference = "Stop"
     $watch.Stop()
 
+    # The test host is gone now, so its temp roots (%TEMP%\csvm-tests\run-<pid>-*) delete in
+    # place in well under a second. The host's own exit hook only hands them to a detached
+    # delete, which is the backstop for a bare `dotnet test`; here the folder is left clean
+    # before the next stage starts. A root whose process is still alive belongs to another run.
+    $testTemp = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-tests"
+    if (Test-Path -LiteralPath $testTemp) {
+        foreach ($root in [System.IO.Directory]::EnumerateDirectories($testTemp, 'run-*')) {
+            if ((Split-Path $root -Leaf) -notmatch '^run-(\d+)-') { continue }
+            $alive = $null
+            try { $alive = Get-Process -Id ([int]$Matches[1]) -ErrorAction Stop } catch { $alive = $null }
+            if ($alive) { continue }
+            try { [System.IO.Directory]::Delete($root, $true) } catch { }
+        }
+    }
+
     # Counts come from the TRX, not from the console summary: one is a machine-readable
     # document, the other is localized prose.
     $total = -1; $passed = -1; $failed = -1; $skipped = -1
