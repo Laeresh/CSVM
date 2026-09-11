@@ -168,6 +168,7 @@
     "collision-visibility": 8.570,
     "world-ground-solid": 11.520,
     "nodelab-visibility": 1.083,
+    "terrain-pick-export": 4.14,
     "trail-world-anchor": 0.011,
     "turret-death-effect-world-anchor": 0.003,
     "turret-death-fire-follows-hull": 1.5,

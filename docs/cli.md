@@ -310,11 +310,11 @@ lines**.
 outermost rung and End back to the struck leaf. A breadcrumb names every rung leaf-first with its
 world-frame box, and a yellow wireframe outlines the current rung's subtree.
 
-Neither mode builds collision (WORLD-9), so the pick tests the camera ray against every visible mesh's
-own AABB, nearest hit wins. It is AABB-accurate rather than triangle-accurate, and meshes whose
-world-space AABB diagonal exceeds 350 m are skipped, so terrain is not selectable and a click that finds
-nothing logs `select miss ... tested=N skipped_oversize=M`. Rung names are `cs_name`, never Godot names
-(WORLD-8).
+Neither mode builds collision (WORLD-9), so the pick casts the camera ray itself, nearest hit wins: objects
+by their own AABB (a click just off a thin one can take it), meshes 350 m or wider (terrain tiles, the cloud
+deck) by triangle, occluding whatever is behind them. Hide a deck tile to click the ground under the clouds.
+A miss logs `select miss ... tested=N map_scale=M`. Rung names are `cs_name`, never Godot names (WORLD-8).
+**Ctrl+click** also flips the struck leaf in the cyan-outlined **export set** (node lab, below).
 
 **M** attaches the mesh lab to the selected rung's subtree and nothing else; M again, or selecting
 something else, puts that subtree back as built. **C** draws the collider wireframes (see `--collision`);
@@ -322,10 +322,10 @@ in `--viewer` C stays the mesh lab's cull cycler. Scripted twin: `--debug-mesh=<
 
 ## The node lab — `N` (`--freecam` / `--anim-lab`)
 
-**N toggles a panel down the left edge** holding the world's node tree by `cs_name`, a search box and a
-dependency readout for the shared selection. It is two-way: clicking an object scrolls the tree to it, a
-row selects it, a double-click frames the camera. Buttons: **Frame**, **Hide/Show** (flip the subtree's
-`Visible`, reversible), **Export glTF** (that subtree to git-ignored `Exports/`), **Deps**, **Destructibles**.
+**N toggles a panel down the left edge** holding the world's `cs_name` tree, a search box and a dependency
+readout for the shared selection; a click scrolls the tree to it, a row selects, a double-click frames. Buttons:
+**Frame**, **Hide/Show** (flip `Visible`), **Export glTF** (the subtree to git-ignored `Exports/`), **Deps**,
+**Destructibles**; for the export set **± set** (current rung), **Export set** (one GLB at world positions), **Clear set**.
 
 The tree fills one branch at a time on expand and stops at 500 rows per branch. The dependency readout
 lists the anim definitions anchored on or naming the node, its destructible pools with live HP, its mesh
