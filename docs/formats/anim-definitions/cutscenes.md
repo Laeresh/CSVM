@@ -22,6 +22,7 @@ compiled shape are on the [landing page](../anim-definitions.md) and in
 - [`CALLBACK`: the dispatch chain](#callback-the-dispatch-chain)
 - [`CALLBACK` code reference](#callback-code-reference)
   - [The re-placement code 951](#the-re-placement-code-951)
+  - [Handoff and skip](#handoff-and-skip)
 - [The intro defs' eight dispatches](#the-intro-defs-eight-dispatches)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
 - [Evidence and limits](#evidence-and-limits)
@@ -1069,6 +1070,37 @@ Across the shipped campaign three definitions raise 20: the shared `generic_intr
 changes the player's aeroplane or its place (CM02's `ww_balmoral1` with 967, CM01's `texdrop` with
 951) raises none, which is why dropping the remaining codes costs the original nothing. An intro's own
 remainder past the arm is 2, 11 and 14, and its `RESET_STATE` authors 1, 914, 10 and 667.
+
+#### A remake-only rule: a held input fast-forwards a scene that arms no skip
+
+CSVM adds a way through the scenes the paragraph above leaves unskippable, and it is **not** the
+original's skip. Nothing in the executable raises a rate, and this rule stands beside the livery
+carry in [the airframe swap codes](#the-airframe-swap-codes-965-966-and-967) as something the
+project decided rather than decoded. While an input the skip declined stays down, the episode's
+own definitions run at up to **4x**, reached over a **0.25 s** ramp and released over the same
+ramp; the definition's ambient `SOUND_NODE` emitters and the one-shot `SOUND`s it fires are
+pitched by the same number, so the sound rises with the picture. Both figures are design choices
+with nothing behind them, and both are constants on `Mech3/Anim/CutsceneFastForward.cs`.
+
+Three properties make it a fast-forward rather than a cut:
+
+- **Every authored code still fires, in order, at its own authored time.** The rate multiplies the
+  DEFINITION's dt, so 913/914, 951, the swap codes and the `RESET_STATE` block arrive at the same
+  point of the definition's clock and only sooner in real seconds. A skip, by contrast, drops every
+  code still ahead of it.
+- **The rate is scoped to the episode's `CALL_ANIMATION` closure.** The world outside it, the
+  flight models and the session clock keep real time; `GameClock.SimHeld` is untouched. A
+  mid-mission scene raises no hold code, so the world around it is live and must not speed up
+  with it.
+- **The raised rate is spent as repeated passes of the runtime's whole instance walk**, never as
+  one longer step. Two codes an authored frame apart would otherwise land in one pass and be
+  ordered by the walk rather than by their own times, which is the order 967's hide and 914's
+  reveal depend on above.
+
+⚠ **It is never offered where the original arms a real skip.** Callback 20 clears the rate as it
+sets `Skippable`, so an intro takes the key press as the force-stop the original performs and
+nothing else. The `campaign-cutscene-fast-forward` suite plays CM02's capture at both rates over
+its built world and reads the two against each other.
 
 ## The intro defs' eight dispatches
 

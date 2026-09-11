@@ -432,7 +432,8 @@ kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`), the world-effects 
 (`PlayEffectAt` over a hidden template stage), the emitter prewarm, the range-deferred start sweep
 and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
-`PlayerRangeHeld` says a cutscene is posing their aeroplanes. What binds a member is on that member:
+`PlayerRangeHeld` says a cutscene is posing their aeroplanes. `FastForward` is the per-definition
+rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
 probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
 
@@ -505,6 +506,15 @@ constructor-supplied, never the node type's inherited `Equals`, and `DropFreed` 
 naming a freed node. Every tier is filtered by `AdmissibleStaging`, the owner's verdict on one
 pooled copy; that filter and its limits are on the members. Decode:
 [../org/sequences.md](../org/sequences.md), "The definition owns a private copy of its subtree".
+
+## src/Mech3/Anim/CutsceneFastForward.cs
+The rate one cutscene episode's own definitions run at while the player holds a key through a scene
+that offers no skip: the target, the ramp, the scoped definition set and `RateFor`. Engine-free and
+owned by nobody but `CutsceneController`, which scopes it per episode and hands it to
+`AnimRuntime.FastForward`; the runtime multiplies each definition's dt by it and spends a raised
+rate as repeated passes of the instance walk. A remake-only rule, so both constants are design
+choices rather than decoded figures. Read `Session/CutsceneController.cs` next; the reasoning is
+docs/formats/anim-definitions/cutscenes.md, "Handoff and skip".
 
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,

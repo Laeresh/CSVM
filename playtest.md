@@ -717,6 +717,24 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
 
+- `PT-140` `[Own]` **Holding a key through the wing-walk fast-forwards it, and letting go slows it
+  back down.** In the same sortie, when the capture's picture comes up, hold any key (or any pad
+  button) rather than tapping it. The scene arms no skip, so the key is taken as a fast-forward
+  instead.
+  *Look for:*
+  - (a) the picture spools up to about four times speed rather than jumping there, and spools back
+    to normal speed over about the same quarter second when you let go;
+  - (b) the sound rises in pitch with it and drops back, rather than staying at its own speed;
+  - (c) nothing is skipped: the wing walk, the hand-over and the cut back to flight all happen, in
+    order, and you fly out of it in the Balmoral exactly as when you watch it through;
+  - (d) 4x and the quarter-second ramp are a judgement with nothing in the original behind them, so
+    say if either reads wrong and the constants move
+    (`Mech3/Anim/CutsceneFastForward.cs`, `Target` and `RampSeconds`);
+  - (e) a mission INTRO still takes a key press as a skip, ending it at once, rather than running
+    fast.
+  *Blocks:* the held-input glue is the one half no instrument reaches (no synthetic input), and (d)
+  is a taste call; the rest is covered by the `campaign-cutscene-fast-forward` suite.
+
 ### CM14 (C2B/M04) · the Gemini, both kill orders
 
 ```powershell

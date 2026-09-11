@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using CSVM.Utils;
 using Godot;
 
@@ -120,6 +121,16 @@ public sealed partial class CutsceneController : Node
     private readonly List<FlightController> _parked = new();
     private readonly HashSet<int> _gapsLogged = new();
     private readonly Dictionary<Camera3D, float> _fov = new();
+    // The fast-forward a held key applies to an episode the player may not skip, handed to the
+    // runtime at the bind and scoped per episode below.
+    private readonly CutsceneFastForward _fastForward = new();
+    // What is down right now, as the session's own input saw it go down. Confirmed against the
+    // device every tick rather than waiting for a release: a key-up consumed elsewhere would
+    // otherwise leave the picture running at the raised rate for the rest of the episode.
+    private readonly HashSet<Key> _keysDown = new();
+    private readonly HashSet<(int Device, JoyButton Button)> _padsDown = new();
+    private bool _scriptedHold;
+    private bool _fastForwardLogged;
     private AnimRuntime? _runtime;
     private IReadOnlyList<PlayerRig> _rigs = Array.Empty<PlayerRig>();
     private Func<IReadOnlyList<FlightController>>? _aiPlanes;
@@ -192,6 +203,11 @@ public sealed partial class CutsceneController : Node
     /// <summary>Whether the player is out of flight: input suspended, the airframe pinned and
     /// undrawn, engine audio released (code 11).</summary>
     public bool OutOfFlight { get; private set; }
+
+    /// <summary>The rate this episode's own definitions are running at, 1 at real speed. A
+    /// remake-only rule, offered where <see cref="Skippable"/> is false, so a scene the original
+    /// plays out in full can be held through rather than cut short.</summary>
+    public float FastForwardRate => _fastForward.Rate;
 
     /// <summary>Whether the AI vehicles are parked (code 913), the state code 914 reverses.</summary>
     public bool AiParked { get; private set; }
@@ -316,6 +332,10 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
+        // The rate rides the runtime's own advance, so it reaches a realtime flown session and the
+        // parent-driven probe clock through the one path both step through.
+        runtime.FastForward = _fastForward;
+
         _markerHome = runtime.WorldRoot;
         _cutsceneCamera = First(runtime.FindNodes(CameraNode));
         // ⚠ The runtime's root, not the camera's parent right now: this binds AFTER the bootstrap,
@@ -436,6 +456,7 @@ public sealed partial class CutsceneController : Node
             _owner = null;
             _ownerRig = null;
             SeedRaisers();
+            ScopeFastForward();
             HeldForEnding = false;
             _barsFlipsThisEpisode = 0;
             _lastBarsVisible = _bars?.Visible ?? false;
@@ -463,6 +484,7 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
+        PollFastForward();
         MirrorCamera();
         StagePlayerAircraft();
         PinBars();
@@ -502,6 +524,33 @@ public sealed partial class CutsceneController : Node
         Restore("skipped");
         return true;
     }
+
+    /// <summary>Takes an input the session offered the skip and the skip declined, and holds the
+    /// picture at a raised rate for as long as that input stays down. A remake-only rule offered
+    /// only where no skip is armed, which is every mid-mission definition; an intro that armed one
+    /// has already taken the press as the original's own force-stop.</summary>
+    public void NoteHeld(InputEvent @event)
+    {
+        if (!Playing || Skippable)
+        {
+            return;
+        }
+
+        if (@event is InputEventKey { Pressed: true, Keycode: not Key.Escape } key)
+        {
+            _keysDown.Add(key.Keycode);
+        }
+        else if (@event is InputEventJoypadButton { Pressed: true } pad)
+        {
+            _padsDown.Add((pad.Device, pad.ButtonIndex));
+        }
+    }
+
+    /// <summary>Holds (or releases) the fast-forward without an input event, for the suite that
+    /// plays one scene at both rates. Stands beside a real held input rather than replacing it;
+    /// either arms the rate, and the episode's own gate below still decides whether it may.
+    /// </summary>
+    public void HoldFastForward(bool held) => _scriptedHold = held;
 
     private static bool AuthorsCode(AnimDefinition def)
     {
@@ -607,6 +656,49 @@ public sealed partial class CutsceneController : Node
         return false;
     }
 
+    // The definitions the fast-forward may raise: this episode's whole call closure, since the
+    // callee flying the shot drives as much of the picture as the definition that owns the
+    // episode. Nothing is scoped where there is no runtime to ask.
+    // Everything back to real speed at once: the episode is over, or it turned out to arm the
+    // original's own skip and was never one to hold a key through.
+    private void ClearFastForward()
+    {
+        _fastForward.Clear();
+        _keysDown.Clear();
+        _padsDown.Clear();
+        _scriptedHold = false;
+        _fastForwardLogged = false;
+    }
+
+    private void ScopeFastForward()
+    {
+        ClearFastForward();
+        if (_runtime == null || Anim == null)
+        {
+            return;
+        }
+
+        _fastForward.Scope(_runtime.CallClosureOf(Anim));
+    }
+
+    // Whether the rate is armed this tick, and at what. ⚠ The devices are re-read rather than
+    // waited on for a release: an input whose key-up another handler consumed would otherwise hold
+    // the picture at the raised rate for the rest of the episode.
+    private void PollFastForward()
+    {
+        _keysDown.RemoveWhere(key => !Input.IsKeyPressed(key));
+        _padsDown.RemoveWhere(pad => !Input.IsJoyButtonPressed(pad.Device, pad.Button));
+        bool down = _scriptedHold || _keysDown.Count > 0 || _padsDown.Count > 0;
+        _fastForward.Held = down && !Skippable && !HeldForEnding;
+        if (!_fastForward.Held || _fastForwardLogged)
+        {
+            return;
+        }
+
+        _fastForwardLogged = true;
+        Log.Info("anim", $"cutscene '{Anim}' fast-forwards while an input is held; this scene arms no skip");
+    }
+
     // BL-452: the bars are separately-called data (docs/formats/anim-definitions/cutscenes.md),
     // so this controller never turns them on or off itself except in Restore below. While Playing
     // is true they should transition AT MOST once, false->true, from the letterbox call site(s);
@@ -637,6 +729,9 @@ public sealed partial class CutsceneController : Node
     {
         GD.Print($"cutscene: '{Anim}' {why} at t={Utils.GameClock.Current?.Time ?? 0.0:0.##}, " +
                  $"handing off after {_codes.Count} code(s)");
+        // ⚠ Before the reset block below, not after: its own events register motions, and a rate
+        // still standing here would run the hand-back faster than the world it hands back to.
+        ClearFastForward();
         // What the ending definition's own RESET_STATE asserts beyond the codes below: CM07's
         // hangar drop calls `got_the_plane` there, and that call is the only thing in the mission
         // that completes its "Fly Through Zeppelin Hangar" objective.
@@ -746,6 +841,9 @@ public sealed partial class CutsceneController : Node
                 // code and not an implementation: the hold is what a definition asks for, the
                 // skip is what the player is then offered.
                 Skippable = true;
+                // ⚠ And the fast-forward goes away with the same code. An episode offering the
+                // original's own force-stop must not also run fast; the key press ends it.
+                ClearFastForward();
                 WorldHeld?.Invoke(true);
                 // The original parks the AI before every mission's intro regardless of what codes
                 // that intro's own data authors; the shared generic_intro never raises 913, and

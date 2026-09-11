@@ -19,8 +19,10 @@ internal sealed class SoundChannel
     // Keyed by (sound name, anchor), like the lights and for the same reason: the anchor
     // identifies the *instance* of the definition, so C1's four firetrucks each get their own
     // siren rather than sharing one. It cannot be keyed by host node the way puffers are — in the
-    // reader's triple the emitter is declared BEFORE anything says where it goes.
-    private readonly Dictionary<(string Name, Node3D? Anchor), object> _soundEmitters = new();
+    // reader's triple the emitter is declared BEFORE anything says where it goes. The value
+    // carries the declaring definition beside the handle, which is what a per-definition rate is
+    // resolved through.
+    private readonly Dictionary<(string Name, Node3D? Anchor), Declared> _soundEmitters = new();
 
     private readonly HashSet<string> _soundFailuresReported = new(StringComparer.OrdinalIgnoreCase);
 
@@ -34,7 +36,15 @@ internal sealed class SoundChannel
 
     private readonly Action _recordApplied;
 
+    // What one definition's dt is multiplied by right now: the cutscene fast-forward, read live so
+    // a one-shot fired inside a sped-up shot is pitched by the rate that shot is running at.
+    private readonly Func<AnimDefinition, float> _rateFor;
+
     private int _soundsUnknown, _soundsAfterBuild;
+
+    // Did the last ApplyRates write a pitch other than 1? The sweep costs a dictionary walk, so it
+    // runs only while a rate is live and once more to hand every emitter its own pitch back.
+    private bool _pitched;
 
     // Set once Bootstrap has printed its emitter census. After it, a failed SOUND_NODE is invisible
     // unless reported at the point of use, because the census is a bootstrap snapshot and cannot
@@ -43,13 +53,15 @@ internal sealed class SoundChannel
     private bool _soundCensusPrinted;
 
     public SoundChannel(Func<WorldSounds?> sounds, Func<bool> handledElsewhere,
-        Func<string, AnimDefinition, Node3D?, Node3D?> resolve, Func<Random> rng, Action recordApplied)
+        Func<string, AnimDefinition, Node3D?, Node3D?> resolve, Func<Random> rng,
+        Action recordApplied, Func<AnimDefinition, float>? rateFor = null)
     {
         _sounds = sounds;
         _handledElsewhere = handledElsewhere;
         _resolve = resolve;
         _rng = rng;
         _recordApplied = recordApplied;
+        _rateFor = rateFor ?? (_ => 1f);
     }
 
     /// <summary>One-shot SOUND events that resolved to a stream and fired this session (the
@@ -84,11 +96,29 @@ internal sealed class SoundChannel
         return true;
     }
 
+    /// <summary>Pitches every declared emitter by the rate its own definition is running at, so a
+    /// fast-forwarded shot's ambient sound rises with the picture instead of playing under it.
+    /// ⚠ Runs after the rates are settled for the frame and before <c>WorldSounds.Tick</c> starts
+    /// a stream, so nothing plays a frame at the wrong pitch.</summary>
+    internal void ApplyRates(CutsceneFastForward? rates)
+    {
+        bool live = rates is { Scoped: true } && rates.Rate != 1f;
+        if ((!live && !_pitched) || _sounds() is not { } sounds)
+            return;
+        foreach (var declared in _soundEmitters.Values)
+            sounds.SetPitch(declared.Handle, live ? _rateFor(declared.Def) : 1f);
+        _pitched = live;
+    }
+
     /// <summary>The sound-emitter case of OBJECT_ADD_CHILD: whether <paramref name="child"/> names a
     /// declared emitter, and if so its handle. The router resolves the parent node itself; this
     /// channel only knows sound names.</summary>
-    internal bool TryGetChild(string child, Node3D? anchor, out object handle) =>
-        _soundEmitters.TryGetValue((child, anchor), out handle!);
+    internal bool TryGetChild(string child, Node3D? anchor, out object handle)
+    {
+        bool found = _soundEmitters.TryGetValue((child, anchor), out var declared);
+        handle = declared.Handle!;
+        return found;
+    }
 
     internal void Attach(object handle, Node3D host)
     {
@@ -116,7 +146,7 @@ internal sealed class SoundChannel
         }
 
         var key = (name, anchor);
-        if (!_soundEmitters.TryGetValue(key, out var handle))
+        if (!_soundEmitters.TryGetValue(key, out var declared))
         {
             // Re-assertion must be a no-op, not a second emitter: the data keeps its definitions
             // alive with `[SOUND_NODE, …, Loop{-1}]` exactly as it does for puffers.
@@ -127,10 +157,12 @@ internal sealed class SoundChannel
                                              + "(unknown to sounds.json, or never prewarmed)");
                 return;
             }
-            handle = created;
-            _soundEmitters[key] = handle;
+            declared = new Declared(created, def);
+            _soundEmitters[key] = declared;
             _recordApplied();
         }
+
+        object handle = declared.Handle;
 
         // AT_NODE — the compiled form's own placement. Absent in the reader form and in the 865
         // compiled events that leave it to OBJECT_ADD_CHILD.
@@ -168,7 +200,8 @@ internal sealed class SoundChannel
             ReportLateSoundFailure(name, "there is no audio session", "SOUND");
             return;
         }
-        if (sounds.PlayOneShot(name, OneShotSoundPosition(ev, def, anchor), _rng()) != null)
+        if (sounds.PlayOneShot(name, OneShotSoundPosition(ev, def, anchor), _rng(),
+                pitch: _rateFor(def)) != null)
         {
             OneShotSoundsPlayed++;
             _recordApplied();
@@ -187,10 +220,11 @@ internal sealed class SoundChannel
     {
         if (_sounds() is { } sounds)
         {
-            foreach (var handle in _soundEmitters.Values)
-                sounds.SetActive(handle, false);
+            foreach (var declared in _soundEmitters.Values)
+                sounds.SetActive(declared.Handle, false);
         }
         _soundEmitters.Clear();
+        _pitched = false;
     }
 
     /// <summary>The sound half of `TearDownResourcesOf`: every emitter this anchor's instance
@@ -201,7 +235,7 @@ internal sealed class SoundChannel
             return;
         foreach (var key in _soundEmitters.Keys.Where(k => k.Anchor == anchor).ToList())
         {
-            sounds.SetActive(_soundEmitters[key], false);
+            sounds.SetActive(_soundEmitters[key].Handle, false);
             _soundEmitters.Remove(key);
         }
     }
@@ -224,7 +258,7 @@ internal sealed class SoundChannel
     {
         if (_sounds() == null || ev.Data.Str("name") is not { } name)
             return null;
-        return _soundEmitters.TryGetValue((name, anchor), out var handle) ? handle : null;
+        return _soundEmitters.TryGetValue((name, anchor), out var declared) ? declared.Handle : null;
     }
 
     // Where a one-shot SOUND plays: its AT_NODE's world pose plus the trailing offset, or the
@@ -255,4 +289,8 @@ internal sealed class SoundChannel
             Log.Info("sound", $"one-shot SOUND '{ev.Data.Str("name")}' positioned by out-of-tree ancestor composition at {pos} (world root not parented at bootstrap)");
         return pos;
     }
+
+    // One declared ambient emitter: the opaque WorldSounds handle plus the definition that declared
+    // it, which is the only thing a per-definition rate can be resolved through afterwards.
+    private readonly record struct Declared(object Handle, AnimDefinition Def);
 }

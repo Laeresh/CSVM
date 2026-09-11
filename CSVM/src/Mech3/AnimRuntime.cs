@@ -181,6 +181,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// switch. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Action<string>? MissionTriggerOwner;
 
+    /// <summary>The rate one cutscene episode's definitions run at while the player holds a key
+    /// through a scene that offers no skip, or null on a runtime nobody fast-forwards (every one
+    /// but the world's). Set by <c>CutsceneController</c>, which owns both the scope and the key.
+    /// ⚠ It multiplies the DEFINITION's dt here, never the session's clock: the world and the
+    /// flight models around the episode keep real time.</summary>
+    public CutsceneFastForward? FastForward;
+
     /// <summary>Animation names whose <c>EXECUTION_BY_RANGE</c> is an ARMING gate, not a LOD one:
     /// a <c>CALL_ANIMATION</c> only arms them and the player reaching the band is what runs them.
     /// Bind the mission's own cutscene definitions; left empty, every call starts its callee at
@@ -780,7 +787,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// world build finishes; a crash runtime's `SoundHandledElsewhere` follows its aircraft).
     /// </summary>
     private SoundChannel Sound => _sound ??= new SoundChannel(
-        () => Sounds, () => SoundHandledElsewhere, Resolve, () => _rng, () => _opsApplied++);
+        () => Sounds, () => SoundHandledElsewhere, Resolve, () => _rng, () => _opsApplied++,
+        def => FastForward?.RateFor(def) ?? 1f);
 
     /// <summary>This runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` family. Reads <see cref="Lights"/>
     /// and <see cref="LightViewerPositions"/> live through the closures below, not a snapshot at
@@ -1396,6 +1404,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// code path either way, so the game's behaviour is untouched.</summary>
     public void Advance(float dt)
     {
+        // On the incoming dt, before anything reads the rate: the ramp measures real seconds, and
+        // both clock paths (realtime physics, parent-driven frame) reach the runtime through here.
+        FastForward?.Ramp(dt);
         _elapsed += dt;
         SampleRangePositions();
         // Motions advance ONCE per frame, here — not from the sequence runners, which would
@@ -1405,46 +1416,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _templateStage.FollowSites();
         Emitters.Tick(dt);
         Light.Tick(dt);
+        Sound.ApplyRates(FastForward);
         Sounds?.Tick();
         SweepEffectTtls(dt);
         _templateStage.Sweep();
         TickDeferredByRange();
         if (DebugMotions)
             LogMotions(dt);
-        // Instances can finish, stop each other, and be added by CallAnimation during the walk, so
-        // iterate a copy: newest first, one added this frame runs in the drain that closes the walk.
-        _advancing.Clear();
-        _advancing.AddRange(_instances);
-        // Saved and restored rather than set and cleared, so a nested advance cannot end the outer
-        // walk's queueing window behind it.
-        bool wasWalking = _walkingInstances;
-        _walkingInstances = true;
-        try
+        // A raised rate is spent as repeated passes of the WHOLE walk, never as one longer step per
+        // instance: two codes an authored frame apart would otherwise land in one pass and be
+        // ordered by the walk (docs/formats/anim-definitions/cutscenes.md).
+        int passes = FastForward is { Scoped: true } rate && rate.Rate > 1f
+            ? Mathf.CeilToInt(rate.Rate)
+            : 1;
+        for (int pass = 0; pass < passes; pass++)
         {
-            for (int i = _advancing.Count - 1; i >= 0; i--)
-            {
-                var inst = _advancing[i];
-                if (!_instances.Contains(inst))
-                {
-                    continue;
-                }
-
-                inst.Advance(this, dt);
-                if (Retirable(inst) && _instances.Remove(inst))
-                {
-                    FinishInputGoverned(inst.Def, inst.Anchor);
-                    FinishEffectInstance(inst.Def, inst.Anchor);
-                    _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
-                    OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
-                }
-            }
-
-            DrainQueuedStarts();
-        }
-        finally
-        {
-            _walkingInstances = wasWalking;
-            _advancing.Clear();
+            WalkInstances(dt, passes, pass == passes - 1);
         }
     }
 
@@ -4106,13 +4093,62 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             Log.Debug("anim", $"anim/debug: … and {Motions.Count - 12} more");
     }
 
+    // One pass of the live instances. Instances can finish, stop each other, and be added by
+    // CallAnimation during the walk, so it iterates a copy: newest first, one added during the pass
+    // runs in the drain that closes it. A definition outside a fast-forwarded episode takes its
+    // whole step on the LAST pass and nothing on the others, so the extra passes never re-step the
+    // world around the cutscene at a finer grain than it runs at.
+    private void WalkInstances(float dt, int passes, bool last)
+    {
+        _advancing.Clear();
+        _advancing.AddRange(_instances);
+        // Saved and restored rather than set and cleared, so a nested advance cannot end the outer
+        // walk's queueing window behind it.
+        bool wasWalking = _walkingInstances;
+        _walkingInstances = true;
+        try
+        {
+            for (int i = _advancing.Count - 1; i >= 0; i--)
+            {
+                var inst = _advancing[i];
+                if (!_instances.Contains(inst))
+                {
+                    continue;
+                }
+
+                float rate = FastForward?.RateFor(inst.Def) ?? 1f;
+                float step = rate > 1f ? dt * rate / passes : (last ? dt : 0f);
+                if (step <= 0f)
+                {
+                    continue;
+                }
+
+                inst.Advance(this, step);
+                if (Retirable(inst) && _instances.Remove(inst))
+                {
+                    FinishInputGoverned(inst.Def, inst.Anchor);
+                    FinishEffectInstance(inst.Def, inst.Anchor);
+                    _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
+                    OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+                }
+            }
+
+            DrainQueuedStarts();
+        }
+        finally
+        {
+            _walkingInstances = wasWalking;
+            _advancing.Clear();
+        }
+    }
+
     // Advances every live motion, then dispatches whatever landed. ⚠ The two halves stay in one
     // method, called from one statement in Advance, because the instance walk must not run between
     // them: an instance whose only hold is a landed piece would be Finished with nothing owed, so
     // it retires and FinishEffectInstance SustainEnds the piece's trail emitter mid-flight.
     private void TickMotions(float dt)
     {
-        foreach (var landing in Motions.Tick(dt))
+        foreach (var landing in Motions.Tick(dt, FastForward))
         {
             // ⚠ Count the miss here. A landing can outlive its own instance, and CallSequence then
             // has nothing to dispatch into and returns silently.

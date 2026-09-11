@@ -74,8 +74,10 @@ internal sealed class MotionSet
     /// <summary>Advances every live motion by <paramref name="dt"/>, removes the finished ones, and
     /// returns those that owed a <c>BOUNCE_SEQUENCE</c> — empty on almost every frame. The caller
     /// dispatches them; this class holds no runtime back-reference, and returning them rather than
-    /// calling out makes remove-before-dispatch structural instead of a rule to remember.</summary>
-    public IReadOnlyList<Landing> Tick(float dt)
+    /// calling out makes remove-before-dispatch structural instead of a rule to remember.
+    /// <paramref name="rate"/> is the cutscene fast-forward, which scales a motion by what its own
+    /// owning definition runs at, so a sped-up shot's pose keeps step with its callbacks.</summary>
+    public IReadOnlyList<Landing> Tick(float dt, CutsceneFastForward? rate = null)
     {
         List<Landing>? landed = null;
         for (int i = _motions.Count - 1; i >= 0; i--)
@@ -89,7 +91,7 @@ internal sealed class MotionSet
                 continue;
             }
 
-            _motions[i].Tick(dt);
+            _motions[i].Tick(dt * (rate?.RateFor(_motions[i].Owner.Def) ?? 1f));
             // Central, rather than in each motion class: every transform motion has the same
             // render problem and the same answer, and one call here cannot be forgotten by a
             // motion added later. Inert on any clock but the realtime one.

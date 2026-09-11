@@ -79,6 +79,53 @@ internal static class CutsceneSkipSuites
         ctx.Note($"played and pressed the skip key through the cutscene {chapter}/{folder} authors");
     }
 
+    // The first definition in the mission's compiled program that raises a swap code, with the code
+    // and the root node it raises it on: read out of the shipped data rather than named here.
+    internal static (string Anim, int Code, string Root)? SwapCallIn(AnimProgram program)
+    {
+        foreach (var def in program.Defs)
+        {
+            if (def.AnimName is not { } anim)
+            {
+                continue;
+            }
+
+            string root = def.RootName is { Length: > 0 } named ? named : def.Name;
+            foreach (var sequence in def.Sequences)
+            {
+                foreach (var ev in sequence.Events)
+                {
+                    if (!string.Equals(ev.Kind, "Callback", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    int code = (int)(ev.Data.Num("value") ?? -1f);
+                    if (AirframeSwapCodes.For(code) != null)
+                    {
+                        return (anim, code, root);
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // The mission at one story position, or null where the sequence table carries none.
+    internal static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions, int seq)
+    {
+        foreach (var mission in missions)
+        {
+            if (mission.Seq == seq)
+            {
+                return mission;
+            }
+        }
+
+        return null;
+    }
+
     // The drop-off's own stake in the gate, read off CM01's shipped definitions: the code that
     // re-places the pilot is raised by a definition that raises no hold code, so no key press can
     // cut that episode short and leave the pilot at the pose it flew in on.
@@ -398,39 +445,6 @@ internal static class CutsceneSkipSuites
             Team: AimAssist.PlayerTeam, Inert: inert, NodeName: name));
     }
 
-    // The first definition in the mission's compiled program that raises a swap code, with the code
-    // and the root node it raises it on: read out of the shipped data rather than named here.
-    private static (string Anim, int Code, string Root)? SwapCallIn(AnimProgram program)
-    {
-        foreach (var def in program.Defs)
-        {
-            if (def.AnimName is not { } anim)
-            {
-                continue;
-            }
-
-            string root = def.RootName is { Length: > 0 } named ? named : def.Name;
-            foreach (var sequence in def.Sequences)
-            {
-                foreach (var ev in sequence.Events)
-                {
-                    if (!string.Equals(ev.Kind, "Callback", StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    int code = (int)(ev.Data.Num("value") ?? -1f);
-                    if (AirframeSwapCodes.For(code) != null)
-                    {
-                        return (anim, code, root);
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
     private static FlightRoster BuildRoster(TestContext ctx, TestWorld world, string chapter,
         TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs)
     {
@@ -467,19 +481,6 @@ internal static class CutsceneSkipSuites
                 MenuInputFor = _ => new MenuInput(),
                 ExitSession = () => { },
             }, new SkipFlightStarts());
-    }
-
-    private static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions, int seq)
-    {
-        foreach (var mission in missions)
-        {
-            if (mission.Seq == seq)
-            {
-                return mission;
-            }
-        }
-
-        return null;
     }
 
     // What one leg leaves behind: what the key press did, and the state both legs are compared on

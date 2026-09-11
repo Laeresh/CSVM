@@ -81,6 +81,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/LightChannel.cs` — one runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events: the live point-light table, the tween, the `WorldLights` submission.
 - `src/Mech3/Anim/PoseChannel.cs` — one runtime's object-pose and visual events: the pose helpers, the opacity/fade machinery and the motion-builder role.
 - `src/Mech3/Anim/NameResolver.cs` — name to node resolution: the index, wildcard matcher, scope tier chain, symbol authority, anchors and the bind census.
+- `src/Mech3/Anim/CutsceneFastForward.cs` — the rate one cutscene episode's own definitions run at while the player holds a key through a scene that offers no skip.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock, LOOP, IF/ELSEIF, WAIT_FOR_COMPLETION) behind the `ISequenceHost` seam.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def, anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/ScriptedPath.cs` — resolves an authored waypoint path (`pp1` → the gamez `pp1_aipath` subtree) into ordered world-space waypoints.

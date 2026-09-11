@@ -197,14 +197,14 @@ public sealed partial class WorldSounds : Node3D
     }
 
     /// <summary>Fires a one-shot <c>SOUND</c> at a world point: fire-and-forget destruction/impact
-    /// audio, a player that frees itself when the clip ends. When <paramref name="name"/> is a
-    /// <see cref="SoundGroup"/> it resolves to one member by weight through <paramref name="rng"/>
-    /// first. <paramref name="bus"/> is this one call's mix category, defaulted so every
-    /// destruction and impact caller stays on Effects and combat voice alone asks for Voice.
-    /// Returns the resolved name, or null when unknown or never prewarmed (<see cref="Prewarm"/>).</summary>
+    /// audio, a player that frees itself when the clip ends. A <see cref="SoundGroup"/> name
+    /// resolves to one member by weight through <paramref name="rng"/> first. <paramref name="bus"/>
+    /// is this call's mix category, defaulted so every destruction caller stays on Effects and
+    /// combat voice alone asks for Voice; <paramref name="pitch"/> is the cutscene fast-forward's
+    /// rate, 1 everywhere else. Null when unknown or never prewarmed (<see cref="Prewarm"/>).</summary>
     public string? PlayOneShot(string name, Vector3 worldPos, Random rng,
-        string bus = AudioBuses.Effects) =>
-        Spawn(name, worldPos, null, rng, bus);
+        string bus = AudioBuses.Effects, float pitch = 1f) =>
+        Spawn(name, worldPos, null, rng, bus, pitch);
 
     /// <summary>The source-following variant of <see cref="PlayOneShot(string, Vector3, Random, string)"/>:
     /// the one-shot rides <paramref name="source"/>'s world pose each <see cref="Tick"/>. For a
@@ -218,7 +218,7 @@ public sealed partial class WorldSounds : Node3D
         var pos = IsInstanceValid(source) && source.IsInsideTree()
             ? source.GlobalPosition
             : Vector3.Zero;
-        return Spawn(name, pos, source, rng, bus);
+        return Spawn(name, pos, source, rng, bus, 1f);
     }
 
     /// <summary>Attaches an emitter to the world node that gives it its position — the reader's
@@ -240,6 +240,16 @@ public sealed partial class WorldSounds : Node3D
         e.Active = active;
         if (!active && e.Player.Playing)
             e.Player.Stop();
+    }
+
+    /// <summary>Plays an emitter faster or slower, and higher or lower with it: the cutscene
+    /// fast-forward's pitch half, so a sped-up shot's ambient sound rises with its picture.
+    /// ⚠ Floored, never zero: a <c>PitchScale</c> of 0 stalls the stream rather than silencing
+    /// it, the same floor the flight engine note keeps.</summary>
+    public void SetPitch(object handle, float pitch)
+    {
+        if (handle is Emitter e && IsInstanceValid(e.Player))
+            e.Player.PitchScale = Mathf.Max(0.01f, pitch);
     }
 
     /// <summary>Immediately frees every live one-shot player. For the synchronous damage-test
@@ -365,7 +375,8 @@ public sealed partial class WorldSounds : Node3D
         return (best, which);
     }
 
-    private string? Spawn(string name, Vector3 worldPos, Node3D? source, Random rng, string bus)
+    private string? Spawn(string name, Vector3 worldPos, Node3D? source, Random rng, string bus,
+        float pitch)
     {
         string resolved = _groups.TryGetValue(name, out var group)
             ? group.Pick(rng) ?? name
@@ -402,6 +413,7 @@ public sealed partial class WorldSounds : Node3D
             VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
             AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
             Bus = bus,
+            PitchScale = Mathf.Max(0.01f, pitch),
         };
         AddChild(player);
         player.GlobalPosition = worldPos;

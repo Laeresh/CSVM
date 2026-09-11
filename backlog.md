@@ -1293,28 +1293,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); a per-texture lighting term (the original's hardware draw has none, and the band is a function of camera distance that lifts under a mip-policy switch, which changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
 
-- `BL-555` `[Feature]` `[Divergence]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A held key fast-forwards a mid-mission cutscene instead of
-  skipping it: the definition plays at a raised rate that spools up while the key is held and
-  spools back down on release, with its sound pitched up to match.** The original arms a skip only
-  on callback 20 (the intros), so CM02's capture and CM01's drop-off play out in full and
-  `CutsceneController.Skippable` now declines the key there. A fast-forward keeps every authored
-  code in order (913/914, 967, 951 and the `Loop{1000}` active-state re-assertions all fire at
-  their authored beats, only sooner) while letting the player through a scene they have seen; the
-  spool is a short ramp on the rate, not a jump. *Fix shape:* a rate multiplier on the cutscene
-  clock (`AnimRuntime`'s advance takes the definition's dt; the held world, `GameClock.SimHeld`,
-  stays held) ramped over a fraction of a second toward a target such as 4x while the skip key or
-  gamepad A is down and back to 1x on release; the definition's own sounds (`SoundNode`,
-  `OBJECT_MOTION` engine notes) take the same multiplier as a pitch scale, as the original does
-  nothing of the kind so the values are a design choice. Advanced: the rate has to reach every
-  channel a definition drives (pose, camera, sound, callbacks, the `RESET_STATE` timeline) or the
-  channels drift apart. *⚠ Traps:* ⚠ A deliberate divergence, so document it on the cutscenes
-  page beside the livery one; do not present it as the original's skip. ⚠ Do not raise the rate
-  on an intro that arms a real skip, where the original's own force-stop is the behaviour. ⚠
-  Realtime flown sessions and the parent-driven probe clock step differently; the multiplier
-  belongs on the definition's dt, not on the session's `PhysicsDt`. *Cross-refs:*
-  `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `PLAN-M5-polish-2`
-  E24 (the decode that made the two scenes unskippable).
-
 
 - `BL-720` `[Bug]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM24]` **The Dante's
   engine fires moved between the engines because the effect-template pool was shorter than the

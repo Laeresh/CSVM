@@ -675,6 +675,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   continuity checks had already run since the shot; stepping to a fresh round first and timing from
   that frame put both edges where the decode says they are.
 
+- **INSTR-56** — **Compare two runs of a cutscene on a node that episode alone drives, never on
+  `camera1`: the cutscene camera is one shared node, and a definition outside the episode takes it
+  over on its own schedule.** Reading CM02's capture at 1x and at a held 4x off `camera1` showed
+  260 m of apparent drift over a 558 m shot, all of it `gi_scene2` claiming the node 15.9 real
+  seconds in, which the faster leg never reached; the wing walk's own `wingwalk_parent` reads 0.2 m
+  of drift over 577 m across the same pair.
+
 ## SRC — sources and documents
 
 - **SRC-3** — **Use design documents for intent; retail evidence decides shipped details.**

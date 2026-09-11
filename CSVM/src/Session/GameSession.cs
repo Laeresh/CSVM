@@ -651,6 +651,10 @@ public partial class GameSession : Node3D
                 _split?.NoteSkip(skipper);
                 return;
             }
+
+            // The skip was declined, so this scene is one the original plays out in full: the same
+            // input held fast-forwards it instead (docs/formats/anim-definitions/cutscenes.md).
+            _cutscene.NoteHeld(@event);
         }
         // P halts the sim and . steps it one frame, in freecam and the static viewer. ⚠ Do not
         // handle either for flight or the animation lab; both own their own transport.
