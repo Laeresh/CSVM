@@ -1052,9 +1052,10 @@ the bought armour on the damage zones by copy, leaving structure and unnamed zon
 is [../org/hangar.md](../org/hangar.md), "Into the mission".
 
 ## src/Flight/HangarEconomy.cs
-The hangar's decoded economy over a `CustomPlaneDef`: the airframe, gun and engine tables as data,
-the per-line cost and weight of everything a build carries, the two totals, the purchase verdict
-and the display-only star ratings. Pure, so a build's whole price resolves without a session. The
+The hangar's decoded economy over a `CustomPlaneDef`: the airframe, gun, engine and stock-armour
+tables as data, the per-line cost and weight of everything a build carries, the two totals, the
+purchase verdict and the display-only star ratings. Pure, so a build's price resolves session-free.
+The
 verdict covers capacity and engine presence only, because pricing a build never checks funds.
 Provenance: [../org/hangar.md](../org/hangar.md), "The economy".
 

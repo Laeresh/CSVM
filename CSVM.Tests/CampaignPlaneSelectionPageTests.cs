@@ -185,13 +185,40 @@ public class CampaignPlaneSelectionPageTests
         Assert.Equal(0, combo.Selected);
     }
 
-    /// <summary>The one decoded rating, checked against both aircraft the reference screenshots
-    /// show: Bloodhawk reads Excellent and Devastator Average.</summary>
+    /// <summary>The four ratings of the two aircraft the reference screenshots show: the seeded
+    /// Devastator reads Average on all four, and the awarded Bloodhawk Average, Excellent and Fair
+    /// under a top speed the original leaves blank.</summary>
     [Fact]
-    public void TheAgilityRatingMatchesTheReferenceScreenshots()
+    public void TheFourRatingsMatchTheReferenceScreenshots()
     {
-        Assert.Equal(4, PlaneRatings.Agility(3));
-        Assert.Equal(2, PlaneRatings.Agility(5));
+        var starter = PlaneFit.For(5, null, DevastatorStock());
+        Assert.Equal(new[] { 2, 2, 2, 2 }, PlaneRatings.For(starter));
+
+        var blueStreak = PlaneFit.For(3, CampaignProgression.AwardBuild(3), null);
+        Assert.Equal(new[] { 4, 2, 4, 1 }, PlaneRatings.For(blueStreak));
+    }
+
+    /// <summary>Two awards the ratings' own arithmetic separates from any power-to-weight or
+    /// calibre-count reading of them: the Balmoral is not the slowest airframe on the screen and is
+    /// not armoured Excellent, and the Warhawk's two twin mounts do not reach Good.</summary>
+    [Fact]
+    public void TheRatingsReadTheArmamentsWeightAndTheEnginesPower()
+    {
+        var jumpingJane = PlaneFit.For(2, CampaignProgression.AwardBuild(2), null);
+        Assert.Equal(new[] { 1, 3, 0, 3 }, PlaneRatings.For(jumpingJane));
+
+        var annie = PlaneFit.For(10, CampaignProgression.AwardBuild(10), null);
+        Assert.Equal(new[] { 2, 3, 0, 2 }, PlaneRatings.For(annie));
+    }
+
+    /// <summary>A record with no engine rates Poor for speed without touching the power table.</summary>
+    [Fact]
+    public void AnEngineLessRecordRatesPoorForSpeed()
+    {
+        var def = CampaignProgression.AwardBuild(3)!;
+        def.Engine = CustomPlaneDef.EngineNone;
+
+        Assert.Equal(0, PlaneRatings.Speed(PlaneFit.For(3, def, null)));
     }
 
     [Fact]
@@ -394,6 +421,26 @@ public class CampaignPlaneSelectionPageTests
 
         Assert.Equal(5, flow.Field.Plane(1)!.Airframe);
         Assert.Equal(5, page.Combo(0)!.Selected);
+    }
+
+    // The Devastator's shipped stock fit, the one the two profile-seeded starters fly: three twin
+    // wing mounts and four hardpoints.
+    private static LoadoutDef DevastatorStock()
+    {
+        var def = new LoadoutDef { Def = "pdevastator", Model = "player_pfighter" };
+        int[] calibres = { 50, 40, 30 };
+        for (int slot = 0; slot < calibres.Length; slot++)
+        {
+            def.Guns.Add(new GunSpec
+            {
+                Slot = slot + 1,
+                Caliber = calibres[slot],
+                Markers = { "a", "b" },
+            });
+        }
+
+        def.Hardpoints = new HardpointSpec { Count = 4 };
+        return def;
     }
 
     // The picker for the last joined player, the flight-check walk having reached them. The

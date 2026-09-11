@@ -496,8 +496,9 @@ public sealed partial class OriginalShell
                     return lines;
                 }
 
-                var fit = PlaneFit.For(row.Custom, _shell._stock?.Invoke()?.ForModel(row.Node));
-                var ratings = PlaneRatings.For(airframe, fit);
+                var fit = PlaneFit.For(
+                    airframe, row.Custom, _shell._stock?.Invoke()?.ForModel(row.Node));
+                var ratings = PlaneRatings.For(fit);
                 for (int i = 0; i < RatingLabels.Length; i++)
                 {
                     var (x, y, width) = layout.Box(Section, RatingKeys[i], RatingX, RatingY + (i * RatingPitch), RatingWidth);

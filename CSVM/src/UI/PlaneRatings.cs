@@ -7,81 +7,79 @@ namespace CSVM.UI;
 /// The four ratings the plane selection screen prints beside an aircraft (<c>PS_T_TOPSPEEDP</c> and
 /// its three neighbours), each as a 0-to-4 index into langui 501-505, Poor to Excellent.
 ///
-/// ⚠ Only <see cref="Agility"/> is decoded. The other three are stand-ins built from the
-/// airframe stat table, with thresholds chosen so the two aircraft the reference screenshots show
-/// read as they do there, and nothing else pins them. Do not read a number here as the original's.
-/// Decode status: <c>docs/formats/campaign-screens.md</c>, "Plane selection".
+/// All four are the original's own integer arithmetic over one plane record and its airframe's stat
+/// row, transcribed case for case; the divisors, the inputs each reads and the reference aircraft
+/// they reproduce are in <c>docs/org/hangar.md</c>, "The four rating words".
 /// </summary>
 public static class PlaneRatings
 {
-    // Where a plane's power-to-weight ratio crosses from one word to the next. Bloodhawk (0.124)
-    // and Devastator (0.072) both read Average in the reference, so the middle band spans both.
-    private static readonly double[] SpeedBands = { 0.04, 0.07, 0.13, 0.16 };
+    /// <summary>The highest rating index, langui 505 <c>Excellent</c>.</summary>
+    public const int Best = 4;
 
-    // Where an offense score crosses. Bloodhawk's fit scores 16 and reads Fair, Devastator's
-    // scores 28 and reads Average, which is what sets the first two.
-    private static readonly int[] OffenseBands = { 10, 20, 32, 44 };
+    // The four divisors, in the rating helper's own case order. Each turns one raw quantity (engine
+    // power, armour units, the agility stat, armament weight) into a rating index.
+    private const int SpeedDivisor = 0x55;
+    private const int ArmourDivisor = 0x49;
+    private const int AgilityDivisor = 4;
+    private const int OffenseDivisor = 0x80c;
 
     /// <summary>The four ratings in the order the screen prints them: top speed, armour, agility,
     /// offense.</summary>
-    public static int[] For(int airframe, PlaneFit fit)
+    public static int[] For(PlaneFit fit)
     {
-        int id = Math.Clamp(airframe, 0, HangarEconomy.Airframes.Length - 1);
-        return new[] { Speed(id, fit), Armour(id, fit), Agility(id), Offense(fit) };
+        ArgumentNullException.ThrowIfNull(fit);
+        return new[] { Speed(fit), Armour(fit), Agility(fit.Airframe), Offense(fit) };
     }
 
-    /// <summary>The one decoded rating: <see cref="HangarEconomy"/>'s own agility star formula,
-    /// which reproduces both reference aircraft (Bloodhawk 19 reads Excellent, Devastator 10 reads
-    /// Average).</summary>
-    public static int Agility(int airframe) =>
-        Math.Clamp((HangarEconomy.Airframes[airframe].Agility - 1) / 4, 0, 4);
-
-    // ⚠ Stand-in. The hangar's own armour star formula ((armour + units*5 - 1) / 0x49) reads Fair
-    // for both reference aircraft where the screen prints Average, so it is not what this widget
-    // shows; halving-to-fifty is the coarser rule that matches both.
-    private static int Armour(int airframe, PlaneFit fit)
+    /// <summary>TOP SPEED: the airframe's engine power at the fitted engine's factor, less one and
+    /// truncated, over the speed divisor. A record with no engine rates Poor without the
+    /// arithmetic.</summary>
+    public static int Speed(PlaneFit fit)
     {
-        int armour = HangarEconomy.Airframes[airframe].Armour + (fit.ArmourUnits * 5);
-        return Math.Clamp((int)Math.Round(armour / 50.0), 0, 4);
-    }
+        ArgumentNullException.ThrowIfNull(fit);
+        if (fit.Engine == CustomPlaneDef.EngineNone)
+        {
+            return 0;
+        }
 
-    // ⚠ Stand-in. Power over weight, the two quantities the airframe table does carry. It ranks the
-    // autogyro highest, which no reading of the original would; this value remains undecoded.
-    private static int Speed(int airframe, PlaneFit fit)
-    {
-        var stats = HangarEconomy.Airframes[airframe];
-        double power = HangarEconomy.EngineBases[airframe].Power
+        double power = HangarEconomy.EngineBases[fit.Airframe].Power
             * HangarEconomy.EnginePowerFactors[
                 Math.Clamp(fit.Engine, 0, HangarEconomy.EnginePowerFactors.Length - 1)];
-        return Band(power / Math.Max(1, stats.Weight), SpeedBands);
+        return Word((int)(power - 1.0) / SpeedDivisor);
     }
 
-    // ⚠ Stand-in. One point per ten millimetres of every barrel, plus one per hardpoint.
-    private static int Offense(PlaneFit fit)
+    /// <summary>ARMOR: the airframe's armour base plus the record's fitted armour units, less one,
+    /// over the armour divisor. The same reading the hangar's own star column takes.</summary>
+    public static int Armour(PlaneFit fit)
     {
-        int score = fit.Hardpoints;
-        foreach (var (calibre, barrels) in fit.Barrels)
-        {
-            score += calibre / 10 * barrels;
-        }
-
-        int at = 0;
-        while (at < OffenseBands.Length && score >= OffenseBands[at])
-        {
-            at++;
-        }
-
-        return at;
+        ArgumentNullException.ThrowIfNull(fit);
+        return Word(
+            (HangarEconomy.Airframes[fit.Airframe].Armour + fit.ArmourUnits - 1) / ArmourDivisor);
     }
 
-    private static int Band(double value, double[] bands)
+    /// <summary>AGILITY: the airframe's agility stat alone, less one, over four. The one rating no
+    /// part of the build moves.</summary>
+    public static int Agility(int airframe) =>
+        Word((HangarEconomy.Airframes[Math.Clamp(airframe, 0, HangarEconomy.Airframes.Length - 1)]
+            .Agility - 1) / AgilityDivisor);
+
+    /// <summary>OFFENSE: what the armament weighs, guns priced by the slot's own wing or turret
+    /// column and doubled for a twin mount, plus one hardpoint weight per hardpoint, over the
+    /// offense divisor.</summary>
+    public static int Offense(PlaneFit fit)
     {
-        int at = 0;
-        while (at < bands.Length && value >= bands[at])
+        ArgumentNullException.ThrowIfNull(fit);
+        var stats = HangarEconomy.Airframes[fit.Airframe];
+        int weight = fit.Hardpoints * HangarEconomy.HardpointWeight;
+        for (int slot = 0; slot < fit.Slots.Count; slot++)
         {
-            at++;
+            weight += HangarEconomy.GunLine(stats, fit.Slots[slot], slot).Weight;
         }
 
-        return at;
+        return Word(weight / OffenseDivisor);
     }
+
+    // The original clamps the top alone, and prints an empty line for an index its string table has
+    // no word for. Nothing in the shipped tables reaches below zero, so the floor is a guard.
+    private static int Word(int value) => Math.Clamp(value, 0, Best);
 }

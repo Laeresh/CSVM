@@ -386,9 +386,10 @@ the `Hollywood - The Great Plane Robbery` the reference screenshots carry.
 **The four rating strings carry their own captions.** 2015's four out-strings are assigned in widget
 order to `TOPSPEED`, `ARMOR`, `AGILITY` and `OFFENSE`, and no separate label widget exists beside
 them, so `TOP SPEED:  Average` is one string in one 140-wide box. The values are the five-word run
-at langui 501 to 505, `IDS_QUALITY`: `Poor`, `Fair`, `Average`, `Good`, `Excellent`. **Which plane
-fields the original rates as top speed and offense is not decoded** and is `BL-653`; armour and
-agility are decoded elsewhere and running.
+at langui 501 to 505, `IDS_QUALITY`: `Poor`, `Fair`, `Average`, `Good`, `Excellent`. All four words
+are the native side's own arithmetic over the plane record, top speed off the engine's power rating
+and offense off what the armament weighs; the four formulas are in
+[`../org/hangar.md`](../org/hangar.md), "The four rating words".
 
 **A rollover previews the whole block.** Message `10013` from either dropdown calls `uiData` 2014
 with the slot, the rollover row `RM` and 0, which is the plane-override write the flight check
@@ -851,17 +852,18 @@ corroborate but do not establish them.
 | Cabin | the six buttons and their targets, the deactivated SAVE GAME, the plane photo path, the memento source, the pin count, the `idaho` dropdown, the intro trigger | five buttons and no SAVE GAME, the painted cabin, the framed memento, the map | whether anything on the screen animates or loops, and how the pin frames read; both need the cabin capture |
 | Chapter intro | the movie name, the skip gesture, the one-shot guard | not covered by any screenshot | the MPG decode itself, deliberately out of scope |
 | Flight check | both slots, all four lists, the wingman gate, both plane-change rules, the grant table, both exits | the title, plane lines, six of eight gun rows filled and two blank, the objectives note, the calibre label's string block, both buttons | the `10018`/`10000` state art |
-| Plane selection | both blocks and their gates, the dropdown fill, the rollover preview, the duplicate rule and its revert, the export and cancel paths, the deactivated SELL pair | the widget positions, the list rows, the rating words and their captions, both message boxes verbatim, the preview following the pointer | which plane fields feed top speed and offense (`BL-653`), and what `gosCallback` 22 writes |
+| Plane selection | both blocks and their gates, the dropdown fill, the rollover preview, the duplicate rule and its revert, the export and cancel paths, the deactivated SELL pair | the widget positions, the list rows, the rating words and their captions, both message boxes verbatim, the preview following the pointer | why the reference's nitrous-engined aircraft prints no top speed word (`BL-817`), and what `gosCallback` 22 writes |
 | Ammo selection | both callers, the working-copy commit, the greyed empty group, the pylon deactivation, all six string blocks | the greyed fourth group, two of four pylons per wing, both description panes, both plane diagrams | the rocket table's unread second field |
 | Scrapbook | every button's transition, the composition file, the results rows, the kill stamps, the table of contents, the Replay Mission fork | the three reference spreads scrap for scrap, the stamps and total on two of them | the native side of the cabin entry and of `$$SR$$`, both in `crimson.exe`, unreached this session |
 
 Where this decode stops:
 
-- **The plane screen's `uiData` handlers were not traced in `crimson.exe`.** 2012, 2013, 2015, 2019,
-  2020, 2103, 2105 and 2109 are described above from their use in the script and from what the
+- **Most of the plane screen's `uiData` handlers were not traced in `crimson.exe`.** 2012, 2013,
+  2019, 2020, 2103, 2105 and 2109 are described above from their use in the script and from what the
   reference screenshots draw, which fixes each one's arguments and its visible effect but not the
   fields it reads. `2000` and `2001` belong to the save and load screens and were not followed
-  either.
+  either. 2015 is the exception: its handler at `0x004096ab` and the rating helper it calls four
+  times are decoded in [`../org/hangar.md`](../org/hangar.md).
 - **The three flags that bypass the ordnance availability filter** were located, not identified.
 - **The obfuscated identifiers were not recovered.** Widget keys, callback ids, message ids and
   langui ids carry the meaning here, and the letters were left alone.

@@ -115,8 +115,8 @@ public static class CampaignProgression
     private const int AwardGunEmpty = 5;
 
     // One award's build, in the 204-byte record's own field order (docs/formats/paint.md, "Saved
-    // custom planes"): airframe, engine, the two wing hardpoint counts, the four armour zones in
-    // units, the twin-mount bit field, then the four gun ids with 5 for an empty slot.
+    // custom planes"): airframe, engine, the two wing hardpoint counts, the four armour zones as
+    // dropdown rows, the twin-mount bit field, then the four gun ids with 5 for an empty slot.
     private static readonly int[][] AwardTemplates =
     {
         new[] { 0, 1, 1, 1, 3, 3, 3, 3, 1, 0, 5, 5, 5 },

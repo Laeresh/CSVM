@@ -135,6 +135,13 @@ public static class HangarEconomy
         new(2550, 3000, 201),
     };
 
+    /// <summary>How much armour each airframe's stock build carries, in the record's own units:
+    /// the four zone dwords of the eleven prebuilt records the profile initialiser and the picker
+    /// copy from, summed. Per zone, and the rest of those builds, is in docs/org/hangar.md, "The
+    /// stock builds".</summary>
+    public static readonly int[] StockArmourUnits =
+        { 60, 95, 125, 80, 105, 100, 110, 90, 100, 85, 120 };
+
     /// <summary>Cost offsets added to the airframe's engine base, engine ids 0-5.</summary>
     public static readonly int[] EngineCostOffsets = { -425, 0, 425, 5, 430, 855 };
 
@@ -212,7 +219,10 @@ public static class HangarEconomy
         return (int)(EngineBases[airframe].Power * EnginePowerFactors[engineId]);
     }
 
-    private static CostWeight GunLine(AirframeStats stats, GunChoice gun, int slot)
+    /// <summary>What one slot's gun costs and weighs: the calibre's own price row read down its
+    /// wing or turret column, whichever the airframe's turret mask makes the slot, doubled for a
+    /// twin mount. An empty slot is zero.</summary>
+    public static CostWeight GunLine(AirframeStats stats, GunChoice gun, int slot)
     {
         if (gun.Calibre is not { } calibre)
         {

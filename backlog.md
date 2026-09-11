@@ -2180,8 +2180,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   blocks are ordered per component and are not one contiguous run across kinds, so index them rather
   than deriving a single base. The box is the authored `S` widget with its own back and border, so a
   longer body scrolls or wraps inside it and never grows it. Armour, hardpoints and paint show no
-  such prose in the stills; do not invent it. *Cross-refs:* `BL-653` (the same screen's TOP SPEED and
-  OFFENSE ratings).
+  such prose in the stills; do not invent it.
 
 - `BL-762` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A decal list opens as
   a one-wide column where the original opens a five-across, two-row grid of tiles.** *Evidence:*
@@ -2962,21 +2961,6 @@ usual.
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
 
-- `BL-653` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The plane selection screen's TOP SPEED and OFFENSE ratings have no decoded
-  formula, and ship as a stand-in.** *Evidence:* `PS_T_TOPSPEEDP`/`PS_T_OFFENSEP` and their wingman
-  twins are four text widgets fed one of langui 501-505 (`Poor`, `Fair`, `Average`, `Good`,
-  `Excellent`). Two of the four are decoded and running: `HangarEconomy.Bill` computes
-  `AgilityStars` from `(agility - 1) / 4` and `ArmourStars` from
-  `(armour + units*5 - 1) / 0x49` (`CSVM/src/Flight/HangarEconomy.cs:173-176`). No such reading
-  exists for speed or offense, so the screen derives them from engine power and from gun calibre
-  plus hardpoint count instead, which matches the reference screenshots on the airframes visible
-  there and is otherwise unevidenced. *What to settle:* which engine field the original rates speed
-  from and what it counts as offense, then whether the ratings are per airframe or per built plane.
-  *⚠ Traps:* do not settle it by eye against `OriginalScreenshots/Campaign Flight Check Change
-  Plane.png` alone. Two airframes reading `Average` is consistent with many formulas, and a
-  stand-in that happens to match the four sampled aircraft is exactly what is already there.
-  *Cross-refs:* the plane selection screen that draws them.
-
 - `BL-695` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
   all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
   without a single `[anim] damage:` line on any `lbroadNN` node anywhere in the mission window, and
@@ -3075,6 +3059,25 @@ usual.
   mission with no record must not offer it; and the list is the same on both presentations, so a
   change reaches Original through `EnterFromPage` as well. *Cross-refs:*
   `git log --grep=CompletedSeqs`, `docs/formats/saved-games.md`.
+
+- `BL-817` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The plane
+  selection screen's reference capture prints no TOP SPEED word for the one aircraft carrying a
+  nitrous engine, which the decoded formula cannot produce.** *Evidence:*
+  `OriginalScreenshots/Campaign Flight Check Change Plane.png` shows the awarded Blue Streak
+  (airframe 3, engine id 4) with `ARMOR: Average`, `AGILITY: Excellent` and `OFFENSE: Fair`, all
+  three of which the decode reproduces, and `TOP SPEED:` followed by nothing. The rating helper's
+  speed case is `ftol(power x factor - 1.0) / 0x55` over 300 and 1.33, which is 4, and the same
+  block's AGILITY line proves langui 505 `Excellent` loads. The value string is a plain lookup of
+  `0x1f5 + index`, so an empty line means an index outside 0 to 4; the case clamps the top alone, so
+  only a negative index reaches one, and only a negative or indefinite `ftol` result gives that.
+  CSVM ports the arithmetic and prints `Excellent` there (`CSVM/src/UI/PlaneRatings.cs`).
+  *What to settle:* what makes that one line empty in the original: a plane record whose engine
+  field is not the template's 4, or an x87 state the menu inherits (a full stack makes `FILD` return
+  an indefinite, and `ftol` then returns `INT_MIN`). *⚠ Traps:* the two other captures of the same
+  screen show the seeded Devastators, neither of which has a nitrous engine, so nothing in the
+  stills separates "nitrous engines print blank" from "that one record was odd"; do not conclude the
+  first from a single aircraft. *Cross-refs:* `docs/org/hangar.md` ("The four rating words"),
+  `docs/formats/campaign-screens.md`.
 
 ## Tooling, platform & docs
 

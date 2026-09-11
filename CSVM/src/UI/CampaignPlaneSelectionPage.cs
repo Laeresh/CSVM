@@ -557,7 +557,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     // The four rating lines, at PS_T_TOPSPEEDP and its three neighbours (the W rows for the wingman).
     private void AddRatings(List<BoardLine> lines, OwnedPlane plane, int slot)
     {
-        var ratings = PlaneRatings.For(plane.Airframe, FitOf(plane));
+        var ratings = PlaneRatings.For(FitOf(plane));
         string[] labels = { "TOP SPEED:", "ARMOR:", "AGILITY:", "OFFENSE:" };
         string[] keys = { "PS_T_TOPSPEED", "PS_T_ARMOR", "PS_T_AGILITY", "PS_T_OFFENSE" };
         string crew = slot == 0 ? "P" : "W";
@@ -611,6 +611,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     // guest's stock record is named for its airframe, and a hangar plane sharing that name would
     // otherwise fit it with somebody else's build.
     private PlaneFit FitOf(OwnedPlane plane) => PlaneFit.For(
+        plane.Airframe,
         Flow.Field.IsStock(plane) ? null : Flow.Planes?.Load(plane.Name),
         Flow.Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe)));
 }

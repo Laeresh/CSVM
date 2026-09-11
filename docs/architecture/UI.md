@@ -75,18 +75,18 @@ nothing rather than a mis-sliced picture. Shared because ammo selection, the cam
 check and the hangar's airframe list all want it; decodes are cached per process, misses included.
 
 ## src/UI/PlaneFit.cs
-What one campaign aircraft is carrying: barrels by calibre, hardpoint count, armour units and
-engine id. Resolved from the plane's hangar build where it has one and from its airframe's stock fit
+What one campaign aircraft is carrying: the four gun slots, barrels by calibre, hardpoint count,
+armour units and engine id. Resolved from its hangar build where it has one and from the stock fit
 where it does not, which is the case for the profile-seeded starters and every granted reward
 aircraft. Engine-free, so the screens that print it test off engine. The caller resolves the build,
 never this class. The wallet and the award templates: [../org/hangar.md](../org/hangar.md).
 
 ## src/UI/PlaneRatings.cs
 The four ratings the plane selection screen prints beside an aircraft, each a 0-to-4 index into
-langui 501-505, Poor to Excellent. Only agility is decoded, from `HangarEconomy`'s own star formula;
-speed, armour and offense are stand-ins whose thresholds were chosen so the two aircraft the
-reference screenshots show read as they do there, and each carries that caveat at its own member.
-Decode status: [../formats/campaign-screens.md](../formats/campaign-screens.md), "Plane selection".
+langui 501-505, Poor to Excellent. All four are the original's own integer arithmetic over one plane
+record and its airframe's stat row: the engine's power for speed, the armour units, the agility stat
+and what the armament weighs for offense. The four formulas and the aircraft they reproduce:
+[../org/hangar.md](../org/hangar.md), "The four rating words".
 
 ## src/UI/CampaignFlow.cs
 Built-in's campaign screen graph as one engine-free flow over the shared `CampaignFeature`

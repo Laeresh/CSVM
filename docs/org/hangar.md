@@ -194,6 +194,42 @@ and selects it. The block lives in `PURCHASE.SCRIPT`: `gui_init` calls the probl
 problems, with `pur_t_problems` carrying the text. An overweight or engineless build therefore
 cannot be bought in the original; the button greys out.
 
+## The four rating words
+
+`FUN_0040faf0(record, which, flags)` is the whole of it: one switch, one case per rating, reading
+one 204-byte plane record and its airframe's stat row. `which` is 1 to 4 in the order the plane
+selection screen prints them, and the case picks the caption it prepends, `langui` 1018
+`IDS_GN_TOPSPEED` "TOP SPEED: ", 1019 `IDS_GN_ARMOR`, 1020 `IDS_GN_AGILITY` and 1132
+`IDS_GN_OFFENSE`, each followed by a one-space pad from `0x0061f428`. Every case ends in the same
+tail: the index becomes `langui` 0x1f5 + index, the five-word run 501 to 505 `IDS_QUALITY`
+(`Poor`, `Fair`, `Average`, `Good`, `Excellent`), appended to the caption in the shared buffer at
+`0x0064e064`. `flags` 0x20 asks for the caption line, 0x40 for the bare index. The caller is the
+plane screen's `uiData` 2015 at `0x004096ab`, which calls it four times over the profile's plane
+slot (`0x0064b78c` + 204×slot) and copies each answer into one of the script's four out-strings.
+
+Every case clamps at 4 and none clamps at 0, so an index the arithmetic drives below zero names no
+string and prints an empty line.
+
+| Word | Case | Value, C-truncating throughout |
+|---|---|---|
+| TOP SPEED | 1 | engine id 6 (none) rates 0 outright; else `ftol(power × factor − 1.0) / 0x55`, the airframe's power rating from the engine base table at `0x00619da0` times the engine id's own double from the factor table at `0x00619e38` (0.9, 1.0, 1.1, 1.197, 1.33, 1.463) |
+| ARMOR | 2 | `(armour base + Σ four zone dwords − 1) / 0x49`, the zone dwords being units |
+| AGILITY | 3 | `(agility base − 1) / 4`, the one word no part of the build moves |
+| OFFENSE | 4 | `(gun weight + hardpoints × 0x1e0) / 0x80c`, the gun weight being `FUN_004055c0(record, −1)`, the same per-slot wing-or-turret weight column the total weight uses, doubled for a twin mount |
+
+So top speed reads the engine alone, offense weighs the armament and nothing else reads cost. The
+two reference captures agree cell for cell, `OriginalScreenshots/Campaign Flight Check Change
+Plane.png` and `Campaign Flight Check Change Plane Combo Box.png`: the seeded Devastator (airframe
+5, engine 1, 100 armour units, three twin wing mounts and four hardpoints) reads Average four
+times, at 250/85, 199/73, 9/4 and 4200/2060; the awarded Blue Streak (airframe 3, engine 4, 80
+units, twin .40 and twin .30, two hardpoints) reads Average, Excellent and Fair, at 159/73, 18/4
+and 2280/2060.
+
+⚠ **The Blue Streak's TOP SPEED line prints no word in that capture, which this arithmetic cannot
+produce.** Its 300 × 1.33 comes to Excellent, and the neighbouring AGILITY line proves that word
+loads. An empty line means an index outside 0 to 4, which only the missing floor allows, and only a
+negative or indefinite `ftol` result reaches it. `BL-817` holds what is left to settle.
+
 ## Into the mission: what the build changes on the spawned vehicle
 
 The consumer trace past the launch bridge. Armour and engine are live combat data; total
@@ -438,7 +474,7 @@ aircraft, not just an ownership row: the grant copies one of these wholesale and
 the name over `+0x04`, whose shipped value is the placeholder `??`. Read directly out of the
 executable's data.
 
-| Plane | Airframe | Engine | Hardpoints L/R | Armour units (nose/tail/left/right) | Guns |
+| Plane | Airframe | Engine | Hardpoints L/R | Armour rows (nose/tail/left/right), five units each | Guns |
 |---|---|---|---|---|---|
 | Minx | 0 Hoplite | 1 | 1/1 | 3/3/3/3 | twin 30 cal |
 | Jumping Jane | 2 Balmoral | 1 | 4/4 | 8/7/5/5 | twin 50, twin 50, 30, 30 |
@@ -463,6 +499,34 @@ described in [`../formats/paint.md`](../formats/paint.md), and every template ca
 that derivation produces from its own gun ids and hardpoint counts: `4` in the slots whose gun id
 is `5`, and a live pylon inside each wing's count with `11` past it. They restate the fields above
 rather than adding to them.
+
+### The eleven stock builds at `0x00619f58`
+
+Templates 0 to 10 of the same array, one per airframe id, are what an aircraft carries when nobody
+has built it: the profile's two starters are copies of template 5, and the ratings on the plane
+screen read them as they read any other record. All eleven take engine id 1, the plain middle tier,
+so no stock aircraft carries an injector. Armour is in the record's own units, five to a dropdown
+row.
+
+| Id | Airframe | Hardpoints L/R | Armour nose/tail/left/right | Twin mask |
+|---|---|---|---|---|
+| 0 | Hoplite | 1/1 | 15/15/15/15 | 0x1 |
+| 1 | Hellhound | 2/1 | 30/25/20/20 | 0x3 |
+| 2 | Balmoral | 4/4 | 40/35/25/25 | 0x3 |
+| 3 | Bloodhawk | 2/1 | 20/20/20/20 | 0x3 |
+| 4 | Brigand | 2/2 | 30/35/20/20 | 0xb |
+| 5 | Devastator | 2/2 | 25/25/25/25 | 0x7 |
+| 6 | Firebrand | 3/3 | 30/30/25/25 | 0xb |
+| 7 | Fury | 2/1 | 25/25/20/20 | 0x3 |
+| 8 | Kestrel | 3/2 | 30/30/20/20 | 0xb |
+| 9 | Peacemaker | 2/1 | 25/20/20/20 | 0x3 |
+| 10 | Warhawk | 4/4 | 30/30/30/30 | 0x3 |
+
+The four zones sum to the airframe's own armour rating base in ten of the eleven rows, the Kestrel
+(100 against a base of 110) the only one parting from it, so a stock aircraft's ARMOR word comes
+out of very nearly twice its base. `CSVM/src/Flight/HangarEconomy.cs` carries those sums as
+`StockArmourUnits`, which is all the rating needs; the guns and hardpoints of the same builds are
+in `CSVM/data/stock_loadouts.json`, where they agree with these rows slot for slot.
 
 ### The purchase gate and what a build costs
 
