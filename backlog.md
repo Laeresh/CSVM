@@ -2299,25 +2299,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
   both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
-- `BL-802` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The pause screen
-  marks a completed objective with a red check drawn over the row's number, and the row's text stays
-  black.** *Evidence:* the four `OriginalScreenshots/CAP-45 Mission Pause with objective*.png` stills
-  (CM01, C3/M01, whose four keyed rows fill the parchment). In the first still row 1 carries a
-  red brush-stroke check over its leading "1)"; in the third and fourth, rows 1, 2 and 3 each carry
-  one, drawn over the number so the check overlaps the digit and the text after it does not move.
-  No row drops, no row dims and no row is struck: a completed line reads in the same black italic
-  as an open one, the check is the only mark, and the parchment keeps all four rows throughout.
-  Ours draws a "✓" glyph in a mark column of its own and dims the whole line green
-  (`CSVM/src/UI/ObjectivesHud.cs:34-38`, `199-218`). *Fix shape:* draw the mark in red over the
-  text's own leading characters instead of in a column, keep the completed line's colour, and
-  re-pin the campaign-objectives-hud suite's expectations; the glyph itself stays TUNE, since no
-  extracted asset for it is identified. *⚠ Traps:* the mark column exists because a tick prefixed
-  into the text moved the line (`git log --grep=BL-466`); overlaying the mark as its own label at
-  the row's origin keeps the text where it is without the column. The map flags in the same stills
-  do not change on completion (every "?" flag stays "?" after rows 1 to 3 complete), so nothing on
-  the map side is owed. *Playtest after fix:* `./RunGame.ps1 --campaign=<profile>:0 --debug-pause
-  --debug-objective=N` on CM01, against the CAP-45 stills. *Cross-refs:* `BL-466`'s closing commit (the
-  readout's placement and its mark column), `docs/formats/objectives.md` (the display list).
 
 - `BL-805` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The original's
   menus fire a press on the release, colour a plaque's lettering gold, orange and red for its three

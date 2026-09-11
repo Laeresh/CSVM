@@ -2967,10 +2967,14 @@ public partial class GameSession : Node3D
         if (_campaign is { } campaign && objectiveMessages is { } objectiveStrings)
         {
             // One readout and one fade per rig, under that rig's own HudParent, so every pane
-            // draws its own copy, the pattern every other per-rig HUD follows.
+            // draws its own copy, the pattern every other per-rig HUD follows. The completion
+            // mark's art is loaded once and shared across them, as the HUD font is.
+            var objectiveMark = UI.ObjectivesHud.LoadMark(
+                Path.Combine(_dataRoot, "extracted", "rimage"));
             foreach (var rig in _rigs)
             {
-                rig.HudParent.AddChild(UI.ObjectivesHud.Build(campaign, objectiveStrings, _pauseState!));
+                rig.HudParent.AddChild(
+                    UI.ObjectivesHud.Build(campaign, objectiveStrings, _pauseState!, objectiveMark));
                 rig.HudParent.AddChild(UI.MissionEndFade.Build(campaign));
             }
             var sites = new ObjectiveSites(campaign, objectiveStrings,

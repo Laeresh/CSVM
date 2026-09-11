@@ -93,6 +93,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   `AnimRuntime.DamageAt` writes that line, while `KillCalledDestructible` zeroes the pool and runs
   the death straight, which is how a Gemini whose gasbag deaths had demolished four cannon bays
   reads as "no cannon destroyed at all".
+- **DIAG-26** — **No objective completes while a mission's intro cutscene holds the world, so a
+  scripted `--debug-objective=` run on such a mission marks nothing.** `CampaignDirector.Step`
+  returns before `Graph.Step` under the cutscene hold, and `--pos=` is withheld until the handoff
+  too, so a probe waiting on either needs a mission whose intro hands off inside the run: C3/M01's
+  had not by 43 s of sim, where C1/M02's marks its row well before 25 s.
 
 ## SHOT — screenshots and pixel evidence
 

@@ -35,7 +35,9 @@ internal static class CampaignHudSuites
         "IDENTITY objective completing off whichever condition the chapter's own mission " +
         "authors (an INACTIVEn node list, a danger zone, or no condition at all) marks its " +
         "own readout line " +
-        "(not only the graph's), a WAKEUP_SOUND_GROUP the mission authors starts a real " +
+        "(not only the graph's) with the original's own mark art centred over that row's " +
+        "leading characters and its text left in the colour an open row's carries, a " +
+        "WAKEUP_SOUND_GROUP the mission authors starts a real " +
         "AudioStreamPlayer3D through WorldSounds (D31's existing routing, counted rather than " +
         "duplicated), and whichever cue surface the mission chose, WAKEUP_SOUND_GROUP or " +
         "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483)")]
@@ -75,11 +77,15 @@ internal static class CampaignHudSuites
             // path only runs while the board is up, and this suite wants that path exercised.
             var pause = new CSVM.Flight.PauseState();
             pause.TryToggle(0);
-            var hud = ObjectivesHud.Build(director, messages, pause);
+            var mark = ObjectivesHud.LoadMark(
+                System.IO.Path.Combine(ctx.DataRoot, "extracted", "rimage"));
+            ctx.Check(mark != null,
+                $"the completion mark's own art is extracted ({ObjectivesHud.MarkFile})");
+            var hud = ObjectivesHud.Build(director, messages, pause, mark);
             ctx.Host.AddChild(hud);
             // A second rig's own instance over the same director proves that "one per rig"
             // is N polling instances rather than one broadcasting to many panes.
-            var hud2 = ObjectivesHud.Build(director, messages, pause);
+            var hud2 = ObjectivesHud.Build(director, messages, pause, mark);
             ctx.Host.AddChild(hud2);
 
             // ObjectivesHud polls for the graph in _Process rather than at construction (the
@@ -324,6 +330,40 @@ internal static class CampaignHudSuites
         ctx.Check(drawn.Count > 0, $"the readout draws at least one keyed objectives line");
     }
 
+    // Where the completion mark lands, which is the half of the readout no completion bit can show.
+    // The original draws its mark over the row's own leading characters and leaves the line's text
+    // exactly where and how an open line's is, so a marked row here must carry a mark box centred
+    // on its origin and a text colour no different from the rest of the board's.
+    private static void CheckMarkPlacement(TestContext ctx, ObjectivesHud hud, StringBuilder report)
+    {
+        var rows = hud.DrawnRows();
+        ctx.Same(hud.DrawnLines().Count, rows.Count, $"every drawn line stands as a row on the board");
+        int marked = 0, centred = 0, recoloured = 0, wrong = 0;
+        Color? first = null;
+        foreach (var row in rows)
+        {
+            first ??= row.TextColor;
+            recoloured += row.TextColor == first ? 0 : 1;
+            wrong += row.Marked == row.Line.Completed ? 0 : 1;
+            if (!row.Marked)
+            {
+                continue;
+            }
+
+            marked++;
+            var origin = row.MarkBox.Position + (row.MarkBox.Size * 0.5f);
+            centred += row.MarkBox.Size.X > 0f && origin.Length() < 1f ? 1 : 0;
+            report.AppendLine($"row '{Head(row.Line.Text)}' marked: box {row.MarkBox}");
+        }
+
+        ctx.Same(0, wrong, $"the mark is over a row when that row is completed and over no other");
+        ctx.Same(0, recoloured, $"a completed row's text is drawn in the same colour as an open one's");
+        ctx.Same(marked, centred,
+            $"each mark is centred on its row's own origin, over its leading characters ({marked} marked)");
+    }
+
+    private static string Head(string text) => text.Length <= 24 ? text : text.Substring(0, 24);
+
     // Wakes every WAKEUP_SOUND_GROUP-authoring objective in turn until one of them actually starts
     // a real one-shot player, and asserts that at least one did. Returns whether one did.
     // ⚠ Assert nothing when the mission authors no such directive; that is the mission's choice of
@@ -424,6 +464,7 @@ internal static class CampaignHudSuites
 
         CheckRowMarking(ctx, report, rowObjective, driven, unreachable);
         CheckNoBlankRowsDrawn(ctx, hud, report);
+        CheckMarkPlacement(ctx, hud, report);
         if (soundObjective != null)
         {
             ctx.Check(true, $"a COMPLETED_SOUND_GROUP cue started a real one-shot player (OBJECTIVE{soundObjective})");

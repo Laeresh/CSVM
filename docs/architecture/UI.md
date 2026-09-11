@@ -365,12 +365,12 @@ paint-time rule `ScreenFlash` applies. Decode: [../org/ordnanceTypes.md](../org/
 ## src/UI/ObjectivesHud.cs
 The flown campaign mission's objectives readout, drawn on the pause screen and nowhere else: the
 original keeps its objectives on the pause parchment and leaves the flight HUD to the gauges. Reads
-`CampaignDirector`'s `ObjectiveGraph` rows directly rather than re-parsing, resolves text through
-the message table, and shows every row rather than gating on the row's own awake flag, which the
-member itself explains. A row with no message key is dropped from the drawing but still counted, so
-a suite can compare against the graph. Self-mounting, and unlike `PerfHud`'s one instance for the
-window a splitscreen session builds one per rig. The decoded display mechanism it matches:
-[../formats/objectives.md](../formats/objectives.md).
+`CampaignDirector`'s `ObjectiveGraph` rows directly, resolves text through the message table, and
+shows every row rather than gating on its awake flag, which the member explains; a row with no
+message key is dropped from the drawing but still counted. A completed row is marked with the art
+(`obj_check1`, loaded once through `LoadMark`) centred on that row's origin, over its leading
+characters, and keeps the colour an open row carries. Self-mounting, and one per rig where
+`PerfHud` is one per window. Decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/UI/MissionEndFade.cs
 A full-screen `ColorRect` on a `CanvasLayer` at `HudLayers.MissionEndFade`, polling

@@ -250,6 +250,16 @@ matches (`FUN_004ad240`). Consequences, all decoded:
   `IDENTITY` without it (authored, for example `["SECONDARY", 11]`) produces a row with empty
   text that still tracks completion.
 
+The rows themselves are laid out by `escape.zrd`'s `OBJECTIVESLIST` primitive, which the pause
+screen and the loading dialog share: a `parchment` bitmap at `[555, 6]`, the title
+`MSG_BRF_DLG_OBJECTIVES` in `ObjListTitle`, and the list itself at `[580, 50]` in `ObjList`,
+which `fonts.zrd` gives as "Andy Bold" at 14 px, italic, in near-black `[16, 16, 16]`. Completion
+adds nothing but a mark: the list's `CHECKMARK` element is the `obj_check1` bitmap (25x24, a red
+brush stroke) with `CENTER [1]`, so it is drawn centred on the marked row's own origin and overlaps
+its leading characters. `FUN_004ad240` only sets the row's completed byte (+0x10 of the 0x1c-byte
+row, whose +0x14 is the priority it matches on); the row's text, colour and place do not change,
+and the parchment keeps every row it started with.
+
 ### Win and loss
 
 - `INSTANTWIN` (bare flag): completing this objective sets the mission won flag (mission
