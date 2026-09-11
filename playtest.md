@@ -106,6 +106,7 @@ draws its authored 800x600 space one-to-one.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
+| `CAP-56` | The **death camera and the flyby** in the original | Both cameras are implemented from the decode and their geometry is pinned by engine suites, so this take judges PRESENTATION only and settles no constant. (a) **Death.** Get shot down in level flight at a few hundred metres and hold the recording from the kill until the respawn prompt. *Look for:* how long the camera holds before anything else takes the screen, whether the HUD is really gone, and whether the wreck stays framed the whole way down or leaves the picture. (b) **Flyby.** In level flight press **F7** and hold it for twenty seconds without touching the stick. *Look for:* how the cut in reads (hard cut or a move), whether the aeroplane passes as close as the authored 5.5-7 m radius makes it look, and what the camera does at the moment it re-sites. Fly a chapter with terrain under you for both, so the shared clearance has something to lift over | presentation of `StaticCameras`; nothing is blocked on it |
 
 ### Audio
 

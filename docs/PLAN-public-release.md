@@ -1101,10 +1101,6 @@ Anything A2 or a later wave closes comes off this list.
   dark band at middle distance.** No workaround; it is a matter of how the shipped textures are
   sampled and nothing is missing from the world. (`BL-322` and `BL-538`; both have had their
   premises narrowed by decodes and neither has a landing commit.)
-- **The death camera and the flyby camera are not implemented, so a kill or an F7 press does not
-  reach them.** No workaround; the crash and look-behind cameras that shipped are unaffected.
-  (`BL-260`; partially closed, with `CamParams` still the only code that reads `death_x` and the
-  flyby fields.)
 - **Every wave of AI aircraft arriving in a mission costs a visible hitch.** No workaround; it
   passes in a frame or two. (`BL-699`; no landing commit, and the model build and controller bind
   still sit on the launch frame.)

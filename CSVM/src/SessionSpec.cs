@@ -1282,7 +1282,7 @@ public sealed record SessionSpec
                     s.View = ParseView(want);
                     if (s.View == 0)
                     {
-                        notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9), 'back', or a view mode (chase/cockpit/nose) — using the chase camera"));
+                        notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9), 'back', 'flyby', or a view mode (chase/cockpit/nose) — using the chase camera"));
                     }
                 }
             }
@@ -1431,15 +1431,19 @@ public sealed record SessionSpec
         return new Vector2(Mathf.Clamp(x, -1f, 1f), Mathf.Clamp(y, -1f, 1f));
     }
 
-    /// <summary>The numpad view digit for <c>--view=</c>, or the look-behind
-    /// (<c>--view=back</c> → <see cref="Flight.CameraController.PinnedBackView"/>). 5 has no
-    /// perspective of its own (the middle of the pad is the chase camera), and anything outside
-    /// 1–9/back is a typo — both give 0, the chase camera, which the caller reports.</summary>
+    /// <summary>The numpad view digit for <c>--view=</c>, the look-behind
+    /// (<c>--view=back</c>) or the flyby (<c>--view=flyby</c>), the last two as sentinels above the
+    /// digit range. 5 has no perspective of its own (the middle of the pad is the chase camera),
+    /// and anything else is a typo — both give 0, the chase camera, which the caller reports.</summary>
     public static int ParseView(string s)
     {
         if (string.Equals(s, "back", StringComparison.OrdinalIgnoreCase))
         {
             return Flight.CameraController.PinnedBackView;
+        }
+        if (string.Equals(s, "flyby", StringComparison.OrdinalIgnoreCase))
+        {
+            return Flight.CameraController.PinnedFlybyView;
         }
         if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
             && n >= 1 && n <= 9 && n != 5)

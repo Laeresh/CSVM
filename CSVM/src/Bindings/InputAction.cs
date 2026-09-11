@@ -93,4 +93,9 @@ public enum InputAction
     // the members are positional and inserting one would renumber every action after it.
     SelectGunGroupPrev,
     SelectOrdnancePrev,
+
+    // The flyby camera, the original's "Access Chase View". Appended rather than filed with the
+    // view actions above because the members are contiguous and indexed by value; the rebinding
+    // screen reads its caption off the name, so it needs no table entry either.
+    FlybyView,
 }

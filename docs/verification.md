@@ -688,6 +688,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   seconds in, which the faster leg never reached; the wing walk's own `wingwalk_parent` reads 0.2 m
   of drift over 577 m across the same pair.
 
+- **INSTR-57** — **`FlightController` overrides no `_PhysicsProcess`, so a suite stepping a rig with
+  it advances the CAMERA and nothing else; the simulation step is `SimStep`.** A flyby suite driven
+  that way read the aeroplane 31 m from where it started after four seconds at 100 m/s, and the
+  camera it was measuring looked correct against a subject that had never flown.
+
 ## SRC — sources and documents
 
 - **SRC-3** — **Use design documents for intent; retail evidence decides shipped details.**

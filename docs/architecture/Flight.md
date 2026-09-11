@@ -214,13 +214,23 @@ frame, and the `--view=` spelling. Engine-free, so the decisions unit-test witho
 
 ## src/Flight/CameraController.cs
 The flown aircraft's camera: the roll-following chase pose, the numpad fixed views, the look-behind,
-the right-stick look-around, the authored crash cut, the weapon lab's held-airframe orbit and the
-pilot's selected view mode (`PilotViewMode` decides, this class holds the state and the camera;
-`ResetToChase` is what the player's own destroy definition asks for by callback). The chase radius
-is per plane and dynamic, `Dist + DistFactor·V` plus `DistTransient`'s authored throttle term
-(`DistVary` on a speed copy lagging at `DistCatchUp`); `ExternalRadius` bounds it and carries the
-numpad zoom outward from the near bound. Cockpit and Nose mount rigidly at the authored
-`cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores the FOV it was built with. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+the right-stick look-around, the weapon lab's held-airframe orbit, the three static cameras through
+`Statics`, and the pilot's selected view mode (`PilotViewMode` decides, this class holds the state
+and the camera; `ResetToChase` is what the player's own destroy definition asks for by callback).
+The chase radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s
+authored throttle term (`DistVary` on a speed copy lagging at `DistCatchUp`); `ExternalRadius` bounds
+it and carries the numpad zoom outward from the near bound. Cockpit and Nose mount rigidly at the
+authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores the FOV it was built with. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+
+## src/Flight/StaticCameras.cs
+The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death
+camera the pilot's own destruction enters, and the flyby. One placement shape serves both random
+ones, a circle about the flight axis carried `speed · interval + z` along the nose, and one
+clearance serves all three, a vertical probe that never lets a spot sit closer than `crash_elev`
+above the terrain under it. The flyby adds its own bookkeeping: a drawn watch deadline in sim time
+and a drawn switch distance, the re-site landing on the step after both are past. Placement and
+clearance are static and engine-free but for the `IWorldQuery` probe; `CameraController` owns one
+and does the aiming. Decode: [../formats/camparam.md](../formats/camparam.md).
 
 ## src/Flight/HeadLook.cs
 The pilot's head in the two first-person views, decoded from the original's shared look controller.

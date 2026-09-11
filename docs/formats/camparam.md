@@ -80,39 +80,66 @@ two-turret aircraft — the largest.
 
 ## Static death, crash, and flyby cameras
 
-All three cameras first calculate a candidate world position and then pass its Y coordinate through
-one shared world-collision clearance rule. `crash_chord_y` raises the start of a vertical ray above the
-candidate; the ray ends 1000 m below the candidate. When it hits terrain, the candidate rises to at
-least `highest_hit_y + crash_elev`. The executable calls the latter field `crash_min_elev`, which
+All three cameras share one lifecycle: a world point chosen once, held, and re-aimed at the aircraft
+every frame. The mode setter `FUN_0042c280` raises the shared "needs placement" flag `DAT_0064ef2c`
+from a 10×10 from/to table at `00621380` (a zero entry means place); entering mode 8 or 9 from any of
+the three player views is a zero entry, so it always places. Each mode's own per-frame handler
+consumes the flag. **Every random draw is `rand() × 3.051851e-05`, which is `rand()/32767`, uniform
+on [0, 1].**
+
+All three then pass the candidate's Y through one world-collision clearance. `crash_chord_y` raises
+the start of a vertical ray above the candidate; the ray ends **1000 m** below it, a hard-coded
+literal rather than a field. When it hits terrain, the candidate rises to at least
+`highest_hit_y + crash_elev`, and never falls. ⚠ **The probe hides the camera's own aeroplane
+first** (`FUN_004cca30(DAT_0071c298 + 0xc, 0)`, restored from the saved flag bit afterwards), so an
+aircraft is never its own obstacle. The executable calls the second field `crash_min_elev`, which
 describes its role; `crash_elev` is the extracted reader's spelling. The rule is `FUN_0042c390`,
 called through `FUN_0042c580` by crash (`0042e041`–`0042e04e`), death
-(`0042e1d7`–`0042e1e4`), and flyby (`0042e387`–`0042e394`).
+(`0042e1d7`–`0042e1e4`), and flyby (`0042e387`–`0042e394`). ⚠ **No chase pose is lifted.** The chase
+path calls a clearance hook of its own, `FUN_0042c5a0`, and in the retail build that function is a
+stub: it computes `y = (y − 1) + 1` and returns 0.
+
+The crash camera is **mode 5**, entered on a fatal ground impact. `FUN_0042ce00` places once through
+`FUN_0042df90`, which offsets the aircraft's world position by `crash_horiz` along the horizontal
+bearing of its own basis and `crash_y` up, then takes the shared clearance; the handler then holds
+that point and re-aims at the aircraft, like modes 8 and 9.
 
 The death camera is mode 8. On entry it chooses one fixed world point:
 
-1. Draw an angle uniformly around the aircraft and form the local offset
+1. Draw `θ` uniformly on [0, 2π) and form the local offset
    `(death_x·cos θ, death_x·sin θ, −(speed·death_interval + death_z))`.
 2. Transform that offset through the aircraft basis and add the aircraft world position.
 3. Add `death_alt` to world Y, clamp Y to `death_min_alt`, then apply the shared clearance.
 
 `FUN_0042e0b0` performs the placement (`0042e0c3`–`0042e1e4`). The camera holds the resulting
 world point and re-aims at the aircraft every frame; it has no timer-driven re-frame. Mode 8 is
-entered for the destroyed player when callback event `0x0f` consumes the armed death-camera flag
-(`00470912`–`0047093c` and `0048072a`–`00480794`). Reset/respawn leaves it for mode 6.
+entered for the destroyed player when callback event `0x0f` finds the per-aircraft one-shot flag at
+`obj + 0x91f` set on the player's own object (`DAT_0071c298`); the handler clears the flag and calls
+the mode setter (`00470912`–`0047093c`, and a second path at `00480764`–`00480794`). The respawn
+routine `FUN_0047f1f0` clears that flag and returns the camera to mode 6.
 
-The flyby camera is mode 9. Each re-site (`FUN_0042e1f0`, `0042e1f0`–`0042e3f6`):
+The flyby camera is mode 9, entered by the F7 handler at `00489430`–`00489447` while the player is
+alive (`player + 0x91d` clear). Each re-site (`FUN_0042e1f0`, `0042e1f0`–`0042e3f6`):
 
-1. Draws a local angle outside the ±15° forward/back exclusion wedges and a radius uniformly from
-   `flyby_min_radius..flyby_max_radius`.
-2. Draws `interval` uniformly from `flyby_min_interval..flyby_max_interval` and uses
-   `−(speed·interval + flyby_z)` as the longitudinal offset.
+1. Draws `a` uniformly on [−π, π) and forms `θ = a·(5/6) ± 0.2617994`, the sign taken from `a`'s.
+   That leaves two 30°-wide excluded arcs, one centred on `θ = 0` and one on `θ = ±π`.
+2. Draws a radius uniformly from `flyby_min_radius..flyby_max_radius` and forms the local offset
+   `(radius·sin θ, radius·cos θ, −(speed·interval + flyby_z))`, `interval` drawn uniformly from
+   `flyby_min_interval..flyby_max_interval`.
 3. Transforms the offset through the aircraft basis, adds `flyby_y` to world Y, clamps to
    `flyby_min_alt`, and applies the shared clearance.
-4. Draws a watch duration and switch distance independently from their authored min/max pairs.
+4. Draws a watch duration and a switch distance from their authored min/max pairs. The watch is
+   stored as an ABSOLUTE game time (`DAT_0071c470 + watch`), not a countdown, and the switch
+   distance is stored SQUARED, because the test it feeds is against a squared distance.
+
+⚠ **Sine and cosine are swapped between the two placements.** The death camera puts the cosine on
+the first local axis and the sine on the second; the flyby puts the sine first. With the flyby's
+wedges excluded about `θ = 0` and `θ = ±π`, that keeps a flyby spot off the aircraft's own vertical
+and out on its flanks, while the death camera's angle is unrestricted.
 
 `FUN_0042db40` holds that world point and re-aims at the moving aircraft each frame. After the watch
 deadline, distance beyond the chosen switch threshold requests a re-site; because the re-site check
-precedes the distance check, the move occurs on the next frame. Every re-site redraws all four
+precedes the distance check, the move occurs on the next frame. Every re-site redraws all five
 random choices. Mode 9 has no internal exit; another camera-mode transition ends it.
 
 `FUN_0042f700` maps the raw floats without conversion: death fields occupy table offsets
@@ -120,9 +147,16 @@ random choices. Mode 9 has no internal exit; another camera-mode transition ends
 are metres. The two `*_interval` values are seconds because they multiply speed to produce metres;
 only `flyby_*_watch_time` is a dwell.
 
-The vector-component formulas and basis transform are exact. Calling the third local component
-fore/aft is an interpretation of the resulting camera behaviour; the executable does not expose a
-friendly name for that basis axis.
+The vector-component formulas and basis transform are exact. Which end of the flight path the third
+local component points at is an interpretation: the executable names no axis, and the model frame's
+own two readings disagree. **The flyby's lifecycle settles it as AHEAD.** Placed behind, a camera
+starts `speed · interval` metres away (about 200 m at 100 m/s), already past the 70-85 m switch
+distance, and would watch a receding dot for the whole 3.8-4.3 s watch time before re-siting.
+Placed ahead, the aircraft closes over that same interval, passes at the authored 5.5-7.0 m radius,
+and is past the switch distance roughly when the watch expires, which is what the four authored
+ranges are proportioned for. Mapping the components straight onto this codebase's own plane basis
+(nose at −Z, `docs/formats/gotchas.md`) gives exactly that, and the `flyby-camera` suite measures
+the closest approach at 6.0 m to prove it.
 
 ## The distance law
 
@@ -200,12 +234,16 @@ direction factor, which the look-behind arm hard-codes to `−1`, so a slam push
 - `crash_horiz` / `crash_y` — the crash camera's hard-cut pose (`CrashView`).
 - `back_dist_min` / `back_dist_max` — the look-behind view's distance bounds (`BackView`,
   numpad 0 / `--view=back`), which take no zoom.
+- `crash_chord_y` / `crash_elev` — the shared terrain clearance
+  (`StaticCameras.LiftClearOfWorld`), taken by the crash cut, the death camera and the flyby.
+- every `death_*` field — the death camera (`StaticCameras.StepDeath`), entered when the player's
+  own aircraft is destroyed and held while the wreck falls.
+- every `flyby_*` field — the flyby (`StaticCameras.StepFlyby`), entered on F7 or `--view=flyby`.
 
-The death and flyby cameras are decoded but remain dormant in CSVM. The original's F7 "Access Chase
-View" enters flyby mode 9; destroyed-player callback event `0x0f` enters death mode 8. Captures are
-useful after implementation to judge their presentation, but they do not supply any field meaning
-or placement constant. See [`docs/org/cameraViews.md`](../org/cameraViews.md) for the camera-state
-dispatch and lifecycle.
+The engine suites `death-camera` and `flyby-camera` fly both on the empty stage and read the spot
+each one chose. What no instrument settles is PRESENTATION: whether the original's own death shot
+and flyby read the way these do at the controls. See
+[`docs/org/cameraViews.md`](../org/cameraViews.md) for the camera-state dispatch and lifecycle.
 
 ## Evidence & limits
 

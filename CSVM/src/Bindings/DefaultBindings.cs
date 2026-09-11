@@ -130,6 +130,9 @@ public static class DefaultBindings
             .Buttons(InputAction.CycleStuntTarget, JoyButton.DpadUp);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
         b.Keys(InputAction.SelectChaseView, Key.F6).Buttons(InputAction.SelectChaseView, JoyButton.Back);
+        // F7 is the original's own key for this camera ("Access Chase View", which its own decode
+        // settles as the flyby rather than the following chase view); the pad has no spare button.
+        b.Keys(InputAction.FlybyView, Key.F7);
         b.Keys(InputAction.LookUp, Key.Kp7, Key.Kp8, Key.Kp9);
         b.Keys(InputAction.LookDown, Key.Kp1, Key.Kp2, Key.Kp3);
         b.Keys(InputAction.LookLeft, Key.Kp7, Key.Kp4, Key.Kp1);

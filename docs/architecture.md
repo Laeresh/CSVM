@@ -149,6 +149,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/PilotViewMode.cs` — the three selectable views (Chase/Cockpit/Nose = camera modes 0/6/7) and `PilotView`, the pure rules over them.
 - `src/Flight/CameraController.cs` — the flown plane's camera: chase, numpad fixed views, look-behind, the selected view mode and the lab's held-airframe orbit.
+- `src/Flight/StaticCameras.cs` — the crash, death and flyby cameras: one placement law, one terrain clearance, and the flyby's watch-and-switch re-site.
 - `src/Flight/HeadLook.cs` — the pilot's head in a first-person view: snap directions, free-look, the centre key and the smoothing to the shown angles.
 - `src/Flight/CockpitVisibility.cs` — the per-mode hiding of the pilot's OWN plane in first person; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
 - `src/Flight/CockpitOverlay.cs` — the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out.

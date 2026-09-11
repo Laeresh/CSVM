@@ -43,7 +43,7 @@ internal static class SpectateHandoff
 
         // ⚠ Give the spectator this pilot's OWN device filter: two downed pilots watching at once
         // otherwise move in lockstep. Any translation input releases the orbit lock.
-        var eye = rig.Camera.Position;   // where Crash's own cut left it (CameraController.CrashView)
+        var eye = rig.Camera.Position;   // where the death or crash camera left it (CameraController)
         var spectator = new SpectatorCamera(rig.Camera, eye,
             follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z,
             pilot.PadDevices, pilot.UseKeyboard)

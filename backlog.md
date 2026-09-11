@@ -1645,26 +1645,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   implementation against the four cancellations and the two triples — those are the cases with a
   right answer to check against.
 
-- `BL-260` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The decoded death and flyby cameras are not implemented; shared static-camera world clearance is unwired.**
-  `CamParams.cs` parses the fields, and the executable now settles every consumer and trigger
-  ([`docs/formats/camparam.md`](docs/formats/camparam.md), [`docs/org/cameraViews.md`](docs/org/cameraViews.md)).
-  **Death:** callback event `0x0f` enters mode 8 for the destroyed player; one fixed world point is
-  chosen from a random `death_x` radius, a third local component of
-  `−(speed·death_interval + death_z)`, `death_alt`, and `death_min_alt`, then held while the camera
-  re-aims every frame
-  (`FUN_0042e0b0`, callbacks `00470912`–`0047093c` / `0048072a`–`00480794`).
-  **Flyby:** F7 enters mode 9; each re-site randomizes azimuth/radius, uses
-  `speed·flyby_interval + flyby_z` for longitudinal placement, then waits the randomized watch time
-  and re-sites on the frame after distance exceeds the randomized switch threshold
-  (`FUN_0042e1f0`, `FUN_0042db40`). **Shared clearance:** `crash_chord_y` starts a vertical terrain
-  world-collision ray that far above the candidate, and the field the executable names
-  `crash_min_elev` (extracted
-  as `crash_elev`) holds crash, death, and flyby at least that far above the highest hit
-  (`FUN_0042c390`). *Fix shape:* implement modes 8/9 and one shared clearance helper; do not create
-  independent hand-authored offsets. A capture after implementation judges presentation only.
-  *⚠ Traps:* both `*_interval` fields are seconds multiplied by speed into distance, not re-frame
-  timers. Preserve the decoded basis transform rather than assigning physical axes from field names.
-
 - `BL-266` `[Research]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
   wiring landed.** The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
   plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and

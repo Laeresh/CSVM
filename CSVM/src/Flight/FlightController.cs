@@ -459,7 +459,7 @@ public partial class FlightController : Node3D
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly List<AimCandidate> _targetSites = new(); // this frame's objective sites
     private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
-    private readonly bool[] _viewModeKeyPrev = new bool[4]; // F8/F6 + pad view-selection edges
+    private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F6/F7 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
     // Suppresses the rocket trigger's next read when a cutscene skip or a pause-menu
     // Resume hands input back while F/A is still down from confirming it.
@@ -481,6 +481,9 @@ public partial class FlightController : Node3D
     private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
     private FlightModel _model = null!;
     private CameraController? _cam;              // null on an AI rig — no view rides this plane
+    private bool _deathCamera;                   // the pilot's own destruction holds the view; the
+                                                 // one camera that keeps writing while crashed,
+                                                 // since it re-aims at the falling wreck
     private Camera3D? _viewCamera;
     private CanvasLayer? _hudCanvas;             // the whole HUD layer; hidden while crashed (the
                                                  // original's crash camera shows no HUD — footage);
@@ -1923,8 +1926,13 @@ public partial class FlightController : Node3D
         }
         else if (Crashed)
         {
-            // The authored crash camera holds the pose Crash() cut to — the original's camera
-            // does not move after the cut (footage), so nothing is written here until respawn.
+            // The authored crash camera holds the pose Crash() cut to — the original's camera does
+            // not move after the cut (footage). The DEATH camera is the exception: its spot is
+            // fixed but its aim is not, so it is stepped to keep the falling wreck framed.
+            if (_deathCamera)
+            {
+                StepDeathView();
+            }
         }
         else
         {
@@ -1937,7 +1945,16 @@ public partial class FlightController : Node3D
             _cam.RestoreExternalFov();
             bool firstPersonPose = false;
             int view = _cam.ActiveView();
-            if (view >= 0)
+            if (_cam.FlybyActive)
+            {
+                // Above the numpad views on purpose: the flyby is a camera the aeroplane was put
+                // into, not a pose held over the pilot's selection, so nothing overrides it while
+                // it runs. Sim time, so the pass survives a frame-rate change and a halt freezes it.
+                _cam.FlybyView((float)(clock?.Time ?? 0.0), _renderPose, _model.Speed,
+                    World, Body?.ExcludeSelf);
+                view = CameraController.FlybyViewLog;
+            }
+            else if (view >= 0)
             {
                 _cam.FixedView(view, _renderPose);
             }
@@ -2708,7 +2725,7 @@ public partial class FlightController : Node3D
             PlaneModel.Visible = false;
         }
         if (death.CutCamera)
-            CutToCrashView(at);
+            CutToDeathView();
         Log.Info("flight",
             $"DESTROYED by {hitName} ({part}) def={destroyDef ?? "-"} wreck={(death.WreckFalling ? "falling (flight model)" : "handed over on the kill frame")} lands={(DestroyDefFliesWreck ? "anim (bounce sequence)" : "ground-impact def")} pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s");
         if (death.Downed)
@@ -2746,7 +2763,35 @@ public partial class FlightController : Node3D
     private void CutToCrashView(Vector3 at)
     {
         if (!CameraOwned)
-            _cam?.CrashView(at, _model.VelocityDir);
+            _cam?.CrashView(at, _model.VelocityDir, World, Body?.ExcludeSelf);
+        HideHudForStaticCamera();
+    }
+
+    // The DEATH camera, the destruction's own framing rather than the ground impact's: a spot
+    // chosen once out of the death_* fields and held while the wreck falls past it. Unlike the
+    // crash cut this one is stepped every frame, because it re-aims at a moving wreck.
+    private void CutToDeathView()
+    {
+        if (CameraOwned || _cam == null)
+            return;
+        _deathCamera = true;
+        _cam.EnterDeathView();
+        StepDeathView();
+        HideHudForStaticCamera();
+    }
+
+    // One stepped frame of the death camera, off the drawn pose so it tracks the wreck exactly the
+    // way every other per-frame camera write does.
+    private void StepDeathView()
+    {
+        _cam?.DeathView(_renderPose, _model.Speed, World, Body?.ExcludeSelf);
+        _cam?.LogView(CameraController.DeathViewLog, _model.Position, _model.Attitude);
+    }
+
+    // What every static camera owes the screen: no HUD (the original's crash and death footage
+    // shows none) and no first-person dressing, since all of them are outside vantages.
+    private void HideHudForStaticCamera()
+    {
         if (_hudCanvas != null)
             _hudCanvas.Visible = false;
         LeaveFirstPerson();
@@ -3110,6 +3155,7 @@ public partial class FlightController : Node3D
         DispatchViewModeKey(1, _keyActions.Held(InputAction.SelectChaseView), () => _cam!.SelectChase());
         DispatchViewModeKey(2, _padActions.Held(InputAction.CycleCockpitViews), () => _cam!.CycleCockpitViews());
         DispatchViewModeKey(3, _padActions.Held(InputAction.SelectChaseView), () => _cam!.SelectChase());
+        DispatchViewModeKey(4, _keyActions.Held(InputAction.FlybyView), () => _cam!.EnterFlyby());
     }
 
     // Same one-action-per-press rule as DispatchTargetKey, against its own slots.
@@ -3849,6 +3895,10 @@ public partial class FlightController : Node3D
     // not yank the eye back onto the plane the tester just flew away from.
     private void SnapCamera()
     {
+        // The death camera ends where the aeroplane it was framing does. Cleared even under the
+        // lab's free camera, so a re-park cannot leave a dead pilot's framing armed for the next
+        // life.
+        _deathCamera = false;
         if (!CameraOwned)
         {
             _cam?.Snap(_model.Position, _model.Attitude, _model.Speed, _renderPose);

@@ -21,6 +21,10 @@ public sealed class CameraController
     /// look-behind view for the whole run, the scripted twin of holding numpad 0.</summary>
     public const int PinnedBackView = 10;
 
+    /// <summary>The <c>--view=flyby</c> sentinel: start in the flyby camera and re-enter it after
+    /// every respawn, the scripted twin of pressing the flyby key.</summary>
+    public const int PinnedFlybyView = 11;
+
     /// <summary>LogView's marker for the look-behind view (the numpad views log their digit).</summary>
     public const int BackViewLog = -2;
 
@@ -34,6 +38,14 @@ public sealed class CameraController
     public const int CockpitViewLog = -4;
 
     public const int NoseViewLog = -5;
+
+    /// <summary>LogView's markers for the two STATIC cameras a scripted run can be in: the flyby a
+    /// key or <c>--view=flyby</c> entered, and the death camera the player's own destruction cuts
+    /// to. Both hold a WORLD point, so the breadcrumb's plane-frame offset grows as the aircraft
+    /// leaves, which is how a held camera is told from one riding the aeroplane.</summary>
+    public const int FlybyViewLog = -6;
+
+    public const int DeathViewLog = -7;
 
     /// <summary>The fixed head-pitch offset <c>FUN_0042d980</c> applies about the same axis as
     /// elevation, in both first-person views: −4.70° = −0.08203 rad (bit pattern
@@ -116,6 +128,11 @@ public sealed class CameraController
     // look-behind view's distance bounds.
     private readonly float _crashHoriz, _crashY, _backMin, _backMax;
 
+    // The whole resolved block, for the two clearance fields the crash cut hands the shared probe.
+    // Held as the block rather than copied out field by field because <see cref="Statics"/> reads
+    // a dozen more of them and two copies of one plane's tuning would be two things to keep level.
+    private readonly CamParams _camParams;
+
     // The authored base distance and speed factor (camparam, per plane). The fixed numpad views
     // take the same dynamic radius as the chase camera, so a snap changes the angle and nothing
     // else — they are one number, and moving only one desyncs the two cameras.
@@ -163,12 +180,14 @@ public sealed class CameraController
     private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
 
     public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView,
-        PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default)
+        PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default,
+        Func<float>? staticDraw = null)
     {
         _camera = camera;
         _keyDown = keyDown;
         _pinnedView = pinnedView;
         ViewMode = viewMode;
+        _camParams = cam;
         _dist = cam.Dist;
         _distFactor = cam.DistFactor;
         _radius = cam.Dist;
@@ -182,6 +201,8 @@ public sealed class CameraController
         _backMax = cam.BackDistMax;
         _cockpitCameraOffset = cockpitCameraOffset;
         _externalFovDeg = camera.Fov;
+        Statics = new StaticCameras(cam, staticDraw ?? Rng.Stream(Rng.Camera).Randf);
+        FlybyActive = pinnedView == PinnedFlybyView;
     }
 
     /// <summary>Which view this pilot has SELECTED — Chase, Cockpit or Nose. State, not a held
@@ -191,6 +212,17 @@ public sealed class CameraController
     /// ⚠ Deliberately NOT a row in <see cref="Views"/>: `BL-150` rebuilds that table later and
     /// must be able to replace it without touching these modes.</summary>
     public PilotViewMode ViewMode { get; set; }
+
+    /// <summary>The crash, death and flyby cameras' shared placement and world clearance. Exposed
+    /// so a suite reads the chosen point and the flyby's own re-site bookkeeping off the law itself
+    /// rather than off the camera transform it produced.</summary>
+    public StaticCameras Statics { get; }
+
+    /// <summary>Whether the flyby camera holds this pilot's view. Not a
+    /// <see cref="PilotViewMode"/>: the original's view selector rejects the flyby exactly as it
+    /// rejects the death camera, so it is a state the aeroplane is put into and not one of the
+    /// three views a cycle key walks.</summary>
+    public bool FlybyActive { get; private set; }
 
     /// <summary>Where the owned camera's eye is in the world this frame, for a pass that draws
     /// relative to it (<see cref="CockpitOverlay"/>).</summary>
@@ -214,11 +246,42 @@ public sealed class CameraController
     private float EffectiveRadius => ExternalRadius(_radius, _distMin, _distMax, _zoomShown);
 
     /// <summary>One press of the original's "Cycle Cockpit Views" key advances the three-stop
-    /// cycle: Cockpit → Nose → Chase → Cockpit.</summary>
-    public void CycleCockpitViews() => ViewMode = PilotView.Cycle(ViewMode);
+    /// cycle: Cockpit → Nose → Chase → Cockpit. It also leaves the flyby, which is how the
+    /// original's own selector ends a camera mode it will not accept as a selection.</summary>
+    public void CycleCockpitViews()
+    {
+        FlybyActive = false;
+        ViewMode = PilotView.Cycle(ViewMode);
+    }
 
-    /// <summary>Select the chase view directly, without walking the three-stop cycle.</summary>
-    public void SelectChase() => ViewMode = PilotViewMode.Chase;
+    /// <summary>Select the chase view directly, without walking the three-stop cycle. Leaves the
+    /// flyby for the same reason <see cref="CycleCockpitViews"/> does.</summary>
+    public void SelectChase()
+    {
+        FlybyActive = false;
+        ViewMode = PilotViewMode.Chase;
+    }
+
+    /// <summary>Enter the flyby camera: it takes a fresh spot at once rather than resuming the
+    /// deadline the last pass left behind. A no-op while it is already running, so holding the key
+    /// does not re-site every frame.</summary>
+    public void EnterFlyby()
+    {
+        if (FlybyActive)
+        {
+            return;
+        }
+        FlybyActive = true;
+        Statics.ResetFlyby();
+    }
+
+    /// <summary>Enter the death camera: one spot chosen on the next step and held for the whole
+    /// fall. The pilot's own destruction is what calls it, never a key.</summary>
+    public void EnterDeathView()
+    {
+        FlybyActive = false;
+        Statics.Arm();
+    }
 
     /// <summary>Both writes the destroy def's <c>CALLBACK 3</c> makes: the SELECTED view goes back
     /// to the chase camera and the head-look angles return to level and forward
@@ -385,12 +448,37 @@ public sealed class CameraController
     /// held, back to first-person FOV on release, same as any other override).</summary>
     public void RestoreExternalFov() => _camera.Fov = _externalFovDeg;
 
+    /// <summary>The death camera: a spot chosen once from the <c>death_*</c> fields on the frame
+    /// the pilot's aircraft is destroyed, held for the whole fall while the view re-aims at the
+    /// wreck. Takes the DRAWN pose, like every other per-frame write, and the world probe so the
+    /// spot clears the terrain it was chosen over.</summary>
+    public void DeathView(in Transform3D renderPose, float speed, IWorldQuery? world,
+        Godot.Collections.Array<Rid>? exclude)
+    {
+        RestoreExternalFov(); // the death cut is an external framing, whatever view was selected
+        AimStatic(Statics.StepDeath(renderPose.Origin, renderPose.Basis, speed, world, exclude),
+            renderPose.Origin);
+    }
+
+    /// <summary>The flyby camera: a spot out on the aircraft's flank and ahead of it, held while
+    /// the aeroplane runs past, then re-sited once the drawn watch time is up and the drawn switch
+    /// distance is exceeded. Takes SIM time, so the watch deadline survives a frame-rate change and
+    /// a halted sim freezes the pass rather than ending it.</summary>
+    public void FlybyView(float simTime, in Transform3D renderPose, float speed, IWorldQuery? world,
+        Godot.Collections.Array<Rid>? exclude)
+    {
+        RestoreExternalFov();
+        AimStatic(
+            Statics.StepFlyby(simTime, renderPose.Origin, renderPose.Basis, speed, world, exclude),
+            renderPose.Origin);
+    }
+
     /// <summary>The authored crash camera (<c>crash_horiz</c>/<c>crash_y</c>): on a fatal crash
-    /// the original hard-cuts to a static elevated vantage looking down at the impact point.
-    /// Framing decoded off the original's crash footage — see docs/formats/camparam.md.
-    /// ⚠ The decoded shared world clearance (<c>crash_elev</c>/<c>crash_chord_y</c>) is not
-    /// wired here; keep it out until crash, death, and flyby share one implementation.</summary>
-    public void CrashView(Vector3 impact, Vector3 travelDir)
+    /// the original hard-cuts to a static elevated vantage looking down at the impact point, then
+    /// lifts that vantage clear of the terrain through the same probe the death camera and the
+    /// flyby use. Framing decoded off the original's crash footage — docs/formats/camparam.md.</summary>
+    public void CrashView(Vector3 impact, Vector3 travelDir, IWorldQuery? world = null,
+        Godot.Collections.Array<Rid>? exclude = null)
     {
         RestoreExternalFov(); // the crash cut is always an external framing, whatever view was selected
         var alongH = new Vector3(travelDir.X, 0f, travelDir.Z);
@@ -406,8 +494,10 @@ public sealed class CameraController
             var camH = new Vector3(_camera.Position.X - impact.X, 0f, _camera.Position.Z - impact.Z);
             behind = camH.LengthSquared() > 1e-6f ? camH.Normalized() : Vector3.Back;
         }
-        _camera.Position = impact + (behind * _crashHoriz) + (Vector3.Up * _crashY);
-        _camera.LookAt(impact, Vector3.Up);
+        AimStatic(
+            StaticCameras.LiftClearOfWorld(
+                impact + (behind * _crashHoriz) + (Vector3.Up * _crashY), _camParams, world, exclude),
+            impact);
     }
 
     // Kept beside its one caller, for the same SA1204 reason as FirstPersonPose above.
@@ -518,6 +608,17 @@ public sealed class CameraController
         // left panned across a respawn would frame the spawn from over the pilot's shoulder.
         Head.Reset();
         RestoreExternalFov(); // default; the first-person arm below overrides it
+        // A pinned flyby re-enters on every respawn, and any live one starts its pass over. The
+        // spot itself is left to the next stepped frame, which is the one holding the world probe
+        // the placement has to clear the terrain through.
+        if (_pinnedView == PinnedFlybyView)
+        {
+            FlybyActive = true;
+        }
+        if (FlybyActive)
+        {
+            Statics.ResetFlyby();
+        }
         int view = ActiveView();
         if (view >= 0)
         {
@@ -592,8 +693,25 @@ public sealed class CameraController
             : view == PadLookLog ? "padlook"
             : view == CockpitViewLog ? PilotView.Name(PilotViewMode.Cockpit)
             : view == NoseViewLog ? PilotView.Name(PilotViewMode.Nose)
+            : view == FlybyViewLog ? "flyby"
+            : view == DeathViewLog ? "death"
             : (view < 0 ? "0" : Views[view].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Log.Debug("flight", $"view n={n} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
+    }
+
+    // The write every static camera shares: sit on the held world point and look at the aircraft.
+    // ⚠ Godot's LookAt rejects an up parallel to the view direction, which a camera lifted to
+    // straight overhead reaches, so the up axis swings to world back there rather than throwing.
+    private void AimStatic(Vector3 eye, Vector3 target)
+    {
+        _camera.Position = eye;
+        var toTarget = target - eye;
+        if (toTarget.LengthSquared() < 1e-6f)
+        {
+            return;
+        }
+        var up = Mathf.Abs(toTarget.Normalized().Y) > 0.999f ? Vector3.Back : Vector3.Up;
+        _camera.LookAt(target, up);
     }
 
     // Chase from behind and above the nose in the plane's own frame, so the offset (and the

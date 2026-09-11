@@ -14,8 +14,8 @@ decode wins and the disagreement is a note.
 **Where the neighbours live.** The engine's *external-camera tuning* (distance, catch-up, third-person
 eye height and pitch, look-behind, death/crash/flyby placement) is the shared zrdr reader
 [`../formats/camparam.md`](../formats/camparam.md) — that page carries the field rules but
-no FOV and no first-person data. The death and flyby geometry and lifecycle are decoded under
-`BL-260`; their field-level formulas live on the camparam page.
+no FOV and no first-person data. The crash, death and flyby geometry and lifecycle live on that
+page too, field formulas included.
 
 ## The headline
 
@@ -63,7 +63,7 @@ shared render-camera `FUN_0042ba70`. Only **modes `6` and `7` are first-person**
 | `2` | `FUN_0042c7f0` +flag | Chase variant (fixed-scale) | 60° | 46.8° | — | — |
 | `3` | `FUN_0042cb70` | Chase behind, turn-flippable (+side) | 60° | 46.8° | — | — |
 | `4` | `FUN_0042cb70` +flag | Chase, same base, −side offset | 60° | 46.8° | — | — |
-| `5` | `FUN_0042ce00` | External — camera at the plane, aimed along the flight-velocity direction | 60° | 46.8° | — | — |
+| `5` | `FUN_0042ce00` | **Crash** — one world point `crash_horiz`/`crash_y` off the impact, continuously aimed at the aircraft | 60° | 46.8° | — | — |
 | **`6`** | `FUN_0042d980` | **Cockpit** | **80°** | 64.4° | **drawn** | look-around + autohead, floor `0` |
 | **`7`** | `FUN_0042d980` | **Nose** | 60° | 46.8° | hidden | look-around, floor `0` (autohead off) |
 | `8` | `FUN_0042cf10` | **Death** — one fixed world point chosen on callback event `0x0f`, continuously aimed at the destroyed player | 60° | 46.8° | — | — |
@@ -74,6 +74,17 @@ function and differ only by the boolean flag each passes in — in `(6,7)`'s cas
 the cockpit-vs-nose split below. Modes `1`, `5`, `8`, `9` each have a handler of their own. All of
 the non-first-person handlers read distance/eye geometry from the `camparam.json` chase table
 (`DAT_0064efd0`), so they are all chase/external poses rather than first-person ones.
+
+### Modes 5, 8 and 9 are the STATIC cameras, and they share one lifecycle
+
+The crash cut, the death camera and the flyby are the three poses that hold a WORLD point instead of
+riding the aeroplane. Each per-frame handler opens the same way: if the shared placement flag
+`DAT_0064ef2c` is set, choose a point and clear the flag; then sit on that point and re-aim at the
+aircraft's world position. The mode setter `FUN_0042c280` raises the flag from a 10×10 from/to table
+at `00621380`, and entering `8` or `9` from any of `0`, `6`, `7` raises it. They also share one
+terrain clearance, which no chase pose takes: `FUN_0042c5a0`, the chase path's own clearance hook,
+is a stub in the retail build. The field-level formulas, the clearance and the flyby's re-site
+cadence are in [`camparam.md`](../formats/camparam.md).
 
 ### Only three views are player-selectable: Chase `0`, Cockpit `6`, Nose `7`
 
@@ -111,18 +122,20 @@ positions "external" (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "
 ### Mode 8 is the death camera
 
 Both death-effect callback paths consume event `0x0f`, require the armed entity to be the player,
-and enter mode 8 (`00470912`–`0047093c`, `0048072a`–`00480794`). `FUN_0042e0b0` chooses one fixed
-world point from the `death_*` fields when the mode is entered. `FUN_0042cf10` then holds that point
-and re-aims at the destroyed player every frame; there is no periodic re-frame. Reset/respawn leaves
-mode 8 for mode 6 (`004804de`–`00480508`). The friendly semantic name of callback event `0x0f`
-remains unknown; its gate and effect do not.
+and enter mode 8 (`00470912`–`0047093c`, `00480764`–`00480794`). The gate is a per-aircraft one-shot
+flag at `obj + 0x91f`, which the handler clears, plus the object being the player's own
+(`DAT_0071c298`). `FUN_0042e0b0` chooses one fixed world point from the `death_*` fields when the
+mode is entered. `FUN_0042cf10` then holds that point and re-aims at the destroyed player every
+frame; there is no periodic re-frame. The respawn routine `FUN_0047f1f0` clears the flag and returns
+the camera to mode 6. The friendly semantic name of callback event `0x0f` remains unknown; its gate
+and effect do not.
 
 ⚠ **This label collides with CSVM's own numpad chase look-around key set.** The chase camera runs
 the same head-look controller decoded below through
 `FUN_0042c7f0`, driven by the same numpad snap cluster and menu-labelled `F9`-`F12` **External
 Camera** keys — and the menu's `F7` **Access Chase View** binding is exactly this section's
-"Access Chase View", i.e. the flyby (mode 9), not the look-around. CSVM's `docs/controls.md`
-already leaves `F7` unbound in the flight scheme for this reason. Filed as `BL-435`.
+"Access Chase View", i.e. the flyby (mode 9), not the look-around. CSVM binds `F7` to the flyby for
+that reason; the chase look-around's own binding remains `BL-435`.
 
 ### The in-binary strings expose no view-name tokens
 
@@ -380,7 +393,9 @@ the chase caller is `BL-435`, filed and not yet built.
 | FOV axis | stored/ported as **horizontal** half-angle, converted at the 4:3 it ran | matches for Cockpit/Nose, whose vertical is then held at every viewport shape; external views still store/assume vertical |
 | First-person pair | modes 6/7 share the `cockpit_camera` position; differ in interior render, head-look, FOV | `PilotViewMode` implements Cockpit/Nose as camera modes |
 | Cockpit interior gate | drawer (`FUN_0049fb00`) draws `cockpit1` only in mode 6 | `CockpitVisibility` enforces the same mode gate |
-| **Flyby** ("Access Chase View") | world-fixed, re-siting camera (mode `9`): holds a world point, re-aims at the plane, re-sites on `camparam` flyby trigger | not represented (no world-fixed / re-siting camera concept) |
+| **Flyby** ("Access Chase View") | world-fixed, re-siting camera (mode `9`): holds a world point, re-aims at the plane, re-sites on `camparam` flyby trigger | landed as `StaticCameras`, on `F7` and `--view=flyby` |
+| **Death camera** | mode `8`: one spot from the `death_*` fields when the player is destroyed, held while the wreck falls | landed as `StaticCameras`, entered by the player's own destruction |
+| Static-camera terrain clearance | `crash_chord_y`/`crash_elev`, taken by the crash cut, the death camera and the flyby alike | landed as `StaticCameras.LiftClearOfWorld`, taken by all three |
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
 | Head-look controller | snap, free-look, center key, autohead — one shared state machine, three callers (first person + chase) | landed for first person as `HeadLook` (C21-C22); the chase caller is not represented (`BL-435`) |
 
@@ -402,11 +417,10 @@ applied to the mount.
 
 ## Not resolved
 
-- **The non-selectable modes (`1`, `2`, `3`, `4`, `5`) still have no friendly name or
+- **The non-selectable modes (`1`, `2`, `3`, `4`) still have no friendly name or
   identity.** The player-view selector (`FUN_0042c210`) rejects all of them, so none is a
-  player-selected view; they are internal/context camera poses. Mode `5` is confirmed as an
-  "external camera at the plane", but its precise trigger/pose remains capture-gated. Mode `9` is
-  the **flyby** and mode `8` the **death camera**.
+  player-selected view; they are internal/context camera poses. Modes `5`, `8` and `9` are settled:
+  the **crash** cut, the **death camera** and the **flyby**, the three static cameras above.
 - Which of the 22 `cockpit_camera` offsets corresponds to each named player airframe by display
   name (the node→display map lives in `../formats/markers.md`); only `player_pfighter`'s is
   pinned here.

@@ -49,6 +49,11 @@ public static class Rng
     // shifts what the paint or spawn code rolls; under --det the offered name replays exactly,
     // which is what makes a hangar screenshot reproducible.
     public const string PlaneName = "planename";
+    // The static cameras' placement draws (StaticCameras: the death spot, and the flyby's angle,
+    // radius, interval, watch time and switch distance). Its own stream because the death camera
+    // is placed on the same frame the crash rig scatters a wreck, and sharing Rng.Crash would make
+    // every piece of that wreck a function of where the camera happened to land.
+    public const string Camera = "camera";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 
