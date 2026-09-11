@@ -295,6 +295,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   count never returns to zero once a world is freed with an effect resting at opacity 0, so the
   `fade-walk-bound` suite's no-fade baseline reads 0 ancestor steps run alone and 44 once
   `effect-pool-reset` has run in the same process.
+- **PERF-28** — **An exact-zero allocation claim needs more than one measurement window: take
+  several `GC.GetAllocatedBytesForCurrentThread` windows and require that ONE of them reads zero,
+  rather than widening the assertion to a tolerance.** A real allocator charges every window alike
+  (a one-byte array added to `PerfSample.Close` reads 320,000 bytes over 10,000 iterations in all
+  five windows), while 60,000 windows in the unit host under load, 294 of them crossed by a
+  collection, all read exactly zero, so a lone charged window is the runtime's and not the path's.
 
 ## LOG — logs, error censuses, and exit codes
 

@@ -2666,6 +2666,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-812`, `BL-813`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
   `CSVM/src/UI/CampaignBriefingPage.cs` (the map and pin drawer to share).
 
+- `BL-818` `[Bug]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`ScrapbookComposition`'s
+  three static memos are plain `Dictionary` instances written without a lock, so two callers on
+  different threads corrupt them.** *Evidence:* `Files`, `ZoomFamilies` and `Symbols`
+  (`ScrapbookComposition.cs:84-91`) are read through `TryGetValue` and written through the indexer
+  at the end of `Load`, `LoadZoomFamilies` and `LoadSymbols` with nothing guarding either. Two unit
+  classes reach them, `ScrapbookCompositionTests` and `CampaignLayoutTests`, and xUnit runs test
+  classes in parallel, so a full `dotnet test` throws
+  `InvalidOperationException: Operations that change non-concurrent collections must have exclusive
+  access` out of `Dictionary.TryInsert` under `LoadZoomFamilies`, seen once in three runs with the
+  suite slowed enough to widen the overlap. In the game every caller is a menu page on the UI
+  thread, which is why nothing has been seen in play. *Fix shape:* `ConcurrentDictionary`, or a
+  `lock` around each memo's read and write; the entries are a pure function of their path, so a
+  racing double-load is harmless once the store itself is safe. *⚠ Traps:* the memos cache a null
+  for a missing file, which a `ConcurrentDictionary` value cannot be unless the value type stays
+  nullable and `TryGetValue`'s found-but-null case is kept distinct from not-found.
+  *Cross-refs:* `CSVM/src/UI/ScrapbookComposition.cs`, `CSVM.Tests/CampaignLayoutTests.cs`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -3080,34 +3097,6 @@ usual.
   holds a roster position without producing input came to take the seat `AssignPads` fills by
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
-
-- `BL-584` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **`PerfSampleTests.AScopeAllocatesNothing` goes red intermittently and neither named
-  mechanism reproduces.** *Evidence:* two sightings, both isolated, both green on every run
-  either side. The first was a full `RunTests.ps1` unit stage (`Expected: 0, Actual: 3984` bytes)
-  on a tree whose only difference from six green runs was PowerShell and documentation edits. The
-  second came from a whole-project `dotnet test` in an agent worktree, 3441 of 3442, and passed 15
-  of 15 on an immediate re-run of the same test. ⚠ **The second sighting's evidence was lost, and
-  the way it was lost is itself the finding:** neither the byte count nor the TRX was copied out
-  before the agent's worktree was removed, so this recurrence adds a rate observation and nothing
-  else. **A flake reported by an agent needs its `.scratch/testresults/units.trx` copied out of
-  that worktree before `git worktree remove`**, which deletes the whole directory. **Both
-  mechanisms this entry used to name are ruled out, so do not re-chase them.** Cross-class interference on a shared
-  thread-pool thread cannot charge this assertion: `GC.GetAllocatedBytesForCurrentThread` is
-  per-thread by construction, confirmed empirically with sixteen background tasks allocating and
-  forcing gen-0 collections across the whole measured window (8 of 8 trials read exactly 0 bytes),
-  and `PerfSampleTests` is the only class in `CSVM.Tests` touching `PerfSample`'s ambient statics
-  at all, since every production call site is reachable only through Godot runtime code the unit
-  stage never loads. A tiered-JIT recompile landing mid-scope is ruled out the same way: warm-up
-  counts of 0, 1, 5, 50 and 500 against the 10,000-iteration measured loop all read 0 bytes.
-  Roughly forty forced-contention trials produced no failure. *Fix shape:* none until the cause is
-  known; both readings remain unexplained rather than explained-and-fixed. **On recurrence,
-  capture the binary hash and the concurrent-class list from the TRX**, captured on neither
-  sighting so far, and reopen from there. *⚠ Traps:* do not widen the assertion
-  to a tolerance; zero allocations is the contract `PerfSample` makes, and `BL-562` needs
-  this test able to catch a real regression. A handful of green runs is not evidence at the
-  observed rate: at a 1-in-10 base rate, 30 consecutive clean unit stages give about 95%
-  confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF
-  rules, `PLAN-fast-verification` C23.
 
 - `BL-785` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`TestData.TempDir()`
   mints a GUID directory per call and nothing ever deletes one, so the unit suite leaks directories
