@@ -3103,16 +3103,22 @@ usual.
   `FUN_00401fc0` registers by address as an int, so the script write lands in the wallet dword
   `0x0064b788` directly and is a fifth writer beside the four in `docs/org/hangar.md`. The same
   binder registers `fViewAll` (`0x00647b80`) and `fAllowAll` (`0x00647b5c`, the unlock-everything
-  mode with its 250000 budget); which obfuscated `$$` names those are is the decode. A fourth word the
+  mode with its 250000 budget), which the readings below pair with `ispy` and `crashcheat!`. A fourth word the
   walkthroughs do not list, `crashcheat!`, is compared against the pilot name on the new-campaign
-  name entry (`CAMPAIGN.SCRIPT:100-130`): it sets `$$SB$$`, restores the previous name and re-runs
-  the accept callback, and no script reads `$$SB$$` again; the fresh-profile initialiser's
-  `fAllowAll` branch is the natural candidate for what it sets. The invincibility code `I AM THE ACE!!`
+  name entry (`CAMPAIGN.SCRIPT:100-130`): it sets `$$SB$$`, accepts the name through `uiData`
+  2100 and `gosCallback` 9, then re-accepts the previous name and stays on the screen. Case 9 of
+  `FUN_00407670` runs the fresh-profile initialiser `FUN_004113b0` and then compares the pilot name
+  to `CrashCheat!` case-insensitively, skipping the new-pilot registration when it matches; the
+  initialiser's only binder-flag branch is `fAllowAll`, which no code writes, so `$$SB$$` is that
+  flag: 250000 cash, the eleven stock airframes in slots 2 to 12, and every airframe threshold
+  bypassed, for the rest of the session (`docs/formats/campaign-screens.md`, the name entry).
+  `ispy`'s flag is `fViewAll` by the same reading: the scrapbook lookup `FUN_004061d0` refuses a
+  spread past the campaign position unless `0x00647b80` is set, and then skips the per-spread
+  capture bits too (`docs/org/debrief.md`). The invincibility code `I AM THE ACE!!`
   is in no script's `gui_char` (`ORDINANCELAYOUT.SCRIPT` and `FLIGHTCHECK.SCRIPT` have none) and is
   not a plain ASCII or UTF-16 string in `crimson.exe`, so its compare is engine-side and obfuscated
   or hashed. *What to settle first:* the exe side: where the ACE compare lives and what it sets,
-  what `$$SB$$` does, what list 2409 does with `$$USA$$`, and whether the engine holds further
-  hidden words. *Fix shape:* one typed-prefix matcher owned by each of the three screens, with the
+  and whether the engine holds further hidden words beside the `CrashCheat!` compare. *Fix shape:* one typed-prefix matcher owned by each of the three screens, with the
   scripts' reset-on-miss rule, and a cheat store the campaign carries (a mission pick for the next
   launch, a cash grant, a gallery reveal, an invincibility flag cleared when the flight ends); the
   pull-down is the existing mission list activated where the script places it. *⚠ Traps:* the
@@ -3121,8 +3127,8 @@ usual.
   case-sensitive and the buffer restarts from empty on a miss, so a partial retype starts over.
   Keep the buffer per screen; do not route typed words through `MenuCommands`, which is
   device-neutral by contract. The invincibility is one mission only; a flag that survives the
-  wrap-up is a different cheat. Do not write "see all pictures" into our behaviour until the 2409
-  decode says what the original reveals. *Playtest after fix:*
+  wrap-up is a different cheat. `ispy` reveals spreads up to mission 24 regardless of progress and
+  capture bits, not "every picture in the art"; reproduce that bound. *Playtest after fix:*
   `./RunGame.ps1 --presentation=original --menu=campaign`, click the microphone side, type `idaho`
   and check the mission pull-down appears and New Mission flies the picked row; in the hangar click
   the cash figure, type `gimme` and check it rises by 25000 while under 50000; on Previous Missions click the
