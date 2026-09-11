@@ -172,10 +172,20 @@ raises messagebox `DI = 201` with button mask `0x4`, and on the confirmed result
 messagebox parameter block declared in `GLOBALS.SCRIPT`: `DI` is the langui id of the prompt, `UR`
 the button mask, `WR` an input flag, `VR` the result the box writes back, `TH` a string slot.
 
-⚠ **Two branches of this script are unreachable as shipped.** `int TB = 0` guards the
+⚠ **One branch of this script is unreachable as shipped.** `int TB = 0` guards the
 load-a-savegame branch (`script_run load.script`), so it never runs and the following
-`if (24 > IB)` roster-full test always takes the true arm; and the literal name `crashcheat!` sets
-a script global and forces the name back. Do not reproduce either as behaviour.
+`if (24 > IB)` roster-full test always takes the true arm. Do not reproduce it as behaviour.
+
+**The pilot name `crashcheat!` is a cheat, not dead code.** The script sets a script global,
+accepts the name through `uiData` 2100 and `gosCallback` 9, then re-accepts the previous name
+and stays on the screen. `gosCallback` 9 (case 9 of `FUN_00407670`) runs the fresh-profile
+initialiser `FUN_004113b0` and then compares the pilot name to `CrashCheat!` case-insensitively,
+skipping the new-pilot registration `FUN_004198c0` when it matches. The initialiser's only
+branch on a binder flag is `fAllowAll` (`0x00647b5c`), which has no writer in code, so the
+script global is that flag: with it set the profile starts with `nPlayerCash = 250000` and plane
+slots 2 to 12 filled with the eleven stock airframes, and the airframe thresholds in
+`FUN_0040ff00` / `FUN_0040ff50` / `FUN_0040ffa0` are bypassed. The flag is never cleared by a
+script, so it holds for the session. Reproducing it is `BL-819`.
 
 ## The cabin: `PASSENGERCABIN.SCRIPT`
 
