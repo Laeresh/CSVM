@@ -246,6 +246,18 @@ clauses then walk each launch between nets. CSVM: `GeneratorLaunch.Surface` in
 `Session/CampaignRoster.cs`, built by `Session/SurfaceVehicleRuntime.cs` and launched down the
 path by `Session/AiGeneratorRuntime.cs`; never the CLI airframe in a hull's place.
 
+## A launch flies its net like a roster aircraft
+
+Nothing on the net-following path reads a field only a launch carries, so a generated aeroplane takes
+a tagged node's `dzpath` run exactly as a roster one does, and the direction it walks its net is not
+authored anywhere: each assignment seats the walk on the nearest node and takes the edge best lined
+up with the nose, `SET_AI_NET` included ([org/aiPilot.md](../../org/aiPilot.md), "The danger-zone
+run"). C5/M04 is the shipped case, the install's only tagged node on a generator's net: the Dante's
+bay launches Miles onto `M4MilesStage`, and OBJECTIVE60 moves him onto `M4MilesRun`, whose node 2
+names `dzpath34`. The spawner's own ordering has one consequence for the launch pose: the net is
+assigned while the aircraft still wears the generator's authored `rotation`, so a drop's seat is made
+with the nose pointing straight down.
+
 ## Launch names
 
 Every launch is renamed, `sprintf("%s_eg%d", base, counter)`. The base is the roster block's own

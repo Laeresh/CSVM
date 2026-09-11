@@ -3040,18 +3040,6 @@ usual.
   the roll's threshold before the count says which way it errs. *Cross-refs:* `BL-558`,
   `docs/org/aiControlLaw.md`.
 
-- `BL-731` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM24]` **Whether Miles flies
-  stunts through Manhattan or cruises, and which way round his net runs.** *Evidence:* asked at
-  the controls on CM24 (C5/M04): "should miles fly stunts or just cruise through manhattan (wrong
-  net direction perhaps)". `M4MilesRun` is a generator's net with one tagged danger-zone node,
-  `dzpath34` (`docs/formats/ai-nets.md`, `docs/org/aiPilot.md` on danger-zone nets), the mechanism
-  CM13's racers and CM21's Cabbie also use; Miles launches from the Dante's bay as the
-  `stihellhound_5_eg0` template. *What to settle:* whether the original consumes a tagged danger
-  zone on a generator-launched aircraft's net (the racers and the Cabbie are roster aircraft), and
-  the direction the net is walked from the launch node. His objective marker is not part of this:
-  the bay launch stamps it onto the aircraft like any roster spawn.
-  *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`.
-
 - `BL-811` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **A campaign
   position reached without flying leaves the scrapbook's mission list empty, with no floor under
   it.** *Evidence:* seen at the controls on a profile whose `missionsCompleted` was set by hand,

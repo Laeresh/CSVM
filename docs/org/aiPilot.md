@@ -987,6 +987,35 @@ mission's thirteen zones. The racers have no target and never pursue, so the pro
 runs for them: **in the original the racers fly exactly those seven zones and skip the other
 six**, and a port that sends them through all thirteen would be inventing.
 
+⚠ **A generator's launch takes a tagged node like any roster aircraft.** The tag arm sits inside the
+follower's mode-0 branch and reads the reached node's `+0x11` and `+0x14` alone; `FUN_00421500` then
+wants the zone to resolve by name, its active byte set and a lane free. Read end to end, none of the
+functions on that path (`FUN_0041d1f0`, `FUN_0041d8f0`, `FUN_00431e40`, `FUN_00421500`) touches a
+field only a launch carries: the generator back-pointer `+0x94`, the surface take-off path
+`+0xc8`/`+0xcc`/`+0xd0` and the drop's collision grace `+0xac`/`+0xb4` are written by
+`FUN_00451bf0` and read nowhere here, and the net assignment forces a `wingman` to mode 0 in any
+case. So how an aeroplane reached the air neither enables nor blocks a run. C5/M04 is the shipped
+case: the Dante's bay launches Miles onto `M4MilesStage`, OBJECTIVE60's `SET_AI_NET` moves him to
+`M4MilesRun`, and the mission's `dzones.zrd` authors no `disable` list, so `dzpath34` is armed when
+he reaches the node that names it.
+
+⚠ **Which way round a net is walked is nowhere authored.** A net assignment seats the walk on the
+node nearest the aeroplane (`FUN_00431900`) and takes the edge whose leg best lines up with its
+NOSE (`FUN_00431e40`), and `SET_AI_NET` is that same assignment (`FUN_00475f30` into
+`FUN_00475fc0`), so the direction is whatever heading the aeroplane holds when the net is handed to
+it. `M4MilesRun` is an open eight-node chain carrying its tag on node 2, and a dead end turns the
+walk around, because the edge pick skips the excluded edge but keeps its own default index of 0 and
+so hands a degree-1 node back the edge just flown. The tagged node is therefore reached from either
+side, and a seat anywhere on that chain ends in the `dzpath34` run rather than away from it.
+
+A bay launch's own first edge is not picked by its nose at all. The spawner places and rotates
+the node and only then assigns the net (`FUN_0047c210`: the rotation through `FUN_004d1a30`, then
+`FUN_00476250`), so the seat sees the generator's authored `rotation`, `[-90, 0, 0]` on all 17
+zeppelin hosts, which is nose straight down; `FUN_00451bf0` rewrites the euler with the host's own
+heading only afterwards. Every shipped net is level within itself, so every candidate leg dots to
+zero against a vertical nose and the first-listed edge of the seat node wins, the maximum being
+seeded at `−FLT_MAX` under a strict compare.
+
 ### Mode 2, the approach (`FUN_004216e0`)
 
 The aim point is the run's CURRENT point (segment, metres, lane), flown through the steering law
@@ -1054,10 +1083,19 @@ edge the slot would need; the original does not need one. A hull-swept AI rams t
 front face with a wingtip at `(-6038, 23, -3848)` every time, which is what the
 `campaign-racers` suite holds against with the world's colliders up.
 
+A generator's launch is handed the same ribbons when it is booked into the roster
+(`CampaignDirector.RegisterGeneratorLaunch`), since the world phase that hands them out has already
+run by the time a bay launches: without that, C5/M04's Miles could not take `dzpath34`, which is the
+install's one tagged node on a generator's net. The `generator-launch-danger-zone` suite launches him
+off the Dante over the mission's built world, seats him on `M4MilesRun` the way OBJECTIVE60 does and
+reads the entry off his pilot.
+
 Not ported: the proximity roll (it needs the `+0xba` hit flag the mode machine does not carry;
 `DangerZoneRibbon.ProximityRangeM` and `HasFreeLane` are its admission terms, kept for it), the
 target release at the lock (CSVM's gunner target is the host's), the altitude-floor bypass on the
-approach solve, and the lane table past the zero lane (no shipped node has one).
+approach solve, the lane table past the zero lane (no shipped node has one), and the vertical nose a
+bay launch seats its net with (CSVM seats a launched follower on its first update, from the
+aeroplane's live nose, so a drop's first leg is the best-aligned one rather than the first-listed).
 
 ## The merge rule: what pursue does when two aircraft close nose to nose
 

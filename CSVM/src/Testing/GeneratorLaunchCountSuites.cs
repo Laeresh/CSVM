@@ -18,8 +18,9 @@ namespace CSVM.Testing;
 /// 15 s later with Miles alive in the player's brackets. The launch itself must survive the
 /// Dante's kill: a torpedo salvo kills the fourth gasbag inside OBJECTIVE10's 0.5 s nap, before
 /// OBJECTIVE11 credits the bay, and a bay disabled on the kill tick never launches him. A second
-/// suite covers the opposite shape, C3/M03's <c>barracuda</c> submarine, whose own bay must
-/// disable rather than launch forever once its healthy node dies.</summary>
+/// suite covers the opposite shape, C3/M03's <c>barracuda</c> submarine, whose own bay must disable
+/// rather than launch forever once its healthy node dies. A third flies the <c>dzpath</c> ribbons a
+/// launch must also carry, for the install's one tagged net node that is a generator's.</summary>
 internal static class GeneratorLaunchCountSuites
 {
     private const string Chapter = "C5";
@@ -28,6 +29,19 @@ internal static class GeneratorLaunchCountSuites
     private const string Template = "stihellhound_5_7";
     private const string Launch = "stihellhound_5_eg0";
     private const int MilesGroup = 5;
+
+    // The escape run: OBJECTIVE60's SET_AI_NET moves the launch off its launch net onto
+    // M4MilesRun, whose node 2 of 8 is the install's one tagged node on a generator's net.
+    private const string LaunchNet = "M4MilesStage";
+    private const string RunNet = "M4MilesRun";
+    private const int RunObjective = 60;
+    private const int TaggedNode = 2;
+    private const int TaggedPath = 34;
+
+    // Where the walk is put for the run into the tagged node: this far back down the leg into it,
+    // so the node it is seated on is unambiguous and the nose is already on the leg.
+    private const float SeatLeadM = 40f;
+    private const float ZoneWaitS = 30f;
 
     private const string SubChapter = "C3";
     private const string SubMission = "M03";
@@ -66,20 +80,7 @@ internal static class GeneratorLaunchCountSuites
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
-        CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
-        {
-            if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
-                && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
-            {
-                found = m;
-            }
-        }
-        if (found is not { } mission)
-        {
-            throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");
-        }
-
+        var mission = MissionOrSkip(ctx);
         var script = ObjectiveScript.Load(missionZrdr);
         var blocks = AiSkills.LoadRoster(missionZrdr);
         var nets = AiNets.Load(chapterZrdr);
@@ -101,6 +102,87 @@ internal static class GeneratorLaunchCountSuites
 
         ctx.WriteArtifact($"test-generator-launch-dedg-{Chapter}-{Mission}.txt", report.ToString());
         ctx.Note($"{Chapter}/{Mission}: the Dante's launch counts for DEDG over group {MilesGroup}");
+    }
+
+    [Suite("generator-launch-danger-zone",
+        "C5/M04's Miles over the mission's own BUILT world: the dantezep launch is handed the "
+        + "world's dzpath ribbons the way a roster aircraft is, and with OBJECTIVE60's SET_AI_NET "
+        + "seating him on M4MilesRun the walk into that net's one tagged node (node 2, naming "
+        + "dzpath34, which the mission's dzones.zrd leaves armed) starts the run. The decoded "
+        + "node-tag entry has no gate on how the aircraft reached the air, and the install's only "
+        + "tagged node on a generator's net is this one")]
+    internal static void GeneratorLaunchDangerZone(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+
+        var mission = MissionOrSkip(ctx);
+        var script = ObjectiveScript.Load(missionZrdr);
+        var nets = AiNets.Load(chapterZrdr);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs, nets);
+        var report = new StringBuilder();
+
+        EnemyGeneratorDef? bay = null;
+        foreach (var d in EnemyGenerators.Load(missionZrdr))
+        {
+            if (d.Node.Equals(Generator, StringComparison.OrdinalIgnoreCase))
+            {
+                bay = d;
+            }
+        }
+        var run = AiNets.ByName(nets, RunNet);
+        if (bay == null || run == null)
+        {
+            throw new SuiteSkippedException($"{Chapter}/{Mission} carries no '{Generator}' on '{RunNet}'");
+        }
+
+        // The authored shape: the bay launches onto its staging net, and the tagged node is on the
+        // net the script moves the launch to afterwards, so nothing about the launch itself
+        // predicts the run.
+        ctx.Check(bay.Nets.Count == 1 && bay.Nets[0].Equals(LaunchNet, StringComparison.OrdinalIgnoreCase),
+            $"'{Generator}' launches onto '{LaunchNet}' ({string.Join(", ", bay.Nets)})");
+        var tagged = new List<int>();
+        for (int i = 0; i < run.Nodes.Count; i++)
+        {
+            if (run.Nodes[i].EntersDangerZone)
+            {
+                tagged.Add(i);
+                report.AppendLine($"{RunNet}: node {i} tags dzpath{run.Nodes[i].DangerZonePath} at {run.Nodes[i].Position}");
+            }
+        }
+        ctx.Check(tagged.Count == 1 && tagged[0] == TaggedNode,
+            $"'{RunNet}' carries its one danger-zone tag on node {TaggedNode} ({string.Join(", ", tagged)})");
+        ctx.Same(TaggedPath, run.Nodes[TaggedNode].DangerZonePath,
+            $"…naming dzpath{TaggedPath}");
+        bool seats = false;
+        foreach (var (name, net) in ObjectiveNumbered(script, RunObjective)?.SetAiNet
+                                    ?? new List<(string, string)>())
+        {
+            seats |= name.Equals(Launch, StringComparison.OrdinalIgnoreCase)
+                     && net.Equals(RunNet, StringComparison.OrdinalIgnoreCase);
+        }
+        ctx.Check(seats, $"OBJECTIVE{RunObjective} is the SET_AI_NET that puts '{Launch}' on '{RunNet}'");
+        if (tagged.Count != 1 || tagged[0] != TaggedNode)
+        {
+            return;
+        }
+
+        var director = CampaignDirector.Create(script, mission,
+            CampaignProfileDef.NewProfile("Zachary"), null, missionZrdr);
+        ctx.WithWorld(Chapter, collision: false, Mission, world =>
+            DriveZone(ctx, world, director, bay, templates, skills, nets, run, missionZrdr,
+                texturesPath, report));
+
+        ctx.WriteArtifact($"test-generator-launch-danger-zone-{Chapter}-{Mission}.txt", report.ToString());
+        ctx.Note($"{Chapter}/{Mission}: the Dante's launch takes '{RunNet}''s dzpath{TaggedPath}");
     }
 
     [Suite("generator-sub-kill-disables-bay",
@@ -356,6 +438,149 @@ internal static class GeneratorLaunchCountSuites
             pool?.Free();
             textures.Dispose();
         }
+    }
+
+    // The launch, then the escape run: the bay puts Miles in the air, the assignment OBJECTIVE60
+    // makes seats him on the tagged net, and he flies the leg into the tagged node himself.
+    private static void DriveZone(TestContext ctx, TestWorld world, CampaignDirector director,
+        EnemyGeneratorDef def, IReadOnlyDictionary<string, RosterSpawnPlan> templates,
+        AiSkills skills, IReadOnlyList<AiNet> nets, AiNet run, string missionZrdr,
+        string texturesPath, StringBuilder report)
+    {
+        var textures = new TextureArchive(texturesPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        ProjectilePool? pool = null;
+        FlightRoster? roster = null;
+        AiGeneratorRuntime? generators = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            roster = Spawner(ctx, planesGamez, textures, live);
+            var spawner = roster;
+            director.Attach(new CampaignDirector.WorldInputs
+            {
+                Runtime = world.Runtime,
+                Gamez = world.Gamez,
+            });
+
+            AiGeneratorRuntime? runtime = null;
+            LaunchedVehicle SpawnFromGenerator(EnemyGeneratorDef d, Vector3 pos, Vector3 look, AiPilot pilot)
+            {
+                if (CampaignRosterPlan.ResolveGeneratorLaunch(templates, d.VehicleParams, out var plan)
+                    != GeneratorLaunch.Template || plan == null)
+                {
+                    return default;
+                }
+                string name = EnemyGenerators.LaunchName(
+                    EnemyGenerators.LaunchBase(plan.Name), runtime?.LaunchOrdinal ?? 0);
+                var built = spawner.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot, name));
+                CampaignRosterPlan.ApplyPlan(pilot, plan, skills.MinAiActiveDist);
+                director.RegisterGeneratorLaunch(name, built, plan);
+                return built;
+            }
+            runtime = new AiGeneratorRuntime(new[] { def },
+                (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
+                nets, ctx.PlaneName, SpawnFromGenerator);
+            generators = runtime;
+
+            // The Dante at its zeppelin record's pose, where a session places it: the gamez node's
+            // own pose sits under the 150 m launch gate.
+            var host = world.Runtime.FindNodes(Generator) is { Count: > 0 } hosts ? hosts[0] : null;
+            ZeppelinDef? record = null;
+            foreach (var z in Zeppelins.Load(missionZrdr))
+            {
+                if (z.Node.Equals(Generator, StringComparison.OrdinalIgnoreCase))
+                {
+                    record = z;
+                }
+            }
+            ctx.Check(host != null && record != null, $"'{Generator}' is a world node with a zeppelin record");
+            if (host == null || record == null)
+            {
+                return;
+            }
+            host.GlobalPosition = record.Position;
+
+            ctx.Same(1, runtime.GrantWaveCapacity(Generator, 1), $"the script's WAKEUP_GENERATOR credit is granted");
+            float waited = 0f;
+            while (waited < SpawnWaitS && !director.Roster.ContainsKey(Launch))
+            {
+                runtime.SimStep(StepDt);
+                waited += StepDt;
+            }
+            report.AppendLine($"launch: '{Launch}' in the roster after {waited:0.00} s");
+            if (!director.Roster.TryGetValue(Launch, out var miles) || miles.Pilot is not { } pilot)
+            {
+                ctx.Check(false, $"the launch enters the roster as '{Launch}' with its own pilot");
+                return;
+            }
+            ctx.Check(pilot.DangerZones != null, $"the launch carries the world's dzpath ribbons");
+            ctx.Check(pilot.DangerZones?.ByIndex(TaggedPath) is { Active: true },
+                $"…including an armed dzpath{TaggedPath}");
+            if (pilot.Machine is not { } machine)
+            {
+                ctx.Check(false, $"the launch carries a mode machine to enter the run with");
+                return;
+            }
+
+            // The seat OBJECTIVE60 makes, then the leg into the tagged node: the assignment takes
+            // the nearest node and the edge the nose lines up with, so a nose already on the leg is
+            // what the script's mid-flight swap leaves behind.
+            CampaignDirector.SeatOnNet(miles, pilot, run, null, skills.MinAiActiveDist);
+            var leg = (run.Nodes[TaggedNode].Position - run.Nodes[TaggedNode - 1].Position).Normalized();
+            var start = run.Nodes[TaggedNode - 1].Position - (leg * SeatLeadM);
+            miles.Activate(start, start + leg);
+            report.AppendLine($"seat: '{run.Name}' at {start}, flying node {TaggedNode - 1} -> {TaggedNode}");
+
+            string? entered = null;
+            float flown = 0f;
+            while (flown < ZoneWaitS && entered == null && miles.InPlay)
+            {
+                live.SimStep(StepDt);
+                miles.SimStep(StepDt);
+                flown += StepDt;
+                if (machine.Mode is AiMode.ApproachingDangerZone or AiMode.NavigatingDangerZone)
+                {
+                    entered = pilot.ZoneRun?.Ribbon.Name;
+                }
+            }
+            report.AppendLine($"run: mode {machine.Mode} on '{entered ?? "-"}' after {flown:0.00} s at "
+                + $"{miles.WorldPosition}, {pilot.Patrol?.Advances ?? -1} walk advance(s)");
+            ctx.Check(entered != null,
+                $"reaching node {TaggedNode} starts a danger-zone run inside {ZoneWaitS:0} s (mode {machine.Mode})");
+            ctx.Check(entered == null
+                      || entered.Equals($"dzpath{TaggedPath}", StringComparison.OrdinalIgnoreCase),
+                $"…on the ribbon that node names, dzpath{TaggedPath} ('{entered}')");
+        }
+        finally
+        {
+            generators?.Free();
+            var members = new List<FlightController>(
+                roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            foreach (var rig in members)
+            {
+                rig.Free();
+            }
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    private static CampaignMission MissionOrSkip(TestContext ctx)
+    {
+        CampaignMission? found = null;
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
+            {
+                found = m;
+            }
+        }
+        return found ?? throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");
     }
 
     private static ObjectiveDef? ObjectiveNumbered(ObjectiveScript script, int number) =>

@@ -658,6 +658,11 @@ public sealed class CampaignDirector
             _rosterPlans[launchName] = template;
             rig.Group = template.Group;
             rig.Downed += (_, killer) => CreditKill(template, killer);
+            // A launch takes a tagged net node's dzpath like any netted jet, so the ribbons the
+            // world phase handed the roster must reach an aircraft that was not built yet
+            // (docs/formats/mission-entities/enemy-generators.md).
+            if (rig.Pilot is { } pilot)
+                pilot.DangerZones = _ribbons;
         }
         else if (launched.Vessel is { } vessel)
         {
