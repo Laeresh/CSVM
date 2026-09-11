@@ -157,8 +157,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`, the weapon-fire subsystem: ballistics, guidance, fuses, the hit ray, tracers, impact and splash damage.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: every ordnance round runs its own def on the sequence interpreter.
-- `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) and the swept-segment/point distance; unit-testable alone.
-- `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig, a phantom shooter on each player's six, so the cue is reachable without an AI gunner.
+- `src/Flight/WarningShotCue.cs` — the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.
+- `src/Flight/IncomingFire.cs` — `--incoming`: the incoming-fire test rig, a phantom shooter on each player's six, so the cues are reachable without an AI gunner.
 - `src/Flight/CanopyHoleCue.cs` — the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json`: target key to its objective display keys, plus the marker flags a mission starts with.

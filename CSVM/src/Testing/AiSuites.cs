@@ -96,8 +96,6 @@ internal static class AiSuites
                 $"failed human batch removes every world-root child it created");
             ctx.Same(0, pane.GetChildCount(),
                 $"failed human batch removes its external HUD canvas");
-            ctx.Same(0, pool.NearMissTargets.Count,
-                $"failed human batch removes its projectile near-miss registration");
             ctx.Check(pool.RigOfShooter(0) == null,
                 $"failed human batch removes its projectile shooter registration");
             ctx.Check(rigs.All(rig => rig.Controller == null),
@@ -418,6 +416,9 @@ internal static class AiSuites
                     Projectiles = live,
                     UseKeyboard = false,
                     AllowPause = false,
+                    // AI rigs on purpose: the gunner is read by its victim's ledger, and the
+                    // incoming-fire shield would discard the first seconds of it on a HUMAN one.
+                    IsHumanPiloted = false,
                 };
                 rig.AddChild(model);
                 // Nose on world -Z (identity attitude): plane-local == world - pos.
@@ -683,6 +684,9 @@ internal static class AiSuites
                         Projectiles = live,
                         UseKeyboard = false,
                         AllowPause = false,
+                        // AI rigs on purpose: the emplacement is read by its victim's ledger, and
+                        // the incoming-fire shield discards the first seconds of it on a HUMAN one.
+                        IsHumanPiloted = false,
                     };
                     rig.AddChild(model);
                     rig.Setup(new FlightModel(st), ctx.Camera, new CamParams(), pos, look);
@@ -1778,6 +1782,11 @@ internal static class AiSuites
             ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtOffBore,
                 $"a 19° residual after the traverse clamp holds fire (nose 30° off)");
 
+            // ⚠ Flagged AI to the ranking phase: WarningShotCue discards gun damage on a HUMAN rig
+            // until sustained fire saturates it, and every check between here and there measures a
+            // gunner by the victim's ledger. That rule is incoming-fire-cues' subject, not this.
+            target.IsHumanPiloted = false;
+
             // Dead-eye scatter, skill 1 against 9 on fixed geometry: the high rear quarter at ~212 m, where the
             // planform presents real area. Dead astern the airframe is edge-on and both cones mostly miss,
             // which drowns the difference the volley is measuring.
@@ -1860,6 +1869,7 @@ internal static class AiSuites
             // Ranked acquisition on a hostile pair at equal geometry: the human-piloted target carries the
             // decoded 0.7 base weight and out-ranks the AI rival, a primary_target assignment overrides the
             // ranking, and a candidate beyond the activation radius scores the engine's 1e21 and is never picked.
+            target.IsHumanPiloted = true;  // the weight under test is the PLAYER's
             ai.IsHumanPiloted = false;
             ai.AutoFire = false;
             pilot.Gunner = gunner;

@@ -135,8 +135,8 @@ public partial class FlightAudio : Node
         _grazeWater = MakeOneShot(archive, defs, "snd_exp_water_b", out _grazeWaterVol);
 
         // The incoming-fire set, own-ship and non-positional so in splitscreen only the pilot being
-        // shot at hears it: the near miss (player.json warning_shot_sound), the airframe ricochet
-        // (player.json bullet_hit_sound) and the canopy glass (named by the hole defs themselves).
+        // shot at hears it: the absorbed round (player.json warning_shot_sound), the airframe
+        // ricochet (player.json bullet_hit_sound) and the canopy glass (named by the hole defs).
         _cueRng = Rng.NewSystemRandom(Rng.Weapons);
         _warningShot = MakeGroupCue(groups, stats.WarningShotSound, out _warningShotGroup);
         _bulletHit = MakeGroupCue(groups, stats.BulletHitSound, out _bulletHitGroup);
@@ -305,14 +305,16 @@ public partial class FlightAudio : Node
     public void OnGraze(bool water) => PlayOneShot(water ? _grazeWater : _grazeGround,
         (water ? _grazeWaterVol : _grazeGroundVol) * MixGain);
 
-    /// <summary>A round passed close enough to hear: one draw from the warning-shot group,
-    /// already rate-limited by <see cref="WarningShotCue"/> in FlightController — same split as
-    /// <see cref="OnGraze"/>. Returns the variant that played, or null when the cue is unbuilt.</summary>
+    /// <summary>A gun round the shield absorbed: one draw from the warning-shot group, which the
+    /// original plays INSTEAD of the ricochet on a round whose damage it discards
+    /// (<see cref="WarningShotCue"/> holds the rule). Returns the variant that played, or null when
+    /// the cue is unbuilt.</summary>
     public string? OnWarningShot() => PlayGroupCue(_warningShot, _warningShotGroup);
 
-    /// <summary>A gun round struck this airframe: one draw from <c>bullet_hit_sound</c>. Every
-    /// qualifying round rings it, as the original's does — the rate limit belongs to the canopy
-    /// cue, not to this one. Dispatched from the projectile-hit path, never from a contact.</summary>
+    /// <summary>A gun round struck this airframe and the shield did not take it: one draw from
+    /// <c>bullet_hit_sound</c>. Every such round rings it, as the original's does — the rate limit
+    /// belongs to the canopy cue. Dispatched from the projectile-hit path, never from a
+    /// contact.</summary>
     public string? OnBulletHit() => PlayGroupCue(_bulletHit, _bulletHitGroup);
 
     /// <summary>A canopy hole opened: one draw from <c>window_hit_sg</c>. The cadence is

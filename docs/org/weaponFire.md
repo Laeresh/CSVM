@@ -148,10 +148,10 @@ glass holes against the exterior `two_bulletholes_*` / `three_bulletholes_*` / `
 call. A build that silences the glass outside the cockpit is inventing a gate the data does not
 author.
 
-**Which interval opens a hole.** The per-vehicle tick `FUN_004b1340` is the `warning_shot_*` block's
-own: `+0x914` ages against `warning_shot_interval`, `+0x918` counts the CANNON hits taken since the
+**Which interval opens a hole.** The tick `FUN_004b1340` is the `warning_shot_*` block's own:
+`+0x914` ages against `warning_shot_interval`, `+0x918` counts the CANNON hits taken since the
 last close (incremented at `0x004b9e83`), `+0x910` is the intensity against `warning_shot_max`, and
-`+0x91c` is a saturation flag. An interval that closes with a non-zero hit count calls
+`+0x91c` is the shield flag the next section is about. An interval that closes with a non-zero hit count calls
 `FUN_004b1210`, which walks the vehicle def's `bullethole_anims` vector at `def + 0x1b8`, each entry
 an 8-byte `{anim handle, used byte}` pair, and:
 
@@ -167,9 +167,60 @@ once per sortie until the `reset_bulletholes` spawn anim clears the flags. ⚠ T
 the unused count **less one**, so the last unused entry is reachable only on a maximal draw; that is
 the shipped arithmetic, not a transcription slip.
 
-⚠ **The same routine carries an undecoded damage rule this page does not build on.** In
-`FUN_004b9bc0` the player arm zeroes the incoming damage pair and plays `bullet_warning_sg` instead
-of `bullet_hit_sg` while `+0x91c` is set and the global `*DAT_0064f750` reads zero. Read literally
-that makes the `warning_shot_*` accumulator a damage-absorbing shield on the player rather than a
-near-miss rating, and makes `bullet_warning_sg` a hit cue. What `*DAT_0064f750` selects is not
-decoded, so the reading is not yet safe to build on.
+## The `warning_shot_*` block is a shield on the player, and `bullet_warning_sg` is its cue
+
+The same tick carries the damage rule the two cues choose between. `+0x91c` is not a rating: it is
+a flag meaning "gun damage on this aeroplane is discarded", and the vehicle constructor writes it
+SET (`0x004b032b`, beside the three zeroes at `0x004b0319`-`0x004b0325`). In `FUN_004b9bc0`, once
+the round is a CANNON round on the player's own vehicle, the arm reads in this order:
+
+| Address | Step |
+|---|---|
+| `0x004b9e83` | `+0x918` (the hit count the hole cadence runs on) is incremented FIRST, so an absorbed round still counts |
+| `0x004b9e89` | the struck vehicle against the player global `DAT_0071c298` |
+| `0x004b9e91` | the shield flag `+0x91c` |
+| `0x004b9e9b` | `*DAT_0064f750`, which must read zero |
+| `0x004b9ea4`-`0x004b9ea7` | both floats of the incoming damage pair are written zero |
+| `0x004b9ea9` | `warning_shot_sound` plays and the routine RETURNS, so nothing below it runs |
+| `0x004b9ec9` | the other way out of the same test: `bullet_hit_sound`, then the damage is spent |
+
+So the two cues are exclusive per round, and the pass cue means the round did nothing. The return
+skips the whole remainder of the routine: the armour/health spend, the per-part loop, the kill test,
+and the hit-direction indicator at the end. It does not skip the camera shake, which the player arm
+kicks earlier at `0x004b9d26`, so an absorbed round still rocks the aeroplane.
+
+**What fills the shield.** The tick's own arithmetic, on the shipped `max` 2.0, `interval` 1.0 and
+`dissipation` 2.0:
+
+| Address | Rule |
+|---|---|
+| `0x004b1355`-`0x004b137e` | `+0x914` accrues the frame delta; nothing happens until it reaches `warning_shot_interval` |
+| `0x004b138c`-`0x004b1396` | an interval that closed with a hit adds its own ELAPSED LENGTH to `+0x910`, not the hit count |
+| `0x004b13a2`-`0x004b13b5` | at `warning_shot_max` the intensity is clamped there and the shield flag is CLEARED |
+| `0x004b13e5`-`0x004b13f5` | a quiet interval subtracts `elapsed · coefficient` instead |
+| `0x004b1406`-`0x004b1422` | below `max` again the flag is SET, and the intensity floors at zero |
+
+The coefficient is not the authored `warning_shot_dissipation`: the loader divides 1.0 by what it
+read (`0x0047469f`-`0x004746ad`, default 2.0 at `0x006076b8`), so the shipped 2.0 sheds 0.5 per
+second of quiet. In flight that reads as: about two seconds of sustained gunfire land on the player
+for free, the rounds sounding `snd_bulletpass1-3` as though they had missed, and only then do they
+tell; one quiet interval re-arms the shield, and four give it its whole charge back.
+
+**It is single-player, and the player alone.** The world tick calls `FUN_004b1340` at `0x0048985f`
+only for `DAT_0071c298` and only while `*DAT_0064f750` reads zero (`0x00489854`). That global is
+the `Network` setting: `FUN_0043fb50` binds it at `0x00440247` from the config key `Network`
+(`0x006237f4`), beside `NetListen` and `MPFuel`, and writes 0 through `FUN_00440ab0`. Its only
+other writers are the session paths: `FUN_004a827f` sets it as a network session is entered, and
+`FUN_00496cf0` and `FUN_00440460` clear it again when one ends. So in a network game the
+accumulator never ticks at all, which is why the
+damage arm tests the same global a second time: without it, `+0x91c`'s constructor value would
+leave a networked player permanently invulnerable.
+
+Nothing else reads the block. `+0x910`, `+0x918` and `+0x91c` have no readers outside the
+constructor, this tick and this arm, so the intensity feeds no HUD and no AI decision.
+
+⚠ **There is no near-miss geometry anywhere in the image.** `DAT_0071c488` has exactly one read,
+`0x004b9ea9` above, and the projectile module has none of the player global's 640 references (every
+one lies between `0x0041xxxx` and `0x004cxxxx`), so the round stepper `FUN_005af720` cannot measure
+a pass distance against the player even in principle. A build that sounds `bullet_warning_sg` on a
+round flying past is inventing the event.

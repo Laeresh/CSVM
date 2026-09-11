@@ -1145,90 +1145,21 @@ internal static class CombatSuites
         });
     }
 
-    // The incoming-fire near-miss cue's wiring, with its able-to-fail baseline: a real round from
-    // another pilot flying past registers a pass, the same round fired by the target's own identity
-    // registers none, and a round a hundred metres wide of the aircraft registers none either, so a
-    // pass count of 1 means the geometry. The accumulator's own arithmetic is unit-tested off-engine
-    // (WarningShotCueTests); this is the pool half, on real ballistics.
-    [Suite("warning-shot", "the incoming-fire near-miss cue fires on another pilot's round, never on your own")]
-    internal static void WarningShot(TestContext ctx)
-    {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
-        ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_01", out var gun))
-        {
-            ctx.Check(false, $"wep_01 definition loads");
-            return;
-        }
-        var textures = new TextureArchive(texturesPath);
-        ProjectilePool? pool = null;
-        try
-        {
-            var live = new ProjectilePool(textures, null, null);
-            pool = live;
-            ctx.Host.AddChild(live);
-            var target = new Vector3(0f, 500f, 0f);
-            int passes = 0;
-            float closest = float.MaxValue;
-            live.NearMissTargets.Add(new ProjectilePool.NearMissTarget
-            {
-                ShooterId = 0,
-                Position = () => target,
-                OnPass = d =>
-                {
-                    passes++;
-                    closest = Mathf.Min(closest, d);
-                },
-            });
-
-            // A round overtaking the aircraft 3 m abeam, fired 60 m astern along +Z. A round leaves
-            // dead straight (A1 — CANNON_SPREAD is not a dispersion cone), so the pass distance is
-            // the requested one, not a budget against a scatter cone.
-            void FireBy(int shooter, float abeam)
-            {
-                var origin = target + new Vector3(abeam, 0f, -60f);
-                live.Spawn(gun, new Transform3D(Basis.LookingAt(Vector3.Back, Vector3.Up), origin),
-                    Vector3.Zero, shooter);
-                for (int i = 0; i < 60; i++)
-                    live.SimStep(1f / 60f);
-                live.Clear();
-            }
-
-            FireBy(shooter: 1, abeam: 3f);
-            ctx.Check(passes > 0, $"another pilot's round registers a pass passes={passes}");
-            ctx.Check(closest <= WarningShotCue.PassRadius,
-                $"the pass is measured, not assumed closest={(closest < float.MaxValue ? closest : -1f):0.0} m");
-
-            passes = 0;
-            FireBy(shooter: 0, abeam: 3f);
-            ctx.Same(0, passes, $"the target's OWN round never warns it");
-
-            passes = 0;
-            FireBy(shooter: 1, abeam: 100f);
-            ctx.Same(0, passes, $"a round 100 m wide registers nothing");
-        }
-        finally
-        {
-            pool?.Free();
-            textures.Dispose();
-        }
-    }
-
-    // The two hit cues on real AI fire, staged the way the ai-gunnery suite stages a shooter: a
-    // skill-9 gunner from the high rear quarter, the target parked. The cues are counted off the
-    // `weapons` log, which carries the variant the group drew, so a count proves an archive read
-    // rather than a call. The whole point of running it twice is the view: the bullethole defs gate
-    // their VISUAL on PLAYER_1ST_PERSON and not their SOUND, so a chase-view count of zero would be
-    // this build inventing a gate the data does not author.
+    // The three incoming-fire cues on real AI fire, staged as ai-gunnery stages a shooter: a skill-9
+    // gunner from the high rear quarter, the target parked. The cues are counted off the `weapons`
+    // log, which carries the variant the group drew, so a count proves an archive read, and the
+    // ledger is read either side of saturation so the discard is measured. Running it twice is about
+    // the view: the bullethole defs gate their VISUAL on PLAYER_1ST_PERSON and not their SOUND, so a
+    // chase-view count of zero would be this build inventing a gate the data does not author.
     [Suite("incoming-fire-cues",
-        "the incoming-fire hit cues on real AI gunnery: a gun round landing on the player's own "
-        + "aeroplane rings bullet_hit_sg once per round from snd_ricochet1-4, the canopy cue "
-        + "window_hit_sg follows the decoded hole cadence (an interval that closed with a hit, "
-        + "below the closed-hole health share, on the shipped 0.3 draw), both sound in Chase and "
-        + "in Cockpit since the defs gate only the decal on PLAYER_1ST_PERSON, and neither a "
-        + "non-CANNON round nor a collision hit rings either")]
+        "the incoming-fire shield and its two cues on real AI gunnery: while the shipped "
+        + "warning_shot_* accumulator is armed a gun round landing on the player's own aeroplane "
+        + "is DISCARDED and rings bullet_warning_sg from snd_bulletpass1-3, and once sustained "
+        + "fire saturates it the same rounds spend their damage and ring bullet_hit_sg from "
+        + "snd_ricochet1-4; the canopy cue window_hit_sg follows the decoded hole cadence (an "
+        + "interval that closed with a hit, below the closed-hole health share, on the shipped 0.3 "
+        + "draw), all of it sounds in Chase and in Cockpit since the defs gate only the decal on "
+        + "PLAYER_1ST_PERSON, and neither a non-CANNON round nor a collision hit rings anything")]
     internal static void IncomingFireCues(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1297,7 +1228,8 @@ internal static class CombatSuites
                 Log.Configure("weapons:debug");
                 using var sink = Log.PushConsoleSink(line =>
                 {
-                    if (line.Contains("bullet hit P1") || line.Contains("canopy hole P1"))
+                    if (line.Contains("warning shot P1") || line.Contains("bullet hit P1")
+                        || line.Contains("canopy hole P1"))
                         hits.Add(line);
                 });
 
@@ -1309,30 +1241,50 @@ internal static class CombatSuites
                     live.Clear();
                     hits.Clear();
 
-                    // The volley: real rounds from a real gunner, called off at a dozen landed so
-                    // the aeroplane survives the phase below (this staging kills it at 36). Landed
-                    // rounds come off the ledger; the `shot hit` log caps itself at six a sortie.
+                    // The volley runs until the shield has saturated, a dozen rounds are through it
+                    // and the hull pool is dented, which is the canopy phase's precondition (its
+                    // gate reads HEALTH, and the first rounds spend armour). 36 landed would kill.
                     float before = Combined();
-                    for (int i = 0; i < 900 && !target.Crashed && hits.Count < 12; i++)
+                    float shielded = before;   // the ledger on the last frame before the first ricochet
+                    bool rangRicochet = false;
+                    int Rung() => hits.Count(l => l.Contains("bullet hit P1"));
+                    bool Dented() => target!.Damage!.SummaryHealthFraction < 1f;
+                    for (int i = 0; i < 3600 && !target.Crashed && Rung() < 24
+                         && (Rung() < 12 || !Dented()); i++)
                     {
+                        if (!rangRicochet)
+                            shielded = Combined();
                         ai.SimStep(1f / 60f);
                         live.SimStep(1f / 60f);
                         target.SimStep(1f / 60f);
+                        rangRicochet |= Rung() > 0;
                     }
 
                     live.Clear(); // no straggler lands on the phase below
 
                     int landed = (int)Mathf.Round((before - Combined()) / armorDmg);
+                    var passed = hits.Where(l => l.Contains("warning shot P1")).ToList();
                     var rung = hits.Where(l => l.Contains("bullet hit P1")).ToList();
                     string name = PilotView.Name(view);
-                    ctx.Check(landed > 0, $"{name}: the AI gunner landed real rounds on the player rounds={landed}");
+                    ctx.Check(passed.Count > 0,
+                        $"{name}: the AI gunner's first rounds reached the shield passes={passed.Count}");
+                    ctx.Check(passed.All(l => l.Contains("snd=snd_bulletpass")),
+                        $"{name}: every absorbed round drew from bullet_warning_sg's own members first={passed.FirstOrDefault() ?? "-"}");
+                    ctx.Check(Mathf.IsEqualApprox(shielded, before),
+                        $"{name}: not one point of gun damage stuck while the shield stood ({before:0.0} → {shielded:0.0})");
+                    ctx.Check(hits.FindIndex(l => l.Contains("warning shot P1"))
+                        < hits.FindIndex(l => l.Contains("bullet hit P1")),
+                        $"{name}: the pass cue comes first and the ricochet only after the accumulator filled");
+                    ctx.Check(landed > 0, $"{name}: past saturation the same gunner's rounds tell rounds={landed}");
                     ctx.Same(landed, rung.Count, $"{name}: every landed gun round rang the ricochet");
                     ctx.Check(rung.Count > 0 && rung.All(l => l.Contains("snd=snd_ricochet")),
                         $"{name}: every draw came from bullet_hit_sg's own members first={rung.FirstOrDefault() ?? "-"}");
+                    ctx.Check(Dented(),
+                        $"{name}: and the rounds that got through reached the hull pool health={target.Damage!.SummaryHealthFraction:0.000}");
 
                     // The canopy cadence needs INTERVALS, which a volley that kills the aeroplane
-                    // does not supply. So the pool's own projectile-hit call is fed one round per
-                    // interval with the damage share zeroed, leaving health where the volley put it.
+                    // does not supply. So the projectile-hit call is fed one round per interval with
+                    // the damage share zeroed, which also lets the shield re-arm between them.
                     hits.Clear();
                     for (int i = 0; i < 40 && !hits.Any(l => l.Contains("canopy hole")); i++)
                     {
@@ -1345,7 +1297,7 @@ internal static class CombatSuites
                     var glass = hits.Where(l => l.Contains("canopy hole P1")).ToList();
                     ctx.Check(glass.Count == 1 && glass[0].Contains("snd=snd_windowhit"),
                         $"{name}: the canopy cue opened a hole and drew from window_hit_sg line={glass.FirstOrDefault() ?? "-"}");
-                    report.Add($"{name}: {landed} rounds landed, {rung.Count} ricochets, {glass.Count} canopy hole(s)");
+                    report.Add($"{name}: {passed.Count} rounds absorbed, {landed} landed, {rung.Count} ricochets, {glass.Count} canopy hole(s)");
                 }
 
                 // The two negatives, on the same rig: an ordnance round through the same
@@ -1353,11 +1305,11 @@ internal static class CombatSuites
                 hits.Clear();
                 var rocket = weapons.All.First(w => w.IsRocket && !w.IsCannon);
                 target.TakeProjectileHit(rocket, target.GlobalPosition, "fuselage", ai.PlayerIndex);
-                ctx.Same(0, hits.Count(l => l.Contains("bullet hit P1")),
-                    $"a {rocket.Id} round rings neither cue: the original's gate is the CANNON flag");
+                ctx.Same(0, hits.Count,
+                    $"a {rocket.Id} round rings no cue and the shield never sees it: the original's gate is the CANNON flag");
                 hits.Clear();
                 target.TakeCollisionHit(5f, 5f, target.GlobalPosition, ai.PlayerIndex);
-                ctx.Same(0, hits.Count(l => l.Contains("bullet hit P1")),
+                ctx.Same(0, hits.Count,
                     $"a contact rings nothing either — a scrape is not being shot at");
             }
             finally
@@ -2019,6 +1971,10 @@ internal static class CombatSuites
                     Projectiles = live,
                     UseKeyboard = false,
                     AllowPause = false,
+                    // AI rigs on purpose: every check here reads a ledger, and the incoming-fire
+                    // shield would discard the first seconds of gun damage on a HUMAN one. That
+                    // rule is incoming-fire-cues' subject; this suite is about what a round does.
+                    IsHumanPiloted = false,
                 };
                 rig.AddChild(model);
                 // Nose on world -Z (identity attitude): plane-local == world - pos.
@@ -2485,6 +2441,10 @@ internal static class CombatSuites
                     Projectiles = live,
                     UseKeyboard = false,
                     AllowPause = false,
+                    // The index says which: a shooter id at or past ShooterIdBase is an AI's. It
+                    // matters to the friendly-fire round below, since the incoming-fire shield
+                    // discards the first seconds of gun damage on a HUMAN rig.
+                    IsHumanPiloted = playerIndex < FlightRoster.ShooterIdBase,
                 };
                 if (team is { } t)
                     rig.Team = t;

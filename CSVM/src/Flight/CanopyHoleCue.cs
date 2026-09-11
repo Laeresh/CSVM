@@ -3,11 +3,12 @@ using System;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The decoded canopy-glass cadence: gun rounds landing on the pilot's own aeroplane are counted
-/// over the shipped <c>warning_shot_interval</c>, and an interval that closed with at least one hit
-/// may open one of the five <c>bullethole_anims</c> holes, whose def is what sounds
-/// <c>window_hit_sg</c>. A hole opens once per sortie. Engine-free so the rule unit-tests without a
-/// live node, the same split <see cref="WarningShotCue"/> uses.
+/// The decoded canopy-glass cadence (<c>FUN_004b1210</c>): an interval that closed with at least
+/// one gun hit on the pilot's own aeroplane may open one of the five <c>bullethole_anims</c> holes,
+/// whose def is what sounds <c>window_hit_sg</c>. A hole opens once per sortie. The interval and
+/// the hit count belong to <see cref="WarningShotCue"/>, the same block's tick, which is where the
+/// original keeps them and why this rule owns no clock. Engine-free so it unit-tests without a
+/// live node.
 /// Decode: <c>docs/org/weaponFire.md</c>, "The incoming-fire cues".
 /// </summary>
 public sealed class CanopyHoleCue
@@ -25,12 +26,7 @@ public sealed class CanopyHoleCue
     /// <c>rand()/32768</c> and goes on only above 0.7 (<c>0x004b12ae</c>).</summary>
     public const float HoleChance = 0.3f;
 
-    private readonly float _interval;
     private readonly bool[] _opened = new bool[HoleCount];
-    private float _sinceInterval;
-    private int _hits;
-
-    public CanopyHoleCue(float interval) => _interval = interval;
 
     /// <summary>Holes still closed. The gate compares the airframe's health fraction against this
     /// share, so a pristine canopy needs damage before its first hole and each further one needs
@@ -47,23 +43,14 @@ public sealed class CanopyHoleCue
         }
     }
 
-    /// <summary>One gun round landed on this aeroplane. The interval decides whether it is heard;
-    /// however many arrive meanwhile, an interval opens at most one hole.</summary>
-    public void Register() => _hits++;
-
-    /// <summary>Ages the interval and answers with the hole number (1..5) it opened, or null. The
-    /// caller passes the whole-vehicle health fraction and the draw stream, so the rule itself owns
-    /// no clock and no randomness.</summary>
-    public int? Tick(float dt, float healthFraction, Random rng)
+    /// <summary>An interval closed with at least one gun hit: answers with the hole number (1..5)
+    /// it opened, or null. The caller passes the whole-vehicle health fraction and the draw stream,
+    /// so the rule itself owns no clock and no randomness. However many rounds the interval took,
+    /// it opens at most one hole.</summary>
+    public int? TryOpenHole(float healthFraction, Random rng)
     {
-        _sinceInterval += dt;
-        if (_sinceInterval < _interval)
-            return null;
-        _sinceInterval = 0f;
-        int hits = _hits;
-        _hits = 0;
         int closed = ClosedCount;
-        if (hits == 0 || closed == 0 || healthFraction >= (float)closed / HoleCount)
+        if (closed == 0 || healthFraction >= (float)closed / HoleCount)
             return null;
         if (rng.NextDouble() <= 1.0 - HoleChance)
             return null;
@@ -87,10 +74,5 @@ public sealed class CanopyHoleCue
 
     /// <summary>Back to a pristine canopy, which is what the <c>reset_bulletholes</c> spawn anim
     /// does for the decals.</summary>
-    public void Reset()
-    {
-        Array.Clear(_opened, 0, _opened.Length);
-        _sinceInterval = 0f;
-        _hits = 0;
-    }
+    public void Reset() => Array.Clear(_opened, 0, _opened.Length);
 }

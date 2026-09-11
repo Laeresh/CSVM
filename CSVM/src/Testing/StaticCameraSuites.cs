@@ -293,24 +293,28 @@ internal static class StaticCameraSuites
 
     // Rounds through the pool's own entry point until whole-vehicle health is spent, which is the
     // one path that reaches Destroy and therefore the death camera.
+    // ⚠ Ordnance, never a CANNON round: the incoming-fire shield discards gun damage on a human rig
+    // until sustained fire saturates it, and these hits are fed inside one frame, where the
+    // accumulator never ticks at all. Anything else about the kill is the same call.
     private static void Kill(TestContext ctx, FlightController plane)
     {
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        WeaponDef? gun = null;
+        WeaponDef? round = null;
         foreach (var w in weapons.All)
         {
-            if (w.IsGun && w.HealthDamage > 0f && (gun == null || w.HealthDamage > gun.HealthDamage))
+            if (!w.IsCannon && w.HealthDamage > 0f
+                && (round == null || w.HealthDamage > round.HealthDamage))
             {
-                gun = w;
+                round = w;
             }
         }
-        if (gun == null)
+        if (round == null)
         {
-            throw new SuiteSkippedException("no gun in the weapons table carries health damage");
+            throw new SuiteSkippedException("no non-cannon weapon carries health damage");
         }
         for (int i = 0; i < 4000 && !plane.Crashed; i++)
         {
-            plane.TakeProjectileHit(gun, plane.GlobalPosition, "fuselage", 0);
+            plane.TakeProjectileHit(round, plane.GlobalPosition, "fuselage", 0);
         }
     }
 

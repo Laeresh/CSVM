@@ -14,7 +14,7 @@ namespace CSVM.Flight;
 /// too. The sibling of <see cref="AiEngineAudio"/>, and separate from it because that component's
 /// contract is the two engine slots and nothing else.
 /// ⚠ Own-ship concepts stay out: no splitscreen mix gain (the panes' listeners already decide who
-/// hears this), no near-miss cue (that one is the nearly-hit pilot's alone), and no pitch term of any
+/// hears this), no incoming-fire cue (those are the pilot being shot at), and no pitch term of any
 /// kind (see <see cref="StartGunLoop"/>).
 /// </summary>
 public sealed partial class AiWeaponAudio : Node3D

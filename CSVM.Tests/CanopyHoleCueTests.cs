@@ -5,34 +5,17 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The canopy-glass cue's decoded cadence, the half that runs without an engine. The
-/// interval is player.json's <c>warning_shot_interval</c>, 1.0 s.</summary>
+/// interval that gets it here belongs to <see cref="WarningShotCue"/>, so every call below stands
+/// for one interval that closed with at least one gun hit.</summary>
 public class CanopyHoleCueTests
 {
-    [Fact]
-    public void AnIntervalWithNoHitOpensNothing()
-    {
-        var cue = new CanopyHoleCue(1f);
-        Assert.Null(cue.Tick(1.5f, 0.1f, new ScriptedRandom(0.99, 0.0)));
-        Assert.Equal(CanopyHoleCue.HoleCount, cue.ClosedCount);
-    }
-
-    [Fact]
-    public void AHitInsideTheIntervalWaitsForItToClose()
-    {
-        var cue = new CanopyHoleCue(1f);
-        cue.Register();
-        Assert.Null(cue.Tick(0.5f, 0.1f, new ScriptedRandom(0.99, 0.0)));
-        Assert.Equal(1, cue.Tick(0.6f, 0.1f, new ScriptedRandom(0.99, 0.0)));
-    }
-
     /// <summary>The decoded gate: the health fraction must be BELOW the closed share. A pristine
     /// airframe is at 1.0 against a closed share of 1.0, so it never opens a hole.</summary>
     [Fact]
     public void APristineAirframeKeepsItsGlass()
     {
-        var cue = new CanopyHoleCue(1f);
-        cue.Register();
-        Assert.Null(cue.Tick(1f, 1f, new ScriptedRandom(0.99, 0.0)));
+        var cue = new CanopyHoleCue();
+        Assert.Null(cue.TryOpenHole(1f, new ScriptedRandom(0.99, 0.0)));
         Assert.Equal(CanopyHoleCue.HoleCount, cue.ClosedCount);
     }
 
@@ -41,38 +24,32 @@ public class CanopyHoleCueTests
     [Fact]
     public void EachHoleNeedsMoreDamageThanTheLast()
     {
-        var cue = new CanopyHoleCue(1f);
-        cue.Register();
-        Assert.Equal(1, cue.Tick(1f, 0.9f, new ScriptedRandom(0.99, 0.0)));
-        cue.Register();
-        Assert.Null(cue.Tick(1f, 0.9f, new ScriptedRandom(0.99, 0.0)));
-        cue.Register();
-        Assert.NotNull(cue.Tick(1f, 0.7f, new ScriptedRandom(0.99, 0.0)));
+        var cue = new CanopyHoleCue();
+        Assert.Equal(1, cue.TryOpenHole(0.9f, new ScriptedRandom(0.99, 0.0)));
+        Assert.Null(cue.TryOpenHole(0.9f, new ScriptedRandom(0.99, 0.0)));
+        Assert.NotNull(cue.TryOpenHole(0.7f, new ScriptedRandom(0.99, 0.0)));
         Assert.Equal(3, cue.ClosedCount);
     }
 
     [Fact]
     public void TheDrawBelowTheShippedChanceOpensNothing()
     {
-        var cue = new CanopyHoleCue(1f);
-        cue.Register();
+        var cue = new CanopyHoleCue();
         // 0.7 is the threshold itself, and the original goes on only ABOVE it.
-        Assert.Null(cue.Tick(1f, 0.1f, new ScriptedRandom(1.0 - CanopyHoleCue.HoleChance, 0.0)));
-        cue.Register();
-        Assert.NotNull(cue.Tick(1f, 0.1f, new ScriptedRandom(0.71, 0.0)));
+        Assert.Null(cue.TryOpenHole(0.1f, new ScriptedRandom(1.0 - CanopyHoleCue.HoleChance, 0.0)));
+        Assert.NotNull(cue.TryOpenHole(0.1f, new ScriptedRandom(0.71, 0.0)));
     }
 
-    /// <summary>A hole is opened once. Five intervals with the airframe on its last legs open all
-    /// five and the sixth finds no glass left.</summary>
+    /// <summary>A hole is opened once. Five eligible intervals with the airframe on its last legs
+    /// open all five and the sixth finds no glass left.</summary>
     [Fact]
     public void EveryHoleOpensAtMostOnce()
     {
-        var cue = new CanopyHoleCue(1f);
+        var cue = new CanopyHoleCue();
         var opened = new bool[CanopyHoleCue.HoleCount];
         for (int i = 0; i < CanopyHoleCue.HoleCount; i++)
         {
-            cue.Register();
-            int? hole = cue.Tick(1f, 0.01f, new ScriptedRandom(0.99, 0.999));
+            int? hole = cue.TryOpenHole(0.01f, new ScriptedRandom(0.99, 0.999));
             Assert.NotNull(hole);
             Assert.InRange(hole!.Value, 1, CanopyHoleCue.HoleCount);
             Assert.False(opened[hole.Value - 1]);
@@ -80,20 +57,16 @@ public class CanopyHoleCueTests
         }
 
         Assert.Equal(0, cue.ClosedCount);
-        cue.Register();
-        Assert.Null(cue.Tick(1f, 0.01f, new ScriptedRandom(0.99, 0.999)));
+        Assert.Null(cue.TryOpenHole(0.01f, new ScriptedRandom(0.99, 0.999)));
     }
 
     [Fact]
     public void ResetGivesBackAPristineCanopy()
     {
-        var cue = new CanopyHoleCue(1f);
-        cue.Register();
-        Assert.NotNull(cue.Tick(1f, 0.1f, new ScriptedRandom(0.99, 0.0)));
+        var cue = new CanopyHoleCue();
+        Assert.NotNull(cue.TryOpenHole(0.1f, new ScriptedRandom(0.99, 0.0)));
         cue.Reset();
         Assert.Equal(CanopyHoleCue.HoleCount, cue.ClosedCount);
-        // The interval and the hit count went with it: a fresh sortie starts from zero.
-        Assert.Null(cue.Tick(0.5f, 0.1f, new ScriptedRandom(0.99, 0.0)));
     }
 
     // A draw stream that hands out the values a test asks for, so the 0.3 chance and the index pick

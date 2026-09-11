@@ -23,7 +23,7 @@ public readonly record struct WeaponSoundCue(
 /// <see cref="AiWeaponAudio"/> read their cues from here rather than each keeping a copy, the way
 /// both engine paths read <see cref="EngineAudioCurves"/>. It selects and nothing else: which player
 /// a cue lands on, what gain it takes and whether it is culled are the two paths' own business,
-/// which is what keeps own-ship concepts (splitscreen mix gain, the pilot's near-miss cue) out of the
+/// which is what keeps own-ship concepts (splitscreen mix gain, the incoming-fire cues) out of the
 /// world. Definitions: docs/formats/sounds.md.
 /// </summary>
 public static class WeaponAudioCues

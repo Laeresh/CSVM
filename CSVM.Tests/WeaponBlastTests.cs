@@ -101,6 +101,32 @@ public class WeaponBlastTests
         Assert.False(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Back));
     }
 
+    /// <summary>The fuse's cheap reject measures the whole of a round's step: a round crossing 3 m
+    /// abeam mid-step has both endpoints far away, which is why the endpoints are not what is
+    /// tested (a gun round covers ~8 m per 60 Hz frame).</summary>
+    [Fact]
+    public void SegmentDistanceMeasuresThePassNotTheEndpoints()
+    {
+        var a = new Vector3(-50f, 0f, 0f);
+        var b = new Vector3(50f, 0f, 0f);
+        var p = new Vector3(0f, 3f, 0f);
+        Assert.Equal(3f, ProjectilePool.SegmentPointDistance(a, b, p), 4);
+        Assert.True((p - a).Length() > 40f);
+        Assert.True((p - b).Length() > 40f);
+    }
+
+    [Fact]
+    public void SegmentDistanceClampsToTheEndpointsAndSurvivesAZeroStep()
+    {
+        var a = new Vector3(0f, 0f, 0f);
+        var b = new Vector3(10f, 0f, 0f);
+        // Behind the segment's start: the nearest point IS the start, not the infinite line.
+        Assert.Equal(5f, ProjectilePool.SegmentPointDistance(a, b, new Vector3(-5f, 0f, 0f)), 4);
+        Assert.Equal(5f, ProjectilePool.SegmentPointDistance(a, b, new Vector3(15f, 0f, 0f)), 4);
+        // A stationary step (dt 0, or a round spawned and killed in one frame) is a point test.
+        Assert.Equal(4f, ProjectilePool.SegmentPointDistance(a, a, new Vector3(0f, 4f, 0f)), 4);
+    }
+
     // D31: the one-shot pool's distance term — linear between a sound's own RANGE,
     // full inside the near edge, silent past the far edge, 1 (skip the term) with no nearest
     // human to measure against.

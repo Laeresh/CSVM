@@ -526,10 +526,6 @@ internal sealed class HumanFlightAdapter
                 rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
         }
 
-        // The incoming-fire near-miss cue: this aircraft becomes a target every OTHER
-        // pilot's rounds are measured against. After Setup — the target reads the live flight
-        // model — and after PlayerIndex, the identity that excludes this pilot's own rounds.
-        controller.AttachWarningShotCue(_world.Projectiles);
         controller.Name = $"player{pi + 1}";
         rig.Controller = controller;
         _worldRoot.AddChild(controller);

@@ -720,6 +720,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   subtract.** Nine of the ten cinemas carry the identical presentation timestamp on their first
   video and first audio packet, and only `msopen1.mpg` differs, its sound starting 0.0667 s before
   its picture (`formats/cinemas.md`).
+- **SRC-11** — **A name in the data is a label, not a specification: what the feature IS comes from
+  the one site that reads it.** `player.json`'s `warning_shot_*` block and its `bullet_warning_sg`
+  read as a near-miss rating and were built as one, geometry and all; the single read of the handle
+  (`0x004b9ea9`) is an arm of the damage routine that zeroes the incoming damage pair, so the block
+  is a shield on the player and the cue says a round was absorbed. Before building a feature on a
+  block of constants, find every reader of every field: here all four had three sites between them
+  (`org/weaponFire.md`).
 
 ## What this project cannot verify itself
 

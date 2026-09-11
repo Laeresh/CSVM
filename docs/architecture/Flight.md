@@ -307,22 +307,23 @@ and logs anything else once. The trail puffers, the sonic's body roll and the to
 all come off this instance. Decode: [../org/ordnanceTypes.md](../org/ordnanceTypes.md).
 
 ## src/Flight/WarningShotCue.cs
-The incoming-fire near-miss cue's shipped accumulator (player.json `warning_shot_max` /
-`_dissipation` / `_interval`), plus the swept-segment-to-point distance a round's step is measured
-with, lifted out of `FlightController` so both unit-test without a live node, the same split
-`WeaponCursor` uses. One pass accrues 1.0, saturating at the max, drains at the dissipation rate,
-and the cue re-triggers no faster than the interval; the pass radius is a tune explained at its own
-declaration. `ProjectilePool.NearMissTargets` is the registry whose aircraft each round's actual
-travelled segment is measured against, its own shooter excluded. Read `Projectile.cs` next.
+The incoming-fire shield's shipped accumulator (player.json `warning_shot_max` / `_dissipation` /
+`_interval`), lifted out of `FlightController` so it unit-tests without a live node. `Absorbs` is the
+decoded flag a fresh airframe starts SET: while it stands, a gun round on the pilot's own aeroplane
+has its damage discarded and rings `bullet_warning_sg` instead of the ricochet. `Tick` ages the
+shipped interval and answers with the hit count the interval closed with, charging the accumulator
+by the interval's own elapsed length and dropping the shield at the max, or draining and re-arming
+on a quiet one. That answer also drives `CanopyHoleCue`, since the original runs both off this tick.
+Decode: [../org/weaponFire.md](../org/weaponFire.md). Read `FlightController.cs` for the hit path.
 
 ## src/Flight/CanopyHoleCue.cs
-The decoded cadence behind the canopy-glass cue, engine-free like `WarningShotCue` beside it. Gun
-rounds landing on the pilot's own aeroplane are counted over the shipped `warning_shot_interval`,
-and an interval that closed with at least one hit opens one of the five `bullethole_anims` holes
-when the airframe's health fraction is under the closed-hole share and the shipped 0.3 draw comes
-up. A hole opens once per sortie, and `Reset` is what the `reset_bulletholes` spawn anim does to the
-ledger. `WindowHitSound` is the group the opened hole's def sounds; the decal itself is not drawn,
-so `FlightController.TickCanopyHoles` renders the cue alone.
+The decoded cadence behind the canopy-glass cue, engine-free like `WarningShotCue`, whose tick hands
+it the intervals. An interval that closed with at least one gun hit on the pilot's own aeroplane
+opens one of the five `bullethole_anims` holes when the airframe's health fraction is under the
+closed-hole share and the shipped 0.3 draw comes up. A hole opens once per sortie, and `Reset` is
+what the `reset_bulletholes` spawn anim does to the ledger. `WindowHitSound` is the group the opened
+hole's def sounds; the decal itself is not drawn, so `FlightController.TickIncomingFire` renders the
+cue alone.
 Decode: [../org/weaponFire.md](../org/weaponFire.md). Read `FlightAudio.cs` for what it plays.
 
 ## src/Flight/AiNetFollower.cs
@@ -488,12 +489,13 @@ which is the original's `Target` vtable read ([../org/aiPilot.md](../org/aiPilot
 does with a non-vehicle target").
 
 ## src/Flight/IncomingFire.cs
-`--incoming[=metres[,wep_id]]`, the near-miss test rig: a phantom shooter on each player's six,
-alternating sides, firing the target's own gun or a named weapon into the shared pool under a shooter
-identity no player holds. It exists for deterministic near-miss testing, since an AI gunner is a real
-shooter but aims to hit and a splitscreen pilot needs a second human. It aims along the target's own
-nose with a lateral offset, so the round overtakes on a parallel track and the pass distance holds
-with no lead maths. Read `WarningShotCue.cs` for what the near miss feeds.
+`--incoming[=metres[,wep_id]]`, the incoming-fire test rig: a phantom shooter on each player's six,
+firing the target's own gun or a named weapon into the shared pool under a shooter identity no
+player holds. It exists so the shield and both of its cues are reachable deterministically, since an
+AI gunner has to find its shot and a splitscreen pilot needs a second human. It aims along the
+target's own nose, so the round overtakes on a parallel track and lands with no lead maths; the
+metres argument offsets that track sideways, alternating sides, and a wide one is the rig's own
+able-to-fail control. Read `WarningShotCue.cs` for what the rounds meet.
 
 ## src/Flight/PhysicsConstants.cs
 `PhysicsConstants.NomGravity`, the single player.json `nom_gravity` value shared by

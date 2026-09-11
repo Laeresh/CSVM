@@ -165,9 +165,9 @@ public sealed class FlightRoster
         // change what the next wave is painted.
         var assemblerState = _players.CaptureState();
 
-        // ⚠ Order is forced. DetachRosterBindings drops every near-miss registration carrying this
-        // pilot's shooter id and the replacement registers its own under the same id, so the
-        // outgoing aircraft goes first. A build that throws then leaves the rig aircraft-less.
+        // ⚠ Order is forced. DetachRosterBindings drops the outgoing pilot's registrations with the
+        // pool and the replacement registers its own under the same shooter id, so the outgoing
+        // aircraft goes first. A build that throws then leaves the rig aircraft-less.
         RemoveController(outgoing);
         rig.Controller = null;
         try

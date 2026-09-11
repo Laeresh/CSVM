@@ -369,6 +369,7 @@ internal static class CampaignSetAiSuites
         float gate = bomber.Pilot?.Machine?.AttackRange ?? -1f;
         float before = Combined(player);
         int shotsBefore = rear.ShotsFired;
+        int attackersBefore = player.Targeting?.Attackers.Count ?? 0;
         for (int i = 0; i < 240; i++)
         {
             bomber.SimStep(StepDt);
@@ -388,8 +389,11 @@ internal static class CampaignSetAiSuites
             $"…and the gunner slewed onto the target anyway: dot {dot:0.000}");
         ctx.Check(rear.ShotsFired > shotsBefore,
             $"the gunner fires through the 15° gate: {rear.ShotsFired - shotsBefore} round(s)");
-        ctx.Check(Combined(player) < before,
-            $"its rounds strike the target: {before - Combined(player):0.##} off the ledger");
+        // Read as an attacker record, not off the ledger: a gun round landing on a HUMAN rig has
+        // its damage discarded while the incoming-fire shield stands, and this burst is shorter
+        // than the shield takes to saturate. The record is written before that arm, on the hit.
+        ctx.Check(player.Targeting!.Attackers.Count > attackersBefore,
+            $"its rounds strike the target: {player.Targeting.Attackers.Count - attackersBefore} attacker record(s), {before - Combined(player):0.##} off the ledger");
         ctx.Check(Pristine(bomber),
             $"…and none of them on the host's own airframe, which the rear arc points across");
         bool credited = false;

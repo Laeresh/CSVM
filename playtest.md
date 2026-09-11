@@ -378,19 +378,6 @@ reasons that have nothing to do with any of these checks.
     as one impact or two.
   *Blocks:* `BL-122`.
 
-- `PT-125` `[Own]` **How close a round has to pass before the near-miss cue sounds (`BL-230`).**
-  `WarningShotCue.PassRadius` is 15 m, chosen rather than read: the shipped `warning_shot_*` block
-  rates the cue but says nothing about distance, and the sound def's `RANGE [20,200]` is a 3D
-  falloff window, not a trigger radius. *Look for:*
-  - (a) at 15 m the cue fires for rounds that read as near misses and stays quiet for the rest;
-  - (b) walking the radius in and out, where it starts to feel late or trigger-happy;
-  - (c) the failure mode while raising it: a round crossing the sky nowhere near you sounding at all.
-  *Blocks:* `BL-230`. ⚠ `CANNON_SPREAD` scatters each round several metres over any real firing
-  range, so the achieved distance is a distribution: judge over a burst, never off one pass.
-  *Variations:* `--incoming=<metres>` walks a burst past at a chosen distance;
-  `weapons.warningShotRadius` in `config.json` moves the threshold without a rebuild, so it is
-  **not** available under `--det`.
-
 - `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **What plays
   past the plane's own top speed, and how loud (`BL-252`).** The gating is settled and needs no
   change: something starts exactly at `1.0× fd_speed`, the plane's own maximum level speed. Two

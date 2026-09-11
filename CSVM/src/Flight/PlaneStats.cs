@@ -251,12 +251,14 @@ public sealed class PlaneStats
     public float CollideHealthFloor = 15f;
     public float CollideHealthScale = 200f;
 
-    // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
-    // question. The sound is a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a
-    // sounds.json def, so it resolves through the group table like every other one.
-    public float WarningShotMax = 2f;
-    public float WarningShotDissipation = 2f;   // intensity per second
-    public float WarningShotInterval = 1f;      // s between cues
+    // The incoming-fire shield's shipped accumulator (warning_shot_*, WarningShotCue). The sound is
+    // a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a sounds.json def, so it
+    // resolves through the group table like every other one. Fallbacks are the executable's own
+    // compiled defaults (0x00474661, 0x006076b8, 0x004746d7), which this install's data replaces
+    // with the identical figures.
+    public float WarningShotMax = 2f;           // s of sustained fire before rounds tell
+    public float WarningShotDissipation = 0.5f; // intensity shed per second of quiet
+    public float WarningShotInterval = 1f;      // s the hit count accrues over
     public string WarningShotSound = "bullet_warning_sg";
 
     // The ricochet a gun round striking your own airframe rings (bullet_hit_sound → bullet_hit_sg →
@@ -823,7 +825,11 @@ public sealed class PlaneStats
             stats.Gravity = player.Float("nom_gravity", stats.Gravity);
             stats.StallMag = player.Float("stall_mag", stats.StallMag);
             stats.WarningShotMax = player.Float("warning_shot_max", stats.WarningShotMax);
-            stats.WarningShotDissipation = player.Float("warning_shot_dissipation", stats.WarningShotDissipation);
+            // Authored as a divisor and stored as its RECIPROCAL, which is the original's own
+            // parse-time conversion (0x0047469f through 0x004746ad divides 1.0 by what it read),
+            // so the shipped 2.0 drains half a second of charge per second of quiet.
+            float dissipation = player.Float("warning_shot_dissipation", 1f / stats.WarningShotDissipation);
+            stats.WarningShotDissipation = dissipation != 0f ? 1f / dissipation : 0f;
             stats.WarningShotInterval = player.Float("warning_shot_interval", stats.WarningShotInterval);
             stats.WarningShotSound = player.Str("warning_shot_sound") ?? stats.WarningShotSound;
             stats.BulletHitSound = player.Str("bullet_hit_sound") ?? stats.BulletHitSound;

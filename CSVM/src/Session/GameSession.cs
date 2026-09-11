@@ -204,7 +204,7 @@ public partial class GameSession : Node3D
     private SessionSimulation? _simulation;
     // Combat owners retained by this orchestrator and advanced through SessionSimulation.
     private ProjectilePool? _projectiles;
-    private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
+    private IncomingFire? _incomingFire;   // --incoming: the incoming-fire test rig
     // The flight roster builds the human field and introduces AI aircraft later. Every AI it
     // returns is stepped by SessionSimulation after the player rigs and freed with the world.
     private FlightRoster? _flightRoster;
@@ -2433,8 +2433,8 @@ public partial class GameSession : Node3D
             _worldRoot!.AddChild(boardLayer);
         }
 
-        // --incoming: the near-miss test rig — a phantom shooter on every pilot's six, so the
-        // incoming-fire cue is reachable deterministically with one player, no AI gunner needed.
+        // --incoming: the incoming-fire test rig — a phantom shooter on every pilot's six, so both
+        // cues and the shield are reachable with one player, no AI gunner needed.
         if (_spec.IncomingPass is float incomingPass)
         {
             var incoming = new IncomingFire(projectiles, weaponDefs, incomingPass, _spec.IncomingWeapon);
@@ -2443,7 +2443,7 @@ public partial class GameSession : Node3D
                     incoming.AddTarget(rig.Controller);
             _worldRoot!.AddChild(incoming);
             _incomingFire = incoming;
-            GD.Print($"--incoming: rounds passing {incomingPass:0.0} m from every player" +
+            GD.Print($"--incoming: rounds {incomingPass:0.0} m off every player's track" +
                      (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
         }
 

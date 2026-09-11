@@ -1009,8 +1009,6 @@ internal static class AirframeSwapSuites
         float outgoingArmor = before.Damage!.WholeArmor;
         float outgoingHealth = before.Damage!.WholeHealth;
         report.AppendLine($"capture '{call.Root}': armour {armorLeft * 100f:0}% structure {healthLeft * 100f:0}% of its own maxima");
-        int registered = pool.NearMissTargets.Count;
-
         ctx.Check(cutscene.Host(wanted.Code, anim, call.Root),
             $"the mission-script host answers callback {wanted.Code} rather than declining it");
         var after = rig.Controller ?? throw new InvalidOperationException("the swap built no aircraft");
@@ -1033,8 +1031,8 @@ internal static class AirframeSwapSuites
             $"and at the speed it was flying, so the swap is not a respawn");
         ctx.Same(before.PlayerIndex, after.PlayerIndex,
             $"the pilot keeps their shooter id, which is what a round already in the air scores to");
-        ctx.Same(registered, pool.NearMissTargets.Count,
-            $"and the pool holds the registrations it held before, so the old rig left exactly one behind and the replacement took its place");
+        ctx.Check(ReferenceEquals(pool.RigOfShooter(after.PlayerIndex), after),
+            $"and the pool's registration under that id resolves the replacement, so the old rig gave its own up and the new one took its place");
 
         // The cutscene flags codes 965 to 967 set are the player vehicle's own +0x91d/+0x91e pair
         // and the chrome off: the state code 11 and code 2 assert between them

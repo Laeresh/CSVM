@@ -463,11 +463,6 @@ public sealed partial class ProjectilePool : Node3D
     /// Null in a build with no world (the weapon lab, the suite labs).</summary>
     public Mech3.DestructibleRegistry? Structures { get; set; }
 
-    /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
-    /// one per flight rig. Empty in every build that has no player aircraft (the weapon
-    /// lab, the dump probes), which costs the scan nothing.</summary>
-    public List<NearMissTarget> NearMissTargets { get; } = new();
-
     /// <summary>Instant Action's wrap-up "Shot %" (docs/formats/instant-action.md "What the four
     /// numbers count") counts a cannon round fired/hit only for <c>the local player</c>; a shooter
     /// id here is that filter generalised to every human pilot for splitscreen, empty outside
@@ -596,6 +591,19 @@ public sealed partial class ProjectilePool : Node3D
             return true;
         return velocity.Normalized().Dot(towardTarget.Normalized()) >= minimumDot.Value;
     }
+    /// <summary>Distance from point <paramref name="p"/> to the segment <paramref name="a"/>→
+    /// <paramref name="b"/>. The fuse's cheap reject wants a round's whole step, not its endpoints:
+    /// a gun round covers ~8 m per 60 Hz frame.</summary>
+    public static float SegmentPointDistance(Vector3 a, Vector3 b, Vector3 p)
+    {
+        var seg = b - a;
+        float lenSq = seg.LengthSquared();
+        if (lenSq <= 1e-12f)
+            return (p - a).Length();
+        float t = Mathf.Clamp((p - a).Dot(seg) / lenSq, 0f, 1f);
+        return (p - (a + seg * t)).Length();
+    }
+
     /// <summary>The struck collider's numeric surface id, the index the weapon's <c>IMPACT</c>
     /// table is read at (<see cref="ImpactOutcome.Resolve"/>), off the same
     /// <see cref="SceneBuilder.SurfaceIdMeta"/> tag the crash and graze cascades read. An
@@ -880,7 +888,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>Fires one round of <paramref name="weapon"/> from the muzzle transform, along
     /// <paramref name="aimDir"/> or the muzzle axis, carrying what <see cref="InheritedAtLaunch"/>
     /// allows of <paramref name="inheritVel"/>. Drops the round silently if the pool is full.
-    /// <paramref name="shooterId"/> is the near-miss cue's self-exclusion, <paramref name="team"/>
+    /// <paramref name="shooterId"/> is the identity the hit ray excludes, <paramref name="team"/>
     /// stamps the round once, <paramref name="target"/> is what it holds, and <paramref name="ownerBodies"/>
     /// is a world gunner's own mount, which its rounds neither strike nor splash (org/ordnanceTypes.md).</summary>
     public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter,
@@ -1169,7 +1177,6 @@ public sealed partial class ProjectilePool : Node3D
                 // per-surface effect, no sound, no splash. The frame check above acts on the result.
                 if (struckFlyout != null && flyoutDistSq <= hitDistSq)
                 {
-                    NearMissPass(prev, flyoutPoint, p.Shooter);
                     struckFlyout.Spend(p.Weapon.ArmorDamage ?? 0f, p.Weapon.HealthDamage ?? 0f);
                     RetireRound(ref p);
                     continue;
@@ -1177,7 +1184,6 @@ public sealed partial class ProjectilePool : Node3D
 
                 if (hitDistSq < float.PositiveInfinity)
                 {
-                    NearMissPass(prev, hitPoint, p.Shooter);
                     Impact(p.Weapon, hitPoint, hitCollider, hitNormal, hitShape, p.Shooter, p.Team, p.Owner);
                     RetireRound(ref p);
                     continue;
@@ -1188,7 +1194,6 @@ public sealed partial class ProjectilePool : Node3D
                 if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, vel,
                         out var fusePoint, out var fused, out var towardHull))
                 {
-                    NearMissPass(prev, fusePoint, p.Shooter);
                     var fuseNormal = towardHull.LengthSquared() > 1e-8f
                         ? towardHull.Normalized() : Vector3.Zero;
                     Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter, p.Team, p.Owner);
@@ -1196,7 +1201,6 @@ public sealed partial class ProjectilePool : Node3D
                     continue;
                 }
             }
-            NearMissPass(prev, next, p.Shooter);
             p.PrevPos = p.Pos;
             p.Pos = next;
             // The round's def ticks on the moved round: its trail puffs are laid along this step
@@ -2240,7 +2244,7 @@ public sealed partial class ProjectilePool : Node3D
                 continue;
             // Cheap reject: the segment cannot come within fuse range of any box while it stays
             // outside the plane's bounding sphere by more than that range.
-            if (WarningShotCue.SegmentPointDistance(from, to, plane.GlobalPosition)
+            if (SegmentPointDistance(from, to, plane.GlobalPosition)
                 > fuseRange + plane.BoundRadius)
                 continue;
             float d = plane.SegmentDistance(from, to, out float t, out var hull);
@@ -2863,30 +2867,9 @@ public sealed partial class ProjectilePool : Node3D
         return null;
     }
 
-    // The incoming-fire near-miss cue: the round's ACTUAL travelled segment this step —
-    // muzzle-ward end to wherever it ended up, including a hit or fuse point — measured against
-    // every registered aircraft. A round is silent for the pilot who fired it: exclusion is by
-    // shooter IDENTITY, not by weapon, so flying through your own line of fire (a hard turn into a
-    // burst you just sent) still warns nobody, which is the intended reading of "your own rounds".
-    // The radius is a TUNE, not data — see WarningShotCue.PassRadius.
-    private void NearMissPass(Vector3 from, Vector3 to, int shooter)
-    {
-        if (NearMissTargets.Count == 0)
-            return;
-        float radius = Config.GetFloat("weapons.warningShotRadius", WarningShotCue.PassRadius);
-        foreach (var t in NearMissTargets)
-        {
-            if (t.ShooterId == shooter)
-                continue;
-            float d = WarningShotCue.SegmentPointDistance(from, to, t.Position());
-            if (d <= radius)
-                t.OnPass(d);
-        }
-    }
-
     // The exclusion list a round's hit ray carries: its shooter's own registered body,
-    // so identity — not weapon — is what keeps a pilot's rounds off their own airframe (the same
-    // reading the near-miss cue uses), or a world gunner's own mount bodies. An unowned round
+    // so identity — not weapon — is what keeps a pilot's rounds off their own airframe, or a
+    // world gunner's own mount bodies. An unowned round
     // (NoShooter, no owner) excludes nothing and can hit any plane.
     private Godot.Collections.Array<Rid> ExcludeFor(int shooter, Godot.Collections.Array<Rid>? owner)
     {
@@ -3157,17 +3140,6 @@ public sealed partial class ProjectilePool : Node3D
         // Null exactly when the corresponding Base/Splash is null, or its fade twin failed.
         public MeshInstance3D? BaseMesh;
         public MeshInstance3D? SplashMesh;
-    }
-
-    /// <summary>One aircraft the near-miss cue tests rounds against. The rig supplies its own live
-    /// position (the plane is a moving sim value, not a node transform the pool could cache) and
-    /// takes the pass distance in metres; <see cref="ShooterId"/> is the identity whose own rounds
-    /// never warn it.</summary>
-    public sealed class NearMissTarget
-    {
-        public int ShooterId;
-        public System.Func<Vector3> Position = null!;
-        public System.Action<float> OnPass = null!;
     }
 
     /// <summary>One round's shootable-flyout state: the armour/health pair the spawn seeds at round

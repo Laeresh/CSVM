@@ -516,18 +516,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
   than placed in the world data. Locate them before scheduling.
 
-- `BL-230` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Near-miss trigger distance (B7, 2026-08-02).** `WarningShotCue.PassRadius` = **15 m**,
-  the distance a round's swept step must pass within to sound `bullet_warning_sg`. Chosen, not read:
-  the shipped `warning_shot_*` block rates the cue but says nothing about how close is close, and the
-  sound def's `RANGE [20,200]` is the 3D falloff window, not a trigger radius. Judge it at the
-  controls — `--incoming=<metres>` walks a burst past at a chosen distance, and
-  `weapons.warningShotRadius` moves the threshold without a rebuild (config.json, so **not** under
-  `--det`).
-  ⚠ Traps: `CANNON_SPREAD` scatters each round several metres over any real firing range, so the
-  achieved distance is a distribution — judge over a burst, never off one pass. Raising it far enough
-  that a round crossing the sky sounds is the failure mode, not a louder cue.
-  *Cross-refs:* `PT-125` (the flight that judges it).
-
 - `BL-233` `[Feature]` `[Blocked: M4]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Extend the proximity fuse to zeppelins (and any other M4 flyer) when they get
   bodies.** The fuse itself came back 2026-08-06 (PLAN-vs-mode B14): re-enabled **aircraft-only**
   against the registered `AircraftBody` list — never world geometry, matching the user's
@@ -752,32 +740,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Balmoral reach the Pandora and watch the rings. *Cross-refs:* `BL-714` (the same rings,
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
-
-- `BL-826` `[Research]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **The
-  `warning_shot_*` block reads as a damage-absorbing shield on the player, not as a near-miss
-  rating, and `bullet_warning_sg` is a HIT cue in the original.** If that reading holds, the remake
-  sounds the near-miss cue on an event the original never sounds it on, and the player takes gun
-  damage the original would have discarded.
-  *Evidence:* `DAT_0071c488` (`warning_shot_sound`) has exactly one read in the whole image, at
-  `0x004b9ea9` inside the damage routine `FUN_004b9bc0`, beside `bullet_hit_sg`'s at `0x004b9ec9`;
-  no near-miss or fly-by test plays it anywhere. The arm that plays it also zeroes the incoming
-  damage pair. The accumulator's own tick `FUN_004b1340` counts CANNON HITS at vehicle `+0x918`
-  (incremented at `0x004b9e83`), accrues `+0x910` toward `warning_shot_max`, and sets the flag
-  `+0x91c` while the intensity is below the max, which is the flag that arm tests. Read literally:
-  until sustained fire saturates the accumulator, gun rounds on the player do nothing but sound
-  `bullet_warning_sg`; once saturated, they damage and sound `bullet_hit_sg`. Decode written up in
-  `docs/org/weaponFire.md`, "The incoming-fire cues".
-  *Fix shape:* decode the global `*DAT_0064f750` that the arm also tests (it reads zero in whatever
-  mode the arm is meant for, and it gates several other branches of the same routine), then decide
-  whether CSVM adopts the shield. Adopting it moves `WarningShotCue` off the near-miss path and onto
-  the hit path, which changes how much gun damage a player takes.
-  ⚠ **Traps.** (a) The near-miss geometry CSVM measures (`ProjectilePool.NearMissTargets`,
-  `WarningShotCue.PassRadius`) has no counterpart in the image at all, so this is not a tuning
-  question about a radius; it is whether the feature exists. (b) Do not half-adopt: sounding
-  `bullet_warning_sg` on hits while keeping the near-miss dispatch would ring it twice for one
-  event. (c) `--incoming` exists to reach the near-miss path deterministically and would have to
-  change meaning with it.
-  *Cross-refs:* `BL-230` (the chosen 15 m pass radius, moot if the near-miss reading falls).
 
 ## Flight model & collision physics
 

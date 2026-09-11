@@ -34,7 +34,7 @@ internal static class CoopEpisodeOwnerSuites
         "the episode owner over CM02's own capture with two humans flying: the mission's swap "
         + "rebuilds the rig whose trigger claimed the episode, on the record the code names, "
         + "while the other human keeps the aeroplane it was flying; the swapped pilot keeps "
-        + "their own shooter id and their one near-miss registration, the other pilot's is "
+        + "their own shooter id and the pool's registration under it, the other pilot's is "
         + "untouched, and the same capture claimed by nobody swaps the scripted player")]
     internal static void CampaignCoopEpisodeOwner(TestContext ctx)
     {
@@ -119,7 +119,6 @@ internal static class CoopEpisodeOwnerSuites
 
             cutscene.Own(call.Anim, guest ? rigs[1] : null);
             world.Runtime.Play(call.Anim);
-            int registered = pool.NearMissTargets.Count;
             bool swapped = Play(world, cutscene, owner, before[owner.Index]);
 
             report.AppendLine($"claimed by {who}: swapped={swapped} owner=" +
@@ -131,7 +130,7 @@ internal static class CoopEpisodeOwnerSuites
             ctx.Check(ReferenceEquals(ordered, owner),
                 $"…and the swap order carries that rig, so the seam is answered rather than guessed");
             CheckRigs(ctx, wanted, owner, other, before, was, report);
-            CheckRegistrations(ctx, pool, registered, was, report);
+            CheckRegistrations(ctx, pool, was, report);
             if (guest)
             {
                 CheckStaged(ctx, world.Session.Aircraft, owner, other, report);
@@ -180,42 +179,22 @@ internal static class CoopEpisodeOwnerSuites
             $"…and not the other human's, which is the aeroplane a single-player mission would have staged");
     }
 
-    // ⚠ The near-miss registrations are why the removal precedes the build in the roster's swap:
-    // DetachRosterBindings drops every registration carrying the outgoing pilot's shooter id and
-    // the replacement registers its own under the same id.
-    private static void CheckRegistrations(TestContext ctx, ProjectilePool pool, int registered,
-        Flying was, StringBuilder report)
+    // ⚠ The pool's shooter registrations are why the removal precedes the build in the roster's
+    // swap: DetachRosterBindings drops the outgoing pilot's aircraft body and the replacement
+    // registers its own under the same shooter id.
+    private static void CheckRegistrations(TestContext ctx, ProjectilePool pool, Flying was,
+        StringBuilder report)
     {
-        int mine = 0, theirs = 0, threw = 0;
-        foreach (var target in pool.NearMissTargets)
-        {
-            if (target.ShooterId == was.OwnerId)
-            {
-                mine++;
-            }
-            else if (target.ShooterId == was.OtherId)
-            {
-                theirs++;
-            }
-
-            try
-            {
-                target.Position();
-            }
-            catch (Exception)
-            {
-                threw++;
-            }
-        }
-
-        report.AppendLine($"near-miss: {pool.NearMissTargets.Count} registered (was {registered}), " +
-            $"owner {mine}, other {theirs}, {threw} reading a freed aircraft");
-        ctx.Same(registered, pool.NearMissTargets.Count,
-            $"the pool holds the registrations it held before, so the outgoing rig left exactly one behind and the replacement took its place");
-        ctx.Same(1, mine, $"the swapped pilot carries one near-miss registration under their own shooter id");
-        ctx.Same(1, theirs, $"and the human who kept their aeroplane carries their own, untouched");
-        ctx.Same(0, threw,
-            $"every registration reads a live aircraft, so none was left pointing at the aeroplane the swap freed");
+        var mine = pool.RigOfShooter(was.OwnerId);
+        var theirs = pool.RigOfShooter(was.OtherId);
+        bool Live(FlightController? rig) =>
+            rig != null && GodotObject.IsInstanceValid(rig) && rig.IsInsideTree();
+        report.AppendLine($"shooter ids: owner {(Live(mine) ? "live" : "missing")}, " +
+            $"other {(Live(theirs) ? "live" : "missing")}");
+        ctx.Check(Live(mine),
+            $"the swapped pilot's shooter id resolves a live aircraft, so the replacement took the registration the outgoing rig gave up");
+        ctx.Check(Live(theirs),
+            $"and the human who kept their aeroplane keeps their own, untouched");
     }
 
     // The episode played out on a realtime clock, answering whether the owner's rig was replaced.
