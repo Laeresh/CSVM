@@ -1258,24 +1258,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `depth_draw_never` and no sort is a **separate delta** from the blend rule, and it is the one that
   actually produces dark-over-fire. Fixing blend alone will not close the reported symptom.
 
-- `BL-035` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
-  one-shot `SOUND`** (triaged 2026-07-22, the last of `PLAN-anim-rendering-followups`
-  item 2 after `OBJECT_MOTION` landed). All three still dispatch at bootstrap, so the counts in
-  the "not yet acted on" report look like open work — **they are not**. Each was probed at the
-  dispatch site across C1/C3/C4/C5 (def, anchor, resolved target count, payload), and each fails
-  for a concrete reason rather than a suspicion. Implementing any of them today is a provable
-  no-op, the same verdict `OBJECT_ADD_CHILD` got:
-
-  | Kind | Count | Why it cannot do anything |
-  |---|---|---|
-  | `Callback` | ×8 every chapter | **Answered.** The values 1/2/10/11/14/20/913/914 are the cutscene vocabulary, decoded in `docs/formats/anim-definitions/cutscenes.md`, and `CutsceneController` is the host that raises them, for a story mission's intro and for the `landings.zrd` approach triggers `LandingApproachRuntime` starts. What is left here is only the OTHER codes the mission-script host reads: **3, 12, 13, 86, 701, 702, 800–803, 950, 951, 965–968**. Those reach the host today and are declined, so they are now testable rather than unreachable. C3/M01's own drop raises `951` (teleport the player to the camera pose) and it is the first one worth doing. |
-  | `ObjectCycleTexture` | ×1–2 per chapter | Every dispatch is `node=taildamage` with **`targets=0`** — the node never resolves, so there is nothing to cycle. The one real use of this mechanism (the cockpit damage-indicator hilite) is already a build-time material swap in `GaugeCluster.cs`. |
-
-  **The blocker on the `Callback` half is gone**: the approach trigger exists, so the remaining
-  codes now arrive at a live host and each can be implemented and tested against C3/M01's own drop
-  and hookup. `ObjectCycleTexture` still needs a mission that actually builds a `taildamage` node,
-  which none of the ones this project defaults to do.
-
 - `BL-293` `[Tuning]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Rocket impact rings: the fixed-axis upper ring is faithful but reads
   poorly — parked** (PT-35). Faithfulness versus feels-good, decide later: the original
   (`Crimson Skies 1.02 2026-07-31 23-27-53.mp4`) shows the second (upper) HE ring always oriented

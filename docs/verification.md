@@ -98,6 +98,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   returns before `Graph.Step` under the cutscene hold, and `--pos=` is withheld until the handoff
   too, so a probe waiting on either needs a mission whose intro hands off inside the run: C3/M01's
   had not by 43 s of sim, where C1/M02's marks its row well before 25 s.
+- **DIAG-27** — **An arithmetic shape in a dispatcher (`index = code − N`) names no table; read the
+  callee and check which subsystem owns it, then confirm against where the data authors the code.**
+  The `CALLBACK` reference read 701 and 702 as "applies camera-parameter set `code − 700`", on the
+  strength of the subtraction alone. `FUN_0049a210` is the multiplayer flag list, gated on a live
+  network session, and the two occurrences are `flg_throw1`/`flg_throw2` in the `MP2` missions, so
+  the codes do nothing in single player at all.
 
 ## SHOT — screenshots and pixel evidence
 

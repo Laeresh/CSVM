@@ -121,8 +121,9 @@ list: `pickups.zrd` exists for this switch. C1/M02's table is one row, `ladder_p
 ## Consequences for the port
 
 - The switch is a per-mission native object evaluated every tick, never an animation event: a
-  `CALLBACK` handler for code 123 in the mission-script host would be wrong, and `BL-035`'s
-  dropped event kinds play no role.
+  `CALLBACK` handler for code 123 in the mission-script host would be wrong, and the codes
+  around it play no role
+  ([formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md)).
 - The gate is two tests, in this order: `up.Y > 0.707` on the aircraft's own attitude, then
   inside any active `pickups.zrd` sensor. There is no speed band, no heading test and no
   objective gate; the sensor node's own activation (the pickup rig staging it on the caboose)

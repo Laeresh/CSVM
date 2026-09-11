@@ -21,7 +21,7 @@ internal static class DestroyChoreographySuites
     // would pass the two arms and still be inventing behaviour, and one wired to nothing at all
     // leaves the wreck motionless exactly as it did before this existed.
     [Suite("callback-events",
-        "a destroy def's CALLBACK 16 hands the instance the rig's wreck velocity and its 15 stops the damage stages, on player-player and fury-fury; an authored code the runtime does not act on is counted, and no def in the chapter authors the free arm, code 0 (D18)")]
+        "a destroy def's CALLBACK 16 hands the instance the rig's wreck velocity, its 15 stops the damage stages and the player def's own 3 takes the pilot out of the view they chose, on player-player and fury-fury; an authored code the runtime does not act on is counted, an acted-on code with no seam wired is named as unwired, and no def in the chapter authors the free arm, code 0 (D18)")]
     internal static void CallbackEvents(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -784,7 +784,7 @@ internal static class DestroyChoreographySuites
     // list, `player_autogyro`, so the rotor arm is an airframe test and every other airframe takes
     // `random_destroy`. Decode: docs/org/vehicleDamage.md.
     [Suite("player-destroy-choreography",
-        "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the camera-only Callback 3 stays counted rather than invented (D25)")]
+        "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the def's own Callback 3 reaches the view seam the kill binds rather than going counted (D25)")]
     internal static void PlayerDestroyChoreography(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1833,9 +1833,10 @@ internal static class DestroyChoreographySuites
 
             AnimationAndEffectsSuites.WithEmitterStage(ctx, program, $"Callback_{animName}", destroyDefNodes, (stage, runtime, fake) =>
             {
-                int stops = 0;
+                int stops = 0, views = 0;
                 runtime.WreckVelocity = () => handed;
                 runtime.StopDamageStages = () => stops++;
+                runtime.ResetPilotView = () => views++;
                 runtime.Start(defs[0], stage);
                 for (int i = 0; i < Steps; i++)
                 {
@@ -1845,6 +1846,10 @@ internal static class DestroyChoreographySuites
                 ctx.Check(runtime.InheritedWorldVelocity.IsEqualApprox(handed) && runtime.InheritedVelocityArmed,
                     $"{animName}: CALLBACK 16 handed the instance the rig's velocity and ARMED it inherited={runtime.InheritedWorldVelocity} handed={handed} armed={runtime.InheritedVelocityArmed}");
                 ctx.Same(1, stops, $"{animName}: CALLBACK 15 stopped the damage stages exactly once");
+                // Both destroy arms raise 3 at their head and only one arm runs per play, so the
+                // player's def reaches the view seam exactly once; the AI's authors it nowhere.
+                ctx.Same(animName == "player" ? 1 : 0, views,
+                    $"{animName}: CALLBACK 3 reached the view seam {views}×");
                 foreach (var (key, n) in runtime.UnhandledEventCounts)
                 {
                     ctx.Check(!key.Contains("no seam wired"),
@@ -1870,8 +1875,9 @@ internal static class DestroyChoreographySuites
                     $"...and both codes are reported as unwired rather than silently skipped keys=[{string.Join(",", runtime.UnhandledEventCounts.Keys)}]");
                 if (animName == "player")
                 {
-                    ctx.Check(runtime.UnhandledEventCounts.TryGetValue("Callback(3)", out int unknown) && unknown > 0,
-                        $"player: the authored code 3 is counted and ignored, never invented (×{(runtime.UnhandledEventCounts.TryGetValue("Callback(3)", out int u) ? u : 0)})");
+                    ctx.Check(runtime.UnhandledEventCounts.TryGetValue("Callback(3, no seam wired)", out int unwired)
+                              && unwired > 0,
+                        $"player: with no seam wired the authored code 3 is reported unwired rather than acted on (×{unwired})");
                 }
             },
                 asCrashRig: true);
@@ -2402,10 +2408,14 @@ internal static class DestroyChoreographySuites
             ctx.Check(rig.BallisticMotionsLaunched >= 4,
                 $"{planeName}: the rig launched {rig.BallisticMotionsLaunched} ballistic motion(s), one per piece at least");
 
-            // Callback 3 would leave the crash view that Destroy already selected, so it stays
-            // counted rather than overriding CSVM's crash-camera choreography.
-            ctx.Check(rig.UnhandledEventCounts.TryGetValue("Callback(3)", out int three) && three > 0,
-                $"{planeName}: the authored Callback 3 is counted, not invented (×{(rig.UnhandledEventCounts.TryGetValue("Callback(3)", out int n3) ? n3 : 0)})");
+            // Callback 3 is the def's own view code: the kill binds the seam reaching
+            // CameraController.ResetToChase, so it is ACTED ON here rather than counted
+            // (docs/formats/anim-definitions/cutscenes.md).
+            ctx.Check(rig.ResetPilotView != null,
+                $"{planeName}: the kill bound the view seam the authored Callback 3 reaches");
+            ctx.Check(!rig.UnhandledEventCounts.ContainsKey("Callback(3)")
+                      && !rig.UnhandledEventCounts.ContainsKey("Callback(3, no seam wired)"),
+                $"{planeName}: …and the code was answered rather than counted keys=[{string.Join(",", rig.UnhandledEventCounts.Keys)}]");
             ctx.Check(chuteman is { Visible: true },
                 $"{planeName}: the parachutist is out too, untimed here where the ten AI defs gate him at 3.0 s");
             // He hangs level in the WORLD while the airframe he left is banked: his template is

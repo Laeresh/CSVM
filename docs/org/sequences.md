@@ -988,7 +988,11 @@ them.
   `value: 15`/`16`). The handler calls the anim instance's own registered native function pointer
   (`anim+0x74`) with a per-event code (`anim+0x78`, the event's own `+0xc`) if one is registered —
   pure `has_callbacks`-gated mission-scripting plumbing, notifying a host that installed a callback.
-  CSVM's `AnimRuntime` never installs one; there is no consumer to notify.
+  The world build installs the mission-script host `FUN_0047e080` on every definition it walks, and
+  what each code does there is
+  [`formats/anim-definitions/cutscenes.md`](../formats/anim-definitions/cutscenes.md)'s code
+  reference. CSVM answers the same codes through `AnimRuntime.CallbackHost`'s chain and its own two
+  vehicle-death seams.
 - **`ObjectCycleTexture`** (96 events, 96 defs — exactly the player's own
   `<part>_damage_{green,yellow,red}` cockpit indicator lights for `leftwing`/`rightwing`/`nose`/
   `tail`, one set per chapter, nothing else). The handler resets an object's per-mesh texture-cycle
@@ -998,6 +1002,11 @@ them.
   deliberately unwired: the live screen-space `GaugeCluster.OnPartDamage` covers the same
   information, while driving the Cockpit view's authored in-3D indicators belongs to the gauge
   work tracked separately. The decode confirms it is the same mechanism, not a second consumer.
+  ⚠ **Wiring it would be a provable no-op either way.** Probed at the dispatch site across C1, C3,
+  C4 and C5, every shipped dispatch names the node `taildamage` and resolves **zero** targets: the
+  node the event addresses is not built in any world these missions stand up, so there is nothing
+  for a handler to cycle. The one real use of the mechanism, the cockpit damage-indicator hilite, is
+  a build-time material swap in `GaugeCluster.cs`.
 - **`ObjectDeleteChild`** (48 events, 40 defs). The handler unconditionally detaches a named child
   from a named parent (`FUN_004cd6d0`, dispatched by the child's own node type) — a pure scene-graph
   reparent, no visibility or transform change of its own. Every shipped use is one of two shapes:

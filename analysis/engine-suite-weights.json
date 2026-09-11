@@ -342,6 +342,8 @@
     "ace-wake-terrain": 3.60,
     "campaign-launch-hook-prop": 3.05,
     "mesh-light-blink": 2.70,
-    "mesh-light-fade": 2.64
+    "mesh-light-fade": 2.64,
+    "cutscene-clear-ordnance": 2.42,
+    "campaign-wingman-removal": 4.43
   }
 }

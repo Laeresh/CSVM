@@ -42,6 +42,13 @@ public sealed class CampaignDirector
     /// frame the ending landed on.</summary>
     public const float LeavingHoldS = 2f;
 
+    // The other roster code of the mission-script host, and its literal, the way `cargozep1` is
+    // 800's: the docking film raises it to take the escorting wingman out of the world, and its very
+    // next event is her own "down" line. One occurrence in the install
+    // (docs/formats/anim-definitions/cutscenes.md).
+    private const int CodeRemoveWingman = 968;
+    private const string RemovedWingman = "bswingman_1";
+
     private readonly CampaignProfileDef _profile;
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
@@ -1119,6 +1126,12 @@ public sealed class CampaignDirector
     // it.
     private bool LaunchHookCallback(int code, string? animName, string? rootName)
     {
+        if (code == CodeRemoveWingman)
+        {
+            RemoveNamedWingman();
+            return true;
+        }
+
         if (LaunchHookFamily(code) is not { } family)
         {
             return _innerCallbackHost?.Invoke(code, animName, rootName) ?? false;
@@ -1134,6 +1147,21 @@ public sealed class CampaignDirector
         }
 
         return true;
+    }
+
+    // Callback 968's whole body: the named wingman leaves the world unless she is already out of it,
+    // the test the original makes on her own out-of-flight byte before hiding her. The hide is the
+    // deactivate, not the cutscene park, so an objective walk stops counting her from here.
+    private void RemoveNamedWingman()
+    {
+        if (Commanded(RemovedWingman) is not { InPlay: true } rig)
+        {
+            GD.Print($"campaign: CALLBACK {CodeRemoveWingman} leaves '{RemovedWingman}' alone: not in play");
+            return;
+        }
+
+        rig.Inert = true;
+        GD.Print($"campaign: CALLBACK {CodeRemoveWingman} took '{RemovedWingman}' out of the world");
     }
 
     // The lowest-numbered member of the family still deactivated, so a hook called six times

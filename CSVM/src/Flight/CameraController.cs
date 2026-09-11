@@ -220,6 +220,16 @@ public sealed class CameraController
     /// <summary>Select the chase view directly, without walking the three-stop cycle.</summary>
     public void SelectChase() => ViewMode = PilotViewMode.Chase;
 
+    /// <summary>Both writes the destroy def's <c>CALLBACK 3</c> makes: the SELECTED view goes back
+    /// to the chase camera and the head-look angles return to level and forward
+    /// (docs/formats/anim-definitions/cutscenes.md). The selection is what outlives the death, so a
+    /// pilot shot down in the cockpit respawns behind the aeroplane.</summary>
+    public void ResetToChase()
+    {
+        SelectChase();
+        Head.Reset();
+    }
+
     /// <summary>The look-behind view is on: numpad 0 held, the run pinned it with
     /// <c>--view=back</c>, or <paramref name="padClick"/> — this player's right-stick
     /// click, read by the host the same way it reads every other pad button. A held numpad 1–9 key

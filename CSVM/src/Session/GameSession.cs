@@ -571,6 +571,9 @@ public partial class GameSession : Node3D
                     // leaving hold and its fade start on, so this reads true for every ending that
                     // landed under a film whatever raised it.
                     _cutscene.EndingLanded = () => _campaign?.Result != null;
+                    // Read through the field rather than captured: the pool is built by the world
+                    // phase, which a lab or bench session skips entirely.
+                    _cutscene.ClearOrdnance = () => _projectiles?.Clear();
                 }
             }
             ApplyDestroyOverride(state);

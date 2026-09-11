@@ -2689,6 +2689,10 @@ public partial class FlightController : Node3D
             // are LOOP -1 with NO authored exit, so nothing else can reach them and a survivor emits
             // forever at the node the wreck left behind.
             CrashRuntime.StopDamageStages = () => Visuals?.DamageEffectStop?.Invoke();
+            // Code 3, the first event of either destroy arm: the pilot loses the view they chose.
+            // Bound on every rig and raised by none but the human def, so the aeroplane whose
+            // camera this is is always the one dying.
+            CrashRuntime.ResetPilotView = () => _cam?.ResetToChase();
             // The airburst, the pilot's chute and (on the eleven airframe defs) the wreck's own
             // launch: this plane's parts detaching, not a world destructible's.
             using (PerfSample.Scope(PerfSite.PartDetach))

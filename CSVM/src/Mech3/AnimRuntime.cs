@@ -229,6 +229,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// leaves the hull on the flight model and the two systems fly it at once.</summary>
     public Action? StopWreckFlying;
 
+    /// <summary>What a <c>Callback 3</c> does: the pilot's SELECTED view goes back to the chase
+    /// camera and the head-look angles are zeroed, which is how the original leaves first person as
+    /// the pilot's own aeroplane comes apart (docs/formats/anim-definitions/cutscenes.md). Bound by
+    /// the rig, because only the rig knows whose camera this is; null leaves the code counted and
+    /// the view alone. ⚠ Only the human player's destroy def authors this code, and only a human
+    /// rig ever plays that def, so an AI death cannot reach a person's camera through it.</summary>
+    public Action? ResetPilotView;
+
     /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
     /// late-failure reports. Set on the world-effects runtime: it renders an effect def's
     /// puffers, but the same effect's impact/death SOUND is already played by the projectile pool
@@ -375,6 +383,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // and acting on it would delete a live wreck.
     private const int CallbackWreckVelocity = 16;
     private const int CallbackStopStages = 15;
+
+    // The third code a destroy def raises, from the mission-script host's case at 0x0047e0ec. Only
+    // the human player's own def authors it, twice, at the head of each of its two destroy arms
+    // (docs/formats/anim-definitions/cutscenes.md).
+    private const int CallbackResetView = 3;
 
     // Per-axis magnitude a Callback 16 must exceed to ARM the velocity it hands over (`004ee0e0`).
     private const float InheritedVelocityEpsilon = 0.01f;
@@ -3122,8 +3135,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 StopWreckFlying?.Invoke();
                 _opsApplied++;
                 return;
+            case CallbackResetView when ResetPilotView != null:
+                // The original's own case runs before anything else the destroy sequence does, so
+                // the death is watched from outside from its first frame.
+                ResetPilotView();
+                _opsApplied++;
+                return;
             case CallbackWreckVelocity:
             case CallbackStopStages:
+            case CallbackResetView:
                 // Named apart from an unknown code: this one IS understood, and only the caller's
                 // seam is missing — which is the whole answer to "why did the wreck not inherit".
                 Count($"Callback({code}, no seam wired)");

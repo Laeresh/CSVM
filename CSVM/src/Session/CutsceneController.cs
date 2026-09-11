@@ -79,6 +79,13 @@ public sealed partial class CutsceneController : Node
     /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Action? MissionComplete;
 
+    /// <summary>Code 86, which the original answers by walking every weapon type's live-round list
+    /// and despawning each round where it flies, with no detonation and no impact effect. The one
+    /// definition that raises it is the hangar drop that also swaps the airframe, so the air is
+    /// cleared of what the outgoing aeroplane fired. Decode:
+    /// docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Action? ClearOrdnance;
+
     /// <summary>Has the flown mission's ending already landed? An episode whose mission ended
     /// under it keeps its shot: no handoff and no skip, so the leaving fade runs over the film's
     /// last frame the way the original's does (docs/formats/objectives.md, "The mission-end
@@ -92,6 +99,7 @@ public sealed partial class CutsceneController : Node
     private const int CodePresentation = 2;
     private const int CodeRestoreSystems = 10;
     private const int CodeMissionComplete = 13;
+    private const int CodeClearOrdnance = 86;
     private const int CodeCamParamsFree = 666;
     private const int CodeCamParamsRestore = 667;
     private const int CodeParkAi = 913;
@@ -412,6 +420,7 @@ public sealed partial class CutsceneController : Node
             case CodeRestoreSystems:
             case CodeMissionComplete:
             case CodeReplacePlayer:
+            case CodeClearOrdnance:
                 break;
             default:
                 if (AirframeSwapCodes.For(code) != null)
@@ -891,6 +900,9 @@ public sealed partial class CutsceneController : Node
                 break;
             case CodeMissionComplete:
                 MissionComplete?.Invoke();
+                break;
+            case CodeClearOrdnance:
+                ClearOrdnance?.Invoke();
                 break;
             case CodeRestoreSystems:
                 foreach (var pilot in Pilots())
