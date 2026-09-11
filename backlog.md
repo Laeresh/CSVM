@@ -1999,20 +1999,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   variants where they are. *Cross-refs:* the same screen's PLANE NAME dialog, centred on its own
   pane by the rule in [`docs/formats/menu-layout.md`](docs/formats/menu-layout.md).
 
-- `BL-754` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Plane Construction's
-  CURRENT WEIGHT line stays in the ordinary ink when the build is over its airframe's capacity.**
-  *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie, "colour Current
-  Weight: xxx lbs. red if overweight". The hub draws it in `BoardInk.Dialog` unconditionally
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1333-1339`) while the cash figure two blocks above
-  already takes the problems ink once the build outruns the wallet (`:1312-1317`), and Built-in
-  colours the same totals line through `TotalsOverweight`
-  (`CSVM/src/UI/LaunchMenu.cs:2364`, `CSVM/src/UI/HangarFlow.cs:244-246`). *Fix shape:* the weight
-  line takes the same problems ink when `bill.Total.Weight` exceeds `bill.Capacity`, the condition
-  `HangarEconomy.Price` already reports as `PurchaseVerdict.Overweight`
-  (`CSVM/src/Flight/HangarEconomy.cs:181`). *⚠ Traps:* the ink is the board palette's, not a
-  literal colour; use the mark the cash figure uses so the two agree. The pending case before an
-  airframe is chosen has no weight and must stay plain. *Cross-refs:* `BL-655`'s landing
-  (`git log --grep=BL-655`), which added the cash note.
+- `BL-754` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The plane
+  construction hub writes no line in red: the original reddens PLANE COST when the wallet cannot
+  cover the build and CURRENT WEIGHT when the build is over capacity.** *Evidence:* reported at
+  the controls over `PLAN-M5-polish-12`'s closing sortie, "colour Current Weight: xxx lbs. red if
+  overweight", and both halves are in `PLANECONSTRUCTION.SCRIPT`'s mailbox arms. Arm 12001 sets
+  `px_t_planecost`'s colour to the authored one when callback 2213 reports the build affordable
+  (and unconditionally on the export and multiplayer doors) and to `0xffff0000` otherwise; arm
+  12002 does the same for `px_t_currentweight` off callback 2214's capacity answer. `CAP-50.mkv`
+  shows the weight line red over capacity. Ours writes both in the page's own ink whatever the
+  bill says (`CSVM/src/UI/Menu/Original/OriginalHangar.cs`, `ComposeHubChrome`), while the cash
+  figure already takes the problems ink once the build outruns the wallet and Built-in colours
+  the same totals line through `TotalsOverweight` (`CSVM/src/UI/HangarFlow.cs`). *Fix shape:* the
+  board has no red ink to reach for, so this needs one added to `BoardInk` and to each
+  `PaletteFor`, or a narrower way for a hub line to carry a literal colour; then redden the two
+  lines off `HangarBill`'s own verdict (`PurchaseVerdict.Overweight` and the affordable check
+  `HangarEconomy.Price` already reports). *⚠ Traps:* the red is a literal in the script, not a
+  layout colour, so it is the same on every screen and must not be read off a colour tail; the
+  cash figure's own over-budget mark is a remake addition and is not this. The pending case
+  before an airframe is chosen has no weight and must stay plain. *Cross-refs:* `docs/org/hangar.md`,
+  `docs/org/menu-inventory.md` Part 4, `BL-655`'s landing (`git log --grep=BL-655`), which added
+  the cash note.
 
 - `BL-755` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ammo screen's two
   description panes trade the cursor's words instead of each holding its own subject.** *Evidence:*
@@ -2311,37 +2318,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `./RunGame.ps1 --presentation=original`, hold a plaque down and release off it, against
   `playtest/CAP-49/06-plaque-normal-rollover-depressed.png`. *Cross-refs:* `BL-808` (the same
   takes' hub corrections; the Instant Action page's landed with `git log --grep=BL-807`),
-  `docs/org/menu-inventory.md` Part 4.
-
-
-- `BL-808` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: footage]` **The plane
-  construction hub's default build is not the Devastator, its running total sits on the top rail,
-  every door shows a `$$$ on` scrap, and the INVENTORY's Export is drawn live.** *Evidence:*
-  `CAP-50.mkv` t=118.6 to 139.9 from Instant Action and `CAP-52.mkv` t=109.9 to 145.3 from the
-  cabin (`playtest/CAP-50/29-35`, `playtest/CAP-52/pc1.png`, `inventory.png`, `msgbox.png`). The
-  name screen is a dialog over the blueprint page with Load Default Configuration drawn checked;
-  checked, it opened on a Balmoral at $10720 from Instant Action and a Bloodhawk at $9088 from the
-  cabin, both complete stock builds, so what picks the airframe is not read. The standing tab
-  draws raised and pale with dark lettering, the other five purple with white, none gated. PLANE
-  COST stands on the page's top rail beside the plane name and follows every pick. The airframe
-  list draws eleven rows with no bar; the decal picker is a five-wide thumbnail grid with its own
-  arrows. The Instant Action door wears READY TO EXPORT and CANCEL EXPORT with a `$$$ on $50000`
-  scrap on every tab; the cabin door wears READY TO PURCHASE and CANCEL PURCHASE with `$$$ on
-  $16780`. SELL PLANES opens the INVENTORY with a plane dropdown, Sell and Export as grey pills with
-  blue lettering, Sell turning green under the pointer, a value block and DONE back to the tab;
-  selling asks with the Yes/No box (Yes left) and a plane that cannot be sold refuses with the OK
-  box, neither drawing a focus. No airframe switch raised string 206 on a fresh build. CANCEL
-  drops the build. The weight line turns red over capacity. Ours starts on the Devastator
-  (`HangarFeature.DefaultAirframe`, read off langui 3005), writes PLANE COST at the layout row's
-  own position, shows no scrap on the export door and draws Export disabled
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:78`, `1305`). *Fix shape:* check the drawn PLANE
-  COST against the still's top rail, since the layout row is the decode and the film only says
-  where it landed; draw the scrap on both doors with its figure; draw Export live (what it does is
-  unfilmed); keep the Devastator until the decode says what picks the airframe, since two takes
-  gave two different ones and langui 3005 names the Devastator; draw the standing tab raised
-  rather than disabled. *⚠ Traps:* out-of-order tabs,
-  Purchase, the cleared default box, string 206 on a customised build and string 203 are all
-  unfilmed (`CAP-53`). *Cross-refs:* `CAP-53`, `docs/org/hangar.md`,
   `docs/org/menu-inventory.md` Part 4.
 
 - `BL-809` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **An opened scrap

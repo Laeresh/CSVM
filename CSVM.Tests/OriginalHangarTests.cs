@@ -180,8 +180,20 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(
             new[] { OriginalShell.AirframeDropKey, "PX_B_AIRFRAME", "PX_B_ENGINE", "PX_B_ARMOR", "PX_B_GUNS", "PX_B_HARDPOINTS", "PX_B_PAINT", OriginalShell.SellPlanesKey, OriginalShell.ReadyKey, OriginalShell.CancelBuildKey, OriginalShell.HubNameFieldKey },
             shell.Rows.Select(r => r.Key));
-        Assert.False(shell.Rows.Single(r => r.Key == "PX_B_AIRFRAME").Enabled);
+        Assert.True(shell.Rows.Single(r => r.Key == "PX_B_AIRFRAME").Enabled);
         Assert.Equal("Airframe 5", shell.Rows.Single(r => r.Key == OriginalShell.AirframeDropKey).Label);
+    }
+
+    [Fact]
+    public void TheDefaultConfigurationTakesTheAirframeTheDoorWasOpenedOver()
+    {
+        var shell = Shell(out var hangar, out _, pilotPlane: 2);
+        OpenHub(shell, "Ace");
+
+        Assert.True(hangar.AirframeChosen);
+        Assert.Equal(2, hangar.Scratch.Airframe);
+        Assert.Equal(1, hangar.Scratch.Engine);
+        Assert.Equal("Airframe 2", shell.Rows.Single(r => r.Key == OriginalShell.AirframeDropKey).Label);
     }
 
     [Fact]
@@ -264,10 +276,12 @@ public class OriginalHangarTests : IDisposable
         var shell = Shell(out _, out _);
         OpenHub(shell, "Ace");
 
+        // The standing tab is a sibling like the other five, so the walk steps onto it too.
         shell.Step(Down);
+        Assert.Equal("PX_B_AIRFRAME", shell.FocusedKey);
+        shell.Step(Right);
         Assert.Equal("PX_B_ENGINE", shell.FocusedKey);
         shell.Step(Right);
-        Assert.Equal("PX_B_ARMOR", shell.FocusedKey);
         shell.Step(Right);
         shell.Step(Right);
         shell.Step(Right);
@@ -395,7 +409,7 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(
             new[] { OriginalShell.InventoryPlanesKey, OriginalShell.InventorySellKey, OriginalShell.InventoryExportKey, OriginalShell.InventoryDoneKey },
             shell.Rows.Select(r => r.Key));
-        Assert.False(shell.Rows.Single(r => r.Key == OriginalShell.InventoryExportKey).Enabled);
+        Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.InventoryExportKey).Enabled);
         Assert.Equal("Old", shell.Rows[0].Label);
         Assert.Contains(shell.Compose().Pictures, p => p.Art.Name == "PH_PlaneIcons.png" && p.Frame == 2);
 
@@ -431,6 +445,27 @@ public class OriginalHangarTests : IDisposable
     }
 
     [Fact]
+    public void ExportAnswersWithTheScreensOwnConfirmationAndKeepsThePlane()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Old", Airframe = 2, Engine = 1 });
+        var shell = Shell(out var hangar, out _);
+        OpenHub(shell, "Ace");
+        Click(shell, OriginalShell.SellPlanesKey);
+
+        Click(shell, OriginalShell.InventoryExportKey);
+        Assert.NotNull(shell.Dialog);
+        // The export box is the one-button 0x1 mask, so it keeps the notice icon.
+        Assert.Equal(DialogIcon.Warning, shell.Dialog!.Icon);
+        Assert.Equal(new[] { OriginalShell.DialogOkKey }, shell.Rows.Select(r => r.Key));
+        Assert.Contains("exported", shell.Dialog!.Message, StringComparison.Ordinal);
+        Click(shell, OriginalShell.DialogOkKey);
+
+        Assert.Null(shell.Dialog);
+        Assert.NotNull(_store.Load("Old"));
+        Assert.Equal(new[] { "Old" }, hangar.Saved.Select(p => p.Name));
+    }
+
+    [Fact]
     public void TheHubComposesTheChromeTabsAndButtonsFromTheLayout()
     {
         var shell = Shell(out var hangar, out _);
@@ -439,16 +474,21 @@ public class OriginalHangarTests : IDisposable
 
         var board = shell.Compose();
         Assert.Equal("PH_Back.jpg", Assert.Single(board.Backdrop).Art.Name);
+        // The standing tab is latched, not gated: the depressed frame in that frame's own ink,
+        // against the normal frame the other five draw.
         var current = board.Plaques.Single(p => p.Label == "Engine");
-        Assert.Equal(0, current.Frame);
-        Assert.Equal(BoardInk.Detail, current.Ink);
+        Assert.Equal(3, current.Frame);
+        Assert.Equal(BoardInk.LabelActivate, current.Ink);
         Assert.Equal(1, board.Plaques.Single(p => p.Label == "Airframe").Frame);
         Assert.Equal((150f, 520f), (current.X, current.Y));
         Assert.Contains(board.Lines, l => l.Text == "PLANE COST:  $" + hangar.Bill.Total.Cost);
         Assert.Contains(board.Lines, l => l.Text == "AIRFRAME: Airframe 5");
         Assert.Contains(board.Lines, l => l.Text == "Ace" && l.Ink == BoardInk.Dialog);
         Assert.Contains(board.Plaques, p => p.Art.Name == "PH_B_Ready.png");
-        Assert.DoesNotContain(board.Lines, l => l.Text == "$$$ on Hand:");
+        // The cash note stands on the wallet-free door too, over the export funds the hub's own
+        // script writes there.
+        Assert.Contains(board.Lines, l => l.Text == "$$$ on Hand:");
+        Assert.Contains(board.Lines, l => l.Text == "$50000" && l.Ink == BoardInk.Row);
     }
 
     [Fact]
@@ -505,13 +545,17 @@ public class OriginalHangarTests : IDisposable
         _ => null,
     };
 
-    private OriginalShell Shell(out HangarFeature hangar, out PlayerSetupFeature setup)
+    // The Instant Action door's Pilot Plane pick is what a default-configuration build inherits, so
+    // every shell here states the pick it opens the door from; the Devastator is the suite's.
+    private OriginalShell Shell(out HangarFeature hangar, out PlayerSetupFeature setup, int pilotPlane = HangarFeature.DefaultAirframe)
     {
         setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalRosters.Roster(Array.Empty<CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+        var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
+        instantAction.SelectPlayerPlane(pilotPlane);
         return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
-            hangar: hangar, planes: _store);
+            instantAction: instantAction, hangar: hangar, planes: _store);
     }
 }

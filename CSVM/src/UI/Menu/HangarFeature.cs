@@ -298,15 +298,18 @@ public sealed class HangarFeature : IMenuFeature
         DefaultsAskText = string.Empty;
     }
 
-    /// <summary>Starts a fresh build on the default configuration: the <see cref="DefaultAirframe"/>
-    /// with its stock engine, guns, hardpoints and armour loaded, already chosen, so a pilot who
-    /// asked for the default configuration lands on a plane that flies. The name is not the
-    /// airframe's to default and stays as the caller sets it.</summary>
-    public void StartDefaultPlane()
+    /// <summary>Starts a fresh build on the default configuration: <paramref name="airframe"/>'s
+    /// stock engine, guns, hardpoints and armour, already chosen, so a pilot who asked for it lands
+    /// on a plane that flies. The airframe is the caller's, the original loading the stock template
+    /// of whichever the build already stands on (docs/org/hangar.md, "What Load Default
+    /// Configuration loads"); out of range falls back to <see cref="DefaultAirframe"/>. The name
+    /// stays as the caller sets it.</summary>
+    public void StartDefaultPlane(int airframe = DefaultAirframe)
     {
+        int pick = airframe >= 0 && airframe < HangarEconomy.Airframes.Length ? airframe : DefaultAirframe;
         StartNewPlane();
-        LoadAirframeDefaults(DefaultAirframe);
-        NormalisePattern(DefaultAirframe);
+        LoadAirframeDefaults(pick);
+        NormalisePattern(pick);
         AirframeChosen = true;
     }
 

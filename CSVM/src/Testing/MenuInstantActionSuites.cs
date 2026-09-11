@@ -877,6 +877,9 @@ internal static class MenuInstantActionSuites
             return;
         }
 
+        // A default-configuration build inherits the airframe the door was opened over, which on
+        // this door is the screen's own Pilot Plane pick (docs/org/hangar.md).
+        int door = host.Features.Get<InstantActionFeature>().PlayerPlaneIndex;
         Press(host, seat, Pointer(fit, build.X + 5f, build.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet == null,
             $"a click opens the decoded name screen over a wallet-free build ({shell.Screen})");
@@ -913,8 +916,9 @@ internal static class MenuInstantActionSuites
         int row = PilotRowOf(shell, built);
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && store.Load(built) != null,
             $"Purchase Now saves the plane and returns to the screen ({shell.Screen})");
-        ctx.Check(row >= 11 && shell.PilotRoster[row].Node == PlanePickerRoster.AirframeNode(HangarFeature.DefaultAirframe),
-            $"whose Pilot Plane list offers the build after the stock rows on its airframe's node (row {row})");
+        ctx.Check(row >= 11 && store.Load(built) is { } saved && saved.Airframe == door
+            && shell.PilotRoster[row].Node == PlanePickerRoster.AirframeNode(door),
+            $"whose Pilot Plane list offers the build after the stock rows on the door's airframe node (row {row}, airframe {door})");
         var drop = Row(shell, OriginalShell.PlayerPlaneKey);
         if (drop != null && row >= 0)
         {

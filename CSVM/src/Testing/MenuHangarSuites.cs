@@ -91,8 +91,8 @@ internal static class MenuHangarSuites
         + "Instant Action screen with it in the Pilot Plane list, SELL PLANES opens the inventory whose "
         + "Sell asks and then removes it again, CANCEL and Back return to the Instant Action screen with "
         + "no residue, the cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals "
-        + "page with an over-priced row marked yet pickable while the wallet-free door draws neither, "
-        + "and a switch discards an open build")]
+        + "page with an over-priced row marked yet pickable while the wallet-free door draws the same "
+        + "note over its export funds and marks nothing, and a switch discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -609,15 +609,18 @@ internal static class MenuHangarSuites
         Press(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarAirframe && hangar.Scratch.Name == scratch,
             $"OK opens the hub on the airframe tab under the typed name ({shell.Screen}, {hangar.Scratch.Name})");
-        ctx.Check(hangar.AirframeChosen && hangar.Scratch.Airframe == HangarFeature.DefaultAirframe && hangar.Scratch.Engine == 1,
-            $"with the default configuration loaded ({hangar.Scratch.Airframe}, engine {hangar.Scratch.Engine})");
+        // The default configuration is the stock build of the airframe the door was opened over,
+        // which on this door is the Instant Action screen's own Pilot Plane pick.
+        int pilotAirframe = host.Features.Get<InstantActionFeature>().PlayerPlaneIndex;
+        ctx.Check(hangar.AirframeChosen && hangar.Scratch.Airframe == pilotAirframe && hangar.Scratch.Engine == 1,
+            $"with the default configuration loaded over the Pilot Plane pick ({hangar.Scratch.Airframe} of {pilotAirframe}, engine {hangar.Scratch.Engine})");
         ctx.Check(!host.Seats[0].CapturingText, $"and text capture ends with the name screen");
     }
 
     private static void OriginalHub(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
     {
-        ctx.Check(Row(shell, "PX_B_AIRFRAME") is { Enabled: false, X: 23f, Y: 524f } && Row(shell, "PX_B_PAINT") is { Enabled: true, X: 662f },
-            $"the tab bar stands at its authored line with the standing tab disabled");
+        ctx.Check(Row(shell, "PX_B_AIRFRAME") is { Enabled: true, X: 23f, Y: 524f } && Row(shell, "PX_B_PAINT") is { Enabled: true, X: 662f },
+            $"the tab bar stands at its authored line with no tab gated, the standing one included");
         var paint = Row(shell, "PX_B_PAINT")!;
         Press(host, seat, Pointer(fit, paint.X + 5f, paint.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarPaint, $"a click on Paint opens the paint tab out of order ({shell.Screen})");
@@ -644,15 +647,21 @@ internal static class MenuHangarSuites
         var board = shell.Compose();
         ctx.Check(board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == "PX_BackGround.jpg",
             $"the hub's background is the layout's own ({board.Backdrop.Count})");
-        ctx.Check(board.Pictures.Any(p => p.Art.Name.StartsWith("PX_ICON_5_", StringComparison.Ordinal) && p.Tint != null),
-            $"the plane is the paint composite of the Devastator's icon set on every tab but the airframe's");
-        ctx.Check(!board.Lines.Any(l => l.Text == hangar.Strings.Text(1149, "$$$ on Hand:"))
+        string composite = $"PX_ICON_{hangar.Scratch.Airframe}_";
+        ctx.Check(board.Pictures.Any(p => p.Art.Name.StartsWith(composite, StringComparison.Ordinal) && p.Tint != null),
+            $"the plane is the paint composite of the built airframe's icon set on every tab but the airframe's ({composite})");
+        // The wallet-free door wears the same note over the export funds its own script writes,
+        // and still checks no price against them, so no row is marked.
+        ctx.Check(board.Lines.Any(l => l.Text == hangar.Strings.Text(1149, "$$$ on Hand:"))
+            && board.Lines.Any(l => l.Text == "$50000")
             && Row(shell, OriginalShell.EngineDropKey)?.Label.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal) == false,
-            $"no cash note and no mark over the wallet-free door");
+            $"the export door's cash note reads $50000 with no mark on a row");
         Press(host, seat, Down);
         ctx.Check(shell.FocusedKey == "PX_B_AIRFRAME", $"Down from the dropdown lands on the first tab ({shell.FocusedKey})");
         Press(host, seat, Right);
-        ctx.Check(shell.FocusedKey == "PX_B_ARMOR", $"Right walks the bar past the standing tab ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == "PX_B_ENGINE", $"Right walks the bar onto the standing tab, which is a sibling ({shell.FocusedKey})");
+        Press(host, seat, Right);
+        ctx.Check(shell.FocusedKey == "PX_B_ARMOR", $"and on to the next ({shell.FocusedKey})");
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.HangarArmor && Row(shell, "AR_D_POINT0") is { X: 490f, Y: 133f, Width: 225f },
             $"Accept on a tab opens it with its dropdowns at their authored boxes ({shell.Screen})");
@@ -718,7 +727,8 @@ internal static class MenuHangarSuites
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.LastBuiltPlane == scratch && !hangar.IsOpen,
             $"Purchase Now saves, drops the build and returns to the Instant Action screen ({shell.Screen}, {shell.LastBuiltPlane})");
         ctx.Check(shell.FocusedKey == OriginalShell.BuildKey, $"with the focus back on Build Custom Plane ({shell.FocusedKey})");
-        ctx.Check(store.Load(scratch) is { Airframe: HangarFeature.DefaultAirframe, Engine: 1 }, $"the store holds the plane as built");
+        int built = host.Features.Get<InstantActionFeature>().PlayerPlaneIndex;
+        ctx.Check(store.Load(scratch) is { Engine: 1 } saved && saved.Airframe == built, $"the store holds the plane as built ({built})");
         ctx.Check(setup.Roster is var roster && Contains(roster, scratch), $"and the shared roster lists it without a return to the top level");
         ctx.Check(Contains(shell.PilotRoster, scratch), $"and the Pilot Plane list offers it, re-read on the way back");
     }
@@ -740,7 +750,7 @@ internal static class MenuHangarSuites
         Press(host, seat, Pointer(fit, sell.X + 5f, sell.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarInventory && Row(shell, OriginalShell.InventoryPlanesKey) is { X: 138f, Y: 132f, Width: 271f },
             $"it opens the inventory with the plane dropdown at its authored box ({shell.Screen})");
-        ctx.Check(Row(shell, OriginalShell.InventoryExportKey) is { Enabled: false }, $"Export draws disabled, the campaign's verb");
+        ctx.Check(Row(shell, OriginalShell.InventoryExportKey) is { Enabled: true }, $"Export draws live beside Sell, as the screen's own script leaves it");
         int index = IndexOf(hangar.Saved, scratch);
         ctx.Check(index >= 0, $"the inventory lists the scratch plane ({hangar.Saved.Count} saved)");
         var planes = Row(shell, OriginalShell.InventoryPlanesKey)!;
@@ -831,7 +841,7 @@ internal static class MenuHangarSuites
         ctx.Check(shell.Screen == OriginalScreen.HangarEngine && board.Lines.Any(l => l.Text == title) && board.Lines.Any(l => l.Text == figure),
             $"the engine tab draws the same note ({shell.Screen})");
         // The click leaves the focus on the tab bar; Up walks it onto the page's one dropdown.
-        for (int i = 0; i < 4 && shell.FocusedKey != OriginalShell.EngineDropKey; i++)
+        for (int i = 0; i < 8 && shell.FocusedKey != OriginalShell.EngineDropKey; i++)
         {
             Press(host, seat, Up);
         }

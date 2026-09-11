@@ -361,7 +361,17 @@ the hub hosts every tab script (`AIRFRAME.SCRIPT` to `PAINT.SCRIPT`) and the tot
 it, the note stands on every construction screen, beside `px_t_planecost` (`langui` 1036 `PLANE
 COST:  $%1!d!`) in the header. The two `OriginalScreenshots\Campaign CAP-40 Plane Construction
 *.png` captures show exactly that: the Engine and Armor tabs of a build, `$$$ on Hand` / `$21840`
-on the note and `PLANE COST: $9930` / `$9190` in the header.
+on the note and `PLANE COST: $9930` / `$9190` in the header. The title's authored box is only 25
+high, so those captures and the film alike show the note reading `$$$ on` over the figure with the
+rest of the line clipped.
+
+**The wallet-free doors carry the same note over a fixed $50000.** `gui_init` builds the figure as
+string 91 followed by `"$"` and the funds, and substitutes `50000` for `nPlayerCash` when
+`fIAConstruction` or `fMultiPlayerConstruction` is set, which is the `$$$ on $50000` the Instant
+Action stills show on every tab. String 91 is an empty entry carrying nothing but its font tag, so
+the figure reads as the number alone in the note's own handwriting face. Nothing on that path
+checks a price against the 50000: the only funds gate in the image is callback 2264 at the
+Purchase button, which the export door never reaches.
 
 **No dropdown row is marked in the original.** The tab scripts' fill callbacks (2200, 2218,
 2246, 2248, 2244) write names alone, and the only funds check anywhere on the path is callback
@@ -541,6 +551,51 @@ The four zones sum to the airframe's own armour rating base in ten of the eleven
 out of very nearly twice its base. `CSVM/src/Flight/HangarEconomy.cs` carries those sums as
 `StockArmourUnits`, which is all the rating needs; the guns and hardpoints of the same builds are
 in `CSVM/data/stock_loadouts.json`, where they agree with these rows slot for slot.
+
+### What Load Default Configuration loads
+
+`PLANECONSTRUCTION.SCRIPT`'s `gui_create` reads the name screen's checkbox (`mail(10008,
+@planename@OOA)`) and hands its state to callback **2212**, whose handler is at `0x0040aacc`
+(the widget dispatcher's table: byte `0x40f788 + (2212 - 2100)` is `0x28`, and the dword at
+`0x40f5b4 + 0x28*4` is that address). The handler does four things in order:
+
+1. It reads the build record's own airframe field at `0x0064cba4` (record `+0x2c`) and copies the
+   204-byte stock template at `0x00619f58 + airframe*204` over the whole record (`0x0040aaff` to
+   `0x0040ab2c`), preserving the typed name across the copy through the string helper at
+   `0x00a1fc84`.
+2. The paint block (thirteen dwords from `0x0064cbb8`) is saved and put back when `0x00647b94` is
+   set; otherwise the pattern's own colour and shade defaults are reloaded from `0x0061daf4` and
+   `0x0061db00`.
+3. Only then is the checkbox consulted, at `0x0040ab92`. **With the box clear** the template just
+   copied is stripped back to a bare airframe: engine `6`, the no-engine value (`0x0040abed`),
+   both hardpoint counts and all four armour zones zero, the four gun slots set to the empty gun
+   `5`, the ammunition dwords to `11` and `4`.
+4. The finished record is copied to `0x006480cc`, the "as opened" copy CANCEL and the
+   changed-since test read.
+
+**So the checkbox never picks an airframe.** It chooses between the stock extras and a bare
+airframe, and the airframe is whatever the record already carried. The only direct writer of
+`+0x2c` is the AIRFRAME tab's own callback 2216 (`0x0040d296`); everything else arrives as a whole
+record, and the one the surrounding screens use is callback **2014** (`0x00409518`, the copy at
+`0x00409567`), which loads a plane into the build record. `HANGAR.SCRIPT` calls it on every change
+of the inventory's plane dropdown, and the pilot-plane pick elsewhere makes a plane current the
+same way. The default configuration is therefore the **stock build of the plane that was current
+when the door was pressed**, which is why one take opened on a Balmoral from Instant Action and
+another on a Bloodhawk from the cabin. A fresh profile's record is zeroed, so its airframe is 0.
+
+The remake carries the rule as `HangarFeature.StartDefaultPlane(int airframe)` over the airframe
+the door names: Instant Action's Pilot Plane pick on that door, the seated profile's own aircraft
+on the cabin's, and `HangarFeature.DefaultAirframe` where no plane is current.
+
+### Export on the inventory writes nothing here
+
+`HANGAR.SCRIPT` creates `ha_b_exportp` and never deactivates it, so Export draws live beside Sell
+whatever the store holds. Pressing it runs `callback($$A$$, 22, -1)`, the screen-flow dispatcher's
+save-custom-plane commit, and then the one-button messagebox over the string callback 2105
+(`0x0040a0f7`) builds: `langui` 702 formatted with the plane's short airframe name, `langui`
+`3020 + airframe` read at `0x0040a123`. The original's export is what makes a campaign plane
+visible to Multiplayer and Instant Action, and both of the remake's presentations already pick out
+of one saved-plane store, so the remake answers with the same confirmation and writes nothing.
 
 ### The purchase gate and what a build costs
 

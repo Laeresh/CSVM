@@ -833,11 +833,11 @@ What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
-the cabin. It owns the plane picture over the four blueprint panes (the airframe's blueprint, else
-the picked pattern's masks tinted under its plate), the running total, the cash note with its mark
-on an unaffordable row, the tab bar off the layout's own edges, every dropdown's list, the two name
-boxes with their authored caret, and the airframe-switch ask. `PaneOrigin` centres a section's pane
-when its art is smaller than the board and places the section's rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+the cabin, the door also naming the airframe a default-configuration build opens on. It owns the
+plane picture over the blueprint panes, the running total, the cash note on both doors (the wallet
+with its mark on a row it cannot cover, else the export door's figure), the tab bar with the
+standing tab latched, every list under its box, the two name boxes with their authored caret, and
+the airframe-switch ask; `PaneOrigin` centres a small section pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

@@ -22,8 +22,8 @@ public sealed record OriginalHangarInks(
 /// opens the totals, CANCEL drops the scratch plane and SELL PLANES opens the inventory. Each tab's
 /// dropdowns bind to the feature's operations; a pick that changes the airframe raises the
 /// defaults ask as a dialog. Entered wallet-free from Instant Action's Build Custom Plane and over
-/// the wallet from the cabin's PLANE CONSTRUCTION. Remake-only until the tab bar is filmed: the
-/// export wording, the standing tab drawn disabled, the open list, keyboard and pad focus.
+/// the wallet from the cabin's PLANE CONSTRUCTION, the door also naming the airframe a
+/// default-configuration build opens on. Remake-only: the open list, keyboard and pad focus.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -81,7 +81,8 @@ public sealed partial class OriginalShell
     /// <summary>The inventory's Sell button.</summary>
     public const string InventorySellKey = "HA_B_SELLP";
 
-    /// <summary>The inventory's Export button, the campaign's verb, drawn disabled here.</summary>
+    /// <summary>The inventory's Export button, the campaign's verb. Live: the screen's script
+    /// never deactivates it, and the still shows it drawn like Sell beside it.</summary>
     public const string InventoryExportKey = "HA_B_EXPORTP";
 
     /// <summary>The inventory's Done button, back to the hub.</summary>
@@ -125,6 +126,9 @@ public sealed partial class OriginalShell
     // A dropdown's fallback item height where the layout row is missing.
     private const float FallbackHubItemHeight = 15f;
 
+    // The funds the wallet-free doors build against, the figure their own cash note shows.
+    private const int ExportFunds = 50000;
+
     // The defaults ask as a dialog over the page: a panel in the message box's own proportions.
     private const float AskX = 160f;
     private const float AskY = 200f;
@@ -151,6 +155,7 @@ public sealed partial class OriginalShell
     private OriginalScreen _hangarTab = OriginalScreen.HangarAirframe;
     private string _hangarName = string.Empty;
     private bool _hangarDefaults = true;
+    private int _hangarDefaultAirframe = HangarFeature.DefaultAirframe;
     private string? _hangarOpen;
     private int _hangarListTop;
     private int _inventoryIndex;
@@ -211,6 +216,7 @@ public sealed partial class OriginalShell
         // Over a wallet the build store is the campaign's own, so ownership and the file it names
         // cannot end up in two different directories when a suite or an aid seats a scratch store.
         _hangar.Open(wallet != null ? _campaign?.Planes ?? _planes : _planes, wallet);
+        _hangarDefaultAirframe = DoorAirframe();
         _hangarReturn = IsHangarScreen ? OriginalScreen.TopLevel : _screen;
         _hangarName = string.Empty;
         _hangarDefaults = true;
@@ -342,6 +348,9 @@ public sealed partial class OriginalShell
         int colon = key.IndexOf(':');
         return Indexed(colon > 0 ? key[..colon] : key, prefix);
     }
+
+    // A strip's depressed frame, the fourth of a four-state strip; a shorter strip has only one.
+    private static int DepressedFrame(int frames) => frames >= 4 ? 3 : 0;
 
     // The paper buttons whose authored label colours are the page's black, not the tabs' white.
     private static bool IsPaperButton(string key) =>
@@ -557,6 +566,21 @@ public sealed partial class OriginalShell
         Open(screen);
     }
 
+    // The airframe a default-configuration build opens on, which the door decides: the original
+    // loads the stock template of whatever airframe the build record already carries, and the
+    // screen the door stands on is what last wrote one there (docs/org/hangar.md, "What Load
+    // Default Configuration loads"). Instant Action's door means its Pilot Plane pick, the cabin's
+    // the seated pilot's own aircraft, and any other door has no current plane to inherit.
+    private int DoorAirframe()
+    {
+        if (_screen == OriginalScreen.InstantAction && _instantAction != null)
+        {
+            return _instantAction.PlayerPlaneIndex;
+        }
+
+        return _campaign?.Field.Plane(0)?.Airframe ?? HangarFeature.DefaultAirframe;
+    }
+
     // The name screen's OK: the typed name onto a bare or default-configuration build, then the
     // first tab. An empty box is refused at the press, which is PLANENAME.SCRIPT's own else arm:
     // langui 203 raised under a 0x1 mask, so the box wears the warning icon and one OK, and the
@@ -580,7 +604,7 @@ public sealed partial class OriginalShell
 
         if (_hangarDefaults)
         {
-            _hangar.StartDefaultPlane();
+            _hangar.StartDefaultPlane(_hangarDefaultAirframe);
         }
         else
         {
@@ -824,7 +848,9 @@ public sealed partial class OriginalShell
     }
 
     // The hub's rows in focus order: the page's dropdowns (or the totals page's Purchase Now),
-    // then the six tabs with the standing one disabled, then SELL PLANES, READY and CANCEL.
+    // then the six tabs, then SELL PLANES, READY and CANCEL. No tab is gated: the hub's script
+    // latches the standing one and never deactivates any of them, so all six stay hittable and the
+    // standing one is told apart by the frame it draws in.
     private void BuildHubRows(List<OriginalRow> rows)
     {
         var hub = _layout.Screen(PlaneConstructionSection);
@@ -856,7 +882,7 @@ public sealed partial class OriginalShell
 
         foreach (var tab in Tabs)
         {
-            AddStrip(hub, rows, tab.Key, OriginalRowKind.TextButton, tab.Screen != _screen, 0);
+            AddStrip(hub, rows, tab.Key, OriginalRowKind.TextButton, true, 0);
         }
 
         AddStrip(hub, rows, SellPlanesKey, OriginalRowKind.Button, true, 0);
@@ -907,7 +933,7 @@ public sealed partial class OriginalShell
         }
 
         AddStrip(screen, rows, InventorySellKey, OriginalRowKind.TextButton, _hangar.Saved.Count > 0, 0);
-        AddStrip(screen, rows, InventoryExportKey, OriginalRowKind.TextButton, false, 0);
+        AddStrip(screen, rows, InventoryExportKey, OriginalRowKind.TextButton, _hangar.Saved.Count > 0, 0);
         AddStrip(screen, rows, InventoryDoneKey, OriginalRowKind.Button, true, 0);
     }
 
@@ -1187,6 +1213,27 @@ public sealed partial class OriginalShell
             No());
     }
 
+    // Export answers with the screen's own confirmation (langui 702 over the plane's short
+    // airframe name) and writes nothing: the original's export copies the record into the store
+    // Multiplayer and Instant Action read, and both presentations here already pick from that one
+    // store, so the plane is offered to them the moment it is built.
+    private void ExportPicked()
+    {
+        if (_hangar == null || _inventoryIndex < 0 || _inventoryIndex >= _hangar.Saved.Count)
+        {
+            return;
+        }
+
+        string name = _hangar.AirframeShortName(_hangar.Saved[_inventoryIndex].Airframe);
+        string message = _hangar.Strings.Format(702, name);
+        if (message.Length == 0)
+        {
+            message = $"Your {name} has been exported and is now available for Multiplayer and Instant Action missions.";
+        }
+
+        RaiseDialog(Fill(message), DialogIcon.Warning, Ok());
+    }
+
     private MenuExit? ActivateHangar(OriginalRow row)
     {
         if (_hangar == null)
@@ -1263,6 +1310,9 @@ public sealed partial class OriginalShell
                 return null;
             case InventorySellKey:
                 AskToSell();
+                return null;
+            case InventoryExportKey:
+                ExportPicked();
                 return null;
             case InventoryDoneKey:
                 ShowHangarScreen(_hangarTab);
@@ -1401,16 +1451,16 @@ public sealed partial class OriginalShell
             lines.Add(new BoardLine(Fill(cost.Text ?? "PLANE COST:  $%1!d!", bill.Total.Cost), cost.Int("X"), cost.Int("Y"), 0f, HubLabelFont, BoardInk.Dialog));
         }
 
-        if (hangar.Wallet is { } wallet)
+        // The cash note's two authored rows, on every tab and the totals page and on both doors,
+        // the wallet-free build wearing the export door's own funds. The figure takes the problems
+        // ink once a funded build outruns it; wallet-free nothing is checked, so nothing is marked.
+        AddHangarText(hub, lines, "PX_T_CASHTITLE", HubTextFont, BoardInk.Row);
+        if (hub.Widget("PX_T_CASH") is { } cash)
         {
-            // The cash note's two authored rows, on every tab and the totals page alike; the figure
-            // takes the problems ink once the build outruns it, the mark's own colour.
-            AddHangarText(hub, lines, "PX_T_CASHTITLE", HubTextFont, BoardInk.Row);
-            if (hub.Widget("PX_T_CASH") is { } cash)
-            {
-                lines.Add(new BoardLine("$" + wallet.Funds.ToString(CultureInfo.InvariantCulture), cash.Int("X"), cash.Int("Y"),
-                    cash.Int("Width"), HubLabelFont, hangar.TotalUnaffordable() ? BoardInk.Heading : BoardInk.Row, -1, false, Justify(cash)));
-            }
+            int funds = hangar.Wallet?.Funds ?? ExportFunds;
+            bool overFunds = hangar.Wallet != null && hangar.TotalUnaffordable();
+            lines.Add(new BoardLine("$" + funds.ToString(CultureInfo.InvariantCulture), cash.Int("X"), cash.Int("Y"),
+                cash.Int("Width"), HubLabelFont, overFunds ? BoardInk.Heading : BoardInk.Row, -1, false, Justify(cash)));
         }
 
         if (hub.Widget("PX_T_AIRFRAME") is { } airframe)
@@ -1766,6 +1816,12 @@ public sealed partial class OriginalShell
                 return;
             case OriginalRowKind.Dropdown:
                 ComposeHangarDropdown(row, focused, pressed, index, fills, lines, pictures);
+                return;
+            case OriginalRowKind.TextButton when row.Art != null && TabOf(row.Key) == _screen:
+                // The standing tab is latched, not gated: it draws its depressed frame (the full
+                // pale tab, against the squat purple one the other five wear) in that frame's own
+                // ink, and stays hittable like any sibling.
+                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, DepressedFrame(row.Art.Frames), row.Label, BoardInk.LabelActivate));
                 return;
             case OriginalRowKind.TextButton when row.Art != null && IsPaperButton(row.Key):
                 int paperFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
