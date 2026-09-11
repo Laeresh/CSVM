@@ -1,4 +1,4 @@
-# Gun fire timing — how the original emits rounds, decoded from `crimson.exe`
+# Gun fire, decoded from `crimson.exe`: how the original emits rounds, and how it answers taking them
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
 `crimson.exe`, `language x86:LE:32:default`), 2026-08-18, settling the fire-rate half of backlog
@@ -118,3 +118,58 @@ the law's literal number **by construction**, not by a pipeline loss;
 kick. Whether the look should be ~3.5× stronger to match the original is the clip/fidelity
 judgment, not the decode. Full reconciliation:
 `analysis/gun-wobble-shake/FINDINGS.md`.
+
+## The incoming-fire cues
+
+Three `SOUND_GROUPS` entries answer being shot at: `bullet_warning_sg` (`snd_bulletpass1-3`),
+`bullet_hit_sg` (`snd_ricochet1-4`) and `window_hit_sg` (`snd_windowhit1-3`). `player.json` names
+only the first two, as `warning_shot_sound` and `bullet_hit_sound`; the loader resolves each to a
+play handle at `0x00474702` (`DAT_0071c488`) and `0x00474730` (`DAT_0071c48c`) inside the player
+globals reader `FUN_004735b0`, leaving the handle null when the key is absent.
+
+**Both are played flat, without a position.** The only read of either handle is in the damage
+routine `FUN_004b9bc0`, at `0x004b9ea9` and `0x004b9ec9`, and both go through
+`FUN_00593590(handle, 1.0)`, whose group arm `FUN_0059ab40` passes a null position and a null
+velocity down to `FUN_0059ab60`, which then clears the positional bit. So `snd_ricochet1-4`'s own
+`3D` + `RANGE [20, 200]` never reaches a distance model on this path. The member is a weighted
+random draw with the `DYNAMIC_WEIGHTS` recency scalar applied to the pick and the weights
+renormalised afterwards (`FUN_0059a440`), which is the draw every group share.
+
+**The dispatch gate is a CANNON round on the player's own vehicle.** `FUN_004b9bc0` tests the
+weapon's flag word for `0x40` at `0x004b9e7e` and the struck vehicle against the player global
+`DAT_0071c298`, and only inside that arm does either cue sound. Nothing on the vehicle-contact path
+plays them.
+
+⚠ **`window_hit_sg` is not view-gated.** It is authored in the five `bullet1`..`bullet5` defs of
+`cockpit_bulletholes.zrd` rather than in `player.json`, three or four `SOUND` events apiece across
+the def's ~0.91 s timeline, and those events sit in the def's SECOND sequence. The
+`IF PLAYER_1ST_PERSON` branch is in the FIRST sequence and chooses only the visual, the cockpit
+glass holes against the exterior `two_bulletholes_*` / `three_bulletholes_*` / `four_bulletholes`
+call. A build that silences the glass outside the cockpit is inventing a gate the data does not
+author.
+
+**Which interval opens a hole.** The per-vehicle tick `FUN_004b1340` is the `warning_shot_*` block's
+own: `+0x914` ages against `warning_shot_interval`, `+0x918` counts the CANNON hits taken since the
+last close (incremented at `0x004b9e83`), `+0x910` is the intensity against `warning_shot_max`, and
+`+0x91c` is a saturation flag. An interval that closes with a non-zero hit count calls
+`FUN_004b1210`, which walks the vehicle def's `bullethole_anims` vector at `def + 0x1b8`, each entry
+an 8-byte `{anim handle, used byte}` pair, and:
+
+| Step | Address | Rule |
+|---|---|---|
+| health gate | `0x004b1219`–`0x004b1292` | proceed only while `health/maxHealth` is **below** `unused/total` |
+| chance | `0x004b12ae` | proceed only while `rand()/32768` exceeds **0.7** |
+| pick | `0x004b12c5`–`0x004b12d4` | `ftol(rand()/32768 · (unused − 1))` indexes the unused entries |
+| play | `0x004b1317` | starts that `ON_CALL` def, then marks its entry used at `0x004b1328` |
+
+So a pristine airframe never opens a hole, each hole raises the bar for the next, and a hole opens
+once per sortie until the `reset_bulletholes` spawn anim clears the flags. ⚠ The span of the pick is
+the unused count **less one**, so the last unused entry is reachable only on a maximal draw; that is
+the shipped arithmetic, not a transcription slip.
+
+⚠ **The same routine carries an undecoded damage rule this page does not build on.** In
+`FUN_004b9bc0` the player arm zeroes the incoming damage pair and plays `bullet_warning_sg` instead
+of `bullet_hit_sg` while `+0x91c` is set and the global `*DAT_0064f750` reads zero. Read literally
+that makes the `warning_shot_*` accumulator a damage-absorbing shield on the player rather than a
+near-miss rating, and makes `bullet_warning_sg` a hit cue. What `*DAT_0064f750` selects is not
+decoded, so the reading is not yet safe to build on.

@@ -1216,6 +1216,168 @@ internal static class CombatSuites
         }
     }
 
+    // The two hit cues on real AI fire, staged the way the ai-gunnery suite stages a shooter: a
+    // skill-9 gunner from the high rear quarter, the target parked. The cues are counted off the
+    // `weapons` log, which carries the variant the group drew, so a count proves an archive read
+    // rather than a call. The whole point of running it twice is the view: the bullethole defs gate
+    // their VISUAL on PLAYER_1ST_PERSON and not their SOUND, so a chase-view count of zero would be
+    // this build inventing a gate the data does not author.
+    [Suite("incoming-fire-cues",
+        "the incoming-fire hit cues on real AI gunnery: a gun round landing on the player's own "
+        + "aeroplane rings bullet_hit_sg once per round from snd_ricochet1-4, the canopy cue "
+        + "window_hit_sg follows the decoded hole cadence (an interval that closed with a hit, "
+        + "below the closed-hole health share, on the shipped 0.3 draw), both sound in Chase and "
+        + "in Cockpit since the defs gate only the decal on PLAYER_1ST_PERSON, and neither a "
+        + "non-CANNON round nor a collision hit rings either")]
+    internal static void IncomingFireCues(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var stock = StockLoadouts.Load().All.Values.FirstOrDefault(d => d.Model == ctx.PlaneName);
+        ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
+        ctx.Check(stats.BulletHitSound == "bullet_hit_sg",
+            $"player.json binds bullet_hit_sound={stats.BulletHitSound}, the group the ricochet draws from");
+        if (stock == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        ProjectilePool? pool = null;
+        FlightController? target = null;
+        FlightController? ai = null;
+        try
+        {
+            var live = new ProjectilePool(textures, archive, soundDefs, soundGroups: soundGroups);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var targetPos = new Vector3(0f, 500f, 0f);
+            var aiPos = targetPos + new Vector3(0f, 150f, 150f); // the high rear quarter
+            var gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260911 })
+            {
+                DeadEyeAngleDeg = skills.DeadEyeAngleDeg(9),
+                QuickDrawAngleDeg = skills.QuickDrawAngleDeg(9),
+            };
+            var pilot = AiPilot.HoldingCourse(aiPos, targetPos);
+            pilot.Gunner = gunner;
+            ai = BuildParkedRig(ctx, planesGamez, textures, stats, FlightRoster.ShooterIdBase,
+                aiPos, targetPos, live, stock, weapons, pilot);
+            ai.InfiniteAmmo = true;
+
+            target = BuildParkedRig(ctx, planesGamez, textures, stats, 0,
+                targetPos, targetPos + Vector3.Forward, live, stock, weapons, null);
+            var audio = new FlightAudio();
+            audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
+            target.Audio = audio;
+            target.AddChild(audio);
+            gunner.AutoTarget = true;
+            gunner.Target = target;
+
+            var gun = ai.Loadout!.FirableGuns.First();
+            float armorDmg = gun.Weapon.ArmorDamage ?? 0f;
+            ctx.Check(armorDmg > 0f && Mathf.IsEqualApprox(armorDmg, gun.Weapon.HealthDamage ?? -1f),
+                $"the stock gun's two damage magnitudes are equal ({gun.Weapon.Id}, {armorDmg:0.#}) — the landed-round count's precondition");
+            float Combined() => target!.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+
+            var hits = new List<string>();
+            bool wasDebug = Log.ConsoleShows("weapons", Log.Level.Debug);
+            var report = new List<string>();
+            try
+            {
+                Log.Configure("weapons:debug");
+                using var sink = Log.PushConsoleSink(line =>
+                {
+                    if (line.Contains("bullet hit P1") || line.Contains("canopy hole P1"))
+                        hits.Add(line);
+                });
+
+                foreach (var view in new[] { PilotViewMode.Chase, PilotViewMode.Cockpit })
+                {
+                    target.PinnedViewMode = view;
+                    target.Respawn();
+                    target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+                    live.Clear();
+                    hits.Clear();
+
+                    // The volley: real rounds from a real gunner, called off at a dozen landed so
+                    // the aeroplane survives the phase below (this staging kills it at 36). Landed
+                    // rounds come off the ledger; the `shot hit` log caps itself at six a sortie.
+                    float before = Combined();
+                    for (int i = 0; i < 900 && !target.Crashed && hits.Count < 12; i++)
+                    {
+                        ai.SimStep(1f / 60f);
+                        live.SimStep(1f / 60f);
+                        target.SimStep(1f / 60f);
+                    }
+
+                    live.Clear(); // no straggler lands on the phase below
+
+                    int landed = (int)Mathf.Round((before - Combined()) / armorDmg);
+                    var rung = hits.Where(l => l.Contains("bullet hit P1")).ToList();
+                    string name = PilotView.Name(view);
+                    ctx.Check(landed > 0, $"{name}: the AI gunner landed real rounds on the player rounds={landed}");
+                    ctx.Same(landed, rung.Count, $"{name}: every landed gun round rang the ricochet");
+                    ctx.Check(rung.Count > 0 && rung.All(l => l.Contains("snd=snd_ricochet")),
+                        $"{name}: every draw came from bullet_hit_sg's own members first={rung.FirstOrDefault() ?? "-"}");
+
+                    // The canopy cadence needs INTERVALS, which a volley that kills the aeroplane
+                    // does not supply. So the pool's own projectile-hit call is fed one round per
+                    // interval with the damage share zeroed, leaving health where the volley put it.
+                    hits.Clear();
+                    for (int i = 0; i < 40 && !hits.Any(l => l.Contains("canopy hole")); i++)
+                    {
+                        target.TakeProjectileHit(gun.Weapon, target.GlobalPosition, "fuselage",
+                            ai.PlayerIndex, damageScale: 0f);
+                        for (int f = 0; f < 60; f++)
+                            target.SimStep(1f / 60f);
+                    }
+
+                    var glass = hits.Where(l => l.Contains("canopy hole P1")).ToList();
+                    ctx.Check(glass.Count == 1 && glass[0].Contains("snd=snd_windowhit"),
+                        $"{name}: the canopy cue opened a hole and drew from window_hit_sg line={glass.FirstOrDefault() ?? "-"}");
+                    report.Add($"{name}: {landed} rounds landed, {rung.Count} ricochets, {glass.Count} canopy hole(s)");
+                }
+
+                // The two negatives, on the same rig: an ordnance round through the same
+                // projectile-hit call rings nothing, and neither does a contact.
+                hits.Clear();
+                var rocket = weapons.All.First(w => w.IsRocket && !w.IsCannon);
+                target.TakeProjectileHit(rocket, target.GlobalPosition, "fuselage", ai.PlayerIndex);
+                ctx.Same(0, hits.Count(l => l.Contains("bullet hit P1")),
+                    $"a {rocket.Id} round rings neither cue: the original's gate is the CANNON flag");
+                hits.Clear();
+                target.TakeCollisionHit(5f, 5f, target.GlobalPosition, ai.PlayerIndex);
+                ctx.Same(0, hits.Count(l => l.Contains("bullet hit P1")),
+                    $"a contact rings nothing either — a scrape is not being shot at");
+            }
+            finally
+            {
+                Log.Configure(wasDebug ? "weapons:debug" : "weapons:info");
+            }
+            foreach (string line in report)
+            {
+                ctx.Note($"{line}");
+            }
+        }
+        finally
+        {
+            ai?.Free();
+            target?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The decoded graze restitution on real contacts: a shallow dive onto a floor and a shallow scrape
     // along a vertical wall, flown by a real rig through the real collision sweep. Two things need a
     // live contact and cannot be read off FlightModel (whose arithmetic BounceRestitutionTests pins):
@@ -2389,5 +2551,34 @@ internal static class CombatSuites
         }
     }
 
-
+    // A parked, stock-armed rig with its own airframe, collider and damage ledger. ⚠ The loadout
+    // and the pilot go on BEFORE Setup: Setup respawns, and a respawn is what fills the magazines,
+    // so a loadout bound afterwards leaves the guns dry. The camera is deliberately null, so
+    // ViewMode reads PinnedViewMode and a suite can choose the view outright.
+    private static FlightController BuildParkedRig(TestContext ctx, GameZ planesGamez,
+        TextureArchive textures, PlaneStats stats, int playerIndex, Vector3 pos, Vector3 lookAt,
+        ProjectilePool pool, LoadoutDef stock, WeaponDefs weapons, AiPilot? pilot)
+    {
+        var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+        var rig = new FlightController
+        {
+            PlaneModel = model,
+            Collider = PlaneCollider.Build(model),
+            Damage = new PlaneDamage(stats.DestroyableParts),
+            PlayerIndex = playerIndex,
+            IsHumanPiloted = pilot == null,
+            Pilot = pilot,
+            Projectiles = pool,
+            UseKeyboard = false,
+            PadDevices = System.Array.Empty<int>(),
+            AllowPause = false,
+        };
+        rig.AddChild(model);
+        rig.Loadout = Loadout.Bind(stock, model, weapons);
+        rig.Setup(new FlightModel(stats), null, new CamParams(), pos, lookAt);
+        ctx.Host.AddChild(rig);
+        rig.Held = true;
+        rig.PlaceHeld(pos, lookAt);
+        return rig;
+    }
 }

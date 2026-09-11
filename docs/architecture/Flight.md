@@ -305,6 +305,16 @@ and the cue re-triggers no faster than the interval; the pass radius is a tune e
 declaration. `ProjectilePool.NearMissTargets` is the registry whose aircraft each round's actual
 travelled segment is measured against, its own shooter excluded. Read `Projectile.cs` next.
 
+## src/Flight/CanopyHoleCue.cs
+The decoded cadence behind the canopy-glass cue, engine-free like `WarningShotCue` beside it. Gun
+rounds landing on the pilot's own aeroplane are counted over the shipped `warning_shot_interval`,
+and an interval that closed with at least one hit opens one of the five `bullethole_anims` holes
+when the airframe's health fraction is under the closed-hole share and the shipped 0.3 draw comes
+up. A hole opens once per sortie, and `Reset` is what the `reset_bulletholes` spawn anim does to the
+ledger. `WindowHitSound` is the group the opened hole's def sounds; the decal itself is not drawn,
+so `FlightController.TickCanopyHoles` renders the cue alone.
+Decode: [../org/weaponFire.md](../org/weaponFire.md). Read `FlightAudio.cs` for what it plays.
+
 ## src/Flight/AiNetFollower.cs
 Walks an `AiNet` patrol graph as a waypoint stream, aircraft-agnostic on purpose: positions in and a
 target node out, with `AiPilot.Patrol` and `ZeppelinMotion` its two consumers. Given the vehicle's
@@ -697,12 +707,12 @@ Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather
 ## src/Flight/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
 one-shots a crash, a ground or water explosion, a survivable graze and an engine stop fire, each
-drawing the sound the chosen crash or touchdown definition itself authors rather than a fixed
-name. `OnWarningShot` draws a near-miss variant from the group player.json names; the rate limits
-live on `FlightController`, not here. The engine is one voice on one slot whose pitch, gain and
-definition all come from `EngineAudioCurves`, and the gun loop and dry cue from `WeaponAudioCues`;
-`MixGain` is the only own-ship scale left, for splitscreen. `AiEngineAudio` and `AiWeaponAudio` are
-the positional pair an AI aircraft carries instead of this.
+drawing the sound the chosen crash or touchdown definition itself authors rather than a fixed name.
+The three incoming-fire cues are group draws, flat as the original plays them: `OnWarningShot`,
+`OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine is one voice on one
+slot whose pitch, gain and definition all come from `EngineAudioCurves`, and the gun loop and dry
+cue from `WeaponAudioCues`; `MixGain` is the only own-ship scale left, for splitscreen.
+`AiEngineAudio` and `AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
 
 ## src/Flight/EngineAudioCurves.cs
 The engine-audio slot maths both audio paths read: whether an airframe counts as damaged, which

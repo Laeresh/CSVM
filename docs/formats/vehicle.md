@@ -38,7 +38,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `injure_anims` | def-level damage thresholds (below) |
 | `destroyable_parts` | the damage model (below) |
 | `collision` | 6 collision probe points (below) |
-| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed — [Weapons, damage & AI keys](#weapons-damage-and-ai-keys) below |
+| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` and the count of `bullethole_anims` consumed — [Weapons, damage & AI keys](#weapons-damage-and-ai-keys) below |
 
 ## Units, dynamics, and engines
 
@@ -551,7 +551,11 @@ leaves, so the angle an AI will actually fire across is wider than the band
 the reading — an NPC's Dead Eye statistic sets the radius of a lead sphere it will shoot into.
 
 **`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
-`bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).
+`bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)). The engine holds them as a
+vector of `{anim handle, used}` pairs at `def + 0x1b8` and opens at most one per
+`warning_shot_interval` that closed with a gun hit, which is also what sounds `window_hit_sg`:
+[org/weaponFire.md](../org/weaponFire.md), "The incoming-fire cues". The remake runs that cadence
+for the cue; the decals themselves are not drawn yet.
 
 **`mass`** parses to the def at `+0x9c`, and the parser stores its reciprocal beside it at `+0xa0`
 (`0x0047afae`), which is the form every consumer reads. Three defs author it: `basic_airplane` at

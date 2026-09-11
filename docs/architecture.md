@@ -158,6 +158,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: every ordnance round runs its own def on the sequence interpreter.
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) and the swept-segment/point distance; unit-testable alone.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig, a phantom shooter on each player's six, so the cue is reachable without an AI gunner.
+- `src/Flight/CanopyHoleCue.cs` — the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json`: target key to its objective display keys, plus the marker flags a mission starts with.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.

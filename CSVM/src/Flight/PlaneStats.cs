@@ -259,6 +259,11 @@ public sealed class PlaneStats
     public float WarningShotInterval = 1f;      // s between cues
     public string WarningShotSound = "bullet_warning_sg";
 
+    // The ricochet a gun round striking your own airframe rings (bullet_hit_sound → bullet_hit_sg →
+    // snd_ricochet1-4). A SOUND_GROUPS name like the one above, and the fallback is the shipped
+    // value, since the original leaves the slot null with the key absent and then plays nothing.
+    public string BulletHitSound = "bullet_hit_sg";
+
     // The gun aim assist (sticky_bullet_*, docs/org/aim-assist.md) — CatchupRate/ForgetInterval
     // feed B2's per-frame slot update, DistFactor B4's candidate scoring, Inaccuracy B5's launch
     // scatter. Fallbacks are the executable's own compiled defaults, not the shipped player.json
@@ -821,6 +826,7 @@ public sealed class PlaneStats
             stats.WarningShotDissipation = player.Float("warning_shot_dissipation", stats.WarningShotDissipation);
             stats.WarningShotInterval = player.Float("warning_shot_interval", stats.WarningShotInterval);
             stats.WarningShotSound = player.Str("warning_shot_sound") ?? stats.WarningShotSound;
+            stats.BulletHitSound = player.Str("bullet_hit_sound") ?? stats.BulletHitSound;
             stats.StickyBulletCatchupRate = player.Float("sticky_bullet_catchup_rate", stats.StickyBulletCatchupRate);
             stats.StickyBulletForgetInterval = player.Float("sticky_bullet_forget_interval", stats.StickyBulletForgetInterval);
             stats.StickyBulletDistFactor = player.Float("sticky_bullet_dist_factor", stats.StickyBulletDistFactor);

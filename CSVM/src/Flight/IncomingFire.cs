@@ -13,8 +13,8 @@ namespace CSVM.Flight;
 /// no player holds, so the rounds are real. The muzzle sits <see cref="Standoff"/> behind the
 /// aircraft, aimed along the target's own nose, so the round overtakes on a parallel track.
 /// ⚠ Never aim this rig at the plane: an aircraft IS a projectile target (<see
-/// cref="AircraftBody"/>). Hit feedback comes from a real shooter — another pilot, or an AI
-/// gunner (<c>BL-226</c>).
+/// cref="AircraftBody"/>). The hit cues are a real shooter's business, another pilot or an AI
+/// gunner, and reach the airframe through <see cref="FlightController.TakeProjectileHit"/>.
 /// </summary>
 public sealed partial class IncomingFire : Node
 {

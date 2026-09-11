@@ -497,6 +497,8 @@ public partial class FlightController : Node3D
     private float _sinceUnderMapReport;          // s since the under-map backstop last reported
     private int _underMapResets;                 // its running count, which is how a loop reads
     private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator
+    private CanopyHoleCue? _canopyHoles;         // the canopy-glass cue's decoded cadence
+    private System.Random? _canopyRng;           // built on the first round that lands, not at Setup
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
     // s until auto-rematch on a finished race (scripted hold runs only). Not the lifecycle's
     // respawn timer: this one belongs to a results board, which no aircraft state reaches.
@@ -914,6 +916,7 @@ public partial class FlightController : Node3D
         _spawnSpeed = spawnSpeed;
         _warningShots = new WarningShotCue(model.Stats.WarningShotMax,
             model.Stats.WarningShotDissipation, model.Stats.WarningShotInterval);
+        _canopyHoles = new CanopyHoleCue(model.Stats.WarningShotInterval);
         Respawn();
     }
 
@@ -1061,6 +1064,7 @@ public partial class FlightController : Node3D
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         Surfaces?.Reset();   // control surfaces back to neutral
         Damage?.Reset();     // every part back to full HP
+        _canopyHoles?.Reset(); // pristine glass, which is what reset_bulletholes does at spawn
         _pilotHud.Reset();   // damage-dial blink timers cleared, no impact line pending
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
         RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
@@ -1460,6 +1464,11 @@ public partial class FlightController : Node3D
         {
             Targeting.RecordAttacker(attacker);
         }
+        // The incoming-fire cues, gated as the original gates them: a CANNON round (0x004b9e7e) on
+        // the pilot's own aeroplane. ⚠ Never dispatch these from the contact path, where a scrape
+        // is "I hit something" rather than "I was shot" and would make both readings wrong.
+        if (weapon.IsCannon && IsHumanPiloted)
+            OnCannonHit();
         // Runs even with no damage data, so a plane nothing tracks HP for still visibly takes fire.
         if (weapon.Caliber is { } shakeCal)
             Shake?.BulletHit(shakeCal);
@@ -1605,6 +1614,7 @@ public partial class FlightController : Node3D
         // The near-miss accumulator drains on the sim clock like everything else here; the pool
         // registers passes into it earlier in the same SessionSimulation step.
         _warningShots?.Tick(dt);
+        TickCanopyHoles(dt);
 
         // Race players finish STAGGERED by index, exercising the real one-finishes-while-others-fly
         // path instead of four identical totals landing on frame one.
@@ -3650,6 +3660,32 @@ public partial class FlightController : Node3D
         // The breadcrumb the cue otherwise leaves only in the speakers: which pilot, how close, and
         // which of the three pass samples drew — an at-the-controls report is judgeable from it.
         Log.Info("weapons", $"near miss P{PlayerIndex + 1} at {distance:0.0} m intensity={_warningShots.Intensity:0.00} snd={variant ?? "none"}");
+    }
+
+    // One gun round landed on this pilot. The ricochet rings on every one of them, and the round
+    // also counts toward the canopy cue's interval. The draw stream is built here rather than at
+    // Setup so a pilot nobody shoots at consumes none of it.
+    private void OnCannonHit()
+    {
+        _canopyRng ??= Rng.NewSystemRandom(Rng.Weapons);
+        _canopyHoles?.Register();
+        if (Audio?.OnBulletHit() is { } variant)
+            Log.Info("weapons", $"bullet hit P{PlayerIndex + 1} snd={variant}");
+    }
+
+    // The canopy-glass cue. An interval that closed with at least one gun hit may open one of the
+    // five hole defs, and the glass sound is what that def sounds; the decal itself is not drawn
+    // yet, so this is the cue alone. The health fraction is the whole-vehicle pool, as decoded.
+    private void TickCanopyHoles(float dt)
+    {
+        if (_canopyHoles == null || _canopyRng == null || Damage == null || Crashed)
+            return;
+        if (_canopyHoles.Tick(dt, Damage.SummaryHealthFraction, _canopyRng) is not { } hole)
+            return;
+        string? variant = Audio?.OnWindowHit();
+        // The breadcrumb the cue otherwise leaves only in the speakers: which pilot, which hole of
+        // the five, and which of the three glass samples drew.
+        Log.Info("weapons", $"canopy hole P{PlayerIndex + 1} bullet{hole} closed={_canopyHoles.ClosedCount} snd={variant ?? "none"}");
     }
 
     // The survivable scrape's authored per-surface reaction, selected exactly as

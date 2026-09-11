@@ -64,13 +64,13 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _emptyClip;
     private float _emptyClipVol = 1f;
 
-    // The near-miss cue: warning_shot_sound names a SOUND_GROUPS entry
-    // (bullet_warning_sg → snd_bulletpass1-3), so the variant is picked per pass through the
-    // group's own weighted-recency draw rather than fixed at Setup. One player, restreamed —
-    // two passes closer together than the wav is long is exactly what the interval prevents.
-    private SoundGroup? _warningShotGroup;
-    private AudioStreamPlayer? _warningShot;
-    private System.Random? _warningShotRng;
+    // The three incoming-fire cues, each a SOUND_GROUPS name rather than a plain definition, so the
+    // variant is drawn per play through the group's own weighted recency rather than fixed at
+    // Setup. One player each, restreamed. All flat: the original hands none of the three a position
+    // (docs/org/weaponFire.md), whatever the members' own 3D flags say.
+    private SoundGroup? _warningShotGroup, _bulletHitGroup, _windowHitGroup;
+    private AudioStreamPlayer? _warningShot, _bulletHit, _windowHit;
+    private System.Random? _cueRng;
 
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats,
         WeaponDefs? weapons, IReadOnlyDictionary<string, SoundGroup>? groups = null)
@@ -134,19 +134,13 @@ public partial class FlightAudio : Node
         _grazeGround = MakeOneShot(archive, defs, "snd_exp_ground_b", out _grazeGroundVol);
         _grazeWater = MakeOneShot(archive, defs, "snd_exp_water_b", out _grazeWaterVol);
 
-        // The near-miss cue's group (player.json warning_shot_sound), own-ship and non-positional
-        // so splitscreen only the nearly-hit pilot hears it.
-        if (groups != null && groups.TryGetValue(stats.WarningShotSound, out var warningGroup))
-        {
-            _warningShotGroup = warningGroup;
-            _warningShotRng = Rng.NewSystemRandom(Rng.Weapons);
-            _warningShot = new AudioStreamPlayer { Bus = AudioBuses.Effects };
-            AddChild(_warningShot);
-        }
-        else
-        {
-            GD.PushWarning($"sound group not found in sounds.json: {stats.WarningShotSound}");
-        }
+        // The incoming-fire set, own-ship and non-positional so in splitscreen only the pilot being
+        // shot at hears it: the near miss (player.json warning_shot_sound), the airframe ricochet
+        // (player.json bullet_hit_sound) and the canopy glass (named by the hole defs themselves).
+        _cueRng = Rng.NewSystemRandom(Rng.Weapons);
+        _warningShot = MakeGroupCue(groups, stats.WarningShotSound, out _warningShotGroup);
+        _bulletHit = MakeGroupCue(groups, stats.BulletHitSound, out _bulletHitGroup);
+        _windowHit = MakeGroupCue(groups, CanopyHoleCue.WindowHitSound, out _windowHitGroup);
     }
 
     /// <summary>Start (or keep playing) the gun firing loop for the given <c>LOOPED_SOUND_NAME</c>.
@@ -314,20 +308,16 @@ public partial class FlightAudio : Node
     /// <summary>A round passed close enough to hear: one draw from the warning-shot group,
     /// already rate-limited by <see cref="WarningShotCue"/> in FlightController — same split as
     /// <see cref="OnGraze"/>. Returns the variant that played, or null when the cue is unbuilt.</summary>
-    public string? OnWarningShot()
-    {
-        if (_warningShot == null || _warningShotGroup == null || _archive == null || _defs == null)
-            return null;
-        string? name = _warningShotGroup.Pick(_warningShotRng!);
-        if (name == null || !_defs.TryGetValue(name, out var def))
-            return null;
-        var stream = _archive.Find(def.WavName, looped: false);
-        if (stream == null)
-            return null;
-        _warningShot.Stream = stream;
-        PlayOneShot(_warningShot, def.Volume * MixGain);
-        return name;
-    }
+    public string? OnWarningShot() => PlayGroupCue(_warningShot, _warningShotGroup);
+
+    /// <summary>A gun round struck this airframe: one draw from <c>bullet_hit_sound</c>. Every
+    /// qualifying round rings it, as the original's does — the rate limit belongs to the canopy
+    /// cue, not to this one. Dispatched from the projectile-hit path, never from a contact.</summary>
+    public string? OnBulletHit() => PlayGroupCue(_bulletHit, _bulletHitGroup);
+
+    /// <summary>A canopy hole opened: one draw from <c>window_hit_sg</c>. The cadence is
+    /// <see cref="CanopyHoleCue"/>'s, and the caller has already decided.</summary>
+    public string? OnWindowHit() => PlayGroupCue(_windowHit, _windowHitGroup);
 
     /// <summary>Engine wind-down: plays snd_propstop and kills the loops. Layers over the crash
     /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it — FlightController
@@ -385,6 +375,40 @@ public partial class FlightAudio : Node
         }
         baseVolume = def.Volume;
         return archive.Find(def.WavName, def.Looped);
+    }
+
+    // One SOUND_GROUPS cue on a player of its own. The group is kept rather than a stream, since
+    // the member is drawn per play; an unresolved name warns here and leaves the cue silent.
+    private AudioStreamPlayer? MakeGroupCue(IReadOnlyDictionary<string, SoundGroup>? groups,
+        string name, out SoundGroup? group)
+    {
+        group = null;
+        if (groups == null || !groups.TryGetValue(name, out var found))
+        {
+            GD.PushWarning($"sound group not found in sounds.json: {name}");
+            return null;
+        }
+        group = found;
+        var player = new AudioStreamPlayer { Bus = AudioBuses.Effects };
+        AddChild(player);
+        return player;
+    }
+
+    // One draw from a group cue, restreamed onto that cue's own player. Null when the cue is
+    // unbuilt or the draw names a definition the archive has no WAV for.
+    private string? PlayGroupCue(AudioStreamPlayer? player, SoundGroup? group)
+    {
+        if (player == null || group == null || _archive == null || _defs == null)
+            return null;
+        string? name = group.Pick(_cueRng!);
+        if (name == null || !_defs.TryGetValue(name, out var def))
+            return null;
+        var stream = _archive.Find(def.WavName, looped: false);
+        if (stream == null)
+            return null;
+        player.Stream = stream;
+        PlayOneShot(player, def.Volume * MixGain);
+        return name;
     }
 
     /// <summary>Points the engine slot at <c>damaged_engine_sound</c>, <c>cockpit_engine_sound</c>

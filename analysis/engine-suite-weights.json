@@ -21,6 +21,7 @@
     "aim-assist": 0.030,
     "loadout-forrig": 2.127,
     "warning-shot": 0.009,
+    "incoming-fire-cues": 0.520,
     "blast-neighbor-shape": 0.023,
     "blast-curve-cover-cap": 0.029,
     "launch-velocity-decay": 0.017,

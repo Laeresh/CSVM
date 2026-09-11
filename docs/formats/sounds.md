@@ -91,6 +91,10 @@ A sibling of `SETS`: the weighted random sound groups a one-shot `SOUND` animati
 through when it names a group instead of a plain `snd_*` definition. The combat/destruction
 one-shots go through these — `air_mixed_exp_sg`, `ground_mixed_exp_sg`, `plane_destroy_sg`,
 `bullet_hit_sg`, `bullet_warning_sg`, `window_hit_sg`. Parsed by `SoundDefs.LoadGroups`.
+⚠ The last three are the incoming-fire set, and two of them are named in `player.json` rather than
+by a `SOUND` event: which one plays on a hit, that all of them play flat despite `snd_ricochet1-4`
+carrying `3D`, and which interval opens a canopy hole are in
+[weaponFire.md](../org/weaponFire.md), "The incoming-fire cues".
 
 Entry shapes (all start with the group name):
 
