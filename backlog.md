@@ -2491,6 +2491,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-812`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
   `CSVM/src/UI/CampaignBriefingPage.cs` (the map and pin drawer to share).
 
+- `BL-821` `[Feature]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **The original's
+  pause screen is not built: a campaign pause shows CSVM's own board with the objectives readout
+  in a corner, where the original draws the mission map with its flags, the objectives parchment,
+  the profile's memento and four parchment buttons.** *Evidence:* the four
+  `OriginalScreenshots/CAP-45 Mission Pause with objective*.png` stills (C3/M01): the whole
+  screen is the mission's chart with a red numbered flag per objective point ("?" until revealed),
+  a compass rose, the objectives parchment upper right with the red check over each completed
+  number, the memento photograph lower right, and RESUME, RESTART, PREFERENCES and QUIT on
+  `escape_button1/2/3` strips. The layout is data: `extracted/zrdr/escape.zrd.json` carries the
+  `OBJECTIVESLIST` primitive (shared with the loading dialog), `OWNSHIP` and `MYZEP` map icons,
+  and the `BUTTONS` block with each button's position, three bitmaps and `BtnEscape*` fonts, and
+  `docs/formats/objectives.md` already decodes the list and the check. Ours pauses on
+  `PauseBoard` (`CSVM/src/Flight/PauseBoard.cs`) in both presentations and draws the objectives
+  through `ObjectivesHud` at a corner of its own; the readout's check now matches the original's
+  mark, but nothing else of the screen does. *Fix shape:* an Original-presentation pause screen
+  composed from `escape.zrd` the way the load and briefing screens are composed from their
+  dialogs: the map and pins through `BriefingReveal`'s element model, the parchment through the
+  shared `OBJECTIVESLIST` reader, the memento from the profile, the four buttons as a board; the
+  Built-in presentation keeps its own board. *⚠ Traps:* which flags read "?" and which read their
+  number is a reveal rule the stills show but do not explain (every "?" stayed "?" across rows 1
+  to 3 completing, while one flag reads "4"), so decode the flag state before drawing one; the
+  map sheet and pin set are per mission and are the same data `BL-814`'s load screen needs, so
+  build the drawer once. Instant Action pauses are unfilmed. *Cross-refs:* `BL-814` (the same
+  map and parchment on the load screen), `BL-802`'s closing commit (the check), `CAP-45`,
+  `docs/formats/objectives.md`, `docs/org/menu-inventory.md`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
