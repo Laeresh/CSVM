@@ -73,7 +73,8 @@ their definitions turn `OBJECTIVESLIST` off explicitly.
 
 `Loading.zrd` defines 81 dialogs. Grouping the 28 `loading_i*` bodies by content yields five
 distinct definitions, and they differ only by the mission-type letter: the environment digit selects
-nothing (`loading_i6a` is the one exception, and differs from its siblings outside the script block).
+nothing. `loading_i6a` is the one exception, and its whole difference is one number, its `HEAD2`
+at x 325 where the other six `a` dialogs put it at 365.
 Every Instant Action dialog carries the same three photographs at the same positions, `MP-shotdown`
 at `197,157`, `MP-crash` at `197,307` and `mp-dangerzone2` at `197,457`, each centred. The pictures
 are authored artwork, not a runtime choice and not a capture of the player's own flying.
@@ -96,6 +97,25 @@ What the Instant Action letter does select is the text:
 
 Each family supplies `HEAD1` (always "INSTANT ACTION"), `HEAD2` (the heading above), and `OBJ1` and
 `OBJ2`, the blurb and the win condition.
+
+Where each of the four goes is the dialog's own script, and every family places them the same way.
+The widget names in the script are `HEAD1`, `HEAD2`, `OBJ5` and `OBJ6`; the strings they bind are
+the family's `HEAD1`, `HEAD2`, `OBJ1` and `OBJ2`:
+
+| Widget | At | Font | Wrap |
+|---|---|---|---|
+| `HEAD1` | 70, 35 | `loadListTitle` | none |
+| `HEAD2` | 325, 35 (365 in the `a` family bar `loading_i6a`) | `loadListTitle`, and the empty default face in the `s` family | 400 by 250 |
+| `OBJ5` | 360, 135 | `loadListbody` | 400 by 350 |
+| `OBJ6` | 360, 215 | `loadListbody` | none |
+
+The empty font is the dialog's own default face, and the stunt screen is the only place on this
+board that takes it. `OriginalScreenshots/Instant Action Loading Screen STUNT FLYING.png` shows it
+as a bold letterspaced slab beside `HEAD1`'s light sans; `OriginalScreenshots/IA LoadScreen.png`
+shows the `d` family's `HEAD2` in `HEAD1`'s own face, which is what its `loadListTitle` says.
+Measured off that second shot, whose client area is the authored 800x600 unscaled: `loadListTitle`
+sets a 12-pixel cap height on a baseline at y 52, and `loadListbody` a baseline at y 147 with its
+wrapped lines 13 pixels apart.
 
 Instant Action and multiplayer screens use the `loadframempt2` and `loadframempt` backgrounds
 respectively, both 800x600, with the bar at `564,546` drawing `prog_red` over `prog_blk`. An
@@ -156,12 +176,26 @@ the load straight through on one thread and yields a rate-limited repaint from i
 
 ## Where CSVM differs
 
-`UI/LoadBoard.cs` draws the composition above at its authored coordinates, through the campaign
-boards' own surface (`docs/org/campaign-board.md`): the chart sheet for a campaign launch, the
-blackboard with its three centred photographs for everything else. Free flight and dogfight are
-ours rather than the original's and take the non-campaign screen; the multiplayer family has no
-caller here. The two text lines are placed by us, since the coordinates for `HEAD1`/`HEAD2`/`OBJ1`/
-`OBJ2` live in `Loading.zrd.json` and not in this decode.
+`UI/LoadScreens.cs` composes the screen above at its authored coordinates and `UI/LoadBoard.cs`
+hangs it over the build, through the campaign boards' own surface (`docs/org/campaign-board.md`):
+the chart sheet for a campaign launch, the blackboard with its three centred photographs for
+everything else. An Instant Action launch reads `loading_i1<letter>` and writes its four texts at
+the positions and wrap widths in the table above; the environment digit is not plumbed, since it
+selects nothing bar the `loading_i6a` heading. The multiplayer family has no caller here, and the
+campaign sheet's own content is a separate decode, so that screen still writes two lines of ours.
+
+**The three authored faces meet two of ours.** The extraction ships no menu typeface, so a board
+writes in the one the engine has: `loadListTitle` becomes that face at 17 pixels, which puts its
+baseline on the authored 52, and `loadListbody` the same face at 13. The empty default face differs
+from `loadListTitle` by weight rather than by size, and one typeface cannot carry two weights, so it
+is drawn emboldened at `loadListTitle`'s size. Our face also leads wider than the original's, which
+runs a three-line blurb through the chalk rule under it, so the body widget carries the authored
+13-pixel pitch and the renderer wraps to it rather than to the face's own metrics. Where the words
+break is still ours: a wider face takes a wider line.
+
+**Free flight and dogfight are ours rather than the original's**, and no shipped dialog describes
+either. Both take the mode's own name at `HEAD1`'s authored place and write nothing else, since the
+nearest dialog, the `d` family's, would state a win condition neither mode has.
 
 **What is drawn from the bar and the propeller is their still art alone.** The unlit strip
 (`prog_blkload`, `prog_blk`) is drawn at its authored position and nothing ever fills it; the

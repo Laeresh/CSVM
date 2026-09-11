@@ -1071,17 +1071,22 @@ public partial class Launcher : Node3D
         // score stops. What plays next is the mission's own business: a campaign mission cues
         // prebattle from its objectives graph, and Instant Action ships silent (docs/org/music.md).
         _music?.Stop();
-        ShowLoadScreen(_spec.CampaignProfile != null);
+        ShowLoadScreen(_spec.CampaignProfile != null, _spec.IaDef?.MissionType);
         _launchFramesWaited = 0;
     }
 
     // The load screen over the whole window, on the board layer. Campaign launches take the
     // original's chart sheet and everything else its blackboard (docs/org/loading-screen.md).
-    private void ShowLoadScreen(bool campaign)
+    private void ShowLoadScreen(bool campaign, string? missionType)
     {
+        // The sheet names the chapter and the flight; the blackboard writes its dialog's own four
+        // texts, and takes this only when the mode is ours and no dialog describes it.
+        string subject = campaign
+            ? $"{_spec.Chapter}   ·   {LaunchSubject()}"
+            : LaunchSubject().ToUpperInvariant();
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
         _loadLayer.AddChild(UI.LoadBoard.Build(
-            _dataRoot, campaign, $"{_spec.Chapter}   ·   {LaunchSubject()}"));
+            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType));
         AddChild(_loadLayer);
     }
 
@@ -1299,10 +1304,15 @@ public partial class Launcher : Node3D
         _menuHost.Show(destination);
         _menuAid = null;
         // The load screen is up for two frames during a build and torn down before anything
-        // renders, so a shot of it needs a door of its own that leaves it standing.
-        if (aid is "loadboard" or "loadboard-campaign")
+        // renders, so a shot of it needs a door of its own that leaves it standing. Its argument
+        // names the Instant Action mission type, which is the whole of what the blackboard writes.
+        if (aid.StartsWith("loadboard", System.StringComparison.Ordinal))
         {
-            ShowLoadScreen(aid == "loadboard-campaign");
+            int colon = aid.IndexOf(':');
+            string missionType = colon < 0 ? string.Empty : aid[(colon + 1)..];
+            ShowLoadScreen(
+                aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal),
+                missionType.Length > 0 ? missionType : _spec.IaDef?.MissionType);
         }
 
         // Safe on every entry: a cue for the track already playing is a no-op, which is exactly

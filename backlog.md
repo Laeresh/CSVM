@@ -2468,36 +2468,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not thread its load either; a pump from inside a blocking build is a legitimate shape if the
   Godot frame loop can be driven that way. *Playtest after fix:* launch any Instant Action mission
   from the menu and watch the bar step and the propeller turn until the world appears; then a
-  campaign launch for the sheet's own bar. *Cross-refs:* `BL-813` and `BL-814` (what each screen
+  campaign launch for the sheet's own bar. *Cross-refs:* `BL-814` (what the campaign sheet
   draws while this one makes it move), `BL-314` (the splitscreen
   race whose clock starts while a load screen is still up), `docs/org/loading-screen.md`.
-
-- `BL-813` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The Instant
-  Action load screen writes our own "LOADING" line where the original writes INSTANT ACTION, the
-  mission type, its blurb and its win condition, each at an authored position in its own face.**
-  *Evidence:* every `loading_i*` dialog's script places four texts: `HEAD1` at 70,35 in
-  `loadListTitle` (always "INSTANT ACTION"), `HEAD2` at 325,35 in the default face wrapped at 400
-  (the mission type: SQUADRON, STUNT FLYING, ZEPPELIN RUN, DOGFIGHT AN ACE.), `OBJ1` at 360,135 in
-  `loadListbody` wrapped at 400 (the blurb) and `OBJ2` at 360,215 in `loadListbody` (the win
-  condition), from the `MSG_BRF_IA*_*` string families (`extracted/zrdr/Loading.zrd.json:4806-4915`,
-  `extracted/messages.json:3825-3863`). `OriginalScreenshots/Instant Action Loading Screen STUNT
-  FLYING.png` and `IA LoadScreen.png` show the result: the two headings on one line across the top,
-  the blurb on the ruled right half a hand's width down, the win condition two rules under it. Ours
-  writes "LOADING" at 360,60 and "chapter · subject" under it, positions chosen rather than read
-  (`CSVM/src/UI/LoadBoard.cs:17-20,95-107`), and the decode page's "Where CSVM differs" records
-  the text placement as ours. The pictures, the bar and the propeller are already at their authored
-  places. *Fix shape:* read the mission type's dialog out of `Loading.zrd.json` (`loading_i%d%c`,
-  the letter from the mission-type table in `docs/org/loading-screen.md`) rather than hardcoding a
-  composition, and draw its four `Text` entries with their strings from `messages.json` at their
-  authored positions and wrap widths; map `loadListTitle`, `loadListbody` and the empty default face
-  onto the nearest shipped faces and record the choice. *⚠ Traps:* free flight and dogfight are ours
-  and have no dialog, so they need a stated stand-in (the `d` family's text is the nearest, or a
-  heading alone). The `HEAD2` face is the one the screenshot shows as a bold serif, distinct from
-  `HEAD1`; do not draw both in one face. Do not fold this into the animation (`BL-812`): the text is
-  right or wrong on a still screen. *Playtest after fix:* `--menu=loadboard` beside the two
-  screenshots at the same window size. *Cross-refs:* `BL-812`, `BL-814` (the campaign sheet's own
-  content), `BL-807` (the film shows FLY MISSION opening this screen titled by mission type),
-  `docs/org/loading-screen.md`.
 
 - `BL-814` `[Fidelity]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **The campaign
   load screen is a bare chart sheet, where the original draws the mission's map with its pins and
@@ -2534,7 +2507,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   into the animation (`BL-812`): the sheet is right or wrong on a still screen. *Playtest after
   fix:* `--menu=loadboard-campaign` beside the CM01 screenshot at the same window size, then a real
   campaign launch to see the memento and objectives follow the profile and the mission.
-  *Cross-refs:* `BL-812`, `BL-813`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
+  *Cross-refs:* `BL-812`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
   `CSVM/src/UI/CampaignBriefingPage.cs` (the map and pin drawer to share).
 
 ## Splitscreen

@@ -219,10 +219,15 @@ public sealed record BoardPlaque(
 /// <paramref name="Italic"/> is the <c>I</c> of a langui row's own <c>[FONTID]</c> tag, which is
 /// how the original names a slanted face; the renderer decides what it draws that with.
 /// <paramref name="Justify"/> needs a width to mean anything, since it is measured from one.
-/// <paramref name="Caret"/> is the blinking cursor an edit box draws after its text.</summary>
+/// <paramref name="Caret"/> is the blinking cursor an edit box draws after its text.
+/// <paramref name="Bold"/> is the weight of an authored face a screen draws beside a lighter one,
+/// which the extraction ships no second typeface for, so the renderer emboldens its own.
+/// <paramref name="Leading"/> is the pitch a wrapped block's lines take, 0 leaving it to the face's
+/// own metrics; a widget whose authored block must end where the artwork under it does sets it.</summary>
 public sealed record BoardLine(
     string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1,
-    bool Italic = false, BoardJustify Justify = BoardJustify.Left, BoardCaret? Caret = null);
+    bool Italic = false, BoardJustify Justify = BoardJustify.Left, BoardCaret? Caret = null,
+    bool Bold = false, float Leading = 0f);
 
 /// <summary>
 /// A list widget's entries and the box they flow inside, in authored pixels: the briefing

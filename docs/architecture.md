@@ -350,7 +350,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BootSequence.cs` — `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
 - `src/UI/BootCard.cs` — the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
-- `src/UI/LoadBoard.cs` — the load screen a session builds behind: the original's chart sheet for a campaign launch, its blackboard for everything else.
+- `src/UI/LoadBoard.cs` — the node that hangs the load screen over a build, tracking the window until the world appears.
+- `src/UI/LoadScreens.cs` — what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts.
 - `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
 - `src/UI/MissionEndFade.cs` — the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.

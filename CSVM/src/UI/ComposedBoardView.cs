@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using CSVM.Mech3;
 using Godot;
 
@@ -39,6 +40,11 @@ public sealed partial class ComposedBoardView : Control
     // states a period, so this one reads like a text cursor rather than being decoded from any.
     private const double CaretBlinkSeconds = 0.5;
 
+    // How much heavier a bold draw is than the board's own face, as Godot's own embolden amount.
+    // The extraction ships no second typeface either, so this stands in for the weight the load
+    // screen's two headings differ by; the value is chosen to read like that screenshot.
+    private const float Weight = 0.5f;
+
     private readonly Dictionary<string, Texture2D?> _textures = new();
 
     // The movies behind the boards, one per file, kept beside the texture cache rather than in it
@@ -47,6 +53,7 @@ public sealed partial class ComposedBoardView : Control
     private readonly Dictionary<string, MovieSurface?> _movies = new();
 
     private FontVariation? _slanted;
+    private FontVariation? _emboldened;
 
     // The caret's blink: how far into the current half-period the board is, whether that half is
     // the lit one, and whether anything on the board carries a caret at all.
@@ -182,7 +189,7 @@ public sealed partial class ComposedBoardView : Control
         var font = GetThemeDefaultFont();
         foreach (var line in board.Lines)
         {
-            DrawText(fit, line.Italic ? Slanted(font) : font, line);
+            DrawText(fit, Face(font, line), line);
         }
 
         foreach (var note in board.Notes)
@@ -211,7 +218,7 @@ public sealed partial class ComposedBoardView : Control
 
             foreach (var line in panel.Lines)
             {
-                DrawText(fit, line.Italic ? Slanted(font) : font, line);
+                DrawText(fit, Face(font, line), line);
             }
         }
 
@@ -263,6 +270,31 @@ public sealed partial class ComposedBoardView : Control
         return new Rect2(0f, top, size.X, height);
     }
 
+    // Greedy word wrap in one face at one size: the words that fit a width, in order. A single word
+    // longer than the width stands on its own line rather than being broken mid-word.
+    private static IEnumerable<string> Wrap(Font font, string text, int points, float width)
+    {
+        var line = new StringBuilder();
+        foreach (var word in text.Split(' '))
+        {
+            string candidate = line.Length == 0 ? word : line + " " + word;
+            if (line.Length > 0
+                && font.GetStringSize(candidate, HorizontalAlignment.Left, -1f, points).X > width)
+            {
+                yield return line.ToString();
+                line.Clear().Append(word);
+                continue;
+            }
+
+            line.Clear().Append(candidate);
+        }
+
+        if (line.Length > 0)
+        {
+            yield return line.ToString();
+        }
+    }
+
     // Keep Godot's loader and texture color-space handling; only the uncommon PNG transfer curve
     // needs correcting in its decoded pixels.
     private static void NormalizeGamma(Image image, uint gamma)
@@ -295,6 +327,24 @@ public sealed partial class ComposedBoardView : Control
         BoardInk.DialogPressed => Colors.Black,
         _ => _palette.Row,
     };
+
+    // The face one line draws in. A line asks for at most one variation of the board's own, so a
+    // slant wins over a weight rather than the two compounding into a face nothing authored.
+    private Font? Face(Font? font, BoardLine line) =>
+        line.Italic ? Slanted(font) : line.Bold ? Emboldened(font) : font;
+
+    // The board's own face at a heavier weight, built once, for a screen that writes two authored
+    // faces side by side.
+    private FontVariation? Emboldened(Font? font)
+    {
+        if (font == null)
+        {
+            return null;
+        }
+
+        _emboldened ??= new FontVariation { BaseFont = font, VariationEmbolden = Weight };
+        return _emboldened;
+    }
 
     // The board's own face sheared into an oblique, built once. Godot's variation transform is a
     // 2x3 matrix over the glyph outline, so the x-shear is the whole of the lean.
@@ -421,6 +471,12 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
+        if (line.Leading > 0f)
+        {
+            DrawPitched(fit, font, line, points, at);
+            return;
+        }
+
         // Wrapped, because a description panel's text is a block and a row's own text may still be
         // longer than the widget it sits in; a single-line draw would run off the board.
         var justify = line.Justify switch
@@ -455,6 +511,19 @@ public sealed partial class ComposedBoardView : Control
         DrawRect(
             new Rect2(x, fit.Y(line.Y), fit.Length(caret.Width), fit.Length(caret.Height)),
             new Color(caret.R / 255f, caret.G / 255f, caret.B / 255f));
+    }
+
+    // Wrapped at the widget's own line pitch rather than the face's. Godot's multiline draw spaces
+    // by the font's metrics, which on a face other than the authored one runs a block past the
+    // artwork it was written to sit inside; a justification is ignored here for want of a measure.
+    private void DrawPitched(BoardFit fit, Font font, BoardLine line, int points, Vector2 at)
+    {
+        float step = fit.Length(line.Leading);
+        foreach (var part in Wrap(font, line.Text, points, fit.Length(line.Width)))
+        {
+            DrawString(font, at, part, HorizontalAlignment.Left, -1f, points, InkOf(line.Ink));
+            at.Y += step;
+        }
     }
 
     private void DrawNote(BoardFit fit, Font? font, BoardNote note)

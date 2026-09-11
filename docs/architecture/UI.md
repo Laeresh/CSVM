@@ -277,13 +277,21 @@ board is not dismissable, since dismissing it would leave the player in a halted
 back. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
 
 ## src/UI/LoadBoard.cs
-The load screen drawn over the whole window while a session builds, the original's own composed
-artwork through `ComposedBoardView`, so it inherits the authored-pixel surface and `BoardFit`'s
-scaling. Two compositions, the split the original makes: a campaign launch gets the chart sheet,
-everything else the blackboard. Free flight and dogfight are ours rather than the original's and
-take the non-campaign screen. Populated in `_Ready`, since the view sizes itself off the viewport.
-Its subject line names the chapter and the flight in a player's own words, never the log file's
-internal mode tag. The screens and their art: [../org/loading-screen.md](../org/loading-screen.md).
+The load screen drawn over the whole window while a session builds: `LoadScreens`' composition
+through `ComposedBoardView`, so it inherits the authored-pixel surface and `BoardFit`'s scaling.
+Populated in `_Ready`, since the view sizes itself off the viewport, and it tracks the window every
+frame the way every shared board does. Holds no composition of its own, so what the screen says
+tests off engine.
+
+## src/UI/LoadScreens.cs
+What the load screen is made of, engine-free: the campaign chart sheet, and the Instant Action
+blackboard with the four texts its own `loading_i` dialog places, read out of `Loading.zrd` and
+resolved through `messages.json` at the authored positions and wrap widths. The mission type picks
+the dialog by the exe's own letter; the environment digit is not plumbed because it selects nothing.
+Free flight and dogfight are ours rather than the original's, so they write the mode's name at the
+mode heading's place and nothing else. An absent or unreadable extraction yields no words rather
+than throwing, since this screen is shown while everything else is still loading. The dialogs, the
+face mapping and the line pitch: [../org/loading-screen.md](../org/loading-screen.md).
 
 ## src/UI/BoardMenuItem.cs
 The rows a board menu can offer: Resume, Photo, Restart and Exit. The board owning the menu decides

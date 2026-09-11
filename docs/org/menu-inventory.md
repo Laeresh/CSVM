@@ -294,7 +294,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-planeselection[:export]` | plane selection, or its export messagebox | `Campaign` |
 | `campaign-hangar` | the hangar over the profile's wallet | `Campaign` → `Hangar` |
 | `campaign-fly` | walks a real profile to Fly Mission and launches | `Campaign` |
-| `loadboard` | the load screen's blackboard, over the menu | out of scope |
+| `loadboard[:mission_type]` | the load screen's blackboard, over the menu, writing that mission type's own dialog | out of scope |
 | `loadboard-campaign` | the load screen's chart sheet, over the menu | out of scope |
 
 ⚠ **`Screen.WaveEdit` has no aid.** It is the only screen enum member with no `--menu=` value, so
