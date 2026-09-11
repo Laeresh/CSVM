@@ -152,6 +152,23 @@ public class DefaultBindingsTests
         Assert.Equal(3, map.Bindings(InputAction.Pause).Count);
     }
 
+    /// <summary>The two backward weapon selectors ship on the keyboard alone: every control a
+    /// flight pad has is already spoken for, so the rebinding screen is where a pad player finds
+    /// their second pair. Recorded so a later edit cannot hand one a pad control by accident.
+    /// </summary>
+    [Fact]
+    public void TheBackwardSelectors_ShipOnTheKeyboardOnly()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F3)) },
+            map.Bindings(InputAction.SelectGunGroupPrev));
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F4)) },
+            map.Bindings(InputAction.SelectOrdnancePrev));
+    }
+
     /// <summary>Free look is the held right mouse button, the one action the model had no kind for
     /// until <see cref="BindingControl.Mouse"/> existed.</summary>
     [Fact]

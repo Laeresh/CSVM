@@ -176,7 +176,11 @@ message table. Control codes are the raw stored values.
 
 ⚠ **The clockwise and counterclockwise names are inverted against the message keys.** "Cycle guns
 clockwise" is `MSG_CMD_CANNON_PREV` and "counterclockwise" is `MSG_CMD_CANNON_NEXT`. Take the
-displayed name, not the key, when reading `BL-357`.
+displayed name, not the key, when reading a direction off this table.
+
+⚠ **The joystick column carries only the counterclockwise half of each weapon cycle**, button 7 for
+the guns and button 8 for the rockets. A pad player of the original steps one way and reaches the
+other by going round, which is why a second pad control was never a given here.
 
 ⚠ **Three codes differ on Japanese hardware.** `FUN_00493630` remaps A and B through
 `FUN_00493600` when `FUN_005384a0` returns 1-98, which happens only when `GetKeyboardType(0) == 7`.

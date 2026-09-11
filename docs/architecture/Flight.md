@@ -47,8 +47,8 @@ every weapon fires from every mount of its class rather than only from what stoc
 
 ## src/Flight/FireControl.cs
 The fire-control state machine, a plain engine-free class: trigger edges, per-group `FIRE_RATE`
-accumulators and muzzle rotation, ammo draw-down, both weapon selectors with their on-empty
-auto-advance, the rocket pull and cooldown gate, and the two once-only dry cues.
+accumulators and muzzle rotation, ammo draw-down, both weapon selectors in either direction with
+their on-empty auto-advance, the rocket pull and cooldown gate, and the two once-only dry cues.
 `Step(dt, FireInputs)` takes raw held booleans, detects every edge inside, and returns decisions in
 one reused `FireOutcome`; `FlightController.ApplyFireOutcome` performs them against muzzle
 transforms, `ProjectilePool` and `FlightAudio`. Ammo mutates through the node-free
@@ -118,11 +118,12 @@ sight line and to its rounds sit at their members: [../org/targeting.md](../org/
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
 is the firing cursor, the selected slot while it has rounds and otherwise the next armed slot
-forward-wrapping, and `NextSelectable` is where the manual G or H step lands, the next armed slot
-strictly after the cursor with empties skipped. Each slot is its own selectable position whatever it
-carries, so the selector steps across slots rather than ordnance types and H cycles even a uniform
-loadout, which is the per-hardpoint reading the original gives at the controls. Stateless, and proven
-through `FireControl`'s own interface rather than its own. Read `FireControl.cs` next.
+forward-wrapping, and `NextSelectable`/`PrevSelectable` are where a manual selector press lands, the
+nearest armed slot either side of the cursor with empties skipped. Both are one private walk taken in
+two directions, so the skipping and the wrap cannot drift apart. Each slot is its own selectable
+position whatever it carries, so the selector steps across slots rather than ordnance types and
+cycles even a uniform loadout, the per-hardpoint reading the original gives at the controls.
+Stateless, proven through `FireControl`'s own interface. Read `FireControl.cs` next.
 
 ## src/Flight/RocketTriggerLatch.cs
 The rocket trigger's consumed-press latch. A cutscene skip or a pause-menu Resume can hand flight

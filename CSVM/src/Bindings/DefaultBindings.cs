@@ -108,6 +108,12 @@ public static class DefaultBindings
         b.Keys(InputAction.FireRockets, Key.F).Buttons(InputAction.FireRockets, JoyButton.A);
         b.Keys(InputAction.SelectGunGroup, Key.G).Buttons(InputAction.SelectGunGroup, JoyButton.DpadRight);
         b.Keys(InputAction.SelectOrdnance, Key.H).Buttons(InputAction.SelectOrdnance, JoyButton.DpadLeft);
+
+        // The backward step of each selector, on two of the four function keys the original spends
+        // on these cycles (docs/controls.md). No pad default: a flight pad has no free control
+        // left, so a second pair is what the rebinding screen is for.
+        b.Keys(InputAction.SelectGunGroupPrev, Key.F3);
+        b.Keys(InputAction.SelectOrdnancePrev, Key.F4);
         b.Keys(InputAction.Nitro, Key.N).Buttons(InputAction.Nitro, JoyButton.X);
         b.Keys(InputAction.Respawn, Key.R).Buttons(InputAction.Respawn, JoyButton.Y);
         b.Keys(InputAction.AutoLand, Key.F9).Buttons(InputAction.AutoLand, JoyButton.LeftStick);

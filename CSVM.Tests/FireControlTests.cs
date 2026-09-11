@@ -534,6 +534,164 @@ public class FireControlTests
         Assert.Throws<System.ArgumentException>(() => Make(new List<FakeGun>(), pylons, stepOrder: new[] { 0 }));
     }
 
+    // ==== Selectors, backward ===================================================================
+
+    /// <summary>The backward step walks the same physical mount order as the forward one, read the
+    /// other way: on the full eight-pylon fit whose list order is the fill order 1,5,2,6,3,7,4,8,
+    /// one press back off pylon 1 lands on pylon 8 and the walk continues along the belt.</summary>
+    [Fact]
+    public void TheBackwardHardpointStepWalksTheSameMountOrderInReverse()
+    {
+        var pylons = new List<FakePylon>();
+        for (int i = 0; i < 8; i++)
+        {
+            pylons.Add(Pylon(1f, 3, 3, $"wep_p{i}"));
+        }
+        var fc = Make(new List<FakeGun>(), pylons, stepOrder: new[] { 0, 2, 4, 6, 1, 3, 5, 7 });
+
+        var trace = new List<int> { fc.SelectedPylon };
+        for (int press = 0; press < 8; press++)
+        {
+            Press(fc, rocketSelBack: true);
+            trace.Add(fc.SelectedPylon);
+        }
+
+        Assert.Equal(new[] { 0, 7, 5, 3, 1, 6, 4, 2, 0 }, trace);
+    }
+
+    /// <summary>A mixed fit, the case custom loadouts make ordinary: with slot 2 spent, both
+    /// directions skip it and each lands on an armed slot. The two traces are each other's
+    /// reverse, which is what makes the pair usable as a correction at the controls.</summary>
+    [Fact]
+    public void BothDirectionsSkipEmptySlotsOnAMixedFit()
+    {
+        var pylons = new List<FakePylon>
+        {
+            Pylon(1f, 2, 2, "wep_p0"), Pylon(1f, 2, 2, "wep_p1"),
+            Pylon(1f, 0, 2, "wep_p2"), Pylon(1f, 2, 2, "wep_p3"),
+        };
+        var fc = Make(new List<FakeGun>(), pylons);
+
+        var forward = new List<int>();
+        for (int press = 0; press < 3; press++)
+        {
+            Press(fc, rocketSel: true);
+            forward.Add(fc.SelectedPylon);
+        }
+
+        var backward = new List<int>();
+        for (int press = 0; press < 3; press++)
+        {
+            Press(fc, rocketSelBack: true);
+            backward.Add(fc.SelectedPylon);
+        }
+
+        Assert.Equal(new[] { 1, 3, 0 }, forward);
+        Assert.Equal(new[] { 3, 1, 0 }, backward);
+    }
+
+    [Fact]
+    public void OneStepEachWayReturnsTheHardpointCursorToWhereItStarted()
+    {
+        var pylons = new List<FakePylon>
+        {
+            Pylon(1f, 2, 2, "wep_p0"), Pylon(1f, 0, 2, "wep_p1"),
+            Pylon(1f, 2, 2, "wep_p2"), Pylon(1f, 0, 2, "wep_p3"),
+        };
+        var fc = Make(new List<FakeGun>(), pylons);
+
+        Press(fc, rocketSel: true);
+        Assert.Equal(2, fc.SelectedPylon);
+
+        Press(fc, rocketSelBack: true);
+        Assert.Equal(0, fc.SelectedPylon);
+    }
+
+    /// <summary>One armed slot is the degenerate fit: the backward press has nowhere to go and
+    /// leaves the cursor alone rather than parking it on a spent pylon, on a belt of four and on a
+    /// single-pylon plane the <c>&lt;2 slots</c> guard turns away before the scan.</summary>
+    [Fact]
+    public void TheBackwardStepStaysPutWhenOnlyOneSlotIsArmed()
+    {
+        var pylons = new List<FakePylon>
+        {
+            Pylon(1f, 0, 3, "wep_p0"), Pylon(1f, 3, 3, "wep_p1"),
+            Pylon(1f, 0, 3, "wep_p2"), Pylon(1f, 0, 3, "wep_p3"),
+        };
+        var fc = Make(new List<FakeGun>(), pylons);
+        fc.SelectPylon(1);
+
+        Press(fc, rocketSelBack: true);
+        Assert.Equal(1, fc.SelectedPylon);
+
+        var single = Make(new List<FakeGun>(), new List<FakePylon> { Pylon(1f, 3, 3) });
+        Press(single, rocketSelBack: true);
+        Assert.Equal(0, single.SelectedPylon);
+    }
+
+    /// <summary>The gun-group cycle was never watched at the original's controls, but its keybind
+    /// page names both directions (`Cycle guns clockwise` / `counterclockwise`), so both are wired
+    /// and both are held to the same empty-skipping walk the hardpoints take.</summary>
+    [Fact]
+    public void TheGunGroupSelectorStepsBothWays()
+    {
+        var guns = new List<FakeGun>
+        {
+            Gun(10f, 3, 3, id: "wep_g0"), Gun(10f, 0, 3, id: "wep_g1"),
+            Gun(10f, 3, 3, id: "wep_g2"), Gun(10f, 3, 3, id: "wep_g3"),
+        };
+        var fc = Make(guns, new List<FakePylon>());
+
+        var forward = new List<int>();
+        for (int press = 0; press < 3; press++)
+        {
+            Press(fc, gunSel: true);
+            forward.Add(fc.GunSel);
+        }
+
+        var backward = new List<int>();
+        for (int press = 0; press < 3; press++)
+        {
+            Press(fc, gunSelBack: true);
+            backward.Add(fc.GunSel);
+        }
+
+        Assert.Equal(new[] { 2, 3, 0 }, forward);
+        Assert.Equal(new[] { 3, 2, 0 }, backward);
+    }
+
+    [Fact]
+    public void BothDirectionsHeldAtOnceLeaveTheCursorWhereItWas()
+    {
+        var pylons = new List<FakePylon>
+        {
+            Pylon(1f, 3, 3, "wep_p0"), Pylon(1f, 3, 3, "wep_p1"),
+            Pylon(1f, 3, 3, "wep_p2"), Pylon(1f, 3, 3, "wep_p3"),
+        };
+        var fc = Make(new List<FakeGun>(), pylons);
+
+        Press(fc, rocketSel: true, rocketSelBack: true);
+
+        Assert.Equal(0, fc.SelectedPylon); // one step out and one straight back, on the same edge
+    }
+
+    [Fact]
+    public void TheBackwardSelectorIsEdgeDrivenLikeTheForwardOne()
+    {
+        var pylons = new List<FakePylon>
+        {
+            Pylon(1f, 3, 3, "wep_p0"), Pylon(1f, 3, 3, "wep_p1"), Pylon(1f, 3, 3, "wep_p2"),
+        };
+        var fc = Make(new List<FakeGun>(), pylons);
+
+        for (int i = 0; i < 10; i++)
+        {
+            Step(fc, rocketSelBack: true);
+        }
+
+        Assert.Equal(2, fc.SelectedPylon); // one step back despite 10 held ticks
+    }
+
     // ==== Fakes and builders ====================================================================
 
     private static FakeGun Gun(float fireRate, int ammo, int capacity, int muzzleCount = 1, string? loopSound = null, string id = "wep_gun") =>
@@ -561,8 +719,26 @@ public class FireControlTests
     // One tick. Held levels only (no edges — FireControl does its own edge
     // detection), dt fixed at 60 Hz throughout. The returned FireOutcome is the SAME
     // reused instance every call — callers must read what they need before the next Step.
-    private static FireOutcome Step(FireControl fc, bool fire = false, bool rocket = false, bool gunSel = false, bool rocketSel = false) =>
-        fc.Step(Dt, new FireInputs { FireHeld = fire, RocketHeld = rocket, GunSelectHeld = gunSel, RocketSelectHeld = rocketSel });
+    private static FireOutcome Step(FireControl fc, bool fire = false, bool rocket = false,
+        bool gunSel = false, bool rocketSel = false, bool gunSelBack = false, bool rocketSelBack = false) =>
+        fc.Step(Dt, new FireInputs
+        {
+            FireHeld = fire,
+            RocketHeld = rocket,
+            GunSelectHeld = gunSel,
+            RocketSelectHeld = rocketSel,
+            GunSelectBackHeld = gunSelBack,
+            RocketSelectBackHeld = rocketSelBack,
+        });
+
+    // One press of a selector direction and the release after it, which is what the rising-edge
+    // gate needs to see. Returns nothing: every caller reads the cursor off the FireControl.
+    private static void Press(FireControl fc, bool gunSel = false, bool rocketSel = false,
+        bool gunSelBack = false, bool rocketSelBack = false)
+    {
+        Step(fc, gunSel: gunSel, rocketSel: rocketSel, gunSelBack: gunSelBack, rocketSelBack: rocketSelBack);
+        Step(fc);
+    }
 
     private sealed class FakeGun : IGunSlot
     {

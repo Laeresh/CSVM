@@ -1769,6 +1769,8 @@ public partial class FlightController : Node3D
                     && (!IsHumanPiloted && Pilot?.Rocketeer is { } r ? r.WantsFire : RocketFirePressed()),
                 GunSelectHeld = GunSelectPressed(),
                 RocketSelectHeld = RocketSelectPressed(),
+                GunSelectBackHeld = GunSelectBackPressed(),
+                RocketSelectBackHeld = RocketSelectBackPressed(),
             };
             // The assist's forget + catch-up pass (docs/org/aim-assist.md "Per frame"), ticked on
             // the PRE-shot state; must run before a round out this frame restamps last-update.
@@ -2228,12 +2230,18 @@ public partial class FlightController : Node3D
     // pause-menu Resume cannot also read as the rocket trigger's next pull.
     private void SuppressRocketTriggerOnRegainedInput() => _rocketLatch.ArmIfHeld(RocketButtonDown());
 
-    // G / gamepad D-pad Right — cycles the gun selector through the firable groups (1 → 2 →
+    // G / gamepad D-pad Right — cycles the gun selector forward through the firable groups (1 → 2 →
     // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
     // ⚠ The D-pad side follows the cockpit dial it drives: the GUNS gauge sits in the right column
     // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
     // mis-binding at the controls.
     private bool GunSelectPressed() => _actions.Held(InputAction.SelectGunGroup);
+
+    // F3 — the same walk the other way, its own bound action because the original's own keybind
+    // page carries one per direction per weapon class. The gun cycle's second direction was never
+    // watched at the original's controls; it is wired because that page names it, and the pages are
+    // what the port reproduces where a play session cannot reach.
+    private bool GunSelectBackPressed() => _actions.Held(InputAction.SelectGunGroupPrev);
 
     // F9 / gamepad left-stick click, the auto-land button, read live by
     // LandingApproachRuntime.Tick() so a press lands in the same frame it happens. Kept beside the
@@ -2246,11 +2254,15 @@ public partial class FlightController : Node3D
     }
 #pragma warning restore SA1202
 
-    // H / gamepad D-pad Left — moves the hardpoint selector to the next pylon that still
+    // H / gamepad D-pad Left — moves the hardpoint selector forward to the next pylon that still
     // carries ordnance (each pylon is its own selectable slot, whatever it loads — even a plane with
     // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
     // edge-detects.
     private bool RocketSelectPressed() => _actions.Held(InputAction.SelectOrdnance);
+
+    // F4 — the hardpoint walk the other way, over the same physical mount order and skipping the
+    // same empties, so a press each way from one pylon returns to it. Caller edge-detects.
+    private bool RocketSelectBackPressed() => _actions.Held(InputAction.SelectOrdnancePrev);
 
     // This frame's pilot-HUD feed. The pipper's inputs are resolved HERE and only where there is a
     // reticle to draw: a muzzle midpoint reads one world transform per barrel, which every aircraft

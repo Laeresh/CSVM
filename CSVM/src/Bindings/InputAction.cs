@@ -87,4 +87,10 @@ public enum InputAction
     // triggers, whose digital threshold would leave the first half of trigger travel inert here.
     CameraDollyOut,
     CameraDollyIn,
+
+    // The backward half of each weapon selector, which the original carries as its own bound action
+    // per weapon class. Appended here rather than filed beside their forward twins above, because
+    // the members are positional and inserting one would renumber every action after it.
+    SelectGunGroupPrev,
+    SelectOrdnancePrev,
 }

@@ -40,8 +40,9 @@ specified in [`cli.md`](cli.md).
 | `Shift` / `Ctrl` | triggers | throttle up / down |
 | `Space` | B | fire guns |
 | `F` | A | fire rockets — one per pull |
-| `G` | D-pad → | select gun group (one at a time). The pad side follows the cockpit dial: the **GUNS** gauge is in the right column, **ROCKETS** in the left (`docs/formats/hud.md`, "Weapon gauges") |
-| `H` | D-pad ← | select ordnance (steps forward only; the original also steps back, `BL-357`) |
+| `G` | D-pad → | step the gun-group selector forward (one group fires at a time). The pad side follows the cockpit dial: the **GUNS** gauge is in the right column, **ROCKETS** in the left (`docs/formats/hud.md`, "Weapon gauges") |
+| `H` | D-pad ← | select ordnance: step the hardpoint selector one mount along the belt, skipping every pylon that is spent |
+| `F3` · `F4` | | step the gun-group and hardpoint selectors the other way, over the same order and skipping the same empties, so a press each way returns to the slot you started on. The original carries one bound action per direction per weapon class (`OriginalScreenshots/Keybinds Weapons.png`: `F3`/`F4` guns, `F5`/`F6` rockets); `F5` and `F6` are the damage lab and the chase view here, so the backward halves take the two of its four keys this port leaves free. No pad default: every control a flight pad has is already spoken for, and the Controls door is where a pad player picks their second pair |
 | `N` | X | nitro boost (the original's "Use Nitro-Booster"): engages only with a nitrous engine fitted and the tank at 99 % or more, then burns the whole tank (9.5 s) with no way to stop it, and re-arms after a 28 s refill. The nitro dial appears at the bottom of the right column, below the speedometer, with the injector fitted (`docs/org/flightModel.md`, "Nitro") |
 | `F5` | | damage lab on the flown plane — `--damage=` |
 | `B` | | weapon lab panel — `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |

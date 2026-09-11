@@ -22,6 +22,8 @@ public class FlightBindingMappingTests
         { Key.F, InputAction.FireRockets },
         { Key.G, InputAction.SelectGunGroup },
         { Key.H, InputAction.SelectOrdnance },
+        { Key.F3, InputAction.SelectGunGroupPrev },
+        { Key.F4, InputAction.SelectOrdnancePrev },
         { Key.N, InputAction.Nitro },
         { Key.R, InputAction.Respawn },
         { Key.F9, InputAction.AutoLand },

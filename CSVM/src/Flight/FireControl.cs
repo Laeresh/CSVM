@@ -36,8 +36,10 @@ public struct FireInputs
 {
     public bool FireHeld;          // gun trigger (Space / pad B; --fire ORs in adapter-side)
     public bool RocketHeld;        // rocket trigger (F / pad A)
-    public bool GunSelectHeld;     // gun-group selector (G / D-pad Right)
-    public bool RocketSelectHeld;  // hardpoint selector (H / D-pad Left)
+    public bool GunSelectHeld;         // gun-group selector, forward (G / D-pad Right)
+    public bool RocketSelectHeld;      // hardpoint selector, forward (H / D-pad Left)
+    public bool GunSelectBackHeld;     // gun-group selector, backward (F3)
+    public bool RocketSelectBackHeld;  // hardpoint selector, backward (F4)
 }
 
 /// <summary>The one spelling of "is this weapon slot armed?".</summary>
@@ -108,11 +110,14 @@ public sealed class FireControl
     private readonly int[] _pylonStep;        // pylon list positions, in the order the cursor walks
     private readonly int[] _pylonRank;        // inverse of _pylonStep: list position -> its step place
     private readonly Func<int, int> _stepAmmo; // step place -> that pylon's ammo, for WeaponCursor
+    private readonly Func<int, int> _gunAmmo;  // gun slot -> its ammo, for WeaponCursor
     private readonly FireOutcome _outcome = new();
 
     private bool _firePrev;          // previous tick's gun trigger (immediate first shot on press)
-    private bool _gunSelPrev;        // edge detection for the gun-selector button
-    private bool _rocketSelPrev;     // edge detection for the hardpoint-selector button
+    private bool _gunSelPrev;        // edge detection for the forward gun-selector button
+    private bool _gunSelBackPrev;    // edge detection for the backward gun-selector button
+    private bool _rocketSelPrev;     // edge detection for the forward hardpoint-selector button
+    private bool _rocketSelBackPrev; // edge detection for the backward hardpoint-selector button
     private bool _rocketFirePrev;    // previous tick's rocket trigger (one rocket per discrete pull)
     private bool _rocketDryWarned;   // the all-pylons-empty cue has already sounded
     private float _rocketCooldown;   // s until the next rocket may launch (FIRE_RATE gate)
@@ -145,6 +150,7 @@ public sealed class FireControl
             _pylonRank[_pylonStep[k]] = k;
         }
         _stepAmmo = k => _pylons[_pylonStep[k]].Ammo;
+        _gunAmmo = i => _guns[i].Ammo;
         _selectedPylon = FirstPylon();
     }
 
@@ -152,7 +158,8 @@ public sealed class FireControl
     /// reticle aims for.</summary>
     public int GunSel => _gunSel;
 
-    /// <summary>The selected pylon — what H points at and the rocket trigger launches from.</summary>
+    /// <summary>The selected pylon — what the hardpoint selector points at and the rocket trigger
+    /// launches from.</summary>
     public int SelectedPylon => _selectedPylon;
 
     /// <summary>--fire-rockets / the weapon lab's auto toggle: a held rocket trigger auto-repeats
@@ -248,26 +255,45 @@ public sealed class FireControl
         return step;
     }
 
-    // Advances each weapon selector on the rising edge of its button to the next armed
-    // slot (one active at a time, skipping empties). Both cursors also auto-advance on their own
-    // when the selected slot empties (in the gun/rocket steps).
+    // Moves each weapon selector on the rising edge of one of its two buttons to the adjacent armed
+    // slot in that direction (one active at a time, skipping empties). Each direction has its own
+    // edge, so holding both steps one way and straight back and the cursor stays put. Both cursors
+    // also auto-advance on their own when the selected slot empties (in the gun/rocket steps).
     private void StepSelectors(in FireInputs input)
     {
         bool gunSel = input.GunSelectHeld;
-        if (gunSel && !_gunSelPrev && _guns.Count > 1)
+        bool gunSelBack = input.GunSelectBackHeld;
+        if (_guns.Count > 1)
         {
-            _gunSel = WeaponCursor.NextSelectable(
-                _guns.Count, i => _guns[i].Ammo, _gunSel, InfiniteAmmo);
+            if (gunSel && !_gunSelPrev)
+            {
+                _gunSel = WeaponCursor.NextSelectable(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo);
+            }
+            if (gunSelBack && !_gunSelBackPrev)
+            {
+                _gunSel = WeaponCursor.PrevSelectable(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo);
+            }
         }
         _gunSelPrev = gunSel;
+        _gunSelBackPrev = gunSelBack;
 
         bool rocketSel = input.RocketSelectHeld;
-        if (rocketSel && !_rocketSelPrev && _pylons.Count > 1)
+        bool rocketSelBack = input.RocketSelectBackHeld;
+        if (_pylons.Count > 1)
         {
-            _selectedPylon = _pylonStep[WeaponCursor.NextSelectable(
-                _pylonStep.Length, _stepAmmo, _pylonRank[_selectedPylon], InfiniteAmmo)];
+            if (rocketSel && !_rocketSelPrev)
+            {
+                _selectedPylon = _pylonStep[WeaponCursor.NextSelectable(
+                    _pylonStep.Length, _stepAmmo, _pylonRank[_selectedPylon], InfiniteAmmo)];
+            }
+            if (rocketSelBack && !_rocketSelBackPrev)
+            {
+                _selectedPylon = _pylonStep[WeaponCursor.PrevSelectable(
+                    _pylonStep.Length, _stepAmmo, _pylonRank[_selectedPylon], InfiniteAmmo)];
+            }
         }
         _rocketSelPrev = rocketSel;
+        _rocketSelBackPrev = rocketSelBack;
     }
 
     // Advances every gun slot's fire clock: while the trigger is held, the selected slot
@@ -319,8 +345,7 @@ public sealed class FireControl
                     // The selected slot just ran dry — switch to the next slot that still has ammo
                     // the moment it empties, not on the next trigger pull. Only when no slot has
                     // ammo left does the dry cue sound.
-                    int next = WeaponCursor.NextArmed(
-                        _guns.Count, i => _guns[i].Ammo, _gunSel, InfiniteAmmo);
+                    int next = WeaponCursor.NextArmed(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo);
                     if (next >= 0)
                     {
                         _gunSel = next;

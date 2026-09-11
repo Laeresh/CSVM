@@ -602,38 +602,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
   *Cross-refs:* `PT-128` (the flight that judges the ricochet).
 
-- `BL-357` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The hardpoint selector steps one way only; the original cycles in both
-  directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
-  an individual hardpoint (the half that settled `BL-062`, closed the same day), and the selection
-  can be stepped clockwise *and* counter-clockwise. Ours has exactly one selector input per weapon,
-  `H` / D-pad Left for pylons and `G` / D-pad Right for gun groups
-  (`FlightController.cs:1456`, `docs/controls.md`), and `WeaponCursor.NextSelectable`
-  (`WeaponCursor.cs:34`) only ever scans forward. **Direct corroboration, `PLAN-targeting` A1
-  (2026-08-16):** the original's own Weapons keybind page carries `Cycle guns clockwise` (`F3`) and
-  `Cycle guns counterclockwise` (`F4`) as two separate actions, same for rockets (`F5`/`F6`) — the
-  original has two selectors per weapon class where we have one, confirmed from the keybind page
-  itself rather than from watching a play session. *Fix shape:* a `PrevSelectable` backward scan
-  with the same empty-slot skipping, plus a second binding per selector, which is where this stops
-  being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
-  already spent on the two forward steps. The seam is built and the four named actions belong in it:
-  `InputAction` gains a reverse member per selector, `DefaultBindings` authors it, and the rebinding
-  screen is what finds a player their second pair, so the key space that blocked this is no longer
-  the blocker (`CSVM/src/Bindings/`, `docs/controls.md`).
-  ⚠ Traps: (a) **The cycle sequence is settled and must not be re-derived**: the selector walks the
-  hardpoints in physical mount order (`Loadout.PylonStepOrder`, `FireControl`'s `pylonStepOrder`),
-  which is NOT the order the list is built in (`Loadout.PylonFillOrder`, 1,5,2,6,3,7,4,8, which says
-  only which pylons a fit occupies). Stepping the list itself sent the gauge arrow back and forth
-  across the belt on a full fit. What is missing here is the second direction, nothing else, so a
-  reverse step is `NextSelectable` walked backwards over that same sequence.
-  (b) The observation is about hardpoints. The gun-group selector is
-  the analogous case but was not observed, so do not assume it cycles both ways either.
-  (c) Empty-slot skipping is not in question and must survive the change: both directions land on
-  an armed slot.
-  *Cross-refs:* the hangar's custom loadouts (`PLAN-hangar`, landed) are where
-  mixed fits make the direction matter, so this item's value went up when that shipped;
-  `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
-  per-hardpoint half.
-
 - `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are
   picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
   `CapturedDeadzone` **0.5** are what decide whether a stick or a trigger a player pushes becomes a
