@@ -13,17 +13,18 @@ namespace CSVM.UI;
 /// leaf up to the placed world object it belongs to. A breadcrumb HUD line names every rung and a
 /// wireframe box outlines the current one. Every other inspect tool reads this state rather than
 /// picking for itself. Ladder construction: this module's entry in docs/architecture.md.
-/// ⚠ The pick is a manual ray-vs-AABB scan, not a physics raycast: neither mode builds collision.
-/// It is AABB-accurate, not triangle-accurate — a click just off a thin object can still take it.
+/// ⚠ A manual scan, not a physics raycast (neither mode builds collision): objects by AABB, so a
+/// click just off a thin one can take it; map-scale meshes (terrain) by triangle, occluding.
 /// Unreachable in splitscreen by construction: <c>--freecam</c>/<c>--anim-lab</c> are not
 /// <c>Fly</c>, and <c>SessionSpec.Resolve</c> clamps players back to 1 whenever more than one
 /// joined a non-flight mode, so this single-camera pick never has a second pane to be wrong about.
 /// </summary>
 public sealed partial class SelectionService : Node
 {
-    /// <summary>The largest a pickable mesh's world-space AABB diagonal may be. Terrain tiles span
-    /// the whole map, so without this a click almost always hits one instead of the object standing
-    /// on it; buildings, vehicles and animated props are all well under this. TUNE.</summary>
+    /// <summary>The largest world-space AABB diagonal picked by box. A terrain tile is a 1024 m cell
+    /// whose box covers the air above its valleys, so a box test would take the tile over the
+    /// object standing on it; meshes at or over this are tested against their triangles instead.
+    /// Buildings, vehicles and animated props are all well under it. TUNE.</summary>
     public const float MaxPickDiag = 350f;
 
     /// <summary>Node metadata marking a subtree as another tool's DRAWING rather than world content:
@@ -48,9 +49,15 @@ public sealed partial class SelectionService : Node
     // because this is the same question ("what is that thing called").
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
 
+    // The export set's outline: distinct from the amber selection box, since a set member is
+    // usually also the current selection.
+    private static readonly Color SetCyan = new(0.35f, 0.85f, 1f);
+
     private readonly Node3D _world;
     private readonly Camera3D _camera;
     private readonly List<Node3D> _ladder = new();
+    private readonly List<Node3D> _set = new();
+    private readonly List<MeshInstance3D> _setBoxes = new();
 
     private CanvasLayer? _hudLayer;
     private Label? _hud;
@@ -98,6 +105,11 @@ public sealed partial class SelectionService : Node
     /// subtree's own meshes at selection time. Zero-size when the rung draws nothing itself and has
     /// no drawing descendants.</summary>
     public Aabb CurrentBox { get; private set; }
+
+    /// <summary>The export set: nodes gathered with Ctrl+click or the node lab's ± set, for one
+    /// combined export. Separate from the single selection every other tool reads; each member is
+    /// outlined in cyan while it stays in the set.</summary>
+    public IReadOnlyList<Node3D> ExportSet => _set;
 
     /// <summary>The game-file name of a built node — the <c>cs_name</c> meta, never
     /// <c>Node.Name</c>, which Godot sanitises and auto-renames.</summary>
@@ -180,7 +192,11 @@ public sealed partial class SelectionService : Node
             // defocus a LineEdit on a click into empty space, which left the camera keys dead
             // after typing in the anim lab's filter), then picks.
             GetViewport().GuiReleaseFocus();
-            PickAt(mb.Position);
+            if (PickAt(mb.Position) && mb.CtrlPressed && Current is { } picked)
+            {
+                // Ctrl is otherwise only the camera's slow modifier, so it is free for the set.
+                ToggleInSet(picked);
+            }
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -219,6 +235,18 @@ public sealed partial class SelectionService : Node
             _debugDone = true;
             RunDebugPick();
         }
+        for (int i = _set.Count - 1; i >= 0; i--)
+        {
+            if (IsInstanceValid(_set[i]))
+            {
+                _setBoxes[i].GlobalTransform = _set[i].GlobalTransform;
+            }
+            else
+            {
+                // A member freed under us (a destructible swapping to its wreck) leaves the set.
+                RemoveFromSetAt(i);
+            }
+        }
         if (_highlight == null)
         {
             return;
@@ -246,7 +274,8 @@ public sealed partial class SelectionService : Node
         var dir = _camera.ProjectRayNormal(screenPos);
         Node3D? best = null;
         float bestT = float.MaxValue;
-        int tested = 0, oversize = 0;
+        int tested = 0;
+        var mapScale = new List<MeshInstance3D>();
         void Walk(Node n)
         {
             if (n is Node3D overlay && overlay.HasMeta(OverlayMeta))
@@ -259,7 +288,7 @@ public sealed partial class SelectionService : Node
                 var xf = mi.GlobalTransform;
                 if ((xf.Basis * aabb.Size).Length() >= MaxPickDiag)
                 {
-                    oversize++;
+                    mapScale.Add(mi);
                 }
                 else
                 {
@@ -287,12 +316,34 @@ public sealed partial class SelectionService : Node
                 Walk(root);
             }
         }
+        // Map-scale meshes last, by triangle. A tile whose box the ray enters beyond the best hit
+        // cannot win, which prunes almost every tile; a nearer triangle beats an object's box.
+        int triTested = 0;
+        bool mapScaleHit = false;
+        foreach (var mi in mapScale)
+        {
+            var inv = mi.GlobalTransform.AffineInverse();
+            var o = inv * from;
+            var d = inv.Basis * dir;
+            if (!RayAabb(o, d, mi.Mesh.GetAabb(), out float tBox) || tBox >= bestT)
+            {
+                continue;
+            }
+            triTested++;
+            if (RayMesh(o, d, mi.Mesh, out float t) && t < bestT)
+            {
+                bestT = t;
+                best = mi;
+                mapScaleHit = true;
+            }
+        }
         if (best == null)
         {
-            Log.Info("ui", $"select miss screen=({screenPos.X:0},{screenPos.Y:0}) tested={tested} skipped_oversize={oversize} (map-scale meshes are never pickable)");
+            Log.Info("ui", $"select miss screen=({screenPos.X:0},{screenPos.Y:0}) tested={tested} map_scale={mapScale.Count} map_scale_tri_tested={triTested}");
             return false;
         }
-        Log.Debug("ui", $"select hit screen=({screenPos.X:0},{screenPos.Y:0}) dist={bestT:0.0} tested={tested} skipped_oversize={oversize}");
+        var at = from + dir * bestT;
+        Log.Debug("ui", $"select hit screen=({screenPos.X:0},{screenPos.Y:0}) dist={bestT:0.0} at=({at.X:0.0},{at.Y:0.0},{at.Z:0.0}) tested={tested} map_scale={mapScale.Count} map_scale_tri_tested={triTested} map_scale_hit={mapScaleHit}");
         Select(best);
         return true;
     }
@@ -366,6 +417,39 @@ public sealed partial class SelectionService : Node
         Changed?.Invoke(this, false);
     }
 
+    /// <summary>Adds a node to the export set, or removes it if it is already there. Returns true
+    /// when the node is in the set afterwards.</summary>
+    public bool ToggleInSet(Node3D node)
+    {
+        int at = _set.IndexOf(node);
+        if (at >= 0)
+        {
+            RemoveFromSetAt(at);
+        }
+        else
+        {
+            var box = NewBoxInstance("set_box", SetCyan, 19);
+            AddChild(box);
+            DrawBox(box, node, SubtreeWorldAabb(node));
+            _set.Add(node);
+            _setBoxes.Add(box);
+        }
+        Log.Info("ui", $"select set {(at >= 0 ? "remove" : "add")} cs_name={NameOf(node)} count={_set.Count}");
+        UpdateHud();
+        return at < 0;
+    }
+
+    /// <summary>Empties the export set and removes its outlines.</summary>
+    public void ClearSet()
+    {
+        for (int i = _set.Count - 1; i >= 0; i--)
+        {
+            RemoveFromSetAt(i);
+        }
+        Log.Info("ui", $"select set cleared");
+        UpdateHud();
+    }
+
     // Slab test. Returns the near intersection parameter (>= 0) of the ray o + t·d with the box.
     private static bool RayAabb(Vector3 o, Vector3 d, Aabb box, out float tHit)
     {
@@ -399,83 +483,91 @@ public sealed partial class SelectionService : Node
         return tmax >= 0f;
     }
 
-    private bool IsExtraRoot(Node n)
+    // Nearest two-sided hit of the ray o + t·d against a mesh's triangle surfaces, in the mesh's own
+    // frame. Allocates each surface's arrays, which a click can afford and a per-frame caller cannot.
+    private static bool RayMesh(Vector3 o, Vector3 d, Mesh mesh, out float tHit)
     {
-        foreach (var root in ExtraRoots)
+        tHit = float.MaxValue;
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
         {
-            if (ReferenceEquals(root, n))
+            if (mesh is ArrayMesh array && array.SurfaceGetPrimitiveType(s) != Mesh.PrimitiveType.Triangles)
             {
-                return true;
+                continue;
+            }
+            var arrays = mesh.SurfaceGetArrays(s);
+            var verts = arrays[(int)Mesh.ArrayType.Vertex].As<Vector3[]>();
+            var indices = arrays[(int)Mesh.ArrayType.Index].As<int[]>();
+            bool indexed = indices.Length > 0;
+            int count = indexed ? indices.Length : verts.Length;
+            for (int i = 0; i + 2 < count; i += 3)
+            {
+                var a = verts[indexed ? indices[i] : i];
+                var b = verts[indexed ? indices[i + 1] : i + 1];
+                var c = verts[indexed ? indices[i + 2] : i + 2];
+                if (RayTriangle(o, d, a, b, c, out float t) && t < tHit)
+                {
+                    tHit = t;
+                }
             }
         }
-        return false;
+        return tHit < float.MaxValue;
     }
 
-    private void Apply(bool fresh)
+    // Möller–Trumbore, both faces.
+    private static bool RayTriangle(Vector3 o, Vector3 d, Vector3 a, Vector3 b, Vector3 c, out float t)
     {
-        var node = _ladder[Level];
-        CurrentBox = SubtreeWorldAabb(node);
-        EnsureBuilt();
-        DrawHighlight(node, CurrentBox);
-        UpdateHud();
-        LogLevel(fresh);
-        Changed?.Invoke(this, fresh);
+        t = 0f;
+        var e1 = b - a;
+        var e2 = c - a;
+        var p = d.Cross(e2);
+        float det = e1.Dot(p);
+        if (Mathf.Abs(det) < 1e-12f)
+        {
+            return false;
+        }
+        float invDet = 1f / det;
+        var s = o - a;
+        float u = s.Dot(p) * invDet;
+        if (u < 0f || u > 1f)
+        {
+            return false;
+        }
+        var q = s.Cross(e1);
+        float v = d.Dot(q) * invDet;
+        if (v < 0f || u + v > 1f)
+        {
+            return false;
+        }
+        t = e2.Dot(q) * invDet;
+        return t >= 0f;
     }
 
-    // ---- overlay ------------------------------------------------------------------------------
-
-    // Built on the first selection, never before: an unadorned --freecam/--anim-lab session adds no
-    // CanvasLayer and no mesh at all, so its capture is byte-identical to one without this service.
-    private void EnsureBuilt()
+    private static MeshInstance3D NewBoxInstance(string name, Color color, int priority)
     {
-        if (_highlight == null)
+        var material = new StandardMaterial3D
         {
-            var material = new StandardMaterial3D
-            {
-                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                AlbedoColor = Amber,
-                VertexColorUseAsAlbedo = false,
-                // Drawn through geometry: half the job is outlining an object you picked from the
-                // far side of a hull, and the world's fog would otherwise fade the box out at range.
-                NoDepthTest = true,
-                DisableFog = true,
-                RenderPriority = 20,
-            };
-            _highlight = new MeshInstance3D
-            {
-                Name = "selection_box",
-                Mesh = new ImmediateMesh(),
-                MaterialOverride = material,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                Visible = false,
-            };
-            // Parented to this service, NOT into the selected subtree — a highlight living inside
-            // the thing it measures would grow the next box it measures.
-            AddChild(_highlight);
-        }
-        if (_hudLayer != null)
-        {
-            _hudLayer.Visible = true;
-            return;
-        }
-        _hudLayer = new CanvasLayer { Layer = HudLayers.Debug };
-        var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
-        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _hud = new Label
-        {
-            // Below the freecam readout and the anim lab's two-line status, both at the top left.
-            Position = new Vector2(12, 62),
-            Modulate = Amber,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoColor = color,
+            VertexColorUseAsAlbedo = false,
+            // Drawn through geometry: half the job is outlining an object you picked from the
+            // far side of a hull, and the world's fog would otherwise fade the box out at range.
+            NoDepthTest = true,
+            DisableFog = true,
+            RenderPriority = priority,
         };
-        _hud.AddThemeFontSizeOverride("font_size", 13);
-        root.AddChild(_hud);
-        _hudLayer.AddChild(root);
-        AddChild(_hudLayer);
+        return new MeshInstance3D
+        {
+            Name = name,
+            Mesh = new ImmediateMesh(),
+            MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+        };
     }
 
-    private void DrawHighlight(Node3D node, Aabb box)
+    private static void DrawBox(MeshInstance3D target, Node3D node, Aabb box)
     {
-        if (_highlight?.Mesh is not ImmediateMesh mesh)
+        if (target.Mesh is not ImmediateMesh mesh)
         {
             return;
         }
@@ -517,8 +609,71 @@ public sealed partial class SelectionService : Node
             }
         }
         mesh.SurfaceEnd();
-        _highlight.GlobalTransform = node.GlobalTransform;
-        _highlight.Visible = true;
+        target.GlobalTransform = node.GlobalTransform;
+        target.Visible = true;
+    }
+
+    private void RemoveFromSetAt(int i)
+    {
+        _setBoxes[i].QueueFree();
+        _setBoxes.RemoveAt(i);
+        _set.RemoveAt(i);
+    }
+
+    private bool IsExtraRoot(Node n)
+    {
+        foreach (var root in ExtraRoots)
+        {
+            if (ReferenceEquals(root, n))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void Apply(bool fresh)
+    {
+        var node = _ladder[Level];
+        CurrentBox = SubtreeWorldAabb(node);
+        EnsureBuilt();
+        DrawBox(_highlight!, node, CurrentBox);
+        UpdateHud();
+        LogLevel(fresh);
+        Changed?.Invoke(this, fresh);
+    }
+
+    // ---- overlay ------------------------------------------------------------------------------
+
+    // Built on the first selection, never before: an unadorned --freecam/--anim-lab session adds no
+    // CanvasLayer and no mesh at all, so its capture is byte-identical to one without this service.
+    private void EnsureBuilt()
+    {
+        if (_highlight == null)
+        {
+            _highlight = NewBoxInstance("selection_box", Amber, 20);
+            // Parented to this service, NOT into the selected subtree — a highlight living inside
+            // the thing it measures would grow the next box it measures.
+            AddChild(_highlight);
+        }
+        if (_hudLayer != null)
+        {
+            _hudLayer.Visible = true;
+            return;
+        }
+        _hudLayer = new CanvasLayer { Layer = HudLayers.Debug };
+        var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
+        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _hud = new Label
+        {
+            // Below the freecam readout and the anim lab's two-line status, both at the top left.
+            Position = new Vector2(12, 62),
+            Modulate = Amber,
+        };
+        _hud.AddThemeFontSizeOverride("font_size", 13);
+        root.AddChild(_hud);
+        _hudLayer.AddChild(root);
+        AddChild(_hudLayer);
     }
 
     private void UpdateHud()
@@ -532,8 +687,9 @@ public sealed partial class SelectionService : Node
         string extent = s.LengthSquared() < 1e-6f
             ? "no mesh of its own"
             : Log.Format($"centre ({c.X:0}, {c.Y:0}, {c.Z:0})  size {s.X:0.#} × {s.Y:0.#} × {s.Z:0.#} m");
-        _hud.Text = Log.Format($"selection [click to pick · PgUp/PgDn walk · Home/End jump]  rung {Level + 1}/{_ladder.Count}\n")
-                    + Crumbs() + "\n" + extent;
+        string set = _set.Count == 0 ? "" : Log.Format($"\nexport set {_set.Count} node(s) — N opens the node lab's Export set");
+        _hud.Text = Log.Format($"selection [click to pick · Ctrl+click add to set · PgUp/PgDn walk · Home/End jump]  rung {Level + 1}/{_ladder.Count}\n")
+                    + Crumbs() + "\n" + extent + set;
     }
 
     private string Crumbs()

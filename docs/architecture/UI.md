@@ -458,8 +458,9 @@ arrow keys walk the focus chain instead of reaching the aircraft or the lab's or
 ## src/UI/SelectionService.cs
 The shared world selection in `--freecam` and `--anim-lab`: a left click picks the mesh under the
 cursor, PgUp and PgDn walk its `cs_name` ancestor ladder, and a breadcrumb line and wireframe box
-show the current rung. `Current`, `Ladder`, `Level`, `CurrentBox` and the `Changed` event are what
-the other inspect tools read; `--debug-select` replays a click for a scripted run. `ExtraRoots`
+show the current rung. Objects are picked by box, map-scale meshes (terrain) by triangle. Ctrl+click
+also gathers the `ExportSet` the node lab writes as one file. `Current`, `Ladder`, `Level`,
+`CurrentBox` and the `Changed` event are what the other inspect tools read; `--debug-select` replays a click for a scripted run. `ExtraRoots`
 walks props parked beside the world content, and `SubtreeWorldAabb` is the shared box measurement
 the anim runtime and the node lab read too.
 
@@ -515,7 +516,7 @@ what happens when you touch it, and neither answers "what is this object".
 
 ## src/UI/NodeLab.cs
 The node lab (key N) in `--freecam` and `--anim-lab`: the world's `cs_name` tree, a search box,
-per-node frame, hide and glTF export into `Exports/`, a dependency readout for the current selection (anim defs, destructible
+per-node frame, hide and glTF export into `Exports/`, the export set's toggle, combined export and clear, a dependency readout for the current selection (anim defs, destructible
 pools, geometry and textures, colliders) and a destructibles view with coverage columns, plus
 top-level branches for props parked beside the world content. `--debug-nodelab` is the scripted
 twin. A row's text and colour follow live visibility, re-read on the panel's own status cadence.

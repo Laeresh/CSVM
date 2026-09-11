@@ -12,7 +12,7 @@ namespace CSVM.UI;
 /// <summary>
 /// The node lab (N) in <c>--freecam</c>/<c>--anim-lab</c>: a dockable panel holding the world's
 /// node tree by <c>cs_name</c>, a search box, per-node actions (frame the camera, hide/show and
-/// export the subtree) and a dependency readout for whatever <see cref="SelectionService"/> currently has. A
+/// export the subtree), the export set's actions and a dependency readout for whatever <see cref="SelectionService"/> currently has. A
 /// second view lists the chapter's destructibles with coverage columns. The tree is lazy: a
 /// branch populates only when expanded. Full behaviour: this module's entry in
 /// docs/architecture.md.
@@ -57,6 +57,7 @@ public sealed partial class NodeLab : Node
     private Tree? _tree;
     private LineEdit? _search;
     private Label? _status;
+    private Label? _setLabel;
     private RichTextLabel? _deps;
     private Button? _hideBtn;
     private CheckButton? _destBtn;
@@ -277,6 +278,36 @@ public sealed partial class NodeLab : Node
         GltfExporter.ExportToExports(node, nodeName);
     }
 
+    /// <summary>Flips the current rung in the export set, so a tree row or a walked-up rung can
+    /// join it as well as a Ctrl+clicked leaf.</summary>
+    public void ToggleSetMembership()
+    {
+        if (_selection.Current is not { } node || !IsInstanceValid(node))
+        {
+            Log.Info("ui", $"nodelab set — nothing is selected");
+            return;
+        }
+        _selection.ToggleInSet(node);
+        UpdateStatus();
+    }
+
+    /// <summary>Writes every export set member into one timestamped GLB in <c>Exports/</c>, each at
+    /// its world transform.</summary>
+    public void ExportSet()
+    {
+        var set = _selection.ExportSet.Where(IsInstanceValid).ToList();
+        if (set.Count == 0)
+        {
+            Log.Info("ui", $"nodelab export set — the set is empty (Ctrl+click objects, or ± set on a selection)");
+            return;
+        }
+        Log.Info("ui", $"nodelab export set count={set.Count} nodes=[{string.Join(" ", set.Select(SelectionService.NameOf))}]");
+        string name = set.Count == 1
+            ? SelectionService.NameOf(set[0])
+            : $"{SelectionService.NameOf(set[0])}+{set.Count - 1}";
+        GltfExporter.ExportSetToExports(set, name);
+    }
+
     /// <summary>The dependency readout for one node as plain lines — the same text the panel shows
     /// and the scripted dump logs, so the two can never disagree. Null node yields the
     /// nothing-selected notice.</summary>
@@ -299,9 +330,8 @@ public sealed partial class NodeLab : Node
         return lines;
     }
 
-    /// <summary>Selects a node by <c>cs_name</c> — the tree panel's own entry, and the only way to
-    /// reach anything the click pick refuses (terrain is over the pick's size cap). An exact match
-    /// wins; failing that the first substring match, with the full candidate list logged so an
+    /// <summary>Selects a node by <c>cs_name</c> — the tree panel's own entry, and the way to reach
+    /// anything the click cannot (hidden, or off screen). An exact match wins; failing that the first substring match, with the full candidate list logged so an
     /// ambiguous name is visible rather than silently resolved.</summary>
     public bool SelectByName(string name)
     {
@@ -563,6 +593,17 @@ public sealed partial class NodeLab : Node
         actions.AddChild(_destBtn);
         box.AddChild(actions);
 
+        var setRow = new HBoxContainer();
+        setRow.AddThemeConstantOverride("separation", 4);
+        setRow.AddChild(Btn("± set", ToggleSetMembership));
+        setRow.AddChild(Btn("Export set", ExportSet));
+        setRow.AddChild(Btn("Clear set", ClearSet));
+        _setLabel = Small("");
+        _setLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _setLabel.ClipText = true;
+        setRow.AddChild(_setLabel);
+        box.AddChild(setRow);
+
         _search = new LineEdit { PlaceholderText = "search cs_name…" };
         _search.TextChanged += _ => RebuildTree();
         box.AddChild(_search);
@@ -593,13 +634,19 @@ public sealed partial class NodeLab : Node
         _deps.AddThemeFontSizeOverride("normal_font_size", 11);
         box.AddChild(_deps);
 
-        box.AddChild(Small("click a row to select · double-click frames · Export glTF writes the selection · N hides"));
+        box.AddChild(Small("click a row to select · double-click frames · Export glTF writes the selection · Export set writes the set as one file · N hides"));
 
         margin.AddChild(box);
         panel.AddChild(margin);
         root.AddChild(panel);
         _layer.AddChild(root);
         AddChild(_layer);
+    }
+
+    private void ClearSet()
+    {
+        _selection.ClearSet();
+        UpdateStatus();
     }
 
     private Button Btn(string text, Action pressed)
@@ -626,6 +673,14 @@ public sealed partial class NodeLab : Node
             ? "nothing selected — click an object or a row"
             : Log.Format($"{SelectionService.NameOf(node)}  rung {_selection.Level + 1}/{_selection.Ladder.Count}  visible={node.Visible} in_tree={node.IsVisibleInTree()}");
         _status.Text = sel;
+        if (_setLabel != null)
+        {
+            var set = _selection.ExportSet;
+            _setLabel.Text = set.Count == 0
+                ? "set empty — Ctrl+click adds"
+                : $"set {set.Count}: {string.Join(" ", set.Where(IsInstanceValid).Select(SelectionService.NameOf))}";
+            _setLabel.TooltipText = _setLabel.Text;
+        }
         if (_hideBtn != null)
         {
             _hideBtn.Text = node != null && IsInstanceValid(node) && !node.Visible ? "Show" : "Hide";
@@ -720,8 +775,6 @@ public sealed partial class NodeLab : Node
         {
             return;
         }
-        // A direct Select bypasses SelectionService's click-pick size cap, so a row here can reach
-        // an object (terrain) the click ray refuses.
         _syncing = true;
         _selection.Select(node);
         _syncing = false;

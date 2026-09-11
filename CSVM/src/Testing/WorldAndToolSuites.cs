@@ -1340,6 +1340,105 @@ internal static class WorldAndToolSuites
         });
     }
 
+    // Aims straight down at a sample of C4's 1024 m terrain tiles with the cloud deck hidden. The
+    // box-only pick skipped every map-scale mesh and missed over bare ground; the triangle pick must
+    // land on the aimed tile. Two struck tiles then export through the set and are read back: the
+    // merged box has to cover both tile centres, which fails if members lose their world transform,
+    // and a member nested in another must not be written twice.
+    [Suite("terrain-pick-export", "a click reaches C4's terrain tiles, and an export set writes them as one glTF at their world positions")]
+    internal static void TerrainPickExport(TestContext ctx)
+    {
+        ctx.WithWorld("C4", collision: false, world =>
+        {
+            var root = world.Session.Root;
+            var deck = world.Session.Builder.CloudDeck;
+            var tiles = new List<MeshInstance3D>();
+            CollectMapScale(root, deck, tiles);
+            ctx.Check(tiles.Count > 0, $"C4 has map-scale terrain meshes tiles={tiles.Count}");
+            if (tiles.Count == 0)
+            {
+                return;
+            }
+
+            var selection = new SelectionService(root, ctx.Camera);
+            ctx.Host.AddChild(selection);
+            var cameraWas = ctx.Camera.GlobalTransform;
+            bool deckWas = deck?.Visible ?? false;
+            if (deck != null)
+            {
+                deck.Visible = false;
+            }
+            try
+            {
+                var screen = ctx.Camera.GetViewport().GetVisibleRect().Size * 0.5f;
+                var struck = new List<(Node3D Leaf, Vector3 Centre)>();
+                int aimed = 0;
+                for (int i = 0; i < tiles.Count; i += System.Math.Max(1, tiles.Count / 12))
+                {
+                    var box = tiles[i].GlobalTransform * tiles[i].Mesh.GetAabb();
+                    var centre = box.GetCenter();
+                    ctx.Camera.GlobalTransform = new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                        new Vector3(centre.X, box.End.Y + 200f, centre.Z));
+                    aimed++;
+                    bool hit = selection.PickAt(screen);
+                    var leaf = selection.Current;
+                    bool onTile = hit && leaf != null && (ReferenceEquals(leaf, tiles[i]) || leaf.IsAncestorOf(tiles[i]));
+                    if (onTile)
+                    {
+                        struck.Add((leaf!, centre));
+                    }
+                    else
+                    {
+                        ctx.Note($"straight-down pick took another object tile={SelectionService.NameOf(tiles[i])} hit={hit} got={(leaf != null ? SelectionService.NameOf(leaf) : "nothing")}");
+                    }
+                }
+                ctx.Note($"terrain picks aimed={aimed} on_the_aimed_tile={struck.Count}");
+                ctx.Check(struck.Count * 2 >= aimed, $"most straight-down picks take the aimed tile aimed={aimed} on_tile={struck.Count}");
+
+                var distinct = struck.GroupBy(s => s.Leaf).Select(g => g.First()).Take(2).ToList();
+                ctx.Check(distinct.Count == 2, $"two distinct tiles were struck count={distinct.Count}");
+                if (distinct.Count < 2)
+                {
+                    return;
+                }
+                foreach (var (leaf, _) in distinct)
+                {
+                    selection.ToggleInSet(leaf);
+                }
+                ctx.Same(2, selection.ExportSet.Count, $"export set size after two Ctrl+clicks");
+
+                string path = Path.Combine(ctx.ScratchDir, "terrain-pick-export.glb");
+                Directory.CreateDirectory(ctx.ScratchDir);
+                ctx.Same((long)Error.Ok, (long)GltfExporter.ExportSet(selection.ExportSet, path), $"export set write result");
+                var (meshes, merged) = ReadBack(ctx, path);
+                foreach (var (leaf, centre) in distinct)
+                {
+                    bool covered = merged.Position.X <= centre.X && centre.X <= merged.End.X
+                                   && merged.Position.Z <= centre.Z && centre.Z <= merged.End.Z;
+                    ctx.Check(covered, $"re-imported set covers tile={SelectionService.NameOf(leaf)} centre=({centre.X:0},{centre.Z:0}) box=({merged.Position.X:0},{merged.Position.Z:0})..({merged.End.X:0},{merged.End.Z:0})");
+                }
+
+                // A descendant of a member rides along with it, so listing it too must not add a copy.
+                var nested = new List<Node3D>(selection.ExportSet) { FirstMesh(distinct[0].Leaf)! };
+                string nestedPath = Path.Combine(ctx.ScratchDir, "terrain-pick-export-nested.glb");
+                ctx.Same((long)Error.Ok, (long)GltfExporter.ExportSet(nested, nestedPath), $"nested export set write result");
+                ctx.Same(meshes, ReadBack(ctx, nestedPath).Meshes, $"meshes when a member's own mesh is listed again");
+
+                selection.ClearSet();
+                ctx.Same(0, selection.ExportSet.Count, $"export set size after Clear set");
+            }
+            finally
+            {
+                if (deck != null)
+                {
+                    deck.Visible = deckWas;
+                }
+                ctx.Camera.GlobalTransform = cameraWas;
+                selection.Free();
+            }
+        });
+    }
+
     // The first descendant (inclusive) whose cs_name contains the tag — "healthy"/"destroyed" name
     // their variant subtrees exactly as CountVariants (Probes.cs) scans for, but this returns the
     // node itself rather than a count.
@@ -1597,6 +1696,73 @@ internal static class WorldAndToolSuites
             ctx.Host.RemoveChild(stage);
             stage.Free();
         }
+    }
+
+    // Visible map-scale meshes under a world root, the cloud deck's excepted.
+    private static void CollectMapScale(Node n, Node3D? deck, List<MeshInstance3D> into)
+    {
+        if (deck != null && ReferenceEquals(n, deck))
+        {
+            return;
+        }
+        if (n is MeshInstance3D { Mesh: { } mesh } mi && mi.IsVisibleInTree()
+            && (mi.GlobalTransform.Basis * mesh.GetAabb().Size).Length() >= SelectionService.MaxPickDiag)
+        {
+            into.Add(mi);
+        }
+        foreach (var child in n.GetChildren())
+        {
+            CollectMapScale(child, deck, into);
+        }
+    }
+
+    private static MeshInstance3D? FirstMesh(Node n)
+    {
+        if (n is MeshInstance3D mi)
+        {
+            return mi;
+        }
+        foreach (var child in n.GetChildren())
+        {
+            if (FirstMesh(child) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    // Re-imports a written glTF into the scene tree just long enough to measure it: its mesh count
+    // and the world box of those meshes.
+    private static (int Meshes, Aabb Box) ReadBack(TestContext ctx, string path)
+    {
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        ctx.Same((long)Error.Ok, (long)doc.AppendFromFile(path, state), $"re-import read result path={Path.GetFileName(path)}");
+        if (doc.GenerateScene(state) is not Node3D scene)
+        {
+            ctx.Check(false, $"re-imported scene has a Node3D root path={Path.GetFileName(path)}");
+            return (0, default);
+        }
+        ctx.Host.AddChild(scene);
+        int meshes = 0;
+        Aabb merged = default;
+        void Walk(Node n)
+        {
+            if (n is MeshInstance3D { Mesh: { } mesh } mi)
+            {
+                var box = mi.GlobalTransform * mesh.GetAabb();
+                merged = meshes == 0 ? box : merged.Merge(box);
+                meshes++;
+            }
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(scene);
+        scene.Free();
+        return (meshes, merged);
     }
 
     // One mission's ZONE1 energies, off a rig of its own so the two missions cannot share state.

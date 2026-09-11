@@ -10,7 +10,7 @@ namespace CSVM.Testing;
 /// and live particle emitters (smoke/fire/trails) are not part of the tree it reads.
 ///
 /// The viewer plane goes through the <c>--export-gltf=</c> CLI one-shot and F10; NodeLab can
-/// export its current selection. The work happens on a throwaway <c>Duplicate()</c>, so the live
+/// export its current selection, or its export set as one file. The work happens on a throwaway <c>Duplicate()</c>, so the live
 /// scene is never mutated.</summary>
 public sealed class GltfExporter
 {
@@ -36,7 +36,90 @@ public sealed class GltfExporter
         // Duplicate so material overrides and node pruning below never touch the live tree. The
         // ArrayMesh resources are shared with it, so the winding fix below builds a new mesh rather
         // than editing one, and skins are overridden on the NODE.
-        var copy = (Node3D)plane.Duplicate();
+        return Write((Node3D)plane.Duplicate(), path);
+    }
+
+    /// <summary>Writes several live subtrees into one glTF under a single root, each at its world
+    /// transform, so neighbouring terrain tiles line up in the file as they do in the world. A node
+    /// with an ancestor also in the list is dropped, since the ancestor already carries it.</summary>
+    public static Error ExportSet(IReadOnlyList<Node3D> nodes, string path)
+    {
+        var root = new Node3D { Name = "crimsonskies_set" };
+        int kept = 0;
+        foreach (var node in nodes)
+        {
+            if (!GodotObject.IsInstanceValid(node) || HasAncestorIn(node, nodes))
+            {
+                continue;
+            }
+            var copy = (Node3D)node.Duplicate();
+            copy.Transform = node.GlobalTransform;
+            root.AddChild(copy);
+            kept++;
+        }
+        if (kept == 0)
+        {
+            root.Free();
+            return Export(null, "");
+        }
+        return Write(root, path);
+    }
+
+    /// <summary><see cref="ExportSet"/> to a timestamped GLB in <c>Exports/</c>, as
+    /// <see cref="ExportToExports"/> does for one node.</summary>
+    public static Error ExportSetToExports(IReadOnlyList<Node3D> nodes, string setName) =>
+        ExportSet(nodes, ExportsPath(setName));
+
+    /// <summary>Exports <paramref name="node"/> to a timestamped GLB in the git-ignored
+    /// <c>Exports/</c> directory beside the Godot project. <paramref name="nodeName"/> becomes a
+    /// filesystem-safe portion of the filename.</summary>
+    public static Error ExportToExports(Node3D? node, string nodeName)
+    {
+        if (node == null)
+        {
+            return Export(null, "");
+        }
+        return Export(node, ExportsPath(nodeName));
+    }
+
+    /// <summary>The CLI one-shot, ticked from the tail of <c>_Process</c>: wait for the session to
+    /// land a plane, export it once, then quit with the write's success as the exit code (so a
+    /// scripted run fails loudly). No-op once fired or when no <c>--export-gltf=</c> was given.</summary>
+    public void Tick(Node3D? plane, SceneTree tree, SessionSpec spec)
+    {
+        if (_pendingPath == null || plane == null)
+        {
+            return;
+        }
+        var err = Export(plane, _pendingPath);
+        _pendingPath = null;
+        tree.Quit(err == Error.Ok ? 0 : 1);
+    }
+
+    private static string ExportsPath(string name)
+    {
+        string projectDir = ProjectSettings.GlobalizePath("res://");
+        string directory = Path.GetFullPath(Path.Combine(projectDir, "..", "Exports"));
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory,
+            $"crimsonskies_{SafeFileName(name)}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.glb");
+    }
+
+    private static bool HasAncestorIn(Node3D node, IReadOnlyList<Node3D> nodes)
+    {
+        foreach (var other in nodes)
+        {
+            if (!ReferenceEquals(other, node) && GodotObject.IsInstanceValid(other) && other.IsAncestorOf(node))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Bakes and writes a detached copy, then frees it. The copy is never in the scene tree.
+    private static Error Write(Node3D copy, string path)
+    {
         BakeAndConvert(copy);
         path = ResolvePath(NormalizeExtension(path));
         var doc = new GltfDocument();
@@ -56,37 +139,6 @@ public sealed class GltfExporter
             GD.PrintErr($"gltf export failed ({err}): {path}");
         }
         return err;
-    }
-
-    /// <summary>Exports <paramref name="node"/> to a timestamped GLB in the git-ignored
-    /// <c>Exports/</c> directory beside the Godot project. <paramref name="nodeName"/> becomes a
-    /// filesystem-safe portion of the filename.</summary>
-    public static Error ExportToExports(Node3D? node, string nodeName)
-    {
-        if (node == null)
-        {
-            return Export(null, "");
-        }
-        string projectDir = ProjectSettings.GlobalizePath("res://");
-        string directory = Path.GetFullPath(Path.Combine(projectDir, "..", "Exports"));
-        Directory.CreateDirectory(directory);
-        string path = Path.Combine(directory,
-            $"crimsonskies_{SafeFileName(nodeName)}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.glb");
-        return Export(node, path);
-    }
-
-    /// <summary>The CLI one-shot, ticked from the tail of <c>_Process</c>: wait for the session to
-    /// land a plane, export it once, then quit with the write's success as the exit code (so a
-    /// scripted run fails loudly). No-op once fired or when no <c>--export-gltf=</c> was given.</summary>
-    public void Tick(Node3D? plane, SceneTree tree, SessionSpec spec)
-    {
-        if (_pendingPath == null || plane == null)
-        {
-            return;
-        }
-        var err = Export(plane, _pendingPath);
-        _pendingPath = null;
-        tree.Quit(err == Error.Ok ? 0 : 1);
     }
 
     // Bake the current damage/flare state and drop non-geometry: free every hidden

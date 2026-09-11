@@ -149,9 +149,9 @@ than re-deriving the path. Read `GoldenShot.cs` for what the save site prints.
 ## src/Testing/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.
 `Export(node, path)` works on a throwaway `node.Duplicate()`, frees hidden `Node3D`s (the panel/flare `Visible` toggles
-are how damage is baked) and the point-sprite `"lights"` instances, converts every shader skin to a
-glTF-serializable `StandardMaterial3D` over a copy of the geometry with its winding reversed
-(`docs/formats/gotchas.md`: unreversed, this data exports inside out), then
-`GltfDocument.AppendFromScene` + `WriteToFilesystem`. Format is extension-driven (`.glb` default).
-`ExportToExports` supplies a safe timestamped `Exports/` GLB name. The viewer's `--export-gltf=`
-one-shot and F10, plus NodeLab's selected-subtree action, share that writer.
+are how damage is baked) and the point-sprite `"lights"` instances, and converts every shader skin to a
+`StandardMaterial3D` over geometry with its winding reversed (`docs/formats/gotchas.md`: unreversed,
+this data exports inside out). Format is extension-driven (`.glb` default). `ExportSet` writes several
+subtrees under one root at their world transforms, dropping any an ancestor in the list carries.
+`ExportToExports`/`ExportSetToExports` name a timestamped `Exports/` GLB. The viewer's `--export-gltf=`
+one-shot and F10, and NodeLab's selection and export set actions, share that writer.
