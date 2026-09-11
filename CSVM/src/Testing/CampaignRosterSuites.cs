@@ -56,6 +56,31 @@ internal static class CampaignRosterSuites
     // splits at a node passes this inside seconds.
     private const float BomberSpreadCeilingM = 600f;
 
+    // The crash-probe suite's trail geometry: one bomber held this far astern of another on that
+    // one's own track, which is inside the decoded 4.5 s lookahead at bomber cruise and well
+    // outside both airframes. Held for long enough to cover a whole probe interval, since the
+    // cadence is a per-plane 0.5…1.0 s draw and a shorter hold can miss every cast.
+    private const float ProbeTrailM = 200f;
+    private const float ProbeArmS = 2f;
+    private const float ProbeReleaseS = 8f;
+
+    // How often the formation leg samples its own probe geometry, and how many of those samples may
+    // find a wing-mate across the ray. The probe fires at most twice a second, so four samples a
+    // second describe it without a per-frame hull walk. A turn does put one of three aircraft on
+    // one net in front of another now and then, which costs the one behind a short climb-out; the
+    // ceiling refuses a formation that has become a nose-to-tail queue, where that would be the
+    // normal state rather than an occasional one.
+    private const int ProbeSampleFrames = 15;
+    private const int ProbeOnRayCeiling = 24;
+
+    // A ray this far down from a bomber on its net reaches C3's ground, so a clear one means the
+    // world was built without colliders and the whole suite would be measuring nothing.
+    private const float ProbeGroundRayM = 2000f;
+
+    // Backwards through the caster's own airframe: long enough to start outside its own hulls,
+    // short enough not to reach the aircraft behind it (they fly about 100 m apart).
+    private const float ProbeSelfRayM = 60f;
+
     // The two candidate rings, both dead ahead and level, so distance and the authored bias are
     // the only terms that differ between an arm's two candidates.
     private const float NearRingM = 400f;
@@ -865,6 +890,38 @@ internal static class CampaignRosterSuites
         + "certain steady-hand failure on one leaves it on that node and back with the other two")]
     internal static void BomberFormation(TestContext ctx)
     {
+        var report = WithBomberRoster(ctx, collision: false,
+            (director, rigs, live, log) => FlyBombers(ctx, director.Roster, rigs, live, log));
+        ctx.WriteArtifact($"test-bomber-formation-{BomberChapter}-{BomberMission}.txt", report.ToString());
+        ctx.Note($"flew {BomberChapter}/{BomberMission}'s three netted bombers, unattacked and then fired on");
+    }
+
+    /// <summary>The avoid-crash override between aircraft flying one net, over the same three CM02
+    /// bombers in a world built WITH colliders, which the formation suite above cannot exercise.
+    /// The ray is measured on the real rigs (it sees the netted aircraft beside it and never the
+    /// caster, <c>FUN_0041f810</c>'s deactivate-cast-restore), the formation's own probe geometry
+    /// is sampled over a flown minute, and two of the three are then put in trail so the override
+    /// has to arm on another netted aircraft, climb out and release back onto the net.</summary>
+    [Suite("campaign-bomber-crash-probe",
+        "the avoid-crash probe between C3/M05's three netted bombers in a COLLISION world: the "
+        + "world-and-aircraft ray sees the netted aircraft beside it and never its own airframe, "
+        + "the authored formation flies a minute of its net without becoming a nose-to-tail queue "
+        + "on each other's lookahead rays, and one held 200 m astern of another arms the override "
+        + "on that aircraft, climbs out 1000 m and releases back onto the net when the line clears")]
+    internal static void BomberCrashProbe(TestContext ctx)
+    {
+        var report = WithBomberRoster(ctx, collision: true,
+            (director, rigs, live, log) => ProbeBombers(ctx, director.Roster, rigs, live, log));
+        ctx.WriteArtifact($"test-bomber-crash-probe-{BomberChapter}-{BomberMission}.txt", report.ToString());
+        ctx.Note($"probed {BomberChapter}/{BomberMission}'s three netted bombers against each other");
+    }
+
+    // The C3/M05 roster build both bomber suites fly: the mission's own aiv blocks spawned through
+    // the session's own assembler into that chapter's built world, with or without colliders.
+    // Returns the report the flight appended to, so each suite names its own artifact.
+    private static StringBuilder WithBomberRoster(TestContext ctx, bool collision,
+        Action<CampaignDirector, List<FlightController>, ProjectilePool, StringBuilder> flight)
+    {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
@@ -894,7 +951,7 @@ internal static class CampaignRosterSuites
         var report = new StringBuilder();
         report.AppendLine($"{BomberChapter}/{BomberMission} seq={mission.Seq}: {blocks.Count} roster block(s)");
 
-        ctx.WithWorld(BomberChapter, collision: false, BomberMission, world =>
+        ctx.WithWorld(BomberChapter, collision, BomberMission, world =>
         {
             var textures = new TextureArchive(texturesPath);
             var rigs = new List<FlightController>();
@@ -937,7 +994,7 @@ internal static class CampaignRosterSuites
                     Rng = new System.Random(1),
                 });
 
-                FlyBombers(ctx, director.Roster, rigs, live, report);
+                flight(director, rigs, live, report);
             }
             finally
             {
@@ -954,8 +1011,7 @@ internal static class CampaignRosterSuites
             }
         });
 
-        ctx.WriteArtifact($"test-bomber-formation-{BomberChapter}-{BomberMission}.txt", report.ToString());
-        ctx.Note($"flew {BomberChapter}/{BomberMission}'s three netted bombers, unattacked and then fired on");
+        return report;
     }
 
     // The decoded fork per block: wingman_1 escorts the player with no net; a wingman whose
@@ -1180,6 +1236,261 @@ internal static class CampaignRosterSuites
             $"…and never spread past {BomberSpreadCeilingM:0} m of each other: worst {worstSpread:0} m");
         ctx.Check(finalSpread < BomberSpreadCeilingM,
             $"the one that was fired on is back with the other two: {finalSpread:0} m");
+    }
+
+    // The avoid-crash half, in a world that has colliders: the ray's own reach on the real rigs,
+    // then the authored formation with the probe live, then a wing-mate held inside the lookahead
+    // so the override has to arm on another netted aircraft rather than on terrain.
+    private static void ProbeBombers(TestContext ctx, IReadOnlyDictionary<string, FlightController> roster,
+        List<FlightController> rigs, ProjectilePool live, StringBuilder report)
+    {
+        var bombers = new List<FlightController>();
+        foreach (string name in BomberBlocks)
+        {
+            if (roster.TryGetValue(name, out var rig))
+            {
+                bombers.Add(rig);
+            }
+        }
+        ctx.Same(BomberBlocks.Length, bombers.Count, $"the three britbalmoral blocks all have a rig");
+        if (bombers.Count != BomberBlocks.Length)
+        {
+            return;
+        }
+
+        var overrides = new List<string>();
+        foreach (var rig in bombers)
+        {
+            ctx.Check(rig.Pilot?.Patrol is { Net.Id: BomberNetId },
+                $"{rig.Name} carries its authored net {BomberNetId}: {rig.Pilot?.Patrol?.Net.Id}");
+            if (rig.Pilot?.Machine is { } modes)
+            {
+                string tag = rig.Name;
+                modes.ModeChanged += (from, to, why) =>
+                {
+                    if (to == AiMode.AvoidCrash || from == AiMode.AvoidCrash)
+                    {
+                        overrides.Add($"{tag}: {AiModeMachine.NameOf(from)}>{AiModeMachine.NameOf(to)} ({why})");
+                    }
+                };
+            }
+        }
+
+        void Step(int frames)
+        {
+            for (int i = 0; i < frames; i++)
+            {
+                live.SimStep(StepDt);
+                foreach (var rig in rigs)
+                {
+                    if (rig.InPlay)
+                    {
+                        rig.SimStep(StepDt);
+                    }
+                }
+            }
+        }
+
+        // ⚠ Where each airframe's COLLIDER stands for the whole suite, since a flown aeroplane
+        // leaves its own behind (docs/verification.md INSTR-13). The trail leg flies the pair back
+        // to these poses rather than casting at where an aeroplane is drawn.
+        var pinned = new List<(Vector3 Pos, float HeadingDeg)>();
+        foreach (var rig in bombers)
+        {
+            pinned.Add((rig.WorldPosition, AiPilot.HeadingDegOf(rig.NoseDirection)));
+        }
+
+        Step(1); // the first pilot input, which is what wires each rig's own probe onto its machine
+        var lead = bombers[0];
+        var mate = bombers[1];
+        string mateName = mate.Name;
+        report.AppendLine($"lead y={lead.WorldPosition.Y:0} m v={lead.WorldVelocity.Length():0} m/s, spread {Spread(bombers):0} m, mate {lead.WorldPosition.DistanceTo(mate.WorldPosition):0} m off");
+        ctx.Check(lead.Pilot?.Machine?.ProbeBlocked != null,
+            $"{lead.Name} probes through its own rig's world-and-aircraft ray");
+        string? ground = lead.AvoidCrashBlocksLine(
+            lead.WorldPosition, lead.WorldPosition + (Vector3.Down * ProbeGroundRayM));
+        ctx.Check(ground != null, $"the world under {lead.Name} carries colliders: {ground ?? "clear"}");
+        string? atMate = lead.AvoidCrashBlocksLine(lead.WorldPosition, mate.WorldPosition);
+        report.AppendLine($"probe ray at {mateName}: {atMate ?? "clear"}");
+        ctx.Check(atMate != null && atMate.StartsWith(mateName, StringComparison.Ordinal),
+            $"…and the probe ray sees the netted aircraft beside it: {atMate ?? "clear"}");
+        ctx.Check(
+            lead.AvoidCrashBlocksLine(
+                lead.WorldPosition - (lead.NoseDirection * ProbeSelfRayM), lead.WorldPosition) == null,
+            $"…and never the caster's own airframe, which the original deactivates before it casts");
+
+        // The authored formation, its spacing measured and never widened to quiet a probe: how
+        // close each aeroplane's own lookahead ray comes to a wing-mate's hulls. ⚠ Sampled on the
+        // hulls rather than counted off the casts, since the colliders are pinned above.
+        var routes = new List<List<int>> { new(), new(), new() };
+        bool split = false;
+        float worstSpread = 0f;
+        float nearestOnRay = float.MaxValue;
+        int wouldStrike = 0;
+        for (int i = 0; i < (int)(BomberRunS / StepDt); i++)
+        {
+            Step(1);
+            for (int b = 0; b < bombers.Count; b++)
+            {
+                var walk = bombers[b].Pilot!.Patrol!;
+                var route = routes[b];
+                if (route.Count == 0 || route[route.Count - 1] != walk.CurrentIndex)
+                {
+                    route.Add(walk.CurrentIndex);
+                }
+                split |= Math.Abs(walk.Advances - bombers[0].Pilot!.Patrol!.Advances) > 1;
+            }
+            worstSpread = Mathf.Max(worstSpread, Spread(bombers));
+            if (i % ProbeSampleFrames == 0)
+            {
+                float onRay = NearestOnProbeRay(bombers);
+                nearestOnRay = Mathf.Min(nearestOnRay, onRay);
+                wouldStrike += onRay <= 0f ? 1 : 0;
+            }
+            if (i % 600 == 0)
+            {
+                ctx.Note($"t={i * StepDt:0}s node={bombers[0].Pilot!.Patrol!.CurrentIndex} spread={Spread(bombers):0} m nearest-on-ray={nearestOnRay:0} m");
+            }
+        }
+        string route0 = string.Join(" ", routes[0]);
+        for (int b = 0; b < routes.Count; b++)
+        {
+            report.AppendLine($"{bombers[b].Name} route: {string.Join(" ", routes[b])}");
+        }
+        report.AppendLine($"worst spread {worstSpread:0} m over {BomberRunS:0} s, nearest wing-mate hull on a probe ray {nearestOnRay:0} m, {wouldStrike} sample(s) on the ray, {overrides.Count} override(s)");
+        ctx.Check(string.Join(" ", routes[1]) == route0 && string.Join(" ", routes[2]) == route0,
+            $"all three walk the same nodes with the probe live: {route0}");
+        ctx.Check(!split, $"…never more than one node apart over the whole {BomberRunS:0} s");
+        ctx.Check(worstSpread < BomberSpreadCeilingM,
+            $"…and never spread past {BomberSpreadCeilingM:0} m: worst {worstSpread:0} m");
+        ctx.Check(wouldStrike <= ProbeOnRayCeiling,
+            $"the authored formation is not flying nose to tail: a wing-mate's hull lies on another's lookahead ray on {wouldStrike} of {(int)(BomberRunS / StepDt / ProbeSampleFrames)} samples (nearest {nearestOnRay:0} m), ceiling {ProbeOnRayCeiling}");
+        foreach (var rig in bombers)
+        {
+            string mode = AiModeMachine.NameOf(rig.Pilot!.Machine!.Mode);
+            ctx.Check(rig.Pilot!.Machine!.Mode != AiMode.AvoidCrash,
+                $"{rig.Name} is not left climbing out at the end of the leg: {mode}");
+        }
+
+        ProbeTrail(ctx, bombers, pinned[2], Step, report);
+        report.AppendLine(overrides.Count == 0
+            ? "no avoid-crash transition over the whole suite"
+            : string.Join(System.Environment.NewLine, overrides));
+    }
+
+    // The forced half: two of the netted three put in trail, the geometry their own spacing
+    // produces only now and then. Both are flown back to the target's pinned pose, so the aeroplane
+    // the ray meets is the one the aeroplane is drawn at. Under test is the decoded cycle, where a
+    // blocked ray takes the mode and names the aircraft it saw, the climb-out is flown, and one
+    // clear ray hands the pilot back to its net.
+    private static void ProbeTrail(TestContext ctx, List<FlightController> bombers,
+        (Vector3 Pos, float HeadingDeg) pinned, Action<int> step, StringBuilder report)
+    {
+        var prober = bombers[1];
+        var target = bombers[2];
+        string targetName = target.Name;
+        var machine = prober.Pilot!.Machine!;
+        string? armedOn = null;
+        machine.ModeChanged += (from, to, why) =>
+        {
+            if (to == AiMode.AvoidCrash)
+            {
+                armedOn = why;
+            }
+        };
+
+        // A warp, not an Activate: it writes a pose and a velocity and nothing else, so both keep
+        // the net seat an activation would reseat.
+        var track = new Basis(Vector3.Up, Mathf.DegToRad(pinned.HeadingDeg)) * Vector3.Forward;
+        void Pin(bool holdProber)
+        {
+            target.WarpTo(pinned.Pos, pinned.HeadingDeg, target.WorldVelocity.Length());
+            if (holdProber)
+            {
+                prober.WarpTo(pinned.Pos - (track * ProbeTrailM), pinned.HeadingDeg,
+                    prober.WorldVelocity.Length());
+            }
+        }
+
+        int netBefore = prober.Pilot!.Patrol!.Net.Id;
+        int armedAt = 0;
+        for (; armedAt < (int)(ProbeArmS / StepDt) && machine.Mode != AiMode.AvoidCrash; armedAt++)
+        {
+            Pin(holdProber: true);
+            step(1);
+        }
+        float yArmed = prober.WorldPosition.Y;
+        string armedMode = AiModeMachine.NameOf(machine.Mode);
+        report.AppendLine($"trail leg: {prober.Name} {ProbeTrailM:0} m astern of {targetName} armed after {armedAt * StepDt:0.00} s as {armedMode}, y={yArmed:0} m, climb-out={machine.ClimbOutAltitude:0} m, on '{armedOn}'");
+        ctx.Check(machine.Mode == AiMode.AvoidCrash,
+            $"a netted wing-mate {ProbeTrailM:0} m ahead arms the override: {armedMode}");
+        ctx.Check(armedOn != null && armedOn.Contains(targetName, StringComparison.Ordinal),
+            $"…on that aircraft, not on terrain: '{armedOn}'");
+        ctx.Check(machine.ClimbOutAltitude > yArmed + (AiModeMachine.ClimbOutM * 0.9f),
+            $"…ordering the decoded {AiModeMachine.ClimbOutM:0} m climb-out from {yArmed:0} m: {machine.ClimbOutAltitude:0} m");
+
+        // Released from the hold, the prober flies its own climb-out. The aeroplane it saw stays
+        // where it is, so what clears the line is the climb-out itself turning off it.
+        int released = 0;
+        for (; released < (int)(ProbeReleaseS / StepDt) && machine.Mode == AiMode.AvoidCrash; released++)
+        {
+            Pin(holdProber: false);
+            step(1);
+        }
+        step(1); // one step on the released mode, so the pilot's own dispatch has flown the net
+        string releasedTo = AiModeMachine.NameOf(machine.Mode);
+        report.AppendLine($"…climbed to y={prober.WorldPosition.Y:0} m and released after {released * StepDt:0.0} s as {releasedTo}, patrol={prober.Pilot!.SteeringPatrol}");
+        ctx.Check(prober.WorldPosition.Y > yArmed,
+            $"{prober.Name} flies the climb-out: {prober.WorldPosition.Y:0} m from {yArmed:0} m");
+        ctx.Check(machine.Mode != AiMode.AvoidCrash,
+            $"…and one clear ray releases it inside {ProbeReleaseS:0} s: {released * StepDt:0.0} s");
+        ctx.Check(prober.Pilot!.SteeringPatrol,
+            $"…leaving {prober.Name} steering its net again rather than holding bare orders");
+        ctx.Same(netBefore, prober.Pilot!.Patrol!.Net.Id,
+            $"…the same net it was flying before the override");
+    }
+
+    // The closest any of the group's hulls comes to another's own avoid-crash lookahead ray,
+    // metres, 0 when one lies across it. Measured on the collision hulls through the node
+    // transform, which is the geometry the decoded ray meets in a played session; the bounding
+    // sphere is a floor on that distance, so a pair it puts no nearer than the best pair so far
+    // needs no hull walk at all.
+    private static float NearestOnProbeRay(List<FlightController> group)
+    {
+        float nearest = float.MaxValue;
+        foreach (var caster in group)
+        {
+            var pos = caster.WorldPosition;
+            var velocity = caster.WorldVelocity;
+            float speed = velocity.Length();
+            float reach = Mathf.Max(speed * AiModeMachine.ProbeLookaheadS, AiModeMachine.ProbeMinLookaheadM);
+            var ahead = pos + ((speed > 1e-3f ? velocity / speed : caster.NoseDirection) * reach);
+            foreach (var other in group)
+            {
+                if (ReferenceEquals(other, caster) || other.Body is not { } body)
+                {
+                    continue;
+                }
+                float floor = SegmentDistanceTo(pos, ahead, body.GlobalPosition) - body.BoundRadius;
+                nearest = floor >= nearest
+                    ? nearest
+                    : Mathf.Min(nearest, body.SegmentDistance(pos, ahead, out _, out _));
+            }
+        }
+        return nearest;
+    }
+
+    // Distance from a point to a segment, metres.
+    private static float SegmentDistanceTo(Vector3 from, Vector3 to, Vector3 point)
+    {
+        var span = to - from;
+        float lengthSq = span.LengthSquared();
+        if (lengthSq < 1e-6f)
+        {
+            return from.DistanceTo(point);
+        }
+        float t = Mathf.Clamp((point - from).Dot(span) / lengthSq, 0f, 1f);
+        return (from + (span * t)).DistanceTo(point);
     }
 
     // The widest gap between any two of the group, metres.

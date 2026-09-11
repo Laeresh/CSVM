@@ -478,6 +478,15 @@ one sentence of measured evidence; everything else belongs in the commit that la
   never re-enters the space queries, so aim at bodies where they were created.** A later
   `GlobalTransform` write reaches the physics space only on a flush a synchronous suite never gets:
   in `ai-actor` the ray returns the aircraft at its spawn pose and nothing 3.7 km away.
+  ⚠ **An aircraft body is worse than a static one, and the usual repair does nothing for it.**
+  `AircraftBody` is an `AnimatableBody3D`, so the server reads a transform write as a kinematic
+  motion target and moves the collider only when it steps: `ForceUpdateTransform()`, which does
+  commit a plain `StaticBody3D`, leaves it where it was, and so does writing the transform onto the
+  server by hand (`PhysicsServer3D.BodySetState` followed by `BodyGetState` reads back the spawn
+  pose). A flown aeroplane therefore leaves its own collider behind, and a ray cast at where it is
+  drawn comes back clear. A suite that needs one aeroplane's ray to meet another flies the pair back
+  to the pose they spawned at (`campaign-bomber-crash-probe`), or drops the cast and measures the
+  geometry on the hulls through the node transform (`AircraftBody.SegmentDistance`).
 - **INSTR-14** — **Every automated session check runs on a PARENT-DRIVEN clock, so verify the shared
   step owner rather than either clock adapter alone.** `--det`, implied by `--run-tests` and
   `--screenshot=`, makes `GameClock.ParentDriven` true: E11's wave sequencer lived only in that path

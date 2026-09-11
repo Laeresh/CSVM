@@ -2740,18 +2740,6 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-501` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` `[CM02]` **Nothing exercises avoid-crash probing between aircraft flying one net in
-  formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
-  bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
-  world with collision off, so the probing three aircraft at roughly a hundred metres would do to
-  each other is never run, and that spacing is exactly the geometry that can arm it. *Fix shape:*
-  drive the same formation in a collision world and see whether avoid-crash promotes, and if it
-  does, whether it takes an aircraft off its route. *⚠ Traps:* do not widen the formation to quiet
-  a probe. The separation is what the net and the cross-track carry produce from authored data, and
-  a formation that holds only because its members are far apart is not the one the original flies.
-  *Cross-refs:* `PLAN-M5-polish` G77, whose `campaign-bomber-formation` suite is the harness to
-  extend.
-
 - `BL-469` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **An escort cannot hold station on a leader using nitro, and nothing measures
   the case.** *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
   in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34
