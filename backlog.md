@@ -3096,11 +3096,18 @@ usual.
   region 42,426 to 136,523 at `:41`) sets `$$USA$$` and re-initialises the `sbtoc_l_toclist` list
   (list id 2409); the only script-side reader of that flag is `SCRAPBOOK.SCRIPT:445-453`, which prints
   a white `mission: N spread: N` line at 10,570, so whether the contents list itself widens to every
-  spread sits in the engine's list-2409 callback. `gimme` (`PLANECONSTRUCTION.SCRIPT:167-194`) adds
-  25000 to `$$DOA$$` while it is under 50000 and re-initialises the hub. A fourth word the
+  spread sits in the engine's list-2409 callback. `gimme` (`PLANECONSTRUCTION.SCRIPT:167-194`) arms
+  on a left click on the `$$$ on Hand` figure alone (the hub's region is the `px_t_cash` box, `:155`,
+  authored at 615,25, 120 by 55 in `LAYOUT.CSV:691`), adds 25000 to `$$DOA$$` while it is under
+  50000 and re-initialises the hub; `$$DOA$$` is `nPlayerCash`, which the script-global binder
+  `FUN_00401fc0` registers by address as an int, so the script write lands in the wallet dword
+  `0x0064b788` directly and is a fifth writer beside the four in `docs/org/hangar.md`. The same
+  binder registers `fViewAll` (`0x00647b80`) and `fAllowAll` (`0x00647b5c`, the unlock-everything
+  mode with its 250000 budget); which obfuscated `$$` names those are is the decode. A fourth word the
   walkthroughs do not list, `crashcheat!`, is compared against the pilot name on the new-campaign
   name entry (`CAMPAIGN.SCRIPT:100-130`): it sets `$$SB$$`, restores the previous name and re-runs
-  the accept callback, and no script reads `$$SB$$` again. The invincibility code `I AM THE ACE!!`
+  the accept callback, and no script reads `$$SB$$` again; the fresh-profile initialiser's
+  `fAllowAll` branch is the natural candidate for what it sets. The invincibility code `I AM THE ACE!!`
   is in no script's `gui_char` (`ORDINANCELAYOUT.SCRIPT` and `FLIGHTCHECK.SCRIPT` have none) and is
   not a plain ASCII or UTF-16 string in `crimson.exe`, so its compare is engine-side and obfuscated
   or hashed. *What to settle first:* the exe side: where the ACE compare lives and what it sets,
@@ -3117,8 +3124,8 @@ usual.
   wrap-up is a different cheat. Do not write "see all pictures" into our behaviour until the 2409
   decode says what the original reveals. *Playtest after fix:*
   `./RunGame.ps1 --presentation=original --menu=campaign`, click the microphone side, type `idaho`
-  and check the mission pull-down appears and New Mission flies the picked row; in the hangar type
-  `gimme` and check the cash rises by 25000 while under 50000; on Previous Missions click the
+  and check the mission pull-down appears and New Mission flies the picked row; in the hangar click
+  the cash figure, type `gimme` and check it rises by 25000 while under 50000; on Previous Missions click the
   bottom-left symbol and type `ispy`. *Cross-refs:* `BL-781` (the credits easter egg, the same
   script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
   PlaneConstruction rows), `docs/org/hangar.md`.
