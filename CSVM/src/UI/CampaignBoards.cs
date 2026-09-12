@@ -167,6 +167,23 @@ public static class CampaignBoards
                 Ui("PC_B_PlaneConstruction.png", StripFrames), 452, 431),
             new BoardSlot(BoardButton.ReturnToMainMenu, 0, CampaignLayout.CabinSection, "PC_B_RETURNMM",
                 Ui("PC_B_ReturnMainMenu.png", StripFrames), 593, 561),
+            new BoardSlot(BoardButton.ChangeMemento, 0, CampaignLayout.CabinSection, "PC_B_CHANGEMOMENTO",
+                Ui("PC_B_ChangeMemento.png", StripFrames), 259, 384),
+        },
+
+        // The chooser's two arrows carry each other's art name in the layout: the row at the left
+        // edge names MS_B_Right.png and the one at the right edge MS_B_Left.png. The rows are read
+        // as authored, so the strips land where the original draws them.
+        [CampaignScreen.MementoSelection] = new[]
+        {
+            new BoardSlot(BoardButton.PreviousMemento, 0, CampaignLayout.MementoSection, "MS_B_ARROWL",
+                Ui("MS_B_Right.png", StripFrames), 175, 257),
+            new BoardSlot(BoardButton.NextMemento, 0, CampaignLayout.MementoSection, "MS_B_ARROWR",
+                Ui("MS_B_Left.png", StripFrames), 578, 249),
+            new BoardSlot(BoardButton.AcceptMemento, 0, CampaignLayout.MementoSection, "MS_B_ACCEPT",
+                Ui("MS_B_AcceptChanges.png", StripFrames), 219, 564),
+            new BoardSlot(BoardButton.CancelMemento, 0, CampaignLayout.MementoSection, "MS_B_CANCEL",
+                Ui("MS_B_CancelChanges.png", StripFrames), 406, 564),
         },
         [CampaignScreen.PreviousMissions] = new[]
         {
@@ -275,6 +292,10 @@ public static class CampaignBoards
         [CampaignScreen.Scrapbook] = new[]
         {
             new BoardPane(CampaignLayout.BookSection, "SB_BACKGROUND", Ui("SB_BackGround.jpg"), 0, 0),
+        },
+        [CampaignScreen.MementoSelection] = new[]
+        {
+            new BoardPane(CampaignLayout.MementoSection, "MS_BACKGROUND", Ui("MS_BackGround2.png"), 0, 0),
         },
         [CampaignScreen.FlightCheck] = new[]
         {

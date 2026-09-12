@@ -8,10 +8,10 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The cabin hub (<c>Campaign Cabin.png</c>, <c>PASSENGERCABIN.SCRIPT</c>): NEXT MISSION,
-/// PREVIOUS MISSIONS, PLANE CONSTRUCTION, RETURN TO MAIN MENU. CHANGE MEMENTO is not shipped
-/// (the original does not ship it). <c>CAP-44</c> settled the ambience question at the
-/// controls: the screen has no idle behaviour, only background music over static art, so this
-/// page draws once and does nothing between presses.
+/// PREVIOUS MISSIONS, PLANE CONSTRUCTION, RETURN TO MAIN MENU and CHANGE MEMENTO. SAVE GAME is the
+/// button the original creates and deactivates, and is never drawn. <c>CAP-44</c> settled the
+/// ambience question at the controls: the screen has no idle behaviour, only background music over
+/// static art, so this page draws once and does nothing between presses.
 /// </summary>
 public sealed class CampaignCabinPage : CampaignPage
 {
@@ -32,14 +32,15 @@ public sealed class CampaignCabinPage : CampaignPage
     private const int MementoWidth = 73;
     private const int MementoHeight = 84;
 
-    // The four buttons, in the original's own order (docs/formats/campaign-screens.md, "The
-    // cabin"). SAVE GAME is deactivated there and never drawn here.
+    // The five buttons, in the original's own creation order (docs/formats/campaign-screens.md,
+    // "The cabin"). SAVE GAME is deactivated there and never drawn here.
     private static readonly string[] Rows =
     {
         "Next Mission",
         "Previous Missions",
         "Plane Construction",
         "Return to Main Menu",
+        "Change Memento",
     };
 
     // The cabin scene, decoded on first sight and kept: one 800x600 PNG per session, and a miss
@@ -87,9 +88,9 @@ public sealed class CampaignCabinPage : CampaignPage
             }
 
             // The memento, over the hangar photograph's own keyed-out block for it and under the
-            // painting. Picking one is not shipped, so it is always the campaign's opening keepsake.
+            // painting: whichever picture the profile hangs, which the chooser writes.
             pictures.Add(new BoardPicture(
-                new BoardArt(BoardArtLibrary.Rimage, "ms_p_initialpinup1"),
+                new BoardArt(BoardArtLibrary.Rimage, CampaignMementos.Bitmap(CampaignMementos.Current(Flow.Profile))),
                 MementoX, MementoY, 0, false, 1f, 0f, MementoWidth, MementoHeight));
             var (backX, backY) = layout.At(section, "PC_BACKGROUND", 0, 0);
             pictures.Add(new BoardPicture(
@@ -119,6 +120,7 @@ public sealed class CampaignCabinPage : CampaignPage
         1 => new BoardButtonRef(BoardButton.PreviousMissions),
         PlaneConstructionRow => new BoardButtonRef(BoardButton.PlaneConstruction),
         3 => new BoardButtonRef(BoardButton.ReturnToMainMenu),
+        4 => new BoardButtonRef(BoardButton.ChangeMemento),
         _ => BoardButtonRef.None,
     };
 
@@ -142,6 +144,7 @@ public sealed class CampaignCabinPage : CampaignPage
                 ? "No missions finished yet"
                 : "Review or replay a finished mission",
             2 => "Buy, sell and fit aircraft",
+            4 => "Choose the picture on the cabin wall",
             _ => "Leaves the campaign for the main menu",
         };
     }
@@ -175,6 +178,9 @@ public sealed class CampaignCabinPage : CampaignPage
                 // The shell owns opening the hangar over the profile's wallet and calling
                 // Flow.Resume when it closes.
                 Flow.Request(CampaignExit.OpenHangar);
+                return true;
+            case 4:
+                Flow.GoTo(CampaignScreen.MementoSelection);
                 return true;
             default:
                 Flow.Cancel();

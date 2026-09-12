@@ -472,6 +472,27 @@ public sealed class CampaignFeature : IMenuFeature
         Store?.Save(profile);
     }
 
+    /// <summary>ACCEPT on the memento chooser: the picked picture into the profile and the profile
+    /// to disk, the original's <c>uiData</c> 2150 write. A name the award table does not carry is
+    /// refused, so the cabin can never end up drawing a picture the profile has not earned.</summary>
+    public void CommitMemento(string name)
+    {
+        if (Profile is not { } profile || CampaignMementos.Current(profile) == name)
+        {
+            return;
+        }
+
+        foreach (var award in CampaignMementos.Table)
+        {
+            if (award.Name == name && CampaignMementos.Holds(profile, award))
+            {
+                profile.Memento = name;
+                Store?.Save(profile);
+                return;
+            }
+        }
+    }
+
     /// <summary>EXPORT: the plane and the loadout the campaign fitted it with, into the build store
     /// the Instant Action and multiplayer pickers list. An existing record is the build and keeps
     /// its paint, armour and engine; a starter or a granted aircraft has none, so one is created

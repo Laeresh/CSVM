@@ -40,7 +40,10 @@ internal static class MenuOriginalCampaignSuites
         + "the name rule and one inside it at the cap both type nothing and cue the box's reject "
         + "sound, typed frames name a "
         + "player, a click in the name box takes the caret and starts nothing, "
-        + "Enter seats them on the cabin, the briefing runs its reveal on the presentation's "
+        + "Enter seats them on the cabin, CHANGE MEMENTO opens the chooser where the arrow steps "
+        + "the pictures the profile has been awarded, CANCEL leaves the cabin's wall as it was and "
+        + "ACCEPT writes the chosen picture into the profile and hangs it, "
+        + "the briefing runs its reveal on the presentation's "
         + "clock and starts its narration through the host's audio once, REPLAY BRIEFING starts it "
         + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
         + "from a blank map with the narration starting over, the flight check walks two debug-joined "
@@ -110,6 +113,7 @@ internal static class MenuOriginalCampaignSuites
             var size = ctx.Host.GetViewport().GetVisibleRect().Size;
             var fit = BoardFit.For(size.X, size.Y);
             Roster(ctx, host, seat, shell, fit, campaign, store, audio);
+            Memento(ctx, host, seat, shell, fit, campaign, store);
             Briefing(ctx, host, seat, shell, fit, campaign, audio);
             FlightCheckAndLaunch(ctx, host, seat, shell, fit, campaign, store, exits, audio);
             Returns(ctx, host, shell, fit, campaign, store, audio);
@@ -178,13 +182,61 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(File.ReadAllText(Path.Combine(store.DirFor(Pilot), "profile.json")) == CampaignProfileStore.Serialize(CampaignProfileDef.NewProfile(Pilot))
             && store.LastPlayed == Pilot, $"the store holds exactly a fresh profile and the last-played record");
         ctx.Check(!host.Seats[0].CapturingText, $"and the seat no longer captures text on the cabin");
-        ctx.Check(shell.Rows.Count == 4 && shell.FocusedKey == "NextMission", $"the cabin's four plaques, focus on NEXT MISSION ({shell.FocusedKey})");
+        ctx.Check(shell.Rows.Count == 5 && shell.FocusedKey == "NextMission", $"the cabin's five plaques, focus on NEXT MISSION ({shell.FocusedKey})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions && shell.Rows.Count == 4,
             $"PREVIOUS MISSIONS opens the contents, four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"Back returns to the cabin ({shell.Screen})");
+    }
+
+    // The cabin's CHANGE MEMENTO plaque and the chooser behind it: a fresh profile is awarded the
+    // pictures the campaign starts with, the forward arrow steps the one on show, CANCEL leaves the
+    // cabin hanging what it hung, and ACCEPT writes the stepped name into the profile.
+    private static void Memento(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
+        CampaignFeature campaign, CampaignProfileStore store)
+    {
+        var plaque = Row(shell, nameof(BoardButton.ChangeMemento));
+        ctx.Check(plaque is { Enabled: true }, $"the cabin carries a live CHANGE MEMENTO plaque");
+        if (plaque == null || campaign.Profile is not { } profile)
+        {
+            return;
+        }
+
+        var awarded = CampaignMementos.Awarded(profile);
+        ctx.Same(7, awarded.Count, $"a fresh profile holds the pictures the campaign starts with");
+        string seeded = CampaignMementos.Seeded;
+        string second = awarded[1];
+        ctx.Check(Draws(shell.Compose(), CampaignMementos.Bitmap(seeded)), $"and the cabin hangs the seeded pin-up");
+        Click(host, seat, Pointer(fit, plaque.X + 5f, plaque.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.CampaignMemento && shell.Rows.Count == 4,
+            $"CHANGE MEMENTO opens the chooser's four plaques ({shell.Screen}, {shell.Rows.Count})");
+        ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + seeded), $"standing on the picture the cabin hangs");
+        Arrow(host, seat, shell, fit);
+        ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + second), $"the forward arrow steps onto the next picture awarded");
+        ctx.Check(store.Load(Pilot)?.Memento.Length == 0, $"and nothing is written before the commit");
+        var cancel = Row(shell, nameof(BoardButton.CancelMemento))!;
+        Click(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && Draws(shell.Compose(), CampaignMementos.Bitmap(seeded)),
+            $"CANCEL CHANGES leaves the cabin hanging what it hung ({shell.Screen})");
+        Click(host, seat, Pointer(fit, plaque.X + 5f, plaque.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + seeded), $"the chooser opens again on that picture rather than on the step CANCEL threw away");
+        Arrow(host, seat, shell, fit);
+        var accept = Row(shell, nameof(BoardButton.AcceptMemento))!;
+        Click(host, seat, Pointer(fit, accept.X + 5f, accept.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && store.Load(Pilot)?.Memento == second,
+            $"ACCEPT CHANGES returns to the cabin with the chosen name in the profile ({shell.Screen}, {store.Load(Pilot)?.Memento})");
+        ctx.Check(Draws(shell.Compose(), CampaignMementos.Bitmap(second)), $"and the cabin hangs the chosen picture");
+    }
+
+    // One press of the chooser's forward arrow, read fresh: the plaque is rebuilt every frame.
+    private static void Arrow(MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
+    {
+        if (Row(shell, nameof(BoardButton.NextMemento)) is { } next)
+        {
+            Click(host, seat, Pointer(fit, next.X + 5f, next.Y + 5f, pressed: true, clicked: true));
+        }
     }
 
     // Both routes to the box's reject cue, on the empty box so the screen is left as it was found:
@@ -845,6 +897,21 @@ internal static class MenuOriginalCampaignSuites
         foreach (var line in board.Lines)
         {
             if (line.Text == text)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Whether the composed screen draws that art name, whichever library it comes from: the cabin's
+    // memento is the rimage bitmap and the chooser's is the scrapbook photograph.
+    private static bool Draws(ComposedBoard board, string art)
+    {
+        foreach (var picture in board.Pictures)
+        {
+            if (string.Equals(picture.Art.Name, art, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

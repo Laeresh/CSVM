@@ -8,19 +8,36 @@ namespace CSVM.Tests;
 
 /// <summary>The cabin hub: NEXT MISSION routing to the profile's own next mission and refusing once
 /// the campaign is finished, PREVIOUS MISSIONS and PLANE CONSTRUCTION handing the shell a screen or
-/// a job, and RETURN TO MAIN MENU cancelling the flow.</summary>
+/// a job, CHANGE MEMENTO opening the chooser over the picture the profile hangs, and RETURN TO MAIN
+/// MENU cancelling the flow.</summary>
 public class CampaignCabinPageTests
 {
     [Fact]
-    public void FourButtonsAndNoChangeMemento()
+    public void FiveButtonsInTheOriginalsOwnCreationOrder()
     {
         var flow = Opened(out _);
 
-        Assert.Equal(4, flow.Page.RowCount);
+        Assert.Equal(5, flow.Page.RowCount);
         Assert.Equal("Next Mission", flow.Page.RowText(0));
         Assert.Equal("Previous Missions", flow.Page.RowText(1));
         Assert.Equal("Plane Construction", flow.Page.RowText(2));
         Assert.Equal("Return to Main Menu", flow.Page.RowText(3));
+        Assert.Equal("Change Memento", flow.Page.RowText(4));
+    }
+
+    [Fact]
+    public void ChangeMementoOpensTheChooserAndTheWallDrawsTheProfilesOwnPicture()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Memento = "MS_P_Mom.jpg";
+        var flow = Opened(out _, profile);
+
+        Assert.Contains(flow.Page.Pictures, p => p.Art.Name == "ms_p_mom");
+
+        flow.FocusRow(4);
+        flow.Accept();
+
+        Assert.Equal(CampaignScreen.MementoSelection, flow.Screen);
     }
 
     [Fact]

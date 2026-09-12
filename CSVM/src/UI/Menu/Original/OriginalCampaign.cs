@@ -338,6 +338,7 @@ public sealed partial class OriginalShell
     {
         OriginalScreen.CampaignRoster => CampaignScreen.Roster,
         OriginalScreen.CampaignCabin => CampaignScreen.Cabin,
+        OriginalScreen.CampaignMemento => CampaignScreen.MementoSelection,
         OriginalScreen.CampaignPreviousMissions => CampaignScreen.PreviousMissions,
         OriginalScreen.CampaignBriefing => CampaignScreen.Briefing,
         OriginalScreen.CampaignFlightCheck => CampaignScreen.FlightCheck,
@@ -351,6 +352,7 @@ public sealed partial class OriginalShell
     {
         CampaignScreen.Roster => OriginalScreen.CampaignRoster,
         CampaignScreen.Cabin => OriginalScreen.CampaignCabin,
+        CampaignScreen.MementoSelection => OriginalScreen.CampaignMemento,
         CampaignScreen.PreviousMissions => OriginalScreen.CampaignPreviousMissions,
         CampaignScreen.Briefing => OriginalScreen.CampaignBriefing,
         CampaignScreen.FlightCheck => OriginalScreen.CampaignFlightCheck,
@@ -976,6 +978,10 @@ public sealed partial class OriginalShell
                 // ACCEPT or CANCEL on the ammo and plane screens: back onto the plaque that opened them.
                 ShowCampaign(OriginalScreen.CampaignFlightCheck, keepFocus: from is CampaignScreen.Ammo or CampaignScreen.PlaneSelection);
                 break;
+            case CampaignScreen.Cabin:
+                // ACCEPT or CANCEL in the memento chooser: back onto the plaque that opened it.
+                ShowCampaign(OriginalScreen.CampaignCabin, keepFocus: from is CampaignScreen.MementoSelection);
+                break;
             default:
                 ShowCampaign(OriginalOf(to));
                 break;
@@ -1184,6 +1190,9 @@ public sealed partial class OriginalShell
             case nameof(BoardButton.ReturnToMainMenu):
                 LeaveCampaign();
                 break;
+            case nameof(BoardButton.ChangeMemento):
+                ShowCampaign(OriginalScreen.CampaignMemento);
+                break;
         }
     }
 
@@ -1264,6 +1273,7 @@ public sealed partial class OriginalShell
             case OriginalScreen.CampaignCabin:
                 ShowCampaign(OriginalScreen.CampaignRoster, keepFocus: true);
                 break;
+            case OriginalScreen.CampaignMemento:
             case OriginalScreen.CampaignPreviousMissions:
                 BackTo(OriginalScreen.CampaignCabin);
                 break;

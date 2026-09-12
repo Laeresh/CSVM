@@ -48,7 +48,7 @@ public class OriginalCoverageTests : IDisposable
     {
         "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "ControlsPrefs", "Keys", "Credits",
         "InstantAction", "Campaign",
-        "PassengerCabin", "FlightCheck",
+        "PassengerCabin", "MomentoSelection", "FlightCheck",
         "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
@@ -100,6 +100,8 @@ public class OriginalCoverageTests : IDisposable
             new[] { OriginalShell.ExitKey }),
         new("campaign-roster", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey }, new[] { "CancelProfile" }),
         new("campaign-cabin", OriginalScreen.CampaignCabin, Cabin, new[] { "ReturnToMainMenu" }),
+        new("campaign-memento", OriginalScreen.CampaignMemento, Then(Cabin, "ChangeMemento"), new[] { "CancelMemento", "ReturnToMainMenu" }),
+        new("campaign-memento-accept", OriginalScreen.CampaignCabin, Then(Cabin, "ChangeMemento", "AcceptMemento"), new[] { "ReturnToMainMenu" }),
         new("campaign-previous", OriginalScreen.CampaignPreviousMissions, Then(Cabin, "PreviousMissions"), new[] { "ReturnToCabin", "ReturnToMainMenu" }),
         new("campaign-briefing", OriginalScreen.CampaignBriefing, Then(Cabin, "NextMission"), new[] { "ReturnToCabin", "ReturnToMainMenu" }),
         new("campaign-replay-briefing", OriginalScreen.CampaignBriefing, Then(Cabin, "PreviousMissions", "ReplayMission"), new[] { "ReturnToCabin", "ReturnToMainMenu" }),
@@ -183,7 +185,9 @@ public class OriginalCoverageTests : IDisposable
         ["ControlsPrefs.CP_B_KEYS"] = Edge.Driven("keys", OriginalShell.KeysDoorKey),
         ["Keys.KB_B_ACCEPTCHANGES"] = Edge.Driven("keys-accept", OriginalShell.KeysAcceptKey),
         ["Keys.KB_B_CANCELCHANGES"] = Edge.Driven("keys", OriginalShell.KeysCancelKey),
-        ["PassengerCabin.PC_B_CHANGEMOMENTO"] = Edge.OutOfScope("MomentoSelection is deferred (BL-463); the cabin page offers no memento row"),
+        ["PassengerCabin.PC_B_CHANGEMOMENTO"] = Edge.Driven("campaign-memento", "ChangeMemento"),
+        ["MomentoSelection.MS_B_ACCEPT"] = Edge.Driven("campaign-memento-accept", "AcceptMemento"),
+        ["MomentoSelection.MS_B_CANCEL"] = Edge.Driven("campaign-memento", "CancelMemento"),
         ["PassengerCabin.PC_B_PREVIOUS"] = Edge.Driven("campaign-previous", "PreviousMissions"),
         ["PassengerCabin.PC_B_PLANEX"] = Edge.Driven("campaign-hangar-door", "PlaneConstruction"),
         ["PassengerCabin.PC_B_RETURNMM"] = Edge.Driven("campaign-cabin", "ReturnToMainMenu"),

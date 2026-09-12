@@ -66,6 +66,9 @@ public enum OriginalScreen
     /// <summary>The decoded <c>[@PassengerCabin@]</c> hub.</summary>
     CampaignCabin,
 
+    /// <summary>The decoded <c>[@MomentoSelection@]</c> chooser, CHANGE MEMENTO's destination.</summary>
+    CampaignMemento,
+
     /// <summary>The decoded <c>[@ScrapBook_TOC@]</c> table of contents, PREVIOUS MISSIONS' destination.</summary>
     CampaignPreviousMissions,
 

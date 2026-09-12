@@ -261,7 +261,9 @@ public class OriginalCampaignTests : IDisposable
     {
         var shell = Shell(out var campaign, out _);
         Seat(shell, "Zachary");
-        Assert.Equal(new[] { "NextMission", "PreviousMissions", "PlaneConstruction", "ReturnToMainMenu" }, shell.Rows.Select(r => r.Key));
+        Assert.Equal(
+            new[] { "NextMission", "PreviousMissions", "PlaneConstruction", "ReturnToMainMenu", "ChangeMemento" },
+            shell.Rows.Select(r => r.Key));
         Assert.Equal("NextMission", shell.FocusedKey);
         var previous = shell.Rows[1];
         Assert.Equal((360f, 540f, 240f, 50f), (previous.X, previous.Y, previous.Width, previous.Height));
@@ -285,8 +287,12 @@ public class OriginalCampaignTests : IDisposable
         shell.Step(Down);
         Assert.Equal("ReturnToMainMenu", shell.FocusedKey);
         shell.Step(Down);
+        Assert.Equal("ChangeMemento", shell.FocusedKey);
+        shell.Step(Down);
         Assert.Equal("NextMission", shell.FocusedKey);
         shell.Step(Up);
+        shell.Step(Up);
+        Assert.Equal("ReturnToMainMenu", shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
         Assert.False(campaign.IsOpen);

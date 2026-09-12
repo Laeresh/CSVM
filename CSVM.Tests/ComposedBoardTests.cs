@@ -68,21 +68,22 @@ public class ComposedBoardTests
         Assert.Equal(BoardInk.DialogPressed, ComposedBoard.DialogInk(pressed: true));
     }
 
-    /// <summary>Every cabin row is one of the screen's four authored buttons, at the layout's own
+    /// <summary>Every cabin row is one of the screen's five authored buttons, at the layout's own
     /// coordinates, and none of them lands as a text row.</summary>
     [Fact]
-    public void TheCabinIsFourPlaquesAndNoList()
+    public void TheCabinIsFivePlaquesAndNoList()
     {
         var flow = Opened();
 
         var board = CampaignBoards.For(flow.Page, 0);
 
-        Assert.Equal(4, board.Plaques.Count);
+        Assert.Equal(5, board.Plaques.Count);
         Assert.Empty(board.Lines);
         var next = board.Plaques.Single(p => p.Row == 0);
         Assert.Equal(87f, next.X);
         Assert.Equal(504f, next.Y);
         Assert.Equal(593f, board.Plaques.Single(p => p.Row == 3).X);
+        Assert.Equal(259f, board.Plaques.Single(p => p.Row == 4).X);
     }
 
     /// <summary>What a pad press changes: the plaque under the cursor is the only one in its

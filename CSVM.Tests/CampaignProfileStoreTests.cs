@@ -36,6 +36,7 @@ public class CampaignProfileStoreTests
         def.Planes[0].Ordnance[0] = 11;
         def.Funds = 900;
         def.MissionsCompleted = 1;
+        def.Memento = "MS_P_Mom.jpg";
         def.GrantedAircraft.Add(2);
         def.PersistLog.Merge(6, 2, new[] { new PersistedObject(412, "susp_bridge", "rope1", true, 0f) });
         def.MissionResults.Add(new MissionResult
@@ -63,6 +64,7 @@ public class CampaignProfileStoreTests
         Assert.NotNull(loaded);
         Assert.Equal(900, loaded!.Funds);
         Assert.Equal(1, loaded.MissionsCompleted);
+        Assert.Equal("MS_P_Mom.jpg", loaded.Memento);
         Assert.Equal(2, loaded.Planes[0].Ammo[0]);
         Assert.Equal(11, loaded.Planes[0].Ordnance[0]);
         var result = Assert.Single(loaded.MissionResults);

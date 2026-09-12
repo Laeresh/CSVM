@@ -114,6 +114,21 @@ public enum BoardButton
     /// <summary><c>PC_B_RETURNMM</c>.</summary>
     ReturnToMainMenu,
 
+    /// <summary><c>PC_B_CHANGEMOMENTO</c>, the cabin's door onto the memento chooser.</summary>
+    ChangeMemento,
+
+    /// <summary><c>MS_B_ARROWL</c>, the chooser's step back through the awarded pictures.</summary>
+    PreviousMemento,
+
+    /// <summary><c>MS_B_ARROWR</c>, the chooser's step forward.</summary>
+    NextMemento,
+
+    /// <summary><c>MS_B_ACCEPT</c>, which hangs the picture on show.</summary>
+    AcceptMemento,
+
+    /// <summary><c>MS_B_CANCEL</c>, which leaves the cabin's picture as it was.</summary>
+    CancelMemento,
+
     /// <summary><c>SBTOC_B_VIEW</c>.</summary>
     ViewMission,
 

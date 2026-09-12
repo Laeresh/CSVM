@@ -141,7 +141,7 @@ internal static class MenuCampaignSuites
         ctx.Check(File.ReadAllText(Path.Combine(store.DirFor(Pilot), "profile.json")) == expected,
             $"the store holds exactly a fresh profile under the name");
         Is(ctx, "and remembers the player as last seated", Pilot, store.LastPlayed);
-        ctx.Check(menu.ShownRowCount == 4 && menu.ShownRow == 0, $"the cabin's four rows, cursor on Next Mission ({menu.ShownRowCount}, {menu.ShownRow})");
+        ctx.Check(menu.ShownRowCount == 5 && menu.ShownRow == 0, $"the cabin's five rows, cursor on Next Mission ({menu.ShownRowCount}, {menu.ShownRow})");
         Is(ctx, "the first row", "Next Mission", menu.ShownRowText);
         Is(ctx, "described", "Opens the briefing for the next mission", menu.ShownDetail);
         menu.Drive(Down);

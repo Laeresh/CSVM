@@ -249,8 +249,9 @@ and the four carrying `singledev` get them from their own script.
 **A row on the parchment is never marked here.** The screen stands before the mission it lists has
 run, so the objectives list draws its rows and no check.
 
-**Awarding a memento is not built**, so both screens draw `ms_p_initialpinup1`, the picture the
-original's own profile reset seeds.
+**Neither screen reads the profile's chosen memento yet**, so both draw `ms_p_initialpinup1`, the
+picture the original's own profile reset seeds. The cabin's chooser writes the choice
+(`Session/CampaignMementos.cs`); handing it to these two sheets is what remains.
 
 **The three authored faces meet two of ours.** The extraction ships no menu typeface, so a board
 writes in the one the engine has: `loadListTitle` becomes that face at 17 pixels, which puts its

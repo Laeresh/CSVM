@@ -147,7 +147,7 @@ places `UIData` at `0x5b4`.
 | `+0x314` | pilot name, 32 bytes | `FUN_004113b0` fills it from the registry, falling back to langui string 500; see "Which player is current" below |
 | `+0x338` | missions completed, which is also the sequence index of the next mission | raised to the current mission index only inside the primary-objective-complete branch of `FUN_00405ce0`; zeroed for a new profile |
 | `+0x33c` | selected plane, an index into the plane array | `FUN_00405ce0` reads the flown plane's name and airframe from this slot |
-| `+0x344` | the current memento image file name | `FUN_004113b0` seeds it with `MS_P_InitialPinup1.jpg` |
+| `+0x344` | the current memento image file name | `FUN_004113b0` seeds it with `MS_P_InitialPinup1.jpg`; the chooser writes it through `uiData` 2150, see [../org/pause-screen.md](../org/pause-screen.md) |
 | `+0x448` | **funds** | see below |
 | `+0x44c` | the plane array, 26 slots of 204 bytes | [paint.md](paint.md), "Saved custom planes" |
 | `+0x1868` | the mission-result array, indexed from 1 | see below |

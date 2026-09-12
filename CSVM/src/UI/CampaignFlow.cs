@@ -16,6 +16,9 @@ public enum CampaignScreen
     /// <summary>The cabin hub the rest of the campaign hangs off.</summary>
     Cabin,
 
+    /// <summary>The memento chooser, the cabin's CHANGE MEMENTO door.</summary>
+    MementoSelection,
+
     /// <summary>The scrapbook's finished-missions list, opened from the cabin.</summary>
     PreviousMissions,
 
@@ -175,6 +178,7 @@ public sealed class CampaignFlow
     {
         [CampaignScreen.Roster] = flow => new CampaignRosterPage(flow),
         [CampaignScreen.Cabin] = flow => new CampaignCabinPage(flow),
+        [CampaignScreen.MementoSelection] = flow => new CampaignMementoPage(flow),
         [CampaignScreen.PreviousMissions] = flow => new CampaignPreviousMissionsPage(flow),
         [CampaignScreen.Briefing] = flow => new CampaignBriefingPage(flow),
         [CampaignScreen.FlightCheck] = flow => new CampaignFlightCheckPage(flow),

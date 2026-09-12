@@ -231,6 +231,27 @@ the movie plays once per chapter, on first arrival. When `XQ` is clear the cabin
 music. Either way the script ends with `gosCallback` 31, which joins the background loader thread
 and tears the mission world down.
 
+## The memento chooser: `MOMENTOSELECTION.SCRIPT`
+
+The screen the cabin's CHANGE MEMENTO plaque opens. Creation order is `ms_background`, `ms_glass`,
+`ms_memento`, `ms_b_accept`, `ms_b_cancel`, `ms_b_arrowr`, `ms_b_arrowl`. The picture is the same
+`"assets\graphics\scrapbook\" + <name>` pane the cabin draws, at the layout's `MS_MEMENTO`
+(`184,48`, no authored size, so the 415x515 photograph draws at its own), with `MS_Reflection2.png`
+over it at `206,71`. The layout's two arrow rows carry each other's art name: `MS_B_ARROWL` at
+`175,257` is drawn with `MS_B_Right.png` and `MS_B_ARROWR` at `578,249` with `MS_B_Left.png`. Both
+arrows widen their own click region by 24 pixels.
+
+The name comes from `uiData` 2150 alone. Creation reads it with arg -1 (the profile's current
+name); each arrow sets `GX` to 100 (forward) or 101 (back) and re-runs `gui_init`, which reads 2150
+again with that argument and gets the next or previous name the profile has been awarded, so the
+walk and its wrap are the executable's, not the script's. ACCEPT calls 2150 in write mode
+(`callback($$E$$, 2150, 1, FX)`) and then `gosCallback` 12. CANCEL has no mailbox case at all: it
+leaves through its layout row's own `PassengerCabin` target, which is why nothing is written.
+Two flourishes are the script's own: the first ten frames alternate `10018` and `10000` at both
+arrows, and a held left button swaps the picture for `ms_hourglass.png` until it is released. Which
+names the profile may reach, and the objective bits that admit them, are in
+[../org/pause-screen.md](../org/pause-screen.md).
+
 ## Chapter intro: `CAMPAIGNINTRO.SCRIPT`
 
 The whole screen is one movie widget: `cm_movie` with `BL = "chap" + <n> + ".mpg"`, sized to
@@ -772,7 +793,7 @@ or wingman slot, and any other value is a plane index.
 | 2105 | slot, out | fills the export messagebox, langui 702 over the airframe title |
 | 2106 | out | fills a messagebox string (not decoded further) |
 | 2109 | slot | sell the slot's plane |
-| 2150 | mode, arg, out | read (mode 0) or write (mode 1) the profile's memento file name |
+| 2150 | mode, arg, out | read (mode 0, arg -1 current / 100 next / 101 previous awarded) or write (mode 1) the profile's memento file name |
 | 2151 | out | the chapter number when that chapter has not been started, else 0 |
 | 2600 | | non-zero while a next mission exists |
 

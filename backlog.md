@@ -2159,27 +2159,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the poll order against the film's stop before writing the fix. *Cross-refs:*
   `UI/CinemaHandoff.cs`, `docs/verification.md`'s `METHOD-30`.
 
-- `BL-854` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The pause and
-  load screens always draw the opening pin-up, where the original's campaign awards a keepsake per
-  mission and shows whichever one the profile holds.** *Evidence:* both screens read the memento
-  slot the profile carries, and nothing ever writes it, so every sheet shows
-  `ms_p_initialpinup1`; the reference clips under `OriginalScreenshots/Videos/` show a dog
-  photograph on one mission and the pin-up on another, and the extraction ships 25 `ms_p_*`
-  pictures for the 23 the award table names. The table is decoded in `docs/org/pause-screen.md`:
-  12-byte records at `0x0061af6c`, each a name into the string block at `0x0061e12c`, a mission
-  number and a third field of 0, 1, 2 or 4, read from `FUN_004113b0`, `FUN_00410270` and
-  `0x0040c85f`. Seven records carry mission 0 (`MS_P_DoggiePhoto` among them) and 16 name a
-  mission whose number matches the digits in their own file name. *Fix shape:* decode what picks a
-  record (the third field, and what mission 0 means for the seven), then persist the awarded name
-  on `CampaignProfileDef` and hand it to the two sheets in place of the seeded constant; the
+- `BL-854` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The pause and
+  load screens always draw the opening pin-up, where the original draws whichever picture the
+  profile holds.** *Evidence:* both sheets take the seeded constant rather than the profile's own
+  slot, so every one of them shows `ms_p_initialpinup1`; the reference clips under
+  `OriginalScreenshots/Videos/` show a dog photograph on one mission and the pin-up on another.
+  The slot now exists and is written: `CampaignProfileDef.Memento`, filled by the cabin's chooser
+  through `CampaignFeature.CommitMemento`, over the award table and its admission rule in
+  `CSVM/src/Session/CampaignMementos.cs`. Nothing awards a picture behind the player's back: a row
+  is admitted to the chooser once that mission's merged mask carries the won bit and the row's own
+  objective bit, and only ACCEPT writes (`uiData` 2150 mode 1). *Fix shape:* hand the two sheets
+  `CampaignMementos.Bitmap(CampaignMementos.Current(profile))` in place of the seeded constant; the
   drawing side needs nothing, since both screens already draw whatever name they are given.
-  *⚠ Traps:* the memento name is stored with its extension stripped, so a profile field holding
+  *⚠ Traps:* the name is stored with its extension and drawn without it, so a profile field holding
   `MS_P_DoggiePhoto.jpg` and a bitmap lookup of `ms_p_doggiephoto` are the same value at two
   stages; do not add a second constant beside `Launcher.SeededMemento` for a new default, since a
-  profile with no award is exactly the seeded case. *Playtest after fix:* fly past the first
-  awarding mission, then pause and relaunch to see the same picture on both screens.
-  *Cross-refs:* `docs/org/pause-screen.md` (the table and the name rule),
-  `docs/org/loading-screen.md`, `CSVM/src/Session/CampaignProfileStore.cs`.
+  profile that has chosen nothing is exactly the seeded case. *Playtest after fix:* choose a
+  picture in the cabin, then pause and relaunch to see it on both sheets.
+  *Cross-refs:* `docs/org/pause-screen.md` (the table, the admission rule and the name rule),
+  `docs/org/loading-screen.md`, `CSVM/src/Session/CampaignMementos.cs`.
 
 - `BL-878` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The prompts the
   auto-dock line does not cover still name fixed controls, and every prompt names its control in
@@ -2408,16 +2406,6 @@ usual.
   data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
   the automatic-screenshot sting, not a zone-cleared cue, formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code, it is reserved, and the 15 m is the user's.
-
-- `BL-463` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The cabin ships without Change Memento.** *Evidence:* the user
-  at the controls: the button is missing from the cabin. Decision 3 of `PLAN-M5-campaign`
-  deferred it as cosmetic and resting on an undecoded flow; the flow is now decoded on
-  `docs/org/pause-screen.md` (the profile's memento name, seeded `MS_P_InitialPinup1`, and the
-  22-entry award table at `0x0061af6c`) and both sheets draw whatever name the profile holds.
-  *Fix shape:* the cabin row, opening a chooser over the pictures the profile has been awarded
-  (`BL-854` is the awarding), writing the chosen name to the profile's memento slot; with no award
-  yet the chooser holds the seeded picture alone. *Cross-refs:* `BL-854` (the award, which this
-  chooser lists), `BL-256` (the adjacent snapshot work), `PLAN-M5-campaign` Decision 3.
 
 - `BL-789` `[Research]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]` **Which vehicle volume gates AI target admission: CSVM reads the activation radius where the original reads the attack cylinder.**
   *Evidence:* `FlightController.cs:3344` hands `AiModeMachine.ActivationRange` to

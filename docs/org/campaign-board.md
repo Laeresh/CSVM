@@ -113,8 +113,8 @@ only the justification is pinned there.
 
 Two positions are chosen rather than decoded, and both are marked as such in the code. The cabin's
 memento window (`179, 330`, 73x84) is the block each `PC_P_HANGAR*.JPG` keys out for it, where the
-layout's `PC_MEMENTO` pane sits at `169, 325` with no size, and the picture inside it is always the
-campaign's opening keepsake because choosing one is not shipped. The profile screen's title mark
+layout's `PC_MEMENTO` pane sits at `169, 325` with no size, and the picture inside it is whichever
+keepsake the profile holds, the campaign's opening one until the chooser writes another. The profile screen's title mark
 (`MM_Logo.png`) is `[@MainMenu@]`'s own `MM_LOGO` row, read from the layout; what is chosen is
 standing it over the profile dialog at all, matched off `Campaign Player Profile.png`, since the
 flag movie it belongs over is not decoded.

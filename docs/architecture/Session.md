@@ -202,12 +202,21 @@ the reward table is gated on what the profile has already banked, and reports it
 screen that shows the result. `AirframeCount` fixes the kill tallies' width. Reward table:
 [../org/hangar.md](../org/hangar.md).
 
+## src/Session/CampaignMementos.cs
+The pictures a campaign profile may hang on its cabin wall: the executable's own award table (name,
+the mission that awards it and which bit of that mission's merged objective mask admits it) and the
+rule that reads a profile's records to say which rows it holds. Seven rows carry no mission and are
+held from the first frame, so a chooser is never empty; `Current` answers what an absent or unknown
+stored name draws as, and `Bitmap` is the truncation the drawn file name takes. The table, its
+addresses and the row the original ships but can never admit:
+[../org/pause-screen.md](../org/pause-screen.md).
+
 ## src/Session/CampaignProfileStore.cs
 JSON persistence for one named campaign profile under `user://Profiles/<name>/profile.json`,
 following `ScoreStore` and `CustomPlaneStore`'s precedent: funds, owned planes with their per-gun
 ammunition and per-pylon ordnance picks, each mission's record in the original's two halves
 (latest attempt and best-of merge) with its failed-attempt counter, the completed-mission count,
-the granted aircraft awards and the cross-mission destruction log. An owned plane names a build
+the granted aircraft awards, the cabin's chosen memento and the cross-mission destruction log. An owned plane names a build
 in the global `user://Planes/` store rather than copying it, so deleting a profile orphans
 nothing. A file saved before a field existed reads it at rest rather than failing to load. Save
 format: [../formats/saved-games.md](../formats/saved-games.md).

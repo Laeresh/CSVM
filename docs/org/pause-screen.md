@@ -238,14 +238,25 @@ at its last `.`; `FUN_004a0d20` hands the result to `FUN_005c51a0` on the `MEMEN
 image the primitive draws is **the profile's memento file name without its extension**, and
 `momento_temp` in the data is a placeholder the runtime always replaces. `FUN_004113b0` seeds
 `DAT_0064b684` with `MS_P_InitialPinup1.jpg` when a profile is reset, and the names the campaign can
-award are a 12-byte-record table at `0x0061af6c`: a `char *` into the string block at `0x0061e12c`,
-a mission number and a third field of 0, 1, 2 or 4. It holds 23 records, 7 of them with mission 0
+award are a 12-byte-record table at `0x0061af60`: a `char *` into the string block at `0x0061e12c`,
+a mission number and an objective bit of 0, 1, 2 or 4. Index 0 is `MyMemento.jpg` at mission -1,
+then 23 pictures, then an empty-name terminator at `0x006463b0`. Seven of the 23 carry mission 0
 (`InitialPinup1`, `InitialPinup3`, `JustineBattleax`, `Mom`, `DoggiePhoto`, `Swan&NathaninCabin`,
-`ZacharyandPlane`) and 16 naming a mission, whose number agrees with the digits in their own file
-names (`MS_P_12_01_BettysScreentest2.jpg` against mission 12). The table is read from
-`FUN_004113b0`, `FUN_00410270` and `0x0040c85f`. Which record an awarding picks, and what the third
-field selects, is the campaign's business and not this screen's; this screen draws whatever the
-profile holds.
+`ZacharyandPlane`) and 16 name a mission, whose number agrees with the digits in their own file
+names (`MS_P_12_01_BettysScreentest2.jpg` against mission 12) wherever the name carries digits;
+`MS_P_IllsaandSparks.jpg` carries none and is mission 7. The table is read from `FUN_004113b0`,
+`FUN_00410270` and `0x0040c85f`.
+
+`MyMemento.jpg` is the player's own picture and never appears: its admission at `0x0040c8d8` is a
+file test on the directory string at `0x0061f354` (`Assets\Graphics\Scrapbook`) concatenated with
+the name and no separator between them, which resolves to no shipped path. Every other row is
+admitted at `0x0040c896`: a mission 0 row always, and a row naming mission `m` once
+`*(0x64cca4 + 168*(m-1))`, that mission's merged best objective mask, carries both bit 0 (the
+mission won) and the row's own objective bit. Those records are the mission-result array of
+[../formats/saved-games.md](../formats/saved-games.md) (`UIData +0x1868`, indexed from 1, 168 bytes
+each with the merged half at `+0x54`): `FUN_004113b0` clears it as 0x3f0 dwords at `0x0064cc50`,
+which is record 1 through record 24. `FUN_00410270` walks the table with `lstrcmpiA` and answers index 1, the seeded
+pin-up, for a name it does not find. This screen draws whatever the profile holds.
 
 `FUN_005c4b30` binds the control from the **dialog's own** `PRIMITIVES`, so the position (`[533, 326]`
 in every campaign dialog) is authored while the picture is not. The script then places the shadow

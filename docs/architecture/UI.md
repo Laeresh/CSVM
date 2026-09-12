@@ -108,14 +108,14 @@ player's first FLY MISSION latches `Locked` across that walk. `Taken` and `Choos
 no-duplicate rule, stock picks compared by airframe and profile picks by plane name.
 
 ## src/UI/Campaign*Page.cs
-The nine campaign screens, one file each, every one an `ICampaignPage` over `CampaignFlow`: the
-player roster with its name field and confirmed delete, the cabin hub, the previous-missions
-contents list, the briefing with its revealed map and parchment note, the flight check, ammo
-selection, plane selection with its ratings and export, the scrapbook and one scrap's zoom view.
-Each names its own `LAYOUT.CSV` script and reads every fixed element's geometry through
-`CampaignLayout`, so a page holds rows, detail text and its own refusals and nothing about pixels.
-The chrome: [../org/campaign-board.md](../org/campaign-board.md) and [../org/debrief.md](../org/debrief.md);
-the scripts: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+The ten campaign screens, one file each, every one an `ICampaignPage` over `CampaignFlow`: the
+player roster with its name field and confirmed delete, the cabin hub, the memento chooser its wall
+opens over `Session/CampaignMementos.cs`, the previous-missions contents list, the briefing with its
+revealed map and parchment note, the flight check, ammo selection, plane selection with its ratings
+and export, the scrapbook and one scrap's zoom view. Each names its own `LAYOUT.CSV` script and
+reads geometry through `CampaignLayout`, so a page holds rows, detail text and its own refusals and
+nothing about pixels. The chrome: [../org/campaign-board.md](../org/campaign-board.md) and
+[../org/debrief.md](../org/debrief.md); the scripts: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/UI/CampaignCombo.cs
 A campaign screen's drop-down field (`PS_D_PILOTPLANE`, `OL_D_AMMO0`): the authored rectangle, the
@@ -742,7 +742,7 @@ over a `CampaignProfileStore`, each further dependency optional. The roster oper
 delete and record the last-played player in the original's own words; the mission operations settle
 which `cm_sequence` entry the screens after the cabin are about, with its briefing, wingman flag,
 per-slot change-plane rules and the story aircraft its flight check grants; the writes save the
-loadout, the planes, an exported build and the mission exit. It carries the one `ChapterCinema` and
+loadout, the planes, the cabin's memento (refused unless the profile holds it), an exported build and the mission exit. It carries the one `ChapterCinema` and
 `ClosingCinema` the host built it with, which is how a cabin or mission-end door reaches a film. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs

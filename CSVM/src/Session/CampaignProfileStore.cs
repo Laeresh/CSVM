@@ -110,6 +110,11 @@ public sealed class CampaignProfileDef
     public int MissionsCompleted { get; set; }
     public List<MissionResult> MissionResults { get; } = new();
 
+    /// <summary>The picture hanging in the cabin, a file name out of <see cref="CampaignMementos"/>'s
+    /// award table (the save's <c>UIData +0x344</c>). Empty means the profile has chosen none and
+    /// draws the seeded pin-up, which is exactly what a fresh profile holds.</summary>
+    public string Memento { get; set; } = string.Empty;
+
     /// <summary>Airframe ids of the five campaign aircraft awards already granted. The original
     /// marks a per-airframe byte rather than a per-mission one, so a replay of the awarding
     /// mission grants nothing (<c>docs/org/hangar.md</c>, "The mission reward table").</summary>
@@ -231,6 +236,7 @@ public sealed class CampaignProfileStore
             w.WriteNumber("selectedPlane", def.SelectedPlane);
             w.WriteNumber("wingmanPlane", def.WingmanPlane);
             w.WriteNumber("missionsCompleted", def.MissionsCompleted);
+            w.WriteString("memento", def.Memento);
             w.WriteStartArray("planes");
             foreach (var plane in def.Planes)
             {
@@ -310,6 +316,7 @@ public sealed class CampaignProfileStore
                 SelectedPlane = ReadInt(root, "selectedPlane", 0),
                 WingmanPlane = ReadInt(root, "wingmanPlane", 0),
                 MissionsCompleted = ReadInt(root, "missionsCompleted", 0),
+                Memento = ReadString(root, "memento"),
             };
 
             if (root.TryGetProperty("planes", out var planes) && planes.ValueKind == JsonValueKind.Array)

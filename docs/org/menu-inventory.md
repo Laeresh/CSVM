@@ -99,13 +99,13 @@ delegate to a flow rather than screens of their own, so the 12 contribute 10 pla
 | 9 | Wingman loadout | `Screen.WingmanLoadout` | centred | `FitRowsFor` over the wingman airframe |
 | 10 | Aircraft select | `Screen.Plane` | centred or split | `_roster` plus the hangar door row for player 1 |
 | 11-19 | the nine hangar screens | (`Screen.Hangar` host) | centred | `HangarFlow.Order` |
-| 20-28 | the nine campaign screens | (`Screen.Campaign` host) | board | `CampaignFlow.Registry` |
+| 20-29 | the ten campaign screens | (`Screen.Campaign` host) | board | `CampaignFlow.Registry` |
 
 `HangarScreen` (9, linear in `HangarFlow.Order`): PlaneSelection, Airframe, Engine, Armour, Guns,
 Hardpoints, Paint, Name, Purchase.
 
-`CampaignScreen` (9, a graph over a stack): Roster, Cabin, PreviousMissions, Briefing, FlightCheck,
-Ammo, PlaneSelection, Scrapbook, ScrapbookZoom.
+`CampaignScreen` (10, a graph over a stack): Roster, Cabin, MementoSelection, PreviousMissions,
+Briefing, FlightCheck, Ammo, PlaneSelection, Scrapbook, ScrapbookZoom.
 
 ### Launchscreen transitions
 
@@ -428,13 +428,12 @@ families (pointer clicks on the rows' rectangles, keyboard cursor commands walki
 pad cursor commands walking up and left), once over the hand-authored fixture layout and once over
 the install's own `menu_layout.json` and art. Every `ScriptToExe` edge of an in-scope section must
 have an entry saying how Original realises it, and the entry is checked against the shell. The
-tally over the install: 31 screens (every `OriginalScreen`) reached and left with no open campaign,
-build or dialog behind; 52 journeys by 3 families; 46 edges of which **39 are driven** (the row is
+tally over the install: 32 screens (every `OriginalScreen`) reached and left with no open campaign,
+build or dialog behind; 55 journeys by 3 families; 46 edges of which **42 are driven** (the row is
 pressed and the target screen shows), **2 are realised as the wingman slot's row** (`FC_B_CHANGEPLANEW`
 and `FC_B_CHANGEAMMOW` are the pilot's plaques at the wingman's slot, present exactly when the
-mission flies a wingman), **1 is drawn disabled** (`MM_B_MULTIPLAYER`) and **4 are out of scope**
-(MomentoSelection's two returns and the cabin's `PC_B_CHANGEMOMENTO`, `IAWU_B_CONTINUE`);
-0 dead ends. The exits are checked too: Quit as a `QuitExit`, ACCEPT CHANGES as a
+mission flies a wingman), **1 is drawn disabled** (`MM_B_MULTIPLAYER`) and **1 is out of scope**
+(`IAWU_B_CONTINUE`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, ACCEPT CHANGES as a
 `OptionsApplyExit`, FLY on Free Flight and Fly Mission on Instant Action as a `LaunchExit`,
 FLY MISSION as a `CampaignMissionExit`, and Purchase Now returning to the top level with the plane
 saved. Keyboard and pad share one semantic command vocabulary at the seat seam (Decision 25), so
@@ -444,17 +443,17 @@ device mapping behind them is the seats' own tests.
 ### In scope and out of scope
 
 Decision 5 puts everything `LaunchMenu` hosts in scope. Mapping that onto the original's 34
-single-player screens leaves **28 in and 6 out**, before the 22 multiplayer screens, which are all
+single-player screens leaves **29 in and 5 out**, before the 22 multiplayer screens, which are all
 out (CSVM's Dogfight is splitscreen on `dogfight_ace` spawns, not the original's network play).
 
-**In scope (28):** MainMenu; Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys; Credits;
-InstantAction; Campaign, PassengerCabin, FlightCheck, PlaneSelection, OrdinanceLayout, ScrapBook,
-ScrapBook_TOC, ScrapbookZoom; Hangar, PlaneName, PlaneConstruction, AirFrame, Engine, Armor, Guns,
-HardPoints, Paint, Purchase; MessageBox.
+**In scope (29):** MainMenu; Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys; Credits;
+InstantAction; Campaign, PassengerCabin, MomentoSelection, FlightCheck, PlaneSelection,
+OrdinanceLayout, ScrapBook, ScrapBook_TOC, ScrapbookZoom; Hangar, PlaneName, PlaneConstruction,
+AirFrame, Engine, Armor, Guns, HardPoints, Paint, Purchase; MessageBox.
 
-**Out of scope (6):** CampaignIntro and FinalCinema (MPG playback, `BL-446`); Save and Load (no
+**Out of scope (5):** CampaignIntro and FinalCinema (MPG playback, `BL-446`); Save and Load (no
 savegame system here, and the `LOAD` branch is unreachable in the shipped build);
-MomentoSelection (deferred, `BL-463`); IA_WrapUp (a flight board, excluded by Decision 5).
+IA_WrapUp (a flight board, excluded by Decision 5).
 
 All five Preferences leaves are built. GameOptions, Audio and Video carry the shared options: the
 difficulty and the presentation stand on the first, the four volume levels on the second, the
@@ -488,7 +487,8 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | InstantAction | Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, Presets | 48 rows | [`instant-action.md`](../formats/instant-action.md) | **none** | option sets, the ace's control hiding and the paged enemy rows are script-proven; the screen itself has never been seen. **Built as Original's Instant Action screen** from the section's rows over the shared feature: `IA_BackGround`, the `T` rows, the contents list in its 14-row window with its own scroll arrows and slider, the dropdowns on their authored lines, the enemy rows paged by `IA_B_UP`/`IA_B_DOWN`, the radio pair, View Story, Fly Mission and Exit; `IA_B_BUILD` opens the wallet-free hangar and `IA_B_CHANGEWEAPONS` the Weapon Loadout screen for the seat the radio pair names (both destinations remake readings, no layout row stating either edge). What the data does not settle is listed under Part 4 for `CAP-50` |
 | OrdinanceLayout (as Instant Action's Weapon Loadout) | `WingmanLoadout`, the plane pane's loadout | 31 rows | same | same | **Built as Original's Instant Action loadout screen** over the same section: the ammunition fields for the airframe's firable gun slots and the rocket fields for its pylons (left column pylons 1 to 4, right 5 to 8), each over the stock table's option list, the two diagram panes on the airframe's frame, `OL_T_PLANEINFO` naming the fitted aircraft, the focused field's description in its pane, `OL_B_ACCEPT` keeping the picks and `OL_B_CANCEL` or Back restoring the picks the screen opened on. Remake-only: the original reaches this section from the flight check alone |
 | Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits. **Built as Original's profile screen** over the shared campaign feature and the shared board component: the name box pre-filled with the last player seated, `CM_B_START` / Enter in the box / a second click on the filled roster row starting, a first click filling the box and a click in the box itself taking the caret and nothing else, the list sub-script's own selection bar and pointer frame, the four refusals as the one-button messagebox, `CM_B_DELETEPLAYER` asking with langui 201 as the two-button box whose answers read Yes and No (langui 102 and 103, the words `MESSAGEBOX.SCRIPT` gives a `0x4` box), `CM_B_CANCEL` leaving. The box opens on Yes, the left button `MESSAGEBOX.SCRIPT` focuses for the plain `0x4` mask the campaign passes. Remake-only: the caret |
-| PassengerCabin | `Cabin` | 16 rows | same | `Campaign CAP-44 Cabin.png` | full for the six buttons; whether anything on the screen animates is open. **Built as Original's cabin**: the four plaques the board component draws, `PC_B_NEWMISSION` disabled once the campaign is complete, `PC_B_PLANEX` into the name screen over the profile's wallet with the cabin as the hangar's return, `PC_B_PREVIOUS` and `PC_B_RETURNMM` on their layout edges |
+| PassengerCabin | `Cabin` | 16 rows | same | `Campaign CAP-44 Cabin.png` | full for the six buttons; whether anything on the screen animates is open. **Built as Original's cabin**: the five plaques the board component draws, `PC_B_NEWMISSION` disabled once the campaign is complete, `PC_B_PLANEX` into the name screen over the profile's wallet with the cabin as the hangar's return, `PC_B_CHANGEMOMENTO` into the memento chooser, `PC_B_PREVIOUS` and `PC_B_RETURNMM` on their layout edges |
+| MomentoSelection | `MementoSelection` | 7 rows | same | **none** | full: `MOMENTOSELECTION.SCRIPT` and the award table behind `uiData` 2150 are decoded. **Built as Original's memento chooser** through the shared page: the scrapbook photograph under its reflection, the two arrows stepping the pictures the profile holds, ACCEPT writing the chosen name into the profile and CANCEL leaving the cabin's wall as it was |
 | FlightCheck | `FlightCheck` | 25 rows | same | `Campaign Flight Check.png`, `… Change Plane Button.png` | full: both slots, four lists, the wingman gate, both plane-change rules. **Built as Original's flight check**: the paper plaques per crew slot hit-tested at their rows, `FC_B_RETURNBRIEF` rewinding a co-op walk, `FC_B_FLYMISSION` advancing to the next joined human's check or leaving as the feature's launch with every seat's devices; a joined seat drives its own check |
 | PlaneSelection | `PlaneSelection` | 27 rows | same | `… Change Plane.png`, `… Combo Box.png`, `… Unique Warning.png`, `… Export dialog.png` | full, including the rollover preview and the duplicate rule. **Built as Original's plane selection** through the shared page: the fields at their `D` rows with the open list's entries hit-tested under the box, a sideways step on the closed field, the 710 refusal and the 702 export message as Original's own messagebox. Remake-only: the rollover preview is not drawn (the page previews nothing on a highlight) |
 | OrdinanceLayout | `Ammo` | 31 rows | same | `… Change Ammo Menu.png`, `… ComboBox.png`, `Campaign Ammo Selection.png` | full. **Built as Original's ammo selection** through the shared page: the twelve fields, the description pane following the focused field, ACCEPT and CANCEL back onto the plaque that opened the screen |

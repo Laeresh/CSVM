@@ -23,6 +23,10 @@ public sealed class CampaignLayout
     /// <summary>The cabin's section.</summary>
     public const string CabinSection = "PassengerCabin";
 
+    /// <summary>The memento chooser's section, <c>MOMENTOSELECTION.SCRIPT</c>'s, whose own keys
+    /// spell the word the way the data does.</summary>
+    public const string MementoSection = "MomentoSelection";
+
     /// <summary>The flight check's section.</summary>
     public const string FlightCheckSection = "FlightCheck";
 
