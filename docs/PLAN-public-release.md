@@ -1092,11 +1092,13 @@ Anything A2 or a later wave closes comes off this list.
   carries Master, Music, Effects and Voice levels, so a player can pull the effects category down,
   but nothing separates that one loop from the rest of its category. (`BL-391`; no landing commit,
   and the gain in question is the loop's own rather than a category's.)
-- **Aircraft cast no shadow on the ground in the faithful presentation.** Set Enhanced Graphics in
-  Game Options and restart, which lights the world and casts shadow maps, though those are not the
-  shadow the original drew. (`BL-331`;
-  the decode landed and the build did not, and the faithful path's world light still carries no
-  shadow, which an engine suite asserts.)
+- **An aircraft's ground shadow is a soft blob rather than its own outline.** It is placed, sized,
+  faded and coloured the way the original places its own, but the original fills that footprint
+  with a live top-down raster of the aircraft and this fills it with a blurred ellipse; on a steep
+  slope it also rides over the ground rather than wrapping it. Set Enhanced Graphics in Game
+  Options and restart for real shadow maps instead, which are not the shadow the original drew.
+  (`BL-331`; the placement half has a landing commit and an engine suite, the silhouette and the
+  ground conformance do not.)
 - **In the New York chapter the lit building faces read darker than the original, with a distinct
   dark band at middle distance.** No workaround; it is a matter of how the shipped textures are
   sampled and nothing is missing from the world. (`BL-322` and `BL-538`; both have had their

@@ -815,32 +815,45 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `poleflare` and `lightpole` decoration models carry it is read off the templates, not fitted.
   What remains here is the billboard-axis question, and it still needs the A/B.
 
-- `BL-331` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Aircraft cast no ground shadow; the original draws one, straight down**
-  (split out of `BL-324`, 2026-08-09). **Fully decoded 2026-08-13, in
-  [`docs/org/shadows.md`](docs/org/shadows.md).** The original rasterises each aircraft's
-  silhouette into a live 32×32 modulate texture, projected onto the terrain along `SHADOW_ANGLES`
-  (`[-90, 0, 0]`, straight down, in all 53 shipped files), and draws it as a ground quad. What is
-  left is building it, and the A/B below.
+- `BL-331` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The ground shadow is placed like the original's but shaped like a blob: the silhouette raster and the ground conformance are not built**
+  (split out of `BL-324`). The placement half is landed and pinned
+  (`Flight/GroundShadowLaw.cs`, `Flight/GroundShadowPass.cs`, suite `ground-shadow`): the
+  straight-down projection with the player's forward skew, the 1/200 horizontal distance fade, the
+  60/250 altitude ramp, the player's 3× growth, and the colour derived from the mission's
+  `SUNLIGHT` pair. The decode is [`docs/org/shadows.md`](docs/org/shadows.md), whose last section
+  lists what the port takes and where it departs. What is left:
+  - **The silhouette.** The original rasterises the aircraft's own model, top down, into the 32×32
+    modulate texture every frame (`FUN_00565d80`), and CSVM fills that texture with a blurred
+    ellipse instead. The spread and the ramp are already the decoded ones, so this is a live
+    top-down render (a `SubViewport` with an orthographic camera, or an equivalent) feeding the
+    coverage channel, plus the original's own choice of node: the whole model root for an AI
+    aircraft and the `geometry` child for the player's own.
+  - **The ground conformance.** The original applies the texture as a modulate pass over the
+    world's own polygons, chunk by chunk (`FUN_005668b0`), so it wraps whatever lies inside the
+    footprint; CSVM draws a flat quad at the probed height and lifts it half a unit clear, which
+    rides visibly over a steep slope and cuts into a building. Godot's `Decal` is the obvious
+    candidate and needs checking against the fullbright world's own materials first.
+  - **Fog.** The quad multiplies an already-fogged frame buffer with `fog_disabled`, so a distant
+    shadow stays darker than the ground it lies on. The original modulates before fog.
+  - **Water, and anything with no collider**, takes no shadow at all: the ground comes from one
+    downward ray. The original's terrain column answers the water surface.
+  - **The Spruce Goose** has its own four constants (300/600 range, 180/750 altitude) and an
+    enable switch on its `shadow` child node. Neither is wired.
   ⚠ **Godot shadow mapping cannot be the mechanism**, and the decode confirms it: the original
   casts no shadow map at all. The world is built `fullbright: true` and an unshaded material
-  receives nothing, so `BL-324`'s removal of `_sun.ShadowEnabled` (landed 2026-08-09,
-  `git log --grep=BL-324`) stays correct and is not a regression to rediscover.
-  ⚠ **The authored `shadow` node is the SOFTWARE fallback, not the real shadow** (settles this
-  entry's former "check the authored mesh first" caveat). It is real and it is used, but only when
-  the projected path is off: `FUN_00565aa0` enables that path for the hardware renderer only, and
-  `FUN_004b3050` hides the card whenever it is on. Keeping `shadow` out of `PlaneBuilder.cs:26`
-  is right; do not build the card.
-  *Decoded, all of what this entry once listed as open:* the size law (footprint = the projected
-  bounding box, scaled 1× → **3× between 60 and 250 units for the player's own aircraft only**);
-  the distance fade (**horizontal** squared distance, `(far²−d²)/(far²−near²)`, near/far 1/200 for
-  aircraft and 300/600 for the Spruce Goose, skipped for the player); the altitude ramp
-  (`(250−alt)/190`, full below 60, gone at 250; 180/750 for the Spruce Goose); and the alpha terms
-  (`255·((1−A) + 0.8·A·k)` per channel, `k = ambient/(ambient + diffuse·|dir.y|)`, so **shadow
-  darkness follows the mission's `SUNLIGHT_AMBIENT`/`SUNLIGHT_DIFFUSE`**, the `BL-332` pair).
-  *Needs:* an original-game A/B, a low pass over flat ground showing size and softness against
-  altitude. The decode gives it four falsifiable predictions (`docs/org/shadows.md`, last section);
-  the one to shoot at first is that the **player's own** shadow trails the aircraft by ~1.5 × its
-  altitude along the flight direction while an AI aircraft's sits directly beneath it.
+  receives nothing, so `BL-324`'s removal of `_sun.ShadowEnabled` (`git log --grep=BL-324`) stays
+  correct and is not a regression to rediscover. The pass is therefore **original graphics mode
+  only**; enhanced mode casts real shadow maps and builds none of this.
+  ⚠ **The authored `shadow` node is the SOFTWARE fallback, not the real shadow.** It is real and it
+  is used, but only when the projected path is off: `FUN_00565aa0` enables that path for the
+  hardware renderer only, and `FUN_004b3050` hides the card whenever it is on. Keeping `shadow` out
+  of `PlaneBuilder.cs` is right; do not build the card.
+  *Needs, still:* an original-game A/B, a low pass over flat ground showing size and softness
+  against altitude. The decode's four falsifiable predictions are in `docs/org/shadows.md`'s last
+  section; the one to shoot at first is that the **player's own** shadow runs ~1.5 × its altitude
+  **ahead** of the aircraft along the flight direction while an AI aircraft's sits directly
+  beneath it. That direction was decoded backwards once already, from reading row 2 of the
+  orientation matrix as the nose when it is minus the nose (`SRC-12`), so the capture decides it.
 
 - `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
   one deviation is deliberately held back** (`Precipitation.cs:29-62` — type/tint/rate/density

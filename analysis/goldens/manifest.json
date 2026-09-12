@@ -99,8 +99,8 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "f4c233399c79a8baf8c90031344356ab",
-      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffer placement, world-lit alpha scenery; frame-sensitive.",
+      "hash": "9ce9d75dcc51684ef935443f21071f94",
+      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery, the player's ground shadow; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
@@ -120,29 +120,29 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "824066846e8899409a1cab7b45825045",
-      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and crewed rear turret feed fixed antialiased in-range brackets, the label below the plane, --debug-markers identity/health text, world-lit C1 beneath; frame-sensitive 48.18 %.",
+      "hash": "8c2a86ce8a0dd0b37ea65b3fd53501d5",
+      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and crewed rear turret feed antialiased in-range brackets, the label below the plane, --debug-markers text, the player's ground shadow on world-lit C1; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "f940f76c5d58e141debad1c25fb4a112",
+      "hash": "93e005bfcf9a3a46efb6fe569e9645ef",
       "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen edge arrow and the category/name/clock label block in the non-destructive objective's blue, over the run HUD's clock, zone count and intro banner.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "0553ae7880e57d22872acbf22760b5cf",
-      "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the target's antialiased brackets, the handover fireball inheriting the hull's velocity, the LOW ALT lamp inside its 60 m gate, world-lit C1.",
+      "hash": "891e318307c1ce824d8655105895e440",
+      "exercises": "A shot-down AI 3 s after the kill: flight state under frozen commands, the target's antialiased brackets, the handover fireball inheriting the hull's velocity, the LOW ALT lamp, the player's ground shadow on world-lit C1.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "89da1f87a03ce8cb4ac69e301d23cab2",
-      "exercises": "Four humans launch a co-op campaign mission abreast on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light in every pane; frame-sensitive 73.79%.",
+      "hash": "c9b370fabcf96b3e5cb18799a2fb440a",
+      "exercises": "Four humans launch a co-op campaign mission abreast on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light and the ground shadows in every pane; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
     {

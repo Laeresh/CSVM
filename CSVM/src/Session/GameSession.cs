@@ -2105,6 +2105,12 @@ public partial class GameSession : Node3D
         _worldRoot!.AddChild(projectiles);
         _projectiles = projectiles;
 
+        // The original's per-frame ground shadow, one quad under every aircraft. It reads the
+        // roster fresh, so waves and generator spawns are covered; enhanced graphics mode builds
+        // nothing here and casts real shadow maps instead.
+        GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot,
+            () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
+
         // The smoke screens' own smoke, wired here rather than at their construction because the
         // chapter's textures and anim program are only resolved this far into the build. Same
         // program as the rockets' flyout trails: missile_puffers carries generate_smokescreen too.

@@ -727,6 +727,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   is a shield on the player and the cue says a round was absorbed. Before building a feature on a
   block of constants, find every reader of every field: here all four had three sites between them
   (`org/weaponFire.md`).
+- **SRC-12** — **Which body axis a matrix row holds is a claim to re-derive at a point of use, not
+  to take from another page; a wrong row sign reverses a ported direction without failing
+  anything.** Row 2 of the orientation matrix at `plane+0x180` is **minus** the nose, proved where
+  the thrust magnitude is negated before being multiplied by it (`0x48fe91`, `org/flightModel.md`);
+  read as the nose, the shadow skew that `org/shadows.md` decoded came out backwards, putting the
+  player's own shadow behind the chase camera instead of ahead of the aircraft where it is drawn.
 
 ## What this project cannot verify itself
 

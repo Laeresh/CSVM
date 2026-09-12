@@ -34,6 +34,11 @@ resource (`Launcher.cs`'s `UseMissionSky`, `WeatherRig.WriteSkyColor`). The cock
 and every splitscreen pane pick up the same settings and the same per-zone updates, since both
 duplicate or share the session's own sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
 
+One drawing runs in **original mode alone**, the only difference in that direction: the aircraft's
+projected ground shadow (`Flight/GroundShadowPass.cs`, decoded in `../org/shadows.md`). It is the
+original's own substitute for shadow mapping, so under enhanced mode, where the sun casts real
+shadow maps, the pass is not built at all and the aircraft's own shadow is the mapped one.
+
 The energy mapping from authored SUNLIGHT units to Godot light energies, the 2x fog-range push and
 the shadow distance following it, the night key read off `FOG_COLOR` luminance with its 0.25
 separator and its 0.6 / 0.15 energy cap, and SSR's hard mirror on wave-less water planes are TUNE:

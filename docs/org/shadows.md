@@ -10,8 +10,10 @@ the addresses are given so any claim can be re-checked at source.
 **Where the other halves live.** The authored side (the top-level `SHADOW_ANGLES` and `SHADE_*`
 keys, and the `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` pair the shadow colour is derived from) is
 [`formats/weather.md`](../formats/weather.md); the sunlight node those two land on is
-[`weather.md`](weather.md)'s "The sun". CSVM draws no ground shadow at all today, so there is no
-implementation half yet; `BL-331` is the item, and `BL-332` owns the authored light intensities.
+[`weather.md`](weather.md)'s "The sun". The implementation half is
+[`../architecture/Flight.md`](../architecture/Flight.md)'s `GroundShadowLaw`/`GroundShadowPass`
+entries, and the last section says what it takes from here and where it departs; `BL-331` carries
+what is left, and `BL-332` owns the authored light intensities.
 
 ⚠ **This page is a decode, not a proposal.** Where it disagrees with a footage measurement, the
 decode wins and the disagreement is a note. Nothing on this page has been checked against footage;
@@ -26,6 +28,9 @@ the last section says what to look for.
 | `FUN_0049cf00` | The shadow colour, from the sunlight node's diffuse and ambient |
 | `FUN_00565d80` | The projection, the footprint, the 32×32 raster, the blur and the ramp |
 | `FUN_00565ce0` | Publishes the texture under the material name `gModShadow` |
+| `FUN_005667c0` | Gathers the live shadow objects into the frame's array, 200 at most |
+| `FUN_005668b0` | Selects, per world chunk, the shadows whose footprint overlaps it in x and z |
+| `FUN_004d5910` / `FUN_004d39c0` | The world chunk and node draw that apply the selected set |
 | `FUN_00565ae0` / `FUN_00565bf0` / `FUN_00565b60` | The shadow object: alloc, its 32×32 16-bit buffer, free |
 | `FUN_00565aa0` | Decides **which** of the two shadow implementations is live |
 | `FUN_004b3050` | The authored `shadow` node driver, the other implementation |
@@ -48,7 +53,16 @@ are mutually exclusive:
 |---|---|---|
 | Driver | `FUN_0049d0a0`, from the pass in `FUN_0049d3d0` | `FUN_004b3050`, from the per-aircraft update |
 | Runs when | `00a06f90 != 0` | `00a06f90 == 0` |
-| What it draws | the aircraft's silhouette, projected onto the ground, rasterised live into a 32×32 texture, drawn as a modulate quad | the `shadow` node authored on the plane model, moved down to ground level and flattened |
+| What it draws | the aircraft's silhouette, rasterised live into a 32×32 texture and modulated onto the ground the footprint covers | the `shadow` node authored on the plane model, moved down to ground level and flattened |
+
+⚠ **The projected shadow is not a quad.** `FUN_005667c0` collects the frame's live shadow objects
+(200 at most), and the world draw asks `FUN_005668b0` per chunk which of them overlap that chunk in
+x and z (`FUN_004d5910`, passing the chunk's own bounds at `chunk+0x10`); the node draw then applies
+the selected set as an extra modulate pass over that geometry's own polygons, with texture
+coordinates from the footprint (`shadow+0x48`/`+0x4c` hold 1/width and 1/depth). So the shadow
+conforms to whatever ground lies inside its footprint rather than lying on one flat plane, and a
+node that is itself a caster is excluded from receiving its own shadow (`FUN_004d39c0` at
+`004d3bba`). A remake that draws a quad instead owns the difference.
 
 ⚠ **The `shadow` node on the plane models is the software fallback, not the real shadow.** It is a
 genuine authored card and it is genuinely used, but only on the non-accelerated path, and
@@ -130,6 +144,12 @@ k       = ambient / (ambient − diffuse · dir.y)      // dir.y < 0, so the den
 channel = clamp(round(255 · ((1 − A) + 0.8 · A · k)), 0, 255)
 ```
 
+⚠ **`k` has a zero guard, and it does not fall back to 1.** A channel whose ambient is exactly 0,
+or whose denominator cancels, keeps the raw ambient value in place of the ratio (`0049cf25`…
+`0049cff0`), so an ambient of 0 gives `k = 0`, the darkest that channel can be rather than the
+lightest. The 0.8 is not a literal inside this function either: it is the third argument
+`FUN_0049d0a0` pushes as `0x3f4ccccd`.
+
 `k` is the physical ratio "ambient only" over "ambient + diffuse·(N·L)" for flat ground with an up
 normal. **The original darkens the ground by exactly the light the aircraft blocks**, times a fixed
 0.8, faded toward white by `1 − A`. The literals are `1.0` at `6032dc`, the `0.5` rounding term at
@@ -143,7 +163,12 @@ ambient rises.
 
 Each of the 8 corners of the model's bounding box is projected onto the ground plane along the
 direction (`x + (ground − y)·dir.x/dir.y`, and the same for z), and the min/max of the projected
-corners is the quad. The quad's top is then nudged `+2.0` to keep it off the terrain.
+corners in x and z is the footprint.
+
+⚠ **The `+2.0` is added to the footprint's TOP Y, not to its ground height.** `shadow+0x40` is the
+maximum y of the eight corners, which the projection leaves untouched, and that is what `+2.0`
+nudges; the ground height itself is stored unchanged at `shadow+0x1c`. It is the raster volume's
+ceiling, not a lift off the terrain, and a remake gets no z-fighting remedy from it.
 
 The footprint is then scaled about the projected origin by a factor that is **1 for every aircraft
 except the player's own**, where it is `3 − 2·(altitude factor)`: 1× at or below 60 units, growing
@@ -158,11 +183,14 @@ A 32×32, 16-bit buffer (`FUN_00565bf0` allocates `32·32·2` bytes), cleared an
    whole model root is used; for the player's own aircraft the node named `geometry` is used
    instead when it exists (resolved once at `0071c31c`). The node's cull flag `0x8` is cleared
    first (`FUN_004ccf00`) so frame culling cannot skip the render.
-2. A fixed 3×3 blur: every covered texel adds 4 to itself and 2 to each of its 8 neighbours, with
-   the border ring skipped, so accumulated values run 0…20.
+2. A fixed 3×3 blur: the raster marks a covered texel with 1, then every texel still carrying that
+   odd bit adds 4 to itself and 2 to each of its 8 neighbours. The border ring is never scanned,
+   though it does receive, so accumulated values run 0…21.
 3. Each texel is replaced by entry `value/2` of an 11-entry ramp built per channel as
-   `255 − i·(25.5 − channel/10)` for `i = 0…10`, so entry 0 is white and entry 10 is exactly the
-   colour from `FUN_0049cf00`.
+   `255.5 − i·(25.5 − channel/10)`, rounded, for `i = 0…10`. That is exactly
+   `mix(255, channel, i/10)` plus the half-unit rounding term, so entry 0 is white and entry 10 is
+   the colour from `FUN_0049cf00`. An interior texel reaches 21 and saturates the ramp; a lone
+   covered texel reaches 5, i.e. entry 2, which is what softens the silhouette's edge.
 
 The result is published under the material name `gModShadow` (`FUN_00565ce0`).
 
@@ -172,17 +200,23 @@ Worth collecting, because two of the three are the opposite of what a physical s
 
 1. **No distance fade** (it is always at distance 0 from itself, so this is only bookkeeping).
 2. **The footprint grows to 3× by 250 units**, while every other aircraft's stays tight.
-3. **The direction is skewed backwards along the flight path.** Before use, `1.5 ×` the horizontal
-   part of the aircraft's nose direction is subtracted from the shadow direction and the result
-   renormalised. The nose direction is row 2 of the matrix `FUN_0053bf40` builds at `plane+0x180`;
-   the same pair, negated, is cached at `plane+0x1e0` as the reverse heading. Since the vertical
-   component is unchanged, the projection ratio becomes `1.5 × nose`, and the shadow lands
-   **1.5 × altitude behind the aircraft along its flight direction**.
+3. **The direction is skewed forward along the flight path.** Before use, `1.5 ×` the horizontal
+   part of **row 2** of the orientation matrix `FUN_0053bf40` builds at `plane+0x180` is subtracted
+   from the shadow direction (its x at `+0x198` and its z at `+0x1a0`) and the result renormalised.
+   Since the vertical component is unchanged, the projection ratio becomes `1.5 ×` that row, and the
+   shadow lands **1.5 × altitude ahead of the aircraft along its flight direction**.
 
-⚠ **Point 3 is decoded but unverified against footage.** The magnitude is large (45 units behind, at
-30 units of altitude), and it only makes sense as a readability aid for the default third-person
-chase view, where a shadow displaced toward the camera is easier to read as an altitude cue than one
-hidden under the aircraft. The falsification test is in the last section.
+⚠ **Row 2 is MINUS the nose, which is what makes this forward rather than backward.**
+[`flightModel.md`](flightModel.md) proves it at a point of use: the thrust magnitude is negated and
+then multiplied by that same row (`0x48fe91`), so `force = −magnitude · row2 = +magnitude · nose`.
+Subtracting `1.5 × row2` therefore adds `1.5 × nose`, and `plane+0x1e0`, which caches the row
+negated (`aiControlLaw.md`), holds the heading rather than the reverse of it. A reading that takes
+row 2 for the nose puts the shadow behind the aircraft, where at any real altitude it sits behind
+the chase camera and is never in frame; forward, it lies ahead of the nose in the default view,
+which is where an altitude cue is worth drawing.
+
+⚠ **Point 3 is decoded but unverified against footage.** The magnitude is large (45 units ahead, at
+30 units of altitude). The falsification test is in the last section.
 
 ## The authored card (`FUN_004b3050`)
 
@@ -222,30 +256,35 @@ it.
 
 ## What CSVM does today
 
-No ground shadow is drawn at all (`BL-331`). The decode confirms the shape of the gap rather than
-changing it:
+The placement half is implemented, in original graphics mode only (`Flight/GroundShadowLaw.cs` for
+the rule and `Flight/GroundShadowPass.cs` for the drawing; `docs/architecture/Flight.md`). What it
+takes from this page and where it departs:
 
 - **Godot shadow mapping cannot be the mechanism.** The original never casts a shadow map; it draws
   a projected silhouette onto the terrain. The world is built `fullbright: true` and an unshaded
   material receives nothing, so `BL-324`'s removal of `_sun.ShadowEnabled` stays correct and is not
   a regression to rediscover.
-- The faithful build is a small top-down render of each aircraft (the shipped `SHADOW_ANGLES` is
-  always straight down, so the projection collapses to an orthographic view from above), blurred,
-  ramped white → the derived colour, drawn as a ground-conforming multiply quad sized to the
-  projected bounding box and lifted 2 units.
-- The constants above are directly reusable: 60/250 altitude, 1/200 horizontal distance, the colour
-  formula, the player's 3× growth, the `+2.0` lift.
-- The original's own terrain-query bug (the plain maximum) should not be reproduced.
+- Taken verbatim: the straight-down projection and the player's forward skew, the 1/200 horizontal
+  distance fade, the 60/250 altitude ramp, the player's 3× growth, the colour formula with its zero
+  guard, and the spread and ramp the coverage texture is built through.
+- The silhouette is **not** reproduced: the texture carries a blurred ellipse rather than a live
+  top-down raster of the aircraft, which is the rest of `BL-331`.
+- The modulate lands on a **flat quad** at the probed ground height rather than on the world's own
+  polygons, so it does not conform to a slope, and it is lifted clear by half a unit, a constant
+  this page does not supply.
+- The ground comes from one downward ray from the aircraft, so the original's own terrain-query bug
+  (the plain maximum, which can snap a shadow to a surface above the aircraft) is not reproduced.
+  Water and anything else that carries no collider answers nothing, and no shadow is drawn there.
 
 ## Open questions, and how to falsify this page
 
 None of this has been checked against footage. `BL-331` still owes an original-game A/B, and it now
 has specific predictions to shoot at:
 
-1. The **player's own** shadow trails the aircraft by roughly 1.5 × its altitude along the flight
-   direction and grows to 3× its footprint by 250 units, while an AI aircraft's shadow stays tight
-   and directly beneath it. A capture showing the player's shadow directly beneath the aircraft
-   falsifies the row-2-is-the-nose reading and the whole skew term needs re-deriving.
+1. The **player's own** shadow runs roughly 1.5 × its altitude AHEAD of the aircraft along the
+   flight direction and grows to 3× its footprint by 250 units, while an AI aircraft's shadow stays
+   tight and directly beneath it. A capture showing the player's shadow directly beneath the
+   aircraft, or behind it, falsifies the skew term and it needs re-deriving.
 2. Aircraft shadows vanish above 250 units, and other aircraft's shadows fade out past 200 units of
    horizontal distance from the player.
 3. The Spruce Goose keeps its shadow to 750 units of altitude and 600 of distance.

@@ -347,6 +347,7 @@
     "mesh-light-blink": 2.70,
     "mesh-light-fade": 2.64,
     "cutscene-clear-ordnance": 2.42,
-    "campaign-wingman-removal": 4.43
+    "campaign-wingman-removal": 4.43,
+    "ground-shadow": 3.32
   }
 }

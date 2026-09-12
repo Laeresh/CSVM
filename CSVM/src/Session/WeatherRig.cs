@@ -180,10 +180,21 @@ public sealed class WeatherRig
     /// one.</summary>
     public static (float Sun, float Ambient) DefaultEnergies => (FaithfulSunEnergy, FaithfulAmbientEnergy);
 
+    /// <summary>The install's modal day <c>SUNLIGHT</c> pair scaled by white, the shape
+    /// <see cref="SunlightRgb"/> carries, for a session with no mission weather to read.</summary>
+    public static (Vector3 Diffuse, Vector3 Ambient) DefaultSunlightRgb =>
+        (Vector3.One * WeatherState.DefaultDiffuse, Vector3.One * WeatherState.DefaultAmbient);
+
     /// <summary>The fog this rig last wrote into the three <c>csky_fog_*</c> globals (colour in
     /// linear, range and altitude in metres). A mirror, because the renderer refuses to read a
     /// global back outside the editor; it is what a suite asserts a fog change by.</summary>
     public FogWritten FogGlobals { get; private set; }
+
+    /// <summary>The applied zone's <c>SUNLIGHT_DIFFUSE</c>/<c>SUNLIGHT_AMBIENT</c>, each scaled
+    /// by its own authored colour. The authored pair rather than the energies derived from it,
+    /// for the reader that needs the light itself: the ground shadow's darkness is the light the
+    /// aircraft blocks (<c>Flight/GroundShadowLaw</c>).</summary>
+    public (Vector3 Diffuse, Vector3 Ambient) SunlightRgb { get; private set; } = DefaultSunlightRgb;
 
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every
     /// regime, wearing the dimmed underside below <paramref name="bandCentre"/> and the undimmed
@@ -571,6 +582,11 @@ public sealed class WeatherRig
         env.AmbientLightEnergy = ambientEnergy;
     }
 
+    // One authored SUNLIGHT scalar against its own colour, the triple the original's light class
+    // holds and the ground shadow's colour reads.
+    private static Vector3 Scaled(float intensity, Color colour) =>
+        new(colour.R * intensity, colour.G * intensity, colour.B * intensity);
+
     // Says out loud that one rig's in-volume whiteout engaged, and how hard — the
     // evidence a probe reads, since a curtain that never fires and one that fires at 0.02 look
     // the same in a night frame. Only the 0 ↔ non-0 crossings and moves of 0.05 or
@@ -797,6 +813,10 @@ public sealed class WeatherRig
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
         _sun.Rotation = fog.SunOrientation;
+        // The authored pair itself, published for the ground shadow, which derives its darkness
+        // from the light rather than from either mode's energies.
+        SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),
+            Scaled(fog.SunAmbient, fog.SunColorAmbient));
         if (GraphicsMode.Enhanced)
             ApplyEnhancedLighting(fog);
         else

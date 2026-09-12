@@ -479,14 +479,14 @@ steps a phase at a time (`CrashRigQueue.cs`) and `BuildFlightCrashRuntime` is th
 names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/WeatherRig.cs
-Loads and applies the flown mission's weather and drives each rig's skydome, whiteout, deck regime
-and zone gate every frame. `ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair
-through one arm per graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit
-overlay crosses zones too; `ApplyFogState` is the animation runtime's `FOG_STATE` sink, writing only
-the fields the event carries under the same last-writer order. Enhanced mode additionally caps a
-night zone, paints the sky the zone's own fog colour and pushes the fog range out, which the session
-sun's shadow distance then follows. Decode: [../org/weather.md](../org/weather.md); the authored
-side is [../formats/weather.md](../formats/weather.md).
+Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate
+every frame. `ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
+graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit overlay crosses
+zones too; `ApplyFogState` is the animation runtime's `FOG_STATE` sink, writing only the fields the
+event carries under the same last-writer order. Enhanced mode also caps a night zone, paints the sky
+the zone's own fog colour and pushes the fog range out, which the sun's shadow distance follows.
+`SunlightRgb` publishes the applied pair itself, scaled by its authored colours, for the reader that
+needs the light rather than an energy. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun-to-screen-centre vector, plus a

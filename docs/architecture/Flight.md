@@ -1204,6 +1204,22 @@ performing it, answering one outcome value carrying everything the caller owes.
 crashed aircraft cannot crash again is a transition rule here, with the falling wreck's own
 landing as the single exception.
 
+## src/Flight/GroundShadowLaw.cs
+The original's aircraft ground shadow as a rule, engine-free and pure: the projection direction
+(straight down, with the player's own skewed along its nose), the horizontal distance fade, the
+altitude ramp, the footprint scale, the flattening of one point onto the ground, the colour derived
+from the mission's authored `SUNLIGHT` pair, and the spread and ramp the coverage texture is built
+through. Every constant carries its decode. `CSVM.Tests/GroundShadowLawTests` pins the numbers;
+`GroundShadowPass` is the only caller. Decode: [../org/shadows.md](../org/shadows.md).
+
+## src/Flight/GroundShadowPass.cs
+The drawing half: one modulating quad per live aircraft, rebuilt from the rule each rendered frame,
+with the surface height coming from a single downward ray and the roster, the players and the
+authored sunlight read fresh through delegates `GameSession` supplies. Built in original graphics
+mode only. The shape inside the footprint is a stand-in ellipse rather than the original's live
+silhouette raster, and the quad is flat where the original modulates the ground's own polygons;
+both are recorded on the decode page. Read [../org/shadows.md](../org/shadows.md) next.
+
 ## src/Flight/GodotWorldQuery.cs
 The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. It resolves the
 wrapped node's world at each call rather than caching it, since the node may be bound before it
