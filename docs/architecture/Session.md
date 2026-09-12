@@ -237,8 +237,8 @@ of the SAME chapter, keyed by chapter, by the capturing mission's story position
 index. `Capture` reads the live world through the pool the hit path damages; `Through`/`ApplyTo`
 take the position of the most recent earlier mission of the chapter and carry only what positions
 at or before it captured; `AnimRuntime.CarryState` re-applies the states silently, so a later hit
-on a carried kill is a no-op. Only `PERSIST_LOG` defs are carried, read off the reader def rather
-than the compiled twin. The prohibitions on the cut and on the replay path sit on the members they
+on a carried kill is a no-op. Only `PERSIST_LOG` defs are carried; the readers are where that flag
+is authored, and `AnimProgram` hands it to whichever def its dedup keeps. The prohibitions on the cut and on the replay path sit on the members they
 bind. Decode: [../formats/saved-games.md](../formats/saved-games.md).
 
 ## src/Session/CampaignLoadout.cs

@@ -31,7 +31,10 @@ public sealed class AnimProgram
     private readonly Dictionary<string, List<AnimDefinition>> _byAnimName =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
+    // The def that holds each identity, so a superseded twin can still hand over the fields only
+    // its own source carries (see Add).
+    private readonly Dictionary<string, AnimDefinition> _seen =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Every definition, compiled-preferred, in load order. Read-only by type as well as
     /// by convention: one program is shared by every runtime bound from it, and may be shared by
@@ -325,8 +328,16 @@ public sealed class AnimProgram
     private void Add(AnimDefinition def, bool compiled)
     {
         var key = KeyOf(def);
-        if (!_seen.Add(key))
+        if (_seen.TryGetValue(key, out var kept))
+        {
+            // PERSIST_LOG lives only in the reader form, so a def whose compiled twin won this
+            // key would lose the flag and cross no mission boundary. Only ever set, never clear:
+            // Subset re-Adds the same objects, and the two sources are one authored definition.
+            kept.PersistLog |= def.PersistLog;
             return;
+        }
+
+        _seen[key] = def;
         _defs.Add(def);
         if (compiled) CompiledCount++; else ReaderCount++;
         if (!string.IsNullOrEmpty(def.AnimName))

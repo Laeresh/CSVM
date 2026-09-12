@@ -2789,23 +2789,6 @@ usual.
   v3 writer. *⚠ Traps:* not a path fault, and a worktree shares the main checkout's `user://`.
   *Cross-refs:* `BL-662` (the v3 store), `BL-675`'s closing commit.
 
-- `BL-860` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM02]` **The persist log carries trucks, guns and
-  towers between a chapter's missions but not the suspension bridge, so CM02 (C3/M05) opens
-  with the bridge CM01 dropped standing again.** *Evidence:* the user's profile
-  (`user://Profiles/<name>/profile.json`, `persistLog`) holds 39 chapter-6 objects captured at
-  story positions 0, 2 and 3 (`t_truck**`, `aagun**`, `g_tower*`, `u_camp*`, `unit**`) and no
-  bridge entry, while `extracted/C3/zrdr/susp_bridge.zrd.json` carries `PERSIST_LOG ON`.
-  `Session/CampaignPersistLog.cs` `Capture` walks the destructibles the hit path damages
-  (`DestructibleRegistry.Resolve`); the bridge dies through an animation chain (a rope burns, the
-  deck falls: `cam_anim/susp_bridge-rope1burn-rope1.json`, `bridge_truck01-bridge_destroy01.json`),
-  so it is never in that pool at capture time. *Fix shape:* capture every `PERSIST_LOG` def's
-  state off the animation runtime (the def's completion), not only the hit pool, and re-apply
-  through the same `CarryState`; pin with a headless CM01 that fires the bridge chain and a CM02
-  build that reads it dropped. *⚠ Traps:* the capture commits only on the outcomes
-  `CommitsOn` names; check the user's CM01 was a win before blaming the pool. *Cross-refs:*
-  [`docs/formats/saved-games.md`](docs/formats/saved-games.md) (`Persist.NNN`),
-  `docs/architecture/Session.md` (the log's contract).
-
 - `BL-868` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM05]` **CM05 (C3/M04): one Brigand under the
   Pandora fails the mission; what wakes the authored instant loss, and is one enough?**
   *Evidence:* reported at the controls as a question. `extracted/C3/M04/zrdr/objectives.zrd.json`

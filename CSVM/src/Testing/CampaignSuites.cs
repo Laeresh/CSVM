@@ -59,6 +59,24 @@ internal static class CampaignSuites
 
     private const string CashMission = "M01";
 
+    // The chain-killed persisted object: C3's suspension bridge, dropped in the chapter's first
+    // campaign mission by the fuel truck parked on it, and standing again in the chapter's second
+    // (cm_sequence seq 0 and 1). The bridge is the install's one PERSIST_LOG def whose kill arrives
+    // as a CALL_ANIMATION from another destructible's death.
+    private const string BridgeChapter = "C3";
+
+    private const string BridgeMission = "M01";
+
+    private const string BridgeLaterMission = "M05";
+
+    private const string BridgeDef = "susp_bridge";
+
+    private const string BridgeTruckDef = "bridge_truck01";
+
+    // The wildcard reader def the same chain reaction also kills, the control for a persisted kill
+    // whose flag needs no hand-over.
+    private const string ChainTruckDef = "t_truck**";
+
     // The code that takes the chrome off and the view off the aircraft, named here rather than read
     // off the host: what the presentation check asks of it is a property of the shipped data.
     private const int PresentationCode = 2;
@@ -231,6 +249,120 @@ internal static class CampaignSuites
 
         ctx.WriteArtifact($"test-campaign-persistence-{ctx.Chapter}.txt", report.ToString());
         ctx.Note($"carried {carried.Count} persisted objects across {earlier.MissionFolder} -> {later.MissionFolder}");
+    }
+
+    /// <summary>The persist log over the chapter's chain-killed scenery: C3's suspension bridge
+    /// dies from the fuel truck's <c>CALL_ANIMATION</c> rather than from a hit on itself, and the
+    /// pool the world registers for it is the compiled twin, whose record carries no
+    /// <c>PERSIST_LOG</c> of its own (docs/formats/anim-definitions.md).</summary>
+    [Suite("persist-chain-kill",
+        "C3/M01's fuel-truck chain reaction kills the suspension bridge, whose PERSIST_LOG is "
+        + "authored only in the chapter reader def while the compiled twin is the pool the world "
+        + "registers; the capture holds the dropped bridge alongside the chain's own trucks, and a "
+        + "log carrying it opens C3/M05 with the deck down and dbase still standing, while the "
+        + "same world built from the bootstrap alone has it whole")]
+    internal static void PersistChainKill(TestContext ctx)
+    {
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        if (MissionAt(missions, BridgeChapter, BridgeMission) is not { } dropped
+            || MissionAt(missions, BridgeChapter, BridgeLaterMission) is not { } later)
+        {
+            throw new SuiteSkippedException(
+                $"{BridgeChapter}/{BridgeMission} and /{BridgeLaterMission} are not both campaign missions");
+        }
+
+        int chapter = dropped.Campaign;
+        var report = new StringBuilder();
+        report.AppendLine($"{BridgeChapter} chapter {chapter}: {BridgeMission} seq {dropped.Seq} -> {BridgeLaterMission} seq {later.Seq}");
+        ctx.Same(dropped.Seq, CampaignSequence.PreviousInSameChapter(missions, later.Seq)?.Seq ?? -1,
+            $"{BridgeLaterMission} opens on what {BridgeMission} left");
+
+        var log = new CampaignPersistLog();
+        int bridgeNode = -1;
+        ctx.WithWorld(BridgeChapter, collision: false, BridgeMission, world =>
+        {
+            var runtime = world.Runtime;
+            var registry = runtime.Destructibles;
+            var bridge = PoolNamed(registry, BridgeDef);
+            var truck = PoolNamed(registry, BridgeTruckDef);
+            ctx.Check(bridge != null && truck != null,
+                $"{BridgeChapter}/{BridgeMission} ships both pools bridge={bridge?.Def.Name ?? "-"} truck={truck?.Def.Name ?? "-"}");
+            if (bridge is not { } span || truck is not { } fuel)
+            {
+                return;
+            }
+
+            bridgeNode = NodeIndex(span.Anchor);
+            report.AppendLine($"bridge def={span.Def.Name}/{span.Def.AnimName} archive={span.Def.Archive != null} persist={span.Def.PersistLog} node={bridgeNode} hp={span.MaxHealth:0.##}");
+            ctx.Check(span.Def.Archive != null,
+                $"the pool the world registers for the bridge is the compiled twin, the one a hit resolves to");
+            ctx.Check(span.Def.PersistLog,
+                $"…and it carries the PERSIST_LOG its chapter reader def authors");
+            ctx.Check(bridgeNode >= 0, $"the bridge anchor carries a gamez node index node={bridgeNode}");
+            ctx.Same(0, CampaignPersistLog.Capture(runtime).Count(s => s.Node == bridgeNode),
+                $"the standing bridge is in no capture");
+
+            // Two seconds: `chainreaction` staggers its calls on EVENT_OFFSET, and the bridge's
+            // sits several steps down that list.
+            runtime.DamageAt(fuel.Anchor, fuel.MaxHealth + 1f);
+            for (int i = 0; i < 120; i++)
+            {
+                runtime.Advance(1f / 60f);
+            }
+
+            ctx.Check(span.Status == DestructibleRegistry.State.Destroyed && span.Health <= 0f,
+                $"the chain drops the bridge with no hit on it status={span.Status} hp={span.Health:0.##}");
+            var captured = CampaignPersistLog.Capture(runtime);
+            foreach (var state in captured)
+            {
+                report.AppendLine($"captured node={state.Node} def={state.Def} name={state.NodeName} destroyed={state.Destroyed} hp={state.Health:0.##}");
+            }
+
+            ctx.Check(captured.Any(s => s.Node == bridgeNode && s.Destroyed),
+                $"the capture holds the dropped bridge node={bridgeNode} ({captured.Count} state(s) captured)");
+            // The control the same chain reaction kills: a wildcard reader def registers these,
+            // so they were carried before the bridge was and separate the flag from the kill path.
+            ctx.Check(captured.Count(s => s.Def.Equals(ChainTruckDef, System.StringComparison.OrdinalIgnoreCase)
+                    && s.Destroyed) >= 2,
+                $"…and the chain's own {ChainTruckDef} trucks, which a reader def registers");
+            log.Merge(chapter, dropped.Seq, captured);
+        });
+
+        if (bridgeNode < 0)
+        {
+            return;
+        }
+
+        ctx.WithWorld(BridgeChapter, collision: false, BridgeLaterMission, world =>
+        {
+            var runtime = world.Runtime;
+            var bridge = PoolNamed(runtime.Destructibles, BridgeDef);
+            ctx.Check(bridge != null, $"{BridgeChapter}/{BridgeLaterMission} builds the bridge too");
+            if (bridge is not { } span)
+            {
+                return;
+            }
+
+            ctx.Same(bridgeNode, NodeIndex(span.Anchor),
+                $"the same gamez node index keys it in {BridgeLaterMission}");
+            ctx.Check(span.Status == DestructibleRegistry.State.Healthy,
+                $"the bootstrap alone opens {BridgeLaterMission} with the bridge whole status={span.Status}");
+
+            int Down(string piece) => runtime.FindNodes(piece, span.Anchor).Count(n => !n.Visible);
+            int applied = log.ApplyTo(runtime, chapter, dropped.Seq);
+            report.AppendLine($"applied {applied} of {log.For(chapter).Count} in {BridgeLaterMission}, rope1 down={Down("rope1")} part5 down={Down("part5")}");
+            ctx.Check(applied > 0, $"the carried log reaches {BridgeLaterMission} applied={applied}");
+            ctx.Check(span.Status == DestructibleRegistry.State.Destroyed && span.Health <= 0f,
+                $"…and opens it with the bridge down status={span.Status} hp={span.Health:0.##}");
+            ctx.Check(Down("rope1") >= 1 && Down("part5") >= 1,
+                $"the deck takes the dropped pose rope1 down={Down("rope1")} part5 down={Down("part5")}");
+            ctx.Check(runtime.FindNodes("dbase", span.Anchor) is { Count: > 0 } plinth
+                && plinth.All(n => n.Visible),
+                $"…with dbase still standing under the wreck");
+        });
+
+        ctx.WriteArtifact("test-persist-chain-kill.txt", report.ToString());
+        ctx.Note($"carried the chain-killed bridge node={bridgeNode} from {BridgeMission} into {BridgeLaterMission}");
     }
 
     /// <summary>Drives one shipped mission's objectives graph headless against a scripted world:
@@ -1902,6 +2034,12 @@ internal static class CampaignSuites
 
     private static DestructibleRegistry.Instance? Live(DestructibleRegistry registry, Node3D anchor) =>
         registry.Resolve(anchor);
+
+    // The pool one named definition binds, for a suite that names a worked object rather than
+    // taking whatever the chapter ships first.
+    private static DestructibleRegistry.Instance? PoolNamed(DestructibleRegistry registry, string def) =>
+        registry.All.FirstOrDefault(i =>
+            i.Def.Name.Equals(def, System.StringComparison.OrdinalIgnoreCase));
 
     private static int NodeIndex(Node3D node) =>
         node.HasMeta(AnimRuntime.IndexMeta) ? (int)node.GetMeta(AnimRuntime.IndexMeta) : -1;

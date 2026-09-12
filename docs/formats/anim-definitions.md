@@ -1260,9 +1260,10 @@ transient layer: zeppelin turrets, gasbags, engine nacelles, balloons, player co
   `BL-099`'s C1 fuel depot turned out to be).
 - Because `fuelboxconnect*` is itself a persisted def, a *running* pump animation is part of what
   carries, persisted state is not limited to a static destroyed/healthy flag.
-- CSVM builds every session from the bootstrap and has no log, so it matches the original for
-  campaign missions and for a cold instant action, and diverges only for an instant action loaded
-  after a campaign mission in the same run (`BL-243`).
+- CSVM builds every session from the bootstrap and keeps the persisted half of that log in the
+  campaign profile, applied to a later mission of the same chapter
+  (`Session/CampaignPersistLog.cs`). An instant action loaded after a campaign mission in the same
+  run reads nothing, which is where it still diverges from the original.
 
 **Not yet pinned:** whether the commit happens at damage time or at mission completion (destroy,
 abort without completing, restart, load the next mission), and a direct A/B separating the two
@@ -1295,6 +1296,12 @@ are not visible from the byte format alone, each measured against this install.
   zrdr readers the engine loads at runtime. So a player has to merge both, preferring compiled
   on collision (keyed by anchor name + animation name, which is exactly how the extraction names
   its files: `<name>-<anim_name>.json`).
+  ⚠ **Carry `PERSIST_LOG` onto the def that wins such a collision.** The compiled record has no
+  field for it, so preferring compiled and dropping the reader outright loses the flag for every
+  persisted def whose name is exact rather than a wildcard (`susp_bridge`, `train01`, the studio
+  gates, the yachts), and their nodes then cross no mission boundary at all. A wildcard reader
+  (`t_truck**`, `aagun**`) collides with no compiled per-instance name and keeps its own flag,
+  which is why the loss shows up on single objects among carried neighbours.
 - **Reader op keys and compiled event tags are the same vocabulary under a spelling change.**
   SNAKE_CASE → PascalCase converts one to the other exactly, across the whole event set
   (`OBJECT_ACTIVE_STATE` → `ObjectActiveState`, `OBJECT_MOTION_SI_SCRIPT` →

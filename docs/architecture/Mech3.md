@@ -362,14 +362,14 @@ Unit normalization happens HERE so handlers see one convention: reader rotations
 tokens (to numbers). See [../formats/anim-definitions.md](../formats/anim-definitions.md).
 
 ## src/Mech3/AnimProgram.cs
-Merges the compiled and reader front-ends for one mission (load both, prefer compiled on a
-collision, keep the remainder) plus `StartAnims`; `ScriptFor` resolves an event slot to its archive
-SI script. Two gates run first, both only with a compiled mission manifest present so a reader-only
-extraction is untouched: the mission-scope gate against that manifest, and the shared-scope FILE
-gate (`ListedSharedFiles`, reported as `SharedFilesSkipped`). Whatever survives is deduplicated on
-the (`NAME`, `ANIMATION_NAME`) pair in `Add`, compiled winning because the archives load first.
-Which world ENTITIES a mission shows is `MissionSetup.cs` plus the interp boot script, not this
-file. Scope rules: [../formats/anim-definitions.md](../formats/anim-definitions.md), "Mission library scope".
+Merges the compiled and reader front-ends for one mission plus `StartAnims`; `ScriptFor` resolves
+an event slot to its archive SI script. Two gates run first, both only with a compiled mission
+manifest present so a reader-only extraction is untouched: the mission-scope gate against that
+manifest, and the shared-scope FILE gate (`ListedSharedFiles`, reported as `SharedFilesSkipped`).
+Whatever survives is deduplicated on the (`NAME`, `ANIMATION_NAME`) pair in `Add`, compiled winning
+because the archives load first, and the winner takes over the twin's reader-only `PERSIST_LOG`.
+Which world ENTITIES a mission shows is `MissionSetup.cs` plus the interp boot script. Scope rules:
+[../formats/anim-definitions.md](../formats/anim-definitions.md), "Mission library scope".
 
 ## src/Mech3/TextureCycler.cs
 Runs the gamez material `cycle` flipbooks (water, surf, wakes, crowds) by swapping `albedo_tex`;

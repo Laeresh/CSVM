@@ -234,6 +234,7 @@
     "partition-areas": 0.716,
     "pause-sheet": 0.27,
     "perf-hud-layout": 0.009,
+    "persist-chain-kill": 2.07,
     "plane-shader-reuse": 0.252,
     "player-destroy-choreography": 1.737,
     "puffer-distance-fade": 0.005,

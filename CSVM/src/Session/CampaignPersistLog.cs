@@ -24,9 +24,9 @@ public readonly record struct PersistedObject(
 /// re-applies a mission's own wreckage on a replay, which opens the chapter's first mission on the
 /// world its previous sortie left.
 /// Only <see cref="AnimDefinition.PersistLog"/> defs are carried, and a node counts as persisted
-/// when ANY def bound to it carries the flag: the compiled per-instance def a weapon hit resolves
-/// to never carries it, only the reader's wildcard twin does. What the log holds is destruction,
-/// not the full <c>Mission.NNN</c> world state, so a running looping animation is out of scope.
+/// when ANY def bound to it carries the flag, the reader's wildcard twin or the compiled def
+/// <c>AnimProgram</c> handed the reader's flag to. What the log holds is destruction, not the full
+/// <c>Mission.NNN</c> world state, so a running looping animation is out of scope.
 /// </summary>
 public sealed class CampaignPersistLog
 {

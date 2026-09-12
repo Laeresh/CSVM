@@ -474,6 +474,16 @@ one sentence of measured evidence; everything else belongs in the commit that la
   while the same command in `adjust.gw`, sourced unconditionally, always does. Grep both before
   reading a count of "the chapters that set X".
 
+- **WORLD-39**, **A per-definition flag carried by only ONE of the two animation sources is absent
+  from the built world wherever the other source wins the dedup, so read such a flag off the pool
+  the world registers and never out of the reader file.** `AnimProgram` merges the compiled archives
+  and the zrdr readers on the (`NAME`, `ANIMATION_NAME`) pair, compiled first; the compiled
+  extraction drops `PERSIST_LOG`, which lives in the readers alone. Every exact-name persisted def
+  shares a key with its compiled twin, `susp_bridge` among them, so the flag is in the extraction,
+  is in the reader's own file, and was still false on every pool a C3 world built until the merge
+  handed it over. A wildcard reader (`t_truck**`) collides with no compiled per-instance name,
+  which is why the neighbouring objects carried and hid the hole.
+
 ## SHELL, Windows, PowerShell, and processes
 
 - **SHELL-2**, **Identify stray Godot processes by worktree and probe flag.**
