@@ -53,18 +53,6 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The VIDEO aid's argument that leaves its Enhanced Graphics checkbox checked.</summary>
     public const string VideoCheckedAid = "checked";
 
-    /// <summary>The aid value that opens the CONTROLS page behind the Preferences page's fourth
-    /// door.</summary>
-    public const string ControlsAid = "controls";
-
-    /// <summary>The aid value that opens the KEYS AND BUTTONS page behind the CONTROLS page's own
-    /// door, on its first category tab.</summary>
-    public const string KeysAid = "keys";
-
-    /// <summary>The KEYS aid's argument that stands the page on its last category, the one whose
-    /// rows outrun the list's window.</summary>
-    public const string KeysOtherAid = "other";
-
     /// <summary>The aid value that opens the credits screen behind the top level's fifth row.</summary>
     public const string CreditsAid = "credits";
 
@@ -150,8 +138,6 @@ public sealed class OriginalPresentation : IMenuPresentation
     private bool _shown;
     private bool _joiningOpen;
     private bool _debugPointerDown;
-    // The rebinding pages' seat bookkeeping, null where no shared controls feature is registered.
-    private MenuControlsSeats? _controlsSeats;
 
     // The narration bookkeeping: how many starts the briefing had asked for when playback last
     // began (0 while nothing plays), and whether the reveal was running last frame, so the frame
@@ -268,9 +254,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                 dataRoot: _dataRoot,
                 options: () => OptionsStore.UserOptions().Load(),
                 screenSizes: ResolutionSetting.ScreenSizes,
-                screens: MonitorSetting.Screens,
-                controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null);
-            _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
+                screens: MonitorSetting.Screens);
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);
@@ -364,19 +348,6 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.OpenVideoOn(OriginalShell.GraphicsKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
-                case ControlsAid:
-                    SyncControlsSeats();
-                    _shell.OpenControlsPrefs();
-                    break;
-                case KeysAid:
-                    SyncControlsSeats();
-                    _shell.OpenKeys();
-                    break;
-                case KeysAid + ":" + KeysOtherAid:
-                    SyncControlsSeats();
-                    _shell.OpenKeys();
-                    _shell.ShowKeysTab(OriginalShell.KeysTabCount - 1);
-                    break;
                 case CreditsAid:
                     _shell.Open(OriginalScreen.Credits);
                     break;
@@ -464,13 +435,6 @@ public sealed class OriginalPresentation : IMenuPresentation
             changed |= _devices.ClaimP1Pad();
         }
 
-        // Before the poll, so a pad that joined this frame already has its player row and a seat
-        // whose pad left has lost one before anything reads the keymaps.
-        if (_shell.Screen is OriginalScreen.ControlsPrefs or OriginalScreen.Keys)
-        {
-            SyncControlsSeats();
-        }
-
         var size = _view.GetViewportRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
         changed |= TickBriefing(dt);
@@ -542,13 +506,6 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         // And again after the frame, so a screen change this frame is what the next poll reads.
         _host.Seats[0].CapturingText = _shell.CapturingText;
-        // The same for the player rows, so the press that opened a rebinding page leaves it already
-        // holding its seats rather than blank until the next frame.
-        if (_shell.Screen is OriginalScreen.ControlsPrefs or OriginalScreen.Keys)
-        {
-            SyncControlsSeats();
-        }
-
         // The board's own movies run on the step the host was given. A new picture repaints without
         // recomposing: nothing about the screen changed, only the pixels behind it.
         bool picture = _view.AdvanceMovies(dt);
@@ -629,24 +586,6 @@ public sealed class OriginalPresentation : IMenuPresentation
     // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the
     // page can only be put in from outside: Accept on the opening focus stands the Difficulty
     // dropdown's list open.
-    // The rebinding pages' player rows, in step with the joined seats. Seat 0 reads the poller this
-    // presentation was built on; every other seat is a one-pad poller of its own.
-    private void SyncControlsSeats()
-    {
-        if (_controlsSeats == null || _host == null)
-        {
-            return;
-        }
-
-        var pollers = new List<MenuInput?>(_host.Seats.Count);
-        for (int i = 0; i < _host.Seats.Count; i++)
-        {
-            pollers.Add(i == 0 ? _player1 : MenuSeatDevices.PollerOf(_host.Seats[i]));
-        }
-
-        _controlsSeats.Sync(pollers);
-    }
-
     private void OpenGameOptionsAid(string aid)
     {
         _shell!.OpenGameOptions();
@@ -820,8 +759,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             // in its shared board component's palette, and the rest in the file-wide inks.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
-                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio
-                    or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette
+                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;

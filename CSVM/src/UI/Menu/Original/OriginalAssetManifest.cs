@@ -111,7 +111,7 @@ public sealed class OriginalAssetManifest
     /// <summary>The manifest schema. Bump it when the derivation changes what Original needs: the
     /// composed-section table, the rows Original does not draw or draws optionally, the
     /// script-named files, or what <see cref="Check"/> accepts as a readable file.</summary>
-    public const int Schema = 6;
+    public const int Schema = 5;
 
     /// <summary>The extraction stamp schema Original refuses to read a tree below: the loaders'
     /// own expectation, which the decoded menu layout's first reader raised, so a tree extracted
@@ -122,8 +122,7 @@ public sealed class OriginalAssetManifest
     /// optional, since nothing Original draws reads it.</summary>
     public static readonly IReadOnlyList<string> ComposedSections = new[]
     {
-        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "ControlsPrefs", "Keys", "Credits",
-        "InstantAction", "Campaign",
+        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "Credits", "InstantAction", "Campaign",
         "PassengerCabin", "FlightCheck", "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC",
         "ScrapbookZoom", "Hangar", "PlaneName", "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns",
         "HardPoints", "Paint", "Purchase", "MessageBox",
@@ -145,7 +144,6 @@ public sealed class OriginalAssetManifest
         ["Preferences.PF_B_RETURNTOGAME"] = "the in-flight way back, which the menu's Preferences page never offers",
         ["Audio.AP_B_MUSIC"] = "the In-Game Music checkbox, whose mute a slider that reaches zero already offers",
         ["Audio.AP_D_SQuality"] = "the Sound Quality tier, which no mixer this port runs on has an equivalent of",
-        ["ControlsPrefs.CP_S_MOUSE"] = "the Mouse Sensitivity slider, this port having no cursor speed of its own",
         ["PassengerCabin.PC_B_CHANGEMOMENTO"] = "the memento chooser the original does not ship",
         ["PassengerCabin.PC_B_SAVE"] = "SAVE GAME, deactivated in the original and never drawn",
         ["MessageBox.MP_P_BACKGROUND"] = "the multiplayer error box, which has no local counterpart",

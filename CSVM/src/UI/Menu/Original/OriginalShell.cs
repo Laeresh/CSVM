@@ -39,14 +39,6 @@ public enum OriginalScreen
     /// with ACCEPT CHANGES and CANCEL CHANGES beside them.</summary>
     Video,
 
-    /// <summary>The decoded <c>[@ControlsPrefs@]</c> page: the seat whose keymap is edited, the
-    /// KEYS AND BUTTONS door, and ACCEPT CHANGES and CANCEL CHANGES under them.</summary>
-    ControlsPrefs,
-
-    /// <summary>The decoded <c>[@Keys@]</c> page: the seven category tabs, the action list in its
-    /// two control columns, RESET TO DEFAULT and the exit pair.</summary>
-    Keys,
-
     /// <summary>The decoded <c>[@Credits@]</c> screen: the background pane the credit names are
     /// painted into, ABOUT drawn disabled and the DONE plaque.</summary>
     Credits,
@@ -245,10 +237,10 @@ public sealed partial class OriginalShell
     /// <summary>The Options screen's way back, <c>[@Preferences@]</c>'s own RETURN TO MAIN MENU.</summary>
     public const string OptionsBackKey = "PF_B_MAINMENU";
 
-    /// <summary>The Preferences page's four page doors, in their authored order, onto the Game
-    /// Options, AUDIO, VIDEO and CONTROLS pages. The fourth draws disabled only where no shared
-    /// <see cref="ControlsFeature"/> stands behind it.</summary>
-    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, AudioDoorKey, VideoDoorKey, ControlsDoorKey };
+    /// <summary>The Preferences page's four page doors, in their authored order. The first three
+    /// open the Game Options, AUDIO and VIDEO pages; the fourth draws disabled, no shared controls
+    /// option standing behind it.</summary>
+    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, AudioDoorKey, VideoDoorKey, "PF_B_CONTROLS" };
 
     private const float PreferencesTitleFont = 20f;
     private const float PreferencesTextFont = 14f;
@@ -303,21 +295,13 @@ public sealed partial class OriginalShell
     // and [@CampaignIntro@] excepted; those two are cinemas rather than screens with one behind them.
     private const string MovieKey = "MOVIE";
 
-    // Which section's background movie a screen composes. Save and Load author a row of their own
-    // and take an entry here whenever Original composes them, needing nothing else.
-    // ⚠ The five Preferences leaves author no movie row and still run the page's own behind them,
-    // which is what every leaf still of the film shows; they take the Preferences row for the same
-    // reason they take its logo (docs/org/menu-inventory.md).
+    // The screens whose section authors a background movie Original composes. Save and Load author
+    // the same row and take an entry here whenever Original composes them, needing nothing else.
     private static readonly IReadOnlyDictionary<OriginalScreen, string> MovieSections =
         new Dictionary<OriginalScreen, string>
         {
             [OriginalScreen.TopLevel] = OriginalAvailability.MainMenuSection,
             [OriginalScreen.Options] = PreferencesSection,
-            [OriginalScreen.GameOptions] = PreferencesSection,
-            [OriginalScreen.Audio] = PreferencesSection,
-            [OriginalScreen.Video] = PreferencesSection,
-            [OriginalScreen.ControlsPrefs] = PreferencesSection,
-            [OriginalScreen.Keys] = PreferencesSection,
         };
 
     private static readonly string[] TopLevelButtons =
@@ -337,7 +321,6 @@ public sealed partial class OriginalShell
     private readonly Func<CSVM.Utils.OptionsDef>? _options;
     private readonly Func<IReadOnlyList<string>>? _screenSizes;
     private readonly Func<CSVM.Utils.ScreenList>? _screens;
-    private readonly ControlsFeature? _controls;
     private readonly SliderControl _slider = new();
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
@@ -401,10 +384,7 @@ public sealed partial class OriginalShell
         Func<IReadOnlyList<string>>? screenSizes = null,
         // Reads the screens the machine has, the monitor row's words and the screen a saved index
         // that names none falls back to; null offers the one screen an engine-free caller can.
-        Func<CSVM.Utils.ScreenList>? screens = null,
-        // The shared rebinding feature the CONTROLS door stands over; null draws that door
-        // disabled and leaves the two pages behind it unreachable.
-        ControlsFeature? controls = null)
+        Func<CSVM.Utils.ScreenList>? screens = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -422,7 +402,6 @@ public sealed partial class OriginalShell
         _options = options;
         _screenSizes = screenSizes;
         _screens = screens;
-        _controls = controls;
         _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
@@ -498,9 +477,6 @@ public sealed partial class OriginalShell
                 case OriginalScreen.InstantAction:
                 case OriginalScreen.InstantActionLoadout:
                     InstantActionLists(lists);
-                    break;
-                case OriginalScreen.Keys:
-                    KeysLists(lists);
                     break;
                 case OriginalScreen.SeatPlane:
                 case var _ when IsCampaignScreen:
@@ -615,14 +591,6 @@ public sealed partial class OriginalShell
     private OriginalStep ApplyFrame(MenuCommands commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        // A capture in progress swallows the frame: the player is pressing a control to BIND it,
-        // so reading the same press as a menu command would move the cursor and fire a row under
-        // them. The capture reads the seat's own hardware, which is where Escape is answered.
-        if (_screen == OriginalScreen.Keys && _controls is { Capturing: true } capturing)
-        {
-            return new OriginalStep(Array.Empty<string>(), null, capturing.Poll());
-        }
-
         var cues = new List<string>();
         MenuExit? exit = null;
         SyncCampaignField();
@@ -772,11 +740,6 @@ public sealed partial class OriginalShell
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
-            else if (_screen == OriginalScreen.ControlsPrefs && StepControlsValue(rows, focus, commands.MoveX))
-            {
-                rows = Rows;
-                focus = EnsureFocus(rows);
-            }
             else if (IsHangarScreen && StepHangarSideways(rows, focus, commands.MoveX))
             {
                 rows = Rows;
@@ -813,11 +776,6 @@ public sealed partial class OriginalShell
             changed = true;
         }
 
-        if (_screen == OriginalScreen.Keys)
-        {
-            SyncKeysWindow();
-        }
-
         return new OriginalStep(cues, exit, changed);
     }
 
@@ -844,7 +802,6 @@ public sealed partial class OriginalShell
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
             or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video
-            or OriginalScreen.ControlsPrefs or OriginalScreen.Keys
             or OriginalScreen.SeatPlane or OriginalScreen.Credits
             || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
@@ -892,12 +849,6 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.Video:
                 ComposeVideo(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
-                break;
-            case OriginalScreen.ControlsPrefs:
-                ComposeControlsPrefs(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques);
-                break;
-            case OriginalScreen.Keys:
-                ComposeKeys(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques);
                 break;
         }
 
@@ -1340,9 +1291,6 @@ public sealed partial class OriginalShell
                     case VideoDoorKey:
                         OpenVideo();
                         break;
-                    case ControlsDoorKey:
-                        OpenControlsPrefs();
-                        break;
                     case BackKey:
                     case OptionsBackKey:
                         Open(OriginalScreen.TopLevel);
@@ -1356,10 +1304,6 @@ public sealed partial class OriginalShell
                 return ActivateAudio(row);
             case OriginalScreen.Video:
                 return ActivateVideo(row);
-            case OriginalScreen.ControlsPrefs:
-                return ActivateControlsPrefs(row);
-            case OriginalScreen.Keys:
-                return ActivateKeys(row);
         }
 
         return null;
@@ -1421,12 +1365,6 @@ public sealed partial class OriginalShell
         if (_screen == OriginalScreen.Video)
         {
             BackVideo();
-            return null;
-        }
-
-        if (_screen is OriginalScreen.ControlsPrefs or OriginalScreen.Keys)
-        {
-            BackControls();
             return null;
         }
 
@@ -1503,12 +1441,6 @@ public sealed partial class OriginalShell
             case OriginalScreen.Video:
                 BuildVideoRows(rows);
                 break;
-            case OriginalScreen.ControlsPrefs:
-                BuildControlsPrefsRows(rows);
-                break;
-            case OriginalScreen.Keys:
-                BuildKeysRows(rows);
-                break;
         }
 
         return rows;
@@ -1534,7 +1466,7 @@ public sealed partial class OriginalShell
         {
             if (screen.Widget(key) is { } door)
             {
-                rows.Add(Button(door, key != ControlsDoorKey || _controls != null));
+                rows.Add(Button(door, key is GameOptionsDoorKey or AudioDoorKey or VideoDoorKey));
             }
         }
 

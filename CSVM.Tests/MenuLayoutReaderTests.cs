@@ -192,11 +192,7 @@ public class MenuLayoutReaderTests
                 + "#define IDS_AP_TITLE 290\n#define IDS_AP_MUSIC_TITLE 291\n#define IDS_AP_MUSIC_DESC 292\n"
                 + "#define IDS_AP_MVOLUME_TITLE 293\n#define IDS_AP_MVOLUME_DESC 294\n"
                 + "#define IDS_AP_EVOLUME_TITLE 295\n#define IDS_AP_EVOLUME_DESC 296\n"
-                + "#define IDS_AP_VVOLUME_TITLE 297\n#define IDS_AP_VVOLUME_DESC 298\n"
-                + "#define IDS_CP_TITLE 300\n#define IDS_CP_JOYSTICK_TITLE 301\n#define IDS_CP_JOYSTICK_DESC 302\n"
-                + "#define IDS_CP_MOUSE_TITLE 303\n#define IDS_CP_MOUSE_DESC 304\n#define IDS_CP_KEYS_DESC 305\n"
-                + "#define IDS_KB_TITLE 306\n#define IDS_KB_COMMAND_TITLE 307\n#define IDS_KB_CONTA_TITLE 308\n"
-                + "#define IDS_KB_CONTB_TITLE 309\n#define IDS_KB_DEFAULT_DESC 310\n",
+                + "#define IDS_AP_VVOLUME_TITLE 297\n#define IDS_AP_VVOLUME_DESC 298\n",
             Strings = new Dictionary<int, string>
             {
                 [100] = "OK",
@@ -236,17 +232,6 @@ public class MenuLayoutReaderTests
                 [296] = "Set the volume of the sound effects.",
                 [297] = "Voice Volume",
                 [298] = "Set the volume of the voices.",
-                [300] = "CONTROLS",
-                [301] = "Controller Type",
-                [302] = "Select your controller type.",
-                [303] = "Mouse Sensitivity",
-                [304] = "Set how the cursor will respond to mouse movement.",
-                [305] = "Configure the keyboard and controller buttons for this user.",
-                [306] = "KEYS AND BUTTONS",
-                [307] = "Action",
-                [308] = "Control A",
-                [309] = "Control B",
-                [310] = "[TREB9B]Click a control, then press the key or button you want for\nits corresponding action.",
                 [222] = "PLANE NAME",
                 [223] = "Load Default Configuration",
                 [224] = "Airframe",

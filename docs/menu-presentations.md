@@ -102,7 +102,6 @@ concrete members and composes them its own way.
 | `InstantActionFeature` | every decoded option set, the environment, mission type, lives, four waves, wingmen and their fit, the player plane, presets, the base def, `BuildExit` | which screens the fields appear on, the wizard order |
 | `PlayerSetupFeature` | the seats claimed by input-source identity (four at most, seat 0 never leaving), the aircraft roster (`BuildRoster`), each seat's cursor, the two-stage pick and its fit, the per-mode gate, `Choices`, `BuildExit` for Dogfight | the pad behind a seat (asked of the presentation through `MenuSeatDevices`), the join gesture, the split-pane or seat-strip drawing |
 | `HangarFeature` | one scratch build at a time over a `CustomPlaneStore` and an optional `IHangarWallet`, the three starts, the airframe pick with the defaults ask, the per-tab operations, the purchase gate in the original's words, `Commit`, `DeleteSaved`, the labels and name rules | the nine-screen walk or the tab bar, the dropdowns, the dialog idiom |
-| `ControlsFeature` | the seats it can edit and their staged keymaps, the context and action cursors, the capture and the steal it names first, `Accept`, `Cancel`, `ResetSeat` | which page the rows are split across, the tabs or columns they are drawn in, the join that raises a second seat's row |
 | `CampaignFeature` | the profile store, roster and seated profile, `ContinuePlayer` and `DeletePlayer` with their refusals, the mission position and its briefing state and reveal progress, the intents between screens, `CommitLoadout`, `CommitPlanes`, `ExportPlane`, the flight field, the wallet, `BuildExit` | the screen stack, the cursor, the refusal line, the modal, the working copies before ACCEPT, the reveal's clock |
 
 The rule that makes two presentations replaceable: a feature never references a presentation, and
@@ -271,9 +270,8 @@ Every presentation exposes Options, since a player must be able to leave a prese
 it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
 page behind its Preferences page's first door (`--menu=game-options` under
 `--presentation=original`), with the graphics mode on the VIDEO page behind the third
-(`--menu=video`), the four volume levels on the AUDIO page behind the second
-(`--menu=audio`) and the keymap on the CONTROLS page behind the fourth (`--menu=controls`, and
-`--menu=keys` for the KEYS AND BUTTONS page behind its own door). Every option page reads the saved options from the store on entry and leaves
+(`--menu=video`) and the four volume levels on the AUDIO page behind the second
+(`--menu=audio`). Every one of them reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
 keeps its one writer. Both presentation choosers offer the
 two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
@@ -459,8 +457,7 @@ the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in'
 list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video` and
-`video:checked` with its Enhanced Graphics box ticked, `controls`, `keys` and `keys:other` with
-the KEYS AND BUTTONS page standing on the one category that outruns its list window, the
+`video:checked` with its Enhanced Graphics box ticked, the
 `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
 poses, `campaign-delete`), and any other value opens that
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
@@ -486,9 +483,8 @@ the contract above, not from Original's code. In particular it does not inherit:
   A presentation that lays out for the window's own aspect owes `BoardFit` nothing.
 - **The remake-only screens and rules.** Original's Free Flight and Dogfight doors and screens, its
   wallet-free hangar entry and Weapon Loadout screen behind the Instant Action screen's two buttons,
-  the words and control kinds its Game Options rows take, the seven category tabs its KEYS AND
-  BUTTONS page splits this port's three keymaps across, its keyboard and pad focus over a
-  pointer-driven original, and its pointer hotspot are
+  the words and control kinds its Game Options rows take, its three disabled Preferences
+  page doors, its keyboard and pad focus over a pointer-driven original, and its pointer hotspot are
   readings recorded in the inventory as remake-only. A new
   presentation makes its own choices for the same operations and records them the same way.
 - **The pointer bitmaps and the cue names.** The two extracted pointer bitmaps and the four cue

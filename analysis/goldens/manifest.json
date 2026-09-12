@@ -162,16 +162,9 @@
     {
       "name": "menu-original-options-flag",
       "frame": 120,
-      "hash": "7ba46088feaf9c20c21cc5ceb66afd32",
-      "exercises": "The Options screen over the decoded Preferences chrome with the same movie running under it: its title and descriptions, all four page doors live in their enabled frames, and the flag at the layout row's own corner and scale.",
+      "hash": "593748cbaf766f4043175e83f42b0a77",
+      "exercises": "The Options screen over the decoded Preferences chrome with the same movie running under it: the page's four doors, its title and descriptions, and the flag at the layout row's own corner and scale.",
       "args": ["--menu=options", "--presentation=original", "--det", "--mute"]
-    },
-    {
-      "name": "menu-original-keys",
-      "frame": 120,
-      "hash": "9a0670dff7d2b94e2076dfdb7284d9d3",
-      "exercises": "The KEYS AND BUTTONS page over its decoded plate with the Preferences movie behind it: the seven category tabs, the Movement rows against the two authored control columns naming what a row is not showing, and CANCEL left of ACCEPT.",
-      "args": ["--menu=keys", "--presentation=original", "--det", "--mute"]
     }
   ]
 }

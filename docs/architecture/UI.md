@@ -780,16 +780,6 @@ and description are the page's own, the authored ones naming a 3D card this port
 and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
 Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
-## src/UI/Menu/Original/OriginalControls.cs
-The two rebinding pages, the shell's partial over the decoded `[@ControlsPrefs@]` and `[@Keys@]`
-sections behind the Preferences page's fourth door, all of it over the shared `ControlsFeature`.
-The CONTROLS page carries the seat chooser on the Controller Type row and the KEYS AND BUTTONS
-door; the KEYS page carries seven category tabs, one action list under a category heading in the
-listbox's own window, and each row's controls in the two authored columns, the first in Control A
-and the rest in Control B so nothing is hidden. A cell press arms a capture on that row's action
-and slot, and the page swallows the frame while one runs. Each page's ACCEPT CHANGES commits and
-its CANCEL CHANGES drops the staged edits. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
-
 ## src/UI/Menu/Original/OriginalCredits.cs
 The credits screen, the shell's partial over the decoded `[@Credits@]` section behind the top
 level's fifth row. The section is three widgets: a full-screen background pane, ABOUT and the DONE
@@ -973,16 +963,6 @@ and `ScanJoins` are the join gesture, Start on an unclaimed pad while a seat is 
 deciding on which screens joining is open. `PadOf` reads a joined seat's pad back off its
 `BuiltInSeat`, and `FlightPads` is the binding a launch carries, the answer both presentations
 hand the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.
-
-## src/UI/MenuControlsSeats.cs
-The rebinding screen's seat bookkeeping, for any presentation. `Sync` takes this frame's pollers,
-one per joined seat in player order, and puts the shared `ControlsFeature`'s player rows in step
-with them: a registration is kept while the seat behind its number is the same poller, a number
-that changed hands is registered again, and a seat with nothing to press gets no row. `PadOf` is
-the identity a context's rows sit on, the one function the capture reader and the captured control
-both take, so neither can name a pad the other does not. The profile a seat is staged from is the
-menu poller's own live map plus the saved flight and camera maps, so an accepted rebind is felt at
-once. Read `src/UI/Menu/ControlsFeature.cs` for the editing itself.
 
 ## src/UI/Menu/InstantActionFeature.cs
 Instant Action as a shared `IMenuFeature`, owned by the host's feature set and configured by both
