@@ -2779,12 +2779,46 @@ usual.
   (`0x0040a5b6` to `0x0040a62e`, `docs/org/debrief.md`, "The contents list is the campaign
   position"). It stands in the list from a brand-new profile onwards, so the original's table of
   contents is never empty. CSVM's list is missions alone and `CampaignScrapbookPage` browses slots
-  1 to 24, so both the row and the page behind it are absent. *Fix shape:* a row above the missions
-  that carries no `seq`, and a book position for slot 0 that `Previous()` falls back to and
-  `Next()` climbs out of; the results card has no record to draw, so spread 1 is a story page
-  there. *⚠ Traps:* REPLAY MISSION must not be offered on it, and the page arrows must not read a
-  mission-result record at slot 0, which the original's array does not have (indexed from 1).
-  *Cross-refs:* `docs/formats/campaign-screens.md` (`SCRAPBOOK.CSV`, "Mission slots and spreads").
+  1 to 24, so both the row and the page behind it are absent. **What the page is, decoded.** Slot 0
+  is one spread of ten scraps, `SCRAPBOOK.CSV:5-14` (`0_1_1` to `0_1_10`), every one `Objective`
+  0 and every one openable: two pin-ups (`MS_P_InitialPinup1`/`3`, zoom `A`), `SB_00_00_mag1`
+  (`M`, langui 40145 `Nathan Zachary: Cutthroat Pirate or Gentleman Privateer?` over 40146),
+  `SB_00_00_doc1` and `doc2` (`H`, 40006 to 40009, the Articles of Piracy and the Pandora
+  addendum), `MS_P_Mom` and `MS_P_DoggiePhoto` (`A`), `SB_00_00_news1` (`N`, 40002 `Market Burns
+  Wall Street Favorites!`), `SB_00_00_news2` (`F`, 40004 `United States Remembered`) and
+  `SB_00_00_fhlogo` (`A`, no text). The ids are `RESRC1.H:7-14,155-156`; all ten page images and
+  the four `.JPG` insets are under `extracted\rof\ASSETS\GRAPHICS\SCRAPBOOK\`. The engine treats
+  it as a story page with no mission behind it, on four handlers: `uiData` 2405 mode 1
+  (`0x0040a633`) stores any ordinal but -1 unclamped, so a click on the career row (`UT` 0,
+  `SCRAPBOOK_TOC.SCRIPT:81,120`) opens mission 0 at spread 1; 2408 (`0x0040a453-0x0040a47e`)
+  titles mission 0 with langui 1216 `%1!s! - Scrapbook` over the player's name alone, where every
+  other slot gets 1215 over the name and langui `3479 + m`, which is why 3479 is not in
+  `ui_strings.json`; 2411 (`0x0040a408-0x0040a414`) answers 0 for mission 0 before the record array
+  is read, so the contents' REPLAY MISSION is greyed on that row (`:136-142`) and the book's is
+  never activated; and the script's own spread-1 gate is `1 == callback(2403) && FRA` with `FRA`
+  the open mission (`SCRAPBOOK.SCRIPT:118-134`), which is false at 0, so the stat card, both tabs,
+  the stamps and the results rows all stay deactivated, the only slot whose spread 1 draws scraps
+  alone. Slot 0 is the front of the book: the back step `FUN_00406100` refuses `mission - 1 < 0`
+  and 2401 (`FUN_004060a0`) reports no previous page at `(0, 1)`, so backing out of mission 1's
+  spread 1 lands on slot 0 (its last spread, which is its only one), and the forward step
+  `FUN_00406170` probes `0_2_1`, finds nothing, and rolls to `1_1_1`. `FUN_004061d0` never refuses
+  slot 0 (its gate is `mission > completed && mission > current`), and the `Objective` 0 rows skip
+  the completion-mask read, so the page is readable on a brand-new profile. The Current Mission
+  bookmark is offered there (2401's third flag is `mission != current`). *Fix shape:* a row above
+  the missions that carries no `seq` (icon frame 11, langui 1217, 1218, 511), and a book position
+  for slot 0 that `Previous()` falls back to from `(1, 1)` and `Next()` climbs out of; `PageTitle`
+  takes langui 1216 over the name at slot 0; `Rows()` skips the tabs and Replay when the mission
+  is 0 rather than when the spread is not 1; `Result()` returns null at slot 0 instead of asking
+  `ResultOf(profile, -1)`. *⚠ Traps:* REPLAY MISSION must not be offered on it, on either screen,
+  and the page arrows must not read a mission-result record at slot 0, which the original's array
+  does not have (indexed from 1). Do not gate the results card on "no record": an unflown mission
+  slot also has none and still draws the card with `Not yet flown`; the gate is the slot number.
+  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu=campaign` on a fresh
+  profile, open Previous Missions and check the list has one row, `Starting My Career`; view it
+  and check the title reads `<name> - Scrapbook`, ten scraps and no card, and that the back arrow
+  from mission 1's results page lands on it. *Cross-refs:* `docs/formats/campaign-screens.md`
+  (`SCRAPBOOK.CSV`, "Mission slots and spreads"), `docs/org/debrief.md` ("Ordinal 0 is the career
+  page"), `BL-809` (the opened-scrap look, which every one of these ten scraps goes through).
 - `BL-833` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The allocation-free scope
   test passes when any one of its five windows is clean, so an allocator that charges
   intermittently, the failure shape that was observed, passes.** *Evidence:*
