@@ -36,7 +36,8 @@ internal static class MenuHangarSuites
     [Suite("menu-hangar-journey",
         "Built-in's hangar journey pinned end to end: a real LaunchMenu opens the flow from the Mode "
         + "screen's Build Custom Plane row and from the Instant Action plane pick's trailing row, "
-        + "walks plane selection, airframe (the first confirm picks and raises the defaults ask), "
+        + "walks plane selection, airframe (the first confirm picks and an edited build's swap raises "
+        + "the defaults ask as its three answers), "
         + "engine, armor, guns, hardpoints, paint and name to the purchase review, commits a scratch "
         + "plane that the pickers then list and select, edits it from the plane list and cancels "
         + "without touching its file, deletes it through the two-stage list, opens the --menu= aids "
@@ -94,9 +95,11 @@ internal static class MenuHangarSuites
         + "wallet-free builds no Export row and deletes instead of selling, asking the unpriced delete "
         + "question in the query box, CANCEL and Back return to the Instant Action screen with "
         + "no residue, the cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals "
-        + "page with an over-priced row marked yet pickable while the wallet-free door draws the same "
-        + "note over its export funds and marks nothing, that door's own inventory keeps Export live "
-        + "beside the shipped Sell and asks the priced sale question, the hub's PLANE COST is red past "
+        + "page with every combo row bare and an over-priced one still pickable while the wallet-free "
+        + "door draws the same note over its export funds, that door's own inventory keeps Export live "
+        + "beside the shipped Sell and asks the priced sale question, an airframe swap asks nothing over "
+        + "an unedited build and raises the three-button query box over an edited one, whose Cancel puts "
+        + "the airframe back and whose Yes takes the stock build, the hub's PLANE COST is red past "
         + "the wallet and its CURRENT WEIGHT red past the airframe's capacity and both plain otherwise, "
         + "an open list's focused row is what the two figures price without taking it, a tab page's "
         + "description box follows the shipped figures with the heading that string ends with and the "
@@ -145,6 +148,7 @@ internal static class MenuHangarSuites
             OriginalNameScreen(ctx, host, seat, shell, fit, hangar, scratch);
             OriginalHub(ctx, host, seat, shell, fit, hangar);
             OriginalTabPageBoxes(ctx, host, seat, shell, fit, hangar);
+            OriginalDefaultsAsk(ctx, host, seat, shell, fit, hangar);
             OriginalPurchase(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
             OriginalInventory(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
             OriginalWallet(ctx, host, seat, shell, fit, hangar, layout);
@@ -224,18 +228,33 @@ internal static class MenuHangarSuites
 
         Is(ctx, "five rows down is the Devastator", flow.AirframeName(HangarFeature.DefaultAirframe), menu.ShownRowText);
         menu.Drive(Accept);
-        ctx.Check(flow.DefaultsAsk == HangarFeature.DefaultAirframe && menu.ShownRowCount == 2 && menu.ShownRow == 0,
-            $"the first confirm picks and raises the defaults ask as two rows ({flow.DefaultsAsk}, {menu.ShownRowCount})");
-        Is(ctx, "the first answer", "OK", menu.ShownRowText);
+        // Nothing had been edited away from the opened build, so the swap asks nothing and takes
+        // the answer the door's own default box already gave.
+        ctx.Check(flow.DefaultsAsk == null && menu.ShownRowCount == 11 && menu.ShownRow == HangarFeature.DefaultAirframe,
+            $"the first confirm picks with no question and lands on the chosen row ({flow.DefaultsAsk}, {menu.ShownRow})");
+        ctx.Check(menu.ShownRowText.EndsWith("✓", StringComparison.Ordinal) && flow.Scratch.Engine == CustomPlaneDef.EngineNone,
+            $"the row is ticked and no engine was loaded ({menu.ShownRowText}, engine {flow.Scratch.Engine})");
+
+        // An edit makes the next swap the one the original asks about, as its three answers.
+        flow.Feature.SetEngine(1);
+        menu.Drive(Down);
+        menu.Drive(Accept);
+        ctx.Check(flow.DefaultsAsk == HangarFeature.DefaultAirframe + 1 && menu.ShownRowCount == 3 && menu.ShownRow == 0,
+            $"an edited build's swap raises the ask as three rows ({flow.DefaultsAsk}, {menu.ShownRowCount})");
+        Is(ctx, "the first answer", "Yes", menu.ShownRowText);
         Is(ctx, "the ask's own text stands in the detail", flow.DefaultsAskText, menu.ShownDetail);
         Has(ctx, "the footer names the answer press", "Answer", menu.ShownFooter);
         menu.Drive(Down);
-        Is(ctx, "the second answer", "Cancel", menu.ShownRowText);
+        Is(ctx, "the second answer", "No", menu.ShownRowText);
+        menu.Drive(Down);
+        Is(ctx, "the third answer", "Cancel", menu.ShownRowText);
         menu.Drive(Accept);
-        ctx.Check(flow.DefaultsAsk == null && menu.ShownRowCount == 11 && menu.ShownRow == HangarFeature.DefaultAirframe,
-            $"Cancel keeps the picks and lands back on the chosen row ({flow.DefaultsAsk}, {menu.ShownRow})");
-        ctx.Check(menu.ShownRowText.EndsWith("✓", StringComparison.Ordinal) && flow.Scratch.Engine == CustomPlaneDef.EngineNone,
-            $"the row is ticked and no engine was loaded ({menu.ShownRowText}, engine {flow.Scratch.Engine})");
+        ctx.Check(flow.DefaultsAsk == null && flow.Scratch.Airframe == HangarFeature.DefaultAirframe
+            && flow.Scratch.Engine == 1,
+            $"Cancel puts the airframe back and keeps the edit ({flow.Scratch.Airframe}, engine {flow.Scratch.Engine})");
+        // The engine screen below is walked from an unpicked engine, as the pages after it read it.
+        flow.Feature.SetEngine(CustomPlaneDef.EngineNone);
+        flow.FocusRow(HangarFeature.DefaultAirframe);
         menu.Drive(Accept);
     }
 
@@ -398,8 +417,8 @@ internal static class MenuHangarSuites
         ctx.Check(menu.Hangar?.Screen == HangarScreen.Airframe && menu.Hangar.AirframeChosen == false && menu.ShownRow == 0,
             $"--menu=airframe opens the airframe list unticked ({menu.Hangar?.Screen}, row {menu.ShownRow})");
         menu.ShowMenu("defaults");
-        ctx.Check(menu.Hangar?.Screen == HangarScreen.Airframe && menu.Hangar.DefaultsAsk == 0,
-            $"--menu=defaults opens the same screen mid-ask over the first airframe ({menu.Hangar?.DefaultsAsk})");
+        ctx.Check(menu.Hangar?.Screen == HangarScreen.Airframe && menu.Hangar.DefaultsAsk == 1,
+            $"--menu=defaults opens the same screen mid-ask, the edited build swapped onto the second airframe ({menu.Hangar?.DefaultsAsk})");
         menu.ShowMenu("name");
         ctx.Check(menu.Hangar?.Screen == HangarScreen.Name && menu.Hangar.Scratch.Name.Length > 0,
             $"--menu=name opens the name screen with a rolled name ({menu.Hangar?.Scratch.Name})");
@@ -464,11 +483,15 @@ internal static class MenuHangarSuites
         ctx.Check(flow.RowUnaffordable(menu.ShownRow) && menu.ShownRowText.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal),
             $"the Devastator row carries the mark ({menu.ShownRowText})");
         menu.Drive(Accept);
-        ctx.Check(flow.DefaultsAsk == HangarFeature.DefaultAirframe && flow.Scratch.Airframe == HangarFeature.DefaultAirframe,
-            $"and the press still picks it ({flow.DefaultsAsk}, {flow.Scratch.Airframe})");
-        ctx.Check(!flow.RowUnaffordable(0) && flow.WalletLine == line, $"the ask's answers take no mark and the wallet stays ({menu.ShownRowText})");
+        ctx.Check(flow.DefaultsAsk == null && flow.Scratch.Airframe == HangarFeature.DefaultAirframe,
+            $"and the press still picks it, with nothing asked over an unedited build ({flow.DefaultsAsk}, {flow.Scratch.Airframe})");
+        ctx.Check(flow.WalletLine == line, $"and the wallet stays ({flow.WalletLine})");
         menu.Drive(Accept);
+        // The bare build an unasked swap leaves carries no engine, and the purchase gate names
+        // that before it ever looks at the funds, so one is picked on the way past.
+        menu.Drive(Down);
         menu.Drive(Accept);
+        ctx.Check(flow.Scratch.Engine != CustomPlaneDef.EngineNone, $"an engine is fitted on the engine page ({flow.Scratch.Engine})");
         foreach (var screen in new[] { HangarScreen.Engine, HangarScreen.Armour, HangarScreen.Guns, HangarScreen.Hardpoints, HangarScreen.Paint, HangarScreen.Name, HangarScreen.Purchase })
         {
             ctx.Check(flow.Screen == screen && flow.WalletLine == line, $"{screen} shows the wallet beside the totals ({flow.Screen}, {flow.WalletLine})");
@@ -510,8 +533,15 @@ internal static class MenuHangarSuites
         var profile = wallet.Profile;
         profile.Funds = 500_000;
         profile.MissionsCompleted = 20;
-        for (int guard = 0; flow.Screen != HangarScreen.Purchase && guard < HangarFlow.Order.Length + 4; guard++)
+        for (int guard = 0; flow.Screen != HangarScreen.Purchase && guard < HangarFlow.Order.Length + 6; guard++)
         {
+            // The bare build an unasked swap leaves carries no engine, whose refusal would stand
+            // in front of the cap's own, so the engine page is answered with a real pick.
+            if (flow.Screen == HangarScreen.Engine && flow.Scratch.Engine == CustomPlaneDef.EngineNone)
+            {
+                menu.Drive(Down);
+            }
+
             menu.Drive(Accept);
         }
 
@@ -662,11 +692,11 @@ internal static class MenuHangarSuites
         ctx.Check(board.Pictures.Any(p => p.Art.Name.StartsWith(composite, StringComparison.Ordinal) && p.Tint != null),
             $"the plane is the paint composite of the built airframe's icon set on every tab but the airframe's ({composite})");
         // The wallet-free door wears the same note over the export funds its own script writes,
-        // and still checks no price against them, so no row is marked.
+        // and checks no price against them at all.
         ctx.Check(board.Lines.Any(l => l.Text == hangar.Strings.Text(1149, "$$$ on Hand:"))
             && board.Lines.Any(l => l.Text == "$50000")
-            && Row(shell, OriginalShell.EngineDropKey)?.Label.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal) == false,
-            $"the export door's cash note reads $50000 with no mark on a row");
+            && Row(shell, OriginalShell.EngineDropKey)?.Label == hangar.EngineName(hangar.Scratch.Airframe, 1),
+            $"the export door's cash note reads $50000 over a bare engine row");
         // The squat frames' plaque is the bottom twenty rows of a 36-pixel frame, so a label
         // centred in the frame would stand off the tab and against the page above it.
         var tabPlaques = board.Plaques.Where(p => p.Label.Length > 0
@@ -744,6 +774,77 @@ internal static class MenuHangarSuites
         var tab = Row(shell, here == OriginalScreen.HangarArmor ? "PX_B_ARMOR" : "PX_B_AIRFRAME")!;
         Click(host, seat, Pointer(fit, tab.X + 5f, tab.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == here, $"and the hub is left on the tab this page found ({shell.Screen})");
+    }
+
+    // The airframe swap's own question on the shipped layout: the open list's rows draw bare, a
+    // swap over an unedited build raises nothing, and one over an edited build raises the
+    // three-button messagebox whose Cancel puts the airframe back. Leaves the hub on the tab it
+    // found, over the airframe's stock build, which is what the commit below saves.
+    private static void OriginalDefaultsAsk(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
+    {
+        var here = shell.Screen;
+        int airframe = hangar.Scratch.Airframe;
+        int other = airframe == 0 ? 1 : 0;
+        hangar.ApplyDefaultConfiguration(true);
+        var tab = Row(shell, "PX_B_AIRFRAME")!;
+        Click(host, seat, Pointer(fit, tab.X + 5f, tab.Y + 5f, pressed: true, clicked: true));
+        var box = Row(shell, OriginalShell.AirframeDropKey)!;
+        Click(host, seat, Pointer(fit, box.X + 5f, box.Y + 5f, pressed: true, clicked: true));
+        var rows = shell.Rows.Where(r => r.Kind == OriginalRowKind.ListRow).ToList();
+        bool bare = rows.Count == HangarEconomy.Airframes.Length;
+        for (int i = 0; bare && i < rows.Count; i++)
+        {
+            bare = rows[i].Label == hangar.AirframeName(i);
+        }
+
+        ctx.Check(bare, $"the open airframe list draws every row bare, nothing before the name ({rows.Count}, {rows.FirstOrDefault()?.Label})");
+        SwapAirframe(host, seat, shell, fit, other);
+        ctx.Check(hangar.Scratch.Airframe == other && shell.Dialog == null && hangar.DefaultsAsk == null,
+            $"a swap over an unedited build takes the name screen's own answer and asks nothing ({hangar.Scratch.Airframe}, {hangar.DefaultsAsk})");
+
+        hangar.SetArmour(0, CustomPlaneDef.MaxArmourUnits);
+        SwapAirframe(host, seat, shell, fit, airframe);
+        var ask = shell.Dialog;
+        ctx.Check(ask != null && hangar.DefaultsAsk == airframe && ask.Icon == DialogIcon.Query
+            && ask.Message == hangar.DefaultsAskText,
+            $"and one over an edited build raises the query box on string 206 ({hangar.DefaultsAsk}, {ask?.Icon})");
+        var answers = shell.Rows;
+        ctx.Check(answers.Count == 3
+            && answers[0].Label == hangar.Strings.Text(102, "Yes")
+            && answers[1].Label == hangar.Strings.Text(103, "No")
+            && answers[2].Label == hangar.Strings.Text(101, "Cancel")
+            && answers[0].X < answers[1].X && answers[1].X < answers[2].X,
+            $"with the script's three words across its left, centre and right buttons ({string.Join("/", answers.Select(r => r.Label))})");
+        var cancel = answers[2];
+        Click(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Dialog == null && hangar.DefaultsAsk == null && hangar.Scratch.Airframe == other
+            && hangar.ArmourUnits(0) == CustomPlaneDef.MaxArmourUnits,
+            $"Cancel puts the airframe back and keeps the edit ({hangar.Scratch.Airframe}, {hangar.ArmourUnits(0)} presses)");
+
+        SwapAirframe(host, seat, shell, fit, airframe);
+        var yes = shell.Rows[0];
+        Click(host, seat, Pointer(fit, yes.X + 5f, yes.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(hangar.DefaultsAsk == null && hangar.Scratch.Airframe == airframe && hangar.Scratch.Engine == 1,
+            $"and Yes takes the picked airframe's stock build ({hangar.Scratch.Airframe}, engine {hangar.Scratch.Engine})");
+        var leave = Row(shell, here == OriginalScreen.HangarArmor ? "PX_B_ARMOR" : "PX_B_AIRFRAME")!;
+        Click(host, seat, Pointer(fit, leave.X + 5f, leave.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == here, $"and the hub is left on the tab this page found ({shell.Screen})");
+    }
+
+    // The airframe tab's swap through the presses a pilot has: the closed box opens its list and
+    // the row is clicked out of it.
+    private static void SwapAirframe(MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, int airframe)
+    {
+        if (shell.OpenHangarDropdown == null && Row(shell, OriginalShell.AirframeDropKey) is { } box)
+        {
+            Click(host, seat, Pointer(fit, box.X + 5f, box.Y + 5f, pressed: true, clicked: true));
+        }
+
+        if (Row(shell, OriginalShell.AirframeDropKey + ":" + airframe.ToString(CultureInfo.InvariantCulture)) is { } row)
+        {
+            Click(host, seat, Pointer(fit, row.X + 2f, row.Y + 2f, pressed: true, clicked: true));
+        }
     }
 
     // The ARMOR tab's two wing boxes, which move together: the screen draws one per wing and a
@@ -924,8 +1025,11 @@ internal static class MenuHangarSuites
         var board = shell.Compose();
         ctx.Check(board.Lines.Any(l => l.Text == title) && board.Lines.Any(l => l.Text == figure),
             $"the airframe tab draws the cash note with the profile's funds ({figure})");
-        ctx.Check(wallet.Funds < hangar.Bill.Total.Cost && Row(shell, OriginalShell.AirframeDropKey)?.Label.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal) == true,
-            $"the airframe box is marked over a build the wallet cannot cover ({Row(shell, OriginalShell.AirframeDropKey)?.Label})");
+        // The rows stay bare whatever the funds: the decoded screen reports them at the purchase
+        // alone and reddens the cost figure meanwhile (docs/org/hangar.md).
+        ctx.Check(wallet.Funds < hangar.Bill.Total.Cost
+            && Row(shell, OriginalShell.AirframeDropKey)?.Label == hangar.AirframeName(hangar.Scratch.Airframe),
+            $"the airframe box reads bare over a build the wallet cannot cover ({Row(shell, OriginalShell.AirframeDropKey)?.Label})");
         // The script's own two arms: the cost line red past the wallet, the weight line in the
         // page's ink while the build is inside its capacity.
         ctx.Check(HubFigure(layout, board, "PX_T_PLANECOST")?.Ink == BoardInk.Alarm
@@ -949,8 +1053,8 @@ internal static class MenuHangarSuites
         Press(host, seat, Accept);
         var cheapest = Row(shell, OriginalShell.EngineDropKey + ":0");
         ctx.Check(shell.OpenHangarDropdown == OriginalShell.EngineDropKey && cheapest != null
-            && cheapest.Label.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal),
-            $"the open list marks the over-priced rows ({shell.OpenHangarDropdown}, {shell.FocusedKey}, {cheapest?.Label})");
+            && cheapest.Label == hangar.EngineName(hangar.Scratch.Airframe, 0),
+            $"the open list's rows are bare, over-priced or not ({shell.OpenHangarDropdown}, {shell.FocusedKey}, {cheapest?.Label})");
         Press(host, seat, Up);
         // The hub prices the row under the cursor as though it were taken, which is what the
         // description box and the blueprint already preview, and takes nothing.
@@ -962,7 +1066,7 @@ internal static class MenuHangarSuites
             $"the focused row's build is what the two figures read while the list stands ({HubFigure(layout, board, "PX_T_PLANECOST")?.Text}, {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Text})");
         Press(host, seat, Accept);
         ctx.Check(shell.OpenHangarDropdown == null && hangar.Scratch.Engine == engine,
-            $"a marked row still takes the pick ({hangar.Scratch.Engine}, {shell.FocusedKey})");
+            $"a row past the funds still takes the pick ({hangar.Scratch.Engine}, {shell.FocusedKey})");
         board = shell.Compose();
         ctx.Check(HubFigure(layout, board, "PX_T_PLANECOST")?.Text.Contains("$" + hangar.Bill.Total.Cost.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true,
             $"and the closed box leaves the figures on the build that stands ({HubFigure(layout, board, "PX_T_PLANECOST")?.Text})");

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -200,7 +200,7 @@ public class OriginalHangarTests : IDisposable
     }
 
     [Fact]
-    public void OkWithTheBoxClearedStartsBareAndTheFirstPickRaisesTheAskAsADialog()
+    public void OkWithTheBoxClearedStartsBareAndAnUneditedBuildsAirframeSwapAsksNothing()
     {
         var shell = Shell(out var hangar, out _);
         OpenName(shell, "Ace");
@@ -222,15 +222,77 @@ public class OriginalHangarTests : IDisposable
         shell.Step(Down);
         shell.Step(Accept);
 
-        Assert.Equal(1, hangar.DefaultsAsk);
-        Assert.Equal(new[] { OriginalShell.AskOkKey, OriginalShell.AskCancelKey }, shell.Rows.Select(r => r.Key));
-        var board = shell.Compose();
-        Assert.Contains(board.Overlays.SelectMany(o => o.Lines), l => l.Text == hangar.DefaultsAskText);
-        shell.Step(Accept);
+        // Nothing had been edited away from the opened build, so the swap takes the box's own
+        // answer (clear: a bare airframe) and raises no question.
         Assert.Null(hangar.DefaultsAsk);
+        Assert.Null(shell.Dialog);
         Assert.Equal(1, hangar.Scratch.Airframe);
-        Assert.Equal(1, hangar.Scratch.Engine);
+        Assert.Equal(CustomPlaneDef.EngineNone, hangar.Scratch.Engine);
         Assert.Equal(OriginalShell.AirframeDropKey, shell.FocusedKey);
+    }
+
+    [Fact]
+    public void AnEditedBuildsAirframeSwapAsksWithThreeAnswersAndCancelPutsTheAirframeBack()
+    {
+        var shell = Shell(out var hangar, out _, pilotPlane: 2);
+        OpenHub(shell, "Ace");
+        Assert.Equal(2, hangar.Scratch.Airframe);
+        Assert.Equal(1, hangar.Scratch.Engine);
+
+        // The engine is the edit; the swap that follows is what the original asks about.
+        Click(shell, "PX_B_ENGINE");
+        PickEngine(shell, 2);
+        Assert.Equal(2, hangar.Scratch.Engine);
+        Click(shell, "PX_B_AIRFRAME");
+        SwapAirframeTo(shell, 4);
+
+        Assert.Equal(4, hangar.DefaultsAsk);
+        Assert.Equal(hangar.DefaultsAskText, shell.Dialog!.Message);
+        Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
+        Assert.Equal(
+            new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey, OriginalShell.DialogCancelKey },
+            shell.Rows.Select(r => r.Key));
+        Assert.Equal(
+            new[] { CampaignBoards.DialogLeftKey, CampaignBoards.DialogCenterKey, CampaignBoards.DialogRightKey },
+            shell.Dialog!.Answers.Select(a => a.LayoutKey));
+        Assert.Contains(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text == hangar.DefaultsAskText);
+
+        // Cancel is the only answer that keeps the edit, which is what string 206 says of it.
+        Click(shell, OriginalShell.DialogCancelKey);
+        Assert.Null(hangar.DefaultsAsk);
+        Assert.Equal(2, hangar.Scratch.Airframe);
+        Assert.Equal(2, hangar.Scratch.Engine);
+        Assert.Equal(OriginalShell.AirframeDropKey, shell.FocusedKey);
+    }
+
+    [Fact]
+    public void TheAsksYesTakesTheStockBuildAndItsNoTakesABareAirframe()
+    {
+        var shell = Shell(out var hangar, out _, pilotPlane: 2);
+        OpenHub(shell, "Ace");
+        Click(shell, "PX_B_ENGINE");
+        PickEngine(shell, 2);
+        Click(shell, "PX_B_AIRFRAME");
+        SwapAirframeTo(shell, 4);
+
+        Click(shell, OriginalShell.DialogNoKey);
+        Assert.Equal(4, hangar.Scratch.Airframe);
+        Assert.Equal(CustomPlaneDef.EngineNone, hangar.Scratch.Engine);
+        Assert.Equal(0, hangar.Scratch.ArmourNose);
+        Assert.All(hangar.Scratch.Guns, gun => Assert.True(gun.IsEmpty));
+        Assert.Equal(0, hangar.Scratch.LeftHardpoints);
+
+        // The answered build is the new opened-as build, so an edit has to come first again.
+        SwapAirframeTo(shell, 5);
+        Assert.Null(hangar.DefaultsAsk);
+        Click(shell, "PX_B_ENGINE");
+        PickEngine(shell, 2);
+        Click(shell, "PX_B_AIRFRAME");
+        SwapAirframeTo(shell, 6);
+
+        Click(shell, OriginalShell.DialogYesKey);
+        Assert.Equal(6, hangar.Scratch.Airframe);
+        Assert.Equal(1, hangar.Scratch.Engine);
     }
 
     [Fact]
@@ -713,6 +775,20 @@ public class OriginalHangarTests : IDisposable
     {
         var row = shell.Rows.Single(r => r.Key == key);
         Click(shell, row.X + 2f, row.Y + 2f);
+    }
+
+    // The airframe tab's own swap, through the presses a pilot has: the closed box opens its list
+    // and the row is picked out of it. The engine tab's pick is the same gesture.
+    private static void SwapAirframeTo(OriginalShell shell, int airframe) =>
+        PickFromList(shell, OriginalShell.AirframeDropKey, airframe);
+
+    private static void PickEngine(OriginalShell shell, int engine) =>
+        PickFromList(shell, OriginalShell.EngineDropKey, engine);
+
+    private static void PickFromList(OriginalShell shell, string key, int row)
+    {
+        Click(shell, key);
+        Click(shell, key + ":" + row.ToString(CultureInfo.InvariantCulture));
     }
 
     // The way in: the top level's Instant Action row, then the screen's Build Custom Plane.

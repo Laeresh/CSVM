@@ -54,7 +54,7 @@ cancelling is residue-free. Screens, economy and the cash note: [../org/hangar.m
 ## src/UI/Hangar*Page.cs
 The eight hangar screens the flow walks, one file each, every one a `HangarPage` editing
 `HangarFlow`'s scratch plane and priced through `HangarEconomy`: airframe (eleven rows, raising the
-defaults ask on a pick), engine (the airframe's six plus the explicit None row), armour (four zones
+defaults ask on a swap that changes an edited build), engine (the airframe's six plus the explicit None row), armour (four zones
 on the dropdown's units-times-five scale), guns (four slots stepping the eleven-entry calibre
 cycle), hardpoints (a count per wing), paint (a pattern, three colour and shade pairs and three
 decals over a live preview), name (two word lists, or typed over) and purchase (the itemised bill
@@ -923,9 +923,9 @@ The Original hangar, the shell's partial over the shared `HangarFeature` and the
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
 the cabin, the door naming the airframe a default build opens on. It owns the plane picture over
-the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost and weight lines reddening on that bill's own two verdicts; the cash note on both doors (the wallet with its mark on a row it cannot cover, else the export door's figure);
+the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost and weight lines reddening on that bill's own two verdicts; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
-caret, the airframe-switch ask, and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+caret, the airframe swap's own three-answer question as the shared messagebox, and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

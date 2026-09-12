@@ -10,9 +10,10 @@ from; no decompiler output is reproduced.
 [`formats/paint.md`](../formats/paint.md) "Saved custom planes" (the file is a verbatim dump of
 the in-memory record this page's screens edit). The paint system itself (region masks, colour
 formula, decals) is the rest of that page. The UI scripts that lay the screens out
-(`GUNS.SCRIPT`, `HARDPOINTS.SCRIPT`, `ARMOR.SCRIPT`, `PURCHASE.SCRIPT`, `AIRFRAME.SCRIPT`) are
-pure layout in `extracted/rof/ASSETS/SCRIPTS/`; everything they display comes from the engine
-through the callbacks below.
+(`GUNS.SCRIPT`, `HARDPOINTS.SCRIPT`, `ARMOR.SCRIPT`, `PURCHASE.SCRIPT`) are pure layout in
+`extracted/rof/ASSETS/SCRIPTS/`; everything they display comes from the engine through the
+callbacks below. `AIRFRAME.SCRIPT` is the exception, carrying the airframe swap's own question in
+script rather than in the engine ("When the airframe swap asks").
 
 ⚠ **This page is a decode, not a proposal.** Where it disagrees with an observation at the
 controls or a screenshot, the decode wins and the disagreement is a note.
@@ -706,6 +707,54 @@ another on a Bloodhawk from the cabin. A fresh profile's record is zeroed, so it
 The remake carries the rule as `HangarFeature.StartDefaultPlane(int airframe)` over the airframe
 the door names: Instant Action's Pilot Plane pick on that door, the seated profile's own aircraft
 on the cabin's, and `HangarFeature.DefaultAirframe` where no plane is current.
+
+### When the airframe swap asks, and what its three answers do
+
+`AIRFRAME.SCRIPT` is the one screen script that is not pure layout: its `gui_mailbox` case `10015`
+(the dropdown's own selection-changed mail) carries the whole rule, and the only `0x8` messagebox
+mask in the shipped scripts is at its line 48.
+
+The pick first writes the airframe through callback **2216** (`0x0040d28d`, commit flag 1, the only
+direct writer of record `+0x2c`) and compares the id it returns against the one held since
+`gui_create`. **An id that has not moved ends the case there**: no box, no default configuration,
+nothing. `CAP-50.mkv` shows the other half at t=124.8 to 127.0, an airframe swapped from Balmoral
+to Fury with no dialog at all, because the record had only just been opened.
+
+Where the id did move, callback **2221** (`0x0040b6b3`) is the gate: it compares the live build
+record at `0x0064cb78` against its "as opened" copy at `0x006480cc`, field by field at the same
+offsets, and answers whether anything was edited. The compared fields are the engine (`+0x30`),
+both hardpoint counts (`+0x34`, `+0x38`), the paint pattern (`+0x40`) with its three colours,
+shades and decals (`+0x44`, `+0x50`, `+0x5c`, three dwords each), the four armour zones (`+0x74`
+to `+0x80`), the twin-mount byte (`+0x84`) and the four gun ids (`+0x88` to `+0x94`). **The
+airframe is deliberately not among them**, since 2216 has already written it; neither are the name
+and the ammunition dwords (`+0x98` up). The copy is retaken by every default-configuration load
+(the `rep movsd` at `0x0040ac2c`, 51 dwords) and by callback 2014's plane load (`0x0040961b`), so
+an answered question and a freshly loaded plane are both unedited again.
+
+With the gate false the script skips the box and posts the answer the name screen's own checkbox
+already gave (`@planeconstruction@UMA`, `PLANECONSTRUCTION.SCRIPT:126`): 3 with the box set, 4
+with it clear. With the gate true it raises `messagebox.script` on mask `0x8` over the words
+callback **2222** (`0x0040b62c`) builds, `langui` 206 formatted with two **short** airframe names
+(`langui` 3020 + id): `%1` the airframe just picked, read off the live record, and `%2` the one
+the as-opened copy carries. `OriginalScreenshots/Plane Construction Default Values Dialog.png`
+shows it as "(Bloodhawk)" over "the Brigand you were building".
+
+`MESSAGEBOX.SCRIPT`'s `0x8` mask activates all three buttons, gives them `langui` 102, 103 and 101
+(Yes, No, Cancel) across `mb_b_left`, `mb_b_center` and `mb_b_right`, draws the query icon
+(`mb_p_icon` frame 0, the frame `0x4` takes too), focuses the left button and posts 3, 4 and 2 for
+them; its Escape posts 2, the right button's own answer. Back in `AIRFRAME.SCRIPT`:
+
+| Answer | Posted | What it does to the record |
+|---|---|---|
+| Yes | 3 | `callback(2212, 1)`: the new airframe's stock template over the whole record |
+| No | 4 | `callback(2212, 0)`: the same template, then stripped to a bare airframe |
+| Cancel | 2 | `callback(2216, F, 1)` puts the previous airframe back and the dropdown with it |
+
+**So No is not "keep my picks".** Both Yes and No rebuild from the template, which is why 206 tells
+the pilot that Cancel is the way to keep an edit. The remake carries the rule in
+`HangarFeature`: `EditedSinceOpened` over the same field set, `ApplyDefaultConfiguration(bool)` as
+2212's two arms and `CancelDefaultsAsk` as the third, with the box drawn through
+`CampaignBoards.Dialog`'s three messagebox slots.
 
 ### Export on the inventory writes nothing here
 

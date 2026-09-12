@@ -69,12 +69,6 @@ public sealed partial class OriginalShell
     /// <summary>The totals page's Purchase Now button, the commit.</summary>
     public const string PurchaseNowKey = "PUR_B_PURCHASE";
 
-    /// <summary>The defaults ask's OK, loading the airframe's defaults.</summary>
-    public const string AskOkKey = "ASK:OK";
-
-    /// <summary>The defaults ask's Cancel, keeping every current pick.</summary>
-    public const string AskCancelKey = "ASK:CANCEL";
-
     /// <summary>The inventory's plane dropdown; its items are keyed <c>HA_D_PILOTPLANE:&lt;index&gt;</c>.</summary>
     public const string InventoryPlanesKey = "HA_D_PILOTPLANE";
 
@@ -169,12 +163,6 @@ public sealed partial class OriginalShell
     private const string DeleteLabel = "Delete";
     private const string DeletePrompt = "Delete a Plane";
     private const string DeleteQuestion = "Are you sure you want to delete it?";
-
-    // The defaults ask as a dialog over the page: a panel in the message box's own proportions.
-    private const float AskX = 160f;
-    private const float AskY = 200f;
-    private const float AskWidth = 480f;
-    private const float AskHeight = 180f;
 
     private static readonly Regex FontTag = new(@"\[[A-Za-z0-9]+\]", RegexOptions.Compiled);
 
@@ -412,35 +400,16 @@ public sealed partial class OriginalShell
 
     // The paper buttons whose authored label colours are the page's black, not the tabs' white.
     private static bool IsPaperButton(string key) =>
-        key is PurchaseNowKey or InventorySellKey or InventoryExportKey or AskOkKey or AskCancelKey;
+        key is PurchaseNowKey or InventorySellKey or InventoryExportKey;
 
-    // A list whose rows move the bill: the wallet mark on the rows the funds could not cover, and
-    // the same pricing kept on the list so the hub can show what a row under the cursor would cost
-    // and weigh without taking it.
+    // A list whose rows move the bill: the pricing is kept on the list so the hub can show what a
+    // row under the cursor would cost and weigh without taking it.
+    // ⚠ Do not mark the rows the funds cannot cover. Every reference shot of an open or closed
+    // combo here draws bare rows, and the decoded screen reports funds at the purchase alone
+    // (docs/org/hangar.md, "The purchase gate") with the cost figure reddening meanwhile.
     private static HangarList PricedList(
-        HangarFeature hangar, string[] items, int current, Action<int> select, Func<int, HangarBill> billWith)
-    {
-        MarkUnaffordable(hangar, items, i => billWith(i).Total.Cost);
-        return new HangarList(items, current, select, BillWith: billWith);
-    }
-
-    // The wallet mark on every priced row the funds could not cover after that pick, baked into
-    // the item texts so the closed box, the open list and the focus read the same row.
-    private static void MarkUnaffordable(HangarFeature hangar, string[] items, Func<int, int> costWith)
-    {
-        if (hangar.Wallet == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < items.Length; i++)
-        {
-            if (hangar.Unaffordable(costWith(i)))
-            {
-                items[i] = HangarFeature.UnaffordableMark + items[i];
-            }
-        }
-    }
+        string[] items, int current, Action<int> select, Func<int, HangarBill> billWith) =>
+        new(items, current, select, BillWith: billWith);
 
     // A rating's bar: the five authored segment panes, the first n drawn for n stars.
     private static void ComposeBar(MenuLayoutScreen hub, List<BoardPicture> pictures, string prefix, int filled)
@@ -726,6 +695,40 @@ public sealed partial class OriginalShell
         ShowHangarScreen(OriginalScreen.HangarAirframe);
     }
 
+    // The airframe swap's own question where the feature has one pending, as MESSAGEBOX.SCRIPT's
+    // three-button box: Yes takes the new airframe's stock build, No takes it bare, and Cancel puts
+    // the airframe back (AIRFRAME.SCRIPT's three mailbox arms, docs/org/hangar.md). The box is
+    // raised from here rather than from the pick, since only the swap that changed an edited build
+    // raises one and the feature is what knows that.
+    private void RaisePendingDefaultsAsk()
+    {
+        if (_hangar?.DefaultsAsk == null)
+        {
+            return;
+        }
+
+        RaiseDialog(
+            _hangar.DefaultsAskText, DialogIcon.Query,
+            Yes(() => AnswerDefaults(true)),
+            NoCentred(() => AnswerDefaults(false)),
+            Cancel(() => AnswerDefaults(null)));
+    }
+
+    // One arm of the ask: the stock build, the bare airframe, or (null) the airframe put back.
+    private void AnswerDefaults(bool? stock)
+    {
+        if (stock is { } load)
+        {
+            _hangar?.AnswerDefaultsAsk(load);
+        }
+        else
+        {
+            _hangar?.CancelDefaultsAsk();
+        }
+
+        FocusKey(AirframeDropKey);
+    }
+
     // Leaves the hangar without saving: the scratch plane is dropped and the screen the door was
     // pressed on comes back.
     private void CancelHangar()
@@ -834,12 +837,6 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        if (_hangar?.DefaultsAsk != null)
-        {
-            _hangar.AnswerDefaultsAsk(false);
-            return null;
-        }
-
         if (_screen is OriginalScreen.HangarPurchase or OriginalScreen.HangarInventory)
         {
             ShowHangarScreen(_hangarTab);
@@ -869,6 +866,7 @@ public sealed partial class OriginalShell
             }
 
             FocusKey(row.Key);
+            RaisePendingDefaultsAsk();
             return true;
         }
 
@@ -911,14 +909,6 @@ public sealed partial class OriginalShell
 
                 break;
             default:
-                if (_hangar.DefaultsAsk != null)
-                {
-                    var size = PlaqueSize();
-                    rows.Add(TextButton(AskOkKey, "OK", AskX + 40f, AskY + AskHeight - size.Height - 16f, true, 0));
-                    rows.Add(TextButton(AskCancelKey, "Cancel", AskX + AskWidth - size.Width - 40f, AskY + AskHeight - size.Height - 16f, true, 0));
-                    break;
-                }
-
                 if (!BuildOpenHangarList(rows))
                 {
                     BuildHubRows(rows);
@@ -1252,7 +1242,7 @@ public sealed partial class OriginalShell
                     names[i] = hangar.AirframeName(i);
                 }
 
-                return PricedList(hangar, names, hangar.AirframeChosen ? scratch.Airframe : -1,
+                return PricedList(names, hangar.AirframeChosen ? scratch.Airframe : -1,
                     i => hangar.PickAirframe(i), hangar.BillWithAirframe);
             case EngineDropKey:
                 var engines = new string[CustomPlaneDef.EngineNone + 1];
@@ -1261,7 +1251,7 @@ public sealed partial class OriginalShell
                     engines[i] = i == CustomPlaneDef.EngineNone ? hangar.Strings.Text(1165, "None") : hangar.EngineName(scratch.Airframe, i);
                 }
 
-                return PricedList(hangar, engines, scratch.Engine, i => hangar.SetEngine(i), hangar.BillWithEngine);
+                return PricedList(engines, scratch.Engine, i => hangar.SetEngine(i), hangar.BillWithEngine);
             case PatternDropKey:
                 var patterns = hangar.WearablePatterns();
                 var labels = new string[patterns.Count];
@@ -1290,7 +1280,7 @@ public sealed partial class OriginalShell
                 units[i] = hangar.ArmourLabel(i);
             }
 
-            return PricedList(hangar, units, hangar.ArmourUnits(zone), i => hangar.SetArmour(zone, i),
+            return PricedList(units, hangar.ArmourUnits(zone), i => hangar.SetArmour(zone, i),
                 i => hangar.BillWithArmour(zone, i));
         }
 
@@ -1302,7 +1292,7 @@ public sealed partial class OriginalShell
                 guns[i] = hangar.GunCycleName(i);
             }
 
-            return PricedList(hangar, guns, HangarFeature.GunCycleIndex(scratch.Guns[slot]), i => hangar.SetGun(slot, i),
+            return PricedList(guns, HangarFeature.GunCycleIndex(scratch.Guns[slot]), i => hangar.SetGun(slot, i),
                 i => hangar.BillWithGun(slot, i));
         }
 
@@ -1314,7 +1304,7 @@ public sealed partial class OriginalShell
                 counts[i] = hangar.HardpointsLabel(i);
             }
 
-            return PricedList(hangar, counts, wing == 0 ? scratch.LeftHardpoints : scratch.RightHardpoints,
+            return PricedList(counts, wing == 0 ? scratch.LeftHardpoints : scratch.RightHardpoints,
                 i => hangar.SetHardpoints(wing, i), i => hangar.BillWithHardpoints(wing, i));
         }
 
@@ -1427,18 +1417,6 @@ public sealed partial class OriginalShell
         {
             string prefix = row.Key[..colon];
             string suffix = row.Key[(colon + 1)..];
-            switch (row.Key)
-            {
-                case AskOkKey:
-                    _hangar.AnswerDefaultsAsk(true);
-                    FocusKey(AirframeDropKey);
-                    return null;
-                case AskCancelKey:
-                    _hangar.AnswerDefaultsAsk(false);
-                    FocusKey(AirframeDropKey);
-                    return null;
-            }
-
             if (suffix is "up" or "down")
             {
                 // An arrow steps one row, which on a grid is a whole row of tiles.
@@ -1451,9 +1429,8 @@ public sealed partial class OriginalShell
             {
                 list.Select(int.Parse(suffix, CultureInfo.InvariantCulture));
                 _hangarOpen = null;
-                // A pick that raised the defaults ask lands the focus on its OK; any other pick
-                // lands back on the box it came from.
-                FocusKey(_hangar.DefaultsAsk != null ? AskOkKey : prefix);
+                FocusKey(prefix);
+                RaisePendingDefaultsAsk();
             }
 
             return null;
@@ -1546,20 +1523,19 @@ public sealed partial class OriginalShell
             ComposeTabPage(rows, focus, pictures, fills, lines, notes);
         }
 
-        // With a list or the ask up the rows are its own; the page under it is drawn from the
-        // closed widgets, and the list becomes an overlay over the finished page.
+        // With a list up the rows are its own; the page under it is drawn from the closed widgets,
+        // and the list becomes an overlay over the finished page.
         IReadOnlyList<OriginalRow> widgets = rows;
         int widgetFocus = focus;
         int widgetPressed = _pressed;
-        bool covered = _hangarOpen != null || _hangar.DefaultsAsk != null;
-        if (covered)
+        if (_hangarOpen != null)
         {
             var closed = new List<OriginalRow>();
             BuildHubRows(closed);
             widgets = closed;
             widgetFocus = -1;
             widgetPressed = -1;
-            for (int i = 0; _hangarOpen != null && i < closed.Count; i++)
+            for (int i = 0; i < closed.Count; i++)
             {
                 if (closed[i].Key == _hangarOpen)
                 {
@@ -1576,10 +1552,6 @@ public sealed partial class OriginalShell
         if (_hangarOpen != null)
         {
             ComposeOpenList(rows, focus, overlays);
-        }
-        else if (_hangar.DefaultsAsk != null)
-        {
-            ComposeAsk(rows, focus, overlays);
         }
     }
 
@@ -2210,40 +2182,6 @@ public sealed partial class OriginalShell
             panelPictures.Add(grid == null
                 ? new BoardPicture(thumb, window.ThumbX, window.ThumbY)
                 : new BoardPicture(thumb, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
-        }
-
-        overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
-    }
-
-    // The defaults ask as a dialog over the page: a panel carrying string 206 and the two rows.
-    private void ComposeAsk(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays)
-    {
-        var panelFills = new List<BoardFill>
-        {
-            new(AskX, AskY, AskWidth, AskHeight, 0xE6, 0xDA, 0xBE, 0.97f),
-            new(AskX, AskY, AskWidth, AskHeight, 0, 0, 0, 1f, Border: true),
-        };
-        var panelLines = new List<BoardLine>
-        {
-            new(_hangar!.DefaultsAskText, AskX + 16f, AskY + 16f, AskWidth - 32f, HubTextFont, BoardInk.Row),
-        };
-        var panelPictures = new List<BoardPicture>();
-        for (int i = 0; i < rows.Count; i++)
-        {
-            var row = rows[i];
-            bool focused = i == focus;
-            if (row.Art != null)
-            {
-                // The plaque art rides the panel as a picture, its label written over it.
-                panelPictures.Add(new BoardPicture(row.Art, row.X, row.Y, ComposedBoard.PlaqueFrame(row.Art.Frames, focused, i == _pressed)));
-            }
-            else
-            {
-                panelFills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 255, 255, 255, 0.6f, Border: true));
-            }
-
-            panelLines.Add(new BoardLine(row.Label, row.X, row.Y + 6f, row.Width, HubItemFont,
-                focused ? BoardInk.RowFocused : BoardInk.Row, i, false, BoardJustify.Center));
         }
 
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));

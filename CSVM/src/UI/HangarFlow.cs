@@ -430,10 +430,11 @@ public sealed class HangarFlow
     public void StartFromSaved(CustomPlaneDef saved) => _feature.StartFromSaved(saved);
 
     /// <summary>The AIRFRAME screen's confirm on a row: picking an airframe that is not already
-    /// the pick switches to it and raises the defaults ask, and returns true so the press stays on
-    /// the screen. Confirming the row that already IS the pick returns false, which is what lets
-    /// the flow advance (E49's double-enter idiom). A new plane's first confirm always picks, even
-    /// on the airframe the model was carrying underneath.</summary>
+    /// the pick switches to it, asks where the build was edited, and returns true so the press
+    /// stays on the screen. Confirming the row that already IS the pick returns false, which is
+    /// what lets the flow advance (E49's double-enter idiom). A new plane's first confirm always
+    /// picks, even on the airframe the model was carrying underneath. The cursor moves onto the
+    /// ask's answers where one was raised and stays on the picked row where none was.</summary>
     public bool PickAirframe(int airframe)
     {
         if (!_feature.PickAirframe(airframe))
@@ -441,22 +442,21 @@ public sealed class HangarFlow
             return false;
         }
 
-        Row = 0;
+        Row = DefaultsAsk is null ? airframe : 0;
         return true;
     }
 
-    /// <summary>Raises the airframe-defaults ask, string 206's own question: %1 is the new
-    /// airframe, %2 the plane being built (its name, or its previous airframe's name while it
-    /// has none). The cursor moves onto the confirm rows.</summary>
+    /// <summary>Raises the airframe-defaults ask, string 206's own question over the new airframe's
+    /// short name and the one the build was opened on. The cursor moves onto the answers.</summary>
     public void RaiseDefaultsAsk(int airframe, int previousAirframe)
     {
         _feature.RaiseDefaultsAsk(airframe, previousAirframe);
         Row = 0;
     }
 
-    /// <summary>Answers the pending ask: accepting loads the airframe's defaults into the
-    /// scratch plane, declining keeps every current pick (the airframe switch itself already
-    /// happened when the ask was raised). The cursor lands back on the chosen airframe.</summary>
+    /// <summary>Answers the pending ask: Yes takes the new airframe's whole stock build, No takes
+    /// it bare, and either way the picks 206 warns about are gone. The cursor lands back on the
+    /// chosen airframe.</summary>
     public void AnswerDefaultsAsk(bool loadDefaults)
     {
         if (DefaultsAsk is null)
@@ -465,6 +465,20 @@ public sealed class HangarFlow
         }
 
         _feature.AnswerDefaultsAsk(loadDefaults);
+        Row = Scratch.Airframe;
+    }
+
+    /// <summary>Cancels the pending ask: the airframe goes back to the one the build was opened on
+    /// and every other pick survives, which is what 206 offers Cancel for. The cursor lands back
+    /// on that airframe.</summary>
+    public void CancelDefaultsAsk()
+    {
+        if (DefaultsAsk is null)
+        {
+            return;
+        }
+
+        _feature.CancelDefaultsAsk();
         Row = Scratch.Airframe;
     }
 

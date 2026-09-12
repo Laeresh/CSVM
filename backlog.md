@@ -2282,27 +2282,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   The range is decoded, never read off footage. *Cross-refs:* `docs/org/targeting.md`
   (`FUN_0049d940`, the off-screen case), `CONTEXT.md` "Edge marker", `BL-181`.
 
-- `BL-864` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Plane Construction's open lists draw an X at the
-  start of every row that the original does not draw.** *Evidence:* reported at the controls on
-  the Original presentation's campaign Plane Construction screen: each row of an open combo list
-  is prefixed with an X. The reference captures (`OriginalScreenshots\Campaign CAP-40 Plane
-  Construction*.png`, `CAP-50.mkv` t=118 to 140) show bare rows. *Fix shape:* find the glyph in
-  the shared list drawer the hangar's combos use and drop it for this screen; check the other
-  campaign combos (ammo page, Instant Action) are not drawing it too. *Cross-refs:*
-  `docs/org/hangar.md`, `BL-750` (the same list's arrows and thumb).
-
-- `BL-865` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Plane Construction's defaults ask fires on every
-  airframe change, is drawn as the wrong box, and lacks its third answer.** *Evidence:* reported
-  at the controls against `OriginalScreenshots\Plane Construction Default Values Dialog.png`: the
-  original asks (langui 206) only when the airframe is changed after the record was edited away
-  from its defaults (engine, armour, guns), CSVM asks on every airframe change; the text is right
-  but the box is a different dialog altogether, and the original offers Yes, No and Cancel where
-  CSVM offers two. *Fix shape:* gate the ask on a changed-since test against the stock template
-  (the decode's "as opened" copy, `docs/org/hangar.md` "What Load Default Configuration loads"),
-  draw it as the three-button `MESSAGEBOX.SCRIPT` box the screenshot shows, and wire Cancel to
-  leave the airframe as it was. *⚠ Traps:* what each of the three answers does to the record is
-  not on the screenshot; `CAP-53` films it. *Cross-refs:* `CAP-53`, `docs/org/hangar.md`.
-
 - `BL-875` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's campaign
   screens take the key or pad press that skipped a chapter or closing film.** *Evidence:* a read of
   CSVM's own code, the twin of the leak the Original shell no longer has. `LaunchMenu` polls its

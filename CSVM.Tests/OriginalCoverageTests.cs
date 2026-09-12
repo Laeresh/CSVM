@@ -131,9 +131,12 @@ public class OriginalCoverageTests : IDisposable
         new("sell-confirm", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey, OriginalShell.InventorySellKey),
             Then(new[] { OriginalShell.DialogNoKey, OriginalShell.InventoryDoneKey }, CancelBuild),
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }),
-        new("defaults-ask", OriginalScreen.HangarAirframe, Then(Hub, OriginalShell.AirframeDropKey, OriginalShell.AirframeDropKey + ":1"),
-            Then(new[] { OriginalShell.AskCancelKey }, CancelBuild),
-            Expect: new[] { OriginalShell.AskOkKey, OriginalShell.AskCancelKey }),
+        // Only an airframe swap over an edited build asks, so the engine is hand-picked on the way.
+        new("defaults-ask", OriginalScreen.HangarAirframe,
+            Then(Hub, "PX_B_ENGINE", OriginalShell.EngineDropKey, OriginalShell.EngineDropKey + ":2",
+                "PX_B_AIRFRAME", OriginalShell.AirframeDropKey, OriginalShell.AirframeDropKey + ":1"),
+            Then(new[] { OriginalShell.DialogCancelKey }, CancelBuild),
+            Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey, OriginalShell.DialogCancelKey }),
         new("quit", null, new[] { "MM_B_QUIT" }, Array.Empty<string>(), Exit: typeof(QuitExit)),
         new("apply-options", null,
             new[]

@@ -95,6 +95,15 @@ public sealed class HangarFeature : IMenuFeature
     private StockLoadouts? _fits;
     private bool _fitsRead;
 
+    // The build as the screen last opened it, which is what the changed-since test measures
+    // against. The original keeps the whole 204-byte record (the copy at 0x006480cc, rewritten by
+    // every default-configuration load); only the compared fields are kept here.
+    private int[] _asOpened = Array.Empty<int>();
+
+    // What AirframeChosen goes back to when the pending ask is cancelled: an unchosen build can be
+    // edited on another tab first, and Cancel must not leave a row ticked nobody picked.
+    private bool _askPreviousChosen;
+
     /// <summary>A feature labelling from <paramref name="strings"/>, resolving an airframe id to
     /// its planes.zbd node through <paramref name="nodeOfAirframe"/> (the stock-fit and vehicle
     /// tables are keyed by node), reading stock fits through <paramref name="stockFits"/> on first
@@ -162,12 +171,29 @@ public sealed class HangarFeature : IMenuFeature
     /// plane start true.</summary>
     public bool AirframeChosen { get; private set; }
 
+    /// <summary>Whether the name screen's Load Default Configuration box was checked when this
+    /// build started, which is the answer an unasked airframe swap takes: the stock build when it
+    /// was set, a bare airframe when it was clear (docs/org/hangar.md).</summary>
+    public bool DefaultsWanted { get; private set; } = true;
+
     /// <summary>The airframe whose defaults the pending ask (langui 206) offers, or null when none
-    /// is showing. Raised only by a pick that changes the airframe.</summary>
+    /// is showing. Raised only by an airframe change over a build that was edited away from what
+    /// the screen opened it as; see <see cref="EditedSinceOpened"/>.</summary>
     public int? DefaultsAsk { get; private set; }
 
-    /// <summary>String 206 with both names formatted in, captured when the ask was raised.</summary>
+    /// <summary>The airframe the pending ask would put back, which is Cancel's whole job, or null
+    /// when no ask is showing.</summary>
+    public int? DefaultsAskPrevious { get; private set; }
+
+    /// <summary>String 206 with both airframe names formatted in, captured when the ask was
+    /// raised.</summary>
     public string DefaultsAskText { get; private set; } = string.Empty;
+
+    /// <summary>Whether the build differs from what the screen opened it as, in the fields the
+    /// original's own changed-since test reads: engine, hardpoints, armour, guns and paint, but
+    /// neither the airframe nor the name nor the ammunition. This is the gate the airframe swap's
+    /// question stands behind (docs/org/hangar.md, "When the airframe swap asks").</summary>
+    public bool EditedSinceOpened => !EditableFields(Scratch).SequenceEqual(_asOpened);
 
     /// <summary>The refusal line the last failed commit or sale left, or "".</summary>
     public string Message { get; private set; } = string.Empty;
@@ -294,8 +320,9 @@ public sealed class HangarFeature : IMenuFeature
         Scratch = new CustomPlaneDef();
         EditingName = null;
         AirframeChosen = false;
-        DefaultsAsk = null;
-        DefaultsAskText = string.Empty;
+        DefaultsWanted = false;
+        ClearDefaultsAsk();
+        RememberAsOpened();
     }
 
     /// <summary>Starts a fresh build on the default configuration: <paramref name="airframe"/>'s
@@ -308,9 +335,11 @@ public sealed class HangarFeature : IMenuFeature
     {
         int pick = airframe >= 0 && airframe < HangarEconomy.Airframes.Length ? airframe : DefaultAirframe;
         StartNewPlane();
+        DefaultsWanted = true;
         LoadAirframeDefaults(pick);
         NormalisePattern(pick);
         AirframeChosen = true;
+        RememberAsOpened();
     }
 
     /// <summary>Starts from a saved plane, as a copy: editing and abandoning it must not touch
@@ -322,15 +351,15 @@ public sealed class HangarFeature : IMenuFeature
         Scratch = CustomPlaneStore.Deserialize(CustomPlaneStore.Serialize(saved)) ?? new CustomPlaneDef();
         EditingName = saved.Name;
         AirframeChosen = true;
-        DefaultsAsk = null;
-        DefaultsAskText = string.Empty;
+        ClearDefaultsAsk();
+        RememberAsOpened();
     }
 
-    /// <summary>Picks an airframe: one that is not already the pick switches to it, snaps the
-    /// paint pattern onto one the airframe may wear and raises the defaults ask, returning true.
-    /// Picking the standing pick returns false, so a presentation can treat the second confirm as
-    /// an advance. A new plane's first pick always picks, even on the airframe the model was
-    /// carrying underneath.</summary>
+    /// <summary>Picks an airframe: one that is not already the pick switches to it and snaps the
+    /// paint pattern onto one the airframe may wear, returning true. Picking the standing pick
+    /// returns false, so a presentation can treat the second confirm as an advance. A new plane's
+    /// first pick always picks, even on the airframe the model was carrying underneath. An edited
+    /// build's swap raises the ask; an unedited one takes the checkbox's answer unasked.</summary>
     public bool PickAirframe(int airframe)
     {
         if (AirframeChosen && Scratch.Airframe == airframe)
@@ -338,43 +367,94 @@ public sealed class HangarFeature : IMenuFeature
             return false;
         }
 
+        // Read before the write: the swap itself is not one of the pilot's edits, and neither is
+        // the pattern snap the new airframe forces below.
+        bool edited = EditedSinceOpened;
+        bool wasChosen = AirframeChosen;
         int was = Scratch.Airframe;
         Scratch.Airframe = airframe;
         AirframeChosen = true;
         NormalisePattern(airframe);
-        RaiseDefaultsAsk(airframe, was);
+        if (was == airframe)
+        {
+            // The original's airframe callback compares the id before and after and does nothing
+            // at all when it has not moved, so a first confirm on the airframe the model was
+            // already carrying is a pick and no more.
+            return true;
+        }
+
+        if (edited)
+        {
+            RaiseDefaultsAsk(airframe, was, wasChosen);
+        }
+        else
+        {
+            ApplyDefaultConfiguration(DefaultsWanted);
+        }
+
         return true;
     }
 
-    /// <summary>Raises the airframe-defaults ask, string 206's own question: %1 is the new
-    /// airframe, %2 the plane being built (its name, or its previous airframe's name while it
-    /// has none).</summary>
-    public void RaiseDefaultsAsk(int airframe, int previousAirframe)
+    /// <summary>Raises the airframe-defaults ask, string 206's own question over two short airframe
+    /// names (langui 3020 + id): %1 the airframe just picked, %2 the one the build was opened on.
+    /// <paramref name="previousAirframe"/> and <paramref name="previousChosen"/> are what Cancel
+    /// restores.</summary>
+    public void RaiseDefaultsAsk(int airframe, int previousAirframe, bool previousChosen = true)
     {
-        string plane = string.IsNullOrWhiteSpace(Scratch.Name) ? AirframeName(previousAirframe) : Scratch.Name;
-        string text = Strings.Format(206, AirframeName(airframe), plane);
+        string was = AirframeShortName(previousAirframe);
+        string text = Strings.Format(206, AirframeShortName(airframe), was);
         DefaultsAskText = text.Length > 0 ? text
-            : $"Do you want the default armor, engine, and guns for this new airframe ({AirframeName(airframe)})?  " +
-              $"If you do not want to lose the changes you've made to the {plane} you were building, click Cancel.";
+            : $"Do you want the default armor, engine, and guns for this new airframe ({AirframeShortName(airframe)})?  " +
+              $"If you do not want to lose the changes you've made to the {was} you were building, click Cancel.";
         DefaultsAsk = airframe;
+        DefaultsAskPrevious = previousAirframe;
+        _askPreviousChosen = previousChosen;
     }
 
-    /// <summary>Answers the pending ask: accepting loads the airframe's defaults into the scratch
-    /// plane, declining keeps every current pick (the airframe switch itself already happened
-    /// when the ask was raised). Nothing pending answers nothing.</summary>
+    /// <summary>Answers the pending ask: either way the build is rebuilt from the new airframe's
+    /// stock template, taken whole for Yes and stripped back to a bare airframe for No, which is
+    /// why 206 says Cancel is the only way to keep an edit. Nothing pending answers nothing.</summary>
     public void AnswerDefaultsAsk(bool loadDefaults)
     {
-        if (DefaultsAsk is not { } airframe)
+        if (DefaultsAsk is null)
         {
             return;
         }
 
-        DefaultsAsk = null;
-        DefaultsAskText = string.Empty;
-        if (loadDefaults)
+        ClearDefaultsAsk();
+        ApplyDefaultConfiguration(loadDefaults);
+    }
+
+    /// <summary>Cancels the pending ask: the airframe goes back to the one the build was opened on
+    /// and every other pick is left alone, so the edits 206 warns about survive. Nothing pending
+    /// cancels nothing.</summary>
+    public void CancelDefaultsAsk()
+    {
+        if (DefaultsAskPrevious is not { } was)
         {
-            LoadAirframeDefaults(airframe);
+            return;
         }
+
+        bool chosen = _askPreviousChosen;
+        ClearDefaultsAsk();
+        Scratch.Airframe = was;
+        AirframeChosen = chosen;
+        NormalisePattern(was);
+    }
+
+    /// <summary>Loads the default configuration over the whole build, the original's own callback
+    /// 2212: the standing airframe's stock template, stripped back to a bare airframe when
+    /// <paramref name="stock"/> is false. The name and the paint are not the airframe's to set and
+    /// stay. The build's opened-as copy is retaken, so this is where an edit is measured from.</summary>
+    public void ApplyDefaultConfiguration(bool stock)
+    {
+        LoadAirframeDefaults(Scratch.Airframe);
+        if (!stock)
+        {
+            StripToBareAirframe();
+        }
+
+        RememberAsOpened();
     }
 
     /// <summary>Loads an airframe's defaults into the scratch plane, the ask's accept arm: gun
@@ -904,6 +984,33 @@ public sealed class HangarFeature : IMenuFeature
         StartNewPlane();
     }
 
+    // The fields the original's changed-since test compares, as one vector: engine, both hardpoint
+    // counts, the paint pattern with its three colours, shades and decals, the four armour zones,
+    // and the four gun slots with their twin bits. The airframe is left out because the swap has
+    // already written it, and the name and the ammunition because the test never reads them.
+    private static int[] EditableFields(CustomPlaneDef plane)
+    {
+        var fields = new List<int>
+        {
+            plane.Engine, plane.LeftHardpoints, plane.RightHardpoints, plane.PaintPattern,
+            plane.ArmourNose, plane.ArmourTail, plane.ArmourLeftWing, plane.ArmourRightWing,
+            plane.NoseDecal, plane.TailDecal, plane.WingDecal,
+        };
+        for (int slot = 0; slot < HangarPaintTables.Slots; slot++)
+        {
+            fields.Add(plane.PaintColours[slot]);
+            fields.Add(plane.PaintShades[slot]);
+        }
+
+        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
+        {
+            fields.Add(plane.Guns[slot].Calibre ?? -1);
+            fields.Add(plane.Guns[slot].Twin ? 1 : 0);
+        }
+
+        return fields.ToArray();
+    }
+
     // The scratch plane as the economy sees it, copied: everything Price reads and nothing else,
     // since paint and the name are free and unpriced. ⚠ Do not price a would-be pick by writing it
     // into Scratch and writing it back; a preview that threw mid-price would leave it taken.
@@ -947,6 +1054,34 @@ public sealed class HangarFeature : IMenuFeature
             _taken.Add(CustomPlaneStore.FileKey(def.Name));
         }
     }
+
+    // A bare airframe, the default configuration's own other arm: no engine, no armour, no
+    // hardpoints and four empty gun slots. The original writes the same values over the template
+    // it has just copied (docs/org/hangar.md, "What Load Default Configuration loads").
+    private void StripToBareAirframe()
+    {
+        Scratch.Engine = CustomPlaneDef.EngineNone;
+        Scratch.LeftHardpoints = 0;
+        Scratch.RightHardpoints = 0;
+        Scratch.ArmourNose = 0;
+        Scratch.ArmourTail = 0;
+        Scratch.ArmourLeftWing = 0;
+        Scratch.ArmourRightWing = 0;
+        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
+        {
+            Scratch.Guns[slot] = default;
+        }
+    }
+
+    private void ClearDefaultsAsk()
+    {
+        DefaultsAsk = null;
+        DefaultsAskPrevious = null;
+        DefaultsAskText = string.Empty;
+        _askPreviousChosen = false;
+    }
+
+    private void RememberAsOpened() => _asOpened = EditableFields(Scratch);
 
     // A pattern the picked airframe may not wear snaps to its first available one, carrying that
     // pattern's own colour/shade defaults: a fresh scratch holds pattern 0 (blackhat), which most

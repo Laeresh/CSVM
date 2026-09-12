@@ -1709,13 +1709,17 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        flow.Accept(); // pick the focused airframe, which is what raises the defaults ask (E49)
+        flow.Accept(); // pick the focused airframe
         if (startScreen == "defaults")
         {
+            // Only an airframe swap over an edited build asks, so an engine is picked by hand
+            // first and the swap made onto the next row (E49).
+            flow.Feature.SetEngine(1);
+            flow.Move(1);
+            flow.Accept();
             return;
         }
 
-        flow.AnswerDefaultsAsk(false);
         var stopAt = startScreen == "name" ? HangarScreen.Name : HangarScreen.Paint;
         for (int guard = 0; flow.Screen != stopAt && guard < HangarFlow.Order.Length; guard++)
         {

@@ -320,7 +320,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/PlaneFit.cs`, what one campaign aircraft carries, resolved from its hangar build or its airframe's stock fit; engine-free.
 - `src/UI/PlaneRatings.cs`, the four Poor-to-Excellent ratings the plane selection screen prints beside an aircraft; only agility is decoded.
 - `src/UI/HangarFlow.cs`, the Build Custom Plane flow, Built-in's walk of the shared hangar feature: the screen order, the cursor and the page mount point.
-- `src/UI/HangarAirframePage.cs`, the AIRFRAME screen: the eleven airframes, the blueprint preview, and the defaults ask a pick raises.
+- `src/UI/HangarAirframePage.cs`, the AIRFRAME screen: the eleven airframes, the blueprint preview, and the defaults ask an edited build's swap raises.
 - `src/UI/HangarEnginePage.cs`, the ENGINE screen: the airframe's six engines plus the explicit None row, each with its decoded cost and weight.
 - `src/UI/HangarArmourPage.cs`, the ARMOR screen: the four zones stepped on the dropdown's own units-times-five scale.
 - `src/UI/HangarGunsPage.cs`, the GUNS screen: four slots stepping the eleven-entry calibre cycle, priced per mount.

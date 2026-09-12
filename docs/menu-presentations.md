@@ -108,7 +108,7 @@ concrete members and composes them its own way.
 | `FreeFlightFeature` | the chapter roster it offers, the chapter pick, the launch gate over the setup's seats, `BuildExit` | seats, aircraft, stores |
 | `InstantActionFeature` | every decoded option set, the environment, mission type, lives, four waves, wingmen and their fit, the player plane, presets, the base def, `BuildExit` | which screens the fields appear on, the wizard order |
 | `PlayerSetupFeature` | the seats claimed by input-source identity (four at most, seat 0 never leaving), the aircraft roster (`BuildRoster`), each seat's cursor, the two-stage pick and its fit, the per-mode gate, `Choices`, `BuildExit` for Dogfight | the pad behind a seat (asked of the presentation through `MenuSeatDevices`), the join gesture, the split-pane or seat-strip drawing |
-| `HangarFeature` | one scratch build at a time over a `CustomPlaneStore` and an optional `IHangarWallet`, the three starts, the airframe pick with the defaults ask, the per-tab operations, the purchase gate in the original's words, `Commit`, `DeleteSaved`, the labels and name rules | the nine-screen walk or the tab bar, the dropdowns, the dialog idiom |
+| `HangarFeature` | one scratch build at a time over a `CustomPlaneStore` and an optional `IHangarWallet`, the three starts, the airframe pick with its changed-since gate and the defaults ask's three answers, the per-tab operations, the purchase gate in the original's words, `Commit`, `DeleteSaved`, the labels and name rules | the nine-screen walk or the tab bar, the dropdowns, the dialog idiom |
 | `ControlsFeature` | the seats it can edit and their staged keymaps, the context and action cursors, the capture and the steal it names first, `Accept`, `Cancel`, `ResetSeat` | which page the rows are split across, the tabs or columns they are drawn in, the join that raises a second seat's row |
 | `CampaignFeature` | the profile store, roster and seated profile, `ContinuePlayer` and `DeletePlayer` with their refusals, the mission position and its briefing state and reveal progress, the intents between screens, `CommitLoadout`, `CommitPlanes`, `ExportPlane`, the flight field, the wallet, `BuildExit` | the screen stack, the cursor, the refusal line, the modal, the working copies before ACCEPT, the reveal's clock |
 
@@ -477,7 +477,9 @@ standing open, the one leaf list whose sizes can outrun the window its row autho
 the KEYS AND BUTTONS page standing on the one category that outruns its list window, `credits` and
 `credits:about` with the About box standing over it, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
-hub's figures preview, `plane-construction:overweight` on a build past its capacity and
+hub's figures preview, `plane-construction:overweight` on a build past its capacity,
+`plane-construction:defaults` with the airframe swap's three-button question standing over an
+edited build and
 `plane-paint:decals` standing the nose decal picker open as its five-across grid, `campaign`
 and the shared scratch-store campaign poses, `campaign-delete`), and any other value opens that 
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.

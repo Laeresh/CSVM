@@ -99,6 +99,11 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// capacity, so the shot shows the reddened CURRENT WEIGHT.</summary>
     public const string PlaneConstructionOverweightAid = "overweight";
 
+    /// <summary>The Plane Construction aid's argument that leaves the airframe-defaults question
+    /// standing: an engine is hand-picked so the build is edited, then the airframe swapped, which
+    /// is the only way the question is raised.</summary>
+    public const string PlaneConstructionDefaultsAid = "defaults";
+
     /// <summary>The aid value that opens the hub's paint tab on a Fury in Fortune Hunters colours.</summary>
     public const string PlanePaintAid = "plane-paint";
 
@@ -435,6 +440,20 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Step(new MenuCommands { Accept = true });
                     _shell.Step(new MenuCommands { MoveY = 1 });
                     break;
+                case PlaneConstructionAid + ":" + PlaneConstructionDefaultsAid:
+                    // The airframe swap's own question, which only an edited build raises: a
+                    // hand-picked engine is the edit and the list's next row is the swap, taken
+                    // through the same presses a pilot has.
+                    _shell.OpenHangarTab(OriginalScreen.HangarAirframe, AidPlaneName);
+                    if (host.Features.TryGet<HangarFeature>(out var asked) && asked.IsOpen)
+                    {
+                        asked.SetEngine(2);
+                    }
+
+                    _shell.Step(new MenuCommands { Accept = true });
+                    _shell.Step(new MenuCommands { MoveY = 1 });
+                    _shell.Step(new MenuCommands { Accept = true });
+                    break;
                 case PlaneConstructionAid + ":" + PlaneConstructionOverweightAid:
                     // A build past its airframe's capacity: the lightest airframe carrying every
                     // armour press and every hardpoint, which is the state the weight line reddens
@@ -443,7 +462,6 @@ public sealed class OriginalPresentation : IMenuPresentation
                     if (host.Features.TryGet<HangarFeature>(out var heavy) && heavy.IsOpen)
                     {
                         heavy.PickAirframe(0);
-                        heavy.AnswerDefaultsAsk(true);
                         for (int zone = 0; zone < 4; zone++)
                         {
                             heavy.SetArmour(zone, CustomPlaneDef.MaxArmourUnits);
@@ -462,7 +480,6 @@ public sealed class OriginalPresentation : IMenuPresentation
                     if (host.Features.TryGet<HangarFeature>(out var paint) && paint.IsOpen)
                     {
                         paint.PickAirframe(7);
-                        paint.AnswerDefaultsAsk(true);
                         paint.SetPattern(4);
                         paint.SetDecal(0, 40);
                     }

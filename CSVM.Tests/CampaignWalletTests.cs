@@ -429,12 +429,6 @@ public class CampaignWalletTests : IDisposable
     {
         for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length + 3; guard++)
         {
-            if (flow.DefaultsAsk != null)
-            {
-                flow.AnswerDefaultsAsk(false);
-                continue;
-            }
-
             if (flow.Screen == HangarScreen.Airframe)
             {
                 flow.FocusRow(flow.Scratch.Airframe);

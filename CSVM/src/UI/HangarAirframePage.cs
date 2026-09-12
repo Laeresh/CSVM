@@ -11,15 +11,18 @@ namespace CSVM.UI;
 /// so it does not gate this screen), named from langui 3000+id, the chosen one ticked. Moving the cursor
 /// previews an airframe (detail figures, stars and blueprint follow focus) and confirm picks it,
 /// so the ←→ stepper is inert here.
-///
-/// <para>Confirming an airframe that is not already the pick raises the defaults ask (string 206,
-/// <see cref="HangarFlow.DefaultsAsk"/>), an inline two-row confirm: OK loads the airframe's
-/// defaults, Cancel keeps every current pick; the switch stands either way. Confirming the row
-/// that already is the pick advances instead, so a new plane leaves this screen only through a
-/// pick.</para>
+/// Confirming an airframe that is not already the pick over an edited build raises the defaults
+/// ask (string 206, <see cref="HangarFlow.DefaultsAsk"/>) as an inline three-row confirm carrying
+/// the original's own three answers: Yes takes the new airframe's stock build, No takes it bare,
+/// Cancel puts the airframe back. Confirming the row that already is the pick advances instead, so
+/// a new plane leaves this screen only through a pick.
 /// </summary>
 public sealed class HangarAirframePage : HangarPage
 {
+    // The ask's three answer rows, MESSAGEBOX.SCRIPT's 0x8 box: Yes, No and Cancel (langui 102,
+    // 103 and 101), in the order the original's three button slots carry them.
+    private const int AskAnswers = 3;
+
     private readonly Dictionary<int, HangarArt?> _art = new();
     private readonly Dictionary<int, HangarArt?> _diagrams = new();
 
@@ -33,7 +36,7 @@ public sealed class HangarAirframePage : HangarPage
     public override HangarScreen Screen => HangarScreen.Airframe;
 
     /// <inheritdoc/>
-    public override int RowCount => Flow.DefaultsAsk is null ? HangarEconomy.Airframes.Length : 2;
+    public override int RowCount => Flow.DefaultsAsk is null ? HangarEconomy.Airframes.Length : AskAnswers;
 
     /// <inheritdoc/>
     public override int OpeningRow => Flow.AirframeChosen ? Scratch.Airframe : 0;
@@ -42,7 +45,7 @@ public sealed class HangarAirframePage : HangarPage
     public override HangarArt? Art => BlueprintFor(FocusedAirframe);
 
     // Which airframe the art follows: the row the cursor is on, or the one the defaults ask is
-    // about, since that ask replaces the list with two buttons and its own row index means nothing.
+    // about, since that ask replaces the list with its answers and its row index means nothing.
     private int FocusedAirframe =>
         Flow.DefaultsAsk ?? Math.Clamp(Flow.Row, 0, HangarEconomy.Airframes.Length - 1);
 
@@ -57,7 +60,12 @@ public sealed class HangarAirframePage : HangarPage
     {
         if (Flow.DefaultsAsk is not null)
         {
-            return row == 0 ? "OK" : "Cancel";
+            return row switch
+            {
+                0 => Flow.Feature.Strings.Text(102, "Yes"),
+                1 => Flow.Feature.Strings.Text(103, "No"),
+                _ => Flow.Feature.Strings.Text(101, "Cancel"),
+            };
         }
 
         // Nothing is ticked until an airframe is picked: a new plane carries airframe 0 in the
@@ -80,7 +88,7 @@ public sealed class HangarAirframePage : HangarPage
                $"Agility {Stars(bill.AgilityStars)}   Armor {Stars(bill.ArmourStars)}";
     }
 
-    /// <summary>What the build would cost on that airframe with every other pick kept; the ask's two
+    /// <summary>What the build would cost on that airframe with every other pick kept; the ask's
     /// answer rows price nothing.</summary>
     public override int? CostWith(int row) =>
         Flow.DefaultsAsk is null ? Flow.Feature.CostWithAirframe(row) : null;
@@ -90,7 +98,15 @@ public sealed class HangarAirframePage : HangarPage
     {
         if (Flow.DefaultsAsk is not null)
         {
-            Flow.AnswerDefaultsAsk(row == 0);
+            if (row < AskAnswers - 1)
+            {
+                Flow.AnswerDefaultsAsk(row == 0);
+            }
+            else
+            {
+                Flow.CancelDefaultsAsk();
+            }
+
             return true;
         }
 

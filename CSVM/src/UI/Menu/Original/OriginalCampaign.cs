@@ -10,9 +10,9 @@ namespace CSVM.UI.Menu.Original;
 public sealed record OriginalDialogAnswer(string Key, string LayoutKey, string Label, Action? Run);
 
 /// <summary>A dialog standing over a campaign screen, the original's <c>messagebox.script</c>
-/// over whatever screen was showing: its words, the icon its message class draws, its one or two
-/// answers and the widget set it is drawn from (null for the shared <c>mb_</c> box). While one
-/// stands the rows are its answers alone.</summary>
+/// over whatever screen was showing: its words, the icon its message class draws, its one, two or
+/// three answers and the widget set it is drawn from (null for the shared <c>mb_</c> box). While
+/// one stands the rows are its answers alone.</summary>
 public sealed record OriginalDialog(
     string Message, DialogIcon Icon, IReadOnlyList<OriginalDialogAnswer> Answers,
     CampaignBoards.DialogChrome? Chrome = null);
@@ -42,6 +42,9 @@ public sealed partial class OriginalShell
 
     /// <summary>A two-answer dialog's declining answer.</summary>
     public const string DialogNoKey = "DIALOG:NO";
+
+    /// <summary>A three-answer dialog's third answer, which leaves the screen as it was.</summary>
+    public const string DialogCancelKey = "DIALOG:CANCEL";
 
     // A page row that is neither a button nor a field: a roster name, a mission row, a scrap.
     private const string RowKeyPrefix = "ROW:";
@@ -380,9 +383,9 @@ public sealed partial class OriginalShell
             ? entry
             : null;
 
-    // The messagebox script's own answer words: it hands its buttons langui 100 (OK) for the
-    // one-button box and 102 and 103 (Yes, No) for the two-button pair, read here through
-    // whichever feature carries the string table.
+    // The messagebox script's own answer words, read here through whichever feature carries the
+    // string table: langui 100 (OK) for the one-button box, 102 and 103 (Yes, No) for the
+    // two-button pair, and 102, 103 and 101 across all three slots of the 0x8 box.
     private OriginalDialogAnswer Ok(Action? run = null) =>
         new(DialogOkKey, CampaignBoards.DialogCenterKey, DialogWord(100, "OK"), run);
 
@@ -391,6 +394,14 @@ public sealed partial class OriginalShell
 
     private OriginalDialogAnswer No() =>
         new(DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
+
+    // The 0x8 box's own two extra answers: its No moves onto the centre slot the two-button box
+    // leaves empty, and Cancel takes the right one (MESSAGEBOX.SCRIPT's gui_init).
+    private OriginalDialogAnswer NoCentred(Action run) =>
+        new(DialogNoKey, CampaignBoards.DialogCenterKey, DialogWord(103, "No"), run);
+
+    private OriginalDialogAnswer Cancel(Action run) =>
+        new(DialogCancelKey, CampaignBoards.DialogRightKey, DialogWord(101, "Cancel"), run);
 
     private string DialogWord(int id, string fallback)
     {
@@ -582,7 +593,8 @@ public sealed partial class OriginalShell
         _pressed = -1;
         _armed = null;
         // A box opens on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain
-        // 0x4 mask. Back still takes the declining one, so a mistake has a way out.
+        // 0x4 and 0x8 masks. Back still takes the last one, which is the answer the script's own
+        // Escape posts for every mask, so a mistake has a way out.
         _focus[(int)_screen] = 0;
     }
 

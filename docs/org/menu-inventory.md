@@ -187,9 +187,11 @@ book. E43 either wires it or deletes it, and that architecture line needs correc
 | PlaneSelection | Accept on the trailing Delete / Sell row | the removal list |
 | removal list | Accept on a plane row | `DeleteSaved`, list re-read |
 | removal list | Accept on Cancel | back to the plane list |
-| Airframe | Accept on a row that changes the airframe | raises `DefaultsAsk` |
-| defaults ask | Accept on OK | loads the airframe's defaults, ask cleared |
-| defaults ask | Accept on Cancel | keeps the current fit, ask cleared |
+| Airframe | Accept on a row that changes the airframe of an edited build | raises `DefaultsAsk` |
+| Airframe | Accept on a row that changes the airframe of an unedited build | takes the default configuration unasked |
+| defaults ask | Accept on Yes | loads the airframe's stock build, ask cleared |
+| defaults ask | Accept on No | loads a bare airframe, ask cleared |
+| defaults ask | Accept on Cancel | puts the airframe back, every other pick kept |
 | Purchase | Accept, gate passed | `HangarExit.Built`, `CustomPlaneStore.Save` |
 | Purchase | Accept, gate refused | stays, `Message` carries the refusal in the original's words |
 
@@ -245,7 +247,7 @@ problem, and none of them is visible to a census of the three enums.
 |---|---|---|---|
 | 1 | split-pane aircraft select | `LaunchMenu` | one panel per joined player instead of the centred column |
 | 2 | a pane's Ammo Selection list | `PlayerSeat.InLoadout` (the shared player setup) | that seat reads nothing else, and nobody can launch while one is open |
-| 3 | the hangar's defaults ask | `HangarFlow.DefaultsAsk` | the Airframe screen becomes a two-row question |
+| 3 | the hangar's defaults ask | `HangarFlow.DefaultsAsk` | the Airframe screen becomes a three-row question |
 | 4 | the hangar's removal list | `HangarPlaneSelectionPage._removing` | the plane list becomes a Delete / Sell list plus Cancel |
 | 5 | the roster's delete confirm | `CampaignRosterPage._confirming` | the whole screen becomes two rows |
 | 6 | an armed name field | `CampaignFlow.CapturesText` | the keyboard types and the cursor axes come from the pad alone |
@@ -505,7 +507,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | HardPoints | `Hardpoints` | 9 rows | same | none | as above. **Built as the hardpoints tab** over `HP_D_POINT0..1` |
 | Paint | `Paint` | 27 rows | same + [`rof.md`](../formats/rof.md) | 8 `CustomPlane Paint*.png` | composition well covered by the paint stills; the pattern pickers' behaviour is not. **Built as the paint tab**: `PT_D_PATTERN` over the wearable patterns, `PT_D_COLORS0..2` as swatches in an 18-row window, `PT_D_SHADES0..2`, `PT_D_DECALS0..2` as `PT_P_DECALS` tiles in a two-row window |
 | Purchase | `Purchase` | 29 rows | same | none | the purchase gate and cost are decoded from the executable. **Built as the hub's totals page**, READY TO PURCHASE's destination: the column heads, one line per priced component at the authored lines and text lists, the totals, `PUR_T_PROBLEMS` in the commit's words, `PUR_B_PURCHASE` live while the feature can commit |
-| MessageBox | (the `_error` line) | 16 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | two campaign dialogs | the `@globals@OR` parameter block and the button masks are decoded; the script also gives the buttons their words by mask, langui 100 (OK) on the `0x1` box and 102 and 103 (Yes, No) on the `0x4` pair, and its Escape takes the `0x4` box's right answer. **Built as Original's dialog over any screen**: the `0x1` box on `MB_B_CENTER` for every refusal and notice (the profile screen's four, the plane screen's 710 and 702, the zoom's 705 and 706, the inventory's 701 and 704), the `0x4` box on `MB_B_LEFT`/`MB_B_RIGHT` for the delete confirm and the sell confirm, the answers in the script's words, a box opening on its first answer (the left button the script focuses, so a `0x4` box opens on Yes), Back taking the declining answer; while a box stands its answers are the only rows. **Rollover and focus are separate in the original and stay separate here.** `gui_init` focuses a button on every raise (`DX` when `0x20` or `0x40` is set, else `CX` on the `0x1` box, else `BX`) and sets no frame with it: the reference shot of a `0x1` box has its focused OK on the normal frame with the pointer elsewhere, so the strip's rollover frame answers the pointer alone. Ours draws it that way and gives the cursor the `DISABLED` focus outline the option pages already use, three pixels clear of the strip and only while the pointer is elsewhere, since one cursor here serves pad, keyboard and pointer together. The widget set is a parameter of the same composer, the `mb_` rows by default and the `ma_` rows for the credits screen's About box, with the icon row left on `mb_p_icon` in either |
+| MessageBox | (the `_error` line) | 16 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | two campaign dialogs | the `@globals@OR` parameter block and the button masks are decoded; the script also gives the buttons their words by mask, langui 100 (OK) on the `0x1` box, 102 and 103 (Yes, No) on the `0x4` pair and 102, 103 and 101 (Yes, No, Cancel) across all three slots of the `0x8` box, and its Escape takes the right answer of whichever mask stands. **Built as Original's dialog over any screen**: the `0x1` box on `MB_B_CENTER` for every refusal and notice (the profile screen's four, the plane screen's 710 and 702, the zoom's 705 and 706, the inventory's 701 and 704), the `0x4` box on `MB_B_LEFT`/`MB_B_RIGHT` for the delete confirm and the sell confirm, the `0x8` box across all three for the airframe swap's 206 (`hangar.md`, "When the airframe swap asks"), the answers in the script's words, a box opening on its first answer (the left button the script focuses, so a `0x4` or `0x8` box opens on Yes), Back taking the last answer, which is the one the script's Escape posts; while a box stands its answers are the only rows. **Rollover and focus are separate in the original and stay separate here.** `gui_init` focuses a button on every raise (`DX` when `0x20` or `0x40` is set, else `CX` on the `0x1` box, else `BX`) and sets no frame with it: the reference shot of a `0x1` box has its focused OK on the normal frame with the pointer elsewhere, so the strip's rollover frame answers the pointer alone. Ours draws it that way and gives the cursor the `DISABLED` focus outline the option pages already use, three pixels clear of the strip and only while the pointer is elsewhere, since one cursor here serves pad, keyboard and pointer together. The widget set is a parameter of the same composer, the `mb_` rows by default and the `ma_` rows for the credits screen's About box, with the icon row left on `mb_p_icon` in either |
 
 ⚠ **Built-in has no counterpart for GameOptions, Video, Audio or
 PlaneConstruction (its Options screen is Preferences' counterpart, and its one Controls row stands
@@ -828,13 +830,14 @@ EXPORT and CANCEL EXPORT with a `$$$ on $50000` scrap on every tab, the cabin do
 PURCHASE and CANCEL PURCHASE with `$$$ on $16780`; SELL PLANES opens the `[@Hangar@]` INVENTORY
 with a plane dropdown, Sell and Export both drawn live, a value block and DONE back to the tab,
 where selling asks with the Yes/No box and a plane that cannot be sold refuses with the OK box;
-no airframe switch raised string 206 on a fresh build; CANCEL drops every pick; and the weight
-line turns red over capacity. Original draws all of that, the weight line's red included, with the
-cost line reddening on the same script's other arm past the wallet. Still
+no airframe switch raised string 206 on a fresh build, which the decode settles as the rule rather
+than the take's luck (`hangar.md`, "When the airframe swap asks"); CANCEL drops every pick; and the
+weight line turns red over capacity. Original draws all of that, the weight line's red included,
+with the cost line reddening on the same script's other arm past the wallet, and the swap's
+question as the script's own three-button box. Still
 unfilmed: tabs visited out of order (both walks ran 1 to 6); Purchase and whether leaving a tab
 commits (Original commits only on `PUR_B_PURCHASE`); the cleared default box (Original starts on
-a bare airframe); string 206 on a customised build (Original raises it as a dialog with OK and
-Cancel) and string 203; and whether keyboard or pad input reaches the hub at all
+a bare airframe); string 203; and whether keyboard or pad input reaches the hub at all
 (Original walks the page's rows then the tab bar and steps a dropdown's value sideways, a remake
 equivalence).
 - **Built-in's Chapter screen is ours.** The original picks a map through Instant Action's

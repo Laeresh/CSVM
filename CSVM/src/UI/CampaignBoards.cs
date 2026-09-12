@@ -393,11 +393,11 @@ public static class CampaignBoards
             layout);
 
     /// <summary>The messagebox over any of its button sets: the single centred OK (<c>MB_B_CENTER</c>,
-    /// the <c>0x1</c> box) or the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the
-    /// <c>0x4</c> box the delete confirm asks for), each button drawn in the strip frame and label
-    /// ink its caller names, which is how a pointer-driven presentation shows which one is under
-    /// the pointer. The icon is its caller's too, the script reading it off the message class.
-    /// <paramref name="chrome"/> picks the widget set; null is the shared <c>mb_</c> box.</summary>
+    /// the <c>0x1</c> box), the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the
+    /// <c>0x4</c> box the delete confirm asks for) or all three (the <c>0x8</c> box the airframe
+    /// swap asks for), each button drawn in the strip frame and label ink its caller names, which
+    /// is how a pointer-driven presentation shows which one is under the pointer. The icon is its
+    /// caller's too. <paramref name="chrome"/> picks the widget set; null is the shared box.</summary>
     public static BoardPanel Dialog(
         string message, IReadOnlyList<DialogButton> buttons, DialogIcon icon, CampaignLayout? layout = null,
         DialogChrome? chrome = null)

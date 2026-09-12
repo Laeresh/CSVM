@@ -110,11 +110,9 @@ public class HangarFlowTests : IDisposable
             }
 
             flow.Accept();
-            if (flow.DefaultsAsk != null)
+            if (screen == HangarScreen.Airframe)
             {
-                // E49: the airframe screen's first confirm picks and asks, and the confirm after
-                // the decline is the one that advances.
-                flow.AnswerDefaultsAsk(false);
+                // E49: the airframe screen's first confirm picks, and the next one advances.
                 flow.Accept();
             }
         }
@@ -422,8 +420,7 @@ public class HangarFlowTests : IDisposable
 
         flow.Accept();
         Assert.Equal(HangarScreen.Airframe, flow.Screen); // the press became a pick, not an advance
-        Assert.NotNull(flow.DefaultsAsk);
-        flow.AnswerDefaultsAsk(false);
+        Assert.Null(flow.DefaultsAsk); // the airframe id did not move, so nothing is asked
         flow.Accept();
         Assert.Equal(HangarScreen.Engine, flow.Screen);
 
@@ -485,18 +482,12 @@ public class HangarFlowTests : IDisposable
 
     // Confirms forward until the flow is on `target`, so a test names the screen it cares about
     // rather than counting presses. The walk keeps the plane the caller set up: the airframe
-    // screen picks on confirm, so the cursor is put on the plane's own airframe first,
-    // and the defaults ask that pick raises is declined.
+    // screen picks on confirm, so the cursor is put on the plane's own airframe first, which is
+    // a pick that moves no airframe id and therefore asks nothing.
     private static void Walk(HangarFlow flow, HangarScreen target)
     {
         for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length + 3; guard++)
         {
-            if (flow.DefaultsAsk != null)
-            {
-                flow.AnswerDefaultsAsk(false);
-                continue;
-            }
-
             if (flow.Screen == HangarScreen.Airframe)
             {
                 flow.FocusRow(flow.Scratch.Airframe);

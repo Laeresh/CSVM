@@ -89,26 +89,53 @@ public class HangarFeatureTests : IDisposable
     }
 
     [Fact]
-    public void PickingAnAirframeRaisesTheAskAndAnsweringItLoadsOrKeeps()
+    public void AnUneditedSwapTakesTheBoxsOwnAnswerAndAnEditedOneAsks()
     {
         var feature = Feature();
         feature.Open(_store);
 
+        // Nothing has been edited away from the opened build, so no question is raised and the
+        // name screen's cleared box leaves a bare airframe.
         Assert.True(feature.PickAirframe(4));
-        Assert.Equal(4, feature.DefaultsAsk);
-        Assert.Contains("Airframe 4", feature.DefaultsAskText);
-        Assert.Equal(CustomPlaneDef.EngineNone, feature.Scratch.Engine);
-
-        feature.AnswerDefaultsAsk(false);
         Assert.Null(feature.DefaultsAsk);
         Assert.Equal(CustomPlaneDef.EngineNone, feature.Scratch.Engine);
         Assert.False(feature.PickAirframe(4));
 
+        Assert.True(feature.SetEngine(3));
+        Assert.True(feature.EditedSinceOpened);
         Assert.True(feature.PickAirframe(7));
-        feature.AnswerDefaultsAsk(true);
-        Assert.Equal(1, feature.Scratch.Engine);
+        Assert.Equal(7, feature.DefaultsAsk);
+        Assert.Contains("Airframe 7", feature.DefaultsAskText);
+        Assert.Contains("Airframe 4", feature.DefaultsAskText);
+
+        // No takes the bare airframe, which is why 206 offers Cancel to anyone keeping an edit.
+        feature.AnswerDefaultsAsk(false);
+        Assert.Null(feature.DefaultsAsk);
+        Assert.Equal(CustomPlaneDef.EngineNone, feature.Scratch.Engine);
         Assert.Equal(7, feature.Scratch.Airframe);
         Assert.True(HangarPaintTables.Default.Available(feature.Scratch.PaintPattern, 7));
+    }
+
+    [Fact]
+    public void TheAsksYesTakesTheStockBuildAndItsCancelPutsTheAirframeBack()
+    {
+        var feature = Feature();
+        feature.Open(_store);
+        feature.StartDefaultPlane(4);
+        Assert.True(feature.SetArmour(0, 7));
+
+        Assert.True(feature.PickAirframe(7));
+        Assert.Equal(7, feature.DefaultsAsk);
+        feature.CancelDefaultsAsk();
+        Assert.Null(feature.DefaultsAsk);
+        Assert.Equal(4, feature.Scratch.Airframe);
+        Assert.Equal(7, feature.ArmourUnits(0));
+
+        Assert.True(feature.PickAirframe(7));
+        feature.AnswerDefaultsAsk(true);
+        Assert.Equal(7, feature.Scratch.Airframe);
+        Assert.Equal(1, feature.Scratch.Engine);
+        Assert.NotEqual(7, feature.ArmourUnits(0));
     }
 
     [Fact]
@@ -117,7 +144,6 @@ public class HangarFeatureTests : IDisposable
         var feature = Feature();
         feature.Open(_store);
         feature.PickAirframe(4);
-        feature.AnswerDefaultsAsk(false);
 
         Assert.Equal("You must enter a name for your new plane.", feature.Refusal());
         feature.Scratch.Name = "Ace";
