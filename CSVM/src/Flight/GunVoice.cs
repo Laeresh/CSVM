@@ -21,7 +21,8 @@ public sealed record GunVoiceHome(Node3D Node, SoundArchive? Archive,
 /// own cue, moved to where it fires from and held sounding by a lease each renewal resets, so a
 /// firing spell is one continuous burst rather than a string of isolated clips. The cue is selected
 /// through <see cref="WeaponAudioCues"/>, the seam <see cref="AiWeaponAudio"/> and the pilot's own
-/// <see cref="FlightAudio"/> read too, and the cull is the cue's own authored audible distance.
+/// <see cref="FlightAudio"/> read too, and the cull is 1.1 times the cue's own authored audible
+/// distance.
 /// ⚠ One voice per mount, never one per owner: the original mints a sound slot per turret, so a
 /// zeppelin's rings each hold their own (docs/formats/turrets.md).
 /// </summary>
@@ -29,9 +30,15 @@ public sealed partial class GunVoice : Node3D
 {
     private const float SilenceThreshold = 0.002f;
 
+    // The margin the sound manager leaves over the RANGE pair's audible distance before it
+    // silences a voice. The pair drives the attenuation curve, so the cull sits outside that
+    // curve rather than on its end (docs/formats/turrets.md).
+    private const float CullMargin = 1.1f;
+
     private readonly Func<IReadOnlyList<Vector3>>? _listeners;
     private readonly AudioStreamPlayer3D _player;
     private readonly string _cue;
+    private readonly float _cull;
     private readonly float _cullSq;
     private readonly string _label;
     private readonly float _lease;
@@ -51,7 +58,8 @@ public sealed partial class GunVoice : Node3D
         float lease)
     {
         _cue = cue.Name;
-        _cullSq = cue.RangeMax * cue.RangeMax;
+        _cull = cue.RangeMax * CullMargin;
+        _cullSq = _cull * _cull;
         _listeners = listeners;
         _label = label;
         _lease = lease;
@@ -98,7 +106,7 @@ public sealed partial class GunVoice : Node3D
         }
         var voice = new GunVoice(cue, home.Listeners, label, leaseSeconds);
         home.Node.AddChild(voice);
-        Log.Info("sound", $"gun voice {label}: loop={cue.Name} cull={cue.RangeMax:0} m lease={leaseSeconds:0.00} s");
+        Log.Info("sound", $"gun voice {label}: loop={cue.Name} audible={cue.RangeMax:0} m cull={voice._cull:0} m lease={leaseSeconds:0.00} s");
         return voice;
     }
 
@@ -153,14 +161,16 @@ public sealed partial class GunVoice : Node3D
         _player.Stop();
     }
 
-    /// <summary>The emitter's cue name, world position and authored cull distance. Internal so an
-    /// emitter suite reads the pairing this path's log prints rather than inferring it.</summary>
-    internal (string Name, Vector3 Position, float RangeMax) Emitter() =>
-        (_cue, _player.GlobalPosition, _player.MaxDistance);
+    /// <summary>The emitter's cue name, world position, authored audible distance and the cull
+    /// past it. Internal so an emitter suite reads the pairing this path's log prints rather than
+    /// inferring it, the two distances included: they differ by the margin above.</summary>
+    internal (string Name, Vector3 Position, float RangeMax, float Cull) Emitter() =>
+        (_cue, _player.GlobalPosition, _player.MaxDistance, _cull);
 
-    // ⚠ The cull is the cue's OWN audible distance, not EngineAudioCurves.CullDistance: a turret
-    // loop is authored audible to 200 m, far inside the engine routine's 2000, so that number could
-    // never bite first and reading it here would be a borrowed constant.
+    // ⚠ The cull is the cue's OWN audible distance times the margin above, not
+    // EngineAudioCurves.CullDistance: a turret loop is authored audible to 200 m, far inside the
+    // engine routine's 2000, so that number could never bite first and reading it here would be a
+    // borrowed constant.
     private void Sound()
     {
         float distSq = AudioListeners.NearestDistanceSq(this, _listeners);
@@ -187,6 +197,6 @@ public sealed partial class GunVoice : Node3D
             return;
         }
         _culled = culled;
-        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {Mathf.Sqrt(distSq):0} m (cull {Mathf.Sqrt(_cullSq):0} m)");
+        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {Mathf.Sqrt(distSq):0} m (cull {_cull:0} m)");
     }
 }

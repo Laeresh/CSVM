@@ -27,18 +27,24 @@ internal static class TurretVoiceSuites
     // window plus a shot interval has to fit inside this.
     private const int ShotBudgetFrames = 1200;
 
+    // The margin the sound manager leaves over a definition's audible distance before it silences
+    // the voice (docs/formats/turrets.md). Held here as the decode's own figure rather than read
+    // off GunVoice, so a build that culls at the RANGE pair itself fails this suite.
+    private const float CullMargin = 1.1f;
+
     [Suite("turret-gun-voices",
         "every turret the data gives a voice is heard firing from its own mount (BL-793): over C4, "
         + "each piratezep gun ring builds its OWN positional snd_chaingun emitter rather than one "
-        + "shared per hull, taking that definition's authored RANGE audible distance as its cull "
-        + "rather than the engine routine's 2000, on the Effects bus at its source asset's pitch "
+        + "shared per hull, attenuated over that definition's authored RANGE audible distance and "
+        + "culled at 1.1 times it, the margin the sound manager leaves over the pair, rather than "
+        + "at the engine routine's 2000, on the Effects bus at its source asset's pitch "
         + "with Doppler tracking off; the voice sounds on the frame a round leaves the firepoint it "
         + "is placed at, is STILL sounding a quarter of a second later with no new round (the lease "
         + "the original renews per shot, not a clip restarted per projectile), goes quiet within "
-        + "that lease once the gun stows, and is silenced past the cue's own audible distance and "
-        + "sounds again inside it; a carried gunner builds the same voice under its host aircraft; "
-        + "and the two turret trucks and the zeppelin's twin cannon stay silent, which is what "
-        + "their own entries author")]
+        + "that lease once the gun stows, is STILL heard from just past the cue's own audible "
+        + "distance, is silenced past the 1.1x cull and sounds again inside it; a carried gunner "
+        + "builds the same voice under its host aircraft; and the two turret trucks and the "
+        + "zeppelin's twin cannon stay silent, which is what their own entries author")]
     internal static void TurretGunVoices(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -184,8 +190,9 @@ internal static class TurretVoiceSuites
                 ctx.Check(emitter.Position.DistanceTo(ears[0]) > 20f
                     && emitter.Position.Length() > 1f,
                     $"…which is neither the listener nor the world origin ({emitter.Position.DistanceTo(ears[0]):0} m from the ear)");
-                ctx.Check(Mathf.IsEqualApprox(emitter.RangeMax, cue.RangeMax),
-                    $"…culled at {TurretCue}'s own authored audible distance {emitter.RangeMax:0} m, not EngineAudioCurves' 2000");
+                ctx.Check(Mathf.IsEqualApprox(emitter.RangeMax, cue.RangeMax)
+                    && Mathf.IsEqualApprox(emitter.Cull, cue.RangeMax * CullMargin),
+                    $"…attenuated over {TurretCue}'s own authored {emitter.RangeMax:0} m and culled at {emitter.Cull:0} m, the {CullMargin:0.0}x of it the sound manager allows, not EngineAudioCurves' 2000");
                 CheckPlayers(ctx, voice);
 
                 // The lease, which is the whole difference between a firing spell and a string of
@@ -218,7 +225,9 @@ internal static class TurretVoiceSuites
                 ctx.Check(soundingAt24 && !voice.Sounding,
                     $"a stowed gun runs its lease out and goes quiet: sounding at 0.40 s={soundingAt24}, at 0.60 s={voice.Sounding}");
 
-                // The cull, driven from the listener rather than by moving the gun.
+                // The cull, driven from the listener rather than by moving the gun. Both placements
+                // are past the distance the definition calls audible and only the far one is past
+                // the margin over it, so a build culling at the RANGE pair itself fails the near.
                 ring.SetActivated(true);
                 if (!StepToShot(ring, Step))
                 {
@@ -226,10 +235,18 @@ internal static class TurretVoiceSuites
                     return;
                 }
                 var abeam = ears[0];
-                ears[0] = abeam + new Vector3(cue.RangeMax * 4f, 0f, 0f);
+                var muzzle = voice.Emitter().Position;
+                var away = (abeam - muzzle).Normalized();
+                ears[0] = muzzle + (away * (cue.RangeMax * 1.05f));
                 Step(1);
-                ctx.Check(!voice.Sounding,
-                    $"a burst {ring.WorldPosition.DistanceTo(ears[0]):0} m off, past the {cue.RangeMax:0} m the definition calls audible, is silent");
+                float justOut = voice.Emitter().Position.DistanceTo(ears[0]) / cue.RangeMax;
+                ctx.Check(voice.Sounding && justOut > 1f && justOut < CullMargin,
+                    $"a burst {justOut:0.00}x the {cue.RangeMax:0} m the definition calls audible is still heard, inside the margin the cull leaves over the RANGE pair");
+                ears[0] = muzzle + (away * (cue.RangeMax * 1.15f));
+                Step(1);
+                float wellOut = voice.Emitter().Position.DistanceTo(ears[0]) / cue.RangeMax;
+                ctx.Check(!voice.Sounding && wellOut > CullMargin,
+                    $"…and {wellOut:0.00}x it, past the {CullMargin:0.0}x cull at {emitter.Cull:0} m, is silent");
                 ears[0] = abeam;
                 Step(1);
                 ctx.Check(voice.Sounding,
@@ -252,10 +269,11 @@ internal static class TurretVoiceSuites
                 ctx.Check(carriedVoice.GetParent() == carrier,
                     $"…hung on the host aircraft, not on the world's sound node (parent '{carriedVoice.GetParent()?.Name}')");
                 ctx.Check(carriedVoice.Emitter().Name == TurretCue
-                    && Mathf.IsEqualApprox(carriedVoice.Emitter().RangeMax, cue.RangeMax),
-                    $"…on the same cue and the same authored cull as a world ring");
+                    && Mathf.IsEqualApprox(carriedVoice.Emitter().RangeMax, cue.RangeMax)
+                    && Mathf.IsEqualApprox(carriedVoice.Emitter().Cull, cue.RangeMax * CullMargin),
+                    $"…on the same cue, the same authored audible distance and the same {carriedVoice.Emitter().Cull:0} m cull as a world ring");
                 CheckPlayers(ctx, carriedVoice);
-                ctx.Note($"voices: {rings.Count} piratezep rings ({belly.Count} belly), {carried.Length} carried on {CarriedPlane}, {trucks.Count} truck(s) and {cannons.Count} twin cannon(s) silent; ring cue {TurretCue} cull {cue.RangeMax:0} m, lease {TurretController.VoiceLeaseSeconds:0.0} s");
+                ctx.Note($"voices: {rings.Count} piratezep rings ({belly.Count} belly), {carried.Length} carried on {CarriedPlane}, {trucks.Count} truck(s) and {cannons.Count} twin cannon(s) silent; ring cue {TurretCue} audible {cue.RangeMax:0} m, cull {emitter.Cull:0} m, lease {TurretController.VoiceLeaseSeconds:0.0} s");
             });
         }
         finally

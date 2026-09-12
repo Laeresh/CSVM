@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☐ A death choreography is only the def's death sequence
 24. ☐ `KeepsTheShot` holds only the episode that raised the ending
 25. ☐ A queued start past the budget still gets its zero-dt advance
-26. ☐ A turret voice culls at 1.1x its range, as decoded
+26. ☑ A turret voice culls at 1.1x its range, as decoded
 27. ☐ `ADD_OTHER_TARGET` and its remove reach the mode table's points
 28. ☐ The goldens README count and the re-pinned `exercises` fields
 29. ☐ Three stale doc lines after the landings
@@ -663,7 +663,34 @@ starts.
 **Verify.** `anim-call-start-order` suite green; the new unit reads all 600 advanced at zero dt;
 23 goldens identical.
 
-## C26 ☐ A turret voice culls at 1.1x its range, as decoded
+## C26 ☑ A turret voice culls at 1.1x its range, as decoded
+
+**Landed.** `GunVoice` carries a `CullMargin` constant of 1.1 with the decode pointer on it, and
+the cull is `cue.RangeMax * CullMargin` rather than `RangeMax` itself. The `RANGE` pair still
+drives the Godot attenuation curve (`UnitSize`, `MaxDistance`), so the two distances are now
+different numbers and `Emitter()` returns both: a suite that read only `MaxDistance` could not
+tell a 1.0x cull from a 1.1x one. Both voice suites hold the 1.1 figure themselves rather than
+reading it off `GunVoice`, and each now places the listener twice past the audible distance, at
+1.05x (still heard) and 1.15x (silent), so the margin is checked as behaviour and not only as a
+field. The turret suite's old far placement at 4x the audible distance passed at either
+multiplier and is replaced by that pair. The `sound` log and the suites' notes print the audible
+distance and the cull separately, 200 m and 220 m for `snd_chaingun`, 400 m and 440 m for
+`snd_turretgun`. `docs/architecture/Flight.md`'s `GunVoice` entry states the 1.1 and points at
+the decode page.
+
+**Verified.** <pending orchestrator run> The decode line is `docs/formats/turrets.md:159`:
+"Attenuation is the definition's own `RANGE` pair, silent past 1.1 x its audible distance
+(`FUN_00597c20`)", and `docs/formats/sounds.md:24` gives the pair as
+`RANGE [fullVolumeDist, audibleDist]`, so the quantity multiplied is `RangeMax`.
+`dotnet build CSVM/CSVM.sln` 0 warnings, 0 errors. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1`
+and `CheckEncoding.ps1` clean. `RunTests.ps1 -Suite "turret-gun-voices,surface-gun-voices"
+-SkipUnits -SkipGoldens`: PASS, 2 passed, 0 failed, engine errors clean. With the constant
+temporarily set to 1.0 the same run is FAIL, 0 passed, 2 failed: `turret-gun-voices` loses the
+emitter pin, the 1.05x hearing check and the carried gunner's matching cull, and
+`surface-gun-voices` loses the emitter pin and the 1.05x hearing check on both the patrol boat
+and the turret truck. No `GunVoice` unit test exists in `CSVM.Tests`.
+
+**Original approach (kept for reference).**
 
 **Goal.** The turret gun voice is silenced past 1.1 times the RANGE pair's audible distance, the
 figure the decode and `docs/formats/turrets.md:159` state.
