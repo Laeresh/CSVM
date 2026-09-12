@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 25. ☐ A queued start past the budget still gets its zero-dt advance
 26. ☑ A turret voice culls at 1.1x its range, as decoded
 27. ☐ `ADD_OTHER_TARGET` and its remove reach the mode table's points
-28. ☐ The goldens README count and the re-pinned `exercises` fields
+28. ☑ The goldens README count and the re-pinned `exercises` fields
 29. ☐ Three stale doc lines after the landings
 
 ## Dependency and parallelism notes
@@ -794,7 +794,31 @@ after B14.
 **Verify.** A unit with a constructed `ADD_OTHER_TARGET` reads the TRAVELERS point;
 `target-class-cycle` green.
 
-## C28 ☐ The goldens README count and the re-pinned `exercises` fields
+## C28 ☑ The goldens README count and the re-pinned `exercises` fields
+
+**Landed.** The README's opening sentence no longer carries a number: it reads "Pinned `--det`
+captures, each reduced to one md5; `manifest.json` lists them and is where the count is read", so
+adding or dropping a shot cannot make it wrong. Five `exercises` fields name what their shot now
+covers. `c2-city` gains the two mesh point lights that author no fade band and are therefore not
+culled at 5 m. `c1-flight`, `c1-targeting-hud` and `campaign-4p-grid` each gain the one distant C1
+point light that draws under its own authored fade band instead of a blanket lens-flare reach.
+`c1-stunt-marker` gains the player's ground shadow, which its low C1 pass takes by the same
+mechanism as the four shots re-pinned beside it. `campaign-4p-grid` also loses "in every pane",
+which was wrong: the shadow shows in three of its four panes. No hash, frame, name or argument
+line was touched. Six shots keep their field because it already names the mechanism that moved
+their pixels: `c1-crash` ("pooled repeat calls", "distance puffers"), `c1-debris-rest` ("its
+landing's own spark puffer"), `c1-destroy-effects` ("seeded puffers", "the player's ground
+shadow"), `c1-ai-wreck` ("the handover fireball", "the player's ground shadow"), `c1-cockpit`
+("the same held flight") and `empty-stage` ("quaternion attitude integration, chase camera").
+
+**Verified.** <pending orchestrator run> `CheckGoldenProse.ps1`: "golden manifest prose within
+contract"; the longest field is 248 characters. `CheckEncoding.ps1`: "no mojibake".
+`git diff --stat` names `analysis/goldens/README.md` and `analysis/goldens/manifest.json` only.
+`git diff -U0` on the manifest yields ten changed lines, every one of them containing
+`"exercises"`, and no changed line matching `"hash"`, `"frame"`, `"name"` or `"args"`. The file
+read `-Raw -Encoding utf8` still parses through `ConvertFrom-Json` at 23 shots.
+
+**Original approach (kept for reference).**
 
 **Goal.** `analysis/goldens/README.md` states the pinned count, and every shot re-pinned in the
 range carries an `exercises` field that says what the shot covers today.
