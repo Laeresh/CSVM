@@ -294,6 +294,11 @@ factor is 1 in play and the drifting light-dapple the code can do never runs.
 
 ### The cloud sprites, which is what the flag decides for
 
+Everything else the engine applies to one of these cards, all of it alpha, is
+[`cloudCards.md`](cloudCards.md): the authored colour reaches the diffuse unscaled, and the card's
+draw distance is scaled by the cosine of the viewing angle against its `fvol` polygon's normal.
+
+
 The `fvol` sprite card is one tri-strip quad lying in the model's XY plane (132.27 m square in C1,
 C1C, C2B and C4, with its corners wobbling between `z = −24.2` and `z = +17.6`, and 70 m square in
 C5), vertex colours 240, and every chapter's copy carries the same three authored normals under the

@@ -981,46 +981,67 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   some other mechanism; the flag does buy a per-vertex `N·L` on the `fvol` cards, which C1B ships
   none of.
 
-- `BL-327` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **What else the original applies to a cloud sprite: the far
-  field's fade and the 209 plateau** (minted at `BL-118`'s close, PLAN-overcast-match `C24`,
-  the fifth candidate `C23` raised and deliberately did not guess at.) One item,
-  because both open questions below are the same question (*what does the original apply to a
-  cloud sprite*), and any answer to one constrains the other.
-  *The flag half is decoded and closed* (`docs/org/vertexLighting.md`'s facade section, the
-  function addresses and populations there). `lighting: true` on a `Facade` card **is** a gate on
-  the same per-vertex sun the rest of the world takes, reached by the same draw, but what it admits
-  is `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated per vertex on the card's own three authored
-  normals carried through the billboard basis, so a lit card is shaded across its face and swings
-  with the heading rather than being multiplied by one `WorldLight`. Two consequences stand here.
-  (a) **It does not explain the plateau:** C1 and C4, whose frames the 208.8 measurement comes
-  from, author `lighting: false`, so no lighting term reaches their cards at all. (b) **It does
-  change what we should do at C1C/C2B/C5**, where the cards are lit and we apply a flat
-  `csky_world_light` instead of the per-vertex term; that is a look change on a visible population,
-  owed a verdict at the controls (`PT-47` (d)) before any code moves, and it replaces the current
-  reading rather than stacking on it. Today's frame at C1C is the flat-multiply one: placed
-  `cloudparent` facades **235.25**, un-dimmed deck floor **195.8**, `fvol` cards **163.7**
-  (measured 163.24 / 163.83; C2B 163.24), cloud-population spread **71.6**.
-  *Evidence (the far field):* at the CAP-12 1700 m rung `tops-L`/`tops-R` sit **+14.9 / +29.0**
+- `BL-327` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A cloud sprite's draw distance is scaled by the
+  viewing angle against its `fvol` polygon's normal, and our flat `far_fade` plus a colour TUNE
+  stands in for it** (minted at `BL-118`'s close, PLAN-overcast-match `C24`; the fifth candidate
+  `C23` raised and deliberately did not guess at.) The decode is done and is on
+  `docs/org/cloudCards.md` with every address; what is left is landing it.
+  *Evidence (decoded):* **nothing in the original scales a cloud card's colour.** The authored
+  per-vertex 240 is copied into the Direct3D diffuse unchanged for an unlit card (`FUN_00554550`
+  with the zero mask `FUN_00552020` returns), the card's texture is a **constant-RGB 239 alpha
+  mask** in every tier (`cloud1.png`/`cloud2.png`, max alpha 254), and the fog factor rides the
+  specular alpha, which a `fog: false` card is submitted with at 255. Every per-card term is alpha,
+  and the one that matters is the clutter fade in `FUN_004d5de0`: each sprite carries
+  `FUN_0044c1c0` at `+0x58` and its own `fvol` polygon's interned world normal at `+0x5c`
+  (`FUN_0044e870`), giving `c = max(0, dot(n, unit(eye − p)))`, and the fade tests
+  `c²·near²` and `c²·far²` against `DAT_0062d170·d²`. On a slab's top face `c = dy/d`, so a card is
+  opaque out to `sqrt(dy·near)` and gone past `sqrt(dy·far)`. The band itself is **per sprite**:
+  `FUN_0044c780` draws one `t` and interpolates *both* authored `far_fade_range` pairs
+  (C1 `[[2000,3000],[3100,3500]]`), so `near = 2000+1100t`, `far = 3000+500t`.
+  `DAT_0062d170` is 1.0 at `detail.zrd`'s `EffectsLevel_HW` `HIGH` (`CPU_MHZ >= 600`, name table
+  `0x006232c8`), which is every retail capture, so the authored metres apply as they stand.
+  *Fix shape:* replace the shader's `1 − smoothstep(far_fade.x, far_fade.y, d)` with the decoded
+  law (linear in `d²`, per-sprite band, times the view-angle cosine) and **delete**
+  `CardVertexColorTune`, restoring the authored 240. The four deck chapters' map-spanning slabs
+  need no new data (their face normal is `+Y`, the same population `TopAnchorHeightFactor` already
+  classifies), so the cosine is `(camY − spriteY)/d` in the card shader; C1C's build-up frusta and
+  C5's street prisms have sloped and vertical faces and need the normal carried per instance, which
+  is what makes this `[M]` rather than `[S]`. Per-sprite `t` rides an instance custom-data channel.
+  *Evidence (what it must move):* at the CAP-12 1700 m rung `tops-L`/`tops-R` sit **+14.9 / +29.0**
   over the altitude-matched `t97` original (were +20.1 / +30.4 before `M-a`, which neither fixed
   nor worsened it), and at the pinned above-deck pose the original frame carries **74 dead-flat
   rows at `FOG_COLOR` 175 (10.4 % of frame, rows 517–590)** between dome and near sheet while ours
-  carries **zero**, our `far_fade` rim steps where the original ramps over ~240 rows. A
-  distance/fade question about the card population, on the same surface as the flag question.
-  *Evidence (the plateau):* the `225/240` `CardVertexColorTune` in `FogVolumeClutter.BuildCardMesh`
-  has **no decoded mechanism**, it is a calibrated match to the original's measured plateau
-  (208.88 `t124` / 209.16 `t59`), marked TUNE in the constant's own comment, and anything that
-  decodes the real mechanism **replaces** it rather than joining it.
-  ⚠ **Traps, four candidates `C23` already refuted on data; do not re-chase them.** (1) *A
-  `cloudsprite` opacity like `cloudparent`'s 0.6:* `extracted/C1/zrdr/clouds.zrd.json` read in
-  full is one `ANIMATION_DEFINITION` naming `cloudparent` only, C1 is the only chapter shipping a
-  `clouds.zrd`, and a sweep of every `zrdr/*.json` in all eight chapters names `cloudsprite` only
-  in the eight `fogvol.zrd` files. (2) *`WorldLight` on C1's cards:* 0.802 puts them at 178.6,
-  *below* the original's own 204.9–213.3 at the 1160 m rung, and the decode settles it outright,
-  since C1's cards author `lighting: false` and the original's gate never admits a light to them. (3) *Fogging the cards:* the same
-  clutter reader's tree templates all author `fog: true`, the world's placed cloud facades author
-  `fog: true`, and `B16` verified the flag is honoured, `fog: false` on the card is a deliberate
-  authored distinction. (4) *Carrying the field up with the relocated deck:* puts card tops at
-  1177–1277 m against CAP-12's measured "clear above by ~1128 m".
+  carries **zero**, our `far_fade` rim stepping where the original ramps over ~240 rows. The law
+  predicts both: at `dy` = 608 m the original's field ends at 1,350–1,459 m against our flat
+  3,500 m, and past it the frame shows the fogged deck at `FOG_COLOR`. The plateau half is the same
+  mechanism at a grazing pose: at `t124` (1,208 m, `dy` 118 m) the original's field is a **~600 m
+  disc**, where ours runs to 3,500 m and reads a near-saturated 222.7 at the authored 240 against
+  the original's 208.88 / 209.16 (`t124`/`t59`). Ceiling check: a card cannot exceed
+  `239 × 240/255 = 224.9`, so 209 is 32 % of the background showing through, a coverage number
+  (`docs/verification.md` SHOT-34).
+  *The lighting-flag clause, unchanged and still owed a look.* `lighting: true` on a `Facade` card
+  admits `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on the card's own three authored normals
+  through the billboard basis (`docs/org/vertexLighting.md`), not a flat multiply. It does not
+  touch the plateau (C1 and C4 author `lighting: false`), but it **does** change what we should do
+  at C1C/C2B/C5, where we apply a flat `csky_world_light`; that is a look change on a visible
+  population, owed a verdict at the controls (`PT-47` (d)) before any code moves, and it replaces
+  the current reading rather than stacking on it. Today's frame at C1C is the flat-multiply one:
+  placed `cloudparent` facades **235.25**, un-dimmed deck floor **195.8**, `fvol` cards **163.7**
+  (measured 163.24 / 163.83; C2B 163.24), cloud-population spread **71.6**.
+  ⚠ **Do not stack anything on `CardVertexColorTune` and do not re-calibrate it.** It corrects a
+  colour where the decode says the gap is coverage, so the fade law replaces it outright. The four
+  candidates `C23` refuted on data stay refuted and are not worth re-chasing: a `cloudsprite`
+  opacity (no chapter's `zrdr` names one), `WorldLight` on C1's cards (0.802 puts them at 178.6,
+  below the original's own 204.9–213.3 at the 1160 m rung, and their `lighting: false` settles it),
+  fogging the cards (`fog: false` is a deliberate authored distinction, honoured, and the specular
+  path above confirms it), and carrying the field up with the relocated deck (card tops at
+  1177–1277 m against CAP-12's "clear above by ~1128 m").
+  ⚠ **Our scatter is the other half of the divergence, and it is not this item.** The original
+  scatters over each `fvol` polygon's face on a staggered lattice of `distance × sqrt(3)/2` by
+  `distance` in that polygon's own plane, where we fill a volume's interior with square cells
+  anchored on the world origin (`docs/org/cloudCards.md`, `docs/formats/fogvol.md`). That is what
+  supplies the per-sprite normal the fade law wants, so a faithful C1C/C5 fade may end up waiting
+  on it; the deck chapters' `+Y` shortcut is what keeps the two separable.
   ⚠ **Instrument:** `population.py`'s flat-red deck mask (`r > 200`) can only see an **un-dimmed**
   deck in a 0.784-`WorldLight` chapter, `255 × 0.784 = 200.0` is exactly the threshold, so
   C1C/C2B read `0.0 %` mesh before `M-a` and `6.8 %` / `0.9 %` after. That is the mask waking up,
@@ -1032,7 +1053,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* C1C and C2B above their band (`--chapter=C1C --pos=-7323,1192,-3829
   --direction=0,0,-1`, and C2B's `-3843,1500,-1101 / -0.391,0,-0.921`), plus a C1 re-check that
   the two reference stills did not move; and the CAP-12 1700 m rung for the far-field half.
-  *Cross-refs:* `PT-47` (d) judges the C1C split at the controls, `BL-325`,
+  *Cross-refs:* `PT-47` (d) judges the C1C split at the controls, `BL-325`, `BL-874` (the scatter
+  half of the same decode), `docs/org/cloudCards.md` (this item's decode, every address),
   `docs/formats/fogvol.md`, `docs/org/vertexLighting.md` (the facade decode).
 
 - `BL-328` `[Tuning]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: data]` **The deck floor's 20,480 m annulus half-span was sized against a mechanism
@@ -1200,6 +1222,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   moves C5's dark band out by 1.74x and does not remove it; the band itself is `BL-538`'s open
   look, and this item is not evidence about it. *Cross-refs:* `BL-538`, `docs/verification.md`
   WORLD-38, `docs/org/textures.md`.
+
+- `BL-874` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original
+  scatters the cloud field over each `fvol` polygon's FACE on a staggered lattice; we fill a
+  volume's interior with square cells anchored on the world origin.** *Evidence:* decoded in
+  `docs/org/cloudCards.md`. `FUN_0044dc90` walks the `fvol` mesh polygon by polygon (skipping
+  polygon flag `0x800`, splitting a triangle strip into triangles) and calls the scatter
+  `FUN_0044c780` per polygon; the lattice is laid in that polygon's own plane on the basis
+  `U = unit(v1−v0)`, `V = cross(U, n)`, with steps `distance × sqrt(3)/2` and `distance`, each
+  extent cut into a whole number of steps, **every other row offset by half a step**, and each
+  point tested against the polygon's own outline (`FUN_0044c310`). The perpendicular offset runs
+  along `unit(p − ref)` from a per-volume reference point, the perturbation is an independent draw
+  on all three axes from one random magnitude, and the scale is one uniform draw. *Fix shape:*
+  scatter per authored face rather than per volume interior; the density reading (`distance` as a
+  mean spacing) survives, and the top-anchored placement rule is what the face scatter already
+  produces for a slab, so the deck chapters should move least. *⚠ Traps:* this is the mechanism
+  that supplies the per-sprite polygon normal `BL-327`'s fade law needs, so land the two in that
+  order or accept `BL-327`'s `+Y` shortcut for the deck chapters only. Counts will move in every
+  chapter and every cloud golden with them; the C1C build-up frusta and C5 street prisms scatter
+  on their sloped and vertical faces, which reads as a shell rather than a filled mass and is the
+  change most worth a look. *Cross-refs:* `BL-327`, `PT-47` (e), `docs/formats/fogvol.md`.
 
 ## Effects & animation runtime
 

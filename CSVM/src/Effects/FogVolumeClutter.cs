@@ -33,11 +33,11 @@ public sealed partial class FogVolumeClutter : Node3D
     private const float TopAnchorHeightFactor = 1.5f;
 
     // TUNE: the fvol cards' authored vertex colour 240 scaled to 225, applied in BuildCardMesh.
-    // No decoded mechanism, four candidates are refuted on data; see docs/formats/fogvol.md's
-    // "sprite templates" section for the measurements.
-    // ⚠ Do not stack a mechanism onto this constant if one is found; replace it instead.
-    // ⚠ fvol cards only, the placed cloudparent facades keep their own authored rules (vcol 255,
-    // range-gated opacity); see fogvol.md.
+    // ⚠ It corrects a colour where the decoded gap is COVERAGE (docs/org/cloudCards.md): nothing
+    // in the original scales a card's colour. Replace it with the decoded fade law, never with
+    // another colour, and never re-calibrate it.
+    // ⚠ fvol cards only: the placed cloudparent facades keep their own authored rules
+    // (vcol 255, range-gated opacity); see fogvol.md.
     private const float CardVertexColorTune = 225f / 240f;
 
     /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
@@ -407,7 +407,7 @@ public sealed partial class FogVolumeClutter : Node3D
         var (found, skipReason) = FogVolumeSpec.FindMapSpanningSlab(volumes, cardHeight, TopAnchorHeightFactor);
         if (skipReason != null)
         {
-            string msg = $"fogvol: map-edge continuation skipped — {skipReason}";
+            string msg = $"fogvol: map-edge continuation skipped, {skipReason}";
             Log.Info("world", $"{msg}");
         }
         if (found is not { } slab)

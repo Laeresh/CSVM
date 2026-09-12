@@ -174,6 +174,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   edge once and never releases, and a menu row fires on the release on it, so a run aimed at a live
   plaque shoots the held frame and nothing behind it. Reading that shot as the button doing nothing
   is the error the aid invites.
+- **SHOT-34**, **Before attributing a brightness gap on a blended population to a colour term,
+  check whether its texture carries any colour at all; a constant-RGB alpha mask makes the gap a
+  coverage measurement.** Every texel of `cloud1`/`cloud2` is RGB 239 with the whole image in the
+  alpha channel, so an `fvol` card has exactly one colour and one rendered ceiling
+  (239 × 240/255 = 224.9); the original's measured 209 plateau is 32 % of the fogged background
+  showing through, and a vertex-colour scale calibrated to it corrects the wrong quantity
+  (`docs/org/cloudCards.md`).
 
 ## GOLD, golden images
 

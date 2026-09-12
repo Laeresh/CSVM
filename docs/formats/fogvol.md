@@ -5,7 +5,8 @@ world's invisible fog volumes with cloud sprites, the original's ambient cloud f
 Consumed by `CSVM/src/Mech3/FogVolumes.cs` (reader + volume census + the in-volume whiteout rule,
 `FogVolumeWhiteout`), `CSVM/src/Effects/FogVolumeClutter.cs` (the scatter and the render) and
 `CSVM/src/Session/WeatherRig.cs` (the whiteout overlay). Which key reaches which consumer:
-[Consumed by the remake](#consumed-by-the-remake).
+[Consumed by the remake](#consumed-by-the-remake). What the original's own scatter and card draw do
+with these keys, decoded from the executable, is [`../org/cloudCards.md`](../org/cloudCards.md).
 
 **The format is two halves that only mean something together.** The reader says *what* to
 scatter and *how densely*; the gamez says *where*. Neither alone tells you a chapter has clouds:
@@ -42,7 +43,7 @@ A `clutter` block:
 |---|---|---|
 | `weight` | `[float]` | This block's weight among the table's alternatives |
 | `nodes` | `[[weight, name], …]` | The gamez clutter-template roots this block may place, with their own weights |
-| `far_fade_range` | `[[a,b],[c,d]]` | **Two** fade bands (metres, start → gone), the same pairing `templates.zrd` uses for ground clutter, i.e. per detail level |
+| `far_fade_range` | `[[a,b],[c,d]]` | **The two endpoints of a per-sprite fade band** (metres, start → gone). The engine draws one random `t` per placement and interpolates both pairs with it, so a sprite's band is `[a+t(c−a), b+t(d−b)]`; it never picks one of the two ([`../org/cloudCards.md`](../org/cloudCards.md)) |
 | `perp_dist_range` | `[min,max]` | Offset perpendicular to the volume's horizontal plane (vertical metres) |
 | `perturb_dist_range` | `[min,max]` | Displacement from the drawn point within that plane |
 | `scale_range` | `[min,max]` | Multiplier on the template sprite's own authored size |
@@ -118,8 +119,11 @@ per-frame consumer `FUN_0042ee40`, the same frame update that runs the `CLOUD_CO
 - **The whole load runs under a FIXED seed:** `srand(0x9b3a9ce2)` at entry, restored to
   `srand(time())` at exit, so every `rand()` the original's scatter draws is the same sequence
   every launch. The original's field is deterministic by construction (the remake's own seeded
-  `Rng` reproduces the *property*, not the sequence, matching the original's exact placements
-  would additionally need its scatter loop decoded, which this pass did not do).
+  `Rng` reproduces the *property*, not the sequence).
+- **The scatter itself is decoded**, in [`../org/cloudCards.md`](../org/cloudCards.md): the original
+  scatters over the volume mesh's **faces**, polygon by polygon, on a staggered lattice of
+  `distance × sqrt(3)/2` by `distance` in each polygon's own plane. That page also holds what the
+  engine applies to a placed card, which is entirely alpha and nothing else.
 - **The engine's defaults equal the "vestigial" C1B/C2/C3 values.** Absent keys default to
   `distance` 206.25, `far_fade_range` [2500,3500]×2, `perturb_dist_range` [82.5, 82.5],
   `perp_dist_range` [151.25, 151.25], `scale_range` [0.85, 1.15], the degenerate copies simply
@@ -207,8 +211,14 @@ own quad centre to within 3 mm.
 ⚠ **We render those cards at vertex colour 225, not the authored 240**, a marked TUNE
 (`FogVolumeClutter.CardVertexColorTune`, the user's verdict at the controls),
 applied to RGB only and never to alpha. The authored value is what this page says it is and is
-unchanged as a decode; what the TUNE fixes is a rendered-brightness gap with **no decoded
-mechanism**. `236.65 × 240/255 = 222.7` is what the naive reading gives and it is what we shipped;
+unchanged as a decode; what the TUNE fixes is a rendered-brightness gap whose mechanism **is now
+decoded, and is not a colour at all**: the card's colour reaches the vertex diffuse unchanged, the
+texture is a constant-RGB 239 alpha mask, and the original's own per-sprite draw distance is scaled
+by the cosine of the viewing angle against its `fvol` polygon's normal, which thins the field to a
+fraction of ours at exactly the grazing poses the 209 plateau was measured in
+([`../org/cloudCards.md`](../org/cloudCards.md)). The measurements below stand; what changes is that
+the quantity to correct is coverage. `236.65 × 240/255 = 222.7` is what the naive reading gives and
+it is what we shipped;
 **nothing in five independent original above-band frames renders at 222.7**, and the original's
 saturated plateau measures **208.88** (`t124`, 1208 m) and **209.16** (`t59`, 1219 m) in a
 near-field, fog-free patch, with whole-frame `p99` topping out at 213–216. `236.65 × 225/255 =
@@ -259,14 +269,20 @@ degenerate ranges).
 
 - **The card's RENDERED brightness, vertex colour 240 scaled to 225 (`CardVertexColorTune`).**
   The authored 240 is decoded and unchanged; the scale is a TUNE calibrated to the original's
-  measured 209 plateau, with no mechanism behind it and four candidates refuted. Full statement
+  measured 209 plateau. ☑ **The mechanism it stands in for is now decoded and is an ALPHA term, so
+  this constant is a stand-in for the wrong quantity:** nothing in the original scales a card's
+  colour, its texture is a constant-RGB 239 alpha mask, and its draw distance is scaled by the
+  cosine of the viewing angle against its `fvol` polygon's normal, which shrinks the field to a
+  ~600 m disc at the grazing poses the plateau was measured in
+  ([`../org/cloudCards.md`](../org/cloudCards.md)). Four candidates were refuted before that;
+  full statement
   under [The sprite templates](#the-sprite-templates) above. ⚠ The card's `lighting` flag is not the
   missing mechanism, and it is decoded rather than open: it gates the sun on a facade exactly as it
   does on any model, but what it admits is a per-vertex `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated
   on the card's own three authored normals carried through the billboard basis, never a flat
   `WorldLight` multiply ([`../org/vertexLighting.md`](../org/vertexLighting.md)'s facade section).
   C1 and C4, whose footage the 208.8 plateau was measured in, author `lighting: false`, so no
-  lighting term reaches their cards at all and this TUNE still has nothing behind it.
+  lighting term reaches their cards at all.
 - **`distance` is the scatter's mean spacing, an areal density, not a lattice period.** Each
   volume is cut into `distance` × `distance` cells anchored on the world origin and each cell gets
   **one placement drawn uniformly inside it**, with `perturb_dist_range` applied on top. The
@@ -300,9 +316,15 @@ degenerate ranges).
 - **`perp_dist_range` is vertical.** "Perpendicular" to the volume's horizontal plane. The
   asymmetry supports it: `cloudsprite1` gets `[-5, 5]` and `cloudsprite2` `[-5, 10]`, so one kind
   floats slightly higher, which is a reading a horizontal offset makes no sense of.
-- **`far_fade_range[1]` is what to draw at.** The pair is per detail level (`templates.zrd`
-  authors it the same way, e.g. `firtree1` `[[500,1000],[1000,2000]]`); the remake has no
-  reduced-detail mode, so it takes the farther band. Both are read and kept.
+  ⚠ **The decode narrows this**: the original displaces the placement along the direction from a
+  per-volume reference point to the sample point, which on a slab's top face is up near the middle
+  and tilts outward towards the rim, so "vertical" is right in effect for the deck chapters and is
+  an approximation in general ([`../org/cloudCards.md`](../org/cloudCards.md)).
+- ~~**`far_fade_range[1]` is what to draw at**, the pair being per detail level.~~ **Struck: the
+  decode says the two pairs are the endpoints of a per-sprite interpolation** and the engine never
+  selects one of them ([`../org/cloudCards.md`](../org/cloudCards.md)). Both are still read and
+  kept; taking the farther band alone is now a known divergence, not a reading. The detail level
+  enters somewhere else entirely, as a factor of 1, 4 or 9 on the squared distance.
 - **The vertical spread is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones, the anchor
   IS per-volume-shape, settled `A3` and verified at the render.** C4's clear air at
   1135 m (`CAP-12` C4 take) falsified a uniform fill: 132.3 m cards
@@ -443,10 +465,13 @@ degenerate ranges).
   `zone_id` mismatches that blocked the "selector" reading (C1's 0 against `zone_id: 2`) were
   never a contradiction, because the value was never an index. `BL-277`'s geometry rule stands
   as landed.
-- **The engine's exact cell phase**, the remake anchors the cells on the world origin. Under the
-  density reading this is a far weaker choice than it was under the grid reading (a phase shift
-  moves which cell a placement is drawn in, not where the placements line up), but it is still not
-  read from data. Same unknown as [clutter.md](clutter.md)'s template alignment.
+- ~~**The engine's exact cell phase**, the remake anchoring its cells on the world origin.~~
+  **Struck: the cell layout is decoded** ([`../org/cloudCards.md`](../org/cloudCards.md)). The
+  original lays a staggered lattice in each `fvol` **polygon's** own plane, anchored on that
+  polygon's projected minimum corner, with steps `distance × sqrt(3)/2` and `distance` and every
+  other row offset half a step. Ours is a square lattice of `distance × distance` cells over a
+  volume's interior anchored on the world origin, which is a known divergence rather than an
+  unknown. The density reading it was chosen under is unaffected.
 - **The map-edge continuation's radius is a TUNE, like `A3`'s `TopAnchorHeightFactor`.** `A5`
   bounds the extension to the largest authored `far_fade.y` (3,500 m, every shipped deck chapter)
   rather than to `MapEdgeExtender`'s own reach (5,120 m), a budget decision matched to the
