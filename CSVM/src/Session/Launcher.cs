@@ -334,12 +334,12 @@ public partial class Launcher : Node3D
         // Both ends of the physics-tick bracket (see PhysicsTickCost). At the launcher rather than
         // the session, because the pair must survive a session rebuild for the tick rate either
         // side of one to be comparable.
-        AddChild(PhysicsTickBracket.Make(false));
-        AddChild(PhysicsTickBracket.Make(true));
+        AddChild(PhysicsTickCost.MakeBracket(false));
+        AddChild(PhysicsTickCost.MakeBracket(true));
 
         // The same pair around the process pass (see ProcessPassCost), for the same reason.
-        AddChild(ProcessPassBracket.Make(false));
-        AddChild(ProcessPassBracket.Make(true));
+        AddChild(ProcessPassCost.MakeBracket(false));
+        AddChild(ProcessPassCost.MakeBracket(true));
 
         // Load the optional tuning-override file first, before any module reads a Config value.
         // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.

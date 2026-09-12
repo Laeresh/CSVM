@@ -101,9 +101,19 @@ the frame's wall cost, so the scopes and the `frame_ms` they ran inside describe
 site vocabulary, the seeded call sites and the attribution terms a record carries:
 [../org/hitch.md](../org/hitch.md).
 
+## src/Utils/WallCostBank.cs
+One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single
+span, the spans that closed, and a tally carried alongside them (the planes an AI walk stepped).
+`PhysicsTickCost`, `ProcessPassCost` and `AiStepCost` are three instances behind static facades
+that name their own terms and drop the slots their readout does not print, so the drain semantics
+are written once: a close with no open standing banks nothing, a reset drops a half-open span, and
+a span still open at the drain is carried whole into the next window. `WallCostBracket` is the node
+that opens or closes one end of a pair, named from the bank's label and pinned to an extreme of the
+process or the physics priority order.
+
 ## src/Utils/PhysicsTickCost.cs
 The wall cost of one whole Godot physics tick and how many ticks a wall second actually got,
-measured by two `PhysicsTickBracket` nodes pinned to the extremes of the physics priority order so
+measured by two `WallCostBracket` nodes pinned to the extremes of the physics priority order so
 the pair spans every `_PhysicsProcess` callback in the tree. `Take()` drains the window as total
 milliseconds, the worst single tick in it and the tick count; `NominalHz` turns that count into the
 sim seconds a wall second bought, which is what shows a sim running at half speed. Godot's
@@ -111,22 +121,23 @@ sim seconds a wall second bought, which is what shows a sim running at half spee
 `docs/verification.md` PERF-21.
 
 ## src/Utils/ProcessPassCost.cs
-The wall cost of one whole `_Process` pass, measured by two `ProcessPassBracket` nodes pinned to
-the extremes of the process priority order so the pair spans every `_Process` callback in the tree.
+The wall cost of one whole `_Process` pass, measured by two `WallCostBracket` nodes pinned to the
+extremes of the process priority order so the pair spans every `_Process` callback in the tree.
 `Take()` drains the window as total milliseconds, the worst single pass in it and the pass count
 the `--perf` window means over; a caller reading from inside the pass gets the frame in progress in
-its next window instead. `PhysicsTickCost` above is the same shape around the physics tick. Godot's
+its next window instead. `PhysicsTickCost` above is the same bank around the physics tick. Godot's
 `TIME_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-1.
 
 ## src/Utils/AiStepCost.cs
 The wall cost of the flight roster's AI walks and how many aircraft they walked, banked by an
-`Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft`. It is the only `--perf`
-term that attributes frame cost to the AI: `proc_ms` and `phys_tick_ms` bracket whichever callback
-the clock mode makes the walk ride, so a plane-count sweep otherwise reads only as a whole-frame
-differential. `Take()` drains the window as total milliseconds, the walk count and the summed plane
-count, and `ai_ms` divides that total by FRAMES rather than walks, since a parent-driven clock runs
-several walks in one rendered frame. Presentation for the same aircraft stays in `proc_ms`.
+`Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft` rather than by bracket
+nodes, since no priority order isolates the walk from the callback it rides. It is the only
+`--perf` term that attributes frame cost to the AI: `proc_ms` and `phys_tick_ms` bracket whichever
+callback the clock mode makes the walk ride, so a plane-count sweep otherwise reads only as a
+whole-frame differential. The plane count rides the bank's tally slot, so `ai_planes` comes off the
+same bracket as `ai_ms`, which divides its total by FRAMES rather than walks.
+
 ## src/Utils/GcTrace.cs
 The `--perf` GC readout: one `[perf] gc` line per ten wall seconds carrying the pause the process
 spent, the collections it spent it in, the bytes allocated, and how many FINALIZABLE objects died,

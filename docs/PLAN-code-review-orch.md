@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Judgement calls
 
-11. ☐ One stopwatch bank for the three `--perf` cost meters
+11. ☑ One stopwatch bank for the three `--perf` cost meters
 12. ☑ `TemplateStage` freed-key walk shared
 13. ☑ One `Play` delegate and one `Once` for the three cinemas
 14. ☐ `ObjectiveSites` collects both target classes through one method
@@ -351,7 +351,28 @@ change its line count and fail a cap that passed.
 
 # Wave B — Judgement calls
 
-## B11 ☐ One stopwatch bank for the three `--perf` cost meters
+## B11 ☑ One stopwatch bank for the three `--perf` cost meters
+
+**Landed.** `CSVM/src/Utils/WallCostBank.cs` holds the meter (`_openedAt`, the banked milliseconds,
+the worst span, the spans closed and a tally slot) plus `WallCostBracket`, the one bracket node,
+which takes the bank it wraps, names itself from the bank's label and brackets either clock.
+`AiStepCost`, `ProcessPassCost` and `PhysicsTickCost` are thin facades over one instance each: all
+three test classes write the ambient statics, so all three facades stay, and each keeps only the
+terms its readout prints (`AiStepCost` the plane tally, the other two the worst span). The two
+bracket types are gone; `Launcher._Ready` builds the four nodes through
+`PhysicsTickCost.MakeBracket` / `ProcessPassCost.MakeBracket`, which keeps the bank private.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean (0 warnings, 0 errors);
+`CheckCommentCaps.ps1` and `CheckDocEntries.ps1` both clean; `RunTests.ps1 -UnitFilter
+"FullyQualifiedName~Cost" -SkipEngine -SkipGoldens` 28 passed of 28 and the `PerfSample` filter 15
+of 15; `RunTests.ps1 -Perf -PerfFilter empty -PerfFrames 200 -PerfIterations 1` printed every key
+with both clocks live, `[perf] window sim_frame=120 frames=60 wall_ms=553.07 fps=108.5
+frame_ms=9.22 script_ms=14.34 proc_ms=0.423 proc_max_ms=3.848 proc_passes=60 ai_ms=0.000
+ai_planes=0.0 render_cpu_ms=0.27 gpu_ms=0.11 physics_ms=0.07 phys_tick_ms=0.008
+phys_tick_max_ms=0.033 phys_hz=59.7 draws=118.0 prims=2037.0 nodes=407.0 mem_mb=141.66
+max_ms=19.95 p95_ms=10.61`.
+
+**Original approach (kept for reference).**
 
 **Goal.** `AiStepCost`, `ProcessPassCost` and `PhysicsTickCost` share one bank type and the two
 bracket nodes share one implementation, with the `--perf` readouts unchanged.
