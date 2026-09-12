@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☐ `ObjectiveSites` collects both target classes through one method
 15. ☐ `CameraController` reads its tuning through `_camParams` and names its views
 16. ☐ `CinemaSkips` without the repeated arms and the mirror enum
-17. ☐ The export set out of `SelectionService`
+17. ☑ The export set out of `SelectionService`
 18. ☐ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
 
 ### Wave C — Spec fixes
@@ -505,7 +505,28 @@ touch `BootSequence.cs`.
 **Verify.** `cinema-skip-pad` suite and the skip units green, including "any" on the boot
 sequence meaning any input (`BL-810`).
 
-## B17 ☐ The export set out of `SelectionService`
+## B17 ☑ The export set out of `SelectionService`
+
+**Landed.** `CSVM/src/UI/ExportSet.cs` is a new `Node` holding the members, their cyan outline
+boxes, the toggle, the clear and the combined glTF write (the last moved off `NodeLab`). The node
+lab owns it, adding it as a child in `_Ready` so a Ctrl+click set is gathered whether or not the
+panel is opened. `SelectionService` keeps pick, ladder and HUD and reports a modified pick through
+a new `CtrlPicked` event; a tool appends its own breadcrumb line through the new `HudLine`
+supplier and re-renders it with `RefreshHud`, which keeps the HUD text identical without the
+service knowing what an export is. The wireframe helpers `NewBoxInstance` and `DrawBox` became
+`internal static` there, alongside `SubtreeWorldAabb`, since both tools draw the same box.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings;
+`CheckCommentCaps.ps1` and `CheckDocEntries.ps1` both clean. Units: 20/20 passed on
+`FullyQualifiedName~Export`, 49/49 on `~Selection`. Engine suites `terrain-pick-export` (the set's
+own suite: two Ctrl+clicks, the merged glTF read back, the nested-member case, then clear) and
+`nodelab-visibility` both PASS with engine errors clean. Log lines, HUD text and the glTF call are
+unchanged by construction. A manual Ctrl+click check from a `--freecam` session would confirm the
+part no suite drives: that a real Ctrl+click still reaches the set through the new event, that the
+cyan box appears and rides a moving member, and that the breadcrumb's `export set N node(s)` line
+reads as before.
+
+**Original approach (kept for reference).**
 
 **Goal.** `SelectionService` owns pick, ladder and HUD; the node lab's Ctrl+click export set
 lives in its own module.

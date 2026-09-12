@@ -45,6 +45,7 @@ public sealed partial class NodeLab : Node
 
     private readonly Node3D _world;
     private readonly SelectionService _selection;
+    private readonly ExportSet _set;
     private readonly AnimRuntime? _runtime;
     private readonly AnimProgram? _program;
     private readonly SceneBuilder? _scene;
@@ -80,6 +81,7 @@ public sealed partial class NodeLab : Node
     {
         _world = world;
         _selection = selection;
+        _set = new ExportSet(selection);
         _runtime = runtime;
         _program = program;
         _scene = scene;
@@ -144,6 +146,9 @@ public sealed partial class NodeLab : Node
 
     public override void _Ready()
     {
+        // The set joins the tree whether or not the panel is ever opened: Ctrl+click gathers it
+        // through the selection, and it draws nothing until a node is in it.
+        AddChild(_set);
         _selection.Changed += OnSelectionChanged;
         if (DebugSpec != null)
         {
@@ -287,25 +292,8 @@ public sealed partial class NodeLab : Node
             Log.Info("ui", $"nodelab set — nothing is selected");
             return;
         }
-        _selection.ToggleInSet(node);
+        _set.Toggle(node);
         UpdateStatus();
-    }
-
-    /// <summary>Writes every export set member into one timestamped GLB in <c>Exports/</c>, each at
-    /// its world transform.</summary>
-    public void ExportSet()
-    {
-        var set = _selection.ExportSet.Where(IsInstanceValid).ToList();
-        if (set.Count == 0)
-        {
-            Log.Info("ui", $"nodelab export set — the set is empty (Ctrl+click objects, or ± set on a selection)");
-            return;
-        }
-        Log.Info("ui", $"nodelab export set count={set.Count} nodes=[{string.Join(" ", set.Select(SelectionService.NameOf))}]");
-        string name = set.Count == 1
-            ? SelectionService.NameOf(set[0])
-            : $"{SelectionService.NameOf(set[0])}+{set.Count - 1}";
-        GltfExporter.ExportSetToExports(set, name);
     }
 
     /// <summary>The dependency readout for one node as plain lines — the same text the panel shows
@@ -596,7 +584,7 @@ public sealed partial class NodeLab : Node
         var setRow = new HBoxContainer();
         setRow.AddThemeConstantOverride("separation", 4);
         setRow.AddChild(Btn("± set", ToggleSetMembership));
-        setRow.AddChild(Btn("Export set", ExportSet));
+        setRow.AddChild(Btn("Export set", _set.WriteGltf));
         setRow.AddChild(Btn("Clear set", ClearSet));
         _setLabel = Small("");
         _setLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -645,7 +633,7 @@ public sealed partial class NodeLab : Node
 
     private void ClearSet()
     {
-        _selection.ClearSet();
+        _set.Clear();
         UpdateStatus();
     }
 
@@ -675,7 +663,7 @@ public sealed partial class NodeLab : Node
         _status.Text = sel;
         if (_setLabel != null)
         {
-            var set = _selection.ExportSet;
+            var set = _set.Members;
             _setLabel.Text = set.Count == 0
                 ? "set empty — Ctrl+click adds"
                 : $"set {set.Count}: {string.Join(" ", set.Where(IsInstanceValid).Select(SelectionService.NameOf))}";

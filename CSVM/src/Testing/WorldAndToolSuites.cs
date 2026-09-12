@@ -1362,6 +1362,8 @@ internal static class WorldAndToolSuites
 
             var selection = new SelectionService(root, ctx.Camera);
             ctx.Host.AddChild(selection);
+            var set = new ExportSet(selection);
+            ctx.Host.AddChild(set);
             var cameraWas = ctx.Camera.GlobalTransform;
             bool deckWas = deck?.Visible ?? false;
             if (deck != null)
@@ -1403,13 +1405,13 @@ internal static class WorldAndToolSuites
                 }
                 foreach (var (leaf, _) in distinct)
                 {
-                    selection.ToggleInSet(leaf);
+                    set.Toggle(leaf);
                 }
-                ctx.Same(2, selection.ExportSet.Count, $"export set size after two Ctrl+clicks");
+                ctx.Same(2, set.Members.Count, $"export set size after two Ctrl+clicks");
 
                 string path = Path.Combine(ctx.ScratchDir, "terrain-pick-export.glb");
                 Directory.CreateDirectory(ctx.ScratchDir);
-                ctx.Same((long)Error.Ok, (long)GltfExporter.ExportSet(selection.ExportSet, path), $"export set write result");
+                ctx.Same((long)Error.Ok, (long)GltfExporter.ExportSet(set.Members, path), $"export set write result");
                 var (meshes, merged) = ReadBack(ctx, path);
                 foreach (var (leaf, centre) in distinct)
                 {
@@ -1419,13 +1421,13 @@ internal static class WorldAndToolSuites
                 }
 
                 // A descendant of a member rides along with it, so listing it too must not add a copy.
-                var nested = new List<Node3D>(selection.ExportSet) { FirstMesh(distinct[0].Leaf)! };
+                var nested = new List<Node3D>(set.Members) { FirstMesh(distinct[0].Leaf)! };
                 string nestedPath = Path.Combine(ctx.ScratchDir, "terrain-pick-export-nested.glb");
                 ctx.Same((long)Error.Ok, (long)GltfExporter.ExportSet(nested, nestedPath), $"nested export set write result");
                 ctx.Same(meshes, ReadBack(ctx, nestedPath).Meshes, $"meshes when a member's own mesh is listed again");
 
-                selection.ClearSet();
-                ctx.Same(0, selection.ExportSet.Count, $"export set size after Clear set");
+                set.Clear();
+                ctx.Same(0, set.Members.Count, $"export set size after Clear set");
             }
             finally
             {
@@ -1434,6 +1436,7 @@ internal static class WorldAndToolSuites
                     deck.Visible = deckWas;
                 }
                 ctx.Camera.GlobalTransform = cameraWas;
+                set.Free();
                 selection.Free();
             }
         });

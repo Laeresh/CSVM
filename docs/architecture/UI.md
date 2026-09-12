@@ -467,11 +467,12 @@ arrow keys walk the focus chain instead of reaching the aircraft or the lab's or
 ## src/UI/SelectionService.cs
 The shared world selection in `--freecam` and `--anim-lab`: a left click picks the mesh under the
 cursor, PgUp and PgDn walk its `cs_name` ancestor ladder, and a breadcrumb line and wireframe box
-show the current rung. Objects are picked by box, map-scale meshes (terrain) by triangle. Ctrl+click
-also gathers the `ExportSet` the node lab writes as one file. `Current`, `Ladder`, `Level`,
-`CurrentBox` and the `Changed` event are what the other inspect tools read; `--debug-select` replays a click for a scripted run. `ExtraRoots`
-walks props parked beside the world content, and `SubtreeWorldAabb` is the shared box measurement
-the anim runtime and the node lab read too.
+show the current rung. Objects are picked by box, map-scale meshes (terrain) by triangle. `Current`,
+`Ladder`, `Level`, `CurrentBox` and the `Changed` event are what the other inspect tools read, and
+`--debug-select` replays a click for a scripted run. A Ctrl-held pick is reported as `CtrlPicked`,
+and a tool may append a line to the breadcrumb through `HudLine`, which is how the export set
+attaches without this service knowing what an export is. `ExtraRoots` walks props parked beside the
+world content; `SubtreeWorldAabb`, `NewBoxInstance` and `DrawBox` are shared with the other tools.
 
 ## src/UI/TargetingOverlay.cs
 The targeting overlay (key F15, `--debug-targets`): a per-frame line from every turret gunner and AI
@@ -525,10 +526,18 @@ what happens when you touch it, and neither answers "what is this object".
 
 ## src/UI/NodeLab.cs
 The node lab (key N) in `--freecam` and `--anim-lab`: the world's `cs_name` tree, a search box,
-per-node frame, hide and glTF export into `Exports/`, the export set's toggle, combined export and clear, a dependency readout for the current selection (anim defs, destructible
+per-node frame, hide and glTF export into `Exports/`, the export set's three buttons, a dependency readout for the current selection (anim defs, destructible
 pools, geometry and textures, colliders) and a destructibles view with coverage columns, plus
 top-level branches for props parked beside the world content. `--debug-nodelab` is the scripted
 twin. A row's text and colour follow live visibility, re-read on the panel's own status cadence.
+
+## src/UI/ExportSet.cs
+The node lab's export set: the nodes gathered with Ctrl+click or the panel's ± set, written as one
+timestamped GLB in `Exports/` at their world transforms. It rides `SelectionService.CtrlPicked`
+rather than reading the mouse itself, outlines each member in a cyan box that follows that member's
+transform, and puts the count on the selection's breadcrumb through `HudLine`, because a set is
+gathered whether or not the panel was ever opened. A member freed under it (a destructible swapping
+to its wreck) leaves on its own. Nothing is drawn until the first node joins.
 
 ## src/UI/WorldDamageLab.cs
 The world damage lab (key F5) in `--freecam` and `--anim-lab`: the destructible pools of whatever

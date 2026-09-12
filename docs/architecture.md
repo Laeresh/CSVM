@@ -382,6 +382,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/DebugKillTarget.cs` — the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
 - `src/UI/SelectionService.cs` — the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
 - `src/UI/NodeLab.cs` — the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
+- `src/UI/ExportSet.cs` — the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
 - `src/UI/WorldDamageLab.cs` — the world damage lab (F5): an HP slider with kill and reset on the selection's own destructible pool.
 - `src/UI/OrbitCamera.cs` — the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
