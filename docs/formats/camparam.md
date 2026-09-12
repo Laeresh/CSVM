@@ -208,9 +208,9 @@ clips (`CAP-21`) are corroboration, not the source, and they agree to 5% and 10%
 ⚠ **`dist_catch_up` is a REAL-second rate, and `k = 1.390` does not belong on it.** The engine eases
 the lagged speed on `DAT_009ad744`, which `0059c0c0` builds from a `GetTickCount()` delta in
 seconds, so the rate is per wall second and the clips' raw 0.90 is directly comparable to it. The
-sim-converted 0.65 the engine used to carry compared the wrong pair of numbers; verification
-`DET-11`'s conversion applies to a duration read off a world that runs fast, not to an easing rate
-the engine itself denominates in wall time. CSVM's own sim clock advances by the wall frame delta
+sim-converted 0.65 that `k` produces compares the wrong pair of numbers: verification `DET-11`'s
+conversion applies to a duration read off a world that runs fast, not to an easing rate the engine
+itself denominates in wall time. CSVM's own sim clock advances by the wall frame delta
 in realtime mode and replays that same axis under `--det`, so the authored 1.0 goes in unconverted.
 
 The radius still advances once per SIM step and never per render frame, so the lag sees one cadence

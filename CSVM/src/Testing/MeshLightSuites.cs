@@ -14,8 +14,9 @@ internal static class MeshLightSuites
     // The night chapter that authors blinking beacons; the only other one in the install is C1.
     private const string LightChapter = "C5";
 
-    // The lens-flare reach the reader used to borrow as every light's fade distance. It is the
-    // value on all but a handful of the chapter's lights, so its absence is the fix.
+    // The lens-flare reach. Most of the chapter's lights carry it and none of them fades at it, so
+    // a built material with this far edge is the reader borrowing the flare field rather than the
+    // light's own reach (docs/formats/world-structure.md).
     private const float FlareReachM = 4000f;
 
     // The periods C5 authors, in seconds. Nothing in the install blinks at any other rate but

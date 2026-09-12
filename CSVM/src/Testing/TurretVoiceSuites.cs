@@ -269,10 +269,11 @@ internal static class TurretVoiceSuites
         }
     }
 
-    /// <summary>One voice's live players. The pitch guard is the D31 trap made a check: CAP-09
-    /// measured no Doppler on the original's world emitters, and Godot's 3D player would take a
-    /// shift from its own tracking mode without a line of ours asking for one. Internal so the
-    /// hull's own voice suite reads the same three properties rather than its own copy.</summary>
+    /// <summary>One voice's live players. The pitch guard holds the decode in
+    /// docs/formats/sounds.md: the original's world emitters carry no Doppler, and Godot's 3D
+    /// player takes a shift from its own tracking mode without a line of ours asking for one.
+    /// Internal so the hull's own voice suite reads the same three properties rather than its own
+    /// copy.</summary>
     internal static void CheckPlayers(TestContext ctx, GunVoice voice)
     {
         var players = voice.GetChildren().OfType<AudioStreamPlayer3D>().ToList();

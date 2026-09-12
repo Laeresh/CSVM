@@ -2628,8 +2628,8 @@ public partial class GameSession : Node3D
                         var spawnedOnNet = flightRoster.SpawnAi(new AiSpawn(
                             planeName, pos, look, pilot, Team: entry.Team, AiDef: aiDef));
                         // The net's own volumes over the gates the assembler took from the airframe
-                        // def, the same write a campaign net assignment makes. Before this, a CLI
-                        // plane kept the machine's decoded defaults whatever net it was given.
+                        // def, the same write a campaign net assignment makes. Without it a CLI
+                        // plane flies the machine's decoded defaults whatever net it is given.
                         CampaignRosterPlan.ApplyVolumes(pilot.Machine, net.Volumes, MinAiActiveDist());
                         RegisterAiVoice(spawnedOnNet, accentId ?? AiStatsForSpawn(planeName, aiDef)?.AiAccentId);
                         ApplyAiHullPreset(spawnedOnNet);

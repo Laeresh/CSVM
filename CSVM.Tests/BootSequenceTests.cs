@@ -56,7 +56,7 @@ public class BootSequenceTests
 
     /// <summary><c>FADEOUT</c> keeps its place and its authored second in the block even though the
     /// screen it would ramp is already empty, an authored action not being deleted for being
-    /// invisible. What it no longer does is spend that second.</summary>
+    /// invisible. Its hold is zero, so the block spends none of that second on it.</summary>
     [Fact]
     public void TheFadeKeepsItsSecondAfterTheCardIsGone()
     {

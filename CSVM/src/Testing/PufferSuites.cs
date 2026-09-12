@@ -1560,8 +1560,8 @@ internal static class PufferSuites
         ctx.Check(!textures.IsAdditive("no_such_texture"),
             $"a name the archive cannot resolve alpha-mixes, which is the engine's own fallback");
 
-        // A rocket trail is one of the emitters the rule moves: ramp-less and ending on a bright
-        // sprite, so the darkness verdict used to add it and the texture flag mixes it.
+        // A rocket trail is where the two readings disagree: ramp-less and ending on a bright
+        // sprite, so a sprite-darkness verdict would add it while the texture flag mixes it.
         var trail = PufferState.Load(ctx.ZrdrPath, "missile_puffers.json", "trailpuffer");
         ctx.Check(trail != null, $"missile_puffers.json defines trailpuffer");
         if (trail != null)

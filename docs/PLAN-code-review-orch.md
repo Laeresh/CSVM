@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☐ Two `_Avoid_` terms: "AI roster" and "deviation"
 2. ☑ `<para>` in three XML doc blocks
 3. ☐ `GD.Print` to `Log` in the three session files
-4. ☐ History and item references out of seven comments
+4. ☑ History and item references out of seven comments
 5. ☑ One banned phrase and two dates in live prose
 6. ☑ A culture-dependent `ToString` and an empty interpolation
 7. ☐ Em-dash sweep, repo-wide
@@ -195,7 +195,25 @@ show their census lines in the log file.
 **⚠ Traps.** `Log.Debug` may be gated; a census line that silently vanishes from a scripted run
 is a regression nobody sees. Compare one run's log before and after.
 
-## A4 ☐ History and item references out of seven comments
+## A4 ☑ History and item references out of seven comments
+
+**Landed.** The five history comments state the standing rule instead of narrating a change: the
+CLI net spawn says what the volume write buys, the mesh-light constant says the flare reach is not
+a fade distance, the boot fade test says the hold is zero, the puffer trail says where the
+sprite-darkness reading and the texture flag disagree, and `camparam.md` says a sim-converted
+easing rate compares the wrong pair of numbers. The two item references are gone: the ground
+shadow test names the zone's `SUNLIGHT` pair, and the turret voice guard points at
+`docs/formats/sounds.md` for the no-Doppler decode instead of a capture id. No docs page needed a
+new claim, since `world-structure.md` and `sounds.md` already carry the evidence behind the two
+cut sentences.
+
+**Verified.** <pending orchestrator run> `CheckCommentCaps.ps1` clean ("all comment blocks within
+cap"); `Select-String 'used to|no longer|Before this|BL-\d+|CAP-\d+|PT-\d+'` over the added diff
+lines in `CSVM/src` and `CSVM.Tests` returns nothing, so every remaining hit is pre-existing;
+`dotnet build CSVM/CSVM.sln` 0 warnings, 0 errors; `.\RunTests.ps1 -SkipEngine -SkipGoldens` PASS
+with 4090 passed, 0 failed, 2 skipped of 4092.
+
+**Original approach (kept for reference).**
 
 **Goal.** Comments say what and why in the present tense, with no item ids and no narration of
 what the code used to do.
