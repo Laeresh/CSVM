@@ -171,7 +171,7 @@ hypothesis and this page does not assert it. What *is* established is enough to 
 - the fallback path they defer to is fully documented and independently sourced.
 
 **A reader must still parse twelve slots** to keep the following field indices aligned — that part
-is load-bearing. Beyond preserving positions, ignore them. This question is closed and should not
+matters. Beyond preserving positions, ignore them. This question is closed and should not
 be reopened without new evidence (a different build, or an authored non-zero value).
 
 ### The skill vector
@@ -368,7 +368,7 @@ signature). `0` on 174 blocks = no signature maneuver.
 
 ## AI runtime modes
 
-Not a format, but decoded from the same binary and load-bearing for anyone reading this data. The
+Not a format, but decoded from the same binary and needed by anyone reading this data. The
 engine's debug readout dispatches on a single mode field with these states:
 
 `patrol` · `pursue` · `lay off` · `evade` · `evasive maneuver` (running a library entry, reported as

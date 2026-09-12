@@ -76,8 +76,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☐ `<para>` in three XML doc blocks
 3. ☐ `GD.Print` to `Log` in the three session files
 4. ☐ History and item references out of seven comments
-5. ☐ One banned phrase and two dates in live prose
-6. ☐ A culture-dependent `ToString` and an empty interpolation
+5. ☑ One banned phrase and two dates in live prose
+6. ☑ A culture-dependent `ToString` and an empty interpolation
 7. ☐ Em-dash sweep, repo-wide
 
 ### Wave B — Judgement calls
@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Spec fixes
 
-21. ☐ `New-ItemId.ps1` gets its BOM and loses its em dashes
+21. ☑ `New-ItemId.ps1` gets its BOM and loses its em dashes
 22. ☐ `SetNet` reports a missing net as no move
 23. ☐ A death choreography is only the def's death sequence
 24. ☐ `KeepsTheShot` holds only the episode that raised the ending
@@ -200,7 +200,20 @@ carries it, and put the removed prose in the landing commit body.
 **Verify.** `CheckCommentCaps.ps1` clean; a grep for `used to`, `no longer`, `Before this` and
 `BL-\d+|CAP-\d+|PT-\d+` over `CSVM/src` and `CSVM.Tests` comments shows only pre-existing hits.
 
-## A5 ☐ One banned phrase and two dates in live prose
+## A5 ☑ One banned phrase and two dates in live prose
+
+**Landed.** "load-bearing" is gone from `docs/formats/` (the `gamez.md` site the review named and
+eight older uses in `ai-rosters.md`, `anim-definitions.md`, `destructibles.md`, `paint.md` and
+`templates.md`, each restated as "matters", "honours" or "unread"). The `BL-327` parenthetical
+in `backlog.md` no longer carries its minting date. The second dated line the review cited was
+`BL-785`'s "oldest created" clause, which left `backlog.md` with that item's close before this
+plan was written. `backlog.md` still carries about 140 older dates in entries outside the reviewed
+range; sweeping those is a separate decision and not this item.
+
+**Verified.** <pending orchestrator run> `Select-String 'load-bearing'` over `docs/`, `backlog.md`
+and `playtest.md` returns nothing; `CheckItemIds.ps1` and `CheckEncoding.ps1` clean.
+
+**Original approach (kept for reference).**
 
 **Goal.** `docs/` and `backlog.md` carry no banned phrase and no date outside the RETIRED headings.
 
@@ -217,7 +230,16 @@ the standing fact; the dated evidence stays findable through `git log --grep`.
 **Verify.** `Select-String 'load-bearing|\d{4}-\d\d-\d\d'` over `docs/`, `backlog.md`,
 `playtest.md` returns only the `docs/org` RETIRED headings; `CheckItemIds.ps1` clean.
 
-## A6 ☐ A culture-dependent `ToString` and an empty interpolation
+## A6 ☑ A culture-dependent `ToString` and an empty interpolation
+
+**Landed.** `DanteEngineFireSuites` formats both the wanted and the found position through
+`CultureInfo.InvariantCulture` with the same `0.#` shape its check line already uses. The
+`SelectionService` interpolation stays: `Log.Info` takes a `FormattableString`, so the `$` is the
+overload's requirement, not an empty interpolation. That half of the finding is disproven.
+
+**Verified.** <pending orchestrator run> `dotnet build` clean.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every formatted number in the range is invariant.
 
@@ -426,7 +448,15 @@ unit (`BL-510`) and the `Messages` tests green.
 
 # Wave C — Spec fixes
 
-## C21 ☐ `New-ItemId.ps1` gets its BOM and loses its em dashes
+## C21 ☑ `New-ItemId.ps1` gets its BOM and loses its em dashes
+
+**Landed.** The two em dashes in the header comment are a comma and a parenthesis, which leaves
+the file pure ASCII (highest byte 0x7D), the stronger of the two rules `CLAUDE.md` gives, so no
+BOM is added.
+
+**Verified.** <pending orchestrator run> A byte scan of the file finds nothing over 0x7F.
+
+**Original approach (kept for reference).**
 
 **Goal.** The mandatory id minter is a file PowerShell 5.1 cannot mangle.
 

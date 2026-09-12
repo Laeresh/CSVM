@@ -781,7 +781,7 @@ third — the "stopper" — turns out to author a teardown that never runs:
   taken pass so the remaining branches never evaluate. Requires the halt reading on self.
 - **Halt a running sibling** (`large_30sec_fire`'s `fire_n_smoke`, `zepskinfire`×5,
   `flame_light_seq`): the target is genuinely running — a `LOOP -1` poll or a sequence started
-  by `CALL_SEQUENCE`. The halt is load-bearing beyond bookkeeping: a `PUFFER_STATE`
+  by `CALL_SEQUENCE`. The halt matters beyond bookkeeping: a `PUFFER_STATE`
   re-assert *revives* a stopped emitter (the damage-stage sputter contract), so the
   `PUFFER_STATE INACTIVE` these stops pair with cannot end the fire alone — the un-halted poll
   would re-light it one frame later.
@@ -930,7 +930,7 @@ a light name is scoped to the definition instance (two refineries each own an `o
 | `color` | `{r,g,b}`, present 765×. A DX7 sRGB value, so it needs linearising like `FOG_COLOR`. |
 | `directional`, `saturated`, `subdivide`, `lightmap`, `static_`, `bicolored`, `orientation`, `ambient*`, `diffuse` | Null or false almost everywhere; nothing in this install depends on them. |
 
-**The load-bearing semantic is that a `LIGHT_STATE` is a PARTIAL update.** A fire or refinery
+**The semantic that matters is that a `LIGHT_STATE` is a PARTIAL update.** A fire or refinery
 flicker is a stream of `{name, range}` events 0.03–0.07 s apart that must leave position,
 colour and active state untouched — the reader spells this the same way
 (`"LIGHT_STATE", ["NAME", […], "RANGE", […]]` and nothing else). The compiled nulls line up

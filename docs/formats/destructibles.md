@@ -206,7 +206,7 @@ and `campaign-persistence` suites.
 ## Definition binding
 
 A destructible def anchors to scene nodes exactly like any animation definition (full rules in
-[anim-definitions.md](anim-definitions.md)), and two of those rules do the load-bearing work:
+[anim-definitions.md](anim-definitions.md)), and two of those rules do the work:
 
 - **`NAME` is a wildcard, so one authored def serves many instances.** The water tower's
   `NAME` is `ap_h2otwr*`; in C1 that one reader definition compiles into four independent

@@ -182,7 +182,7 @@ reachable only by substitution.
 
 ⚠ **Those surplus blocks are inert.** Since a substituted stamp keeps its source block's
 properties, a block belonging to a model that is only ever *arrived at* by a roll is never
-read — the authoring is complete rather than load-bearing. It becomes load-bearing only for a
+read — the authoring is complete but unread. It is read only for a
 model that is ALSO placed directly somewhere, which is the ordinary case for the names that
 appear in both columns. This is why the two C5 targets with no block of their own
 (`cb05det02.flt`, `cb06det03.flt`) cost nothing: there was nothing to read either way.

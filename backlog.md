@@ -910,7 +910,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-327` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **What else the original applies to a cloud sprite: the far
   field's fade and the 209 plateau** (minted at `BL-118`'s close, PLAN-overcast-match `C24`,
-  2026-08-09; the fifth candidate `C23` raised and deliberately did not guess at.) One item,
+  the fifth candidate `C23` raised and deliberately did not guess at.) One item,
   because both open questions below are the same question (*what does the original apply to a
   cloud sprite*), and any answer to one constrains the other.
   *The flag half is decoded and closed* (`docs/org/vertexLighting.md`'s facade section, the

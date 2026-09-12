@@ -327,8 +327,8 @@ Per texel, exactly the formula in [rof.md](rof.md):
 shaded_paint = shading * (w1*colour1 + w2*colour2 + w3*colour3) / 255
 ```
 
-then the pattern's overlay composited over it (4th channel as alpha). Two details are
-load-bearing: the shading map is the `.BM`'s own base plane, **not** the ZBD skin of the same
+then the pattern's overlay composited over it (4th channel as alpha). Two details
+matter: the shading map is the `.BM`'s own base plane, **not** the ZBD skin of the same
 name; and `.BM` rows are stored **bottom-up**, so each source row is read from `h-1-y` (see
 [rof.md](rof.md) — without the flip every livery is mirrored along V, which is how the bug
 first surfaced in-game). Parts a pattern ships no `.BM`
