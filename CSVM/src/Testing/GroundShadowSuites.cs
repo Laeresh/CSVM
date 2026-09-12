@@ -12,9 +12,10 @@ namespace CSVM.Testing;
 /// <summary>The aircraft ground shadow over the flat empty stage and over C1's real terrain: that
 /// one lands under the aircraft it belongs to, that it takes the surface height the probe reads,
 /// that the player's own runs 1.5 times its altitude ahead while an AI aircraft's sits directly
-/// beneath, that the player's own footprint alone grows with altitude, and that it is absent
-/// exactly where the decode says nothing is drawn (over the cutoff altitude, past the far range,
-/// and in enhanced graphics mode). Decode: docs/org/shadows.md.</summary>
+/// beneath, that the player's own footprint alone grows with altitude, that the texture carries
+/// the airframe's own silhouette rather than any symmetric blob, and that it is absent exactly
+/// where the decode says nothing is drawn (over the cutoff altitude, past the far range, and in
+/// enhanced graphics mode). Decode: docs/org/shadows.md.</summary>
 internal static class GroundShadowSuites
 {
     // The empty stage's ground plane, which the shadow must land on rather than on y=0 by luck.
@@ -31,11 +32,18 @@ internal static class GroundShadowSuites
     // slack covers the lift off the ground and nothing else.
     private const float PlaceTolerance = 1.5f;
 
+    // What an ellipse inscribed in the footprint would cover, which is what the silhouette
+    // replaced, against the wing sample that tells the two apart.
+    private const float EllipseCoverage = 0.45f;
+    private const float TipU = 0.10f;
+    private const float WingV = 0.73f;
+
     [Suite("ground-shadow",
         "The projected aircraft ground shadow: under the aircraft on the flat stage and on C1's " +
         "own terrain height, running 1.5 times its altitude ahead of the player while an AI " +
-        "aircraft's sits beneath, the player's footprint alone doubling by 155 m, and absent " +
-        "over 250 m of altitude, past 200 m of range and under enhanced graphics")]
+        "aircraft's sits beneath, the player's footprint alone doubling by 155 m, the airframe's " +
+        "own silhouette in the texture turning with it, and absent over 250 m of altitude, past " +
+        "200 m of range and under enhanced graphics")]
     internal static void GroundShadow(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -92,6 +100,111 @@ internal static class GroundShadowSuites
         rig.Name = human ? "shadow_player" : "shadow_ai";
         ctx.Host.AddChild(rig);
         return rig;
+    }
+
+    // The rasterised silhouette as text, for the artifact: one row per texel row of the mask.
+    private static void Mask(GroundShadowPass pass, FlightController rig, string who,
+        StringBuilder report)
+    {
+        if (pass.ShapeFor(rig) is not { } shape)
+            return;
+        int size = GroundShadowLaw.TextureSize;
+        report.AppendLine($"{who} silhouette: node={shape.Node} triangles={shape.TriangleCount} vertices={shape.VertexCount} covered={shape.CoveredFraction:0.000}");
+        for (int y = 0; y < size; y++)
+        {
+            var row = new StringBuilder();
+            for (int x = 0; x < size; x++)
+                row.Append(shape.CoveredAt((x + 0.5f) / size, (y + 0.5f) / size) ? '#' : '.');
+            report.AppendLine($"  {row}");
+        }
+    }
+
+    // Covered texels along one row of the mask (across the aircraft) and one column (along it).
+    private static int Row(GroundShadowSilhouette shape, float v)
+    {
+        int size = GroundShadowLaw.TextureSize;
+        int covered = 0;
+        for (int x = 0; x < size; x++)
+        {
+            if (shape.CoveredAt((x + 0.5f) / size, v))
+                covered++;
+        }
+
+        return covered;
+    }
+
+    private static int Column(GroundShadowSilhouette shape, float u)
+    {
+        int size = GroundShadowLaw.TextureSize;
+        int covered = 0;
+        for (int y = 0; y < size; y++)
+        {
+            if (shape.CoveredAt(u, (y + 0.5f) / size))
+                covered++;
+        }
+
+        return covered;
+    }
+
+    // The silhouette, on the AI aircraft because its projection is the plain top-down one: the
+    // model's own outline rasterised into the modulate texture, which no symmetric blob stands in
+    // for, and which turns with the aircraft.
+    private static void Silhouette(TestContext ctx, GroundShadowPass pass, FlightController ai,
+        StringBuilder report)
+    {
+        var shape = pass.ShapeFor(ai);
+        ctx.Check(shape != null, $"the aircraft's shadow carries a silhouette of its own model");
+        if (shape is not { } mask)
+            return;
+        int size = GroundShadowLaw.TextureSize;
+        Mask(pass, ai, "ai", report);
+        ctx.Check(mask.TriangleCount > 100,
+            $"rasterised from the airframe's own triangles n={mask.TriangleCount}");
+        ctx.Check(mask.CoveredFraction > 0.05f && mask.CoveredFraction < EllipseCoverage,
+            $"and it covers a fraction of its footprint no inscribed ellipse could {mask.CoveredFraction:0.000} against {EllipseCoverage:0.00}");
+
+        // The airframe is mirror-symmetric across its own fuselage and nothing like it nose to
+        // tail, so the mask must be the first and must not be the second.
+        int mirrored = 0;
+        int flipped = 0;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size;
+                float v = (y + 0.5f) / size;
+                if (mask.CoveredAt(u, v) != mask.CoveredAt(1f - u, v))
+                    mirrored++;
+                if (mask.CoveredAt(u, v) != mask.CoveredAt(u, 1f - v))
+                    flipped++;
+            }
+        }
+
+        report.AppendLine($"ai silhouette: {mirrored} texels break the mirror across the fuselage, {flipped} break it nose to tail");
+        ctx.Same(0, mirrored, $"mirror-symmetric across the fuselage, as the airframe is");
+        ctx.Check(flipped > size * size / 10,
+            $"and not symmetric nose to tail, as no ellipse in this footprint can manage n={flipped}");
+
+        // One sample pair an ellipse cannot satisfy: out at the wing, the span is covered behind
+        // the aircraft's middle and empty the same distance ahead of it.
+        ctx.Check(mask.CoveredAt(TipU, WingV),
+            $"the wing's span is covered out at ({TipU:0.00}, {WingV:0.00}) of the footprint");
+        ctx.Check(!mask.CoveredAt(TipU, 1f - WingV),
+            $"and the mirrored point ahead of it is empty, where an ellipse covers both");
+        report.AppendLine($"ai silhouette: wing row {Row(mask, WingV)} texels, the row ahead of it {Row(mask, 1f - WingV)}");
+
+        // Turned across the projection, the same wing band lands along the other axis: the
+        // silhouette is the model's shape in the world, not a fixed picture in the footprint.
+        int wingRow = Row(mask, WingV);
+        ai.Rotation = new Vector3(0f, Mathf.Pi * 0.5f, 0f);
+        pass.Tick();
+        report.AppendLine($"ai silhouette yawed 90 deg: wing row {Row(mask, WingV)} texels, columns {Column(mask, WingV)} at {WingV:0.00} and {Column(mask, 1f - WingV)} at {1f - WingV:0.00}");
+        ctx.Check(Row(mask, WingV) < wingRow / 2,
+            $"a quarter-turn empties the row the wing filled {wingRow} -> {Row(mask, WingV)} texels");
+        ctx.Check(Column(mask, WingV) > wingRow / 2,
+            $"and fills the column the same distance behind the nose instead {Column(mask, WingV)} texels");
+        ai.Rotation = Vector3.Zero;
+        pass.Tick();
     }
 
     // The flat stage: known ground at y=0 under every pose, so a reading that disagrees is the
@@ -152,6 +265,9 @@ internal static class GroundShadowSuites
             }
 
             float ownWidth = own?.GlobalTransform.Basis.Scale.X ?? 0f;
+
+            Silhouette(ctx, pass, ai, report);
+            Mask(pass, player, "player", report);
 
             // Climb both. The player's footprint grows with the altitude ramp and the AI's does
             // not, which is the size law's whole content.

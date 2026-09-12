@@ -256,9 +256,10 @@ it.
 
 ## What CSVM does today
 
-The placement half is implemented, in original graphics mode only (`Flight/GroundShadowLaw.cs` for
-the rule and `Flight/GroundShadowPass.cs` for the drawing; `docs/architecture/Flight.md`). What it
-takes from this page and where it departs:
+The placement and the silhouette are implemented, in original graphics mode only
+(`Flight/GroundShadowLaw.cs` for the rule, `Flight/GroundShadowPass.cs` for the drawing and
+`Flight/GroundShadowSilhouette.cs` for the raster; `docs/architecture/Flight.md`). What it takes
+from this page and where it departs:
 
 - **Godot shadow mapping cannot be the mechanism.** The original never casts a shadow map; it draws
   a projected silhouette onto the terrain. The world is built `fullbright: true` and an unshaded
@@ -267,8 +268,13 @@ takes from this page and where it departs:
 - Taken verbatim: the straight-down projection and the player's forward skew, the 1/200 horizontal
   distance fade, the 60/250 altitude ramp, the player's 3× growth, the colour formula with its zero
   guard, and the spread and ramp the coverage texture is built through.
-- The silhouette is **not** reproduced: the texture carries a blurred ellipse rather than a live
-  top-down raster of the aircraft, which is the rest of `BL-331`.
+- The silhouette is rasterised per frame from the aircraft's own triangles, off the node this page
+  names (the `geometry` child for the player's own aircraft, the whole model root for every other),
+  through the same texel mapping, spread and ramp. Two departures inside it: both windings are
+  filled where the original culls one, which is the same outline for a closed hull and differs only
+  where a model's faces are inconsistently wound; and a hidden node rasterises nothing while still
+  widening the bounding box, so a torn damage panel or the player's own interior cockpit mesh casts
+  no silhouette.
 - The modulate lands on a **flat quad** at the probed ground height rather than on the world's own
   polygons, so it does not conform to a slope, and it is lifted clear by half a unit, a constant
   this page does not supply.

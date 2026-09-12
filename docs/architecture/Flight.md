@@ -1239,16 +1239,25 @@ The original's aircraft ground shadow as a rule, engine-free and pure: the proje
 (straight down, with the player's own skewed along its nose), the horizontal distance fade, the
 altitude ramp, the footprint scale, the flattening of one point onto the ground, the colour derived
 from the mission's authored `SUNLIGHT` pair, and the spread and ramp the coverage texture is built
-through. Every constant carries its decode. `CSVM.Tests/GroundShadowLawTests` pins the numbers;
-`GroundShadowPass` is the only caller. Decode: [../org/shadows.md](../org/shadows.md).
+through. The spread has a second overload that writes into a caller's buffer, for the per-frame
+raster. Every constant carries its decode. `CSVM.Tests/GroundShadowLawTests` pins the numbers.
+Decode: [../org/shadows.md](../org/shadows.md).
+
+## src/Flight/GroundShadowSilhouette.cs
+One caster's shape: the triangles of the node the original rasterises, taken once, and the 32x32
+coverage texture rebuilt from them each frame. Pose, flattening onto the ground and the footprint
+collapse into one affine map, so a vertex costs two dot products, and the fill is an incremental
+edge walk with its bounds hand-inlined, which is what brings a debug-build raster down to about a
+tenth of a millisecond per aircraft. The mask is readable as data (`CoveredAt`), which is how the
+suites pin a shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/GroundShadowPass.cs
 The drawing half: one modulating quad per live aircraft, rebuilt from the rule each rendered frame,
 with the surface height coming from a single downward ray and the roster, the players and the
 authored sunlight read fresh through delegates `GameSession` supplies. Built in original graphics
-mode only. The shape inside the footprint is a stand-in ellipse rather than the original's live
-silhouette raster, and the quad is flat where the original modulates the ground's own polygons;
-both are recorded on the decode page. Read [../org/shadows.md](../org/shadows.md) next.
+mode only. It owns a `GroundShadowSilhouette` per caster and binds its texture to the quad's
+shader. The quad is flat where the original modulates the ground's own polygons, which the decode
+page records. Read [../org/shadows.md](../org/shadows.md) next.
 
 ## src/Flight/GodotWorldQuery.cs
 The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. It resolves the

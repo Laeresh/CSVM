@@ -78,7 +78,7 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "906905491bb4394158a7fc61d990858b",
+      "hash": "ae2a99c6f70bbd002d2d25cfc1c1cd34",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and its top-centre kill line both up, the live one bracketed and labelled, --debug-markers text, gauges, exhaust, shadow, C1; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -113,14 +113,14 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "93e005bfcf9a3a46efb6fe569e9645ef",
+      "hash": "ce737c3a7ae01e381d84554dac10696f",
       "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen edge arrow and the category/name/clock label in the non-destructive objective's blue, over the run HUD's clock and zone count, the player's ground shadow.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "83bb20908e0a027e05def27ae6a9e460",
+      "hash": "69c2ae713528cab6445012005bab817d",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light, a point light on its fade band and ground shadows; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

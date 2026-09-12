@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The aircraft ground shadow's placement law (<see cref="GroundShadowLaw"/>): the projection
-/// direction with the player's backward skew, both fades, the footprint scale, the derived
+/// direction with the player's forward skew, both fades, the footprint scale, the derived
 /// colour, and the spread the coverage ramp is indexed by. Decode: docs/org/shadows.md.
 /// ⚠ Every number here is the original's; a failing case means the port drifted, not that the
 /// expectation needs adjusting.
@@ -142,6 +142,21 @@ public class GroundShadowLawTests
         // Marked but unscanned: it keeps its own cover mark and spreads into nothing.
         Assert.Equal(0, ramp[0]);
         Assert.Equal(0, ramp[(1 * size) + 1]);
+    }
+
+    [Fact]
+    public void TheSpreadIntoACallersBufferIsTheSameSpread()
+    {
+        // The live raster reuses one buffer per aircraft rather than allocating a ramp per frame,
+        // so the two overloads must not be able to drift apart.
+        const int size = 6;
+        var covered = new bool[size * size];
+        covered[(2 * size) + 3] = true;
+        covered[(3 * size) + 3] = true;
+        var expected = GroundShadowLaw.Spread(covered, size, size);
+        var into = new int[size * size];
+        GroundShadowLaw.Spread(covered, size, size, into);
+        Assert.Equal(expected, into);
     }
 
     [Fact]

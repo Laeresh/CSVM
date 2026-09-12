@@ -127,6 +127,14 @@ public static class GroundShadowLaw
     public static int[] Spread(bool[] covered, int width, int height)
     {
         var acc = new int[covered.Length];
+        Spread(covered, width, height, acc);
+        return acc;
+    }
+
+    /// <summary>The same spread into a caller's own buffer, for the per-frame raster, which runs
+    /// once per live aircraft and has no reason to allocate one each time.</summary>
+    public static void Spread(bool[] covered, int width, int height, int[] acc)
+    {
         for (int i = 0; i < covered.Length; i++)
             acc[i] = covered[i] ? CoverMark : 0;
         for (int y = 1; y < height - 1; y++)
@@ -150,7 +158,6 @@ public static class GroundShadowLaw
 
         for (int i = 0; i < acc.Length; i++)
             acc[i] = Math.Min(acc[i] / 2, RampSteps - 1);
-        return acc;
     }
 
     /// <summary>Where a ramp index sits between white and the shadow colour. The original's

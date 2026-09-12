@@ -876,19 +876,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `poleflare` and `lightpole` decoration models carry it is read off the templates, not fitted.
   What remains here is the billboard-axis question, and it still needs the A/B.
 
-- `BL-331` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The ground shadow is placed like the original's but shaped like a blob: the silhouette raster and the ground conformance are not built**
-  (split out of `BL-324`). The placement half is landed and pinned
-  (`Flight/GroundShadowLaw.cs`, `Flight/GroundShadowPass.cs`, suite `ground-shadow`): the
-  straight-down projection with the player's forward skew, the 1/200 horizontal distance fade, the
-  60/250 altitude ramp, the player's 3× growth, and the colour derived from the mission's
-  `SUNLIGHT` pair. The decode is [`docs/org/shadows.md`](docs/org/shadows.md), whose last section
+- `BL-331` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The ground shadow is placed and shaped like the original's, but it lies on a flat quad rather than conforming to the ground**
+  (split out of `BL-324`). The placement and the silhouette are landed and pinned
+  (`Flight/GroundShadowLaw.cs`, `Flight/GroundShadowPass.cs`,
+  `Flight/GroundShadowSilhouette.cs`, suite `ground-shadow`): the straight-down projection with
+  the player's forward skew, the 1/200 horizontal distance fade, the 60/250 altitude ramp, the
+  player's 3× growth, the colour derived from the mission's `SUNLIGHT` pair, and the aircraft's
+  own triangles rasterised top down into the 32×32 modulate texture every frame off the node the
+  original reads. The decode is [`docs/org/shadows.md`](docs/org/shadows.md), whose last section
   lists what the port takes and where it departs. What is left:
-  - **The silhouette.** The original rasterises the aircraft's own model, top down, into the 32×32
-    modulate texture every frame (`FUN_00565d80`), and CSVM fills that texture with a blurred
-    ellipse instead. The spread and the ramp are already the decoded ones, so this is a live
-    top-down render (a `SubViewport` with an orthographic camera, or an equivalent) feeding the
-    coverage channel, plus the original's own choice of node: the whole model root for an AI
-    aircraft and the `geometry` child for the player's own.
   - **The ground conformance.** The original applies the texture as a modulate pass over the
     world's own polygons, chunk by chunk (`FUN_005668b0`), so it wraps whatever lies inside the
     footprint; CSVM draws a flat quad at the probed height and lifts it half a unit clear, which

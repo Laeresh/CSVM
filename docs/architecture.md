@@ -224,6 +224,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/IWorldQuery.cs`, the one seam onto the live physics world: a shape swept along a motion, a ray, and a standing overlap test.
 - `src/Flight/GodotWorldQuery.cs`, the only adapter over `DirectSpaceState`; implements `IWorldQuery`.
 - `src/Flight/GroundShadowLaw.cs`, the aircraft ground shadow as a pure rule: direction, both fades, footprint scale, derived colour, spread and ramp.
+- `src/Flight/GroundShadowSilhouette.cs`, one caster's shape: the aircraft's own triangles rasterised top-down into its 32x32 coverage texture every frame.
 - `src/Flight/GroundShadowPass.cs`, the per-frame pass that draws it: one modulating quad per aircraft over the ground a downward ray finds, original graphics mode only.
 - `src/Flight/ContactReport.cs`, one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether it was an aeroplane.
 - `src/Flight/ContactOutcome.cs`, what a contact costs the striker: fate, the damage pair, the charged zone, the push-out, and the struck-aircraft instruction.

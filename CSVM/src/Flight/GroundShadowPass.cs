@@ -7,12 +7,11 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The per-frame ground-shadow pass: one modulating quad under every live aircraft, placed,
-/// sized, coloured and dropped by <see cref="GroundShadowLaw"/>. Original graphics mode only,
-/// enhanced mode casting real shadow maps instead (docs/architecture/Root.md).
-/// ⚠ The shape inside the footprint is a stand-in. The original rasterises the aircraft's own
-/// silhouette into the texture every frame; this draws one blurred ellipse through the decoded
-/// spread and ramp, so placement, size, strength and colour are the original's and the outline
-/// is not. Decode: docs/org/shadows.md.
+/// sized, coloured and dropped by <see cref="GroundShadowLaw"/>, with the aircraft's own
+/// silhouette rasterised into its texture by <see cref="GroundShadowSilhouette"/>. Original
+/// graphics mode only, enhanced mode casting real shadow maps instead (docs/architecture/Root.md).
+/// ⚠ The quad is flat where the original modulates the ground's own polygons, so the shadow
+/// rides over a steep enough slope. Decode: docs/org/shadows.md.
 /// </summary>
 public sealed partial class GroundShadowPass : Node3D
 {
@@ -46,7 +45,6 @@ public sealed partial class GroundShadowPass : Node3D
     private readonly Func<IReadOnlyList<Vector3>> _players;
     private readonly Func<(Vector3 Diffuse, Vector3 Ambient)> _sunlight;
     private readonly Mesh _quad;
-    private readonly Texture2D _coverage;
 
     private GroundShadowPass(Func<IReadOnlyList<FlightController>> aircraft,
         Func<IReadOnlyList<Vector3>> players, Func<(Vector3 Diffuse, Vector3 Ambient)> sunlight)
@@ -55,7 +53,6 @@ public sealed partial class GroundShadowPass : Node3D
         _players = players;
         _sunlight = sunlight;
         _quad = new PlaneMesh { Size = Vector2.One };
-        _coverage = CoverageTexture();
         Name = "ground_shadows";
         ProcessPriority = AfterFlightRigs;
     }
@@ -101,6 +98,11 @@ public sealed partial class GroundShadowPass : Node3D
         _casters.TryGetValue(rig.GetInstanceId(), out var caster) && caster.Quad.Visible
             ? caster.Quad : null;
 
+    /// <summary>The silhouette behind one aircraft's shadow, as the last pass rasterised it. The
+    /// suites read its coverage; nothing else has a reason to.</summary>
+    public GroundShadowSilhouette? ShapeFor(FlightController rig) =>
+        _casters.TryGetValue(rig.GetInstanceId(), out var caster) ? caster.Shape : null;
+
     public override void _Process(double delta) => Tick();
 
     /// <summary>One pass over the roster: place, colour or drop every aircraft's shadow. Driven
@@ -120,59 +122,6 @@ public sealed partial class GroundShadowPass : Node3D
         Retire(aircraft);
     }
 
-    // The bounding box of a built plane in its model root's own frame, so the pose that root is
-    // drawn at carries it into the world. Read once per aircraft: an airframe swap rebuilds the
-    // rig and with it this entry.
-    private static Aabb ModelBox(Node3D model)
-    {
-        Aabb box = default;
-        bool any = false;
-        Collect(model, Transform3D.Identity, ref box, ref any);
-        return box;
-
-        static void Collect(Node node, Transform3D at, ref Aabb box, ref bool any)
-        {
-            if (node is MeshInstance3D instance && instance.Mesh != null)
-            {
-                var local = instance.GetAabb();
-                var here = new Aabb(at * local.GetEndpoint(0), Vector3.Zero);
-                for (int i = 1; i < 8; i++)
-                    here = here.Expand(at * local.GetEndpoint(i));
-                box = any ? box.Merge(here) : here;
-                any = true;
-            }
-
-            foreach (var child in node.GetChildren())
-                Collect(child, child is Node3D spatial ? at * spatial.Transform : at, ref box, ref any);
-        }
-    }
-
-    // One 32x32 coverage field, shared by every aircraft: an ellipse inscribed in the footprint,
-    // run through the decoded spread and ramp so that only the outline is the stand-in.
-    // ⚠ Replacing this with the aircraft's own silhouette is the rest of the port, not a knob.
-    private static Texture2D CoverageTexture()
-    {
-        int size = GroundShadowLaw.TextureSize;
-        var covered = new bool[size * size];
-        float half = (size - 1) * 0.5f;
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float nx = (x - half) / half;
-                float ny = (y - half) / half;
-                covered[(y * size) + x] = (nx * nx) + (ny * ny) <= 1f;
-            }
-        }
-
-        var ramp = GroundShadowLaw.Spread(covered, size, size);
-        var bytes = new byte[ramp.Length];
-        for (int i = 0; i < ramp.Length; i++)
-            bytes[i] = (byte)Mathf.RoundToInt(GroundShadowLaw.Coverage(ramp[i]) * 255f);
-        return ImageTexture.CreateFromImage(
-            Image.CreateFromData(size, size, false, Image.Format.L8, bytes));
-    }
-
     // The surface under one aircraft: the highest collider at or below it, which is what the
     // original's own terrain-column wrapper answers. ⚠ Read downward from the aircraft, never a
     // whole column: the projected path takes the column's plain maximum and so snaps its shadow
@@ -190,13 +139,16 @@ public sealed partial class GroundShadowPass : Node3D
         return true;
     }
 
+    // One aircraft's shadow, built on first sight of it. Its shape is read once here: an airframe
+    // swap rebuilds the rig and with it this entry.
     private Caster CasterFor(FlightController rig, Node3D model)
     {
         ulong id = rig.GetInstanceId();
         if (_casters.TryGetValue(id, out var known))
             return known;
+        var shape = GroundShadowSilhouette.For(model, rig.IsHumanPiloted);
         var material = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
-        material.SetShaderParameter("coverage", _coverage);
+        material.SetShaderParameter("coverage", shape.Texture);
         var quad = new MeshInstance3D
         {
             Mesh = _quad,
@@ -207,7 +159,7 @@ public sealed partial class GroundShadowPass : Node3D
             Visible = false,
         };
         AddChild(quad);
-        var caster = new Caster(quad, material, ModelBox(model));
+        var caster = new Caster(quad, material, shape);
         _casters[id] = caster;
         return caster;
     }
@@ -243,7 +195,8 @@ public sealed partial class GroundShadowPass : Node3D
 
         var direction = GroundShadowLaw.Direction(isPlayer, -pose.Basis.Z.Normalized());
         var origin = GroundShadowLaw.Project(pose.Origin, groundY, direction);
-        var footprint = Footprint(caster.Box, pose, groundY, direction);
+        var footprint = Footprint(caster.Shape.Box, pose, groundY, direction);
+        caster.Shape.Raster(pose, groundY, direction, footprint);
         float scale = GroundShadowLaw.FootprintScale(isPlayer, altitudeFactor);
         var min = origin + ((footprint.Position - origin) * scale);
         var max = origin + ((footprint.End - origin) * scale);
@@ -310,5 +263,6 @@ public sealed partial class GroundShadowPass : Node3D
         }
     }
 
-    private sealed record Caster(MeshInstance3D Quad, ShaderMaterial Material, Aabb Box);
+    private sealed record Caster(
+        MeshInstance3D Quad, ShaderMaterial Material, GroundShadowSilhouette Shape);
 }
