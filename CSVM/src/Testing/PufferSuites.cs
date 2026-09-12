@@ -19,7 +19,7 @@ internal static class PufferSuites
         "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it")]
     internal static void EmitterLifetime(TestContext ctx)
     {
-        const string chapter = "C1";   // the only chapter shipping refuel* (5 defs) — matches bounce-launch
+        const string chapter = "C1";   // the only chapter shipping refuel* (5 defs), matches bounce-launch
         const string pufferName = "fire_n_smoke";
         var fake = new CountingEmitterFactory();
         ctx.EmitterFactory = fake;
@@ -257,8 +257,8 @@ internal static class PufferSuites
         }
     }
 
-    // C3's `spew_puffer` exactly as `waterfalls.zrd.json` authors it —
-    // `FADE_RANGE [300, 400]`, `NEAR_FADE [40, 5]` — the only puffer in the install
+    // C3's `spew_puffer` exactly as `waterfalls.zrd.json` authors it,
+    // `FADE_RANGE [300, 400]`, `NEAR_FADE [40, 5]`, the only puffer in the install
     // carrying both a near fade and the tightest far band.
     internal static void PufferFadeBands(TestContext ctx)
     {
@@ -313,7 +313,7 @@ internal static class PufferSuites
     }
 
     // The author's three switches, each shown to switch. Config is file-backed with no
-    // setter, so these come through `CreateWith`'s test-only override — see
+    // setter, so these come through `CreateWith`'s test-only override, see
     // PufferFadeSwitches.
     internal static void PufferFadeSwitchesOff(TestContext ctx)
     {
@@ -360,7 +360,7 @@ internal static class PufferSuites
     // No camera published ⇒ no distance fade at all, rather than one measured against
     // the world origin. This is what keeps the unit suites, the plane viewer and the damage lab
     // out of the unauthored near cull at depth 0, and it is the state every OTHER puffer suite
-    // runs in — which is why none of them moved.
+    // runs in, which is why none of them moved.
     internal static void PufferFadeNoCameraNoFade(TestContext ctx)
     {
         var state = FadeTestState("no_camera", 40f, 5f, 300f, 400f);
@@ -383,7 +383,7 @@ internal static class PufferSuites
     {
         var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
 
-        // Two panes looking the same way down −Z, player 2 astern of player 1 by 200 m — the
+        // Two panes looking the same way down −Z, player 2 astern of player 1 by 200 m, the
         // repro's geometry (P2 behind P1, shooting past him).
         var p1 = SuiteViewers.Camera(ctx, Vector3.Zero);
         var p2 = SuiteViewers.Camera(ctx, new Vector3(0f, 0f, 200f));
@@ -428,7 +428,7 @@ internal static class PufferSuites
                 p3.Free();
             }
 
-            // One pane is the old behaviour exactly — the single-viewer case must not move, and it
+            // One pane is the old behaviour exactly, the single-viewer case must not move, and it
             // is what every capture, freecam shot and single-player session runs.
             var alone = new ViewerSet();
             alone.Bind(new[] { p1 });
@@ -448,7 +448,7 @@ internal static class PufferSuites
     // ---- PRIORITY inflates the sprite -------------------------------------------------------------
 
     // A PRIORITY 10 puffer spawns particles exactly 20% larger
-    // than the same state at PRIORITY 0 — `1 + 0.02·10 = 1.2`, the hardware-path `K`
+    // than the same state at PRIORITY 0, `1 + 0.02·10 = 1.2`, the hardware-path `K`
     // (`PriorityScaleDefault`). Burst mode, NUMBER 1, a degenerate SIZE_RANGE so the drawn
     // size is deterministic and the only thing that can move it is PRIORITY.
     [Suite("puffer-priority-size",
@@ -578,7 +578,7 @@ internal static class PufferSuites
     // The reorder, isolated: friction 0, no wind, a pure world acceleration. The traced
     // order steps position on LAST frame's velocity and only then adds `a·dt`, giving
     // `pos_n = a·dt²·n(n−1)/2`. Our old order (`v += a·dt` first, position after) gave
-    // `a·dt²·n(n+1)/2` — larger by exactly `a·dt²·n`, i.e. one frame of the current
+    // `a·dt²·n(n+1)/2`, larger by exactly `a·dt²·n`, i.e. one frame of the current
     // velocity, which is the whole of the difference and is asserted as such.
     internal static void PufferAccelOrder(TestContext ctx)
     {
@@ -602,7 +602,7 @@ internal static class PufferSuites
 
     // The per-puffer coupling. Both particles start at rest with no acceleration, so the
     // ONLY thing that can move them is the wind: `WIND_FACTOR` 0 must therefore not move at
-    // all, and 1 must converge on the wind velocity. The carried one's closed form is exact —
+    // all, and 1 must converge on the wind velocity. The carried one's closed form is exact,
     // `v_n = w(1 − damp^n)`, `pos_n = w·dt·(n − (1 − damp^n)/(1 − damp))`.
     internal static void PufferWindFactorCoupling(TestContext ctx)
     {
@@ -649,7 +649,7 @@ internal static class PufferSuites
             $"a FRICTION 0 puffer feels no wind at all drift={end.Length():0.000000}");
     }
 
-    // The gust itself (WorldWind), against the shipped authored values —
+    // The gust itself (WorldWind), against the shipped authored values,
     // `STATIC_VELOCITY (0,2,0)`, `RANDOM_MAX_SPEED 10`, `RANDOM_ACCEL 5`,
     // `RANDOM_ANG_VEL 5`, which every one of the install's 53 weather readers carries.
     internal static void PufferWindGustModel(TestContext ctx)
@@ -989,7 +989,7 @@ internal static class PufferSuites
     }
 
     // A DISTANCE_INTERVAL state through `Emit`: the first call homes the trail and
-    // time-sputters one batch (the still-host rule — on the homing frame no motion has elapsed
+    // time-sputters one batch (the still-host rule, on the homing frame no motion has elapsed
     // yet), a moving host emits one puff per interval of actual motion with the remainder carried
     // across frames instead of rounded away.
     internal static void PufferTrailMode(TestContext ctx, PufferState state)
@@ -1036,7 +1036,7 @@ internal static class PufferSuites
         {
             var p0 = new Vector3(0f, 900f, 0f);
             const float dt = 1f / 60f;
-            for (int i = 0; i < 60; i++)   // 1 s held still — no particle dies (LIFETIME ≥ 1.5 s)
+            for (int i = 0; i < 60; i++)   // 1 s held still, no particle dies (LIFETIME ≥ 1.5 s)
             {
                 puffer.Emit(p0, Basis.Identity, dt);
                 puffer._Process(dt);
@@ -1052,8 +1052,8 @@ internal static class PufferSuites
         }
     }
 
-    // A state that authors no interval at all — the compiled shape carries a zero the engine's own
-    // setter refuses — emits at the constructor's 1 s. Reading that zero as a cadence instead puts
+    // A state that authors no interval at all, the compiled shape carries a zero the engine's own
+    // setter refuses, emits at the constructor's 1 s. Reading that zero as a cadence instead puts
     // the emitter on its 1 ms emission floor, which fills the particle pool and holds it full; the
     // install's five such events are texture-less stubs that build nothing, so this suite is the
     // only place it is visible. Count over time, never one frame (verification.md SHOT-19).
@@ -1100,7 +1100,7 @@ internal static class PufferSuites
 
     // What it costs the frame to own an emitter that is doing nothing. Godot dispatches _Process to
     // every processing node, and a mission pre-warms thousands of emitters, so the claim is that a
-    // dormant one does not ask for the callback at all — through each entry path and each end.
+    // dormant one does not ask for the callback at all, through each entry path and each end.
     [Suite("puffer-idle-process-gate",
         "a dormant emitter is off Godot's frame-callback list and each entry path puts it back, "
         + "which is what keeps a mission's pre-warmed field from costing the frame it is idle in")]
@@ -1209,8 +1209,8 @@ internal static class PufferSuites
     }
 
     // A host that CANNOT move (the damage lab's parked plane) declares a burn rate:
-    // `Emit` with `staticBurnMps` spends virtual metres at the held point — the
-    // authored per-metre density, not the time cadence — through the same carry as the moving
+    // `Emit` with `staticBurnMps` spends virtual metres at the held point, the
+    // authored per-metre density, not the time cadence, through the same carry as the moving
     // trail.
     internal static void PufferStaticBurn(TestContext ctx, PufferState state)
     {
@@ -1221,7 +1221,7 @@ internal static class PufferSuites
         {
             var p0 = new Vector3(0f, 1000f, 0f);
             // 15 m/s × 0.2 s = 3 m/call over DISTANCE_INTERVAL 2: puff counts 1,2,1,2 as the
-            // carry wraps — 6 total for 12 virtual metres. The time cadence over the same 0.8 s
+            // carry wraps, 6 total for 12 virtual metres. The time cadence over the same 0.8 s
             // would be 9 batches, so the count also proves which fallback ran.
             for (int i = 0; i < 4; i++)
             {
@@ -1240,7 +1240,7 @@ internal static class PufferSuites
 
     // The pause + far revive, through `Stop` itself: a pooled effect-template slot
     // is teleported to each new call site, so a distance-state emitter stopped at one blast and
-    // revived at the next must re-home there — a kept trail origin draws a puff line across the
+    // revived at the next must re-home there, a kept trail origin draws a puff line across the
     // whole jump (the rocket-explosion ghost trails). `Stop` ends trail AND sustain
     // unconditionally; the revive's first call sputters fresh at the new site.
     internal static void PufferStopRevive(TestContext ctx, PufferState state)
@@ -1258,7 +1258,7 @@ internal static class PufferSuites
             ctx.Check(gpu.Shown > 0, $"the emitter trailed at the first site shown={gpu.Shown}");
 
             puffer.Stop();
-            puffer.Stop();   // idempotent — a second stop is a no-op, not an error
+            puffer.Stop();   // idempotent, a second stop is a no-op, not an error
             var b = a + new Vector3(1000f, 0f, 0f);
             puffer.Emit(b, Basis.Identity, dt);
             puffer._Process(dt);
@@ -1302,7 +1302,7 @@ internal static class PufferSuites
                 $"a 199 m move is under the 200 m guard and emits its full 99 puffs shown={gpu.Shown}");
             ctx.Same(0, puffer.TeleportGuardCount, $"and does not trip the guard");
 
-            // The teleport: 500 m in one frame, with no Stop in between — the case Stop's re-home
+            // The teleport: 500 m in one frame, with no Stop in between, the case Stop's re-home
             // rule cannot reach.
             int before = gpu.Shown;
             var c = b + new Vector3(500f, 0f, 0f);
@@ -1336,7 +1336,7 @@ internal static class PufferSuites
         {
             Name = "test_start_age",
             Number = 40,
-            TimeInterval = 1000f, // never re-fires on its own — one Burst, one batch
+            TimeInterval = 1000f, // never re-fires on its own, one Burst, one batch
             SizeMin = 2f,
             SizeMax = 2f,
             GrowthFactor = 5f, // an unclamped negative t would shrink (or negate) size below BaseSize
@@ -1453,10 +1453,10 @@ internal static class PufferSuites
                 ctx.Note($"  C1 IA1 wind (0,2,0): centre apex {wind.Centre:0.0} m, drawn top {wind.Top:0.0} m, peak live {wind.Live}");
 
                 // What the authored column has to keep doing, as assertions rather than prose:
-                // (1) the rise itself — LOCAL+WORLD velocity against FRICTION and the −1 accel;
+                // (1) the rise itself, LOCAL+WORLD velocity against FRICTION and the −1 accel;
                 ctx.Check(still.Centre > 8f && still.Centre < 22f,
                     $"the authored rise integrates to a high-teens column centre={still.Centre:0.0} m");
-                // (2) the sprite's own half-extent is a real share of the plume — the SIZE_RANGE
+                // (2) the sprite's own half-extent is a real share of the plume, the SIZE_RANGE
                 //     radius showing up in the picture rather than only in a constant;
                 ctx.Check(still.Top > still.Centre * 1.3f,
                     $"the drawn top stands well above the centre apex — A1's sprite is a real share of the plume top={still.Top:0.0} centre={still.Centre:0.0}");
@@ -1480,7 +1480,7 @@ internal static class PufferSuites
 
     // Drives one sustained emitter for 30 s of held-still emission and reports the
     // column it built: the highest particle CENTRE, the highest drawn sprite TOP (centre plus the
-    // quad's half-side — the renderer scales a 1×1 quad by `Size`), the peak live population
+    // quad's half-side, the renderer scales a 1×1 quad by `Size`), the peak live population
     // and the largest sprite ever drawn. Heights are relative to the emitter's own origin.
     internal static (float Centre, float Top, float PreA1Top, int Live, float Sprite) MeasureFireColumn(
         TestContext ctx, PufferState state, EffectAmbience ambience)

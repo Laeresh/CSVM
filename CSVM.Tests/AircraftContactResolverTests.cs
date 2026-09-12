@@ -6,12 +6,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="AircraftContactResolver.Resolve"/> — the decoded contact rules as a table, taken
+/// <see cref="AircraftContactResolver.Resolve"/>, the decoded contact rules as a table, taken
 /// apart from <c>FlightController</c> and the physics world entirely: no <c>Node</c>, no
 /// <see cref="GodotWorldQuery"/>, a synthetic <see cref="IWorldQuery"/> only where the un-embed
 /// loop needs one. Decode: docs/org/flightModel.md's "Collision damage" and its entity-cut note.
 /// ⚠ Entity detection (the 0.2 cut and the doom rule) is the non-player branch only, and only
-/// against another aeroplane — a case that only checks
+/// against another aeroplane, a case that only checks
 /// <see cref="ContactOutcome.DamageStruckAircraft"/> would pass whether or not the cut actually
 /// applied, so every row here asserts the damage MAGNITUDE, not just the flags.
 /// </summary>
@@ -29,7 +29,7 @@ public class AircraftContactResolverTests
     private static readonly Vector3 ShallowSlide = new(-0.99499f, 0f, -0.1f);
 
     /// <summary>An AI that rams anything OTHER than an aeroplane dies outright (local_11), whatever
-    /// health it carries — asserted against a striker with a live ledger so the rule is not merely
+    /// health it carries, asserted against a striker with a live ledger so the rule is not merely
     /// unreachable through the no-ledger speed fallback above it.</summary>
     [Fact]
     public void AnAiRammingANonAeroplaneIsDoomedOutright()
@@ -52,7 +52,7 @@ public class AircraftContactResolverTests
     }
 
     /// <summary>An AI into another aeroplane takes the entity cut (a fifth) instead of the doom
-    /// rule, and survives to hand the struck plane its share — the trap case: a table that only
+    /// rule, and survives to hand the struck plane its share, the trap case: a table that only
     /// checked <c>DamageStruckAircraft</c> would pass with the cut silently missing.</summary>
     [Fact]
     public void AiIntoAiTakesTheEntityCutNotTheDoomRule()
@@ -69,7 +69,7 @@ public class AircraftContactResolverTests
     }
 
     /// <summary>The player skips entity detection outright: ramming another aeroplane costs the
-    /// FULL pair, not the fifth, and never dooms — the asymmetry <see cref="ContactConditions"/>
+    /// FULL pair, not the fifth, and never dooms, the asymmetry <see cref="ContactConditions"/>
     /// warns against losing.</summary>
     [Fact]
     public void APlayerIsExemptFromBothTheCutAndTheDoomRule()
@@ -157,7 +157,7 @@ public class AircraftContactResolverTests
     }
 
     /// <summary>A plane still embedded after the response is pushed out along the contact normal,
-    /// three tries at a time; giving up destroys it rather than letting it sit inside the world —
+    /// three tries at a time; giving up destroys it rather than letting it sit inside the world,
     /// the un-embed loop's own worked case, and the binding test for that product exception.</summary>
     [Fact]
     public void AnEmbeddedPlaneIsPushedOutThreeTimesThenExplodes()
@@ -179,7 +179,7 @@ public class AircraftContactResolverTests
 
     /// <summary>Struck set-dressing that shatters ends the contact immediately: the striker keeps
     /// its full-motion pose and flies through, so nothing past
-    /// <see cref="IContactEffects.ShatterStruck"/> runs at all — not the graze reaction, not the
+    /// <see cref="IContactEffects.ShatterStruck"/> runs at all, not the graze reaction, not the
     /// damage spend, not the response.</summary>
     [Fact]
     public void ShatteringSetDressingEndsTheContactWithNothingElseRun()
@@ -199,7 +199,7 @@ public class AircraftContactResolverTests
 
     /// <summary>A graze spends real armour before health on the struck zone: the decoded pair runs
     /// through <see cref="PlaneDamage.Apply"/>'s armour-first split, so a fully-armoured zone loses
-    /// no health at all, and only once the armour is gone does health start to drain — the control
+    /// no health at all, and only once the armour is gone does health start to drain, the control
     /// half, which a symmetric or health-first spend fails.</summary>
     [Fact]
     public void AGrazeSpendsArmourBeforeHealthOnTheStruckZone()
@@ -251,7 +251,7 @@ public class AircraftContactResolverTests
     // ---- fakes ---------------------------------------------------------------------------------
 
     /// <summary>Every <see cref="IContactEffects"/> stub, each individually scriptable and each
-    /// recording whether it ran — the shatter-and-fly-through row needs to prove the ones AFTER it
+    /// recording whether it ran, the shatter-and-fly-through row needs to prove the ones AFTER it
     /// did not.</summary>
     private sealed class FakeContactEffects : IContactEffects
     {

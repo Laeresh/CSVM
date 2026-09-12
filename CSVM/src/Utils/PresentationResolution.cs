@@ -6,7 +6,7 @@ namespace CSVM.Utils;
 /// Requested-versus-active menu presentation resolution: fixed precedence force-Built-in → CLI
 /// override → saved request → Built-in default, with availability checked separately so a
 /// temporary failure never rewrites what <see cref="OptionsStore"/> has saved. Presentation names
-/// stay plain strings here on purpose — the presentation contract's identity type belongs to
+/// stay plain strings here on purpose, the presentation contract's identity type belongs to
 /// whichever module owns it.
 /// </summary>
 public static class PresentationResolution
@@ -16,7 +16,7 @@ public static class PresentationResolution
 
     /// <summary>The requested presentation before availability is checked: the CLI override beats
     /// the saved request, which beats <see cref="BuiltIn"/>. Force-Built-in never reaches this
-    /// method — <see cref="Resolve"/> answers it before the request is even read, so what a player
+    /// method, <see cref="Resolve"/> answers it before the request is even read, so what a player
     /// sees back in Options still reflects what they last picked.</summary>
     public static string Requested(string? cliOverride, string? savedRequest) =>
         !string.IsNullOrEmpty(cliOverride) ? cliOverride

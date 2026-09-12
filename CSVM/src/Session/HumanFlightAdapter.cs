@@ -14,7 +14,7 @@ namespace CSVM.Session;
 public readonly record struct FlyingAirframe(string PlaneNode, PaintScheme? Scheme);
 
 /// <summary>Assembles one player's flight rig: the painted plane model, the
-/// <see cref="FlightController"/> and everything hung on it — loadout/ordnance, compass, gauges,
+/// <see cref="FlightController"/> and everything hung on it, loadout/ordnance, compass, gauges,
 /// HUD readout/reticle, damage visuals, audio, this player's stunt run, the spawn placement, and
 /// the crash runtime built once the controller is in the tree.
 ///
@@ -55,7 +55,7 @@ internal sealed class HumanFlightAdapter
         _human = human;
     }
 
-    /// <summary>Mesh instances the assembled planes added, accumulated across the rigs — the
+    /// <summary>Mesh instances the assembled planes added, accumulated across the rigs, the
     /// caller folds this into the build's count.</summary>
     public int MeshInstances { get; private set; }
 
@@ -154,7 +154,7 @@ internal sealed class HumanFlightAdapter
             PinnedViewMode = _policy.ViewMode,
             PinnedLook = _policy.PinnedLook,
             HudParent = rig.Viewport,
-            // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
+            // Null when the airframe ships no cockpit1, the rig then hides nothing, as before B11.
             Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
             CockpitInterior = planeBuilder.CockpitInterior,
             CockpitPanel = CockpitGauges.Bind(planeBuilder),
@@ -166,7 +166,7 @@ internal sealed class HumanFlightAdapter
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.CustomPlaneBuild.HasNitrous(custom);
-        // Every human joins team 1 in an Instant Action mission, splitscreen included — the
+        // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
         controller.Bind(new FlightControllerBuild
@@ -207,7 +207,7 @@ internal sealed class HumanFlightAdapter
         onCreated(controller);
 
         // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
-        // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
+        // its built model, resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
         var loadoutDefName = _policy.LoadoutOverride ?? stats.DefName;
         if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
@@ -222,7 +222,7 @@ internal sealed class HumanFlightAdapter
             try
             {
                 // The weapon lab flies the FULL-RIG loadout instead: every firepoint and
-                // every pylon the airframe carries, seeded from this same stock fit — so the
+                // every pylon the airframe carries, seeded from this same stock fit, so the
                 // panel can mount a weapon on a hardpoint the stock file never names.
                 controller.Loadout = _policy.WeaponLab
                     ? Loadout.ForRig(planeModel, _aircraft.WeaponDefs, ldef)
@@ -240,13 +240,13 @@ internal sealed class HumanFlightAdapter
                 controller.AutoFireRockets = _policy.AutoFireRockets;
                 controller.InitialGunSelect = _policy.GunSelect;
                 // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is mounted.
-                // A testing hook — all 11 stock loadouts carry HE, so this is the only way to
+                // A testing hook, all 11 stock loadouts carry HE, so this is the only way to
                 // prove the mounted model varies by rocket type.
                 if (_policy.RocketOverride != null)
                 {
                     Testing.ProbeRunner.ApplyRocketOverride(controller.Loadout, _aircraft.WeaponDefs, _policy.RocketOverride, verbose);
                 }
-                // Hang the FLYOUT-model ordnance under the pylons — one body per pylon,
+                // Hang the FLYOUT-model ordnance under the pylons, one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
                 controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo);
                 if (verbose)
@@ -272,7 +272,7 @@ internal sealed class HumanFlightAdapter
 
         // The carried turret gunners: the vehicle def's thirdp turrets block resolved
         // by TITLE against ai.zrd and by node against this built model. Independent of the
-        // stock loadout — the gunner's weapon comes from its ai.zrd row, not from a gun slot.
+        // stock loadout, the gunner's weapon comes from its ai.zrd row, not from a gun slot.
         if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
         {
             // ⚠ A human's carried gunner IS positional, unlike the pilot's own forward guns: the
@@ -343,7 +343,7 @@ internal sealed class HumanFlightAdapter
 
         // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
         // and a 4P pane can be compared (--hud-font-test). Set before the controller
-        // enters the tree — its _Ready adds this to the HUD canvas.
+        // enters the tree, its _Ready adds this to the HUD canvas.
         if (_aircraft.HudFont != null && _policy.HudFontTest)
         {
             pilotHud.FontTest = new HudFontTest(_aircraft.HudFont, _policy.HudFontTestText);
@@ -352,7 +352,7 @@ internal sealed class HumanFlightAdapter
         }
 
         // The gun aiming reticle: the ballistic impact point of the selected gun
-        // group at the convergence distance, drawn as the game's pipper — visibly
+        // group at the convergence distance, drawn as the game's pipper, visibly
         // trailing the nose in a hard turn, on the rounds in steady flight.
         if (_aircraft.ReticleTex != null && controller.Loadout != null)
         {
@@ -385,13 +385,13 @@ internal sealed class HumanFlightAdapter
                 Log.Info("flight", $"audio: engine={stats.EngineSound} damaged={stats.DamagedEngineSound ?? "none"} whine={stats.WhineSound ?? "none (no def names prop_sound)"} rattle={stats.RattleSound}{(_human.MixGain < 1f ? $" (per-player mix gain {_human.MixGain:0.00})" : "")}");
         }
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
-        // independent copy of the same zones — own progress, own clock. Never on a swap, which
+        // independent copy of the same zones, own progress, own clock. Never on a swap, which
         // would restart the clock and stack a second run HUD (see AirframeSwapRequest).
         if (swap == null && _human.StuntZones != null)
         {
             var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
             controller.Stunt = run;
-            run.LogTag = tag; // "P2 " in a race — one shared world, four runs
+            run.LogTag = tag; // "P2 " in a race, one shared world, four runs
             controller.DebugCompleteStunt = _policy.DebugScoreboard;
             // This pilot's own unflown zones, on their own target cycle. Bound per controller
             // rather than through FlightRoster's roster-wide channel: each pane races its own copy
@@ -403,7 +403,7 @@ internal sealed class HumanFlightAdapter
             pilotHud.StuntRun = runHud;
             if (_human.Race is { } race)
             {
-                // Racing: no per-player splits board — the shared ranked board
+                // Racing: no per-player splits board, the shared ranked board
                 // below covers the whole window when the last pilot is in. The run
                 // HUD shows this player's placing meanwhile.
                 race.Add(pi, controller.Stunt, planeDisplay);
@@ -418,7 +418,7 @@ internal sealed class HumanFlightAdapter
             }
             else
             {
-                // Solo: the end-of-run scoreboard — per-zone splits + total +
+                // Solo: the end-of-run scoreboard, per-zone splits + total +
                 // persisted best time, keyed chapter/mission/plane in
                 // user://stunt_scores.json (race totals are deliberately not recorded).
                 var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
@@ -441,7 +441,7 @@ internal sealed class HumanFlightAdapter
         // match GameSession built before this loop ran; kill facts arrive later via Downed.
         if (_human.VersusMatch is { } versus)
         {
-            // Rigs is the SAME list GameSession keeps live for the whole session — every seat
+            // Rigs is the SAME list GameSession keeps live for the whole session, every seat
             // already exists (BuildRigs ran before this loop), only .Controller fills in as each
             // player assembles, so by the time this pane draws, every opponent's is populated.
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
@@ -457,7 +457,7 @@ internal sealed class HumanFlightAdapter
         if (verbose)
             Log.Info("flight", $"targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 
-        // The player's target selection: one per human pane, each with its own pool — the cycles
+        // The player's target selection: one per human pane, each with its own pool, the cycles
         // are sorted against THIS plane's pose, so they cannot be shared. GameSession binds
         // TargetSubParts later, once the zeppelins exist.
         controller.Targeting = new TargetSelection();
@@ -482,7 +482,7 @@ internal sealed class HumanFlightAdapter
         // so the caller can construct the assembler first. A swap brings its own instead.
         var start = swap?.Start ?? (_starts ??= _spawns.ChooseStarts(
             _human.SpawnList, _world.MissionZrdrPath, _human.SpawnBase, _human.RigCount))[pi];
-        // The plant's force path is chosen once, here, off who is flying — a person, so the
+        // The plant's force path is chosen once, here, off who is flying, a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),

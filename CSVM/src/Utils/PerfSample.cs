@@ -5,12 +5,12 @@ namespace CSVM.Utils;
 
 /// <summary>The work a scope can declare itself as. A fixed enum, never a string built per call:
 /// opening a scope costs two QPC reads and an array index, with nothing allocated or looked up.
-/// The vocabulary is deliberately coarse — a debris burst, not one chunk; a spawn, not one node.
+/// The vocabulary is deliberately coarse, a debris burst, not one chunk; a spawn, not one node.
 /// A site nothing calls never appears in a record; adding one is this enum plus its name in
 /// <c>PerfSample.Names</c>, in the same order.</summary>
 public enum PerfSite
 {
-    /// <summary>A debris burst coming into existence — the damage lab's reproducible case.</summary>
+    /// <summary>A debris burst coming into existence, the damage lab's reproducible case.</summary>
     DebrisSpawn,
 
     /// <summary>A part detaching from an aircraft, the other half of that same case.</summary>
@@ -78,8 +78,8 @@ public static class PerfSample
     };
 
     // The frame in progress, and the last frame EndFrame closed. Two buffers rather than one so a
-    // record fired at the top of frame N reports frame N-1's work — the frame its own wall cost
-    // measures — instead of the handful of scopes that have run since.
+    // record fired at the top of frame N reports frame N-1's work, the frame its own wall cost
+    // measures, instead of the handful of scopes that have run since.
     private static readonly double[] CurrentMs = new double[Names.Length];
     private static readonly int[] CurrentCalls = new int[Names.Length];
     private static readonly double[] LastMs = new double[Names.Length];
@@ -93,7 +93,7 @@ public static class PerfSample
     /// <see cref="PerfSampleFrame"/>'s arrays.</summary>
     public static int SiteCount => Names.Length;
 
-    /// <summary>The wire name of a site — what the sidecar and the log line call it.</summary>
+    /// <summary>The wire name of a site, what the sidecar and the log line call it.</summary>
     public static string NameOf(PerfSite site) =>
         (uint)site < (uint)Names.Length ? Names[(int)site] : "unknown";
 
@@ -131,7 +131,7 @@ public static class PerfSample
     }
 
     /// <summary>Drops both frames' totals. Called wherever the frames on either side are not each
-    /// other's neighbours — a session build, a teardown — for the same reason
+    /// other's neighbours, a session build, a teardown, for the same reason
     /// <see cref="HitchMonitor.Rearm"/> drops its baseline there.</summary>
     public static void Reset()
     {
@@ -196,14 +196,14 @@ public sealed class PerfSampleFrame
     /// <summary>How many scopes of each site closed in the frame.</summary>
     public int[] Calls { get; }
 
-    /// <summary>The sum of <see cref="Ms"/> — what the frame could name.</summary>
+    /// <summary>The sum of <see cref="Ms"/>, what the frame could name.</summary>
     public double AttributedMs { get; set; }
 
     /// <summary>The frame's wall cost minus <see cref="AttributedMs"/>: real work with no scope on
     /// it, never an error term.</summary>
     public double UnattributedMs { get; set; }
 
-    /// <summary>Scopes that were suppressed rather than measured — a nested scope, an unknown site,
+    /// <summary>Scopes that were suppressed rather than measured, a nested scope, an unknown site,
     /// or one still open when the frame ended. Nonzero means the attribution below it is
     /// incomplete, which is why it travels with the record.</summary>
     public int Violations { get; set; }
@@ -219,7 +219,7 @@ public sealed class PerfSampleFrame
         Violations = 0;
     }
 
-    /// <summary>Copies <paramref name="src"/> field by field into this frame — no allocation, so
+    /// <summary>Copies <paramref name="src"/> field by field into this frame, no allocation, so
     /// the sidecar can queue a record's attribution alongside the rest of it.</summary>
     public void CopyFrom(PerfSampleFrame src)
     {

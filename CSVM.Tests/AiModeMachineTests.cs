@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -487,7 +487,7 @@ public class AiModeMachineTests
         PursueFrom(m, Astern600);
 
         // One passing frame is NOT enough: the entry needs the geometry sustained (the
-        // user-reported misfire regression — a turning fight satisfying the test momentarily).
+        // user-reported misfire regression, a turning fight satisfying the test momentarily).
         m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
         Assert.Equal(AiMode.Pursue, m.Mode);
 
@@ -635,7 +635,7 @@ public class AiModeMachineTests
 
     private static AiModeMachine Machine(int seed = 1) => new(new Random(seed));
 
-    // Holds the pursued geometry through the sustain window plus one frame — the
+    // Holds the pursued geometry through the sustain window plus one frame, the
     // entry now needs it CONTINUOUS, never one passing frame.
     private static void SustainPursuit(AiModeMachine m, Vector3 target, Vector3 chase)
     {

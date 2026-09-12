@@ -12,7 +12,7 @@ namespace CSVM.Mech3;
 
 /// <summary>The texture drop-in instruments (<c>--tex-override</c>/<c>--tex-census</c>,
 /// docs/cli.md), hooked into <see cref="TextureArchive.Find"/> because that is the one place
-/// every consumer resolves a name. ⚠ Only RGB bytes change — size, pixel format, alpha channel
+/// every consumer resolves a name. ⚠ Only RGB bytes change, size, pixel format, alpha channel
 /// and mip chain stay the original's, so a diagnostic never alters what it measures. Census
 /// colours are a pure hash of the name, read back by chromaticity (docs/cli.md).</summary>
 public static class TextureDropIn
@@ -33,7 +33,7 @@ public static class TextureDropIn
     public const float DarkFloor = 0.02f;
 
     /// <summary>The colour an override with no explicit one gets. Deliberately the same magenta
-    /// <c>SceneBuilder</c> paints an unresolvable texture — loud, and never a real texture — so a
+    /// <c>SceneBuilder</c> paints an unresolvable texture, loud, and never a real texture, so a
     /// pose that may contain a genuine lookup failure wants an explicit colour instead.</summary>
     public static readonly Color DefaultOverride = new(1f, 0f, 1f);
 
@@ -55,7 +55,7 @@ public static class TextureDropIn
     /// <summary>True once <c>--tex-census</c> asked for the whole-archive colouring.</summary>
     public static bool CensusActive => _census;
 
-    /// <summary>The texture names <c>--tex-override=</c> claimed, sorted — a launch setting like
+    /// <summary>The texture names <c>--tex-override=</c> claimed, sorted, a launch setting like
     /// any other, readable by the reports that record what a run was asked to do.</summary>
     public static IEnumerable<string> OverrideNames
     {
@@ -67,7 +67,7 @@ public static class TextureDropIn
         }
     }
 
-    /// <summary>True when either instrument is on — the flag <see cref="TextureCycler"/> reads to
+    /// <summary>True when either instrument is on, the flag <see cref="TextureCycler"/> reads to
     /// hold its flipbooks still, and the aircraft paint substitution reads to step aside.</summary>
     public static bool Active => _census || Overrides.Count > 0;
 
@@ -112,7 +112,7 @@ public static class TextureDropIn
     }
 
     /// <summary>Turns the census on. <paramref name="extraNames"/> are textures to include in a
-    /// count report even when this chapter's archive has none of them — the able-to-fail control
+    /// count report even when this chapter's archive has none of them, the able-to-fail control
     /// for "texture X is visible here".</summary>
     public static void EnableCensus(string extraNames)
     {
@@ -196,7 +196,7 @@ public static class TextureDropIn
             }
         }
         // Present in the archive but used by no material is the other half of the same lie, and it
-        // is only knowable after the build — end of frame, once every material has resolved.
+        // is only knowable after the build, end of frame, once every material has resolved.
         if (!_unusedQueued)
         {
             _unusedQueued = true;
@@ -204,7 +204,7 @@ public static class TextureDropIn
         }
     }
 
-    /// <summary>The census colour of any name, a pure hash — one texture wears one colour in every
+    /// <summary>The census colour of any name, a pure hash, one texture wears one colour in every
     /// chapter and run. Full brightness, never grey: the readback classifies by channel ratios.
     /// ⚠ Draw the two free channels in LINEAR ratio, not sRGB bytes: sRGB draws bunch into the
     /// corners once gamma is undone.</summary>
@@ -535,7 +535,7 @@ public static class TextureDropIn
         Log.Info("world", $"tex census map textures={names.Count} collisions={names.Count - ByColor.Count} file={path}");
     }
 
-    /// <summary>Override names that never matched a resolved texture — the loud half of the
+    /// <summary>Override names that never matched a resolved texture, the loud half of the
     /// answer, since an override that coloured nothing looks exactly like an object that never
     /// drew.</summary>
     public static IReadOnlyList<string> UnusedOverrides()
@@ -632,9 +632,9 @@ public static class TextureDropIn
     }
 }
 
-/// <summary>Texture lookup over a mech3ax texture extraction — a ZIP (<c>texture.zbd</c> →
+/// <summary>Texture lookup over a mech3ax texture extraction, a ZIP (<c>texture.zbd</c> →
 /// PNGs) or a directory of the same PNGs. Absorbs the stored-name quirks (20-char truncation,
-/// legacy renames — docs/formats/gamez.md) so a truncated material name still resolves.
+/// legacy renames, docs/formats/gamez.md) so a truncated material name still resolves.
 /// Mip levels: <see cref="Mips"/>, docs/formats/gamez.md. Plumbing: this module's entry in
 /// docs/architecture.md.</summary>
 public sealed class TextureArchive : IDisposable
@@ -649,7 +649,7 @@ public sealed class TextureArchive : IDisposable
     private const int AdditiveTransparentBit = 0x04;
 
     // Texture names referenced by gamez meshes that ship in NO archive of a retail
-    // install — verified absent across all extracted chapters. The
+    // install, verified absent across all extracted chapters. The
     // original engine tolerates them (renders neutral), so we do too: a quiet gray
     // fallback instead of the debug magenta, and a one-line data-gap note instead of
     // a lookup-failure warning. Anything NOT on this list that goes missing is likely
@@ -662,7 +662,7 @@ public sealed class TextureArchive : IDisposable
 
     // Absent from the retail data like the set above, but drawn as NOTHING rather than as a
     // neutral card: the original shows empty sky where these are referenced. Kept a separate set
-    // because the two answers differ where it matters — a gray card is right where the original
+    // because the two answers differ where it matters, a gray card is right where the original
     // drew something blank, and wrong where it drew nothing at all. See docs/org/textures.md.
     private static readonly HashSet<string> AbsentAndUndrawn = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -718,7 +718,7 @@ public sealed class TextureArchive : IDisposable
                     _byBaseName[Path.GetFileNameWithoutExtension(entry.Name)] = entry.FullName;
         }
         // Every (base, level) pair the archive ships, counted once up front so the adoption log can
-        // say "N of the M this chapter ships" — a bare adopted count cannot show a level was missed.
+        // say "N of the M this chapter ships", a bare adopted count cannot show a level was missed.
         var bases = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var name in _byBaseName.Keys)
         {
@@ -731,7 +731,7 @@ public sealed class TextureArchive : IDisposable
         AuthoredMipBases = new List<string>(bases);
         ReadTextureManifest();
         // An override naming a texture this archive does not hold would silently colour nothing,
-        // which reads exactly like "the object is not drawing" — the answer the flag exists to give.
+        // which reads exactly like "the object is not drawing", the answer the flag exists to give.
         TextureDropIn.CheckNames(path, _byBaseName.Keys);
     }
 
@@ -743,7 +743,7 @@ public sealed class TextureArchive : IDisposable
         /// a texture with no sibling is untouched.</summary>
         Authored,
 
-        /// <summary>Every level is box-filtered from the base by <c>Image.GenerateMipmaps()</c> —
+        /// <summary>Every level is box-filtered from the base by <c>Image.GenerateMipmaps()</c>,
         /// kept as <c>--mips=generated</c> so the two are A/B-able in
         /// one build and the goldens of either can be reproduced.</summary>
         Generated,
@@ -777,16 +777,16 @@ public sealed class TextureArchive : IDisposable
     /// summary line. Each was already reported once (one line, no stack trace) by Find.</summary>
     public IReadOnlyCollection<string> MissingTextures => _reportedMissing;
 
-    /// <summary>Authored <c>_1</c>/<c>_2</c> levels this archive ships whose base is present too —
+    /// <summary>Authored <c>_1</c>/<c>_2</c> levels this archive ships whose base is present too,
     /// the denominator of the adoption count, known before anything is loaded.</summary>
     public int AuthoredMipsAvailable { get; private set; }
 
-    /// <summary>The base textures those levels belong to, sorted — what <c>--dump-mips</c> sweeps.</summary>
+    /// <summary>The base textures those levels belong to, sorted, what <c>--dump-mips</c> sweeps.</summary>
     public IReadOnlyList<string> AuthoredMipBases { get; } = Array.Empty<string>();
 
     /// <summary>Authored levels actually installed this session, and the base textures they were
     /// installed on. Below <see cref="AuthoredMipsAvailable"/> by however many of those textures no
-    /// material asked for — a chapter never loads its whole archive.</summary>
+    /// material asked for, a chapter never loads its whole archive.</summary>
     public int AuthoredMipsInstalled { get; private set; }
 
     /// <inheritdoc cref="AuthoredMipsInstalled"/>
@@ -799,7 +799,7 @@ public sealed class TextureArchive : IDisposable
     /// <summary>True if the last texture returned by Find had an alpha channel.</summary>
     public bool LastHadAlpha { get; private set; }
 
-    /// <summary>True when the last texture's alpha is "soft" — mostly partial alpha, which a
+    /// <summary>True when the last texture's alpha is "soft", mostly partial alpha, which a
     /// 1-bit scissor at 0.5 misrepresents (threshold and census: docs/org/textures.md).
     /// True for translucent art (shadows, fire, glow, neon); false for
     /// genuine cutouts (fences, trees), which scissor correctly.</summary>
@@ -830,7 +830,7 @@ public sealed class TextureArchive : IDisposable
     }
 
     /// <summary>True if the name is a texture the retail game data itself lacks (see
-    /// KnownAbsentFromGameData) — callers render a neutral fallback, not the debug magenta.</summary>
+    /// KnownAbsentFromGameData), callers render a neutral fallback, not the debug magenta.</summary>
     public static bool IsKnownAbsent(string materialTextureName) =>
         KnownAbsentFromGameData.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
 
@@ -913,7 +913,7 @@ public sealed class TextureArchive : IDisposable
         ImageTexture? tex = img != null ? ImageTexture.CreateFromImage(img) : null;
         if (!resolved && _reportedMissing.Add(baseName))
         {
-            // Report each distinct miss once. Log.Warn is a plain line — GD.PushWarning would
+            // Report each distinct miss once. Log.Warn is a plain line, GD.PushWarning would
             // print a full managed stack trace per call in Godot .NET, burying real errors.
             if (AbsentAndUndrawn.Contains(baseName))
             {
@@ -933,21 +933,21 @@ public sealed class TextureArchive : IDisposable
         return tex;
     }
 
-    /// <summary>The exact <see cref="Image"/> <see cref="Find"/> installs — freshly decoded, alpha
-    /// classified, drop-in applied and mip chain built — handed back un-cached so an instrument
+    /// <summary>The exact <see cref="Image"/> <see cref="Find"/> installs, freshly decoded, alpha
+    /// classified, drop-in applied and mip chain built, handed back un-cached so an instrument
     /// measures the chain the renderer got rather than a re-derivation of it. Reports how many of
     /// its levels came from authored siblings. Not for render code: it rebuilds every call, and it
     /// moves <see cref="LastHadAlpha"/> and the adoption counters exactly as a lookup would.</summary>
     public Image? BuildMipped(string materialTextureName, out int authoredLevels) =>
         Build(Path.GetFileNameWithoutExtension(materialTextureName), out _, out authoredLevels);
 
-    /// <summary>The raw PNG as a fresh, un-mipmapped <see cref="Image"/> — the source
+    /// <summary>The raw PNG as a fresh, un-mipmapped <see cref="Image"/>, the source
     /// <see cref="PlanePainter"/> recolours. Deliberately NOT the ImageTexture cache: that
     /// one is shared across every plane and world instance and must never be mutated, and
     /// its images already carry generated mipmaps. Each call returns a new Image.</summary>
     public Image? FindImage(string materialTextureName)
     {
-        // a synchronous decode on the frame path — PlanePainter calls this
+        // a synchronous decode on the frame path, PlanePainter calls this
         // per decal slot at AI spawn (players draw at build) and at livery repaint.
         using var _ = PerfSample.Scope(PerfSite.ResourceLoad);
         var name = Resolve(Path.GetFileNameWithoutExtension(materialTextureName));
@@ -959,7 +959,7 @@ public sealed class TextureArchive : IDisposable
     }
 
     /// <summary>The archive's texture whose name begins with a zero-padded two-digit
-    /// number, e.g. 21 → "21ace_star" — how <c>paint_decalN</c> indexes the gapless 00–49
+    /// number, e.g. 21 → "21ace_star", how <c>paint_decalN</c> indexes the gapless 00–49
     /// decal set every chapter ships. Null when out of range. The half-size "_1" LOD twins
     /// are excluded (they share the numeric prefix but are not the decal itself).</summary>
     public string? FindByDecalIndex(int index)
@@ -1032,7 +1032,7 @@ public sealed class TextureArchive : IDisposable
         img.GetFormat() is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444 && img.DetectAlpha() != Image.AlphaMode.None;
 
     // Rescales each generated mip level's alpha so its scissor coverage (a > 127) matches the
-    // base level's, instead of letting the box filter erode it — the fix for lattices/foliage
+    // base level's, instead of letting the box filter erode it, the fix for lattices/foliage
     // thinning at distance. Boost-only; a level
     // already at coverage is untouched. Blend-class textures (no scissor) never reach this.
     private static void ScissorMipsKeepCoverage(Image img)
@@ -1169,8 +1169,8 @@ public sealed class TextureArchive : IDisposable
         // Before mipmaps: raw pixels only. The named coastline sheets are soft whatever the
         // pixel rule says about them (see SoftAlphaCoastline).
         LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaCoastline.Contains(baseName) || baseName.Contains("trans"));
-        // The drop-in instruments repaint the RGB flat and keep everything else — size, format,
-        // alpha channel — so the alpha class read just above (and with it the blend/scissor choice
+        // The drop-in instruments repaint the RGB flat and keep everything else, size, format,
+        // alpha channel, so the alpha class read just above (and with it the blend/scissor choice
         // and the cutout silhouette) is unchanged.
         var flat = TextureDropIn.ColorFor(Path.GetFileNameWithoutExtension(name!), baseName);
         if (flat is { } color)
@@ -1199,7 +1199,7 @@ public sealed class TextureArchive : IDisposable
     }
 
     // Overwrites levels 1 and 2 with the archive's authored `_1`/`_2` siblings where they exist.
-    // Runs on the already-generated chain, so a level with no sibling — and every level below 2 —
+    // Runs on the already-generated chain, so a level with no sibling, and every level below 2,
     // keeps its box filter, and a texture with no siblings at all is bit-identical to before.
     private int InstallAuthoredMips(Image img, string archiveBaseName, Color? flat)
     {

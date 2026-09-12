@@ -68,7 +68,7 @@ public sealed class AiRocketeer
     /// interval rather than retrying next tick (see <see cref="Solve"/>).</summary>
     public float QuickDrawChance = 0.05f;
 
-    /// <summary>Traverse yaw half-limit, degrees (<c>gun_yaw</c>) — the ordnance fires from a gun
+    /// <summary>Traverse yaw half-limit, degrees (<c>gun_yaw</c>), the ordnance fires from a gun
     /// mount and clamps into the same band.</summary>
     public float PylonYawLimitDeg = AiGunner.GunConeHalfAngleDeg;
 
@@ -104,7 +104,7 @@ public sealed class AiRocketeer
         _roll = roll;
     }
 
-    /// <summary>True when this tick's geometry passed every gate and the dice came up — the AI's
+    /// <summary>True when this tick's geometry passed every gate and the dice came up, the AI's
     /// rocket trigger, replacing the human one for a non-human pilot.</summary>
     public bool WantsFire { get; private set; }
 
@@ -119,7 +119,7 @@ public sealed class AiRocketeer
     /// up to the traverse limit apart at the launch instant (<c>BL-405</c>).</summary>
     public Vector3 LaunchDirWorld { get; private set; }
 
-    /// <summary>Seconds until ordnance may fire again — the lockout, for tests and breadcrumbs.</summary>
+    /// <summary>Seconds until ordnance may fire again, the lockout, for tests and breadcrumbs.</summary>
     public float LockoutRemaining => _lockout;
 
     /// <summary>What the last unlocked <see cref="Solve"/> decided, for the host's breadcrumb:

@@ -53,7 +53,7 @@ public sealed partial class WeaponLab : Node3D
     private readonly Loadout? _loadout;
 
     // The fit the session launched with (stock, or whatever --rocket/--loadout made it), captured
-    // before the panel touches anything — what "reset to stock" restores.
+    // before the panel touches anything, what "reset to stock" restores.
     private readonly Dictionary<GunGroup, WeaponDef> _launchGuns = new();
     private WeaponDef? _launchOrdnance;
 
@@ -66,7 +66,7 @@ public sealed partial class WeaponLab : Node3D
     private int _cycleTick;
 
     // Click-to-place: the click is taken in _UnhandledInput but the ray is cast in the physics
-    // step — the space state may not be queried while the server is flushing queries.
+    // step, the space state may not be queried while the server is flushing queries.
     private Vector2? _pendingClick;
     private bool _pendingAimOnly;
     private bool _scriptedPlacementDone;
@@ -94,7 +94,7 @@ public sealed partial class WeaponLab : Node3D
     private CheckButton _infiniteAmmoToggle = null!;
     private bool _suppress; // set while rewriting widgets from a state change
 
-    // In splitscreen the caller builds one lab on rig 0's aircraft/camera only, by design —
+    // In splitscreen the caller builds one lab on rig 0's aircraft/camera only, by design,
     // the other rigs fly with no panel and no camera hand-off.
     public WeaponLab(Node3D plane, WeaponDefs weapons, Loadout? loadout, string planeModel,
         Flight.FlightController? host = null, Camera3D? camera = null)
@@ -123,31 +123,31 @@ public sealed partial class WeaponLab : Node3D
     /// <summary><c>--weapon-mount=&lt;name&gt;</c>: the mount selected at launch.</summary>
     public string? InitialMount { get; init; }
 
-    /// <summary><c>--weapon-fire</c>: hold the aircraft's trigger from launch — the bank decides
+    /// <summary><c>--weapon-fire</c>: hold the aircraft's trigger from launch, the bank decides
     /// which one (guns or rockets).</summary>
     public bool AutoFireAtStart { get; init; }
 
     /// <summary><c>--weapon-cycle=N</c>: step the current bank's weapon list one entry every N
-    /// physics frames — the scripted twin of holding down the panel's <c>&gt;</c> button, so the
+    /// physics frames, the scripted twin of holding down the panel's <c>&gt;</c> button, so the
     /// mount/ordnance-rebuild path can be walked headlessly under <c>--log=weapons</c>. 0 = off.</summary>
     public int CycleFrames { get; init; }
 
     /// <summary><c>--weapon-click[=x,y]</c>: replay one left click at that viewport pixel on the
-    /// first physics frame (the viewport centre when the value is omitted) — the scripted twin of
+    /// first physics frame (the viewport centre when the value is omitted), the scripted twin of
     /// click-to-place, so a capture can aim at a real surface with nobody at the mouse. Null = off.
     /// </summary>
     public Vector2? DebugClick { get; init; }
 
-    /// <summary>Whether <see cref="DebugClick"/> was given at all — the value is optional, so a
+    /// <summary>Whether <see cref="DebugClick"/> was given at all, the value is optional, so a
     /// null <see cref="DebugClick"/> still means "click the centre" when this is set.</summary>
     public bool DebugClickRequested { get; init; }
 
-    /// <summary><c>--weapon-click=x,y,aim</c>: the scripted shift-click — aim at the struck point
+    /// <summary><c>--weapon-click=x,y,aim</c>: the scripted shift-click, aim at the struck point
     /// without moving the aircraft.</summary>
     public bool DebugClickAimOnly { get; init; }
 
     /// <summary><c>--weapon-target=x,y,z</c>: park facing that world point on the first physics
-    /// frame. Wins over <see cref="DebugSurface"/> and <see cref="DebugClick"/> — it is the most
+    /// frame. Wins over <see cref="DebugSurface"/> and <see cref="DebugClick"/>, it is the most
     /// specific of the three.</summary>
     public Vector3? DebugTarget { get; init; }
 
@@ -164,7 +164,7 @@ public sealed partial class WeaponLab : Node3D
     public bool FreeCameraAtStart { get; init; }
 
     /// <summary><c>--weapon-camera=&lt;N&gt;</c>: hand the camera over and back every N physics
-    /// frames — the scripted twin of tapping <b>V</b>, which is how the no-jump hand-back is
+    /// frames, the scripted twin of tapping <b>V</b>, which is how the no-jump hand-back is
     /// checked with nobody at the controls. 0 = off.</summary>
     public int CameraToggleFrames { get; init; }
 
@@ -290,7 +290,7 @@ public sealed partial class WeaponLab : Node3D
 
     // ---- weapon + mount resolution -----------------------------------------------------------
 
-    // The raw firepoint/pylon marker nodes, each with its ordinal, sorted — the
+    // The raw firepoint/pylon marker nodes, each with its ordinal, sorted, the
     // no-loadout fallback for a plane the stock table omits.
     private static void CollectRawMarkers(Node3D plane,
         out List<(int Ord, Node3D Node)> firepoints, out List<(int Ord, Node3D Node)> pylons)
@@ -516,13 +516,13 @@ public sealed partial class WeaponLab : Node3D
         }
         var from = _camera.ProjectRayOrigin(screen);
         var dir = _camera.ProjectRayNormal(screen);
-        // World colliders only: a pick places the aircraft against the WORLD — the held plane's
+        // World colliders only: a pick places the aircraft against the WORLD, the held plane's
         // own body (or a wingman's) must never be what a placement click lands on.
         var query = PhysicsRayQueryParameters3D.Create(from, from + (dir * RayLength), CollisionLayers.World);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count == 0)
         {
-            // A click on the sky is not a placement — say so and leave the aircraft where it is.
+            // A click on the sky is not a placement, say so and leave the aircraft where it is.
             _pickLine = "target: nothing under the cursor (sky)";
             Log.Info("ui", $"weapon lab: pick at ({screen.X:0},{screen.Y:0}) hit nothing — aircraft left where it was");
             SyncState();
@@ -549,7 +549,7 @@ public sealed partial class WeaponLab : Node3D
         _pickLine = $"target: {Trim(name, 22)} · {surface} · {standoff:0} m";
         // The body's own node name is in the line on purpose: one mesh yields a body per texture
         // class present, so "col" vs "col_buildings" is what distinguishes a click that missed the
-        // tagged sibling from a genuinely untagged surface — and those siblings need not share an id.
+        // tagged sibling from a genuinely untagged surface, and those siblings need not share an id.
         Log.Info("ui", $"weapon lab: picked name={name} body={body?.Name} surface={surface} at=({point.X:0.0},{point.Y:0.0},{point.Z:0.0}) standoff={standoff:0}{(aimOnly ? " (aim only)" : "")}");
         ShowMarker(point);
         _host.PlaceHeld(aimOnly ? _plane.GlobalPosition : point - (dir * standoff), point);
@@ -557,7 +557,7 @@ public sealed partial class WeaponLab : Node3D
     }
 
     // `--weapon-target=x,y,z`: park facing that world point, on the line from the
-    // aircraft's spawn — the mouse-free twin of a click, for a point already known from a log or a
+    // aircraft's spawn, the mouse-free twin of a click, for a point already known from a log or a
     // previous capture. The point is taken as given: a coordinate in mid-air is a legitimate aim,
     // so nothing is raycast and the surface class reads `default` unless a body is under
     // it.
@@ -637,7 +637,7 @@ public sealed partial class WeaponLab : Node3D
     }
 
     // The stand-off the panel asks for, shortened if the ray back from the struck point
-    // re-enters geometry — re-parking the aircraft inside a hillside or a warehouse would be worse
+    // re-enters geometry, re-parking the aircraft inside a hillside or a warehouse would be worse
     // than standing closer than requested. Probed from just off the struck face, so the surface the
     // ray just hit is not itself the obstruction.
     private float ClampedStandoff(Vector3 point, Vector3 dir)
@@ -656,7 +656,7 @@ public sealed partial class WeaponLab : Node3D
         return clamped;
     }
 
-    // Drops the aim marker on the struck point — a small unshaded ball, built on first
+    // Drops the aim marker on the struck point, a small unshaded ball, built on first
     // use. Tagged as an overlay so the inspect tools' subtree measurements skip it, and meshes
     // carry no collider, so it can never be picked or shot itself.
     private void ShowMarker(Vector3 point)
@@ -684,7 +684,7 @@ public sealed partial class WeaponLab : Node3D
     // Builds the two mount banks from the bound loadout: one entry per firable gun
     // group (in Loadout.FirableGuns order, which is the order
     // SelectGunGroup indexes) and one per pylon. Falls back
-    // to the raw firepoint/pylon markers when no loadout is bound — a read-only list then, since
+    // to the raw firepoint/pylon markers when no loadout is bound, a read-only list then, since
     // there is nothing live to arm.
     private void BuildMounts(Loadout? loadout)
     {
@@ -722,7 +722,7 @@ public sealed partial class WeaponLab : Node3D
     }
 
     // Snapshots the weapon every group and pylon carries before the panel touches
-    // anything — the fit "reset to stock" restores. Not read back out of
+    // anything, the fit "reset to stock" restores. Not read back out of
     // `stock_loadouts.json`: `--rocket=`/`--loadout=` are part of how the session
     // was launched, and the button restores the launch, not the file.
     private void RememberLaunchFit(Loadout? loadout)
@@ -833,7 +833,7 @@ public sealed partial class WeaponLab : Node3D
     }
 
     // Re-hangs the mounted ordnance after a hardpoint swap. The old set comes off the
-    // pylons FIRST (PylonOrdnance.Unmount detaches immediately) — rebuilding without
+    // pylons FIRST (PylonOrdnance.Unmount detaches immediately), rebuilding without
     // that leaves the previous body under every pylon, so a stepper held down leaks one model per
     // pylon per swap. A weapon with no `FLYOUT` model in this chapter's gamez mounts nothing:
     // PylonOrdnance.Build returns null and the wings simply go empty.
@@ -848,7 +848,7 @@ public sealed partial class WeaponLab : Node3D
         Log.Debug("weapons", $"weapon lab: hardpoints -> {w.Id} ({w.Name}) flyout='{w.Flyout?.Model ?? "-"}' per_pylon={_loadout.Hardpoints[0].Ammo} mounted={_host.Ordnance?.Count ?? 0} ordnance_nodes={CountOrdnanceNodes()}");
     }
 
-    // How many ordnance bodies are actually parented to the rig's pylons right now — the
+    // How many ordnance bodies are actually parented to the rig's pylons right now, the
     // leak tripwire the swap path is verified with (it must equal the mounted count, whatever the
     // panel has been stepped through).
     private int CountOrdnanceNodes()
@@ -867,7 +867,7 @@ public sealed partial class WeaponLab : Node3D
         return n;
     }
 
-    // Holds the aircraft's own trigger — the gun one or the rocket one, by bank. The
+    // Holds the aircraft's own trigger, the gun one or the rocket one, by bank. The
     // other is always released, so switching banks moves the held trigger with it.
     private void SetAutoFire(bool on)
     {
@@ -977,7 +977,7 @@ public sealed partial class WeaponLab : Node3D
             : $"ammo: {ammo} / {cap}";
     }
 
-    // The arguments that reproduce this selection — the lab's output.
+    // The arguments that reproduce this selection, the lab's output.
     private string CliArgs()
     {
         var sb = new StringBuilder();
@@ -1100,7 +1100,7 @@ public sealed partial class WeaponLab : Node3D
         bankRow.AddChild(StepButton(">", () => StepBank(1)));
         box.AddChild(bankRow);
 
-        // weapon stepper — each step ARMS the selection
+        // weapon stepper, each step ARMS the selection
         _weaponLabel = new Label { CustomMinimumSize = new Vector2(330, 0), VerticalAlignment = VerticalAlignment.Center };
         var weaponRow = new HBoxContainer();
         weaponRow.AddChild(StepButton("<", () => StepWeapon(-1)));
@@ -1114,7 +1114,7 @@ public sealed partial class WeaponLab : Node3D
 
         box.AddChild(Separator());
 
-        // mount stepper — the group/pylon the trigger fires from
+        // mount stepper, the group/pylon the trigger fires from
         _mountLabel = new Label { CustomMinimumSize = new Vector2(280, 0), VerticalAlignment = VerticalAlignment.Center };
         var mountRow = new HBoxContainer();
         mountRow.AddChild(StepButton("<", () => StepMount(-1)));
@@ -1128,7 +1128,7 @@ public sealed partial class WeaponLab : Node3D
 
         box.AddChild(Separator());
 
-        // The lab launches with infinite ammo so a soak run never dries up — which also hides the
+        // The lab launches with infinite ammo so a soak run never dries up, which also hides the
         // depletion behaviour entirely (a pylon that never empties never drops its mounted model),
         // so the toggle to turn it off is on the panel rather than only on the command line.
         _infiniteAmmoToggle = new CheckButton { Text = "infinite ammo" };
@@ -1177,7 +1177,7 @@ public sealed partial class WeaponLab : Node3D
         root.AddChild(panel);
         _ui.AddChild(root);
         AddChild(_ui);
-        // Space is the fire key here, so no widget of this panel may hold keyboard focus — see
+        // Space is the fire key here, so no widget of this panel may hold keyboard focus, see
         // PanelFocus for why, and note it covers the sliders and toggles too, not just the buttons.
         PanelFocus.Strip(_ui, "weapon lab: panel built");
     }
@@ -1185,7 +1185,7 @@ public sealed partial class WeaponLab : Node3D
     // One selectable place on the airframe: a firable gun group or a pylon.
     // Nodes are its live muzzle / pylon Node3Ds and Cli
     // the `--weapon-mount=` token (`g1`, `pylon1`). Group /
-    // Hp are the live loadout entries the panel writes into — both null for the
+    // Hp are the live loadout entries the panel writes into, both null for the
     // raw-marker fallback, which has nothing to arm.
     private sealed class Mount
     {

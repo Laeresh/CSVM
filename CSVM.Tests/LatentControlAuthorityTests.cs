@@ -122,7 +122,7 @@ public class LatentControlAuthorityTests
     }
 
     /// <summary>The AOA window's shape: 1 with the nose on the flight path, falling to zero at the
-    /// authored <c>maxAOA</c> and staying there beyond. It is NOT a threshold — it is below 1 at
+    /// authored <c>maxAOA</c> and staying there beyond. It is NOT a threshold, it is below 1 at
     /// every non-zero α, which is why it binds on stock data and the G half beside it does not.
     /// </summary>
     [Theory]
@@ -255,7 +255,7 @@ public class LatentControlAuthorityTests
     /// <summary>Roll carries no such test at all, in either direction. Read against the closed form
     /// for one step of roll command rather than against a second plant, because a plant flown
     /// without the limiter arrives at this entry with a different speed and so a different roll
-    /// authority — the comparison that looks obvious is not a controlled one.</summary>
+    /// authority, the comparison that looks obvious is not a controlled one.</summary>
     [Theory]
     [InlineData(1f)]
     [InlineData(-1f)]

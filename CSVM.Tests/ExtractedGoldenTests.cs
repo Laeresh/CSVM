@@ -190,7 +190,7 @@ public class ExtractedGoldenTests
     public void TheBloodhawkParsesBothHpAndArmorOnAllFourZones()
     {
         // The destroyable_parts pair is (hit points, armor); pbloodhawk is the
-        // canonical stock example — 20/20 on every zone, not a dropped second float.
+        // canonical stock example, 20/20 on every zone, not a dropped second float.
         var stats = PlaneStats.Load(SharedZrdr, "player_bhawk");
         Assert.Equal(4, stats.DestroyableParts.Count);
         foreach (var part in stats.DestroyableParts)

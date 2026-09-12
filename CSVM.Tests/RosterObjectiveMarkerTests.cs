@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -48,7 +48,7 @@ public class RosterObjectiveMarkerTests
     }
 
     // AiSkills.RosterHelpLabel: reads slot 39 raw. The gate against slot 37 is the caller's job
-    // (CampaignDirector.RegisterObjectiveMarker), not this accessor's — C4/M05's blakepeace_3_1/_2
+    // (CampaignDirector.RegisterObjectiveMarker), not this accessor's, C4/M05's blakepeace_3_1/_2
     // author a non-key string here with the flag at 0, and this reader must not hide that.
     [Fact]
     public void HelpLabelReadsWhateverSlot39CarriesRaw()

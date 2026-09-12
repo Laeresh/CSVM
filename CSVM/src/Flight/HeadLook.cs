@@ -20,7 +20,7 @@ public readonly record struct HeadLookInput(
 /// set by a snap direction, integrated by free-look, or zeroed by the center key) and where it is
 /// actually looking (the SHOWN angles, chasing the targets exponentially at the decoded rates).
 /// Elevation is 0 at level and +π/2 straight up, clamped to <see cref="ElevationFloor"/>..π/2;
-/// azimuth is 0 straight ahead, positive to the left, and CLAMPED to ±π — the head stops at dead
+/// azimuth is 0 straight ahead, positive to the left, and CLAMPED to ±π, the head stops at dead
 /// astern and never pans past it, the original's own stop confirmed at its controls. Both bounds
 /// bind the relative paths (snap, free-look, center); the absolute pad aim carries its own
 /// envelope, see <see cref="PadAimTargets"/>. Engine-free apart from <see cref="Mathf"/>, so
@@ -69,7 +69,7 @@ public sealed class HeadLook
 
     /// <summary>Consulted on any frame with no look input at all, and its answer
     /// becomes the targets directly. It sets elevation past <see cref="ElevationFloor"/> on
-    /// purpose — autohead's own floor is below level — so the value is taken as given and only the
+    /// purpose, autohead's own floor is below level, so the value is taken as given and only the
     /// azimuth is clamped. Null (the default) returns the idle head to straight ahead, the
     /// original's own idle rule in its default snap-look mode; a head that stays where it was
     /// parked is the J smooth-look mode, filed, not this.</summary>
@@ -84,7 +84,7 @@ public sealed class HeadLook
     /// <summary>Where the head is being told to look, left of the nose.</summary>
     public float TargetAzimuth { get; private set; }
 
-    /// <summary>Where the head is actually looking, above level — the angle a view basis is built
+    /// <summary>Where the head is actually looking, above level, the angle a view basis is built
     /// from.</summary>
     public float Elevation { get; private set; }
 
@@ -92,7 +92,7 @@ public sealed class HeadLook
     public float Azimuth { get; private set; }
 
     /// <summary>The snap mapping: a direction becomes an azimuth (its own angle, mirrored so that
-    /// pointing right looks right) and one of three elevations — dead ahead looks straight UP, a
+    /// pointing right looks right) and one of three elevations, dead ahead looks straight UP, a
     /// 45° diagonal looks 45° up, anything else looks level. Returns null for no direction at all.
     /// Pure; <paramref name="dirX"/> is +right and <paramref name="dirY"/> +forward.</summary>
     public static (float Elevation, float Azimuth)? SnapTargets(float dirX, float dirY)
@@ -127,10 +127,10 @@ public sealed class HeadLook
          Mathf.Clamp(-right, -1f, 1f) * Mathf.DegToRad(PadLookYawMaxDeg));
 
     /// <summary>The idle-frame lean into the plane's own velocity, local-frame X/Y only
-    /// (forward speed dropped — why, and the (elevation, azimuth) derivation, are
+    /// (forward speed dropped, why, and the (elevation, azimuth) derivation, are
     /// docs/formats/vehicle/player-globals.md's autohead row). Scaled by <paramref
     /// name="turnTime"/>, capped in magnitude at <paramref name="turnMax"/>, floored at <paramref
-    /// name="minPitch"/> — below <see cref="ElevationFloor"/> on purpose, <see cref="Step"/>'s idle
+    /// name="minPitch"/>, below <see cref="ElevationFloor"/> on purpose, <see cref="Step"/>'s idle
     /// branch bypasses it. Null when the lean is negligible.</summary>
     public static (float Elevation, float Azimuth)? AutoheadTarget(
         Vector3 localVelocity, float turnTime, float turnMax, float minPitch)
@@ -156,7 +156,7 @@ public sealed class HeadLook
     public static float Approach(float shown, float target, float rate, float dt) =>
         target + ((shown - target) * Mathf.Exp(-rate * dt));
 
-    /// <summary>An angle folded into ±π — used to normalise an INPUT angle before it becomes a
+    /// <summary>An angle folded into ±π, used to normalise an INPUT angle before it becomes a
     /// target. The live azimuth is clamped, not wrapped: see <see cref="ClampAzimuth"/>.</summary>
     public static float Wrap(float angle) => Mathf.PosMod(angle + Mathf.Pi, Mathf.Tau) - Mathf.Pi;
 
@@ -197,7 +197,7 @@ public sealed class HeadLook
         else
         {
             // No look input at all: autohead owns the frame when enabled, else the head returns
-            // to straight ahead — the original's idle rule in its default snap-look mode, for
+            // to straight ahead, the original's idle rule in its default snap-look mode, for
             // snap and free-look alike. The smoothing below makes it a swing, not a cut.
             var idle = IdleAim?.Invoke();
             if (idle != null)
@@ -217,7 +217,7 @@ public sealed class HeadLook
         Azimuth = Approach(Azimuth, TargetAzimuth, AzimuthSmoothRate, dt);
     }
 
-    /// <summary>Put the head straight ahead at once, targets and shown angles together — what a
+    /// <summary>Put the head straight ahead at once, targets and shown angles together, what a
     /// fresh spawn wants, as against the center key's smoothed return.</summary>
     public void Reset()
     {

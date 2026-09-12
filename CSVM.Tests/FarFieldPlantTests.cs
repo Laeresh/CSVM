@@ -180,7 +180,7 @@ public class FarFieldPlantTests
         near.Step(near1, Dt);
 
         // The ramp reads 0.25 at 20 mph on this airframe, so the near control is a quarter of the
-        // far one — a ratio, not merely "different", which a dropped multiply could also produce.
+        // far one, a ratio, not merely "different", which a dropped multiply could also produce.
         Assert.Equal(stats.RollTorque * stats.RecInertia.Z * Dt, far.BodyRates.Z / Mathf.Exp(-Dt * stats.AngMomentumDamp), 4);
         Assert.Equal(0.25f, near.BodyRates.Z / far.BodyRates.Z, 3);
     }

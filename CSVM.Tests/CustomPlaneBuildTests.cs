@@ -9,8 +9,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// D32's join: a saved <see cref="CustomPlaneDef"/> onto the three things a spawn consumes. The
-/// cases that matter are the ones the record cannot state on its own — which firepoints a twin
-/// mount owns, which pylons a wing count hangs on, and what a count above the stock fit does —
+/// cases that matter are the ones the record cannot state on its own, which firepoints a twin
+/// mount owns, which pylons a wing count hangs on, and what a count above the stock fit does,
 /// plus the guarantee that the Ammo Selection layer still composes over the result.
 /// </summary>
 public class CustomPlaneBuildTests
@@ -271,7 +271,7 @@ public class CustomPlaneBuildTests
     }
 
     /// <summary>Vehicle totals are the sum over zones, so buying armour raises the hull pool with
-    /// them — the original recomputes the totals on every zone write and never keeps them
+    /// them, the original recomputes the totals on every zone write and never keeps them
     /// independently.</summary>
     [Fact]
     public void TheVehicleArmourTotalIsTheSumOverTheBoughtZones()

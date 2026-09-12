@@ -66,12 +66,12 @@ public sealed partial class WorldDamageLab : Node
         Name = "world_damage_lab";
     }
 
-    /// <summary>Selects a world node by <c>cs_name</c> — the node lab's own index, borrowed so a
+    /// <summary>Selects a world node by <c>cs_name</c>, the node lab's own index, borrowed so a
     /// scripted run can name the object it means instead of aiming a pick ray at it.</summary>
     public Func<string, bool>? SelectByName { get; init; }
 
     /// <summary>Builds (once) and returns the world-effects runtime, so a kill's fire and smoke
-    /// render. <c>--freecam</c> does not build one for itself — outside flight the puffer factory is
+    /// render. <c>--freecam</c> does not build one for itself, outside flight the puffer factory is
     /// torn down after the world build, so a damage stage would start its definition and draw
     /// nothing. Null when this session cannot build one; the HP/kill/swap/reset mechanics do not
     /// depend on it.</summary>
@@ -79,16 +79,16 @@ public sealed partial class WorldDamageLab : Node
 
     /// <summary><c>--debug-damage=&lt;script&gt;</c>: open the panel at launch and run an ordered
     /// script of <c>node=</c>, <c>pool=</c>, <c>hp=</c>, <c>kill</c>, <c>reset</c> and <c>tick=</c>
-    /// steps against it — the scripted stand-in for pressing H and dragging the slider, which live
+    /// steps against it, the scripted stand-in for pressing H and dragging the slider, which live
     /// input cannot do here.</summary>
     public string? DebugSpec { get; init; }
 
-    /// <summary>Pixels of window kept clear below the panel — the anim lab parks its timeline strip
+    /// <summary>Pixels of window kept clear below the panel, the anim lab parks its timeline strip
     /// there, plain freecam does not.</summary>
     public int BottomMargin { get; init; } = 16;
 
     /// <summary>Whether the panel is showing. Nothing is built until it first opens, so a capture
-    /// without H — and without <c>--debug-damage</c> — renders as if this file did not exist.</summary>
+    /// without H, and without <c>--debug-damage</c>, renders as if this file did not exist.</summary>
     public bool IsOpen => _open;
 
     /// <summary>Parses <c>--debug-damage[=script]</c>: a comma-separated, <b>ordered</b> list of
@@ -275,7 +275,7 @@ public sealed partial class WorldDamageLab : Node
     // Queues ResizeToContent for after Godot's own container layout pass.
     // Container sizing (and therefore any word-wrapped label's real height) is resolved lazily on a
     // deferred call the engine queues itself when children change, so measuring synchronously right
-    // after `AddChild` reads stale, pre-layout sizes — queuing ours after theirs (both FIFO on
+    // after `AddChild` reads stale, pre-layout sizes, queuing ours after theirs (both FIFO on
     // the same deferred-call queue) is what makes the measurement below correct.
     private void RequestResize() => Callable.From(ResizeToContent).CallDeferred();
 
@@ -327,7 +327,7 @@ public sealed partial class WorldDamageLab : Node
     }
 
     // Rebuilds the rows for the current selection: every pool anchored on the selected
-    // node, plus the one a weapon hit there would actually reach — which can be an enclosing
+    // node, plus the one a weapon hit there would actually reach, which can be an enclosing
     // node's, since a reader wildcard can grab an inner node the compiled def roots above. The
     // reachable pool is listed first and is the only one with controls.
     private void Rebuild()
@@ -530,8 +530,8 @@ public sealed partial class WorldDamageLab : Node
         UpdateReadouts();
     }
 
-    // Kills a pool outright through the weapon-hit path — one hit spending more than the
-    // whole pool — and reports the immediate consequences: the healthy→destroyed swap and the
+    // Kills a pool outright through the weapon-hit path, one hit spending more than the
+    // whole pool, and reports the immediate consequences: the healthy→destroyed swap and the
     // collider census. Both are read before any clock advance, because they are what the
     // death does synchronously; the debris is scheduled and belongs to Tick.
     private void Kill(PoolRow row, string via)
@@ -624,7 +624,7 @@ public sealed partial class WorldDamageLab : Node
         UpdateReadouts();
     }
 
-    // Which definitions a damage action started — the stage effect a threshold crossing calls, and
+    // Which definitions a damage action started, the stage effect a threshold crossing calls, and
     // the death's own sequences. Naming them is the difference between "the stage counter moved"
     // and "the black-smoke effect fired".
     private List<string> Watch()

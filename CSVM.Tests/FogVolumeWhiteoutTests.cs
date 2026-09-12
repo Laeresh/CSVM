@@ -27,7 +27,7 @@ public class FogVolumeWhiteoutTests
         var box = Cube();
 
         // Outside, straight out from the +X wall (a face's own Voronoi region, so the plane
-        // distance and the hull distance agree — the edge/corner cases are pinned separately).
+        // distance and the hull distance agree, the edge/corner cases are pinned separately).
         Assert.Equal(1f, Density(box, new Vector3(Half, 0f, 0f)), 4);           // AT the wall
         Assert.Equal(0.75f, Density(box, new Vector3(Half + 4f, 0f, 0f)), 4);   // a quarter out
         Assert.Equal(0.5f, Density(box, new Vector3(Half + 8f, 0f, 0f)), 4);    // half fade
@@ -69,7 +69,7 @@ public class FogVolumeWhiteoutTests
     {
         var box = Cube();
 
-        // fog_fade_dist 0 — no approach at all; interior_fog_fade_dist 0 — the wall only.
+        // fog_fade_dist 0, no approach at all; interior_fog_fade_dist 0, the wall only.
         Assert.Equal(0f, FogVolumeWhiteout.VolumeDensity(box, new Vector3(Half + 0.5f, 0f, 0f), 0f, 0f));
         Assert.Equal(1f, FogVolumeWhiteout.VolumeDensity(box, new Vector3(Half, 0f, 0f), 0f, 0f));
         Assert.Equal(0f, FogVolumeWhiteout.VolumeDensity(box, Vector3.Zero, 0f, 0f));
@@ -93,7 +93,7 @@ public class FogVolumeWhiteoutTests
     public void ADisarmedChapterWhiteoutsNothingEvenStandingInsideAVolume()
     {
         // C1's shape: nine volumes, fog_zone 0. The camera inside one of them is a state-1 camera
-        // in clear air — the whole reason fog_zone is a bool and not a geometry test.
+        // in clear air, the whole reason fog_zone is a bool and not a geometry test.
         var spec = FogVolumeSpec.Parse(new System.Collections.Generic.List<object?>
         {
             "fog_zone", new System.Collections.Generic.List<object?> { 0f },
@@ -120,7 +120,7 @@ public class FogVolumeWhiteoutTests
             volumes);
 
         // A 0-255 triple, normalised the way every other weather colour is (WeatherState.ParseColor)
-        // — 16/255, not 16.
+        //, 16/255, not 16.
         Assert.NotNull(authored.Color);
         Assert.Equal(16f / 255f, authored.Color!.Value.R, 5);
         Assert.Equal(32f / 255f, authored.Color!.Value.G, 5);
@@ -150,17 +150,17 @@ public class FogVolumeWhiteoutTests
         Assert.Equal(10f, box.ExteriorDistance(new Vector3(Half + 10f, 0f, 0f)), 3);
         Assert.Equal(10f, box.SignedDistance(new Vector3(Half + 10f, 0f, 0f)), 3);
 
-        // Edge region: the true distance is sqrt(2)·10 = 14.142, the face planes say 10 — a 29 %
+        // Edge region: the true distance is sqrt(2)·10 = 14.142, the face planes say 10, a 29 %
         // under-read that would put the ramp a third too strong.
         var edge = new Vector3(Half + 10f, Half + 10f, 0f);
         Assert.Equal(MathF.Sqrt(2f) * 10f, box.ExteriorDistance(edge), 3);
         Assert.Equal(10f, box.SignedDistance(edge), 3);
 
-        // Corner region: sqrt(3)·10 = 17.32 against the planes' 10 — 42 % under.
+        // Corner region: sqrt(3)·10 = 17.32 against the planes' 10, 42 % under.
         var corner = new Vector3(Half + 10f, Half + 10f, Half + 10f);
         Assert.Equal(MathF.Sqrt(3f) * 10f, box.ExteriorDistance(corner), 3);
 
-        // Inside is 0, and the wall itself is 0 — the ramps' shared boundary.
+        // Inside is 0, and the wall itself is 0, the ramps' shared boundary.
         Assert.Equal(0f, box.ExteriorDistance(Vector3.Zero));
         Assert.Equal(0f, box.ExteriorDistance(new Vector3(Half, 0f, 0f)));
     }
@@ -184,12 +184,12 @@ public class FogVolumeWhiteoutTests
         var prism = new FogVolumeBox("fvoltest", new Aabb(new Vector3(-15f, -10f, -15f), new Vector3(30f, 20f, 30f)), faces);
 
         // Straight out along +X: the diamond's own vertex sits at (10·sqrt2, 0, 0) = 14.142, so a
-        // point at x = 30 is 15.858 away. The face planes read 30·S - 10 = 11.213 — 29 % under.
+        // point at x = 30 is 15.858 away. The face planes read 30·S - 10 = 11.213, 29 % under.
         var out1 = new Vector3(30f, 0f, 0f);
         Assert.Equal(30f - (10f * MathF.Sqrt(2f)), prism.ExteriorDistance(out1), 3);
         Assert.Equal((30f * S) - 10f, prism.SignedDistance(out1), 3);
 
-        // Perpendicular to a side face, where the two DO agree — the able-to-fail half showing the
+        // Perpendicular to a side face, where the two DO agree, the able-to-fail half showing the
         // helper is not simply always larger.
         var out2 = new Vector3(S, 0f, S) * 15f;
         Assert.Equal(5f, prism.ExteriorDistance(out2), 3);
@@ -218,7 +218,7 @@ public class FogVolumeWhiteoutTests
 
         var whiteout = FogVolumeWhiteout.From(spec, volumes);
 
-        // 101010 is 16,16,16 in hex — C5's fog_color, the same 16 its ZONE3 FOG_COLOR carries, so
+        // 101010 is 16,16,16 in hex, C5's fog_color, the same 16 its ZONE3 FOG_COLOR carries, so
         // the "whiteout" is very nearly a blackout and the hand-off to ZONE3's fog is
         // colour-continuous.
         string actual = whiteout.Armed
@@ -255,7 +255,7 @@ public class FogVolumeWhiteoutTests
         Assert.True(nearest > 500f, $"nearest C5 volume is {nearest:0.0} m from the golden pose");
     }
 
-    // fog_fade_dist 16 / interior_fog_fade_dist 16 — C5's own authored pair, so every ramp
+    // fog_fade_dist 16 / interior_fog_fade_dist 16, C5's own authored pair, so every ramp
     // assertion above is read at the scale the install actually ships.
     private static float Density(in FogVolumeBox volume, Vector3 point) =>
         FogVolumeWhiteout.VolumeDensity(volume, point, 16f, 16f);

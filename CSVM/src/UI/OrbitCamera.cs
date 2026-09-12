@@ -24,7 +24,7 @@ public sealed class OrbitCamera
         _camera = camera;
     }
 
-    /// <summary>The point the camera orbits and aims at — the framed pivot. F11 prints it as the
+    /// <summary>The point the camera orbits and aims at, the framed pivot. F11 prints it as the
     /// orbit-mode <c>--lookat</c> (the one mode whose F11 form is a point, because only a point
     /// reproduces the radius as well as the angle), and <c>--shots</c> jitter micro-orbits about
     /// it.</summary>

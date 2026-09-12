@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared pause board and its menu — <see cref="ResultsBoard"/>'s chrome on the same
+/// The shared pause board and its menu, <see cref="ResultsBoard"/>'s chrome on the same
 /// WHOLE-window CanvasLayer shape, since pausing stops the game for everybody at once, but not its
 /// shell: pausing is a held clock, not an ended run, so this board follows
 /// <see cref="PauseState.Changed"/> instead of the halt-and-retire contract. Names the pausing
@@ -16,7 +16,7 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class PauseBoard : Control
 {
-    // Base metrics at 720p (scaled by window height) — mirrors VersusBoard so a shared board reads
+    // Base metrics at 720p (scaled by window height), mirrors VersusBoard so a shared board reads
     // as the same screen whichever one is up. All TUNE.
     private const int TitleFont = 30;
     private const int ContextFont = 18;
@@ -60,7 +60,7 @@ public sealed partial class PauseBoard : Control
 
     public override void _Process(double delta)
     {
-        // Track the window (resizable) so the backdrop always covers it — VersusBoard's same rule.
+        // Track the window (resizable) so the backdrop always covers it, VersusBoard's same rule.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
 
@@ -97,7 +97,7 @@ public sealed partial class PauseBoard : Control
 
     private void Populate()
     {
-        // Whole window, not a pane — scales on window height alone, same reason VersusBoard does.
+        // Whole window, not a pane, scales on window height alone, same reason VersusBoard does.
         float s = Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / 720f : 1f);
         var body = ResultsBoard.RebuildPanel(_center, ref _panel, s);
 

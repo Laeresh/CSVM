@@ -9,7 +9,7 @@ namespace CSVM.Mech3;
 /// <summary>
 /// Reader for mech3ax zrdr extractions (the game's "reader" config files → JSON).
 /// Reader data is nested lists of strings and numbers. By convention most lists
-/// alternate key/value pairs: [key, [values...], key, [values...], ...] — wrap those
+/// alternate key/value pairs: [key, [values...], key, [values...], ...], wrap those
 /// in <see cref="ZrdrDict"/>. vehicle.json defs additionally inherit via 'kind_of'.
 /// </summary>
 public static class Zrdr
@@ -24,7 +24,7 @@ public static class Zrdr
 
     /// <summary>Loads one reader file, treating an EMPTY reader as an empty list rather than as an
     /// error. mech3ax writes a reader with no entries as the four bytes <c>null</c>, which
-    /// <see cref="LoadFile"/> rejects as "not a reader list" — indistinguishable there from a
+    /// <see cref="LoadFile"/> rejects as "not a reader list", indistinguishable there from a
     /// corrupt file. Two shipped `templates.zrd` are in that state (C1C, C2B), and for a caller
     /// that must tell "this chapter authors nothing" apart from "this file is broken", that
     /// difference is the whole point. Still throws when the entry is absent.</summary>
@@ -39,7 +39,7 @@ public static class Zrdr
 
     /// <summary>
     /// Enumerates every reader file in a zrdr ZIP or directory whose raw JSON contains
-    /// <paramref name="contentFilter"/> (a cheap pre-parse sniff — reader archives hold
+    /// <paramref name="contentFilter"/> (a cheap pre-parse sniff, reader archives hold
     /// hundreds of files and most callers want one family, e.g. "ANIMATION_DEFINITIONS"),
     /// yielding (fileName, parsed root list). Unparseable files are skipped.
     /// </summary>
@@ -84,7 +84,7 @@ public static class Zrdr
         }
     }
 
-    /// <summary>Enumerates reader files by NAME (dir or zip) — the counterpart of
+    /// <summary>Enumerates reader files by NAME (dir or zip), the counterpart of
     /// <see cref="LoadMatchingFiles"/> for families keyed by filename rather than content
     /// (the ne0NNNNN patrol nets are pure number arrays with nothing to sniff for). The
     /// predicate sees the stored file name; unparseable matches are skipped.</summary>
@@ -132,7 +132,7 @@ public static class Zrdr
     // The names a requested reader file may be stored under. mech3ax v0.6.1
     // replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
     // instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
-    // identical — all 222 readers verified semantically equal across the two — so only
+    // identical, all 222 readers verified semantically equal across the two, so only
     // the lookup needs to accept both.
     private static byte[] ReadEntry(string zrdrPath, string fileName)
     {
@@ -202,7 +202,7 @@ public sealed class ZrdrDict
     private readonly Dictionary<string, List<object?>> _props = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Every key present, in no particular order (duplicates already collapsed). Lets a
-    /// typed reader assert it consumed every key its source file carries — see
+    /// typed reader assert it consumed every key its source file carries, see
     /// <see cref="Flight.WeaponDefs"/>'s unhandled-key check.</summary>
     public IReadOnlyCollection<string> Keys => _props.Keys;
 
@@ -227,7 +227,7 @@ public sealed class ZrdrDict
             }
             else
             {
-                i += 1; // stray value — tolerate
+                i += 1; // stray value, tolerate
             }
         }
         return d;

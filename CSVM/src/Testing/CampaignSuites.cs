@@ -47,7 +47,7 @@ internal static class CampaignSuites
     private const string CalledDestruction = "destroy_the_cargozep";
 
     // BL-458: the mission whose SECONDARY (OBJECTIVE3, IDENTITY SECONDARY 11) and OBJECTIVE11
-    // both gate on DANGER_ZONES_COMPLETED (dzpath1, dzpath4) — the worked case that was
+    // both gate on DANGER_ZONES_COMPLETED (dzpath1, dzpath4), the worked case that was
     // unreachable before a campaign session armed its own dzpathN gates.
     private const string DangerZoneChapter = "C3";
 
@@ -660,7 +660,7 @@ internal static class CampaignSuites
             {
                 // A fresh tracker per zone: Update tests every armed gate on every call, so one
                 // shared instance's long "prime" jump between two zones' probe points can cross
-                // the OTHER zone's gate plane too — a test-construction risk, not an engine one.
+                // the OTHER zone's gate plane too, a test-construction risk, not an engine one.
                 var solo = CampaignDangerZones.Load(script, world.Gamez, missionZrdrPath)!;
                 ctx.Check(solo.TryGateProbe(name, out var gc, out var gn, out var rc, out var rn),
                     $"'{name}' resolved a green/red gate pair");
@@ -668,7 +668,7 @@ internal static class CampaignSuites
                 solo.Update(gc - gn * 5f, half.Add);
                 solo.Update(gc + gn * 5f, half.Add);
                 // Some authored pairs sit only metres apart (a "thin slit" aperture), so crossing
-                // green can carry this probe across red's plane too — completion, not a false one.
+                // green can carry this probe across red's plane too, completion, not a false one.
                 solo.Update(rc - rn * 5f, half.Add);
                 solo.Update(rc + rn * 5f, half.Add);
                 ctx.Check(half.Contains(name), $"'{name}' completed once both authored gates were crossed");

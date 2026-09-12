@@ -8,7 +8,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The knife-edge: no dedicated sag term and no verticality scale on the nose-chase either — the
+/// The knife-edge: no dedicated sag term and no verticality scale on the nose-chase either, the
 /// decoded bank→yaw coupling and the weathervane produce the drift on their own. Decode:
 /// docs/org/flightModel.md's "lift_accel_rate is a lag toward a target velocity".
 /// ⚠ Do not reintroduce a nose-sag term; see that section for why it regresses the onset.
@@ -103,7 +103,7 @@ public class KnifeEdgeTests
         }
     }
 
-    // The Bloodhawk's real dynamics — the placeholder `PlaneStats()` defaults are the
+    // The Bloodhawk's real dynamics, the placeholder `PlaneStats()` defaults are the
     // executable's fallback aircraft and carry a different inertia and damping.
     private static PlaneStats Bhawk() => new()
     {

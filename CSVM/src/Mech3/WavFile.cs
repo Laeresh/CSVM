@@ -60,7 +60,7 @@ public sealed class WavFile
                         }
                     }
                     break;
-                case 0x74636166: // 'fact' — decoded sample count per channel
+                case 0x74636166: // 'fact', decoded sample count per channel
                     factSamples = BitConverter.ToInt32(bytes, body);
                     break;
                 case 0x61746164: // 'data'

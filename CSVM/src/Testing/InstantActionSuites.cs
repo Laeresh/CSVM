@@ -47,7 +47,7 @@ internal static class InstantActionSuites
             $"an unrecognised display name resolves to null, not a guess");
 
         // RepresentativeRating: every shipped chapter's ace_stats is a uniform 9 (spawns.md), but
-        // a hand-authored --ia= file could differ — eight 9s and one 7 must average (and round)
+        // a hand-authored --ia= file could differ, eight 9s and one 7 must average (and round)
         // to 9, not silently pick one arbitrary slot.
         var mixedStats = new AiSkillVector
         {
@@ -81,7 +81,7 @@ internal static class InstantActionSuites
         ctx.Check(clean == 0, $"a non-colliding draw is used as-is: idx={clean}");
 
         // D9: the wingman standing-order table (docs/formats/instant-action.md "The player and
-        // the wingmen") is pure over its 0-based index — fan placement, the escort chain (0/1/3
+        // the wingmen") is pure over its 0-based index, fan placement, the escort chain (0/1/3
         // escort the player; 2/4 escort wingmen 1/3), and the authored accent ids.
         var slot0 = InstantActionRuntime.WingmanSlotFor(0);
         ctx.Check(slot0 is { MetresOut: 100f, OffsetDeg: -45f, PrimaryTargetIsWingman: null, AccentId: 12 },
@@ -110,7 +110,7 @@ internal static class InstantActionSuites
         ctx.Check(InstantActionRuntime.FlownWingmen(0, humans: 1) == 0, $"0 configured flies none");
 
         // The actual spawn integration: FlightRoster.SpawnAi given an authored scheme/team
-        // (the C8 extension) wears them as-is — the ace lands on team 2 flying the configured
+        // (the C8 extension) wears them as-is, the ace lands on team 2 flying the configured
         // airframe, not a pilot-index-derived team.
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -140,7 +140,7 @@ internal static class InstantActionSuites
                 Textures = textures,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            // worldEffects null!: never dereferenced — Inputs.CrashProgram/WorldScene stay null,
+            // worldEffects null!: never dereferenced, Inputs.CrashProgram/WorldScene stay null,
             // so Spawn's crash-runtime block (the only reader) is skipped.
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
@@ -191,7 +191,7 @@ internal static class InstantActionSuites
                 && Mathf.IsEqualApprox(vol.ReturnRange, InstantActionRuntime.ActorVolumeRadiusM),
                 $"all three volumes take the authored 10000 m: activation={vol.ActivationRange:0} attack={vol.AttackRange:0} return={vol.ReturnRange:0}");
 
-            // E11: RandomPilotStats/ResolveWaveAccentId are pure over their draw — row 4 is the
+            // E11: RandomPilotStats/ResolveWaveAccentId are pure over their draw, row 4 is the
             // flat-4 personality, and only accent 12 (the wingman range's own base) re-rolls.
             var flatRow = InstantActionRuntime.RandomPilotStats(draw: 4);
             ctx.Check(flatRow is { DareDevil: 4, Constitution: 4 },
@@ -201,7 +201,7 @@ internal static class InstantActionSuites
             ctx.Check(InstantActionRuntime.ResolveWaveAccentId(7, draw: 99) == 7,
                 $"any other accent id passes through unchanged: {InstantActionRuntime.ResolveWaveAccentId(7, 99)}");
 
-            // E11: a real InstantActionWaves sequence over real spawned aircraft — wave 1 (2
+            // E11: a real InstantActionWaves sequence over real spawned aircraft, wave 1 (2
             // members, live) killed down to 0 triggers wave 2 (1 member, built inert) activating
             // at a spawn point at least 500 m from the human, fanned off it.
             var iaWaves = new InstantActionWaves(new[] { 2, 1, 0, 0 });
@@ -258,8 +258,8 @@ internal static class InstantActionSuites
             var humanPos = new Vector3(0f, 500f, 0f);
             var waveSpawns = new List<SpawnPoint>
             {
-                new(new Vector3(10f, 500f, 0f), 0f),      // 10 m from the human — too close
-                new(new Vector3(600f, 500f, 0f), 0f),     // 600 m — eligible
+                new(new Vector3(10f, 500f, 0f), 0f),      // 10 m from the human, too close
+                new(new Vector3(600f, 500f, 0f), 0f),     // 600 m, eligible
             };
             var (spIdx, sp) = InstantActionWaves.ChooseWaveSpawn(
                 waveSpawns, new[] { humanPos }, draw: 0);
@@ -499,7 +499,7 @@ internal static class InstantActionSuites
             ctx.Same(2, waves.Step(wave1.Count(m => !m.Crashed)),
                 $"wave 1's last kill advances to wave 2");
 
-            // The builder's other arm: a zeppelin it switches off is HELD — still placed at its
+            // The builder's other arm: a zeppelin it switches off is HELD, still placed at its
             // authored pose, but no longer flown (a merely hidden one would keep flying its net
             // and firing its broadside).
             heldHost = new Node3D { Name = "multiplayer1zep" };
@@ -573,7 +573,7 @@ internal static class InstantActionSuites
     }
 
     // How many collision shapes hang anywhere under this node, and how many of those are
-    // switched off — the state `Mech3/WorldCollision` derives from its owner's visibility.
+    // switched off, the state `Mech3/WorldCollision` derives from its owner's visibility.
     // Recursive, because a world node's shapes hang off its MESH children rather than off the
     // named node itself; a non-recursive count reads 0 of 0 and passes an "all disabled" test
     // vacuously.
@@ -926,7 +926,7 @@ internal static class InstantActionSuites
     }
 
     // A hand-authored `--ia=` file for one end-condition case, written to the
-    // scratch folder and read back through the REAL reader — so a change to how
+    // scratch folder and read back through the REAL reader, so a change to how
     // `mission_type`/`lives` parse moves this suite too, and no test builds an
     // `InstantActionDef` the CLI could not produce.
     internal static InstantActionDef EndDef(TestContext ctx, string tag, string missionType,
@@ -1089,7 +1089,7 @@ internal static class InstantActionSuites
             $"…and a reload finds it recorded: {ScoreStore.Load(storePath).GetBest(key)}");
 
         // A second, faster run that FAILS must not beat the real record it undercuts only by
-        // ending early — the bug this item closes. Byte-compare the file to prove no write ran.
+        // ending early, the bug this item closes. Byte-compare the file to prove no write ran.
         byte[] before = File.ReadAllBytes(storePath);
         var fasterButLost = Fresh();
         fasterButLost.Tick(1f);

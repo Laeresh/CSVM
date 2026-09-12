@@ -118,7 +118,7 @@ public class SoundDefsTests
     public void DynamicWeightsScalesDownTheMemberPickedLast()
     {
         // Equal weights, recency 0.5. The same roll (0.6 of the total) picks member 1 first
-        // — total 2.0, roll 1.2 falls past member 0 — and then member 0, because member 1's
+        //, total 2.0, roll 1.2 falls past member 0, and then member 0, because member 1's
         // weight has halved: total 1.5, roll 0.9 no longer clears member 0's full 1.0.
         var dynamic = Groups()["probe_dynamic_sg"];
         Assert.Equal(0.5f, dynamic.RecencyFactor);

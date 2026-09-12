@@ -8,8 +8,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// What a launchscreen launch resolves to. The launchscreen is the one path with no automated
-/// coverage anywhere else — the pixel goldens never open it and the resolution baseline drives the
-/// CLI only — so these are the only facts standing behind it.
+/// coverage anywhere else, the pixel goldens never open it and the resolution baseline drives the
+/// CLI only, so these are the only facts standing behind it.
 /// </summary>
 public class SessionSpecMenuTests
 {
@@ -27,7 +27,7 @@ public class SessionSpecMenuTests
         Assert.Equal(1, spec.Players);
     }
 
-    /// <summary>A bare launch resolves to the menu, and the menu's pick turns it into flight —
+    /// <summary>A bare launch resolves to the menu, and the menu's pick turns it into flight,
     /// the CLI spec itself is never flight, so this is the whole reason the factory exists.</summary>
     [Fact]
     public void ABareLaunchShowsTheMenuAndTheMenuPickFliesIt()
@@ -75,7 +75,7 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>The third mode: a Dogfight pick takes the dogfight_ace spawn list and sets
-    /// Versus, not Stunt — the two modifiers are mutually exclusive from the menu, same as from
+    /// Versus, not Stunt, the two modifiers are mutually exclusive from the menu, same as from
     /// the CLI's fixed `--vs`/`--stunt` precedence.</summary>
     [Fact]
     public void AVersusPickTakesTheDogfightAceSpawnList()
@@ -90,7 +90,7 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>A tester who pinned a scenario alongside a bare launch keeps it, in all three
-    /// modes — the re-derivation is a default, not an override.</summary>
+    /// modes, the re-derivation is a default, not an override.</summary>
     [Fact]
     public void AnExplicitScenarioSurvivesEveryMenuMode()
     {
@@ -102,7 +102,7 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>Nothing a previous launch settled reaches the next one. Every field the factory
-    /// writes is asserted against the SECOND pick, not the first — this is the property that used
+    /// writes is asserted against the SECOND pick, not the first, this is the property that used
     /// to rest on three hand-written patches in the caller. Each expected value differs from BOTH
     /// the first pick and the parse default, so a dropped write cannot pass by landing on one.</summary>
     [Fact]
@@ -146,7 +146,7 @@ public class SessionSpecMenuTests
         Assert.Equal(fresh.Scenario, patched.Scenario);
     }
 
-    /// <summary>The command line still settles everything the pick does not name — the pick is a
+    /// <summary>The command line still settles everything the pick does not name, the pick is a
     /// chapter, some planes and a mode, not a whole session.</summary>
     [Fact]
     public void EverythingThePickDoesNotNameStillComesFromTheCommandLine()
@@ -177,7 +177,7 @@ public class SessionSpecMenuTests
     // ---- The third mode + its menu-only launch gate ---------------------------------------------
 
     /// <summary>The Mode screen's three rows map 1:1 onto <see cref="MenuMode"/>'s ordinals
-    /// (`LaunchMenu.Modes[(int)mode]`), in this order — the fact the row-to-enum mapping in
+    /// (`LaunchMenu.Modes[(int)mode]`), in this order, the fact the row-to-enum mapping in
     /// <c>LaunchMenu</c> (an engine-bound CanvasLayer, unreachable from here) depends on.</summary>
     [Fact]
     public void TheThreeMenuModesExistInRowOrder()
@@ -207,8 +207,8 @@ public class SessionSpecMenuTests
         => Assert.False(UI.LaunchMenu.CanLaunch(mode, allLocked: false, joinedCount: 4));
 
     /// <summary>The Map screen's roster rule (<see cref="UI.LaunchMenu.ChapterCodesFor"/>): Stunt
-    /// Flying hides C1C and C2B — they ship no <c>dzones</c>, so a stunt run there would be an
-    /// empty free flight (the original hides "the clouds" from stunt for the same reason) — while
+    /// Flying hides C1C and C2B, they ship no <c>dzones</c>, so a stunt run there would be an
+    /// empty free flight (the original hides "the clouds" from stunt for the same reason), while
     /// every other mode offers all eight chapters.</summary>
     [Fact]
     public void StuntFlyingHidesTheChaptersWithoutDangerZones()
@@ -222,7 +222,7 @@ public class SessionSpecMenuTests
 
     // ---- Instant Action wizard steps 1-2 --------------------------
 
-    /// <summary>The Environment screen's roster, in the decoded dropdown order — seven rows,
+    /// <summary>The Environment screen's roster, in the decoded dropdown order, seven rows,
     /// C1C never among them (the chapter Instant Action omits). Matches
     /// docs/formats/instant-action.md's "Environment → chapter" table exactly.</summary>
     [Fact]
@@ -234,7 +234,7 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>The MissionType screen's roster for one environment: all four mission types except
-    /// on "the clouds" (C2B), whose own `disallow_missions` bars Stunt Flying — the same rule
+    /// on "the clouds" (C2B), whose own `disallow_missions` bars Stunt Flying, the same rule
     /// `ChapterCodesFor`/`StuntFlyingHidesTheChaptersWithoutDangerZones` already exercises from the
     /// plain Chapter screen's side, read here from the Environment screen's.</summary>
     [Fact]
@@ -249,7 +249,7 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>Every one of the seven Instant Action environments offers at least the three
-    /// mission types no chapter's `disallow_missions` ever bars — ace, squadron and zeppelin are
+    /// mission types no chapter's `disallow_missions` ever bars, ace, squadron and zeppelin are
     /// never filtered, only stunt is.</summary>
     [Fact]
     public void EveryEnvironmentOffersAceSquadronAndZeppelin()
@@ -265,8 +265,8 @@ public class SessionSpecMenuTests
 
     // ---- Instant Action wizard steps 3-5, one build path -----------
 
-    /// <summary>When the wizard hands over a built <c>InstantActionDef</c>, IT — not the picked
-    /// <see cref="MenuMode"/> — decides <see cref="SessionSpec.Scenario"/>/<see cref="SessionSpec.Stunt"/>:
+    /// <summary>When the wizard hands over a built <c>InstantActionDef</c>, IT, not the picked
+    /// <see cref="MenuMode"/>, decides <see cref="SessionSpec.Scenario"/>/<see cref="SessionSpec.Stunt"/>:
     /// the wizard already knows exactly which of the four mission types was picked, so this
     /// replaces H15's own approximation (mission type mapped onto whichever of Free/Stunt it most
     /// resembled) now that a real build path exists.</summary>
@@ -287,7 +287,7 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>Every CLI launch and every Free Flight/Dogfight menu pick carries no
-    /// <c>InstantActionDef</c> at all — <see cref="SessionSpec.IaDef"/> stays null, the same
+    /// <c>InstantActionDef</c> at all, <see cref="SessionSpec.IaDef"/> stays null, the same
     /// backward-compatible default every existing <c>FromMenu</c> call site (this file's own
     /// 4-argument calls included) already relies on.</summary>
     [Fact]
@@ -300,7 +300,7 @@ public class SessionSpecMenuTests
 
     /// <summary>Decision 8a's own promise, checked at the seam <c>FireLaunch</c> actually calls:
     /// the flown-wingmen clamp is a Plane-screen DISPLAY concern
-    /// (<c>InstantActionRuntime.FlownWingmen</c>), never a rewrite of the def — a 4-player wizard
+    /// (<c>InstantActionRuntime.FlownWingmen</c>), never a rewrite of the def, a 4-player wizard
     /// launch and its 1-player equivalent carry the exact same <c>NumWingmen</c>, because
     /// <c>FromMenu</c> never reads <paramref name="planeNodes"/>'s length into
     /// <see cref="SessionSpec.IaDef"/> at all.</summary>
@@ -354,8 +354,8 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>⚠ Why a cabin launch has to hand its join-flow pad binding over rather than let the
-    /// host re-derive one. The roster split is the fallback, and for the ordinary two-seat setup —
-    /// one pad and the keyboard — it gives that pad to seat 1, which already has the keyboard, and
+    /// host re-derive one. The roster split is the fallback, and for the ordinary two-seat setup,
+    /// one pad and the keyboard, it gives that pad to seat 1, which already has the keyboard, and
     /// seat 2 nothing. Both pilots then fly the same plane. Steam Remote Play Together makes this
     /// the NORMAL shape, since the remote pilot's controller is the host's only pad.</summary>
     [Fact]
@@ -388,7 +388,7 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>A def read off a file has no per-player pick behind it, so its one player_plane
-    /// still stands for every human — the reading <c>--ia=</c> has always had.</summary>
+    /// still stands for every human, the reading <c>--ia=</c> has always had.</summary>
     [Fact]
     public void AnIaFileLaunchStillPutsEveryHumanInTheDefsPlane()
     {

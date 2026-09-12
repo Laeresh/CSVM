@@ -87,7 +87,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // How many Table of Contents rows the list shows at once. `ia_tl_contents` is one of only two
     // LAYOUT.CSV rows whose last column is a visible-row WINDOW rather than an item count: 14 rows
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
-    // to our own layout — do not "tidy" it to the item count.
+    // to our own layout, do not "tidy" it to the item count.
     private const int PresetWindow = 14;
     // The Controls list's window, and the two stepper rows above it (the seat, and which of the
     // three keymaps is being edited). Flight alone owns 35 actions, so the list is windowed like
@@ -104,7 +104,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const float ControlsLabelEms = 11f;
     private const float ControlsValueEms = 20f;
     private const float ControlsExtraWidth = 260f;
-    // The chip strip's own font size and corner inset, in authored board points — scaled through
+    // The chip strip's own font size and corner inset, in authored board points, scaled through
     // the same BoardFit the board itself draws at, so the chips read like part of that screen.
     private const float ChipFont = 16f;
     private const float ChipInset = 14f;
@@ -250,7 +250,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the file). Null until then; a failed load leaves UiStrings.Empty here.
     private UiStrings? _uiStrings;
     private string _error = "";
-    // The join strip as last drawn — _Process redraws when the live roster changes (hotplug).
+    // The join strip as last drawn, _Process redraws when the live roster changes (hotplug).
     private string _stripText = "";
     // --menu=campaign-guestcheck: which guest's flight check the aid asked for, applied by
     // DebugJoin, since the aid runs inside ShowMenu and the players arrive right after it.
@@ -274,7 +274,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private ComposedBoardView _boardRoot = null!;
 
     // The campaign chip strip: `P1 P2 P3 P4` in `SplitScreen.PlayerColor`, top-right, shown while a
-    // campaign board is up AND more than one has joined — a solo campaign board looks exactly as
+    // campaign board is up AND more than one has joined, a solo campaign board looks exactly as
     // it does today. A composed board draws no full join strip by design (RebuildBoard's own
     // comment), so this is a deliberate exception drawn as a shell overlay rather than a page
     // contribution: CampaignBoards' authored geometry has nowhere to put a live, per-frame roster.
@@ -370,7 +370,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>The text drawn on player 1's cursor row.</summary>
     public string ShownRowText => RowText(CurrentIndex);
 
-    // The chapter roster the picked mode offers — the Chapter screen and everything
+    // The chapter roster the picked mode offers, the Chapter screen and everything
     // downstream (breadcrumb, launch) index into this, never the full list. Free Flight/Dogfight
     // only; Instant Action uses Environments/CurrentMissionTypes
     // instead (its own environment list is decoded, not this table's alphabetic one).
@@ -501,7 +501,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>The launch-gate RULE, pure and public so it is reachable from <c>CSVM.Tests</c>
-    /// with no menu instance behind it: everyone joined has locked a plane, AND — Dogfight only —
+    /// with no menu instance behind it: everyone joined has locked a plane, AND, Dogfight only,
     /// at least two have joined to fight each other. Free Flight and Instant Action launch solo
     /// exactly as before.</summary>
     public static bool CanLaunch(MenuMode mode, bool allLocked, int joinedCount) =>
@@ -520,7 +520,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>The Instant Action Environment screen's roster, as chapter codes, in the decoded
-    /// dropdown order — C1, C2B, C3, C5, C1B, C4, C2, C1C never among them. The shared feature's
+    /// dropdown order, C1, C2B, C3, C5, C1B, C4, C2, C1C never among them. The shared feature's
     /// roster, kept here as the screen's own read-out.</summary>
     public static string[] EnvironmentCodes() =>
         Names(InstantActionFeature.Environments, e => e.Code);
@@ -532,7 +532,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Names(InstantActionFeature.Environments, e => e.Name);
 
     /// <summary>The MissionType screen's roster for one chapter, as `ia.json` `mission_type` keys
-    /// in the UI dropdown order, with Stunt Flying dropped where `disallow_missions` bars it — the
+    /// in the UI dropdown order, with Stunt Flying dropped where `disallow_missions` bars it, the
     /// same rule <see cref="ChapterCodesFor"/> applies via <see cref="DangerZonesFor"/>.</summary>
     public static string[] MissionTypeKeysFor(string chapterCode) =>
         Names(InstantActionFeature.MissionTypesFor(chapterCode), m => m.Key);
@@ -547,14 +547,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         Names(InstantActionFeature.Militias, m => m.Name);
 
     /// <summary>The wave editor's Aircraft field roster for one militia (by <see cref="MilitiaNames"/>'s
-    /// own name, case-sensitive) — the `.BM` pattern coverage table
+    /// own name, case-sensitive), the `.BM` pattern coverage table
     /// (docs/formats/instant-action.md), never <c>vehicle.json</c>'s narrower <c>paint_pattern</c>
     /// reading. Throws <see cref="ArgumentException"/> on an unrecognised name.</summary>
     public static string[] AircraftFor(string militiaName) =>
         Names(InstantActionFeature.AircraftFor(militiaName), a => a);
 
     /// <summary>The wave editor's Skill field roster, internal keys in the langui dropdown order
-    /// (3695) — the same vocabulary <c>InstantActionWave.EnemySkill</c> stores.</summary>
+    /// (3695), the same vocabulary <c>InstantActionWave.EnemySkill</c> stores.</summary>
     public static string[] SkillKeys() => Names(InstantActionFeature.Skills, s => s);
 
     /// <summary>Builds one wizard wave slot into the <see cref="InstantActionWave"/>
@@ -597,7 +597,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             OpenControls();
         }
 
-        // Environment/MissionType/Waves/Wingmen only exist under Instant Action — force it so a
+        // Environment/MissionType/Waves/Wingmen only exist under Instant Action, force it so a
         // --menu= opening straight onto one of them (a screenshot aid) renders the right
         // roster/filter rather than whatever _mode was last left at.
         if (_screen is Screen.Presets or Screen.Environment or Screen.MissionType or Screen.Waves
@@ -608,7 +608,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         // The wingman list needs a flight to arm and a mission that HAS wingmen, so the aid
-        // configures both — the ace duel forces the count to 0, and opening onto a state no
+        // configures both, the ace duel forces the count to 0, and opening onto a state no
         // player can reach is worse than not having the aid.
         if (_screen == Screen.WingmanLoadout)
         {
@@ -629,7 +629,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             }
         }
         // Opening straight onto Waves skips the accept that normally parks the cursor, so put it
-        // where a player would find it — otherwise the aid screenshots a state nobody sees.
+        // where a player would find it, otherwise the aid screenshots a state nobody sees.
         if (_screen == Screen.Waves)
         {
             _waveListIndex = InstantActionFeature.WaveSlots;
@@ -663,7 +663,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         foreach (var slot in _slots)
             slot.Input.Prime();
         // A pane's own fit only exists once that slot has selected an airframe, so the aid makes
-        // that press for the reader — after the reset above, which would undo it.
+        // that press for the reader, after the reset above, which would undo it.
         if (startScreen is "loadout" or "selected")
         {
             _setup.Select(_slots[0].Seat);
@@ -807,7 +807,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>Debug/verification aid (--debug-preset=N): apply Table of Contents preset N and
     /// open on the wizard's step 1, so the FILLED wizard is screenshot-able with nobody at the
-    /// controls. This is the aid for the failure mode units cannot see — a preset that applies the
+    /// controls. This is the aid for the failure mode units cannot see, a preset that applies the
     /// wrong aircraft or the wrong militia looks entirely plausible on screen. Forces Instant
     /// Action mode, since presets exist nowhere else.</summary>
     public void DebugPreset(int index)
@@ -1239,7 +1239,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 ScrollPresetsToCursor();
                 return true;
             }
-            // Y on the Wingmen step opens the flight's one fit — the same meaning Y carries on a
+            // Y on the Wingmen step opens the flight's one fit, the same meaning Y carries on a
             // plane pane. Gated on there being wingmen to arm, like the Aircraft row above it.
             if (p1.Loadout && _screen == Screen.Wingmen && _ia.NumWingmen > 0)
             {
@@ -1323,7 +1323,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             else if (input.Accept && !slot.Confirmed)
             {
                 // Two stages: A selects the airframe, A again confirms it and launches once
-                // everybody has. Unconditional — a pilot with no interest in weapons taps twice
+                // everybody has. Unconditional, a pilot with no interest in weapons taps twice
                 // and flies the stock fit, which is the old behaviour plus one press.
                 if (slot.Locked)
                     _setup.Confirm(seat);
@@ -1365,7 +1365,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // A pane showing its loadout list. Live-editing steppers like every other wizard screen, and
     // B returns to the airframe keeping the fit rather than discarding it. ⚠ That last part is
     // INVENTED: the original pairs ACCEPT LOADOUT with CANCEL LOADOUT, but its Cancel is a button
-    // you click, while ours would sit on the pad's navigation key — a discard there would throw
+    // you click, while ours would sit on the pad's navigation key, a discard there would throw
     // away a fit somebody was only stepping back from. Reset to stock is the revert we keep.
     private bool HandleFitInput(Slot slot)
     {
@@ -1401,7 +1401,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         return dirty;
     }
 
-    // The wingman list's rows — the one fit the whole flight carries, so it hangs off the
+    // The wingman list's rows, the one fit the whole flight carries, so it hangs off the
     // Wingmen step rather than any pane.
     private List<FitRow> WingmanFitRows() =>
         FitRowsFor(StockFitFor(_ia.WingmanPlaneIndex), _ia.WingmanFit);
@@ -1456,7 +1456,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             fontSize, color, selected);
     }
 
-    // The horizontal axis's effect, screen by screen — always a live-editing stepper on
+    // The horizontal axis's effect, screen by screen, always a live-editing stepper on
     // whichever field the vertical cursor is focused on, never a "select and lock" gesture (that
     // is what Accept is for). Split out of HandleInput because it now has one branch
     // per wizard screen that carries a stepper: the mission choice's lives, and the wave
@@ -1494,7 +1494,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 if (_wingmenFieldIndex == 0)
                 {
                     _ia.StepWingmen(dir);
-                    // The Aircraft row disappears at 0 wingmen — keep the cursor on a row that
+                    // The Aircraft row disappears at 0 wingmen, keep the cursor on a row that
                     // still exists rather than pointing at a field nothing draws.
                     _wingmenFieldIndex = Math.Min(_wingmenFieldIndex, WingmenRowCount - 1);
                 }
@@ -1515,7 +1515,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
     }
 
-    // The Accept gesture's effect, screen by screen — split out of
+    // The Accept gesture's effect, screen by screen, split out of
     // HandleInput for the same reason HandleMoveX was: one branch per
     // wizard screen now, most of them advancing the wizard rather than picking a row.
     private void HandleAccept()
@@ -1586,7 +1586,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
 
                 _mode = (MenuMode)_modeIndex; // the row order IS the enum order
-                if (_mode == MenuMode.Stunt) // "Instant Action" — the wizard's step 1
+                if (_mode == MenuMode.Stunt) // "Instant Action", the wizard's step 1
                 {
                     _screen = Screen.Environment;
                 }
@@ -1594,7 +1594,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     _screen = Screen.Chapter;
                     // The roster may have shrunk (Stunt hid the dzone-less maps last time
-                    // around) — keep the cursor on a row that exists.
+                    // around), keep the cursor on a row that exists.
                     _chapterIndex = Wrap(_chapterIndex, CurrentChapters.Length);
                 }
                 break;
@@ -1615,7 +1615,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             case Screen.MissionType:
                 if (_ia.IsAceDuel)
                 {
-                    // Dogfighting an Ace takes no wave or wingman configuration — the decoded
+                    // Dogfighting an Ace takes no wave or wingman configuration, the decoded
                     // setup screen's own behaviour (mission type 0 hides every enemy control).
                     _screen = Screen.Plane;
                     PrimeJoins();
@@ -1636,7 +1636,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
 
                 _screen = Screen.Plane;
-                PrimeJoins(); // joining opens here — a Start held on the way in must not fire
+                PrimeJoins(); // joining opens here, a Start held on the way in must not fire
                 break;
             case Screen.Waves:
                 if (_waveListIndex < InstantActionFeature.WaveSlots)
@@ -2083,8 +2083,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // Whose presses steer the campaign board. Player 1's everywhere, except a guest's own flight
-    // check, which is that guest's screen to fill in. A driver with no device — --debug-join's
-    // deviceless players — hands back to player 1, or a screenshot aid could never walk the
+    // check, which is that guest's screen to fill in. A driver with no device, --debug-join's
+    // deviceless players, hands back to player 1, or a screenshot aid could never walk the
     // sequence at all.
     private MenuInput CampaignDriver(CampaignFlow flow, MenuInput p1)
     {
@@ -2281,7 +2281,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         if (_mode == MenuMode.Stunt) // Instant Action
         {
-            // Player 1's own pick — a nominal label only; the roster, not this value, decides
+            // Player 1's own pick, a nominal label only; the roster, not this value, decides
             // what any human actually flies. A custom pick names its airframe's stock aircraft:
             // the def's consumers speak ia.json's stock vocabulary.
             _host.Exit(_ia.BuildExit(seats, NominalPlaneName(_slots[0].PlaneIndex)));
@@ -2310,7 +2310,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // takes the whole window and neither of the other two layouts draws behind it.
         bool board = _screen == Screen.Campaign && _campaign != null;
 
-        // Several players choosing aircraft get a real split screen — one panel each, laid out by
+        // Several players choosing aircraft get a real split screen, one panel each, laid out by
         // SplitScreen.PaneRect, so you pick in the pane you will then fly in. Everything else (and
         // every single-player screen) keeps the centred layout untouched.
         bool split = !board && _screen == Screen.Plane && _slots.Count > 1;
@@ -2475,7 +2475,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // frame has run, and a screen with no registered seat has no keymap to draw.
         SyncSlots();
         SyncControlsSeats();
-        PrimeJoins(); // joining opens here — a Start held on the way in must not fire
+        PrimeJoins(); // joining opens here, a Start held on the way in must not fire
         _controlsIndex = 0;
         _controlsTop = 0;
         // Cancel first, so the screen opens on what the game is actually playing rather than on a
@@ -2861,7 +2861,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // screen (the same SplitScreen.PaneRect geometry the flight panes use), plus a
     // shared bottom strip carrying the breadcrumb, the join strip and the controls line. Each
     // panel shows the player's tag + device, the full aircraft roster with their own cursor, the
-    // focused plane's stats, and their lock state — the panel border lights up in the player's
+    // focused plane's stats, and their lock state, the panel border lights up in the player's
     // colour once locked, which is the at-a-glance "who are we waiting for".
     private void RebuildPanes()
     {
@@ -2871,7 +2871,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         float s = Mathf.Max(1f, size.Y / 720f);
         // The strip's own Instant Action line (decision 8a's flown-wingmen re-clamp) is one more
-        // row than StripHeightFrac was tuned for — grow the fixed band by a line's worth so it
+        // row than StripHeightFrac was tuned for, grow the fixed band by a line's worth so it
         // does not push the controls line off the bottom of a centred, unclipped VBoxContainer.
         bool wingmenLine = WingmenLine().Length > 0;
         float stripH = size.Y * StripHeightFrac + (wingmenLine ? (FooterFont + 6) * s : 0f);
@@ -2931,7 +2931,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _paneRoot.AddChild(strip);
     }
 
-    // One player's panel contents. The roster is the full list — it fits, because the
+    // One player's panel contents. The roster is the full list, it fits, because the
     // font scale is derived from the pane's own height rather than the window's (a 4P quarter
     // pane and a 2P half pane are the same height, so both land on the same size).
     private Control PaneBody(int player, Vector2 inner, float s)
@@ -2959,7 +2959,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             (int)(CrumbFont * paneScale), color, HorizontalAlignment.Center));
 
         // This pane swaps to its own loadout list in place, so the players beside it keep
-        // browsing untouched — and nobody can launch while somebody is still in here.
+        // browsing untouched, and nobody can launch while somebody is still in here.
         if (slot.InLoadout)
         {
             var fitRows = FitRowsFor(StockFitFor(slot.PlaneIndex), slot.Fit);
@@ -3073,7 +3073,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private LoadoutDef? StockFitFor(int planeIndex) => Fits.ForModel(_roster[planeIndex].Node);
 
     // One airframe's loadout list: a row per firable gun slot, a row per pylon, then reset.
-    // Turret slots are left out while they are built inert — an ammo pick there would change
+    // Turret slots are left out while they are built inert, an ammo pick there would change
     // nothing that can be fired. Pylons list in fill order under their PHYSICAL number, so the
     // screen agrees with the weapon gauge's belt lights rather than renumbering them 1..N.
     private List<FitRow> FitRowsFor(LoadoutDef? def, LoadoutChoice fit)
@@ -3197,7 +3197,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _ => CentredFitRows()?.Count ?? PlaneRowCount,
     };
 
-    // One centred list row with a ▶ cursor — the item-4 layout, used by every screen
+    // One centred list row with a ▶ cursor, the item-4 layout, used by every screen
     // the centred body draws. A multi-player aircraft screen never comes through here: it splits
     // into per-player panes instead (RebuildPanes).
     private Control Row(int index, float s)
@@ -3277,7 +3277,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // One WaveEdit-screen field row: the label plus the field's own current value, since
-    // this screen has no separate detail area — HandleMoveX edits whichever one the
+    // this screen has no separate detail area, HandleMoveX edits whichever one the
     // cursor sits on.
     private string WaveFieldRowText(int index)
     {
@@ -3292,7 +3292,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         };
     }
 
-    // One Wingmen-screen field row — the Aircraft row (index 1) only ever draws while
+    // One Wingmen-screen field row, the Aircraft row (index 1) only ever draws while
     // it exists (WingmenRowCount is 1 at 0 wingmen), matching the decoded setup
     // screen's own hidden-at-zero control.
     private string WingmenFieldRowText(int index) => index switch
@@ -3406,7 +3406,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         return row;
     }
 
-    // The strip as plain text — compared each frame so a hotplug (or a join) redraws
+    // The strip as plain text, compared each frame so a hotplug (or a join) redraws
     // even when nothing was pressed.
     private string JoinStripText()
     {
@@ -3420,7 +3420,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The hint beside the join strip. Joining happens on the aircraft screen and on the rebinding
     // screen, so the other screens say where it will be rather than inviting a press that does
     // nothing. The rebinding screen names what the press is for there, since a pad joins to be
-    // rebound rather than to fly. Dogfight below 2 players gets its own line — CanLaunch is
+    // rebound rather than to fly. Dogfight below 2 players gets its own line, CanLaunch is
     // withholding the launch gesture, so the generic "you may join" hint would undersell what is
     // actually blocking it.
     private string JoinHint()
@@ -3503,7 +3503,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // guess at. Named on step 1, the one screen it opens from.
         string presets = _screen == Screen.Environment ? "       P / X  Scenarios" : "";
         // Name the press that is actually next. Before the lock that is "select"; after it, "fly"
-        // — a footer still offering "select" on an already-selected plane is why the second press
+        //, a footer still offering "select" on an already-selected plane is why the second press
         // was not obvious in the first place.
         string select = _screen != Screen.Plane ? "Enter / A  Select"
             : _slots.Count == 1 && _slots[0].Locked ? "Enter / A  FLY"
@@ -3535,7 +3535,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         };
     }
 
-    // The applied preset's name, as the configuration page's own heading crumb — the original's
+    // The applied preset's name, as the configuration page's own heading crumb, the original's
     // View Story formats it through IDS_IA_STORYTITLE, whose whole text is `%1!s!`, and nothing
     // clears it when a dropdown is then changed by hand. Empty on the custom path.
     private string PresetCrumb() =>
@@ -3573,7 +3573,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     };
 
     // The focused preset's own line: what picking it would fill the wizard with. The enemy total
-    // is the sum of its waves, which is 0 for the five ace presets — a duel, not an empty mission.
+    // is the sum of its waves, which is 0 for the five ace presets, a duel, not an empty mission.
     private string PresetDetail(int focus)
     {
         var preset = InstantActionPresets.All[focus];
@@ -3586,13 +3586,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // The lives stepper's own line, shown where the other screens show the focused row's
-    // stat/region — it is not per-row, so it does not vary with the mission-type cursor.
+    // stat/region, it is not per-row, so it does not vary with the mission-type cursor.
     private string LivesDetail() =>
         _ia.Lives == 0 ? "Lives   Unlimited        ◀ ▶  change" : $"Lives   {_ia.Lives}        ◀ ▶  change";
 
     // The Plane screen's own Instant Action line: the flown-wingmen re-clamp (decision
     // 8a, InstantActionRuntime.FlownWingmen) against the CURRENT joined-player count
-    // — recomputed every Rebuild, so it tracks a pilot joining live. Empty outside Instant Action
+    //, recomputed every Rebuild, so it tracks a pilot joining live. Empty outside Instant Action
     // or at 0 configured wingmen, which is what lets the caller skip the row entirely rather than
     // draw a blank one.
     private string WingmenLine()
@@ -3607,7 +3607,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // A couple of stats for the focused plane, loaded lazily from vehicle.json and cached
-    // (null = load failed, shown as unavailable — never blocks the menu). fd_speed → mph is the
+    // (null = load failed, shown as unavailable, never blocks the menu). fd_speed → mph is the
     // validated top-speed figure (see PlaneStats).
     private string PlaneStat(string node)
     {
@@ -3617,7 +3617,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         return $"Top Speed  {Mph(s)} mph        Weight  {s.VehWeight:0}";
     }
 
-    // Just the top speed — the compact form used in the per-player pick lines.
+    // Just the top speed, the compact form used in the per-player pick lines.
     private string PlaneSpeed(string node)
     {
         var s = StatsFor(node);
@@ -3636,7 +3636,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // One editable line of a loadout list. Key is the gun slot (1-4) or the physical pylon
-    // number (1-8) — slot identity, the same key LoadoutChoice uses, never a row index.
+    // number (1-8), slot identity, the same key LoadoutChoice uses, never a row index.
     private readonly record struct FitRow(FitRowKind Kind, int Key, string Label, string Value);
 
     private readonly record struct Choice(string Label, string Detail);
@@ -3655,7 +3655,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Input = input;
         }
 
-        // Starts at Planes's index 0 — the Autogyro under the 3700 order, matching gui_continue's
+        // Starts at Planes's index 0, the Autogyro under the 3700 order, matching gui_continue's
         // own no-custom-planes selection rather than being positional by accident.
         public int PlaneIndex
         {

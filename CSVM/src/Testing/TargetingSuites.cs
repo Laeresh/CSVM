@@ -89,7 +89,7 @@ internal static class TargetingSuites
             Position = new Vector3(500f, 12f, 500f),
             Velocity = Vector3.Zero,
             Team = AimAssist.PlayerTeam + 1,
-            Live = false, // its healthy node was swapped out — the decoded permanent kill switch
+            Live = false, // its healthy node was swapped out, the decoded permanent kill switch
             Source = gun,
         };
         var flak = TargetRef.ForTurret(gunCandidate, TargetClass.NonAircraft, "AA Emplacement");
@@ -677,7 +677,7 @@ internal static class TargetingSuites
 
             // The able-to-fail control: derive the side from the pilot index the way the HUD used
             // to, and P2's own wingman turns hostile. ⚠ The real enemy now stays in Enemy, where it
-            // used to drop out — that derived side WAS EnemyTeam until the versus band (BL-403).
+            // used to drop out, that derived side WAS EnemyTeam until the versus band (BL-403).
             pool.Rebuild(scan, null, AimAssist.TeamOfPilot(self.PlayerIndex), self);
             ctx.Check(pool.Enemy.Any(t => ReferenceEquals(t.Source, wingman))
                       && AimAssist.TeamOfPilot(self.PlayerIndex) != InstantActionRuntime.EnemyTeam,
@@ -1011,7 +1011,7 @@ internal static class TargetingSuites
                 $"with every hostile down the pane tracks nothing");
 
             // A hud with no pool bound (HostilePool left null) never tracks whatever the pool
-            // holds — the seam that keeps a golden shot with no hostile in play untouched.
+            // holds, the seam that keeps a golden shot with no hostile in play untouched.
             ai1.Respawn();
             noPoolHud = new TargetHud();
             noPoolHud.PlanePos = hud.PlanePos;
@@ -1047,7 +1047,7 @@ internal static class TargetingSuites
             ctx.Check(marks.Count == 0, $"the pane's own aircraft is excluded marks={marks.Count}");
 
             // Once the plane carries a damage ledger, CollectMarks' TargetRef reads it straight
-            // off — the same optional-field contract a sub-part or emplacement would use once the
+            // off, the same optional-field contract a sub-part or emplacement would use once the
             // scan widens past aircraft, not a plane-specific field read of its own.
             ai1.Damage = new PlaneDamage(stats.DestroyableParts);
             var firstPart = stats.DestroyableParts.First();
@@ -1088,7 +1088,7 @@ internal static class TargetingSuites
         }
     }
 
-    // The target-routing switch, driven directly against hand-built sources — no live
+    // The target-routing switch, driven directly against hand-built sources, no live
     // TargetSelection/AimCandidateSet scan behind it, since DebugForceCrash and AnimRuntime.DamageAt
     // already carry their own coverage elsewhere (AiSuites, DamageSuites and others). What is NEW
     // here is only the dispatch: an aircraft source crashes (Downed fires with the given killer), a
@@ -1138,7 +1138,7 @@ internal static class TargetingSuites
             victim.Setup(new FlightModel(stats), null, new CamParams(), Vector3.Zero, Vector3.Forward);
             ctx.Host.AddChild(victim);
 
-            // The inert stage (AnimRuntime's own doc: "every plain testing runtime takes" it) — no
+            // The inert stage (AnimRuntime's own doc: "every plain testing runtime takes" it), no
             // chapter world needed, since DamageAt's death swap is a no-op with no ResetState.
             runtime = new AnimRuntime();
             ctx.Host.AddChild(runtime);
@@ -1163,7 +1163,7 @@ internal static class TargetingSuites
                 $"a destructible source is destroyed through DamageAt status={gasbagInst.Status} hp={gasbagInst.Health}");
 
             // A turret carries no HEALTH key at all (TargetRef.Health's own rule), so its arm is
-            // the same no-op every unrecognised source takes — proven with a plain object stand-in
+            // the same no-op every unrecognised source takes, proven with a plain object stand-in
             // rather than a built TurretController, which this switch never inspects.
             debugKill.KillSource(new object(), "unrecognised", Killer);
 

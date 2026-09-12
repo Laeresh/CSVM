@@ -4,7 +4,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The belt indicator's yellow tier belongs to guns only — a per-pylon hardpoint steps
+/// The belt indicator's yellow tier belongs to guns only, a per-pylon hardpoint steps
 /// straight from green to red at empty, matching the original. A damage zone's
 /// four colour bands walk the combined armor+health fraction, armor spent first, matching the
 /// game manual's Crispen Mark V description. Every member here is a pure static with no engine
@@ -45,7 +45,7 @@ public class GaugeColoursTests
     [Fact]
     public void AnUnfittedBeltPositionReadsRedNotDark()
     {
-        // An unfitted belt position (index past the end of the loadout) reads red, not dark — the
+        // An unfitted belt position (index past the end of the loadout) reads red, not dark, the
         // original lights every position on the dial. A 2-gun plane on a 4-position gun dial:
         // slots 0-1 follow their ammo, 2-3 are red.
         float[] twoGuns = { 1f, 0f };

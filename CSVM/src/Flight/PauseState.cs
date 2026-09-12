@@ -6,13 +6,13 @@ namespace CSVM.Flight;
 /// Who is holding the sim clock, and why: one instance shared by every human rig in the session
 /// (assigned to <see cref="FlightController.PauseState"/> the same way <see cref="VersusMatch"/>
 /// is), so any player's Start/P freezes the shared <c>GameClock</c> for everybody, but only the
-/// player who paused may resume it. Owns none of the halt itself — <see cref="FlightController"/>
+/// player who paused may resume it. Owns none of the halt itself, <see cref="FlightController"/>
 /// mirrors <see cref="Halted"/> into <c>GameClock.Halted</c> every frame; this class only decides
 /// who is allowed to flip it, and keeps a results board's halt separate from a player's.
 /// </summary>
 public sealed class PauseState
 {
-    /// <summary>Fires on every accepted change — never on a rejected or redundant one.</summary>
+    /// <summary>Fires on every accepted change, never on a rejected or redundant one.</summary>
     public event Action? Changed;
 
     /// <summary>The reasons currently holding the clock.</summary>

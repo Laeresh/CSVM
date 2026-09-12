@@ -31,7 +31,7 @@ public class TracerScreenSizeTests
         Assert.Equal(pixels, projectedPx, 3);
     }
 
-    /// <summary>The floor grows linearly with distance — the property that makes a single shared
+    /// <summary>The floor grows linearly with distance, the property that makes a single shared
     /// mesh unable to satisfy two cameras at once, and so the reason the nearest one must win.</summary>
     [Fact]
     public void TheFloorIsLinearInDistance()
@@ -44,7 +44,7 @@ public class TracerScreenSizeTests
     }
 
     /// <summary>A splitscreen pane is shorter than the window, so a camera measured against the
-    /// WINDOW height is under-floored by the pane factor — the second half of the same bug. Halving
+    /// WINDOW height is under-floored by the pane factor, the second half of the same bug. Halving
     /// the viewport height doubles the world size needed to cover the same pixels.</summary>
     [Fact]
     public void APaneHalfTheWindowHeightNeedsTwiceTheWorldSizeForTheSamePixels()
@@ -56,7 +56,7 @@ public class TracerScreenSizeTests
 
     /// <summary>The splitscreen rule: with several viewers the floor is the SMALLEST of their
     /// individual floors, i.e. the nearest camera's. The worked case: a round 1000 m from P1 and
-    /// 100 m from P2. Sizing against P1 — the alternative this discriminates against — makes the
+    /// 100 m from P2. Sizing against P1, the alternative this discriminates against, makes the
     /// mesh ~10x larger than P2's own pane needs, which reads as "P2's tracers are huge"; taking the
     /// minimum sizes it for P2 and leaves it merely under-floored in P1's distant view.</summary>
     [Fact]
@@ -69,7 +69,7 @@ public class TracerScreenSizeTests
         };
         float chosen = ScreenSize.NearestFloor(2f, viewers);
         Assert.Equal(ScreenSize.MinWorldSizeForPixels(2f, 100f, Fov, FullHeight), chosen, 6);
-        // Order must not matter — the rule is "nearest", not "first" or "last".
+        // Order must not matter, the rule is "nearest", not "first" or "last".
         Assert.Equal(chosen, ScreenSize.NearestFloor(2f, new[] { viewers[1], viewers[0] }), 6);
         // The inflation a farthest-viewer rule produces, stated as a number so a regression is legible:
         // sized for P1, the mesh covers ten times its 2 px target in P2's pane.
@@ -80,8 +80,8 @@ public class TracerScreenSizeTests
         Assert.Equal(2f, chosen * FullHeight / (2f * 100f * Tan35), 3);
     }
 
-    /// <summary>A viewer the projection cannot use — sitting exactly on the round, or with no
-    /// viewport — is skipped rather than collapsing the floor to zero for everyone. With one live
+    /// <summary>A viewer the projection cannot use, sitting exactly on the round, or with no
+    /// viewport, is skipped rather than collapsing the floor to zero for everyone. With one live
     /// viewer left, that one decides.</summary>
     [Fact]
     public void DegenerateViewersAreSkippedNotTreatedAsTheNearest()
@@ -95,7 +95,7 @@ public class TracerScreenSizeTests
         Assert.Equal(ScreenSize.MinWorldSizeForPixels(2f, 250f, Fov, FullHeight), ScreenSize.NearestFloor(2f, viewers), 6);
     }
 
-    /// <summary>No viewers bound at all (the weapon lab, the headless dumps) means no floor —
+    /// <summary>No viewers bound at all (the weapon lab, the headless dumps) means no floor,
     /// the pool must fall through to the authored sizes, not to zero-size or infinite geometry.</summary>
     [Fact]
     public void NoViewersMeansNoFloor()

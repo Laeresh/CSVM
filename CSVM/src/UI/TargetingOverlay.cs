@@ -158,7 +158,7 @@ public sealed partial class TargetingOverlay : Node
         int firing = 0, tracking = 0, held = 0, idle = 0;
 
         // ⚠ The surface opens on the FIRST line, not before the walk: SurfaceEnd on an empty
-        // surface is a per-frame engine error, and a frame with nothing to draw is ordinary —
+        // surface is a per-frame engine error, and a frame with nothing to draw is ordinary,
         // every gunner idle at once is the normal state whenever no hostile is in reach.
         bool begun = false;
         void Line(Vector3 from, Vector3 to, Color color)

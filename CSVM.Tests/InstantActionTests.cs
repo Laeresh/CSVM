@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 /// fixture units for the full record (including D9's <c>WingmanPlane</c> and E11's
 /// <c>InstantActionWave.EnemyAccentId</c>), the built-in defaults every optional key falls back
 /// to (matching the original's own <c>FUN_00458ff0</c>/<c>FUN_00459390</c> reset-then-overlay),
-/// the <c>dogfight_ace</c> zero-forcing rule, and the <c>--ia=</c> plain-JSON-object path — plus
+/// the <c>dogfight_ace</c> zero-forcing rule, and the <c>--ia=</c> plain-JSON-object path, plus
 /// golden counts over the install's 8 shipped chapters so a reader change moves a test instead of
 /// silently drifting.
 /// </summary>
@@ -34,13 +34,13 @@ public class InstantActionTests
         Assert.Equal("probezep", def.MilitaryZeppelinNode);
 
         Assert.Equal(4, def.Waves.Count);
-        // Clamped to 6 — the fixture authors 9.
+        // Clamped to 6, the fixture authors 9.
         Assert.Equal(new InstantActionWave(6, "MSG_PROBE_GROUP1", "Firebrand", "novice", 27), def.Waves[0]);
-        // group2 authors no enemy_accentID — the built-in -1 default.
+        // group2 authors no enemy_accentID, the built-in -1 default.
         Assert.Equal(new InstantActionWave(6, "MSG_PROBE_GROUP2", "Fury", "veteran", -1), def.Waves[1]);
-        // group3 authored as a bare "group3", null — reads as the empty/default wave.
+        // group3 authored as a bare "group3", null, reads as the empty/default wave.
         Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran", -1), def.Waves[2]);
-        // group4 authors the wingman accent range's own base (12) — stored verbatim; the re-roll
+        // group4 authors the wingman accent range's own base (12), stored verbatim; the re-roll
         // (12 + rand() % 5) is a spawn-time policy (InstantActionRuntime), not a parse-time one.
         Assert.Equal(new InstantActionWave(2, "MSG_PROBE_GROUP4", "Warhawk", "ace", 12), def.Waves[3]);
 
@@ -97,7 +97,7 @@ public class InstantActionTests
         Assert.Equal(5, def.AceStats.DareDevil);
         Assert.Equal(6, def.AceStats.NaturalTouch);
         Assert.Equal(9, def.AceStats.QuickDraw);
-        Assert.Null(def.AceLivery); // no ace_pattern authored — nothing to paint
+        Assert.Null(def.AceLivery); // no ace_pattern authored, nothing to paint
 
         Assert.Equal(1, def.Lives); // the INVENTED field's own default
     }
@@ -105,7 +105,7 @@ public class InstantActionTests
     [Fact]
     public void ANonAceMissionKeepsItsAuthoredWaveCounts()
     {
-        // The zero-forcing rule is keyed on the MISSION TYPE, not on absence — a non-ace mission
+        // The zero-forcing rule is keyed on the MISSION TYPE, not on absence, a non-ace mission
         // with an authored wave keeps it even when num_wingmen/player_plane are unauthored (C2B's
         // own shape).
         var def = InstantAction.LoadFromJson(TestData.Fixture("ia-cli.json"));
@@ -122,12 +122,12 @@ public class InstantActionTests
         Assert.Equal(new[] { "ground_target", "stunt_flying" }, def.DisallowMissions);
         Assert.Equal("Kestrel", def.PlayerPlane);
         Assert.Equal(2, def.NumWingmen);
-        Assert.Equal("Devastator", def.WingmanPlane); // unauthored in this fixture — the default
+        Assert.Equal("Devastator", def.WingmanPlane); // unauthored in this fixture, the default
         Assert.Equal("cargo", def.ZeppelinType);
         Assert.Equal("probezep", def.CargoZeppelinNode);
 
         Assert.Equal(new InstantActionWave(3, "MSG_PROBE_CLI_G1", "Brigand", "veteran", 18), def.Waves[0]);
-        // group2 authored as a JSON null — same graceful default as a bare zrd flag.
+        // group2 authored as a JSON null, same graceful default as a bare zrd flag.
         Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran", -1), def.Waves[1]);
         // group3/group4 not authored at all.
         Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran", -1), def.Waves[2]);
@@ -156,9 +156,9 @@ public class InstantActionTests
     // ---- The wizard's own build path --------------------------------------------------------
 
     /// <summary>H16's own "one build path" check: a wizard-built def and the equivalent hand-authored
-    /// <c>--ia=</c> JSON — same mission type/player plane/wingmen/waves/lives, same environment
+    /// <c>--ia=</c> JSON, same mission type/player plane/wingmen/waves/lives, same environment
     /// (the "ia" fixture, whose ace/zeppelin/disallow_missions <see cref="TheFullRecordParsesFromTheFixture"/>
-    /// already pins) — produce byte-identical <see cref="InstantActionDef"/> field values. This is
+    /// already pins), produce byte-identical <see cref="InstantActionDef"/> field values. This is
     /// what makes the wizard and <c>--ia=</c> converge on one record rather than two similar ones.</summary>
     [Fact]
     public void BuildFromWizardConvergesWithAnEquivalentIaJsonFile()
@@ -230,8 +230,8 @@ public class InstantActionTests
         Assert.Equal(jsonDef.Lives, wizardDef.Lives);
     }
 
-    /// <summary>Dogfighting an Ace forces the wingman count and every wave's enemy count to 0 —
-    /// the same rule <c>BuildDef</c> applies reading the file — even when the wizard state handed
+    /// <summary>Dogfighting an Ace forces the wingman count and every wave's enemy count to 0,
+    /// the same rule <c>BuildDef</c> applies reading the file, even when the wizard state handed
     /// in still carries configured wingmen/waves (stale state from before the pilot switched mission
     /// types), so a solo-breaking def can never reach the runtime whichever producer built it.</summary>
     [Fact]
@@ -254,8 +254,8 @@ public class InstantActionTests
         }
     }
 
-    /// <summary>The wingman fit is dropped wherever there are no wingmen to carry it — the ace duel
-    /// and a count of 0 — so stale wizard state cannot arm a flight that does not exist. It is one
+    /// <summary>The wingman fit is dropped wherever there are no wingmen to carry it, the ace duel
+    /// and a count of 0, so stale wizard state cannot arm a flight that does not exist. It is one
     /// fit for the whole flight, the original's Player/Wingman radio, never one per wingman.</summary>
     [Fact]
     public void TheWingmanFitIsDroppedWhenNoWingmenFly()
@@ -279,7 +279,7 @@ public class InstantActionTests
 
     /// <summary>An unconfigured wizard wave slot (0 enemies) and a JSON file's own omitted
     /// <c>groupN</c> key resolve to the exact same <see cref="InstantActionWave"/>, regardless of
-    /// what the wizard's militia/aircraft/skill cursors happen to be sitting on — they are not
+    /// what the wizard's militia/aircraft/skill cursors happen to be sitting on, they are not
     /// "configured" until a pilot actually raises the count above 0.</summary>
     [Fact]
     public void AnUnconfiguredWaveMatchesAnOmittedGroupNRegardlessOfCursorPosition()
@@ -305,7 +305,7 @@ public class InstantActionTests
             ("C1B", "stunt_flying", "Firebrand", 3, new[] { 4, 3, 3, 2 }, "Fury", "blckswan", 23),
             ("C1C", "zeppelin_run", "Fury", 3, new[] { 4, 3, 3, 2 }, "Firebrand", "hollywd", 26),
             ("C2", "stunt_flying", "Brigand", 3, new[] { 4, 4, 3, 2 }, "Bloodhawk", "hughes", 25),
-            // C2B ships neither player_plane nor num_wingmen — both read the original's own default.
+            // C2B ships neither player_plane nor num_wingmen, both read the original's own default.
             ("C2B", "zeppelin_run", "Devastator", 0, new[] { 6, 5, 4, 3 }, "Devastator", "hollywd", 26),
             ("C3", "dogfight_squadron", "Hellhound", 3, new[] { 6, 5, 4, 3 }, "Kestrel", "medusas", 17),
             ("C4", "stunt_flying", "Peacemaker", 3, new[] { 6, 5, 4, 3 }, "Bloodhawk", "hughes", 31),
@@ -335,7 +335,7 @@ public class InstantActionTests
             Assert.Equal(9, def.AceStats.DareDevil);
             Assert.Equal(9, def.AceStats.Constitution);
             // None of the 8 chapters' own mission_type is dogfight_ace, so the zero-forcing rule
-            // never fires on shipped data — only on a --ia= or wizard-built ace mission.
+            // never fires on shipped data, only on a --ia= or wizard-built ace mission.
             Assert.NotEqual("dogfight_ace", def.MissionType);
         }
     }

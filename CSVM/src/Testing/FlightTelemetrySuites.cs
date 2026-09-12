@@ -64,7 +64,7 @@ internal static class FlightTelemetrySuites
                 Textures = textures,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            // worldEffects null!: never dereferenced — CrashProgram/WorldScene stay null, so the
+            // worldEffects null!: never dereferenced, CrashProgram/WorldScene stay null, so the
             // spawner's crash-runtime block (its only reader) is skipped.
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs,
                 new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());

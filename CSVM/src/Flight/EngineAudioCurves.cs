@@ -133,7 +133,7 @@ public static class EngineAudioCurves
     /// plus a turn-rate term and a climb-attitude term, clamped to [0, 1.5] BEFORE the curve maps it
     /// to an output (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle
     /// alone"); the pitch then carries the damaged-swap multiplier. The returned volume is the curve
-    /// alone — the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
+    /// alone, the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
     internal static (float Pitch, float Volume) Engine(PlaneStats stats, in EngineDrive drive, float pitchMul)
     {
         float tVol = drive.Boosting ? BoostVolumeParam

@@ -9,14 +9,14 @@ namespace CSVM.Flight;
 /// <summary>
 /// The flying aircraft's collision silhouette: plane-frame convex hulls FlightController sweeps
 /// each physics frame (a lone center-line ray would let everything but the nose pass through
-/// obstacles). The same hulls mount as <see cref="AircraftBody"/>'s hit shapes — single-sourced,
+/// obstacles). The same hulls mount as <see cref="AircraftBody"/>'s hit shapes, single-sourced,
 /// never a second derivation. Built once from the model's mesh triangles (PropAnimator-style
 /// tree walk), transformed into FlightController's frame; hidden subtrees and the nose prop's
-/// blur discs are excluded, but the autogyro's overhead rotor discs stay in — that plane's wing.
+/// blur discs are excluded, but the autogyro's overhead rotor discs stay in, that plane's wing.
 /// Each hull is the convex hull of one clipped region's triangles, so it hugs the silhouette
 /// where a box bridged air. ⚠ Hulls still overlap where regions share clipped triangles; the
 /// earliest in <see cref="Parts"/> order is what a caller reports.
-/// All threshold consts below are TUNE — see <c>CONTEXT.md</c>.
+/// All threshold consts below are TUNE, see <c>CONTEXT.md</c>.
 /// </summary>
 public sealed class PlaneCollider
 {
@@ -26,10 +26,10 @@ public sealed class PlaneCollider
     private const float WingBandFrac = 0.35f;        // |x| beyond this × half-span = wing verts
     private const float TailStartFrac = 0.7f;        // z beyond this × length (nose −Z → tail +Z) = tail verts
     private const float WingSplitGap = 2f;           // m of empty chord between wing clusters ⇒ split (canards)
-    private const float MinThickness = 0.3f;         // m — floor per hull dimension (thin fins/slabs)
+    private const float MinThickness = 0.3f;         // m, floor per hull dimension (thin fins/slabs)
     private const float VolumeSplitFrac = 0.3f;      // a cut must remove ≥ this share of a region's box volume
     private const int MaxParts = 8;                  // total hull budget per plane
-    private const float MinCutWidth = 0.35f;         // m — cut planes keep this far from the cluster rim
+    private const float MinCutWidth = 0.35f;         // m, cut planes keep this far from the cluster rim
     private const int Bins = 64;                     // cut-plane candidates per axis (bin edges)
 
     private PlaneCollider(List<Part> parts) => Parts = parts;
@@ -139,7 +139,7 @@ public sealed class PlaneCollider
     // clipped on z alone, so a swept plane's outboard trailing edge lands there): a piece wholly
     // one side of the centerline, centred outboard of WingBandFrac, is relabelled wing so
     // PlaneDamage's localImpact-blind "tail" arm never sees a wingtip strike. The half-span is
-    // known here — do not side-split in PlaneDamage instead. Applied AFTER refinement so each
+    // known here, do not side-split in PlaneDamage instead. Applied AFTER refinement so each
     // final piece is judged on its own extent.
     private static string Relabel(string name, List<Triangle> tris, float wingBand)
     {
@@ -220,7 +220,7 @@ public sealed class PlaneCollider
     // Best single or double axis cut by volume removed (dims clamped to MinThickness
     // so flat slabs still count); a double cut exists to separate bilateral pairs like twin fins
     // in one pass. Bins enclose full triangle corners so a surface crossing a cut
-    // stays covered on both sides (overlap, not a leak) — do not bin by centroid alone.
+    // stays covered on both sides (overlap, not a leak), do not bin by centroid alone.
     // Returns false below VolumeSplitFrac gain or inside MinCutWidth of the rim.
     private static bool BestCut(List<Triangle> tris, out List<List<Triangle>> pieces, out float gain)
     {
@@ -332,7 +332,7 @@ public sealed class PlaneCollider
     private static void AddHull(List<Region> regions, string name, List<Triangle> tris)
     {
         if (tris.Count == 0)
-            return; // e.g. the autogyro may lack a matching region — tolerate absences
+            return; // e.g. the autogyro may lack a matching region, tolerate absences
         var centre = Enclose(tris).GetCenter();
         var cloud = new List<Vector3>(tris.Count * 3);
         foreach (var t in tris)
@@ -345,7 +345,7 @@ public sealed class PlaneCollider
     }
 
     // Clips every triangle against an axis-aligned plane (axis 0=x, 2=z),
-    // keeping the pieces on the requested side — Sutherland–Hodgman against one
+    // keeping the pieces on the requested side, Sutherland–Hodgman against one
     // plane, re-fanned into triangles. Degenerate slivers are dropped.
     private static List<Triangle> ClipAxis(List<Triangle> tris, int axis, float plane, bool keepGreater)
     {

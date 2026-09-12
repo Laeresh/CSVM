@@ -9,7 +9,7 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>BL-740: the whole torpedo run end to end, on a free-flying aeroplane rather than a
-/// held rig — the acquisition's gasbag gate, the ranking's -0.5, the pursue arm closing the range,
+/// held rig, the acquisition's gasbag gate, the ranking's -0.5, the pursue arm closing the range,
 /// the rocketeer's DAMAGES_ZEPPELIN match and its engagement band. C4/M03's own geometry: a Black
 /// Hat Warhawk 1800 m out and 75 m above the Pandora's nearest gasbag, flying past rather than in.
 /// The held-rig gate suite (<c>gasbag-ordnance-gate</c>) proves the admission rule; this proves an

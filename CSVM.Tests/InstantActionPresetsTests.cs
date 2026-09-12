@@ -10,14 +10,14 @@ namespace CSVM.Tests;
 /// The Instant Action Table of Contents: the 19 preset scenarios decoded from `0x0061b090`
 /// (docs/formats/instant-action.md, "Table of Contents presets") and the name-to-cursor resolution
 /// that applies one to the setup screens. The table is hand-transcribed, so these are the tests
-/// that catch a typo in it — every name has to resolve against a live roster, and a wave's aircraft
+/// that catch a typo in it, every name has to resolve against a live roster, and a wave's aircraft
 /// has to be one its own militia actually flies.
 /// </summary>
 public class InstantActionPresetsTests
 {
     private const int WaveSlots = 4;
 
-    /// <summary>The nineteen names, langui 3600 to 3618 in that order — the order the contents
+    /// <summary>The nineteen names, langui 3600 to 3618 in that order, the order the contents
     /// list shows and the order a preset's own stored index means.</summary>
     [Fact]
     public void TheNineteenPresetsExistInLanguiOrder() =>
@@ -47,7 +47,7 @@ public class InstantActionPresetsTests
     }
 
     /// <summary>All four mission types and all seven environments appear, and no environment is
-    /// tied to one mission type — the decoded table's own statement that the presets are not a
+    /// tied to one mission type, the decoded table's own statement that the presets are not a
     /// per-environment set.</summary>
     [Fact]
     public void ThePresetsCoverEveryMissionTypeAndEveryEnvironment()
@@ -86,8 +86,8 @@ public class InstantActionPresetsTests
         }
     }
 
-    /// <summary>The unused wave slots take `FUN_004102c0`'s own sentinel substitution — militia 4
-    /// (Fortune Hunter), aircraft 5 (Devastator), skill 1 (veteran) — at 0 enemies. It never
+    /// <summary>The unused wave slots take `FUN_004102c0`'s own sentinel substitution, militia 4
+    /// (Fortune Hunter), aircraft 5 (Devastator), skill 1 (veteran), at 0 enemies. It never
     /// reaches a flown mission, but it is what a pilot inherits on raising an empty wave's
     /// count.</summary>
     [Fact]
@@ -122,7 +122,7 @@ public class InstantActionPresetsTests
 
     /// <summary>The mission-type cursor indexes the roster the environment actually offers, not the
     /// four-row master list. "The clouds" (C2B) bars Stunt Flying, so a zeppelin run there is the
-    /// third row, not the fourth — the one case where the filter shifts a preset's own index.</summary>
+    /// third row, not the fourth, the one case where the filter shifts a preset's own index.</summary>
     [Fact]
     public void APresetOnTheCloudsIndexesTheFilteredMissionTypeRoster()
     {

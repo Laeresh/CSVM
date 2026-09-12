@@ -38,7 +38,7 @@ public static class ControlSurfaces
 
     /// <summary>The hinge axis in the surface node's local frame: spanwise X for
     /// ailerons/elevators, vertical Y for rudders. The parent group's rotation
-    /// orients this into the true (swept/tilted) hinge line — e.g. the Bloodhawk's
+    /// orients this into the true (swept/tilted) hinge line, e.g. the Bloodhawk's
     /// rudder hinge leans 12° aft via its lrudder1 group.</summary>
     public static Vector3 HingeAxis(Kind kind) =>
         kind == Kind.Rudder ? Vector3.Up : Vector3.Right;

@@ -13,7 +13,7 @@ public sealed class HudFont
 {
     private const string NormalFile = "5pointhud.png";
     private const string BrightFile = "5pointhudbrite.png";
-    private const int FirstCode = 0x21;         // '!' — the first ink glyph (space 0x20 is blank)
+    private const int FirstCode = 0x21;         // '!', the first ink glyph (space 0x20 is blank)
     private const int LastCode = 0x7e;          // '~'
     private const int CodeCount = LastCode - FirstCode + 1; // 94
     private const int Tracking = 1;             // atlas px of gap the renderer inserts after a glyph
@@ -37,7 +37,7 @@ public sealed class HudFont
     public int PixelHeight { get; }
 
     /// <summary>Loads the font from an extracted <c>rimage</c> directory. Null (with one log line)
-    /// when the normal atlas is absent — HUD text is cosmetic and must never take a build down. The
+    /// when the normal atlas is absent, HUD text is cosmetic and must never take a build down. The
     /// highlight atlas falls back to the normal one if missing.</summary>
     public static HudFont? Load(string rimageDir)
     {
@@ -103,7 +103,7 @@ public sealed class HudFont
 
     // Loads one atlas: keys the black background to transparent, and (when
     // `glyphs` is given) segments the ink into per-code source rects by walking
-    // columns — each maximal run of inked columns is the next glyph, assigned to codes from
+    // columns, each maximal run of inked columns is the next glyph, assigned to codes from
     // FirstCode upward. Returns null if the file is missing or unreadable.
     private static Texture2D? LoadAtlas(string path, (int X, int W)[]? glyphs,
         out int runCount, out int top, out int height)

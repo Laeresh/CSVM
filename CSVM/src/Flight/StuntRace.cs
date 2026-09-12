@@ -6,11 +6,11 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>One seat in a splitscreen stunt race: the player's own
-/// <see cref="StuntMission"/> — their own zone progress and run clock — plus where they placed
+/// <see cref="StuntMission"/>, their own zone progress and run clock, plus where they placed
 /// once they crossed the last Danger Zone.</summary>
 public sealed class Racer
 {
-    /// <summary>0-based player index (player 1 = 0) — also their pane, colour and tag.</summary>
+    /// <summary>0-based player index (player 1 = 0), also their pane, colour and tag.</summary>
     public int Index;
 
     /// <summary>This player's independent run over the shared zone list.</summary>
@@ -45,7 +45,7 @@ public sealed class Racer
 /// whether the race is over.
 /// A player's clock stops at their own <see cref="StuntMission.AllComplete"/> while the others
 /// fly on; when the last one is in, <see cref="RaceCompleted"/> raises the shared
-/// <see cref="StuntRaceBoard"/>. Deliberately not a Node — it is freed with the session, so that
+/// <see cref="StuntRaceBoard"/>. Deliberately not a Node, it is freed with the session, so that
 /// event needs no teardown.
 /// ⚠ Do not wire <see cref="ScoreStore"/> best-time persistence in here: a race field starts on a
 /// synthetic abreast-grid point no solo run starts at, so a race total is not comparable to one.
@@ -63,10 +63,10 @@ public sealed class StuntRace
     /// <summary>How many players have cleared every zone.</summary>
     public int FinishedCount { get; private set; }
 
-    /// <summary>True once every player is in — the shared results board's cue.</summary>
+    /// <summary>True once every player is in, the shared results board's cue.</summary>
     public bool AllFinished => _racers.Count > 0 && FinishedCount >= _racers.Count;
 
-    /// <summary>"1st" / "2nd" / "3rd" / "4th" — placings, shared by the marker HUD's finish banner
+    /// <summary>"1st" / "2nd" / "3rd" / "4th", placings, shared by the marker HUD's finish banner
     /// and the results board.</summary>
     public static string Ordinal(int rank) => rank switch
     {
@@ -113,7 +113,7 @@ public sealed class StuntRace
     }
 
     /// <summary>The field in finishing order for the results board: finishers by placing, then
-    /// anyone still flying, best progress first (zones cleared, then the faster clock) — so a board
+    /// anyone still flying, best progress first (zones cleared, then the faster clock), so a board
     /// raised early still reads sensibly.</summary>
     public IEnumerable<Racer> Standings()
     {

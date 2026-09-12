@@ -19,7 +19,7 @@ public readonly record struct ZeppelinCannon(string Node, string DeployAnim, str
 /// <summary>
 /// Reads a mission's zeppelin instances (<c>zeppelins.zrd.json</c> in the mission zrdr scope):
 /// 58 records across the install, 1–4 per file, <c>[null]</c> on the 12 MP1/MP2 missions that
-/// author none. Every value is reported in its AUTHORED unit (degrees stay degrees) — the
+/// author none. Every value is reported in its AUTHORED unit (degrees stay degrees), the
 /// original converts most angles to radians at load but skips <c>min_pitch</c>/<c>max_pitch</c>
 /// (the load-time unit bug, docs/formats/mission-entities.md "Units and the load-time pitch
 /// clamp"); keeping the reader verbatim leaves that conversion, and the decision not to
@@ -195,7 +195,7 @@ public static class Zeppelins
 }
 
 /// <summary>A <c>cannon_health</c> entry (24 of 58 records author them): the per-cannon damage
-/// record F18 consumes — the cannon, its two constant sub-nodes, the gasbag it is attached to
+/// record F18 consumes, the cannon, its two constant sub-nodes, the gasbag it is attached to
 /// (a hatch hit can take out its section), hp (200 throughout), the destruction anim and the
 /// descending-fraction damage stages (0.6/0.3).</summary>
 public sealed class ZeppelinCannonHealth
@@ -218,7 +218,7 @@ public sealed class ZeppelinCannonHealth
 /// <summary>
 /// One <c>zeppelins.zrd.json</c> instance. 15 keys are universal across the 58 shipped records;
 /// the rest are conditional (<c>gasbags</c> misses exactly one record, C5/M01's
-/// <c>piratezep</c>). All angles and rates are in their AUTHORED units — degrees — including
+/// <c>piratezep</c>). All angles and rates are in their AUTHORED units, degrees, including
 /// <see cref="MinPitchDeg"/>/<see cref="MaxPitchDeg"/>, which the ORIGINAL leaves in degrees
 /// while converting everything else to radians (its initial-pitch clamp is therefore a no-op;
 /// do not reproduce it as a working clamp, and never read the ±30 as radians).
@@ -235,7 +235,7 @@ public sealed class ZeppelinDef
     /// <summary>The start heading, degrees, mission-data convention (0 = −Z).</summary>
     public float YawDeg { get; init; }
 
-    /// <summary>The start pitch, degrees. Applied verbatim — the original's load-time clamp
+    /// <summary>The start pitch, degrees. Applied verbatim, the original's load-time clamp
     /// against <see cref="MinPitchDeg"/>/<see cref="MaxPitchDeg"/> never fires (unit bug) and
     /// no shipped record authors a non-zero value.</summary>
     public float PitchDeg { get; init; }
@@ -259,7 +259,7 @@ public sealed class ZeppelinDef
     public float MaxRatePitchDeg { get; init; }
 
     /// <summary>Flight pitch floor, degrees (−30 throughout). Stays in degrees in the original
-    /// too — see the class summary.</summary>
+    /// too, see the class summary.</summary>
     public float MinPitchDeg { get; init; }
 
     /// <summary>Flight pitch ceiling, degrees (+30 throughout).</summary>
@@ -270,7 +270,7 @@ public sealed class ZeppelinDef
     /// net as mutable input, never read-once.</summary>
     public required string Net { get; init; }
 
-    /// <summary>Who it shoots at — <c>player</c>, or another zeppelin's node name. F19's
+    /// <summary>Who it shoots at, <c>player</c>, or another zeppelin's node name. F19's
     /// input.</summary>
     public required IReadOnlyList<string> Targets { get; init; }
 
@@ -278,7 +278,7 @@ public sealed class ZeppelinDef
     public required IReadOnlyList<ZeppelinHealthyZone> Healthy { get; init; }
 
     /// <summary>How many of <see cref="Healthy"/> must SURVIVE: the zeppelin dies when the
-    /// surviving count drops BELOW this (decoded polarity — the design states the inverse;
+    /// surviving count drops BELOW this (decoded polarity, the design states the inverse;
     /// mission-entities.md "The kill threshold counts survivors"). Defaulted to 1 and clamped
     /// to the healthy count at load, per the decoded rule.</summary>
     public required int NumHealthyRequired { get; init; }

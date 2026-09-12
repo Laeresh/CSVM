@@ -94,7 +94,7 @@ public sealed class SoundArchive : IDisposable
 
     /// <summary>The raw bytes of one WAV, or null when the archive lacks it or cannot read it.
     /// The read primitive under <see cref="Find"/>, public because <see cref="Find"/> itself
-    /// returns a Godot resource that a unit test cannot construct — this is where the
+    /// returns a Godot resource that a unit test cannot construct, this is where the
     /// reopen-after-<see cref="Dispose"/> contract is asserted.</summary>
     public byte[]? ReadWavBytes(string wavName) => ReadBytes(wavName);
 

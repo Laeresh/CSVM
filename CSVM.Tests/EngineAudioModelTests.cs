@@ -46,7 +46,7 @@ public class EngineAudioModelTests
     /// <summary>The damaged engine is a DEFINITION SWAP on slot 0 with a pitch multiplier drawn once
     /// per swap, never a second loop blended over the healthy one. The install authors exactly one
     /// entry, inherited from basic_airplane by every plane, and its flag byte is set with the range
-    /// 0.0 to 1.0 — so a damaged engine can be drawn anywhere from the frequency floor to normal.</summary>
+    /// 0.0 to 1.0, so a damaged engine can be drawn anywhere from the frequency floor to normal.</summary>
     [ExtractedDataFact]
     public void EveryAirframeSwapsOneDamagedEngineDefinitionWithARandomisedPitch()
     {
@@ -68,7 +68,7 @@ public class EngineAudioModelTests
 
     /// <summary>Slot 0's healthy definition is the airframe's own, not one shared default: eleven
     /// planes name at least eight distinct engine loops between them. The count is a floor, so a
-    /// plane gaining or losing its own loop does not fail this — a reader collapsing every plane onto
+    /// plane gaining or losing its own loop does not fail this, a reader collapsing every plane onto
     /// one inherited default does.</summary>
     [ExtractedDataFact]
     public void EngineDefinitionsArePerAirframe()
@@ -105,7 +105,7 @@ public class EngineAudioModelTests
     /// airframe authors it, yields to the damaged swap when both conditions are live (no def authors
     /// a damaged-cockpit variant), and both fall back to the plain <c>engine_sound</c> definition.
     /// <c>DamagedEnginePitchRandom</c> stays false so the random draw branch (needing a live
-    /// <c>RandomNumberGenerator</c>) is never reached — untouched by this precedence rule.</summary>
+    /// <c>RandomNumberGenerator</c>) is never reached, untouched by this precedence rule.</summary>
     [Fact]
     public void EngineDefForPicksDamagedOverCockpitOverNormal()
     {
@@ -187,7 +187,7 @@ public class EngineAudioModelTests
     }
 
     /// <summary>An airframe with no <c>cockpit_engine_sound</c> of its own keeps the normal loop
-    /// in the Cockpit view rather than going silent or erroring — the same "keep the normal def"
+    /// in the Cockpit view rather than going silent or erroring, the same "keep the normal def"
     /// fallback the plan calls for.</summary>
     [Fact]
     public void EngineDefForFallsBackToNormalWithNoCockpitDefinition()

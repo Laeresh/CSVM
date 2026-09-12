@@ -12,7 +12,7 @@ namespace CSVM.Session;
 /// <c>disable</c> list, tested against the same entry/exit gate-crossing rule the <c>--stunt</c>
 /// module uses (docs/formats/missions.md): a route ribbon plus a material-matched pair of gate
 /// polygons, and a segment crossing inside each in either order. A separate implementation from
-/// <c>Flight.StuntMission</c> by ownership, not by mechanism — the two read the same physical
+/// <c>Flight.StuntMission</c> by ownership, not by mechanism, the two read the same physical
 /// <c>dzpathN</c> mesh, just from different authoring surfaces (a mission's own script names
 /// versus <c>ia.json</c>'s zone list).
 /// </summary>

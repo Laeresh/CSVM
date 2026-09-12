@@ -2,21 +2,21 @@ using System;
 
 namespace CSVM.Flight;
 
-/// <summary>Selecting and auto-advancing across a weapon's ammo slots — rocket hardpoints (H) and
-/// firable gun groups (G) alike — as pure index math. <see cref="FireControl"/>'s internal cursor:
+/// <summary>Selecting and auto-advancing across a weapon's ammo slots, rocket hardpoints (H) and
+/// firable gun groups (G) alike, as pure index math. <see cref="FireControl"/>'s internal cursor:
 /// nothing else calls it, and its behaviour is proven through FireControl's own interface
 /// (FireControlTests). Slots are addressed by index; <c>ammoAt</c> reports a slot's remaining
 /// rounds and <c>infinite</c> models <c>--infinite-ammo</c> (every slot always counts as armed).
 /// Each slot is its own selectable position regardless of what it carries, so the selector steps
 /// across slots, not ordnance/weapon types: the player picks a hardpoint rather than the game
-/// draining them in pylon order. Positions are the caller's own sequence, not the pylon list's —
+/// draining them in pylon order. Positions are the caller's own sequence, not the pylon list's,
 /// <see cref="FireControl"/> walks hardpoints in physical mount order. The manual selector steps
 /// both ways over that one sequence, as the original's own keybind page does.</summary>
 internal static class WeaponCursor
 {
     /// <summary>The slot the next round fires from: <paramref name="from"/> itself while it still has
     /// rounds, else the next armed slot scanning forward and wrapping. <c>-1</c> when every slot is
-    /// empty. This is the firing cursor — it stays on the selected slot until that slot drains, then
+    /// empty. This is the firing cursor, it stays on the selected slot until that slot drains, then
     /// advances to the next armed slot the moment it empties.</summary>
     public static int NextArmed(int count, Func<int, int> ammoAt, int from, bool infinite)
     {

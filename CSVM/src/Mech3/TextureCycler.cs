@@ -16,13 +16,13 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed partial class TextureCycler : Node
 {
-    /// <summary>Which flipbooks are running, as "base→frames@fps" — the build log line, and
+    /// <summary>Which flipbooks are running, as "base→frames@fps", the build log line, and
     /// the only way to tell a registered cycle from one whose frames failed to resolve.</summary>
     public readonly List<string> Summary = new();
 
     /// <summary>--debug-anim: report each flipbook's frame once a second, so a headless run can
     /// prove the frames advance without hunting for a camera angle where the change is visible.
-    /// The water is deliberately subtle in the original — 64x64 frames differing by ~2/255 — so
+    /// The water is deliberately subtle in the original, 64x64 frames differing by ~2/255, so
     /// "I can't see it in a screenshot" is not evidence that it is not running.</summary>
     public bool Debug;
 
@@ -33,7 +33,7 @@ public sealed partial class TextureCycler : Node
     /// <summary>How many flipbooks are running (diagnostics / the build log).</summary>
     public int Count => _cycles.Count;
 
-    /// <summary>Registers a flipbook. Ignored unless it has at least two frames and a rate —
+    /// <summary>Registers a flipbook. Ignored unless it has at least two frames and a rate,
     /// a one-frame "cycle" is just a static texture, and a zero rate would divide by nothing.</summary>
     public void Add(ShaderMaterial material, IReadOnlyList<ImageTexture> frames, float fps, bool looping, string label = "")
     {

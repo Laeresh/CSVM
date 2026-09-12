@@ -17,7 +17,7 @@ public enum AiMode
     /// <summary>Chasing the target; the gunner fires in this mode.</summary>
     Pursue,
 
-    /// <summary>The rubber-band assist: a pursued AI lets its human pursuer catch up —
+    /// <summary>The rubber-band assist: a pursued AI lets its human pursuer catch up,
     /// course held, throttle eased by the decoded <c>sixth_sense_factor</c>, fire held.
     /// Disabled session-wide by <c>--no-assist</c> (<see cref="AiModeMachine.AssistEnabled"/>).</summary>
     LayOff,
@@ -56,7 +56,7 @@ public enum AiMode
 /// decoded (docs/formats/ai-rosters.md "AI modes, engine-side"); which transitions are decoded
 /// and which are invented is recorded in docs/architecture.md's entry for this file, and each
 /// invented constant below says so at its own declaration.
-/// Config fields are plain and mutable BY DESIGN — mission scripts rewrite them at runtime
+/// Config fields are plain and mutable BY DESIGN, mission scripts rewrite them at runtime
 /// (<c>SET_AI_ATTACK_RADIUS</c> and friends). All randomness is this machine's own seeded
 /// stream, so a fixed-seed run transitions identically. The obstacle probe is an injected
 /// delegate and target state arrives as a snapshot, so the transition table unit-tests without
@@ -65,13 +65,13 @@ public enum AiMode
 /// tag (docs/org/aiPilot.md "The danger-zone run"). ⚠ Do not add a second entry here.</summary>
 public sealed class AiModeMachine
 {
-    /// <summary>The evade flag's clear threshold — decoded: the flag is dropped once the cosine
+    /// <summary>The evade flag's clear threshold, decoded: the flag is dropped once the cosine
     /// between the pursuer's nose and the line to this aircraft falls under 0.85, about 31.8
     /// degrees off (<c>FUN_0041d9f0</c>, <c>0x0041deaf</c>). Nothing else times the flag out; the
     /// 8 s stamp the damage handler writes at <c>+0xbc</c> is read nowhere in the image.</summary>
     public const float EvadeClearAlignment = 0.85f;
 
-    /// <summary>Obstacle-probe cadence floor, seconds — decoded: the original re-arms its per-plane
+    /// <summary>Obstacle-probe cadence floor, seconds, decoded: the original re-arms its per-plane
     /// timer to the game clock plus 0.5…1.0 s (<c>FUN_0041f810</c>), the fraction drawn as
     /// <c>rand()/32767</c>. Was an invented flat 0.25 s.</summary>
     public const float ProbeIntervalMinS = 0.5f;
@@ -79,17 +79,17 @@ public sealed class AiModeMachine
     /// <summary>Obstacle-probe cadence ceiling, seconds (see <see cref="ProbeIntervalMinS"/>).</summary>
     public const float ProbeIntervalMaxS = 1f;
 
-    /// <summary>The world-Y floor below which the climb-out arms with no ray at all — decoded:
+    /// <summary>The world-Y floor below which the climb-out arms with no ray at all, decoded:
     /// <c>DAT_0071c3f0</c>, written 20.0 at level setup (<c>FUN_004735b0</c>, <c>0x0047415b</c>).
     /// ⚠ Flat world Y, not a terrain follow: it saves a plane over water and does nothing over a
     /// ridge, which is what the ray is for.</summary>
     public const float AltitudeFloorM = 20f;
 
     /// <summary>The world-Y ceiling above which no ray is cast and a running climb-out is released
-    /// — decoded: <c>DAT_0071c3f4</c>, written 8000.0 alongside the floor above.</summary>
+    ///, decoded: <c>DAT_0071c3f4</c>, written 8000.0 alongside the floor above.</summary>
     public const float ProbeCeilingM = 8000f;
 
-    /// <summary>Obstacle-probe lookahead, seconds of current velocity — decoded: the original's
+    /// <summary>Obstacle-probe lookahead, seconds of current velocity, decoded: the original's
     /// ray is the vehicle's own velocity scaled by 4.5 (<c>FUN_0041f810</c>), so 4.5 seconds of
     /// travel. Was an invented 2.5 until the reach was read out of the image.</summary>
     public const float ProbeLookaheadS = 4.5f;
@@ -97,45 +97,45 @@ public sealed class AiModeMachine
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
     public const float ProbeMinLookaheadM = 120f;
 
-    /// <summary>The avoid-crash climb-out altitude gain, metres — decoded: the original's climb-out
+    /// <summary>The avoid-crash climb-out altitude gain, metres, decoded: the original's climb-out
     /// aim is the aeroplane's own position with Y + 1000 (<c>FUN_0041d1f0</c> case 3), which is the
     /// same 1000 m <see cref="AiPilot.ClimbOutAim"/> flies. Was an invented 250.</summary>
     public const float ClimbOutM = 1000f;
 
-    /// <summary>Selection weight multiplier for a roster-authored signature maneuver — decoded
+    /// <summary>Selection weight multiplier for a roster-authored signature maneuver, decoded
     /// (<c>FUN_004201a0</c>, <c>0x004205ca</c>). Was an invented 3.</summary>
     public const float SignatureWeight = 6f;
 
-    /// <summary>Selection weight multiplier on the maneuver flown last — decoded
+    /// <summary>Selection weight multiplier on the maneuver flown last, decoded
     /// (<c>FUN_004201a0</c>, <c>0x00420584</c>, off the <c>+0x9b4</c> slot). This is what keeps a
     /// chained evade from flying the same program twice running.</summary>
     public const float RepeatWeight = 0.1f;
 
-    /// <summary>Selection weight multiplier on the maneuver flown before last — decoded
+    /// <summary>Selection weight multiplier on the maneuver flown before last, decoded
     /// (<c>FUN_004201a0</c>, <c>0x00420598</c>, off the <c>+0x9b8</c> slot).</summary>
     public const float SecondLastWeight = 0.2f;
 
-    /// <summary>Selection weight floor — decoded: a weight that comes out negative is replaced by
+    /// <summary>Selection weight floor, decoded: a weight that comes out negative is replaced by
     /// this, not clamped to zero (<c>FUN_004201a0</c>, <c>0x00420607</c>).</summary>
     public const float MinSelectionWeight = 0.1f;
 
-    /// <summary>Invented: a pursuing human this far behind has "fallen behind" — pursue eases
+    /// <summary>Invented: a pursuing human this far behind has "fallen behind", pursue eases
     /// into lay off past this gap. The mode and the intent are decoded; the distance is not.</summary>
     public const float LayOffEnterRangeM = 350f;
 
-    /// <summary>Invented: the pursuer has "caught up" inside this gap — lay off returns to
+    /// <summary>Invented: the pursuer has "caught up" inside this gap, lay off returns to
     /// pursue (hysteresis against <see cref="LayOffEnterRangeM"/>).</summary>
     public const float LayOffCaughtUpRangeM = 250f;
 
-    /// <summary>Invented: the pursued test's rear cone — the pursuer must sit within this
+    /// <summary>Invented: the pursued test's rear cone, the pursuer must sit within this
     /// half-angle of the AI's tail axis (its velocity, reversed).</summary>
     public const float LayOffRearConeDeg = 60f;
 
-    /// <summary>Invented: the pursued test's chase cone — the pursuer's velocity must point
+    /// <summary>Invented: the pursued test's chase cone, the pursuer's velocity must point
     /// within this half-angle of the line to the AI, i.e. it is actually chasing.</summary>
     public const float LayOffPursuerConeDeg = 30f;
 
-    /// <summary>Invented: minimum lay-off dwell, seconds — an anti-chatter hold before any
+    /// <summary>Invented: minimum lay-off dwell, seconds, an anti-chatter hold before any
     /// lay-off exit condition is honoured.</summary>
     public const float LayOffMinHoldS = 2f;
 
@@ -145,38 +145,38 @@ public sealed class AiModeMachine
     /// 2026-08-14: an enemy behind the player appearing to slow down).</summary>
     public const float LayOffSustainS = 1.5f;
 
-    /// <summary>Activation radius, metres — player.json's <c>min_ai_active_dist</c> (2000 shipped),
+    /// <summary>Activation radius, metres, player.json's <c>min_ai_active_dist</c> (2000 shipped),
     /// the fallback for every roster whose own volume slots are unauthored (all of them).
     /// A target outside it is not ranked at all (the engine scores it 1e21).</summary>
     public float ActivationRange = 2000f;
 
-    /// <summary>Attack radius, metres — vehicle.json's <c>attack</c> (2000 shipped, on
+    /// <summary>Attack radius, metres, vehicle.json's <c>attack</c> (2000 shipped, on
     /// <c>basic_airplane</c>, inherited install-wide). Pursue is entered when a target sits
     /// inside both this and <see cref="ActivationRange"/>.</summary>
     public float AttackRange = 2000f;
 
-    /// <summary>Chase leash, metres — vehicle.json's <c>return_range</c> (1200 shipped). Our
+    /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped). Our
     /// reading (the anchor is undecoded): pursuit is abandoned when the aircraft has strayed
     /// farther than this from where the pursuit began AND the target sits outside the
     /// activation radius.</summary>
     public float ReturnRange = 1200f;
 
-    /// <summary>Probability that a hit's steady-hand test FAILS and the pilot evades —
+    /// <summary>Probability that a hit's steady-hand test FAILS and the pilot evades,
     /// <c>steady_hand_chance</c> (0.5 → 0.08 over the pair; lower is the better pilot). The
     /// default here is the pair's raw low endpoint, not the rating-1 value (rating/9 interpolation
-    /// puts rating 1 partway toward the high endpoint already — see <see cref="AiSkills.At"/>).
+    /// puts rating 1 partway toward the high endpoint already, see <see cref="AiSkills.At"/>).
     /// The design's damage weighting on this roll is undecoded and not modelled.</summary>
     public float SteadyHandChance = 0.5f;
 
     /// <summary>Probability that the sixth-sense test PASSES (the pilot follows the target's
-    /// maneuver) — <c>sixth_sense_chance</c> (0.45 → 0.71 over the pair). A failure stuns.</summary>
+    /// maneuver), <c>sixth_sense_chance</c> (0.45 → 0.71 over the pair). A failure stuns.</summary>
     public float SixthSenseChance = 0.45f;
 
-    /// <summary>How long a stun lasts — <c>stun_recovery_interval</c> (4.8 s → 0.6 s over the
+    /// <summary>How long a stun lasts, <c>stun_recovery_interval</c> (4.8 s → 0.6 s over the
     /// pair).</summary>
     public float StunRecoveryIntervalS = 4.8f;
 
-    /// <summary>The decoded ease-off factor applied while being pursued —
+    /// <summary>The decoded ease-off factor applied while being pursued,
     /// <c>sixth_sense_factor</c> (0.994 → 1.07 over the pair): the fraction of the
     /// pursuer's speed a laying-off pilot flies at, so a poor pilot lets the player close and
     /// an ace pulls away. The constant is decoded; the speed-matching application point is our
@@ -184,7 +184,7 @@ public sealed class AiModeMachine
     public float SixthSenseFactor = 0.994f;
 
     /// <summary>The rubber-band assist switch: false (<c>--no-assist</c>) means
-    /// <see cref="AiMode.LayOff"/> is never entered by <see cref="Update"/> — pursue only, the
+    /// <see cref="AiMode.LayOff"/> is never entered by <see cref="Update"/>, pursue only, the
     /// original's assist off. Default true, the original's behaviour. External
     /// <see cref="Enter"/> overrides (script/tests) are deliberately not gated.</summary>
     public bool AssistEnabled = true;
@@ -203,7 +203,7 @@ public sealed class AiModeMachine
 
     /// <summary>Line-of-sight probe for the avoid-crash test: static world plus other aircraft,
     /// never the caster's own body (docs/org/aiPilot.md "What the ray can hit"). Returns the
-    /// struck body's name, or null for a clear line — the name lets the transition log say
+    /// struck body's name, or null for a clear line, the name lets the transition log say
     /// whether the override fired on terrain or another aircraft. The host wires
     /// <c>FlightController.AvoidCrashBlocksLine</c>; a null delegate means no world data and the
     /// mode is never entered.</summary>
@@ -229,7 +229,7 @@ public sealed class AiModeMachine
         _rng = rng;
     }
 
-    /// <summary>Every transition, with the modes and a short reason — the observability seam
+    /// <summary>Every transition, with the modes and a short reason, the observability seam
     /// (the session logs these in the engine's own mode vocabulary).</summary>
     public event Action<AiMode, AiMode, string>? ModeChanged;
 
@@ -265,7 +265,7 @@ public sealed class AiModeMachine
     /// <summary>Lay off's altitude order, metres: the entry altitude.</summary>
     public float LayOffAltitude { get; private set; }
 
-    /// <summary>The engine's own name for a mode — the debug-readout vocabulary, verbatim.</summary>
+    /// <summary>The engine's own name for a mode, the debug-readout vocabulary, verbatim.</summary>
     public static string NameOf(AiMode mode) => mode switch
     {
         AiMode.Patrol => "patrol",
@@ -280,7 +280,7 @@ public sealed class AiModeMachine
         _ => mode.ToString(),
     };
 
-    /// <summary>External mode override — the mission-script / test seam. Resets the overridden
+    /// <summary>External mode override, the mission-script / test seam. Resets the overridden
     /// mode's own timers so a forced state behaves as if entered normally.</summary>
     public void Enter(AiMode mode, string reason = "ordered")
     {
@@ -390,7 +390,7 @@ public sealed class AiModeMachine
     public void NotifyDamage(float absorbed)
     {
         if (Mode is AiMode.Stunned or AiMode.AvoidCrash or AiMode.NavigatingDangerZone)
-            return; // no controls / emergency override / on rails — nothing to react with
+            return; // no controls / emergency override / on rails, nothing to react with
         if (Evading)
             return; // the original only refreshes its stamp here, and rolls nothing
         bool failed = _rng.NextDouble() < SteadyHandChance;
@@ -551,7 +551,7 @@ public sealed class AiModeMachine
 
     // The pursued test (invented geometry): the target sits within LayOffRearConeDeg of the tail
     // axis and its velocity points within LayOffPursuerConeDeg of the AI, i.e. it is chasing.
-    // The tail axis is the NOSE when supplied, velocity only as fallback — mid-maneuver the two
+    // The tail axis is the NOSE when supplied, velocity only as fallback, mid-maneuver the two
     // diverge and velocity alone let the test pass for a frame with the enemy behind the player.
     private bool IsPursuedBy(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity)
@@ -685,7 +685,7 @@ public sealed class AiModeMachine
             ClimbOutAltitude = _lastPos.Y + ClimbOutM;
         if (to == AiMode.LayOff)
         {
-            // The lay-off course: straight on from the entry velocity, at the entry altitude —
+            // The lay-off course: straight on from the entry velocity, at the entry altitude,
             // stay ahead of the pursuer rather than turning back into a head-on.
             _layOffHold = LayOffMinHoldS;
             if (new Vector2(_lastVelocity.X, _lastVelocity.Z).LengthSquared() > 1e-4f)

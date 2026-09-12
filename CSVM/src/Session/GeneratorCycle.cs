@@ -136,7 +136,7 @@ public sealed class GeneratorCycle
         if (Blocked(hostAltitude))
         {
             // Hold, not cancel: the timer and the wave counter keep running untouched and
-            // ONLY the door closes (once it has been open its minimum) — the decoded
+            // ONLY the door closes (once it has been open its minimum), the decoded
             // blocked branch. The door does not reopen while blocked.
             if (DoorOpen && _timer >= DoorMinOpenSeconds)
             {

@@ -11,7 +11,7 @@ namespace CSVM.Tests;
 /// The <c>ai.zrd</c> turret reader (docs/formats/turrets.md) on the hand-authored
 /// <c>fixtures/zrdr/ai.json</c>: the two structural families, the <c>PARTS</c> chain forms, the
 /// duty-cycle windows, the unauthored-but-accepted keys, and the by-title lookup's titleless
-/// short-circuit — plus the arc semantics that are the item's most likely visible failure:
+/// short-circuit, plus the arc semantics that are the item's most likely visible failure:
 /// <c>YAW [0,0]</c> means unrestricted, and the yaw arc is a directed interval whose out-of-arc
 /// answer is the angularly nearer end stop.
 /// </summary>
@@ -159,7 +159,7 @@ public class TurretDefsTests
         Assert.Equal(-80f, TurretController.ClampYawDeg(-80f, aaa));
         // 180° sits outside; the nearer end stop is -155 (25° away against 175°).
         Assert.Equal(-155f, TurretController.ClampYawDeg(180f, aaa));
-        // The mirrored arc would have accepted it — same span, different arc.
+        // The mirrored arc would have accepted it, same span, different arc.
         var rear = Load().FindByTitle("MSG_TUR_TEST_REAR")!;
         Assert.Equal(180f, TurretController.ClampYawDeg(180f, rear));
     }
@@ -182,7 +182,7 @@ public class TurretDefsTests
     private static TurretDefs Load() => TurretDefs.Load(TestData.Fixture("zrdr"));
 }
 
-/// <summary>Golden counts against the retail extraction — skipped without extracted/ data.
+/// <summary>Golden counts against the retail extraction, skipped without extracted/ data.
 /// These pin the shipped censuses docs/formats/turrets.md records.</summary>
 public class TurretDefsGoldenTests
 {
@@ -214,13 +214,13 @@ public class TurretDefsGoldenTests
     {
         var defs = TurretDefs.Load(ZrdrPath);
         // 37, not the documented raw count of 38: MSG_TUR_TRAIN nests its one PITCH inside the
-        // WEAPON block, where the turret parser does not read it — that turret has no pitch arc.
+        // WEAPON block, where the turret parser does not read it, that turret has no pitch arc.
         Assert.Equal(37, defs.All.Count(d => d.PitchMinDeg != null));
         Assert.Equal(36, defs.All.Count(d => d.YawMinDeg != null));
         Assert.Equal(20, defs.All.Count(d => d.Team != null));
         Assert.Equal(17, defs.All.Count(d => d.Health != null));
         Assert.Equal(37, defs.All.Count(d => d.CannonSound != null));
-        // Exactly one shipped entry authors YAW [0,0] — the unrestricted spelling.
+        // Exactly one shipped entry authors YAW [0,0], the unrestricted spelling.
         Assert.Equal(1, defs.All.Count(d => d.YawMinDeg == 0f && d.YawMaxDeg == 0f));
         Assert.All(defs.All.Where(d => d.YawMinDeg == 0f && d.YawMaxDeg == 0f),
             d => Assert.False(d.YawRestricted));
@@ -237,7 +237,7 @@ public class TurretDefsGoldenTests
         Assert.All(standalone.Where(d => d.Team != null), d => Assert.Equal(1, d.TeamId));
         Assert.All(standalone.Where(d => d.Team == null),
             d => Assert.Equal(TurretDef.DefaultTeamId, d.TeamId));
-        // The awake set: MSG_TUR_THUG (no TEAM — hostile) + the three allied piratezep rings.
+        // The awake set: MSG_TUR_THUG (no TEAM, hostile) + the three allied piratezep rings.
         Assert.Equal(1, standalone.Count(d => d.Activated && d.Team == null));
         Assert.Equal("MSG_TUR_THUG", standalone.Single(d => d.Activated && d.Team == null).Title);
         Assert.Equal(3, standalone.Count(d => d.Activated && d.TeamId == 1));
@@ -281,7 +281,7 @@ public class TurretDefsGoldenTests
     [ExtractedDataFact]
     public void TurretAirframesCarryViewpointKeyedMounts()
     {
-        // The host→gunner link: vehicle.zrd's turrets block, keyed firstp/thirdp — the _G1/_G3
+        // The host→gunner link: vehicle.zrd's turrets block, keyed firstp/thirdp, the _G1/_G3
         // suffixes select the view rig. The Balmoral is the only two-turret airframe.
         var kestrel = PlaneStats.Load(ZrdrPath, "player_kestrel");
         var third = kestrel.TurretMounts.Where(m => !m.FirstPerson).ToList();

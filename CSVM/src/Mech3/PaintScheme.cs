@@ -6,7 +6,7 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// One aircraft paint scheme: a named pattern, three paint colours and three decal
-/// indices — the seven-field record the original stores under the <c>paint_*</c> prefix
+/// indices, the seven-field record the original stores under the <c>paint_*</c> prefix
 /// on a vehicle.json def, <c>ace_*</c> in a mission's ia.json, and binary in a saved
 /// <c>.pln</c> file. See <c>docs/formats/paint.md</c>.
 ///
@@ -40,9 +40,9 @@ public sealed class PaintScheme
     public int WingDecal = -1;
 
     // player_fortune ships a pattern name and NO colours (they live engine-side, wherever the
-    // pattern defaults are kept — still not located), so the catalog entry has to supply them.
+    // pattern defaults are kept, still not located), so the catalog entry has to supply them.
     // Red / black / white, the same shape every shipped scheme has (identity colour, dark
-    // trim, light trim). Inferred from the original's artwork, not read out of a file — see
+    // trim, light trim). Inferred from the original's artwork, not read out of a file, see
     // docs/formats/paint.md.
     private static readonly Color FortuneRed = FromBytes(223, 0, 41);
     private static readonly Color FortuneTrim = FromBytes(0, 0, 0);
@@ -55,14 +55,14 @@ public sealed class PaintScheme
         ? "FORTUNE"
         : Pattern.ToUpperInvariant();
 
-    /// <summary>Display label for HUD/menu use — the pattern name if the scheme came from
+    /// <summary>Display label for HUD/menu use, the pattern name if the scheme came from
     /// the shipped catalog, else a colour summary.</summary>
     public string Label => string.IsNullOrEmpty(Pattern) ? "custom" : Pattern;
 
     /// <summary>The 12 named schemes shipped in vehicle.json, deduplicated by pattern name
     /// (the <c>_2</c>/<c>_3</c>/<c>_5</c> per-chapter roster duplicates repeat their base
-    /// def's scheme verbatim). Patterns carrying a name but no colours — <c>player_fortune</c>
-    /// on <c>devastator</c>/<c>wingman</c>, whose colours live engine-side — are given the
+    /// def's scheme verbatim). Patterns carrying a name but no colours, <c>player_fortune</c>
+    /// on <c>devastator</c>/<c>wingman</c>, whose colours live engine-side, are given the
     /// Fortune Hunters red/white/white seen in the original's paint UI so the catalog entry
     /// is usable. Ordered by first appearance in the file.</summary>
     public static List<PaintScheme> LoadCatalog(string zrdrPath)

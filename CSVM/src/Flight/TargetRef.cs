@@ -64,7 +64,7 @@ public readonly struct TargetRef
     public bool Objective { get; }
 
     /// <summary>The entity's own name: <c>ai1_player_kestrel</c> for an aircraft, <c>gasbag1</c> for
-    /// a sub-part. CSVM's IDENTITY string — what <c>--target=</c> matches and what the
+    /// a sub-part. CSVM's IDENTITY string, what <c>--target=</c> matches and what the
     /// breadcrumbs print. Never null; empty is legal.</summary>
     public string Name { get; }
 
@@ -175,7 +175,7 @@ public readonly struct TargetRef
 
     /// <summary>A <c>TARGETABLE</c> round in flight, the fourth pool's one selectable shape. Health
     /// only: a flyout's armour pool is the literal zero the parser writes, so
-    /// <see cref="Fraction"/> reports none. No type label — the original's wrapper carries one
+    /// <see cref="Fraction"/> reports none. No type label, the original's wrapper carries one
     /// hard-coded display string and no category.</summary>
     public static TargetRef ForOrdnance(AimCandidate candidate, TargetClass cls, string name,
         string? displayName = null, float? health = null) =>

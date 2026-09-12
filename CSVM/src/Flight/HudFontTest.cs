@@ -9,14 +9,14 @@ namespace CSVM.Flight;
 /// compared. A thin rule under each line marks <see cref="HudFont.Measure"/>'s reported width,
 /// confirming the metric agrees with the glyphs actually drawn.
 ///
-/// <para>Not part of the flight HUD — it is only added when the flag is set, and exists purely to
+/// <para>Not part of the flight HUD, it is only added when the flag is set, and exists purely to
 /// prove the renderer. Real HUD text draws with the same <see cref="HudFont"/> API.</para>
 /// </summary>
 public sealed partial class HudFontTest : Control
 {
     private const float RefTextHeight = 24f; // atlas-cell height in px at the 1440p reference
     private const float RefMarginX = 48f;    // left inset at the reference
-    private const float RefMarginY = 300f;   // top inset — clear of the flight text block
+    private const float RefMarginY = 300f;   // top inset, clear of the flight text block
 
     private readonly HudFont _font;
     private readonly string _text;

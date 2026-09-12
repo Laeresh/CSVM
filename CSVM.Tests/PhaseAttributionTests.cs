@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="PhaseAttribution"/> — the B11 categorizer that turns a <c>StartupProfile</c>'s raw
+/// <see cref="PhaseAttribution"/>, the B11 categorizer that turns a <c>StartupProfile</c>'s raw
 /// phase names into archive/decode, sound preparation and runtime/world construction, plus the
 /// suite-level rest/overrun arithmetic. Godot-free by construction, so the closure identity B11's
 /// verify step needs is provable here rather than only read off a live engine report.
@@ -83,7 +83,7 @@ public class PhaseAttributionTests
     public void RestNeverGoesNegativeAndOverrunReportsTheGapInstead()
     {
         // build+disposal exceeding wall time is a measurement anomaly, not a claim of negative
-        // assertion time — Rest clamps to 0 and Overrun names the actual gap.
+        // assertion time, Rest clamps to 0 and Overrun names the actual gap.
         double rest = PhaseAttribution.Rest(suiteWallSeconds: 5, buildSeconds: 4, disposalSeconds: 3);
         double overrun = PhaseAttribution.Overrun(suiteWallSeconds: 5, buildSeconds: 4, disposalSeconds: 3);
         Assert.Equal(0, rest);

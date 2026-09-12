@@ -22,7 +22,7 @@ public sealed partial class NodeLabels : Node
     private const double RefreshInterval = 0.35;
 
     // Minimum on-screen separation between two labels. Wider than tall because a name is a
-    // wide, short box — a square grid either overlaps horizontally or throws away far too
+    // wide, short box, a square grid either overlaps horizontally or throws away far too
     // many rows. Both TUNE.
     private const float GapX = 108f;
     private const float GapY = 26f;
@@ -53,7 +53,7 @@ public sealed partial class NodeLabels : Node
     public enum Mode { Off, Meshes, All }
 
     /// <summary>How far from the camera a node may be and still get a label. This is a
-    /// performance bound, not the readability one — screen-space de-cluttering is what keeps
+    /// performance bound, not the readability one, screen-space de-cluttering is what keeps
     /// the view legible, so it can be generous. It has to be: in flight the camera sits
     /// several hundred metres up, and at the 300 m of the first cut the ground was out of
     /// range entirely and only the player's own aircraft got labelled.</summary>
@@ -63,7 +63,7 @@ public sealed partial class NodeLabels : Node
     /// only where nothing else wants it. GameSession passes the player aircraft in flight:
     /// it is always the nearest thing to the camera by a wide margin, so nearest-first would
     /// otherwise spend every label on the plane you are sitting in while the world you are
-    /// actually inspecting goes unnamed. Deprioritised, not excluded — a misplaced node can
+    /// actually inspecting goes unnamed. Deprioritised, not excluded, a misplaced node can
     /// be on the aircraft too, and the labels still appear once the world runs out of room.</summary>
     public IReadOnlyList<Node3D>? Deprioritise { get; init; }
 
@@ -184,7 +184,7 @@ public sealed partial class NodeLabels : Node
     }
 
     // Re-walks the tree for labellable nodes. Redone periodically because the flight
-    // scene is not static — MapEdgeExtender adds and removes border tiles on cell crossings,
+    // scene is not static, MapEdgeExtender adds and removes border tiles on cell crossings,
     // and a one-shot walk would label ghosts and miss new ground.
     private void Rescan()
     {
@@ -196,7 +196,7 @@ public sealed partial class NodeLabels : Node
     {
         foreach (var child in node.GetChildren())
         {
-            // Never label our own overlays (the marker holder, the mesh lab's draw nodes) —
+            // Never label our own overlays (the marker holder, the mesh lab's draw nodes),
             // they carry no cs_name anyway, but skipping the subtree saves the descent.
             if (ReferenceEquals(child, _holder) || child.Name.ToString().StartsWith("mesh_lab_"))
                 continue;
@@ -298,7 +298,7 @@ public sealed partial class NodeLabels : Node
                 PixelSize = 0.0007f,
                 FontSize = 48,
                 OutlineSize = 14,
-                // Drawn through geometry on purpose — half the job is spotting a node that has
+                // Drawn through geometry on purpose, half the job is spotting a node that has
                 // ended up inside or behind something it should not be.
                 NoDepthTest = true,
                 Modulate = new Color(1f, 0.93f, 0.35f),

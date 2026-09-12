@@ -60,7 +60,7 @@ public sealed partial class AiNetsOverlay : Node
     public bool DebugShow { get; init; }
 
     /// <summary>Comma-separated net names to build (<c>--debug-ainets=&lt;name,…&gt;</c>);
-    /// empty = every net. Matching is exact, case-insensitive — the <c>--node=</c> manner:
+    /// empty = every net. Matching is exact, case-insensitive, the <c>--node=</c> manner:
     /// a miss logs the candidates containing the token rather than failing silently.</summary>
     public string Filter { get; init; } = "";
 
@@ -114,7 +114,7 @@ public sealed partial class AiNetsOverlay : Node
 
     /// <summary>F13: show or hide the chapter's patrol nets. The nets are loaded once on
     /// first use (the reader is pure file I/O; a session that never opens the overlay never
-    /// pays for it) and the geometry is rebuilt per show — it is static data, but rebuild
+    /// pays for it) and the geometry is rebuilt per show, it is static data, but rebuild
     /// keeps the filter and a future live-reload honest.</summary>
     public void Toggle()
     {
@@ -143,7 +143,7 @@ public sealed partial class AiNetsOverlay : Node
     }
 
     // Golden-ratio hue spacing: consecutive ids land far apart, and the colour is a pure
-    // function of the id — the same net reads the same colour in every session.
+    // function of the id, the same net reads the same colour in every session.
     private static Color ColorOf(int id) =>
         Color.FromHsv(id * 0.618034f % 1f, 0.8f, 1f);
 
@@ -192,7 +192,7 @@ public sealed partial class AiNetsOverlay : Node
             });
         }
 
-        // One fixed-size billboarded label per net at its first node — the name is the join
+        // One fixed-size billboarded label per net at its first node, the name is the join
         // key aiv/egen/zeppelins use, so it goes on screen verbatim, trailer appended.
         string text = $"{net.Name}#{net.Id}"
             + (net.Trailer is { } t ? $" → {t.Name ?? $"node{t.NodeIndex}"}" : "");

@@ -40,7 +40,7 @@ public sealed class AnimProgram
     public IReadOnlyList<AnimDefinition> Defs => _defs;
 
     /// <summary>The mission's NEW_GAME_START animation names, in order (startanims.json).
-    /// Order matters — C1/IA1 runs hangar3_doors then mp_hangar3_open over the same doors,
+    /// Order matters, C1/IA1 runs hangar3_doors then mp_hangar3_open over the same doors,
     /// and the last write wins.</summary>
     public IReadOnlyList<string> StartAnims => _startAnims;
 
@@ -161,7 +161,7 @@ public sealed class AnimProgram
     }
 
     /// <summary>Definitions an ANIMATION_NAME refers to (startanims entries, CALL_ANIMATION
-    /// targets). Several defs can share a name — template anims instantiate per object.</summary>
+    /// targets). Several defs can share a name, template anims instantiate per object.</summary>
     public IReadOnlyList<AnimDefinition> ByAnimName(string animName) =>
         _byAnimName.TryGetValue(animName, out var list) ? list : Array.Empty<AnimDefinition>();
 
@@ -173,7 +173,7 @@ public sealed class AnimProgram
     /// empty; the crash runtime never auto-starts.</summary>
     public AnimProgram Subset(string rootAnimName) => Subset(new[] { rootAnimName });
 
-    /// <summary>The closure over several roots at once — the world-effects runtime binds the
+    /// <summary>The closure over several roots at once, the world-effects runtime binds the
     /// union of the impact + destruction effect names, so one runtime serves every effect a hit or a
     /// death calls. Same closure rule as the single-root overload; the reused defs share this
     /// program's script pool.</summary>
@@ -224,7 +224,7 @@ public sealed class AnimProgram
 
     /// <summary>The SI script a def's OBJECT_MOTION_SI_SCRIPT slot refers to. The event
     /// carries an index into the def's own <c>si_script_ids</c>, which in turn indexes its
-    /// archive's script pool — so both hops happen here.</summary>
+    /// archive's script pool, so both hops happen here.</summary>
     public SiScript? ScriptFor(AnimDefinition def, int slot)
     {
         if (def.Archive == null || slot < 0 || slot >= def.SiScriptIds.Length)
@@ -318,7 +318,7 @@ public sealed class AnimProgram
         return leaf;
     }
 
-    // Definition identity: (anchor name, animation name) — exactly how the compiled
+    // Definition identity: (anchor name, animation name), exactly how the compiled
     // extraction names its files, so a reader def and its compiled twin share a key.
     private static string KeyOf(AnimDefinition def) => $"{def.Name}\0{def.AnimName}";
 
@@ -359,7 +359,7 @@ public sealed class AnimProgram
                     }
                 }
             }
-            // The compiled destruction slot is dispatched at death (RunDeathSequence) — same
+            // The compiled destruction slot is dispatched at death (RunDeathSequence), same
             // reachability rule as the death/damage sequences above it.
             if (def.DeathSlot is { } slot)
             {

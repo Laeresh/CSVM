@@ -25,7 +25,7 @@ public sealed class AircraftStage
     public const string PlayerNode = "player";
 
     /// <summary>The aircraft-archive node an intro stages under <c>piratezep</c> and flies with
-    /// <c>gi_pfighter1</c>/<c>gi_pfighter2</c> — the Devastator's remote model, carrying no
+    /// <c>gi_pfighter1</c>/<c>gi_pfighter2</c>, the Devastator's remote model, carrying no
     /// pilot and no flight model.</summary>
     public const string PropNode = "piratefighter";
 
@@ -235,7 +235,7 @@ public sealed class AircraftStage
         }
 
         // ⚠ Under a switched-off holder, not switched off themselves. The wing-walk pilot is never
-        // activated by any definition — it is the reparent into the shot that draws him, which is
+        // activated by any definition, it is the reparent into the shot that draws him, which is
         // exactly what the original gets from a library root its world walk never reaches.
         var holder = new Node3D { Name = "figures", Visible = false };
         worldRoot.AddChild(holder);

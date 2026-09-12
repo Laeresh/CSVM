@@ -9,7 +9,7 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// <see cref="HitchMonitor"/>'s write path: every tripped record gets one human-readable line in
-/// the <c>perf</c> log category and one JSON line in a sidecar sharing the main log's stem — never
+/// the <c>perf</c> log category and one JSON line in a sidecar sharing the main log's stem, never
 /// inline on the hitching frame, since a string interpolation and a file write are avoidable
 /// allocation-heavy work at the worst possible moment. A record is copied (no allocation; every
 /// queue slot is preallocated at construction) into a small ring, drained a few seconds later.
@@ -28,7 +28,7 @@ public sealed class HitchSidecar
     public const int QueueDepthDefault = 16;
 
     /// <summary>How long a queued record waits before it is written, in seconds. TUNE: long enough
-    /// that the frames right after a hitch — which may still be elevated — are not asked to do the
+    /// that the frames right after a hitch, which may still be elevated, are not asked to do the
     /// write work too. 2 s (down from 3) shrinks the crash/relaunch loss bound and drains a storm
     /// sooner; still well past the write-off-the-hitching-frame intent.</summary>
     public const float FlushSecondsDefault = 2f;
@@ -94,14 +94,14 @@ public sealed class HitchSidecar
     public string JsonPath { get; }
 
     /// <summary>Whether the file opened. False means every <see cref="Enqueue"/>/<see cref="Tick"/>
-    /// is a no-op — a write failure degrades the instrument, it does not crash the session.</summary>
+    /// is a no-op, a write failure degrades the instrument, it does not crash the session.</summary>
     public bool IsOpen => _writer != null;
 
     /// <summary>Queues a tripped record for the next flush. Copies every scalar field and the ring
     /// buffer (<see cref="Array.Copy"/> into a preallocated slot, so nothing here allocates) rather
     /// than holding a reference to <see cref="HitchMonitor.Last"/>, which the monitor overwrites on
-    /// the very next trip. Drops the OLDEST unflushed record once the queue is full — the same
-    /// drop-oldest policy <see cref="HitchMonitor"/>'s own ring uses — and counts it, so a hitch
+    /// the very next trip. Drops the OLDEST unflushed record once the queue is full, the same
+    /// drop-oldest policy <see cref="HitchMonitor"/>'s own ring uses, and counts it, so a hitch
     /// burst that outruns the flush interval reads as a reported gap, never a silent one.</summary>
     public void Enqueue(HitchRecord record)
     {
@@ -129,8 +129,8 @@ public sealed class HitchSidecar
         CopyInto(_queue[slot], record);
     }
 
-    /// <summary>Feeds one frame's wall cost — the same value <see cref="HitchMonitor.Tick"/> was
-    /// just fed — and flushes the queue once <c>hitchSidecar.flushSeconds</c> has passed since the
+    /// <summary>Feeds one frame's wall cost, the same value <see cref="HitchMonitor.Tick"/> was
+    /// just fed, and flushes the queue once <c>hitchSidecar.flushSeconds</c> has passed since the
     /// oldest queued record landed. A no-op on an empty queue, so an ordinary clean run costs one
     /// branch a frame.</summary>
     public void Tick(double frameMs)
@@ -174,7 +174,7 @@ public sealed class HitchSidecar
 
     // Field-by-field, not a record `with` copy: HitchRecord is a mutable sealed class (one instance
     // per HitchMonitor, refilled in place) precisely so a hitching frame never allocates one, and
-    // that reasoning applies here too — dst is one of this sidecar's own preallocated queue slots.
+    // that reasoning applies here too, dst is one of this sidecar's own preallocated queue slots.
     private static void CopyInto(HitchRecord dst, HitchRecord src)
     {
         dst.Frame = src.Frame;
@@ -212,7 +212,7 @@ public sealed class HitchSidecar
 
     // The frame's named work as one space-free value, so the flat key=value grammar survives:
     // `site:callsxms`, comma-separated, in PerfSite order. A site with no calls is ABSENT rather
-    // than printed as zero — same rule as StartupProfile's phases, and it keeps the line short on
+    // than printed as zero, same rule as StartupProfile's phases, and it keeps the line short on
     // the ordinary hitch where two things ran out of eight.
     private static string FormatSamples(PerfSampleFrame s)
     {
@@ -236,8 +236,8 @@ public sealed class HitchSidecar
     // Hand-written, not a library: a HitchRecord is all-numeric (Frame/counts/ms terms, and the
     // Ring's FrameSamples are the same), so there is no string field that would ever need escaping.
     // The one string is a C8 site name, which is a compile-time constant from a closed enum spelled
-    // [a-z_] — a name, never data, so that stays true.
-    // string.Create(IFormatProvider, …) — not plain string interpolation — is what keeps every float
+    // [a-z_], a name, never data, so that stays true.
+    // string.Create(IFormatProvider, …), not plain string interpolation, is what keeps every float
     // invariant; a raw $"..." would format under CurrentCulture instead (16,667 on a German machine).
     private void WriteJsonLine(HitchRecord r)
     {

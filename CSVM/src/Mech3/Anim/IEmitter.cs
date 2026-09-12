@@ -11,14 +11,14 @@ public interface IEmitter
 {
     int LiveCount { get; }
 
-    /// <summary>Whether the emitter is still usable — the <c>IsInstanceValid</c> guard the follow
+    /// <summary>Whether the emitter is still usable, the <c>IsInstanceValid</c> guard the follow
     /// and host-deactivation sweeps both make on a real one.</summary>
     bool IsValid { get; }
 
     /// <summary>Emit for this frame at a moving host's world pose.</summary>
     void SustainAt(Vector3 worldPos, Basis worldBasis, float dt);
 
-    /// <summary>Stop emitting, leaving live particles to finish their lifetimes. Revivable — a
+    /// <summary>Stop emitting, leaving live particles to finish their lifetimes. Revivable, a
     /// later <c>PUFFER_STATE 1</c> on the same key resumes this same emitter.</summary>
     void SustainEnd();
 
@@ -41,7 +41,7 @@ public interface IEmitterFactory
     IEmitter? Create(PufferState state, out string? miss);
 }
 
-/// <summary>One row of <see cref="EmitterDirector.Census"/> — a KNOWN emitter, whether or not it is
+/// <summary>One row of <see cref="EmitterDirector.Census"/>, a KNOWN emitter, whether or not it is
 /// currently emitting. Active-only cannot tell a paused-but-revivable emitter from a forgotten one,
 /// which is precisely the distinction <see cref="EmitterDirector.EndFor"/> and
 /// <see cref="EmitterDirector.Discard"/> exist to make.</summary>

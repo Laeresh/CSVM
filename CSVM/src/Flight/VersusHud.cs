@@ -8,23 +8,23 @@ namespace CSVM.Flight;
 /// <summary>Per-pane Dogfight HUD, <c>--vs</c> only (docs/architecture.md): a status line (time,
 /// this pane's own K/D, the leader), a transient kill banner on every Downed report anywhere in the
 /// match, and an edge-arrow + clock-bearing marker per living opponent in that opponent's identity
-/// colour — the splitscreen answer to the original's radar, in the marker HUDs' visual language.
+/// colour, the splitscreen answer to the original's radar, in the marker HUDs' visual language.
 /// The single-target marker this shape came from is <see cref="TargetHud"/>'s, which draws in every
 /// flight session rather than only <c>--vs</c>.
 /// ⚠ Read opponent positions off <see cref="Rigs"/> and project through THIS pane's camera. Never
 /// <c>AnimRuntime.PlayerPosition</c>: it is a P1-only singleton.</summary>
 public sealed partial class VersusHud : Control
 {
-    /// <summary>Which pane this draws in (0-based) — this pane's own K/D, and the identity every
+    /// <summary>Which pane this draws in (0-based), this pane's own K/D, and the identity every
     /// opponent marker excludes.</summary>
     public int PlayerIndex;
 
-    /// <summary>Every rig in the session (this player's own included — skipped when drawing
+    /// <summary>Every rig in the session (this player's own included, skipped when drawing
     /// markers), set once the whole field is built. Null in a solo <c>--vs --players=1</c>
-    /// session — nothing to mark.</summary>
+    /// session, nothing to mark.</summary>
     public IReadOnlyList<PlayerRig>? Rigs;
 
-    // 1440p reference metrics (scaled by HudMetrics — matches TargetHud's calibration).
+    // 1440p reference metrics (scaled by HudMetrics, matches TargetHud's calibration).
     private const int RefStatusFont = 19;
     private const int RefBannerFont = 24;
     private const int RefMarkerFont = 14;
@@ -47,16 +47,16 @@ public sealed partial class VersusHud : Control
     private string _bannerText = "";
     private Color _bannerColor = HudBlue;
 
-    /// <summary>This pane's own world pose, fed every frame by FlightController — opponent clock
+    /// <summary>This pane's own world pose, fed every frame by FlightController, opponent clock
     /// bearings read off it, exactly like TargetHud's PlanePos/HeadingDeg.</summary>
     public Vector3 PlanePos { get; set; }
 
-    /// <summary>This pane's own nose heading, 0 = north (−Z) — see <see cref="PlanePos"/>.</summary>
+    /// <summary>This pane's own nose heading, 0 = north (−Z), see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
 
     /// <summary>Binds the match + this pane's own camera (opponent markers project through it).
     /// Add to the HUD canvas; <see cref="Rigs"/> is attached once the whole field is built, and
-    /// <see cref="PlanePos"/>/<see cref="HeadingDeg"/> every frame — nothing else needs feeding,
+    /// <see cref="PlanePos"/>/<see cref="HeadingDeg"/> every frame, nothing else needs feeding,
     /// the match's own state is always current.</summary>
     public static VersusHud Build(VersusMatch match, int playerIndex, Camera3D camera)
     {
@@ -71,7 +71,7 @@ public sealed partial class VersusHud : Control
     }
 
     /// <summary>A Downed report anywhere in the match: killer named when it was a weapon kill, a
-    /// plain "DOWN" otherwise (terrain/mid-air — no killer to name).</summary>
+    /// plain "DOWN" otherwise (terrain/mid-air, no killer to name).</summary>
     public void OnKill(int? killer, int victim)
     {
         _bannerTime = BannerDuration;
@@ -89,7 +89,7 @@ public sealed partial class VersusHud : Control
 
     public override void _Process(double delta)
     {
-        // Track the pane (resizable window / splitscreen layout) and repaint every frame — the
+        // Track the pane (resizable window / splitscreen layout) and repaint every frame, the
         // clock and the banner fade both need it.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
@@ -145,7 +145,7 @@ public sealed partial class VersusHud : Control
     }
 
     // The sole rank-1 player's tag, or "—" while tied (including 0-0 before the first
-    // kill — nobody leads yet).
+    // kill, nobody leads yet).
     private string LeaderText(VersusMatch match)
     {
         var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
@@ -153,7 +153,7 @@ public sealed partial class VersusHud : Control
     }
 
     // One opponent's marker: on screen, their tag floats just above the projected
-    // point; off screen (or behind), an edge arrow + "N o'clock" bearing — EdgeMarker's placement,
+    // point; off screen (or behind), an edge arrow + "N o'clock" bearing, EdgeMarker's placement,
     // one instance per opponent instead of one stunt zone.
     private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize)
     {
@@ -190,7 +190,7 @@ public sealed partial class VersusHud : Control
     }
 
     // Draws one horizontally-centred line at `anchor`.X, top-anchored
-    // at .Y, with a 1 px drop shadow — MarkerDraw's Lines, single-line.
+    // at .Y, with a 1 px drop shadow, MarkerDraw's Lines, single-line.
     private void DrawCentered(Font font, Vector2 anchor, string text, int fontSize, Color color)
     {
         float ascent = font.GetAscent(fontSize);

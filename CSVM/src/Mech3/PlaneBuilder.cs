@@ -21,14 +21,14 @@ public sealed class PlaneBuilder
     /// <summary>The uniform scale the <c>cockpit1</c> interior is mounted at. TUNE, not decoded:
     /// the subtree is authored in its own units with the pilot's eye at its own origin, so the
     /// FRAMING is scale-invariant and this chooses only how the interior composites against world
-    /// geometry. ⚠ The interior and the airframe are not a similarity apart — do not try to derive
+    /// geometry. ⚠ The interior and the airframe are not a similarity apart, do not try to derive
     /// this from the model. First-person decode: docs/org/cameraViews.md.</summary>
     public const float InteriorScale = 0.04f;
 
     // Non-prop subtrees that make no sense in an exterior view: cockpit interiors are
     // separate (differently-scaled) models; damage/destroyed are alternate states.
     // player_damage_off holds the intact duplicates (pdpNi) of the panels that
-    // player_damage_on already provides as pdpN_h — the original engine shows exactly
+    // player_damage_on already provides as pdpN_h, the original engine shows exactly
     // one of the two groups (its vehicle-damage detail toggle); we model "damage on".
     // `cockpit2` is defensive: no shipped tree carries one.
     private static readonly HashSet<string> SkipNames = new(StringComparer.OrdinalIgnoreCase)
@@ -88,7 +88,7 @@ public sealed class PlaneBuilder
     }
 
     /// <summary>The paint applied to this build, once <see cref="Build"/> has resolved the
-    /// aircraft's skin prefix — null when built unpainted.</summary>
+    /// aircraft's skin prefix, null when built unpainted.</summary>
     public PlanePainter? Painter => _painter;
 
     public int MeshInstanceCount => _scene.MeshInstanceCount + (_interiorScene?.MeshInstanceCount ?? 0);
@@ -99,7 +99,7 @@ public sealed class PlaneBuilder
     public IReadOnlyList<Node3D> WingFlares => _wingFlares;
 
     /// <summary>Flight and damage-lab builds: the exterior damage-state
-    /// panels — the torn-skin pdpN nodes, built HIDDEN (their reset state), plus their
+    /// panels, the torn-skin pdpN nodes, built HIDDEN (their reset state), plus their
     /// healthy pdpN_h twins, built visible. A <see cref="Flight.DamageVisuals"/> flips
     /// them as part HP crosses the vehicle def's injure_anims thresholds.</summary>
     public IReadOnlyList<Node3D> DamagePanels => _damagePanels;
@@ -107,7 +107,7 @@ public sealed class PlaneBuilder
     /// <summary>Cockpit-interior builds only: the two torn-skin cockpit panels,
     /// <c>pcdp4</c>/<c>pcdp6</c>, built HIDDEN like their exterior
     /// counterparts. They carry no healthy twin (no <c>pcdp4_h</c>/<c>pcdp6_h</c> ships anywhere
-    /// in <c>planes.zbd</c>) — <see cref="Flight.DamageVisuals"/> flips them off the SAME
+    /// in <c>planes.zbd</c>), <see cref="Flight.DamageVisuals"/> flips them off the SAME
     /// <c>pdpanel4</c>/<c>pdpanel6</c> injure entries that flip <c>pdp4</c>/<c>pdp6</c>, not a
     /// separate cockpit rule. Empty unless the builder was asked for a cockpit interior.</summary>
     public IReadOnlyList<Node3D> CockpitDamagePanels => _cockpitDamagePanels;
@@ -117,7 +117,7 @@ public sealed class PlaneBuilder
     public string? SkinPrefix => _skinPrefix;
 
     /// <summary>The plane-local offset of this aircraft's authored <c>cockpit_camera</c> marker
-    /// (docs/formats/markers.md), read the same way <see cref="MarkerRig"/> reads weapon markers —
+    /// (docs/formats/markers.md), read the same way <see cref="MarkerRig"/> reads weapon markers,
     /// accumulated from below the plane root, skipping the cockpit-interior/wreck subtrees that
     /// may carry their own same-named node. Zero before <see cref="Build"/> runs, and the
     /// original's own fallback for a plane with no such node
@@ -216,7 +216,7 @@ public sealed class PlaneBuilder
 
     /// <summary>Re-liveries the already-built aircraft in place: a fresh painter, then every
     /// textured material re-resolved through it. The viewer's livery lab drives this from its
-    /// sliders — repainting ~8 small skins is a few ms, where rebuilding the model for each
+    /// sliders, repainting ~8 small skins is a few ms, where rebuilding the model for each
     /// slider pixel would not be interactive. Null paints nothing (back to the shipped skins).
     /// No-op before <see cref="Build"/>, which is what discovers the skin prefix.</summary>
     public void Repaint(PaintScheme? scheme)
@@ -249,12 +249,12 @@ public sealed class PlaneBuilder
         return true;
     }
 
-    // pdpN_h — the healthy twin of an exterior damage panel.
+    // pdpN_h, the healthy twin of an exterior damage panel.
     private static bool IsHealthyPanel(string name) =>
         name.EndsWith("_h", StringComparison.OrdinalIgnoreCase)
         && IsDamagePanel(name[..^2], out bool cockpit) && !cockpit;
 
-    // The painter can only be built once the aircraft's root is known — its skin prefix is
+    // The painter can only be built once the aircraft's root is known, its skin prefix is
     // read off the model's own material names. Built on the first Build/BuildDestroyed call
     // and reused, so both share one painted-texture cache.
     private void EnsurePainter(GameZNode root)
@@ -295,8 +295,8 @@ public sealed class PlaneBuilder
             else if (IsDamagePanel(n3d.Name, out bool cockpit))
             {
                 n3d.Visible = false; // torn skin waits for DamageVisuals to flip it on
-                // pcdpN is kept off DamagePanels — that list is the exterior set the pairing walk
-                // measures mesh-AABB centers over — and collected on its own list instead (B12);
+                // pcdpN is kept off DamagePanels, that list is the exterior set the pairing walk
+                // measures mesh-AABB centers over, and collected on its own list instead (B12);
                 // DamageVisuals flips both off the same pdpanelN injure entries.
                 (cockpit ? _cockpitDamagePanels : _damagePanels).Add(n3d);
             }
@@ -319,7 +319,7 @@ public sealed class PlaneBuilder
     // scale is what the depth bias must be told (_interiorScene). The eye is cockpit1's own origin,
     // and that is where FirstPersonPose puts the camera, so the mount position is the
     // cockpit_camera offset. ⚠ The mount also carries the fixed head-pitch tilt, and that is what
-    // puts the gunsight on the guns — untilted the sight rides 3.9° above the pipper's nose axis
+    // puts the gunsight on the guns, untilted the sight rides 3.9° above the pipper's nose axis
     // and never meets it. Head-look is NOT applied: the interior stays plane-fixed. See docs.
     private void MountCockpitInterior(Node3D built, GameZNode root)
     {
@@ -355,7 +355,7 @@ public sealed class PlaneBuilder
 
     // ⚠ The interior's off-states ship ACTIVE. A node the build script left NodeSetActive(false)
     // is off outright, but the state overlays are authored visible and hidden engine-side until
-    // something drives them — so a pristine cockpit renders every windshield bullet hole and both
+    // something drives them, so a pristine cockpit renders every windshield bullet hole and both
     // warning lamps unless they are parked here. See IsInteriorDrivenState.
     private void ParkInteriorStates(Node3D node)
     {
@@ -405,7 +405,7 @@ public sealed class PlaneBuilder
         if (SkipNames.Contains(node.Name))
             return true;
         // Cockpit damage panels (pcdpN) come with the interior and nothing else; exterior pdpN skip
-        // only in the plain static viewer — flight and damage-lab builds construct them hidden for
+        // only in the plain static viewer, flight and damage-lab builds construct them hidden for
         // DamageVisuals (10c). Both stay hidden until something flips them.
         if (IsDamagePanel(node.Name, out bool cockpit)
             && (cockpit ? !_withCockpitInterior : !_withDamagePanels))

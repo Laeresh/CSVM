@@ -11,8 +11,8 @@ namespace CSVM.Tests;
 /// The always-on detector's write path: the queue's copy-not-reference semantics, the
 /// flush-interval gate, drop-oldest overflow, the JSON line's shape and culture-invariance, and
 /// C8's per-site attribution riding along inside the record. Every test opens a
-/// real file under <see cref="TestData.TempDir"/> — the sidecar's whole job is the write, so a fake
-/// sink would not verify it — and reads it back with <see cref="JsonDocument"/> rather than string
+/// real file under <see cref="TestData.TempDir"/>, the sidecar's whole job is the write, so a fake
+/// sink would not verify it, and reads it back with <see cref="JsonDocument"/> rather than string
 /// matching, so a field reorder cannot make an assertion pass by accident.
 /// </summary>
 public class HitchSidecarTests
@@ -60,7 +60,7 @@ public class HitchSidecarTests
         var record = NewRecord(frame: 1, frameMs: 50, gc0Delta: 0, allocDelta: 0, ringCount: 2);
 
         sidecar.Enqueue(record);
-        // Mutating the source AFTER Enqueue must not reach the queued copy — the whole point of
+        // Mutating the source AFTER Enqueue must not reach the queued copy, the whole point of
         // copying rather than holding a reference to HitchMonitor.Last, which the monitor
         // overwrites on the very next trip.
         record.FrameMs = 999;
@@ -79,10 +79,10 @@ public class HitchSidecarTests
         var sidecar = new HitchSidecar(logPath, ringFrames: 2, queueDepth: 4, flushSeconds: 1f);
         sidecar.Enqueue(NewRecord(frame: 1, frameMs: 50, gc0Delta: 0, allocDelta: 0, ringCount: 1));
 
-        sidecar.Tick(500); // 0.5s of 1s — not yet
+        sidecar.Tick(500); // 0.5s of 1s, not yet
         Assert.Empty(ReadLines(sidecar.JsonPath));
 
-        sidecar.Tick(600); // 1.1s total — past the interval
+        sidecar.Tick(600); // 1.1s total, past the interval
         Assert.Single(ReadLines(sidecar.JsonPath));
     }
 
@@ -101,7 +101,7 @@ public class HitchSidecarTests
         string[] lines = ReadLines(sidecar.JsonPath);
         Assert.Equal(2, lines.Length);
         // Depth 2 over 4 enqueues: frames 1 and 2 are the dropped-oldest, 3 and 4 survive, oldest
-        // surviving first — the same order HitchMonitor's own ring reads in.
+        // surviving first, the same order HitchMonitor's own ring reads in.
         Assert.Equal(3, JsonDocument.Parse(lines[0]).RootElement.GetProperty("frame").GetInt64());
         Assert.Equal(4, JsonDocument.Parse(lines[1]).RootElement.GetProperty("frame").GetInt64());
     }
@@ -160,7 +160,7 @@ public class HitchSidecarTests
     }
 
     // File.ReadAllLines' own share request collides with the sidecar's still-open writer (it stays
-    // open for the process's whole life, by design — see HitchSidecar's own doc comment); a wider
+    // open for the process's whole life, by design, see HitchSidecar's own doc comment); a wider
     // share on the read side is a test concern only, never something production code needs.
     private static string[] ReadLines(string path)
     {

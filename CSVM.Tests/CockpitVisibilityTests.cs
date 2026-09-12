@@ -29,7 +29,7 @@ public class CockpitVisibilityTests
         var shown = CockpitVisibility.Rules(PilotViewMode.Cockpit, firstPerson: true);
         Assert.True(shown.Interior);
         Assert.False(shown.Body);
-        // Only mode 7 strips these — the original's mode 6 leaves both drawn.
+        // Only mode 7 strips these, the original's mode 6 leaves both drawn.
         Assert.True(shown.Markers);
         Assert.True(shown.Dontmove);
     }

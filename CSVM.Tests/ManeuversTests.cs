@@ -9,12 +9,12 @@ namespace CSVM.Tests;
 /// <summary>
 /// The maneuver-library reader (docs/formats/ai-rosters.md): fixture units for both step
 /// shapes, the flags, the stub, the eligibility cull and the signature bitmask, plus golden
-/// counts and difficulties over the install — the plan's own 1–9 table, asserted so a reader
+/// counts and difficulties over the install, the plan's own 1–9 table, asserted so a reader
 /// or extraction change moves a test instead of silently drifting.
 /// </summary>
 public class ManeuversTests
 {
-    /// <summary>The 14 design-shared difficulties plus the two shipped-only entries — the
+    /// <summary>The 14 design-shared difficulties plus the two shipped-only entries, the
     /// plan's table ("The maneuver library" + the 2026-08-10 delta).</summary>
     public static TheoryData<string, int> ShippedDifficulties => new()
     {
@@ -157,7 +157,7 @@ public class ManeuversTests
         Assert.True(dive.AutogyroAllowed);
 
         // The two 7-element steps in the install: barrel_roll's single step and
-        // spiral_dive's second, extras [0.5, 0, 1] both — undecoded, preserved raw.
+        // spiral_dive's second, extras [0.5, 0, 1] both, undecoded, preserved raw.
         var barrel = lib.Single(m => m.Name == "barrel_roll");
         Assert.Equal(new[] { 0.5f, 0f, 1f }, Assert.Single(barrel.Steps).Extra);
         var spiral = lib.Single(m => m.Name == "spiral_dive");
@@ -166,7 +166,7 @@ public class ManeuversTests
         int sevenElement = lib.Sum(m => m.Steps.Count(s => s.Extra.Count > 0));
         Assert.Equal(2, sevenElement);
 
-        // rudder_turn: relative, zero-duration yaw-50 — the "advance when reached" shape.
+        // rudder_turn: relative, zero-duration yaw-50, the "advance when reached" shape.
         var rudder = lib.Single(m => m.Name == "rudder_turn");
         Assert.True(rudder.Relative);
         Assert.Equal(0f, rudder.Steps[0].DurationS);

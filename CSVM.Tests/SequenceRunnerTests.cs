@@ -13,7 +13,7 @@ namespace CSVM.Tests;
 /// case the comment describes. The fixtures carry NO game data
 /// (the no-assets rule covers extracted event lists); the shapes come from the comments, the values
 /// are invented. Everything runs through the real <see cref="AnimInstance"/> and
-/// <see cref="SequenceRunner"/> — never a re-implemented advance loop — so the reverse-iteration
+/// <see cref="SequenceRunner"/>, never a re-implemented advance loop, so the reverse-iteration
 /// removal and the loop/branch state machine are themselves under test. The host is a
 /// <see cref="RecordingHost"/> fake; anchors are always null (the interpreter never dereferences
 /// them). Behaviour is documented in docs/formats/anim-definitions.md.
@@ -76,14 +76,14 @@ public class SequenceRunnerTests
         var t = RunSteps(inst, host, SequenceRunner.AnimFrame, 8);
 
         foreach (var step in t)
-            Assert.Single(step);           // exactly one poll per step — never two
+            Assert.Single(step);           // exactly one poll per step, never two
         Assert.Equal(8, host.Fired.Count);
     }
 
     [Theory]
     [InlineData(1f / 30f)]     // below the authored rate: catches up within the frame
     [InlineData(1f / 60f)]     // the authored rate itself
-    [InlineData(1f / 144f)]    // not a multiple of it — the case that quantised to 48 Hz
+    [InlineData(1f / 144f)]    // not a multiple of it, the case that quantised to 48 Hz
     [InlineData(1f / 240f)]
     public void InstantIterationLoopRateIsIndependentOfTheStep(float dt)
     {
@@ -107,7 +107,7 @@ public class SequenceRunnerTests
     public void CountedInstantLoopTakesItsAuthoredFramesInSeconds(float dt)
     {
         // The case that named this: `ref_fueltanks`' fire_n_smoke is [PufferState, LOOP 200] and
-        // burns ~3 s in the original — 200 frames at 60 Hz. The count must therefore spend
+        // burns ~3 s in the original, 200 frames at 60 Hz. The count must therefore spend
         // 200 x AnimFrame of SIM time before the sequence finishes, at every step size.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("fire"), Loop(200)));
@@ -147,7 +147,7 @@ public class SequenceRunnerTests
 
         Assert.True(inst.Finished, "a counted loop must terminate");
         // 1000 x 0.01 s = 10 s, plus the opening pass's own gate. The band is wide enough not to
-        // pin that phase and narrow enough to be nowhere near the 16.7 s an AnimFrame floor gives —
+        // pin that phase and narrow enough to be nowhere near the 16.7 s an AnimFrame floor gives,
         // discriminating between the two readings is the whole point of the case.
         Assert.InRange(elapsed, 9.9f, 10.2f);
     }
@@ -181,7 +181,7 @@ public class SequenceRunnerTests
     }
 
     [Theory]
-    [InlineData(0.02f)]        // 1.2 steps at 60 Hz — the 126-loop set (patrolboat, ftank_boom, ...)
+    [InlineData(0.02f)]        // 1.2 steps at 60 Hz, the 126-loop set (patrolboat, ftank_boom, ...)
     [InlineData(1.0f)]         // 60 steps in real arithmetic, 61 in float32 without the carry
     [InlineData(2.5f)]         // 150 steps; shipsink's period
     public void AnInfiniteTimedLoopHoldsItsPeriodOverManyIterations(float period)
@@ -295,13 +295,13 @@ public class SequenceRunnerTests
             return host.Fired.ToArray();
         }
 
-        // LOD gate false — the outer IF. The scan still reaches the inner ELSEIF.
+        // LOD gate false, the outer IF. The scan still reaches the inner ELSEIF.
         Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
             new RecordingHost { Conditions = { ["lod"] = false, ["weight2"] = true } }, Body()));
         Assert.Empty(Run(
             new RecordingHost { Conditions = { ["lod"] = false, ["weight2"] = false } }, Body()));
 
-        // Range gate false — the middle IF. Same landing, same re-test.
+        // Range gate false, the middle IF. Same landing, same re-test.
         Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
             new RecordingHost { Conditions = { ["lod"] = true, ["range"] = false, ["weight2"] = true } },
             Body()));
@@ -330,7 +330,7 @@ public class SequenceRunnerTests
     public void ElseWithoutIfRunsTheBranch()
     {
         // A malformed chain (an ELSE with no open IF) reads as "not taken" and its writes are
-        // dropped, so bad data degrades to RUNNING the branch rather than faulting — the safe
+        // dropped, so bad data degrades to RUNNING the branch rather than faulting, the safe
         // direction (a skipped branch poses objects wrongly).
         var host = new RecordingHost();
         var inst = Instance(Seq(Ctrl("Else"), Swap("body"), Ctrl("Endif"), Swap("after")));
@@ -358,7 +358,7 @@ public class SequenceRunnerTests
         Assert.Equal(new[] { "motion" }, t[0]);     // 0.5s
         Assert.Empty(t[1]);                          // 1.0s
         Assert.Empty(t[2]);                          // 1.5s
-        Assert.Equal(new[] { "absolute" }, t[3]);   // 2.0s absolute — relative would be 3.5s
+        Assert.Equal(new[] { "absolute" }, t[3]);   // 2.0s absolute, relative would be 3.5s
         Assert.Equal(new[] { "relative" }, t[4]);   // 2.5s = absolute's fire + 0.5s
     }
 
@@ -417,7 +417,7 @@ public class SequenceRunnerTests
     public void StopSequenceHaltsTheRunningTargetAndItsLaterEventsNeverFire()
     {
         // The halt idiom (large_30sec_fire, zepskinfire): the target is a genuinely running
-        // sibling, and STOP_SEQUENCE must end it — already-fired events stand, later ones never
+        // sibling, and STOP_SEQUENCE must end it, already-fired events stand, later ones never
         // come. Without the halt, the sibling's loop re-asserts its puffer forever.
         var host = new RecordingHost();
         var emitter = Seq("emitter", Swap("puff", "Event", 0.25f), Swap("late", "Event", 1.0f));
@@ -469,7 +469,7 @@ public class SequenceRunnerTests
         var t = RunSteps(inst, host, 0.25f, 5);
 
         // `trail` is declared AFTER `activate`, so the call is forward and its event lands in the
-        // same pass — see CallForwardOfTheCallerRunsInTheSameTick.
+        // same pass, see CallForwardOfTheCallerRunsInTheSameTick.
         Assert.Equal(new[] { "on", "trail", "emit" }, t[0]);
         Assert.Empty(t[1]);
         Assert.Equal(new[] { "stopper" }, t[2]);          // 0.75s: the stop resolves, halts nothing
@@ -477,7 +477,7 @@ public class SequenceRunnerTests
         Assert.DoesNotContain("off2", host.Fired);
         Assert.True(inst.Finished);
 
-        // The stop still reports FOUND — callers read that as "did the name resolve".
+        // The stop still reports FOUND, callers read that as "did the name resolve".
         Assert.True(inst.StopSequence("stopper"));
         Assert.False(inst.StopSequence("ghost"));
     }
@@ -520,7 +520,7 @@ public class SequenceRunnerTests
     public void StopSequenceHaltsEveryDuplicateRunnerOfTheName()
     {
         // CALL_SEQUENCE legitimately starts duplicate concurrent runners of one sequence;
-        // "stop that sequence" in the data names the sequence, not one copy — every runner
+        // "stop that sequence" in the data names the sequence, not one copy, every runner
         // carrying the name halts.
         var host = new RecordingHost();
         var trail = Seq("trail", Swap("emit", "Event", 0.5f));
@@ -540,7 +540,7 @@ public class SequenceRunnerTests
     public void StopSequenceNameMissIsANoOpAndTheSequenceContinues()
     {
         // A name matching no runner and no sequence must neither fault nor gate the rest of
-        // the sequence — the same degrade-to-continuing direction the malformed-IF rule takes.
+        // the sequence, the same degrade-to-continuing direction the malformed-IF rule takes.
         var host = new RecordingHost();
         var main = Seq("main", StopSeq("ghost"), Swap("after"));
         var inst = Instance(new[] { main }, main);
@@ -622,7 +622,7 @@ public class SequenceRunnerTests
         var t = RunSteps(inst, host, 0.25f, 2);
 
         // The cursor is already past slot 0 when the call lands, so the callee's first event
-        // waits a tick — the police siren (`start_walkin` -> `siren_police`) is this shape.
+        // waits a tick, the police siren (`start_walkin` -> `siren_police`) is this shape.
         Assert.Equal(new[] { "callee" }, t[0]);
         Assert.Equal(new[] { "late" }, t[1]);
     }
@@ -644,7 +644,7 @@ public class SequenceRunnerTests
 
         Assert.Equal(new[] { "trail" }, t[3]);        // 1.00s: the call
         Assert.Equal(new[] { "shutoff" }, t[5]);     // 1.50s: the instance clock's 1.5, not the
-        Assert.Empty(t[9]);                            //        sequence's — which would be 2.50s
+        Assert.Empty(t[9]);                            //        sequence's, which would be 2.50s
     }
 
     // ---- WAIT_FOR_COMPLETION: the call gates the NEXT event, on the callee, not on a clock ----
@@ -690,7 +690,7 @@ public class SequenceRunnerTests
     public void AFlaggedCallOnANonRunningCalleeDoesNotHold()
     {
         // A callee whose whole choreography fires at t=0 never becomes a live instance, so the
-        // host installs no test and the caller must advance in the same pass — 16 of the census's
+        // host installs no test and the caller must advance in the same pass, 16 of the census's
         // effective holds are that shape. A runner that held on a missing test would freeze them.
         var host = new RecordingHost();
         var inst = Instance(Seq(Call("instant_effect", wait: true), Call("after")));
@@ -740,7 +740,7 @@ public class SequenceRunnerTests
     public void AWaitInsideAPollLoopStopsTheLoopSpinningWhileItHolds()
     {
         // The data's poll idiom is an INSTANTANEOUS `If … CallAnimation; Endif; Loop{-1}` body,
-        // paced to one pass per AnimFrame — so a hold inside one has to stop the whole loop, not
+        // paced to one pass per AnimFrame, so a hold inside one has to stop the whole loop, not
         // just the next event. Unheld, five seconds of this fixture re-fire the body ~300 times.
         var host = new RecordingHost();
         host.Running["callee"] = true;
@@ -754,7 +754,7 @@ public class SequenceRunnerTests
         host.Running["callee"] = false;
         RunSteps(inst, host, 0.5f, 1);
 
-        // Released, the iteration completes and the loop wraps in that same pass — the hold was
+        // Released, the iteration completes and the loop wraps in that same pass, the hold was
         // real elapsed time, so the iteration is not ALSO charged the AnimFrame floor that paces
         // untimed poll loops (SequenceRunner sets _iterScheduledTime on release for this).
         Assert.Equal(new[] { "callee", "body", "callee" }, host.Fired.GetRange(0, 3));
@@ -770,7 +770,7 @@ public class SequenceRunnerTests
 
     // An instance over a definition that KNOWS the given sequences (so CALL_SEQUENCE /
     // STOP_SEQUENCE can look them up by name), with runners started only for
-    // `run` — the rest sit ON_CALL, and are MARKED so: only an ON_CALL sequence
+    // `run`, the rest sit ON_CALL, and are MARKED so: only an ON_CALL sequence
     // is ever parked, and CALL_SEQUENCE starts nothing else.
     private static AnimInstance Instance(AnimSequence[] defined, params AnimSequence[] run)
     {
@@ -871,7 +871,7 @@ public class SequenceRunnerTests
     private static AnimEvent Ctrl(string kind) => new() { Kind = kind };
 
     // Drives the instance in fixed `dt` steps and returns, per step, the
-    // names dispatched during that step — so a test can assert both order and which step each fire
+    // names dispatched during that step, so a test can assert both order and which step each fire
     // landed on (the timing evidence).
     private static List<List<string>> RunSteps(AnimInstance inst, RecordingHost host, float dt, int steps)
     {
@@ -889,7 +889,7 @@ public class SequenceRunnerTests
 
     // An ISequenceHost that records every real dispatch, returns a scripted
     // duration per event kind, and answers conditions from a tag→verdict table. Control-flow kinds
-    // return `false` from Dispatch — returning true would silently bypass the
+    // return `false` from Dispatch, returning true would silently bypass the
     // LOOP/IF branch logic and every test would pass while testing nothing.
     private sealed class RecordingHost : ISequenceHost
     {
@@ -900,12 +900,12 @@ public class SequenceRunnerTests
 
         /// <summary>Callee name → is that callee still running. The real host closes over the
         /// (def, anchor) instances a call reached; a test needs only the answer, so this stands
-        /// in for the whole of that — set an entry true and the wait holds, false and it releases.
+        /// in for the whole of that, set an entry true and the wait holds, false and it releases.
         /// A callee with no entry installs no wait at all, which is the real host's
         /// "nothing live to hold on" case.</summary>
         public readonly Dictionary<string, bool> Running = new(StringComparer.Ordinal);
 
-        /// <summary>The instance CALL_SEQUENCE/STOP_SEQUENCE act on — the same thin routing the
+        /// <summary>The instance CALL_SEQUENCE/STOP_SEQUENCE act on, the same thin routing the
         /// real runtime's dispatch does; the composition under test is <see cref="AnimInstance"/>'s.
         /// </summary>
         public AnimInstance? Instance;

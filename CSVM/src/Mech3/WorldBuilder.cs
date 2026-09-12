@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>One <c>zone*</c> child of the gamez <c>horizon</c> node, and how many meshed nodes its
-/// subtree carries — the dome <see cref="WorldBuilder.BuildHorizon"/> would build for it.
+/// subtree carries, the dome <see cref="WorldBuilder.BuildHorizon"/> would build for it.
 /// <see cref="MeshedNodes"/> 0 means the zone is a bare marker, which C1B, C2 and C3 ship for
 /// <c>zone2</c>. <see cref="ZoneId"/> is the zone node's own gamez <c>zone_id</c>, what
 /// <see cref="ZoneGate"/> tests the built dome against per rig.</summary>
@@ -99,21 +99,21 @@ public sealed class WorldBuilder
     public int MeshInstanceCount => _scene.MeshInstanceCount;
     public int ColliderCount => _scene.ColliderCount;
 
-    /// <summary>Models animating their UVs — see <see cref="SceneBuilder.ScrollingModelCount"/>.
+    /// <summary>Models animating their UVs, see <see cref="SceneBuilder.ScrollingModelCount"/>.
     /// Read after Build (and after BuildHorizon, which is where C1's daytime sky layer is).</summary>
     public int ScrollingModelCount => _scene.ScrollingModelCount;
 
     /// <summary>Models built from their authored <c>lighting: false</c> / <c>fog: false</c>
-    /// flags — see <see cref="SceneBuilder.UnlitModelCount"/>.</summary>
+    /// flags, see <see cref="SceneBuilder.UnlitModelCount"/>.</summary>
     public int UnlitModelCount => _scene.UnlitModelCount;
     public int UnfoggedModelCount => _scene.UnfoggedModelCount;
 
     /// <summary>Overlay-pass surfaces built, and overlay polygons declined for want of a biasable
-    /// material — see <see cref="SceneBuilder.OverlayPassSurfaceCount"/>.</summary>
+    /// material, see <see cref="SceneBuilder.OverlayPassSurfaceCount"/>.</summary>
     public int OverlayPassSurfaceCount => _scene.OverlayPassSurfaceCount;
     public int OverlayPassDeclinedCount => _scene.OverlayPassDeclinedCount;
 
-    /// <summary>Polygons drawn as nothing for want of a texture the retail data lacks — see
+    /// <summary>Polygons drawn as nothing for want of a texture the retail data lacks, see
     /// <see cref="SceneBuilder.UndrawnPolygonCount"/>.</summary>
     public int UndrawnPolygonCount => _scene.UndrawnPolygonCount;
 
@@ -150,12 +150,12 @@ public sealed class WorldBuilder
     /// the camera as a ceiling; below the band <c>horizon/zone1</c>'s dome is the ceiling.</summary>
     public float CloudDeckAltitude => _deckAltitude;
 
-    /// <summary>Mesh instances this world put on each zone-gate layer, by <c>zone_id</c> —
+    /// <summary>Mesh instances this world put on each zone-gate layer, by <c>zone_id</c>,
     /// <see cref="SceneBuilder.ZoneGatedMeshes"/> for the world walk. The before-census a state
     /// flip's delta is asserted against.</summary>
     public IReadOnlyList<int> ZoneGatedMeshes => _scene.ZoneGatedMeshes;
 
-    /// <summary>The world's placed <c>cloudparent</c> cluster subtrees, in walk order — the
+    /// <summary>The world's placed <c>cloudparent</c> cluster subtrees, in walk order, the
     /// ambient cloud population that is ordinary world geometry rather than <c>fvol</c> clutter.
     /// Some chapters ship none. Empty until <see cref="Build"/> has run.
     /// ⚠ Resolve these by the node's original gamez name (<c>AnimRuntime.NameMeta</c>), never by
@@ -163,7 +163,7 @@ public sealed class WorldBuilder
     /// renaming is free to have touched the built name.</summary>
     public IReadOnlyList<Node3D> CloudClusters => _cloudClusters;
 
-    /// <summary>This world's shared scene builder — its mesh/material/shape caches and its
+    /// <summary>This world's shared scene builder, its mesh/material/shape caches and its
     /// fullbright world materials. Handed to <see cref="ClutterBuilder"/> so the clutter's 3D
     /// city-block decorations render as real world geometry (same shader, same fog, same depth
     /// bias) instead of through the billboard path, and share the caches with the placed world.</summary>
@@ -194,7 +194,7 @@ public sealed class WorldBuilder
         return hits;
     }
 
-    /// <summary>Distinct source names CONTAINING the request — what a miss offers instead of
+    /// <summary>Distinct source names CONTAINING the request, what a miss offers instead of
     /// nothing, so a mistyped <c>--node=</c> is one line away from the right spelling.</summary>
     public static List<string> SuggestNodes(GameZ gamez, string request, int cap)
     {
@@ -287,7 +287,7 @@ public sealed class WorldBuilder
             if (!IsFogVolumeNode(n))
                 continue;
             if (common is { } got && got != n.ZoneId)
-                return -1; // mixed — ungated is the only reading that cannot hide authored content
+                return -1; // mixed, ungated is the only reading that cannot hide authored content
             common = n.ZoneId;
         }
         return common ?? -1;
@@ -466,7 +466,7 @@ public sealed class WorldBuilder
             }
             if (!built.Transform.Origin.IsZeroApprox())
             {
-                continue; // an ON_STARTUP translate placed it — this is real, shown content
+                continue; // an ON_STARTUP translate placed it, this is real, shown content
             }
             built.Visible = false; // colliders follow (WorldCollision)
             _hiddenUnplaced.Add((node, built));
@@ -493,7 +493,7 @@ public sealed class WorldBuilder
             }
             if (built.Transform.Origin.IsZeroApprox())
             {
-                continue; // still parked — leave it switched off
+                continue; // still parked, leave it switched off
             }
             built.Visible = true;
             _hiddenUnplaced.RemoveAt(i);
@@ -529,7 +529,7 @@ public sealed class WorldBuilder
         return built;
     }
 
-    /// <summary>Builds the mission's danger-zone route ribbons — the 'dzpaths' subtree the
+    /// <summary>Builds the mission's danger-zone route ribbons, the 'dzpaths' subtree the
     /// world build skips (see <see cref="SkipWorldNode"/>). This is AI/route guide data the
     /// original never renders (the dzN completion points sit on these polylines); exposed only
     /// for --debug-dzpaths inspection. Never collidable. Null when the world has no dzpaths.</summary>
@@ -566,7 +566,7 @@ public sealed class WorldBuilder
         {
             var v = xf * mesh.Vertices[i];
             if (Mathf.Abs(v.Y - first.Y) > 0.001f)
-                return false; // tilted — a wall or a ramp, not a deck tile
+                return false; // tilted, a wall or a ramp, not a deck tile
             x0 = Mathf.Min(x0, v.X);
             x1 = Mathf.Max(x1, v.X);
             z0 = Mathf.Min(z0, v.Z);
@@ -576,7 +576,7 @@ public sealed class WorldBuilder
         return true;
     }
 
-    /// <summary>A placed ambient cloud cluster — the gamez node the original names
+    /// <summary>A placed ambient cloud cluster, the gamez node the original names
     /// <c>cloudparent</c>, whose children are the individual cloud facades. This is the OTHER
     /// ambient cloud population, world-placed rather than <c>fvol</c>-scattered, and the two are
     /// gated together by camera altitude (<see cref="CloudClusters"/>).</summary>
@@ -661,7 +661,7 @@ public sealed class WorldBuilder
         var aabb = SubtreeAabb(built, Transform3D.Identity);
         if (aabb == null)
         {
-            return false; // no geometry at all (empty group node) — nothing to draw either way
+            return false; // no geometry at all (empty group node), nothing to draw either way
         }
         var box = aabb.Value;
         // Strictly straddling the origin in x and z. Map geometry never does: every chapter's
@@ -671,7 +671,7 @@ public sealed class WorldBuilder
             && box.Position.Z < 0f && box.End.Z > 0f;
     }
 
-    // The dome's star point-lights sit ~22 km out (camera-anchored, 2.5× scaled) — far past
+    // The dome's star point-lights sit ~22 km out (camera-anchored, 2.5× scaled), far past
     // their data visibility range (4000 m), which is meant for in-world beacons. Opt them
     // out of the light shader's distance fade or the night sky goes starless.
     private static void DisableLightRangeFade(Node node)
@@ -816,7 +816,7 @@ public sealed class WorldBuilder
         }
     }
 
-    // The geometry half of IsParkedAtOrigin, from the gamez meshes instead of the built tree —
+    // The geometry half of IsParkedAtOrigin, from the gamez meshes instead of the built tree,
     // the same union of the same vertices, taken before there is a tree to walk.
     private bool WrapsOrigin(List<(GameZNode Node, Transform3D World)> subtree)
     {
@@ -937,13 +937,13 @@ public sealed class WorldBuilder
     }
 
     // True when the node's model is one flat horizontal quad, reporting its altitude and its
-    // world-space x/z footprint — the instance-side wrapper FindCloudDeck (below) walks with.
+    // world-space x/z footprint, the instance-side wrapper FindCloudDeck (below) walks with.
     private bool FlatTile(GameZNode n, out float altitude, out float x0, out float z0,
         out float x1, out float z1) => FlatTileOf(_gamez, n, out altitude, out x0, out z0, out x1, out z1);
 
     // Walks the built world for cloudparent subtrees. Stops descending at each hit: the whole
     // subtree is the cluster, and cloud clusters do not nest. Matched on the name the DATA
-    // carries (AnimRuntime.NameMeta), never on Node.Name — see the CloudClusters remarks.
+    // carries (AnimRuntime.NameMeta), never on Node.Name, see the CloudClusters remarks.
     private void CollectCloudClusters(Node node)
     {
         if (node is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
@@ -1010,7 +1010,7 @@ public sealed class WorldBuilder
                 _deckCoverage = slot.Area / (mapW * mapH);
             }
 
-        // The tiles' own zone_id, for the per-rig gate. Mixed tiles (never observed — 144/144 on
+        // The tiles' own zone_id, for the per-rig gate. Mixed tiles (never observed, 144/144 on
         // zone_id 2 in all four deck chapters) read as −1, i.e. ungated, which is the only reading
         // that cannot hide authored content it does not understand.
         int? deckZone = null;
@@ -1069,7 +1069,7 @@ public sealed class WorldBuilder
     }
 
     // The tile's own mesh in both lit variants, from the SceneBuilder cache the built node just
-    // used — so the dimmed side is the very resource the MeshInstance3D carries, and the RID is a
+    // used, so the dimmed side is the very resource the MeshInstance3D carries, and the RID is a
     // key WeatherRig can look a live instance up by. A deck tile is one flat 4-vertex quad
     // (FlatTile), so its own MeshIndex is the whole tile; a tile that somehow carried child
     // geometry would simply not be swappable, which WeatherRig's own census reports rather than
@@ -1085,9 +1085,9 @@ public sealed class WorldBuilder
 
     // Extends the deck sheet with a flat untextured rim so its edge does not read as a hard step
     // near the horizon. ⚠ Keep `TargetHalfSpan` under the zone2 dome's 21.85 km render distance;
-    // do not re-derive it from a camera-anchored ceiling — that mechanism is gone (`BL-328`).
+    // do not re-derive it from a camera-anchored ceiling, that mechanism is gone (`BL-328`).
     // ⚠ Build it as a picture frame, never a full plane, which would z-fight the tiles.
-    // ⚠ Add it as a CHILD of `deck`, never a sibling — nesting alone makes the rim follow the
+    // ⚠ Add it as a CHILD of `deck`, never a sibling, nesting alone makes the rim follow the
     // camera and flip regime with the sheet.
     private void AddDeckAnnulus(Node3D deck, Aabb tilesAabb)
     {
@@ -1104,7 +1104,7 @@ public sealed class WorldBuilder
 
         Vector3 P(float x, float z) => new(x, y, z);
         // North/south strips run the full outer width (so they cover the four corners too);
-        // east/west fill only the remaining middle strip — a standard picture-frame tiling with
+        // east/west fill only the remaining middle strip, a standard picture-frame tiling with
         // no overlap and no gap, regardless of how much bigger the target is than the sheet.
         var quads = new List<(Vector3, Vector3, Vector3, Vector3)>
         {
@@ -1139,7 +1139,7 @@ public sealed class WorldBuilder
     }
 
     // The source moon is an axis-aligned quad, which looks tilted from most headings, but the
-    // original shows a round upright moon from any direction — so it must billboard. Replaced
+    // original shows a round upright moon from any direction, so it must billboard. Replaced
     // with a camera-facing quad of the same position and size. The original also color-keys the
     // uniform background away, since crater detail rules out additive and the sky shows through
     // to the halo; ColorKeyed reproduces that as an alpha ramp on distance from that colour.

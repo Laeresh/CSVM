@@ -327,7 +327,7 @@ public class HeadLookTests
     }
 
     // C22: HeadLook.AutoheadTarget, the idle-frame lean law fed to IdleAim, exercised as a pure
-    // vector law directly — no PlaneStats in the loop.
+    // vector law directly, no PlaneStats in the loop.
 
     [Fact]
     public void AutoheadIsNullWhenTheLocalVelocityIsNegligible()
@@ -341,15 +341,15 @@ public class HeadLookTests
     {
         // Straight and level at full cruise speed, nose along the plane's own −Z: the forward
         // component is dropped before scaling (the class doc's port decision), so this reads
-        // exactly as negligible — the same null a parked aircraft returns.
+        // exactly as negligible, the same null a parked aircraft returns.
         Assert.Null(HeadLook.AutoheadTarget(new Vector3(0f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
     }
 
     [Fact]
     public void AutoheadPinsTheDecodedMinusThreeDegreeFloorOnAHardDive()
     {
-        // A steep dive at speed: the raw lean angle is well past −3°, so the floor — not the
-        // magnitude cap's direction — decides the shown elevation. This is the trap's own pin:
+        // A steep dive at speed: the raw lean angle is well past −3°, so the floor, not the
+        // magnitude cap's direction, decides the shown elevation. This is the trap's own pin:
         // the −3° floor sits below C21's [0, π/2] input floor and must survive here.
         var t = HeadLook.AutoheadTarget(new Vector3(0f, -50f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
         Assert.NotNull(t);
@@ -372,7 +372,7 @@ public class HeadLookTests
     public void AutoheadLeavesASmallLeanUncappedBelowTurnMax()
     {
         // Well under the cap once scaled: the components pass straight through as the direct
-        // (elevation, azimuth) angles, not through an arctangent — the cap having any effect at
+        // (elevation, azimuth) angles, not through an arctangent, the cap having any effect at
         // all on the visible angle depends on this.
         var t = HeadLook.AutoheadTarget(new Vector3(0.01f, 0.01f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
         Assert.NotNull(t);

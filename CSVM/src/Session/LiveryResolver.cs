@@ -14,7 +14,7 @@ namespace CSVM.Session;
 public sealed class LiveryResolver
 {
     /// <summary>vehicle.json's name for the Fortune Hunters pattern, the player militia's own
-    /// and the only one covering all eleven airframes — the livery an aircraft wears when
+    /// and the only one covering all eleven airframes, the livery an aircraft wears when
     /// nothing asks for another, as the original's stock planes do.</summary>
     public const string DefaultPattern = "player_fortune";
 
@@ -32,7 +32,7 @@ public sealed class LiveryResolver
 
     /// <summary>The original's per-pattern paint region masks, scanned once per session from
     /// the extracted UI archive. Empty (and a one-line note) when ExtractRof.ps1 has not been
-    /// run — aircraft then build unpainted rather than failing.</summary>
+    /// run, aircraft then build unpainted rather than failing.</summary>
     public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
 
     /// <summary>True when the launch asked for a livery by hand (<c>--paint=</c>,
@@ -42,7 +42,7 @@ public sealed class LiveryResolver
         || _spec.PaintColorOverride != null || _spec.PaintDecalOverride != null;
 
     /// <summary>The 12 named schemes shipped in vehicle.json, loaded once per session.
-    /// Empty on a read failure — paint is cosmetic and must never block a build.</summary>
+    /// Empty on a read failure, paint is cosmetic and must never block a build.</summary>
     public List<PaintScheme> PaintCatalog(string zrdrPath)
     {
         if (_paintCatalog != null)
@@ -64,7 +64,7 @@ public sealed class LiveryResolver
     /// <summary>The livery a vehicle def authors for itself, cached per def name. This is what an AI
     /// aircraft wears in the original: the spawn resolves each paint field against the def and only
     /// an explicit override displaces it (docs/org/paint.md). Null when the def's chain authors no
-    /// pattern, or when vehicle.json cannot be read — paint is cosmetic and never blocks a build.</summary>
+    /// pattern, or when vehicle.json cannot be read, paint is cosmetic and never blocks a build.</summary>
     public PaintScheme? DefScheme(string zrdrPath, string defName)
     {
         if (_defSchemes.TryGetValue(defName, out var cached))
@@ -82,7 +82,7 @@ public sealed class LiveryResolver
         return scheme;
     }
 
-    /// <summary>The patterns this aircraft has masks for — the list the original's paint UI
+    /// <summary>The patterns this aircraft has masks for, the list the original's paint UI
     /// offers for that plane. Empty when the model carries no skin prefix to key on.</summary>
     public List<string> PatternsForPlane(GameZ planesGamez, string planeNode)
     {
@@ -128,7 +128,7 @@ public sealed class LiveryResolver
         if (string.Equals(name, "random", StringComparison.OrdinalIgnoreCase))
         {
             // A pattern is per aircraft, so a random livery draws from the ones THIS plane
-            // actually has masks for — picking one it does not carry would paint nothing.
+            // actually has masks for, picking one it does not carry would paint nothing.
             scheme = PaintScheme.Random(rng, catalog, available);
         }
         else
@@ -159,7 +159,7 @@ public sealed class LiveryResolver
     /// so an unpinned launch repaints the field and a pinned one repeats it. --paint-seed=N
     /// overrides the derived seed, pinning liveries alone in an otherwise random run.
     /// ⚠ Construct/advance it the same number of times, same order relative to the other
-    /// per-session RNGs, every launch — reordering reshuffles pinned liveries under --det.</summary>
+    /// per-session RNGs, every launch, reordering reshuffles pinned liveries under --det.</summary>
     public RandomNumberGenerator NewPaintRng() => new()
     {
         Seed = _spec.PaintSeedExplicit ? _spec.PaintSeed : Rng.SeedFor(Rng.Paint),

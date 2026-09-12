@@ -5,10 +5,10 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Instant Action's wrap-up board — <see cref="ResultsBoard"/>'s shell, the whole window on its
+/// Instant Action's wrap-up board, <see cref="ResultsBoard"/>'s shell, the whole window on its
 /// own <c>CanvasLayer</c>, since the mission ends for every human at once. Shows the shipped
-/// screen's four rows — Time to Complete Mission, Enemies Shot Down, Danger Zones Completed,
-/// Shot % — the ones <c>IA_WRAPUP.SCRIPT</c> and <c>LAYOUT.CSV</c> actually wire. On a
+/// screen's four rows, Time to Complete Mission, Enemies Shot Down, Danger Zones Completed,
+/// Shot %, the ones <c>IA_WRAPUP.SCRIPT</c> and <c>LAYOUT.CSV</c> actually wire. On a
 /// <c>stunt_flying</c> mission it also carries the run's <see cref="StuntSplits"/> section, so one
 /// board covers the mission rather than stacking with <see cref="StuntScoreboard"/>. Decode:
 /// docs/formats/instant-action/wrap-up.md. Every value is handed in by the caller at
@@ -17,14 +17,14 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class IaWrapupBoard : ResultsBoard
 {
-    // Base metrics at 720p (scaled by window height). All TUNE — mirrors VersusBoard/StuntRaceBoard
+    // Base metrics at 720p (scaled by window height). All TUNE, mirrors VersusBoard/StuntRaceBoard
     // so every shared results board reads as the same screen.
     private const int TitleFont = 30;
     private const int ContextFont = 15;
     private const int RowFont = 20;
 
     // The shipped row titles, langui ids 1134-1137 (docs/formats/instant-action.md "The wrap-up
-    // screen") — literal text, not read off ui_strings.json at runtime: that table is a build-time
+    // screen"), literal text, not read off ui_strings.json at runtime: that table is a build-time
     // extraction artifact of the .rof archive, not one of the five archives a session build opens
     // (Session/SessionArchives.cs), and six lines are stable enough not to earn a reader of their
     // own here.
@@ -39,7 +39,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
     private string _context = "";
 
     // A mission that has ended stays ended: no live flag ever clears, so the shell never retires
-    // this board — only OnRestartChosen below does.
+    // this board, only OnRestartChosen below does.
     protected override bool StillEnded => true;
 
     /// <summary>Builds the (hidden) board. Add it to a <c>CanvasLayer</c> above the splitscreen
@@ -55,7 +55,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
 
     /// <summary>Shows the board with the mission's four final counters
     /// (docs/formats/instant-action.md "What the four numbers count"). Called exactly once, from
-    /// <see cref="InstantActionRuntime.MissionEnded"/> — every value here is that instant's
+    /// <see cref="InstantActionRuntime.MissionEnded"/>, every value here is that instant's
     /// snapshot, the same discipline <see cref="VersusBoard"/> takes from
     /// <see cref="VersusMatch.Standings"/>.</summary>
     public void Present(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted,
@@ -104,7 +104,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
         AddCell(grid, ShotsTitle, font, RowColor, HorizontalAlignment.Left, labelW);
         AddCell(grid, $"{shotPercent}%", font, RowColor, HorizontalAlignment.Right, valueW);
 
-        // Player 1's run — the board is shared, and splitscreen pilots each fly their own copy of
+        // Player 1's run, the board is shared, and splitscreen pilots each fly their own copy of
         // the zone set.
         if (stunt is { } run)
         {

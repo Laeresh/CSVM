@@ -9,7 +9,7 @@ namespace CSVM.Session;
 public static class PlaneRoster
 {
     /// <summary>The plane player <paramref name="index"/> flies: their own pick when the
-    /// launchscreen (or a --plane= list) gave one, else the last one named — so a single
+    /// launchscreen (or a --plane= list) gave one, else the last one named, so a single
     /// --plane= puts everybody in the same aircraft.</summary>
     public static string PlaneFor(SessionSpec spec, int index) =>
         spec.PlaneNames.Count == 0 ? spec.PlaneName : spec.PlaneNames[Math.Min(index, spec.PlaneNames.Count - 1)];
@@ -24,7 +24,7 @@ public static class PlaneRoster
         spec.IaDef != null ? null : iaPlayerNode;
 
     /// <summary>A readable plane name: the def's own authored <c>title</c> where it has been
-    /// resolved ("Medusa Kestrel"), else derived from the vehicle.json def name — the player defs
+    /// resolved ("Medusa Kestrel"), else derived from the vehicle.json def name, the player defs
     /// are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the leading p and
     /// title-case → "Bloodhawk". Falls back to the node name.</summary>
     public static string PlaneDisplayName(PlaneStats stats)

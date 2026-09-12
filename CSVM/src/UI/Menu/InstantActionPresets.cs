@@ -20,8 +20,8 @@ public static class InstantActionPresets
     // What FUN_004102c0 substitutes for a wave whose militia/skill/aircraft are the out-of-range
     // "unset" sentinels (13, 3 and 11, each one past its dropdown's last row): militia 4, skill 1,
     // aircraft 5. The substitution is self-consistent because Fortune Hunter flies all eleven, so
-    // the aircraft always resolves. It never reaches a flown mission — the mission builder
-    // FUN_004175f0 skips any wave at 0 enemies — but it IS what a pilot inherits on raising the
+    // the aircraft always resolves. It never reaches a flown mission, the mission builder
+    // FUN_004175f0 skips any wave at 0 enemies, but it IS what a pilot inherits on raising the
     // count of an empty wave, so dropping it would be right in one state and wrong in the other.
     private const string UnsetMilitia = "Fortune Hunter";
     private const string UnsetAircraft = "Devastator";
@@ -157,7 +157,7 @@ public static class InstantActionPresets
     }
 
     /// <summary>One wave of a preset: how many enemies, which militia flies it, which of that
-    /// militia's aircraft, and at which skill. Names, not indices — see the type's own
+    /// militia's aircraft, and at which skill. Names, not indices, see the type's own
     /// summary.</summary>
     public readonly record struct Wave(int Count, string Militia, string Aircraft, string Skill);
 

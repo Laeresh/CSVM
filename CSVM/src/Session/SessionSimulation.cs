@@ -51,7 +51,7 @@ public sealed class SessionSimulation
         _runtime = runtime;
     }
 
-    /// <summary>Total phase failures caught since this instance was built — a test asserts on it,
+    /// <summary>Total phase failures caught since this instance was built, a test asserts on it,
     /// since a swallowed throw is otherwise invisible to the caller.</summary>
     public int PhaseFailures { get; private set; }
 

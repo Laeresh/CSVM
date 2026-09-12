@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>One built skydome and the gamez <c>zone_id</c> of the <c>horizon/zone*</c> node it was
-/// built from — the pair <c>Mech3.ZoneGate.Draws</c> needs to decide whether it is this camera's
+/// built from, the pair <c>Mech3.ZoneGate.Draws</c> needs to decide whether it is this camera's
 /// sky.</summary>
 public readonly record struct HorizonDome(Node3D Node, int ZoneId);
 
@@ -26,7 +26,7 @@ public sealed class PlayerRig
     public int Index;
 
     /// <summary>This player's camera. Single player: GameSession's own camera in the main
-    /// viewport. Splitscreen: a camera parented to the player's SubViewport, not a Node3D — its
+    /// viewport. Splitscreen: a camera parented to the player's SubViewport, not a Node3D, its
     /// local <c>Position</c> IS the world transform, so per-frame anchoring can read
     /// <c>Camera.Position</c> directly in both modes.</summary>
     public Camera3D Camera = null!;
@@ -46,7 +46,7 @@ public sealed class PlayerRig
     public FlightController? Controller;
 
     /// <summary>This player's skydome copy, re-centered on <see cref="Camera"/> each frame. It is a
-    /// CONTAINER holding one <see cref="HorizonDomes"/> entry per built horizon zone —
+    /// CONTAINER holding one <see cref="HorizonDomes"/> entry per built horizon zone,
     /// the anchor moves, the zone gate picks which child draws.</summary>
     public Node3D? Horizon;
 
@@ -75,9 +75,9 @@ public sealed class PlayerRig
     /// nothing else touches them, so an ordinary flight is unchanged.</summary>
     public List<CanvasLayer> WorldOverlays = new();
 
-    /// <summary>This player's own camera weather state (1/2/3 — <c>WeatherState.CameraWeatherState</c>),
+    /// <summary>This player's own camera weather state (1/2/3, <c>WeatherState.CameraWeatherState</c>),
     /// published once per frame by
-    /// <c>Session.WeatherRig.Tick</c>. Per rig, not per session — a splitscreen pane's camera can
+    /// <c>Session.WeatherRig.Tick</c>. Per rig, not per session, a splitscreen pane's camera can
     /// sit in a different state than another pane's at the same instant, same as
     /// <see cref="Deck"/>'s regime. Consumed by nothing yet; defaults to 1 (the binary's own
     /// default) until the first <c>Tick</c> resolves it.</summary>

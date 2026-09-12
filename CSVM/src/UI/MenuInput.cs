@@ -35,7 +35,7 @@ public sealed class MenuInput
     /// live, and the pad is untouched: it types nothing and so collides with nothing.</summary>
     public bool TextEntry;
 
-    /// <summary>The gamepad devices this player reads, or null for every connected pad — the same
+    /// <summary>The gamepad devices this player reads, or null for every connected pad, the same
     /// binding <see cref="CSVM.Flight.FlightController"/> takes. A joined player has exactly one
     /// (the pad they pressed Start on); <b>player 1 holds every pad nobody has claimed</b>, which
     /// preserves the any-pad fix: phantom joypad devices can occupy the early slots, so binding
@@ -45,7 +45,7 @@ public sealed class MenuInput
 
     // Results of the last Poll, valid until the next one.
     public int Move;        // −1 up, +1 down, 0 none (auto-repeat already applied)
-    /// <summary>−1 left, +1 right, 0 none (auto-repeat already applied) — a second, independent
+    /// <summary>−1 left, +1 right, 0 none (auto-repeat already applied), a second, independent
     /// axis from <see cref="Move"/> so a screen can carry a list cursor (vertical) and a numeric
     /// stepper (horizontal) at once, the way the Instant Action wizard's mission-type screen reads
     /// mission choice and lives together.</summary>
@@ -58,7 +58,7 @@ public sealed class MenuInput
     /// <summary>The horizontal twin of <see cref="PadMove"/>, same reason.</summary>
     public int PadMoveX;
 
-    /// <summary>The characters typed this frame, "" for none — keyboard only, edge-detected per
+    /// <summary>The characters typed this frame, "" for none, keyboard only, edge-detected per
     /// key. Letters arrive upper case while Shift is held. Polled like everything else here rather
     /// than read off an input event, so one screen's text and its navigation share a clock.</summary>
     public string Typed = string.Empty;
@@ -68,14 +68,14 @@ public sealed class MenuInput
 
     public bool Accept;     // pressed this frame (edge)
     public bool Back;       // pressed this frame (edge)
-    /// <summary>Back on the pad alone, without Escape — for a reader whose Escape is already spoken
+    /// <summary>Back on the pad alone, without Escape, for a reader whose Escape is already spoken
     /// for elsewhere. A board menu's is: Escape toggles the pause that owns the board, so reading
     /// it here as well would toggle twice on one press.</summary>
     public bool PadBack;
     public bool Start;      // pressed this frame (edge)
 
     /// <summary>Open the loadout for whatever this screen is about (edge). Y is free in menu
-    /// context — nothing else here reads it, and its only other use is in flight — so it can mean
+    /// context, nothing else here reads it, and its only other use is in flight, so it can mean
     /// one thing everywhere the menu offers a fit to edit.</summary>
     public bool Loadout;
 
@@ -85,7 +85,7 @@ public sealed class MenuInput
     public bool Presets;
 
     /// <summary>The last of this player's pads seen actually doing something (a menu button or the
-    /// stick past the deadzone) — −1 until one does. The launchscreen uses it to <i>claim</i> the
+    /// stick past the deadzone), −1 until one does. The launchscreen uses it to <i>claim</i> the
     /// pad player 1 drives the Mode/Chapter screens with, so that pad is player 1's for good and
     /// only the remaining ones can join. Start is excluded on purpose: it is the join gesture, not
     /// evidence that this player owns the pad.</summary>
@@ -164,7 +164,7 @@ public sealed class MenuInput
     public ActionMap Map => _keys.Map;
 
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
-    /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
+    /// (player 1's unclaimed set), for logging and the join bookkeeping.</summary>
     public int Pad => Pads is { Length: 1 } ? Pads[0] : -1;
 
     /// <summary>A short description of what drives this player, for the menu's join strip.</summary>
@@ -181,7 +181,7 @@ public sealed class MenuInput
         }
     }
 
-    /// <summary>Whether an unbound pad is pressing Start — the join gesture. Static because the
+    /// <summary>Whether an unbound pad is pressing Start, the join gesture. Static because the
     /// pad has no player (and therefore no <see cref="MenuInput"/>) until it joins; the caller
     /// edge-detects per device. Gated like every other pad read, so nobody joins while the
     /// window is in the background.</summary>
@@ -419,7 +419,7 @@ public sealed class MenuInput
     }
 
     // The first of this player's pads currently producing menu input (excluding Start).
-    // Phantom devices never register — they read idle — so a pad found here is demonstrably a
+    // Phantom devices never register, they read idle, so a pad found here is demonstrably a
     // real one somebody is holding.
     private int ScanActivePad()
     {

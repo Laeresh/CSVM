@@ -7,7 +7,7 @@ namespace CSVM.Mech3.Anim;
 
 /// <summary>Plays a compiled SI script onto a node: per-frame cubics for translation and
 /// the half-angle quaternion composition for rotation (docs/formats/anim-definitions.md).
-/// Loops when the owning sequence loops — the runner restarts it.</summary>
+/// Loops when the owning sequence loops, the runner restarts it.</summary>
 internal sealed class ScriptPlayback : IAnimMotion
 {
     // A scripted node's smoothness is a per-step question, and --debug-anim's once-a-second line

@@ -10,14 +10,14 @@ namespace CSVM.Flight;
 /// The original's cockpit gauges as a screen-space HUD: altimeter (two needles + blinking LOW
 /// ALT), speedometer (needle + blinking STALL), and the per-plane damage display (part fills +
 /// border bars, blinking after a hit). Everything is rebuilt from each plane's own 'gauges'
-/// subtree in planes.zbd — see docs/formats/hud.md for the dial geometry, texture cycles and
+/// subtree in planes.zbd, see docs/formats/hud.md for the dial geometry, texture cycles and
 /// scales. Only screen placement and the value→angle scales are ours, measured in
 /// OriginalScreenshots/HUD.png like CompassTape.
 /// </summary>
 public sealed partial class GaugeCluster : Control
 {
     // Belt indicator colour by remaining fraction: the low tier lights at or below a quarter full.
-    // Decoded (0x006034f4, compared at 0x004547de) — one state function serves BOTH gauges, so this
+    // Decoded (0x006034f4, compared at 0x004547de), one state function serves BOTH gauges, so this
     // is not gun-only. ⚠ Was a 0.15 TUNE, and the gun-only reading came with it.
     public const float IndicatorLowFrac = 0.25f;
     // Weapon-gauge arrow sweep rate, shared by both gauges: 0.8 revolutions per second, constant,
@@ -40,9 +40,9 @@ public sealed partial class GaugeCluster : Control
 
     // ---- state fed by the FlightController ----
     public float AltitudeFt;               // above sea level (the dial is in feet)
-    public float AglMeters = float.MaxValue; // above ground (physics ray) — LOW ALT
+    public float AglMeters = float.MaxValue; // above ground (physics ray), LOW ALT
     public float SpeedMph;
-    /// <summary>STALL lamp gate — the flight model's stall WARNING (under 2.35 g of available
+    /// <summary>STALL lamp gate, the flight model's stall WARNING (under 2.35 g of available
     /// lift), which lights well before the nose-drop the model flies at 1 g.</summary>
     public bool StallWarning;
     /// <summary>Available lift as a multiple of weight (FlightModel.AvailableLoadFactor): the
@@ -65,7 +65,7 @@ public sealed partial class GaugeCluster : Control
     public float NitroChargeFrac = 1f;
 
     /// <summary>The artificial horizon's decoded pitch and roll (radians), from
-    /// <see cref="HorizonAngles"/> off the aircraft's own attitude — never the camera's. Computed
+    /// <see cref="HorizonAngles"/> off the aircraft's own attitude, never the camera's. Computed
     /// here so the 3D panel (<see cref="CockpitGauges"/>) and any future flat draw read the same
     /// two numbers. Zero at spawn, matching an identity attitude.</summary>
     public float HorizonPitchRad;
@@ -81,7 +81,7 @@ public sealed partial class GaugeCluster : Control
 
     // ---- tuning ----
     // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
-    // loadout's pylon count (user-confirmed against the original; markers.md) —
+    // loadout's pylon count (user-confirmed against the original; markers.md),
     // never derive it from the bound Hardpoints count. Indicator i is pylon i+1: the belt
     // light and arrow-target math both index by PYLON NUMBER, not by position in a compacted list.
     internal const int HardpointRingSize = 8;
@@ -103,7 +103,7 @@ public sealed partial class GaugeCluster : Control
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
     private const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     // Four color states (user-confirmed in the original: green/yellow/orange/red, the
-    // full cockpit.gw cycle) over the data's three *_damage_* injure thresholds — each
+    // full cockpit.gw cycle) over the data's three *_damage_* injure thresholds, each
     // threshold steps to the NEXT color: green above the "green" anim's 0.72, yellow
     // ≤ 0.72, orange ≤ 0.46, red ≤ 0.20 (red on a still-flying plane matches the
     // reference shot). Defaults when a part carries no such anims:
@@ -123,7 +123,7 @@ public sealed partial class GaugeCluster : Control
     private const float GunCenterFromRight = 420f, GunCenterY = 918f, GunRadius = 85f;
     // The nitro dial: the bottom of the right column, one dial-pitch below the speedometer and the
     // same radius, so it mirrors the damage dial's row on the left (user-confirmed against the
-    // original). ⚠ Not above the GUNS dial — the column fills downward from ROCKETS/GUNS.
+    // original). ⚠ Not above the GUNS dial, the column fills downward from ROCKETS/GUNS.
     private const float NitroCenterFromRight = 420f, NitroCenterY = 1299f, NitroRadius = 85f;
 
     private static readonly Vector2 AltCenter = new(425.5f, 1108.5f);
@@ -158,7 +158,7 @@ public sealed partial class GaugeCluster : Control
     private readonly List<GaugePoly> _nitroWarn = new();  // no *_on child ships; kept for the shared extractor
     // Glyph atlas for the digit/type cycles: char → texture (zero..nine, A..Z; space/unknown = null).
     private readonly Dictionary<char, Texture2D?> _glyphs = new();
-    // Belt-indicator colour variants (0 green / 1 yellow / 2 red) — the hilite bar and the light.
+    // Belt-indicator colour variants (0 green / 1 yellow / 2 red), the hilite bar and the light.
     private readonly Texture2D?[] _indHilite = new Texture2D?[3];
     private readonly Texture2D?[] _indLight = new Texture2D?[3];
     // DrawGaugePoly's per-vertex scratch, one pair per vertex count the face uses. DrawPolygon
@@ -173,7 +173,7 @@ public sealed partial class GaugeCluster : Control
     private NitroNeedle _nitroBoostNeedle = new(NitroBoostNeedleRate);
     private NitroNeedle _nitroChargeNeedle = new(NitroChargeNeedleRate);
     private double _time;
-    // Live sweep state of each weapon-gauge pointer and the STALL lamp's blink — plain structs
+    // Live sweep state of each weapon-gauge pointer and the STALL lamp's blink, plain structs
     // so CSVM.Tests can drive them without a live Control.
     private ArrowSweep _gunArrow = new();
     private ArrowSweep _missileArrow = new();
@@ -290,14 +290,14 @@ public sealed partial class GaugeCluster : Control
 
     // The colour of belt indicator i, including positions past the end of the loadout: an unfitted
     // slot reads RED, the same as a fitted-but-spent one. In the original every belt light on the
-    // dial is lit — a plane with fewer guns/pylons than the dial has positions shows the surplus in
+    // dial is lit, a plane with fewer guns/pylons than the dial has positions shows the surplus in
     // red, it does not leave them dark. Public so CSVM.Tests can assert that directly.
     public static int SlotIndicatorColor(IReadOnlyList<float> slots, int i, bool isGun) =>
         i >= slots.Count ? 2
         : isGun ? GunIndicatorColor(slots[i]) : HardpointIndicatorColor(slots[i]);
 
     // Damage zones: green > yellow > orange > red over the zone's combined armor+health fraction,
-    // thresholds mined per-part from the data's own injure_anims — see docs/formats/hud.md
+    // thresholds mined per-part from the data's own injure_anims, see docs/formats/hud.md
     // "Thresholds". ⚠ Do not re-shape this as a per-pool ring split; that reading is refuted.
     // Crosses to the next colour at or below threshold. Public for CSVM.Tests.
     public static int DamageZoneColor(float frac, float yellowAt, float orangeAt, float redAt) =>
@@ -311,7 +311,7 @@ public sealed partial class GaugeCluster : Control
     /// simDt toward target, routed the shortest way round. NaN snaps instead of sweeping
     /// in from an undefined pose (gauge just appeared, or a respawn cleared it via Reset). Public
     /// so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep directly.
-    /// ⚠ Only the arrow sweeps — the readout digits/type name still snap on the sweep's first
+    /// ⚠ Only the arrow sweeps, the readout digits/type name still snap on the sweep's first
     /// frame. Do not tween those too.</summary>
     public static float TweenArrow(float current, float target, float simDt)
     {
@@ -437,7 +437,7 @@ public sealed partial class GaugeCluster : Control
     }
 
     /// <summary>A part took damage: its fill + border blink for the next few seconds
-    /// (the original blinks even inside the green range — user-verified).</summary>
+    /// (the original blinks even inside the green range, user-verified).</summary>
     public void OnPartDamage(string partName)
     {
         foreach (var z in _zones)
@@ -517,7 +517,7 @@ public sealed partial class GaugeCluster : Control
 
         // The two weapon gauges: the ROCKETS dial above the altimeter, the GUNS dial above the
         // speedometer (mirrored from the right edge). Each renders only when the FlightController is
-        // feeding it — hidden in the static viewer, which carries no loadout.
+        // feeding it, hidden in the static viewer, which carries no loadout.
         if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
         {
             var c = new Vector2(left + (MissileCenter.X * s), FromBottom(MissileCenter.Y, s, bottom));
@@ -650,7 +650,7 @@ public sealed partial class GaugeCluster : Control
 
     // An altimeter/speedometer node: face polys from any unnamed child mesh
     // (g784 …), warning overlays from *_on children, needles by exact child name.
-    // ⚠ The nitro dial is the one instrument NOT authored in normalized dial coords — never draw
+    // ⚠ The nitro dial is the one instrument NOT authored in normalized dial coords, never draw
     // it under the shared radius-1 rule. Its bezel centre and radius are read from the tree here
     // instead of assumed (docs/formats/hud.md, "Cockpit gauges").
     private void ExtractNitroDial(GameZ gz, TextureArchive textures, GameZNode dial)
@@ -715,7 +715,7 @@ public sealed partial class GaugeCluster : Control
 
     // The damage dial: each *damage child is one zone (border bar + hatch fill); everything else
     // is the silhouette face. Thresholds come from the matching part's injure anims.
-    // ⚠ Face parenting differs per plane — see docs/formats/hud.md. Any non-zone child counts as
+    // ⚠ Face parenting differs per plane, see docs/formats/hud.md. Any non-zone child counts as
     // face, the same rule ExtractInstrument uses for the other two dials.
     private void ExtractDamageDial(GameZ gz, TextureArchive textures, GameZNode dial,
         IReadOnlyList<DestroyablePart> parts)
@@ -763,7 +763,7 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    // A weapon gauge (gungauge/missilegauge): identical layout on all 11 planes — see
+    // A weapon gauge (gungauge/missilegauge): identical layout on all 11 planes, see
     // docs/formats/hud.md. Named children are the ammo/type readouts, belt lights and pointer;
     // anything else is dial face, the same rule the damage dial uses. Extracts geometry and belt
     // order only; the glyph/colour cycles are driven live by FlightController via WeaponGauge.
@@ -811,7 +811,7 @@ public sealed partial class GaugeCluster : Control
         {
             geom.Indicators.Add(byIndex.TryGetValue(i, out var polys) ? polys : new List<GaugePoly>());
         }
-        geom.Positions = geom.Indicators.Count; // 4 (gun) or 8 (missile) — the arrow's step angle
+        geom.Positions = geom.Indicators.Count; // 4 (gun) or 8 (missile), the arrow's step angle
         geom.Face.Sort((a, b) => a.Priority.CompareTo(b.Priority));
     }
 
@@ -842,9 +842,9 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    // Draws one weapon gauge: the labelled face, every belt light — guns step
+    // Draws one weapon gauge: the labelled face, every belt light, guns step
     // green/yellow/red by remaining fraction, hardpoints step green/red with no intermediate
-    // colour, and a position this airframe does not fit at all reads red like a spent one — the
+    // colour, and a position this airframe does not fit at all reads red like a spent one, the
     // right-aligned digit count, the left-aligned type name, then the pointer at its animated
     // sweep angle (tweened toward the selected belt slot in _Process; the readout
     // above still snaps).
@@ -869,7 +869,7 @@ public sealed partial class GaugeCluster : Control
     }
 
     // Draws each fixed glyph quad with the atlas texture for its character; a space or an
-    // unrepresented char leaves that cell blank (the atlas has no space glyph — that IS the space).
+    // unrepresented char leaves that cell blank (the atlas has no space glyph, that IS the space).
     private void DrawGlyphs(List<GaugePoly> quads, string text, Vector2 center, float radius)
     {
         for (int i = 0; i < quads.Count && i < text.Length; i++)
@@ -919,7 +919,7 @@ public sealed partial class GaugeCluster : Control
     }
 
     /// <summary>One weapon-gauge arrow's live sweep angle (degrees, same convention as
-    /// <see cref="DrawGaugePoly"/>'s rotDeg). <see cref="Angle"/> starts NaN — "not yet drawn" — so
+    /// <see cref="DrawGaugePoly"/>'s rotDeg). <see cref="Angle"/> starts NaN, "not yet drawn", so
     /// the first <see cref="Advance"/> snaps to target instead of sweeping in from zero. A plain
     /// struct outside GaugeCluster's private fields so CSVM.Tests
     /// (<c>GaugeArrowTweenTests</c>) can drive it without constructing a live Control.</summary>
@@ -959,13 +959,13 @@ public sealed partial class GaugeCluster : Control
     }
 
     /// <summary>The STALL lamp's blink: binary brightness, duty 0.50, integrated on
-    /// its own sim clock rather than read off a wall clock — a rate change mid-dwell shortens the
+    /// its own sim clock rather than read off a wall clock, a rate change mid-dwell shortens the
     /// remainder rather than jumping the lamp. A plain struct outside GaugeCluster's private fields
     /// so CSVM.Tests (<c>StallWarningTests</c>) can drive it without
     /// constructing a live Control.</summary>
     public struct StallLamp
     {
-        // The fraction of the current half-period elapsed — see the class remark on why this is
+        // The fraction of the current half-period elapsed, see the class remark on why this is
         // integrated rather than PosMod'd over accumulated time.
         private double _phase;
         private float _dwellS;   // sim time the current dwell has run, for the toggle log
@@ -977,7 +977,7 @@ public sealed partial class GaugeCluster : Control
         /// <summary>Whether the lit STALL overlay should draw this frame.</summary>
         public bool Lit { get; private set; }
 
-        /// <summary>(Re)arms the lamp lit and clears the blink phase — construction and a respawn
+        /// <summary>(Re)arms the lamp lit and clears the blink phase, construction and a respawn
         /// (<see cref="GaugeCluster.Reset"/>) both start here, so a respawn snaps.</summary>
         public void Set()
         {
@@ -989,14 +989,14 @@ public sealed partial class GaugeCluster : Control
         }
 
         /// <summary>Integrates one sim step. The lamp lights the instant <paramref name="warning"/>
-        /// does and its phase restarts when it clears — the original shows no hysteresis at the
+        /// does and its phase restarts when it clears, the original shows no hysteresis at the
         /// threshold. <paramref name="nAvail"/> is the available load factor (only read while
         /// warned); <paramref name="mph"/> is for the crossing log only.</summary>
         public void Advance(bool warning, float nAvail, float mph, float simDt)
         {
             if (warning != _warnPrev)
             {
-                // The threshold crossing itself, with the load factor it happened at — the other
+                // The threshold crossing itself, with the load factor it happened at, the other
                 // half of what a scripted run needs to check the cue against.
                 Log.Debug("flight", $"stall warning {(warning ? "on" : "off")} n_avail={nAvail:0.000} mph={mph:0.0}");
                 _warnPrev = warning;
@@ -1015,7 +1015,7 @@ public sealed partial class GaugeCluster : Control
             {
                 _phase -= 1.0;
                 _lampOn = !_lampOn;
-                // The dwell that just ended, in sim ms — the one number the blink law is expressed
+                // The dwell that just ended, in sim ms, the one number the blink law is expressed
                 // in, so a run can be checked without eyes on the lamp. Carries its own times as
                 // values: the log has no timestamp column by design.
                 Log.Debug("flight", $"stall lamp {(_lampOn ? "lit" : "dark")} dwell_ms={_dwellS * 1000f:0} n_avail={nAvail:0.000} half_ms={StallBlinkHalfPeriodS(nAvail) * 1000f:0}");
@@ -1089,7 +1089,7 @@ public sealed partial class GaugeCluster : Control
     /// <c>ggindicator</c>/<c>mgindicator</c> i (green &gt; low &gt; empty); an indicator past the end
     /// of <see cref="Slots"/> is a position the airframe does not fit and reads red. The arrow points at
     /// <see cref="Selected"/>, <see cref="Count"/> fills the 4-digit readout and <see cref="Type"/>
-    /// the 6-char name. Left null (the default) hides that gauge — the static viewer has no loadout.</summary>
+    /// the 6-char name. Left null (the default) hides that gauge, the static viewer has no loadout.</summary>
     public sealed class WeaponGauge
     {
         public int Count;                                       // rounds shown in 4char_ammo (0..9999)

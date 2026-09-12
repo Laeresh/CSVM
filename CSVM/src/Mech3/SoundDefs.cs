@@ -41,7 +41,7 @@ public static class SoundDefs
                     for (int j = 2; j < entry.Count; j++)
                     {
                         if (entry[j] is not string flag)
-                            continue; // value list — consumed by the key before it
+                            continue; // value list, consumed by the key before it
                         List<object?>? Val() => j + 1 < entry.Count ? entry[j + 1] as List<object?> : null;
                         switch (flag)
                         {
@@ -174,14 +174,14 @@ public sealed class SoundDef
 /// <summary>
 /// One <c>SOUND_GROUPS</c> entry: a set of member sounds an event picks one of at random when it
 /// names the group instead of a plain <c>snd_*</c> definition. The combat/destruction one-shots go
-/// through these — <c>air_mixed_exp_sg</c>, <c>ground_mixed_exp_sg</c>, <c>plane_destroy_sg</c>,
+/// through these, <c>air_mixed_exp_sg</c>, <c>ground_mixed_exp_sg</c>, <c>plane_destroy_sg</c>,
 /// <c>bullet_hit_sg</c>, <c>bullet_warning_sg</c>, <c>window_hit_sg</c>.
 ///
 /// <para><c>DYNAMIC_WEIGHTS</c> groups carry a recency factor (0.5 everywhere it appears): the
 /// member returned last has its weight scaled by it on the next pick, so the same clip is less
-/// likely to repeat back-to-back — that is what the bare <c>0.5</c> after the token decodes to.
+/// likely to repeat back-to-back, that is what the bare <c>0.5</c> after the token decodes to.
 /// Explicit-<c>WEIGHT</c> groups (<c>snd_plane_die</c>/<c>snd_plane_dmg</c>, whose <c>snd_nothing</c>
-/// carries 0.7 — a 70% chance of silence) give each member its own weight and no recency decay.</para>
+/// carries 0.7, a 70% chance of silence) give each member its own weight and no recency decay.</para>
 /// </summary>
 public sealed class SoundGroup
 {
@@ -232,7 +232,7 @@ public sealed class SoundGroup
     }
 
     /// <summary>Forgets which member was picked last. The recency memory lives outside the RNG, so
-    /// re-seeding a runtime alone would not replay a pick sequence — whoever re-seeds calls this
+    /// re-seeding a runtime alone would not replay a pick sequence, whoever re-seeds calls this
     /// too (<see cref="AnimRuntime.Reseed"/> via <c>WorldSounds</c>).</summary>
     public void ResetRecency() => _last = -1;
 }

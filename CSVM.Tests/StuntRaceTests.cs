@@ -48,7 +48,7 @@ public class StuntRaceTests
             Assert.Equal(1, raceCompletedCount); // fired exactly once, on the last finisher
 
             // The seam this item exists to prove: the finish line reached the installed sink,
-            // once per racer, plus the one race-complete line — not the real GD.Print.
+            // once per racer, plus the one race-complete line, not the real GD.Print.
             Assert.Equal(4, lines.Count);
             Assert.Contains(lines, l => l.Contains(a.Tag) && l.Contains("finished"));
             Assert.Contains(lines, l => l.Contains(b.Tag) && l.Contains("finished"));
@@ -76,7 +76,7 @@ public class StuntRaceTests
         Assert.Equal(0f, b.FinishTime);
         Assert.Equal(0, race.FinishedCount);
         Assert.False(race.AllFinished);
-        // Restart() runs the real, public StuntMission.Reset() — asserting through it is the
+        // Restart() runs the real, public StuntMission.Reset(), asserting through it is the
         // point: a rematch must not leave the previous run's clock or completions behind.
         Assert.False(a.Mission.AllComplete);
         Assert.Equal(0f, a.Mission.Elapsed);
@@ -90,7 +90,7 @@ public class StuntRaceTests
         var winner = race.Add(0, FakeMission(3), "Bloodhawk");
         var ahead = race.Add(1, FakeMission(3), "Kestrel");      // 3 zones cleared, still flying
         var tiedSlower = race.Add(2, FakeMission(3), "Hoplite"); // 2 zones, slower clock
-        var tiedFaster = race.Add(3, FakeMission(3), "Autogyro"); // 2 zones, faster clock — the tie
+        var tiedFaster = race.Add(3, FakeMission(3), "Autogyro"); // 2 zones, faster clock, the tie
 
         FinishAt(winner.Mission, 99f);
         SetProgress(ahead.Mission, completedCount: 3, elapsed: 40f);

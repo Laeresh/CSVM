@@ -35,7 +35,7 @@ public sealed class WarningShotCue
         _interval = interval;
     }
 
-    /// <summary>The live accumulator, 0..max — seconds of fire taken, less what quiet has drained.
+    /// <summary>The live accumulator, 0..max, seconds of fire taken, less what quiet has drained.
     /// Nothing in the original reads it beyond the saturation test; it is exposed for the log
     /// breadcrumb and the tests.</summary>
     public float Intensity => _intensity;

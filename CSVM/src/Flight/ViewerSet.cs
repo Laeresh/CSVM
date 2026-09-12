@@ -15,20 +15,20 @@ public sealed class ViewerSet
 {
     private readonly List<Camera3D> _cameras = new();
 
-    /// <summary>The raw bound cameras, unfiltered — for a consumer (the tracer floor) that needs
+    /// <summary>The raw bound cameras, unfiltered, for a consumer (the tracer floor) that needs
     /// each viewer's own FOV and pane height alongside its position, not just the position, and
     /// that already skips a freed instance itself while building its per-viewer sample.</summary>
     public IReadOnlyList<Camera3D> Cameras => _cameras;
 
     /// <summary>Replaces the bound set. Called once per rig build (session start; splitscreen panes
-    /// are not rebuilt on respawn) — never incrementally.</summary>
+    /// are not rebuilt on respawn), never incrementally.</summary>
     public void Bind(IEnumerable<Camera3D> cameras)
     {
         _cameras.Clear();
         _cameras.AddRange(cameras);
     }
 
-    /// <summary>Every live viewer's position only — B13's nearest-rig query, where forward is
+    /// <summary>Every live viewer's position only, B13's nearest-rig query, where forward is
     /// irrelevant (a world light is budgeted by range, not by which way a camera is looking).</summary>
     public List<Vector3> Positions()
     {
@@ -42,7 +42,7 @@ public sealed class ViewerSet
         return result;
     }
 
-    /// <summary>Every live viewer's position and forward — B11's per-particle view-space depth
+    /// <summary>Every live viewer's position and forward, B11's per-particle view-space depth
     /// comparison needs both; a Euclidean nearest can pick the wrong pane for a fade that is
     /// authored along the camera's own forward axis, not straight-line range.</summary>
     public List<ViewerPose> Poses()
@@ -52,7 +52,7 @@ public sealed class ViewerSet
         return result;
     }
 
-    /// <summary>The same poses into a caller-owned buffer, cleared first — for the one consumer
+    /// <summary>The same poses into a caller-owned buffer, cleared first, for the one consumer
     /// that reads them EVERY frame (<c>EffectAmbience</c>), where a fresh list per frame is a
     /// per-frame allocation for a set that changes only when the rigs are rebuilt.</summary>
     public void Poses(List<ViewerPose> into)
@@ -67,6 +67,6 @@ public sealed class ViewerSet
     }
 
     /// <summary>One viewer's world position and forward direction (`-Z`, the engine's camera-local
-    /// forward) — B11's view-space depth query.</summary>
+    /// forward), B11's view-space depth query.</summary>
     public readonly record struct ViewerPose(Vector3 Position, Vector3 Forward);
 }

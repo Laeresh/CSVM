@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 /// zone, the whole-vehicle pair recomputed from the parts after every part spend, and the
 /// unabsorbed leftover draining the whole pair directly through the wrapper loop. Values are
 /// the stock Bloodhawk's (20 hp / 20 armor per zone) and the weapons data's 30-calibre ammo
-/// matrix — AP `wep_32` 4.5 armor / 1.5 health, dum-dum `wep_31` 1.5 / 4.5.</summary>
+/// matrix, AP `wep_32` 4.5 armor / 1.5 health, dum-dum `wep_31` 1.5 / 4.5.</summary>
 [Trait("Tier", "Quick")]
 public class PlaneDamageTests
 {
@@ -175,7 +175,7 @@ public class PlaneDamageTests
         Assert.True(damage.IsDestroyed);
     }
 
-    /// <summary>Death at whole ≤ 0 with three zones still healthy — the decoded kill needs the
+    /// <summary>Death at whole ≤ 0 with three zones still healthy, the decoded kill needs the
     /// whole pool empty, not the zones.</summary>
     [Fact]
     public void TheOverflowKillLeavesThreeZonesHealthyOnAFourZoneAirframe()
@@ -217,7 +217,7 @@ public class PlaneDamageTests
         Assert.Equal(40f, damage.WholeHealth);
     }
 
-    /// <summary>The resolver rule (FUN_004b3950): a dead zone is never struck — the hit
+    /// <summary>The resolver rule (FUN_004b3950): a dead zone is never struck, the hit
     /// redirects to a surviving zone, so a dead zone absorbs nothing and soaks nothing.</summary>
     [Fact]
     public void AHitOnADeadZoneRedirectsToASurvivor()
@@ -342,7 +342,7 @@ public class PlaneDamageTests
     }
 
     // Kills a zone with exact spends (armor stripped, then its health spent with no
-    // armor damage on the bare zone) so no leftover reaches the whole pair — the suites'
+    // armor damage on the bare zone) so no leftover reaches the whole pair, the suites'
     // scaffolding pattern.
     private static void KillZoneExactly(PlaneDamage damage, string name)
     {

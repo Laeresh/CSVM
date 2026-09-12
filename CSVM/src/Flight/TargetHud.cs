@@ -21,12 +21,12 @@ namespace CSVM.Flight;
 public sealed partial class TargetHud : Control
 {
     /// <summary>Extra metres of authored gun range that keep the brackets on once they are on.
-    /// <b>TUNE, and ours rather than the original's</b> — the original re-runs its gate every
+    /// <b>TUNE, and ours rather than the original's</b>, the original re-runs its gate every
     /// frame with no memory, which strobes the box on a target sitting exactly at the reach
     /// boundary.</summary>
     public const float BracketHysteresis = 50f;
 
-    /// <summary>Which pane this draws in (0-based) — the identity <see cref="OwnTeam"/> falls
+    /// <summary>Which pane this draws in (0-based), the identity <see cref="OwnTeam"/> falls
     /// back to with no aircraft bound.</summary>
     public int PlayerIndex;
 
@@ -49,7 +49,7 @@ public sealed partial class TargetHud : Control
     /// aircraft of its own (a spectator) should see.</summary>
     public FlightController? Own;
 
-    // 1440p reference metrics (scaled by HudMetrics — matches VersusHud's calibration).
+    // 1440p reference metrics (scaled by HudMetrics, matches VersusHud's calibration).
     private const int RefMarkerFont = 14;
     private const float RefArrowLen = 18f;
     private const float RefArrowHalf = 8f;
@@ -96,11 +96,11 @@ public sealed partial class TargetHud : Control
     private string _hostileTag = "AI";
     private bool _bracketed;   // last frame's gate answer, for the hysteresis
 
-    /// <summary>This pane's own world pose, fed every frame by FlightController — the tracked
+    /// <summary>This pane's own world pose, fed every frame by FlightController, the tracked
     /// hostile's clock bearing reads off it, exactly like VersusHud's PlanePos/HeadingDeg.</summary>
     public Vector3 PlanePos { get; set; }
 
-    /// <summary>This pane's own nose heading, 0 = north (−Z) — see <see cref="PlanePos"/>.</summary>
+    /// <summary>This pane's own nose heading, 0 = north (−Z), see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
 
     /// <summary>This pane's tracked AI hostile, or null with none in the pool. Read by the
@@ -111,7 +111,7 @@ public sealed partial class TargetHud : Control
     /// <see cref="TargetSelection"/> bound (a spectator, a suite rig). The shipped marker.</summary>
     public TargetRef? Selected => Own?.Targeting?.Current;
 
-    /// <summary>Whether the brackets are currently drawn around <see cref="Selected"/> — the gun's
+    /// <summary>Whether the brackets are currently drawn around <see cref="Selected"/>, the gun's
     /// reach gate plus its hysteresis, re-answered every <see cref="_Process"/>. Read by the
     /// suite.</summary>
     public bool Bracketed => _bracketed;
@@ -125,7 +125,7 @@ public sealed partial class TargetHud : Control
 
     /// <summary>Binds this pane's own camera (the marker projects through it) and, when
     /// <paramref name="pool"/> is non-null, the hostile tracker. Add to the HUD canvas;
-    /// <see cref="PlanePos"/>/<see cref="HeadingDeg"/> every frame — nothing else needs feeding.
+    /// <see cref="PlanePos"/>/<see cref="HeadingDeg"/> every frame, nothing else needs feeding.
     /// One per human pane, in EVERY flight session; it draws nothing until a hostile
     /// exists, so an AI-free session's HUD output is unchanged.</summary>
     public static TargetHud Build(int playerIndex, Camera3D camera, ProjectilePool pool)
@@ -283,7 +283,7 @@ public sealed partial class TargetHud : Control
         return reach <= range;
     }
 
-    /// <summary>The marker's label lines, top to bottom — the original's three text elements
+    /// <summary>The marker's label lines, top to bottom, the original's three text elements
     /// (<c>FUN_004579e0</c>): the category line, the name, and <paramref name="bearing"/> (null on
     /// screen, since the clock line is the off-screen case only).
     /// ⚠ <paramref name="keepSlots"/> holds an empty category SLOT under a box: the original's lines
@@ -323,7 +323,7 @@ public sealed partial class TargetHud : Control
     /// (<see cref="FlightController.GunReachesTarget"/>), widened by
     /// <see cref="BracketHysteresis"/> while the brackets are already on. Called every
     /// <see cref="_Process"/>; public so the suite drives it without pumping frames. Kept out of
-    /// <see cref="_Draw"/> deliberately — a hysteresis that advanced per repaint would depend on how
+    /// <see cref="_Draw"/> deliberately, a hysteresis that advanced per repaint would depend on how
     /// often the pane redraws.</summary>
     public void UpdateBrackets()
     {
@@ -458,7 +458,7 @@ public sealed partial class TargetHud : Control
             return true;
         }
 
-        // Off screen: the edge arrow, and the label block stacked off its tail — DrawOpponent's own
+        // Off screen: the edge arrow, and the label block stacked off its tail, DrawOpponent's own
         // geometry, with the tag broken onto its own lines the way HUD.png shows the original's.
         DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s, color);
         LabelLines(target, $"{EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock",
@@ -473,7 +473,7 @@ public sealed partial class TargetHud : Control
 
     /// <summary>The bracket box: six line sprites forming a <c>[ ]</c> pair around the projected
     /// point, 20 x 16 reference pixels with 4-pixel arms (<c>0x00607a0c</c>/<c>0x00607a14</c>/
-    /// <c>0x00607a10</c>). Fixed size — scaled for resolution by <paramref name="s"/> and by nothing
+    /// <c>0x00607a10</c>). Fixed size, scaled for resolution by <paramref name="s"/> and by nothing
     /// else, least of all by range.</summary>
     private void DrawBrackets(Vector2 at, Color color, float s)
     {
@@ -517,7 +517,7 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>One tracked hostile's marker: on screen, its tag floats just above the projected
-    /// point; off screen (or behind), an edge arrow + "N o'clock" bearing —
+    /// point; off screen (or behind), an edge arrow + "N o'clock" bearing,
     /// <see cref="EdgeMarker"/>'s placement, plus the <paramref name="stagger"/> step
     /// <c>--debug-markers</c> needs when several planes share one bearing.</summary>
     private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize,

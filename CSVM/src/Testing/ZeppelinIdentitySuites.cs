@@ -9,7 +9,7 @@ namespace CSVM.Testing;
 
 /// <summary>BL-476's second half: a zeppelin's zones and its guns carried no owning identity, so a
 /// record's authored team stopped at the damage pools and a <c>rating_biases</c> pattern naming the
-/// airship matched nothing. Both halves are driven off shipped records here — C1/MP3's one
+/// airship matched nothing. Both halves are driven off shipped records here, C1/MP3's one
 /// <c>ally</c> hull for the gun fan, C5/M03's <c>cargozep*</c> exclusion for the bias.</summary>
 internal static class ZeppelinIdentitySuites
 {
@@ -154,7 +154,7 @@ internal static class ZeppelinIdentitySuites
     }
 
     // The gun half, over C1/MP3's built world: the record team reaches the emplacements standing on
-    // the hull, and only those. The unauthored sibling is the control — its guns must not move.
+    // the hull, and only those. The unauthored sibling is the control, its guns must not move.
     private static void CheckTurretFan(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "MP3");

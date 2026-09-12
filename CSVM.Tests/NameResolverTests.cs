@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The off-engine charter for <c>src/Mech3/Anim/NameResolver.cs</c>: the wildcard matcher, the
 /// memoized <c>FindAll</c>, the three-tier scope chain, the symbol-table authority and the
-/// anchoring rules, asserted against a plain token node type — no Godot, no chapter world.
+/// anchoring rules, asserted against a plain token node type, no Godot, no chapter world.
 /// ⚠ <see cref="TestNode"/> deliberately has no overridden <c>Equals</c>, so a generic resolver
 /// cannot be shown to inherit a node type's own equality. Fixture shapes mirror the cases named
 /// in the resolver's own doc comments; the values are invented.
@@ -93,7 +93,7 @@ public class NameResolverTests
     public void ScopeRestrictsToItsOwnSubtreeWhenTwoTemplatesShareAChildName()
     {
         // he_trails/ap_trails: two staged effect templates whose fly_trail1 children share a name
-        // (docs/architecture.md's AnimRuntime entry) — scoping must tell the copies apart.
+        // (docs/architecture.md's AnimRuntime entry), scoping must tell the copies apart.
         var heTrails = Node("he_trails");
         var heTrail1 = Node("fly_trail1");
         var apTrails = Node("ap_trails");
@@ -241,7 +241,7 @@ public class NameResolverTests
     public void DeadAnchorFallsToTheLocalOnlyGlobalResolve()
     {
         // A dead anchor (liveness predicate false) cannot scope anything: the resolve drops to
-        // the plain whole-index walk — which also ignores LOCAL_NODES_ONLY, exactly like the
+        // the plain whole-index walk, which also ignores LOCAL_NODES_ONLY, exactly like the
         // null-anchor path it shares.
         var anchor = Node("he_ring");
         var mine = Node("fly_trail1");
@@ -254,7 +254,7 @@ public class NameResolverTests
         var found = resolver.ResolveScoped(
             new List<string> { "fly_trail1" }, Def("he_trails", localNodesOnly: true), anchor);
 
-        Assert.Equal(2, found.Count); // the anchor no longer narrows — both copies, index order
+        Assert.Equal(2, found.Count); // the anchor no longer narrows, both copies, index order
         Assert.Contains(mine, found);
         Assert.Contains(stray, found);
     }
@@ -468,7 +468,7 @@ public class NameResolverTests
     public void MultiTargetDefAnchorsThroughItsOwnPathsOnly()
     {
         // The zeppelin sub-part shape: piratezep's rtur*/ltur* turrets. The path scoping is
-        // what keeps the def off ANOTHER zeppelin's same-named turrets — a bare "ltur*" name
+        // what keeps the def off ANOTHER zeppelin's same-named turrets, a bare "ltur*" name
         // match would grab mp1zep's too.
         var piratezep = Node("piratezep");
         var rtur1 = Node("rtur1");

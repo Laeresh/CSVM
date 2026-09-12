@@ -6,7 +6,7 @@ namespace CSVM.Flight;
 
 /// <summary>The kinematic zeppelin motion law (M4 F17): flies a <see cref="ZeppelinDef"/> along
 /// its net through the shared <see cref="AiNetFollower"/>, forward-only along the facing, under
-/// the record's own yaw/pitch/speed limits (docs/architecture.md). Pure state — no Node, no
+/// the record's own yaw/pitch/speed limits (docs/architecture.md). Pure state, no Node, no
 /// flight model; the consumer writes <see cref="Position"/>/<see cref="YawRad"/>/
 /// <see cref="PitchRad"/> onto the world node. <see cref="AliveEngines"/> is the seam F18's damage
 /// aggregator drives, re-scaling the live limits through <see cref="EngineFactor"/>.</summary>
@@ -39,7 +39,7 @@ public sealed class ZeppelinMotion
         Follower = follower;
         Position = def.Position;
         YawRad = Mathf.DegToRad(def.YawDeg);
-        // Verbatim: the original's own initial-pitch clamp never fires (unit bug — it compares
+        // Verbatim: the original's own initial-pitch clamp never fires (unit bug, it compares
         // the already-radian pitch against still-degree bounds), and that same degree-valued band
         // bounds the drawn pose only, so no step below clamps the pitch (mission-entities.md).
         PitchRad = Mathf.DegToRad(def.PitchDeg);
@@ -81,7 +81,7 @@ public sealed class ZeppelinMotion
     public float EffectiveMaxSpeed => EngineFactor(AliveEngines, TotalEngines) * Def.MaxSpeed;
 
     /// <summary>Acceleration under the current engine loss:
-    /// <c>(0.8·sqrt(alive/total) + 0.2) · max_accel</c> — a 20 % floor while speed goes to
+    /// <c>(0.8·sqrt(alive/total) + 0.2) · max_accel</c>, a 20 % floor while speed goes to
     /// zero at total loss.</summary>
     public float EffectiveMaxAccel =>
         ((0.8f * EngineFactor(AliveEngines, TotalEngines)) + 0.2f) * Def.MaxAccel;
@@ -93,7 +93,7 @@ public sealed class ZeppelinMotion
         -Mathf.Cos(YawRad) * Mathf.Cos(PitchRad));
 
     /// <summary>The decoded engine-loss curve: <c>f = sqrt(alive/total)</c>. NOT the design
-    /// document's three 10/40/50 bands — those are design-era and refuted
+    /// document's three 10/40/50 bands, those are design-era and refuted
     /// (docs/formats/mission-entities.md "Engine loss").</summary>
     public static float EngineFactor(int alive, int total)
     {

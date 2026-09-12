@@ -5,7 +5,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Where a gunner's tick stopped this frame — the fire gates of
+/// <summary>Where a gunner's tick stopped this frame, the fire gates of
 /// <see cref="TurretController.SimStep"/> named, in the order they are taken. Read by the
 /// targeting overlay (F15) so "it is not shooting" can be answered with WHICH gate rather than
 /// by guesswork; <see cref="Firing"/> means every gate passed and a round left the muzzle.</summary>
@@ -29,12 +29,12 @@ public enum TurretGate
 /// the nearest hostile vehicle inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
 /// (<see cref="AimAssist.TryIntercept"/>), clamps the solution to the authored arcs, slews the
 /// barrel, writes the pose onto the <c>PARTS</c> nodes, and fires through the shared
-/// <see cref="ProjectilePool"/> — hit resolution is geometric, with <c>INACCURACY</c> as a scatter
+/// <see cref="ProjectilePool"/>, hit resolution is geometric, with <c>INACCURACY</c> as a scatter
 /// cone, never a probability roll. A plain class, not a Node: a carried gunner is ticked by its
 /// host's <c>SimStep</c>, an emplacement by <c>Session.TurretEmplacementRuntime</c>.</summary>
 public sealed class TurretController
 {
-    /// <summary>The barrel's catch-up rate toward the clamped aim direction, per second — the
+    /// <summary>The barrel's catch-up rate toward the clamped aim direction, per second, the
     /// binary's slew constant. At or past 1/rate seconds per frame the turn snaps whole.</summary>
     public const float SlewRate = 3.0f;
 
@@ -116,7 +116,7 @@ public sealed class TurretController
         Attacking = true;
         _windowLeft = RandRange(def.AttackMin, def.AttackMax);
         // Load pose: the centre of each arc; a free axis stays unrotated. The original poses
-        // dormant emplacements too — ACTIVATED gates the tick, not the load pose.
+        // dormant emplacements too, ACTIVATED gates the tick, not the load pose.
         BarrelLocal = LocalDir(def.RestYawDeg, def.RestPitchDeg);
         ApplyNodePose();
     }
@@ -129,7 +129,7 @@ public sealed class TurretController
     /// calibre.</summary>
     public WeaponDef Weapon { get; }
 
-    /// <summary>The traverse ring (<c>PARTS[0]</c> of the 3-element form) — null on the
+    /// <summary>The traverse ring (<c>PARTS[0]</c> of the 3-element form), null on the
     /// 2-element form, where <see cref="PitchNode"/> takes the combined rotation.</summary>
     public Node3D? YawNode { get; }
 
@@ -142,7 +142,7 @@ public sealed class TurretController
     /// owner, which is what the original's per-turret sound slot is.</summary>
     public GunVoice? Voice { get; }
 
-    /// <summary>Remaining rounds — real state (the original save/restores it), effectively
+    /// <summary>Remaining rounds, real state (the original save/restores it), effectively
     /// unlimited at the shipped 9999/12000.</summary>
     public int Ammo { get; private set; }
 
@@ -157,7 +157,7 @@ public sealed class TurretController
     /// script wakes it. Every carried turret is built awake (all 16 ship <c>ACTIVATED 1</c>).</summary>
     public bool Activated { get; private set; }
 
-    /// <summary>Who this gunner is in a log line — the entry's TITLE plus, for an emplacement,
+    /// <summary>Who this gunner is in a log line, the entry's TITLE plus, for an emplacement,
     /// the world node it stands on.</summary>
     public string Label { get; }
 
@@ -175,10 +175,10 @@ public sealed class TurretController
 
     /// <summary>The platform's velocity: the host's for a carried turret, the differenced own
     /// position (the decoded moving-host estimate, <see cref="MaxPlatformSpeed"/> cut) for an
-    /// emplacement — zero while static, the ride while a zeppelin-slung mount moves.</summary>
+    /// emplacement, zero while static, the ride while a zeppelin-slung mount moves.</summary>
     public Vector3 PlatformVelocity => _host?.WorldVelocity ?? _platformVel;
 
-    /// <summary>The barrel direction in the turret's base frame (the yaw node's rest frame) —
+    /// <summary>The barrel direction in the turret's base frame (the yaw node's rest frame),
     /// what the pose writes and the fire gate read.</summary>
     public Vector3 BarrelLocal { get; private set; }
 
@@ -188,7 +188,7 @@ public sealed class TurretController
 
     /// <summary>The position this gunner is tracking, valid while <see cref="Gate"/> is past
     /// <see cref="TurretGate.NoTarget"/>. The acquired aircraft's own position, not the lead
-    /// solution — the overlay draws the line to the TARGET and the barrel shows the lead.</summary>
+    /// solution, the overlay draws the line to the TARGET and the barrel shows the lead.</summary>
     public Vector3 TargetPosition { get; private set; }
 
     /// <summary>What <see cref="TargetPosition"/> belongs to, for the F15 overlay's roll-call, or
@@ -210,14 +210,14 @@ public sealed class TurretController
     /// <summary>Where the turret is, for the aim assist's candidate list and the detection gate.</summary>
     public Vector3 WorldPosition => (YawNode ?? PitchNode).GlobalPosition;
 
-    /// <summary>The barrel direction in world space — <see cref="BarrelLocal"/> through the base
+    /// <summary>The barrel direction in world space, <see cref="BarrelLocal"/> through the base
     /// frame. What a viewer (and the in-engine suite) sees the gun pointing along.</summary>
     public Vector3 BarrelWorldDir => BaseBasis() * BarrelLocal;
 
     /// <summary>Builds the host's carried turrets: every <c>thirdp</c> mount of its vehicle
     /// def's <c>turrets</c> block, resolved by TITLE against <c>ai.zrd</c> and by node name
     /// against the built plane model. <c>firstp</c> mounts are the cockpit-view rig, which CSVM
-    /// does not render — skipped on purpose. A mount whose def, weapon or nodes do not resolve
+    /// does not render, skipped on purpose. A mount whose def, weapon or nodes do not resolve
     /// is skipped with a warning, never a throw: an unarmed turret ring is a degraded plane,
     /// not a broken session. <paramref name="voices"/> left null leaves every gunner silent.</summary>
     public static TurretController[] BuildCarried(TurretDefs defs, PlaneStats stats,
@@ -241,7 +241,7 @@ public sealed class TurretController
             var weapon = weapons.Get(def.WeaponName);
             if (weapon == null || def.Firepoints.Count == 0)
             {
-                // "An entry with no resolvable WEAPON ticks no further" — the engine's own rule.
+                // "An entry with no resolvable WEAPON ticks no further", the engine's own rule.
                 GD.PushWarning($"turret '{mount.Title}': weapon '{def.WeaponName}' unresolved or no firepoints");
                 continue;
             }
@@ -309,7 +309,7 @@ public sealed class TurretController
             var weapon = weapons.Get(def.WeaponName);
             if (weapon == null || def.Firepoints.Count == 0)
             {
-                // "An entry with no resolvable WEAPON ticks no further" — the engine's own rule.
+                // "An entry with no resolvable WEAPON ticks no further", the engine's own rule.
                 GD.PushWarning($"turret '{def.Title}': weapon '{def.WeaponName}' unresolved or no firepoints");
                 continue;
             }
@@ -358,7 +358,7 @@ public sealed class TurretController
                         continue;
                     }
                     // The kill switch: HEALTHY_NODE (default "healthy") under the site, else the
-                    // site itself — the decoded fallback chain.
+                    // site itself, the decoded fallback chain.
                     rig.TryGetValue(def.HealthyNode ?? "healthy", out var healthy);
                     healthy ??= site;
                     var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
@@ -389,7 +389,7 @@ public sealed class TurretController
         return parent;
     }
 
-    /// <summary>The pitch clamp — plain, and only when the axis is limited at all: the engine
+    /// <summary>The pitch clamp, plain, and only when the axis is limited at all: the engine
     /// clamps only when both limits exist and differ, so an absent key (and min == max) is
     /// UNRESTRICTED, never locked.</summary>
     public static float ClampPitchDeg(float deg, TurretDef def) =>
@@ -397,7 +397,7 @@ public sealed class TurretController
 
     /// <summary>The wrap-aware yaw clamp: the arc is a DIRECTED interval ([105,255] runs through
     /// 180; [-155,-5] is a different arc). The solved angle is tried as-is and at ±360; still
-    /// outside, it snaps to whichever end stop is angularly NEARER — not the shortest-path one.
+    /// outside, it snaps to whichever end stop is angularly NEARER, not the shortest-path one.
     /// ⚠ <c>[0,0]</c> (and an absent key) removes the limit entirely.</summary>
     public static float ClampYawDeg(float deg, TurretDef def)
     {
@@ -496,7 +496,7 @@ public sealed class TurretController
     public void SetActivated(bool activated) => Activated = activated;
 
     /// <summary>One gunner tick: duty cycle, acquire, aim, slew, pose, fire. A dormant
-    /// emplacement takes no tick at all — <c>ACTIVATED</c> gates tracking as well as fire.</summary>
+    /// emplacement takes no tick at all, <c>ACTIVATED</c> gates tracking as well as fire.</summary>
     public void SimStep(float dt)
     {
         // Ahead of every gate: the voice must run down its lease on the ticks this gunner does not
@@ -541,7 +541,7 @@ public sealed class TurretController
 
         // Lead: a true intercept from the muzzle, the round's speed, and the target's velocity
         // relative to the platform. No solution ⇒ the turret tracks the raw bearing and holds
-        // fire — it never falls back to a straight shot.
+        // fire, it never falls back to a straight shot.
         bool solution = AimAssist.TryIntercept(muzzlePos, Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
             targetPos, targetVel - PlatformVelocity, out var aimWorld, out _);
         if (!solution)
@@ -742,7 +742,7 @@ public sealed class TurretController
     }
 
     // The original casts from the platform to 0.2 m above the target and caches the verdict for
-    // a random 1–2 s before re-testing; a failed test blocks firing. World geometry only —
+    // a random 1–2 s before re-testing; a failed test blocks firing. World geometry only,
     // another aircraft in the way is not cover. C9a applies the cached test to whatever target
     // was acquired (the original scopes it to the player); emplacements keep that consistent.
     private bool LineOfSightBlocked(Vector3 targetPos)
@@ -769,7 +769,7 @@ public sealed class TurretController
 
     // The bounded slew: the barrel chases the clamped aim direction at SlewRate per second,
     // renormalised each tick, snapping whole once one frame covers the turn. Same degenerate
-    // guards as AimAssist.Tick — Slerp throws on (anti)parallel inputs.
+    // guards as AimAssist.Tick, Slerp throws on (anti)parallel inputs.
     private void SlewToward(Vector3 desired, float dt)
     {
         float t = SlewRate * dt;
@@ -786,7 +786,7 @@ public sealed class TurretController
                 : BarrelLocal.Slerp(desired, t).Normalized();
     }
 
-    // Writes the barrel pose onto the PARTS chain: yaw on the traverse ring, pitch on the gun —
+    // Writes the barrel pose onto the PARTS chain: yaw on the traverse ring, pitch on the gun,
     // or the combined rotation on the one node of the 2-element form.
     private void ApplyNodePose()
     {

@@ -46,7 +46,7 @@ public sealed class GameZ
     // ever emitted over the shipped install (analysis/surface-classification/FINDINGS.md,
     // 2026-08-11): the `soil` field is a bulk-read raw dword from the material record, and
     // mech3ax's own label for it is just its Soil enum variant name, not a Crimson Skies name.
-    // An unseen label means the extractor's enum changed underneath us, not that the id is 0 —
+    // An unseen label means the extractor's enum changed underneath us, not that the id is 0,
     // fail loudly rather than silently misclassifying every material with the new label.
     private static readonly Dictionary<string, int> SoilLabelToId = new()
     {
@@ -65,7 +65,7 @@ public sealed class GameZ
 
     private int[]? _parent; // flat index → parent flat index (−1 for roots), built lazily
 
-    // Every node index WorldBuilder's own walk reaches — someone's child_indices, or a World
+    // Every node index WorldBuilder's own walk reaches, someone's child_indices, or a World
     // node's spatial-partition reference (the same two places WorldBuilder.cs's class doc says
     // "world content lives"). Built lazily; see IsLibraryRoot.
     private HashSet<int>? _placed;
@@ -132,11 +132,11 @@ public sealed class GameZ
     }
 
     /// <summary>The mesh is a level-editor gizmo, not scenery: one flat-coloured triangle with no
-    /// texture. The original never draws these — they are the authoring marks for AI/mission
+    /// texture. The original never draws these, they are the authoring marks for AI/mission
     /// anchors (approach cones, landing spheres, puffer and sound emitters, look-at targets,
     /// flak/scatter trail origins). 142 nodes install-wide carry one, and every name in that set
     /// is a marker; nothing legible as scenery is a lone untextured triangle.
-    /// The owning node still gets built — animations attach puffers and sounds to it by name.</summary>
+    /// The owning node still gets built, animations attach puffers and sounds to it by name.</summary>
     public bool IsMarkerGizmo(int meshIndex)
     {
         if (meshIndex < 0 || meshIndex >= Meshes.Count)
@@ -168,7 +168,7 @@ public sealed class GameZ
         if (mat.TextureName != null || poly.VertexColors == null || poly.VertexColors.Count == 0)
             return false;
         // Both sides come from the same /255f decode, so this is an equality test with room for
-        // float noise only — half a source byte.
+        // float noise only, half a source byte.
         const float eps = 0.5f / 255f;
         foreach (var c in poly.VertexColors)
         {
@@ -243,7 +243,7 @@ public sealed class GameZ
     }
 
     /// <summary>The world-space transform of a node, accumulated up its parent chain (the
-    /// nodes.json children lists — parent is a flat list position, so we invert those).
+    /// nodes.json children lists, parent is a flat list position, so we invert those).
     /// Nodes without a transformation contribute identity. Robust to nesting, though most
     /// world markers (dz points, route ribbons) sit directly under the identity World root,
     /// so their stored translation is already world-space. Used to resolve objective-marker
@@ -261,7 +261,7 @@ public sealed class GameZ
         return xf;
     }
 
-    // Opens the first of `names` the archive actually has —
+    // Opens the first of `names` the archive actually has,
     // how the models.json / meshes.json rename is absorbed.
     private static Stream OpenEntry(ZipArchive zip, params string[] names)
     {
@@ -293,7 +293,7 @@ public sealed class GameZ
         }
         else
         {
-            // Euler angles compose as R = Ry(y)·Rx(x)·Rz(z) — Godot's YXZ order
+            // Euler angles compose as R = Ry(y)·Rx(x)·Rz(z), Godot's YXZ order
             // (verified numerically against the 221 nodes that carry both forms).
             basis = Basis.FromEuler(ParseVec3(tf.TryGetProperty("rotation", out var r) ? r : tf.GetProperty("rotate")),
                 EulerOrder.Yxz);
@@ -382,7 +382,7 @@ public sealed class GameZ
             var prop = FirstProperty(unified ? data : wrapper);
             var body = prop.Value;      // the variant-specific fields (area, range, transform…)
             var header = unified ? wrapper : body; // where name / mesh index / children live
-            // Not every kind has every field: Display lacks name+children (legacy only —
+            // Not every kind has every field: Display lacks name+children (legacy only,
             // the unified shape names it "display"), Window/Camera/Light lack children.
             var node = new GameZNode
             {
@@ -469,7 +469,7 @@ public sealed class GameZ
                 }
             }
             // Legacy "transformation" is an object or null; unified "transform" is either
-            // the string "Initial" (exactly where legacy wrote null — 3675/3675 on C1) or
+            // the string "Initial" (exactly where legacy wrote null, 3675/3675 on C1) or
             // a {"RotateTranslateScale": {…}} wrapper.
             if (body.TryGetProperty("transformation", out var tf) && tf.ValueKind == JsonValueKind.Object)
                 node.Local = ParseTransform(tf);
@@ -487,7 +487,7 @@ public sealed class GameZ
             var mesh = new GameZMesh();
             if (m.ValueKind != JsonValueKind.Object)
             {
-                Meshes.Add(mesh); // null slot — keep it so mesh_index stays aligned
+                Meshes.Add(mesh); // null slot, keep it so mesh_index stays aligned
                 continue;
             }
             foreach (var v in m.GetProperty("vertices").EnumerateArray())
@@ -510,14 +510,14 @@ public sealed class GameZ
                 poly.TriangleStrip = (pf.TryGetProperty("triangle_strip", out var ts)
                     || pf.TryGetProperty("tri_strip", out ts)) && ts.ValueKind == JsonValueKind.True;
                 // Double-sided flag. mech3ax v0.6.1 emits it as "unk2"; upstream has since
-                // identified it as SHOW_BACKFACE — accept both spellings.
+                // identified it as SHOW_BACKFACE, accept both spellings.
                 poly.ShowBackface = (pf.TryGetProperty("unk2", out var bf) || pf.TryGetProperty("show_backface", out bf))
                     && bf.ValueKind == JsonValueKind.True;
                 // unk3 = no_clutter (docs/formats/gamez.md). Absent means false
                 // (skip_serializing_if), so TryGetProperty's false default is required.
                 poly.NoClutter = pf.TryGetProperty("unk3", out var sf) && sf.ValueKind == JsonValueKind.True;
                 // Draw-priority layer. mech3ax v0.6.1 emits it as "unk04"; upstream has
-                // since identified and renamed it to "priority" — accept both spellings.
+                // since identified and renamed it to "priority", accept both spellings.
                 if (p.TryGetProperty("unk04", out var pr) || p.TryGetProperty("priority", out pr))
                     poly.Priority = pr.GetInt32();
                 // Unified-only; null on legacy. At most one value per polygon (docs/formats/
@@ -621,7 +621,7 @@ public sealed class GameZ
         }
     }
 
-    // textures.json — the unified shape's material texture table. Entries are
+    // textures.json, the unified shape's material texture table. Entries are
     // `{name}`; v0.6.1 wrote `{original, renamed}`, where "renamed" carried a
     // `name.-N` disambiguation for duplicate table entries. The fork drops that
     // machinery entirely (materials reference textures by index, so duplicates need no
@@ -699,7 +699,7 @@ public sealed class GameZNode
     public string Name = "";
     public int MeshIndex = -1;
     // The original's per-node collision-participation flag (flags.intersect_surface): false on
-    // geometry the engine never intersection-tests — spinning props, wreck/debris pieces, fire/
+    // geometry the engine never intersection-tests, spinning props, wreck/debris pieces, fire/
     // flake/ripple/splash effects, light glows, ropes, shadows, the C3 spiderweb. Absent flags
     // (legacy extraction) default to collidable.
     public bool IntersectSurface = true;
@@ -709,7 +709,7 @@ public sealed class GameZNode
     public bool Active = true;
     /// <summary>The original's per-node visibility zone (<c>zone_id</c>): <b>-1</b> = always drawn;
     /// otherwise the node draws only while that id is in the camera's armed zone set, which
-    /// the engine arms as <c>{0, camera weather state}</c> — so <b>0</b> is also always,
+    /// the engine arms as <c>{0, camera weather state}</c>, so <b>0</b> is also always,
     /// and 1/2/3 are the per-state buckets (docs/formats/gamez.md, docs/formats/weather.md's deck
     /// census). Absent in a legacy extraction, which defaults to -1 = ungated.</summary>
     public int ZoneId = -1;
@@ -719,7 +719,7 @@ public sealed class GameZNode
     /// comes from. Decoded in docs/org/targeting.md, "What a mission structure's team is".</summary>
     public uint MissionTargetWord;
     // Flat position in nodes.json. The file is a depth-first serialization of the tree,
-    // so this is the original engine's draw order — the cross-node tie-break for
+    // so this is the original engine's draw order, the cross-node tie-break for
     // coplanar surfaces of equal polygon priority (later node draws on top).
     public int Index;
     public Transform3D? Local;
@@ -731,7 +731,7 @@ public sealed class GameZNode
     // discards. See WorldPartitionGrid and docs/formats/interp.md.
     public List<List<int>>? PartitionCellNodes;
     // World nodes only: the cell grid's geometry, read off the cells' own bounds rather than
-    // derived from Area — the two axes run opposite ways (docs/formats/world-structure.md).
+    // derived from Area, the two axes run opposite ways (docs/formats/world-structure.md).
     // OriginX is column 0's low x edge; OriginZ is row 0's HIGH z edge.
     public float PartitionOriginX, PartitionOriginZ, PartitionCellX, PartitionCellZ;
     // World nodes only: the map's ground-plane bounds (area = {left=xMin, right=xMax,
@@ -762,19 +762,19 @@ public sealed class GameZNode
 
 public sealed class GameZMesh
 {
-    // Null on a legacy (v0.6.1) extraction, which doesn't carry these fields — see the
+    // Null on a legacy (v0.6.1) extraction, which doesn't carry these fields, see the
     // ParseMeshes remark. "Facade" is the original's own billboard-sprite classification;
     // FacadeMode names the rotation axis (SceneBuilder.GetCylindricalAxis/IsGlowSpriteMesh).
     public string? ModelType;
     public string? FacadeMode;
-    // UV units/second (rare: 5 models in this install — a hangar glass-roof sky reflection,
+    // UV units/second (rare: 5 models in this install, a hangar glass-roof sky reflection,
     // an oil-dock texture, and three boat wake fronts; the waterfall's own falls/falls_edge
-    // textures do NOT scroll — their motion in the original is the splash puffers, not a
+    // textures do NOT scroll, their motion in the original is the splash puffers, not a
     // UV animation).
     public Vector2 TextureScroll;
     // The model's own render flags. `lighting: false` = the original's D3D lighting is off for
     // this model, so it draws at full texture × vertex-colour brightness instead of being
-    // modulated by the mission SUNLIGHT (the remake's csky_world_light) — self-lit effect
+    // modulated by the mission SUNLIGHT (the remake's csky_world_light), self-lit effect
     // geometry, billboards, glows, clutter cards. `fog: false` = exempt from distance fog.
     // Absent (legacy v0.6.1 tree) → both true (drawn lit and fogged).
     public bool Lighting = true;
@@ -791,7 +791,7 @@ public sealed class GameZPolygon
     public List<int>? NormalIndices;
     public List<Vector2>? UvCoords;
 
-    /// <summary>The polygon's overlay passes — <c>materials[1..]</c>, each a second textured
+    /// <summary>The polygon's overlay passes, <c>materials[1..]</c>, each a second textured
     /// material drawn on these same triangles with its own UVs, on top of the base skin
     /// (<see cref="MaterialIndex"/>/<see cref="UvCoords"/>, which are <c>materials[0]</c>). Null
     /// for the overwhelming majority. Every overlay texture in this install carries an alpha
@@ -802,7 +802,7 @@ public sealed class GameZPolygon
     public int MaterialIndex = -1;
     public bool TriangleStrip;
     // SHOW_BACKFACE ("unk2" in v0.6.1): render double-sided. Polygons without it are
-    // backface-culled by the original engine — e.g. the autogyro's interior frame
+    // backface-culled by the original engine, e.g. the autogyro's interior frame
     // lattice, which faces inward and must vanish from an outside camera.
     public bool ShowBackface;
     // Draw-priority layer for coplanar geometry: 0 = base surface, >0 drawn on top
@@ -817,7 +817,7 @@ public sealed class GameZPolygon
     // Null when the field is absent (legacy tree) or the array is empty; every
     // polygon in this install carries at most one value where present, matching the
     // node-level zone_id's -1/1/2/3 numbering (see docs/formats/world-structure.md's
-    // census). Nothing reads this yet — which zone is active is not in any data file
+    // census). Nothing reads this yet, which zone is active is not in any data file
     // (see zone_id), so this stays parse-only per the plan's ground rules.
     public int? ZoneSet;
 
@@ -826,8 +826,8 @@ public sealed class GameZPolygon
 
 /// <summary>One overlay pass of a polygon (an entry of <c>materials</c> past the first): the
 /// material to skin the polygon's triangles with, and the UVs to skin them by. The UVs are
-/// independent of the base pass's — a fog gradient runs its own 8×64 ramp across a face whose
-/// base skin tiles a wall texture — which is why the pass cannot be folded into the base
+/// independent of the base pass's, a fog gradient runs its own 8×64 ramp across a face whose
+/// base skin tiles a wall texture, which is why the pass cannot be folded into the base
 /// surface and gets its own.</summary>
 public sealed class GameZPolygonPass
 {
@@ -838,7 +838,7 @@ public sealed class GameZPolygonPass
 public sealed class GameZMaterial
 {
     /// <summary>The material's own texture flipbook (the gamez `cycle` block), frame names in
-    /// order — empty for the overwhelming majority. Frame 0 repeats <see cref="TextureName"/>.
+    /// order, empty for the overwhelming majority. Frame 0 repeats <see cref="TextureName"/>.
     /// Driven by <see cref="TextureCycler"/>; the original's animated water/surf/wake/splash
     /// and the walking-crowd sprites are all this one mechanism.</summary>
     public readonly List<string> CycleTextures = new();

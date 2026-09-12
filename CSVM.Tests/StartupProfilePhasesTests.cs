@@ -4,7 +4,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="StartupProfile.Phases"/> — the read-only view B11's <c>TestContext.BuildWorld</c>
+/// <see cref="StartupProfile.Phases"/>, the read-only view B11's <c>TestContext.BuildWorld</c>
 /// feeds into <c>PhaseAttribution.Categorize</c> without emitting the <c>[perf] startup …</c> line.
 /// Godot-free (the class has no Godot dependency), so this is provable outside the engine.
 /// </summary>
@@ -25,7 +25,7 @@ public class StartupProfilePhasesTests
     [Fact]
     public void PhasesIsReadableWithoutCallingEndBuildOrEmit()
     {
-        // TestContext.BuildWorld reads Phases mid-build, before either lifecycle method runs —
+        // TestContext.BuildWorld reads Phases mid-build, before either lifecycle method runs,
         // this is the contract that makes that legal.
         var profile = new StartupProfile("test-suite", bootMs: 0);
         profile.Add("anim", 3);
@@ -36,7 +36,7 @@ public class StartupProfilePhasesTests
     public void CurrentIsNullByDefaultSoRecordIsANoOpUntilInstalled()
     {
         StartupProfile.Current = null;
-        // Record must not throw with no session installed — the same guarantee the harness
+        // Record must not throw with no session installed, the same guarantee the harness
         // deliberately relies on for the eight-world census case (docs/architecture.md).
         StartupProfile.Record("gamez", StartupProfile.Mark());
     }

@@ -233,7 +233,7 @@ public class HitchMonitorTests
         Assert.Equal(2L, mon.FrameCount);
 
         // A caller reading FrameCount before this Tick sees 2, and Tick's own record agrees the
-        // frame it just stamped was FrameCount + 1 — the invariant --hitch-inject= relies on to
+        // frame it just stamped was FrameCount + 1, the invariant --hitch-inject= relies on to
         // fire on the stated frame rather than the one before or after it.
         Assert.True(mon.Tick(500, Idle));
         Assert.Equal(3L, mon.FrameCount);

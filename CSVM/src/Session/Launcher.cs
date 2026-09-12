@@ -29,13 +29,13 @@ public partial class Launcher : Node3D
     // Rendered frames per `--perf` report. A frame count rather than a wall second
     // because under the fixed clock one rendered frame is exactly one sim step, so a window is a
     // fixed amount of simulation and two runs of the same scenario yield the same number
-    // of samples — which is what makes a paired A/B comparable. At the vsync cap it is also
+    // of samples, which is what makes a paired A/B comparable. At the vsync cap it is also
     // still one report a second, so an interactive run reads as it always did.
     private const int PerfWindowFrames = 60;
 
     // Nearest-rank p95 index into the sorted window (0-based): `ceil(0.95 x
     // PerfWindowFrames) - 1`. At 60 samples this is index 56, leaving 3 samples above it. p99
-    // is deliberately not reported — nearest-rank p99 over 60 samples resolves to index 59, the
+    // is deliberately not reported, nearest-rank p99 over 60 samples resolves to index 59, the
     // same slot as max, so it would just be max under another name (see ReportPerf).
     private const int Perf95Index = (PerfWindowFrames * 95 + 99) / 100 - 1;
 
@@ -142,18 +142,18 @@ public partial class Launcher : Node3D
     private static readonly Color EnhancedDefaultSkyColor = new(0.69f, 0.69f, 0.69f);
 
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
-    // exists — the same empty list the pre-split root held after a teardown.
+    // exists, the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
 
     // This window's unaveraged per-frame wall cost, for the max/p95 that ReportPerf reports
-    // alongside its means — fully overwritten every window, so it needs no reset. _perfFrameMsSorted
+    // alongside its means, fully overwritten every window, so it needs no reset. _perfFrameMsSorted
     // is scratch for the sort at window close, kept off the frame path so no window allocates.
     private readonly double[] _perfFrameMs = new double[PerfWindowFrames];
     private readonly double[] _perfFrameMsSorted = new double[PerfWindowFrames];
 
     // Everything the command line settled, parsed and resolved once (see SessionSpec). _cli is what
-    // the user typed; _spec is what the LIVE session was built from — the launchscreen's pick
-    // patches it — so every consumer below reads _spec and nothing re-derives a launch setting.
+    // the user typed; _spec is what the LIVE session was built from, the launchscreen's pick
+    // patches it, so every consumer below reads _spec and nothing re-derives a launch setting.
     private SessionSpec _cli = null!;
     private SessionSpec _spec = null!;
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
@@ -168,11 +168,11 @@ public partial class Launcher : Node3D
     // --debug-preset=, same one-shot hold. −1 rather than 0 because preset 0 is a real request.
     private int _pendingPreset = -1;
     // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
-    // ad-hoc save — see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
+    // ad-hoc save, see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
     // from the launch spec, never re-armed by a menu relaunch.
     private Testing.CaptureDirector _captureDirector = null!;
 
-    // The --export-gltf= one-shot and F10's ad-hoc glTF save — see src\Testing\GltfExporter.cs's
+    // The --export-gltf= one-shot and F10's ad-hoc glTF save, see src\Testing\GltfExporter.cs's
     // entry. Constructed once from the launch spec alongside the capture director.
     private Testing.GltfExporter _gltfExporter = null!;
     // The master seed every subsystem generator derives from (see Utils.Rng). Pinned runs take the
@@ -182,7 +182,7 @@ public partial class Launcher : Node3D
     // The once-per-process draw _masterSeed starts at, kept so an unpinned relaunch can step to the
     // next sortie's master from it rather than from whatever the last session used.
     private ulong _processSeed;
-    // How many times the launchscreen has started a flight this process — the step count applied to
+    // How many times the launchscreen has started a flight this process, the step count applied to
     // _processSeed for an unpinned run, and the label the seed is logged under.
     private int _sortie;
 
@@ -192,7 +192,7 @@ public partial class Launcher : Node3D
 
     private Camera3D _camera = null!;
     // Built once in _Ready and kept across sessions (like the camera). The mesh lab steers
-    // both — sun direction/energy and the ambient — so held here rather than local to
+    // both, sun direction/energy and the ambient, so held here rather than local to
     // SetupLighting.
     private DirectionalLight3D _sun = null!;
     private Godot.Environment? _env;
@@ -294,10 +294,10 @@ public partial class Launcher : Node3D
     // (Log.DirectoryFor): a recipient's log must not land in a hidden developer folder.
     private bool _exported;
     // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
-    // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
+    // so a git worktree can run the game, /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
     private string _dataRoot = "";
-    private string _planesGamezPath = "";  // extracted/planes.zip — the aircraft models (always this)
+    private string _planesGamezPath = "";  // extracted/planes.zip, the aircraft models (always this)
     private string _zrdrPath = "";
     private string _soundsPath = "";
     private string _interpPath = "";
@@ -354,7 +354,7 @@ public partial class Launcher : Node3D
         }
         else
         {
-            // Exported build: res:// lives inside the pck, so the root is the exe's own folder —
+            // Exported build: res:// lives inside the pck, so the root is the exe's own folder,
             // extracted/ ships beside the exe, and logs/ and .scratch/ output land there too.
             _exported = true;
             _repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
@@ -394,7 +394,7 @@ public partial class Launcher : Node3D
         _messagesPath = _spec.Messages ?? Path.Combine(_dataRoot, "extracted", "messages.json");
         _rofPath = _spec.Rof ?? Path.Combine(_dataRoot, "extracted", "rof");
 
-        // The extraction tree's provenance check — at most one warning line, never a block.
+        // The extraction tree's provenance check, at most one warning line, never a block.
         ExtractionStamp.Check(_dataRoot);
 
         // The drop-in writes statics every material built afterwards reads, so it is applied here
@@ -474,7 +474,7 @@ public partial class Launcher : Node3D
 
         // The pacing's three sources and both engine calls are VSyncSetting's; --no-vsync uncaps
         // the loop so frame/fps/script report work done rather than a refresh cap. The config read
-        // stays unconditional so it self-registers — see Utils/Config.cs's entry.
+        // stays unconditional so it self-registers, see Utils/Config.cs's entry.
         bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, true);
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, VSyncSetting.SavedWord(_spec.Det), vsyncOnByConfig));
 
@@ -543,7 +543,7 @@ public partial class Launcher : Node3D
         if (_spec.Det)
         {
             // The git-ignored dev tuning file would otherwise make a deterministic capture a
-            // function of one machine's uncommitted state — see docs/verification.md's DET-8.
+            // function of one machine's uncommitted state, see docs/verification.md's DET-8.
             // Pass --no-det to capture with your overrides applied.
             int dropped = Config.OverrideCount;
             Config.ClearOverrides();
@@ -583,7 +583,7 @@ public partial class Launcher : Node3D
 
         // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
         // no-op until --fly's weather.json overrides them.
-        // ⚠ Runs once here — GlobalShaderParameterAdd errors on a second call; a rebuild must Set.
+        // ⚠ Runs once here, GlobalShaderParameterAdd errors on a second call; a rebuild must Set.
         RenderingServer.GlobalShaderParameterAdd("csky_fog_color",
             RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0.69f, 0.69f, 0.69f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_range",
@@ -625,7 +625,7 @@ public partial class Launcher : Node3D
         // registering after them left every dump run emitting a missing-global error.
         ShaderTime.RegisterGlobal();
 
-        // --dump-markers: a pure-data report — print the marker rig tables and quit. Runs
+        // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
         // quits with its own verdict, like --run-tests, never a false-clean exit code.
         if (_spec.DumpMarkers)
@@ -633,7 +633,7 @@ public partial class Launcher : Node3D
             GetTree().Quit(_probeRunner.DumpMarkers(_spec) ? 0 : 1);
             return;
         }
-        // --dump-weapons: the same pure-data pattern for the typed weapons.json reader —
+        // --dump-weapons: the same pure-data pattern for the typed weapons.json reader,
         // dump every def and assert no key went unmapped.
         if (_spec.DumpWeapons)
         {
@@ -641,13 +641,13 @@ public partial class Launcher : Node3D
             return;
         }
         // --dump-loadout: bind each plane's stock loadout to its built model and report the
-        // resolved gun groups + hardpoints — a missing marker is a loud error here.
+        // resolved gun groups + hardpoints, a missing marker is a loud error here.
         if (_spec.DumpLoadout)
         {
             GetTree().Quit(_probeRunner.DumpLoadout(_spec) ? 0 : 1);
             return;
         }
-        // --dump-flight: pure data again — no world and no model, just the zrdr stats stepped
+        // --dump-flight: pure data again, no world and no model, just the zrdr stats stepped
         // through the manoeuvres the original was measured flying.
         if (_spec.DumpFlight)
         {
@@ -655,13 +655,13 @@ public partial class Launcher : Node3D
             return;
         }
         // --dump-mips: what the texture archive's mip chains actually hold, level by level, beside
-        // the authored levels they should be — the before/after instrument for --mips=.
+        // the authored levels they should be, the before/after instrument for --mips=.
         if (_spec.DumpMips)
         {
             GetTree().Quit(_probeRunner.DumpMips(_spec) ? 0 : 1);
             return;
         }
-        // --dump-ai: the five AI data families read straight off the extraction — no world, no
+        // --dump-ai: the five AI data families read straight off the extraction, no world, no
         // scene, no readers built for the families that don't have one yet (aiv/ai.zrd/zeppelins/
         // egen). See Probes.Ai.
         if (_spec.DumpAi)
@@ -671,11 +671,11 @@ public partial class Launcher : Node3D
         }
 
         // Exercises the wired modules once so Config's tuning registry is complete, then flags
-        // any config.json key no tunable matched — data-free, so a typo is caught before flight.
+        // any config.json key no tunable matched, data-free, so a typo is caught before flight.
         Config.WarmTuningRegistry();
         Config.ReportOrphans();
         // --dump-config: write a fully-populated tuning template (every registered key + its default,
-        // nested by block) to the scratch folder and quit — the copy-and-edit source for config.json.
+        // nested by block) to the scratch folder and quit, the copy-and-edit source for config.json.
         if (_spec.DumpConfig)
         {
             string dumpPath = Path.Combine(_repoRoot, ".scratch", "config.dump.json");
@@ -698,7 +698,7 @@ public partial class Launcher : Node3D
         var padsAtLaunch = Pads.Connected();
         if (Pads.Disabled)
         {
-            // nothing more to report — the roster is deliberately empty
+            // nothing more to report, the roster is deliberately empty
         }
         else if (padsAtLaunch.Count == 0)
             GD.Print("gamepad: none at launch (hotplug live — connect any time)");
@@ -714,7 +714,7 @@ public partial class Launcher : Node3D
         if (_spec.Pitch is { } argPitch) _orbit.Pitch = argPitch;
 
         // --run-tests: the in-engine assertion suites. Dispatched here, after the camera exists (a
-        // suite building a world resolves PLAYER_RANGE from it) and before any session is built —
+        // suite building a world resolves PLAYER_RANGE from it) and before any session is built,
         // the suites build exactly the world/plane each of them needs and nothing else.
         if (_spec.RunTests)
         {
@@ -793,7 +793,7 @@ public partial class Launcher : Node3D
     }
 
     // The root node's own teardown, reached on an ordinary quit
-    // (GetTree().Quit() or the window's close button) — never on a kill/crash, which is what the
+    // (GetTree().Quit() or the window's close button), never on a kill/crash, which is what the
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
     {
@@ -849,8 +849,8 @@ public partial class Launcher : Node3D
             _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
             return;
         }
-        // F10 in the viewer: export the plane on screen — current livery and damage state baked
-        // in — to a timestamped .glb under the repo's git-ignored Exports/ folder.
+        // F10 in the viewer: export the plane on screen, current livery and damage state baked
+        // in, to a timestamped .glb under the repo's git-ignored Exports/ folder.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F10 })
         {
             Testing.GltfExporter.ExportToExports(_session?.Plane, _spec.PlaneName);
@@ -882,7 +882,7 @@ public partial class Launcher : Node3D
         {
             InjectHitch(injectMs, _spec.HitchInjectAlloc);
         }
-        // Detection is unconditional; logging is not — a hitch nobody watched for is what this
+        // Detection is unconditional; logging is not, a hitch nobody watched for is what this
         // catches. Fed our own QPC pair, never Godot's post-processed `delta`, which measures
         // as a quantised constant.
         long stamp = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -895,7 +895,7 @@ public partial class Launcher : Node3D
         // node processes one notch ahead (-1000), so its declared work is already in.
         PerfSample.EndFrame();
         // B6: a trip queues its record (a cheap, preallocated copy) rather than writing anything
-        // here — the sidecar's own Tick below drains the queue a few quiet frames later.
+        // here, the sidecar's own Tick below drains the queue a few quiet frames later.
         if (_hitchMonitor.Tick(frameMs, counters))
         {
             _hitchSidecar.Enqueue(_hitchMonitor.Last);
@@ -1095,7 +1095,7 @@ public partial class Launcher : Node3D
     }
 
     // What the load screen calls this flight: an Instant Action mission by the wizard's own name
-    // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName — that is the log
+    // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName, that is the log
     // file's and the startup line's internal tag ("fly", "stunt"), which is not a player's word.
     private string LaunchSubject()
     {
@@ -1173,7 +1173,7 @@ public partial class Launcher : Node3D
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
         AiStepCost.Reset();
-        // D10: same reasoning as HitchMonitor.Rearm above — the build's own stall must never read
+        // D10: same reasoning as HitchMonitor.Rearm above, the build's own stall must never read
         // as the readout's worst recent frame.
         _perfHud.Rearm();
         return built;
@@ -1588,7 +1588,7 @@ public partial class Launcher : Node3D
     // the pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
     // any-pad policy (null), so every connected pad flies the one plane, as before.
     // ⚠ EVERY menu launch path has to come through here. Pads.AssignPads, the fallback a path that
-    // skips it lands on, gives P1 every pad no later seat claimed — so a two-seat launch with one
+    // skips it lands on, gives P1 every pad no later seat claimed, so a two-seat launch with one
     // pad and the keyboard flew both seats off both devices, and P2's plane sat still.
     private void BindMenuPads(IReadOnlyList<int[]> pads)
     {
@@ -1607,7 +1607,7 @@ public partial class Launcher : Node3D
 
     // The campaign cabin's FLY MISSION: the same derive-spec-then-build path as the launchscreen's
     // own launch, over the profile and story position the flow settled. The chapter and mission are
-    // NOT named here — CampaignDirector.ResolveSpec reads them out of cm_sequence in the session's
+    // NOT named here, CampaignDirector.ResolveSpec reads them out of cm_sequence in the session's
     // constructor, so one place resolves a story position whether it came from a cabin or a
     // --campaign= command line.
     private void StartCampaignFromMenu(CampaignMissionExit mission)
@@ -1687,7 +1687,7 @@ public partial class Launcher : Node3D
         GetTree().Quit();
     }
 
-    // Frees the current session node and shows the menu again at a semantic destination — the
+    // Frees the current session node and shows the menu again at a semantic destination, the
     // in-process rebuild path for the boards' Exit item, for failed builds and for the debrief.
     // The whole session subtree hangs under the node, so `QueueFree` tears it down; the non-child
     // duties (the published clock, the world lights, the session texture archive, the main-camera
@@ -1714,7 +1714,7 @@ public partial class Launcher : Node3D
 
     // Writes the master output gain Utils/MasterVolume.cs resolves, and is its only caller.
     // Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so
-    // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one —
+    // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one,
     // see this file's docs/architecture.md entry. ⚠ Bus 0 alone: the player's four levels are
     // written on the three buses under it by Utils/AudioMix.cs, so neither gain can stand in for
     // the other and a saved level cannot lift a run this silenced.
@@ -1735,8 +1735,8 @@ public partial class Launcher : Node3D
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }
 
-    // Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —
-    // the notification can arrive more than once — and it only ever clears a mute it set itself,
+    // Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent,
+    // the notification can arrive more than once, and it only ever clears a mute it set itself,
     // so it cannot stomp on a mute from anywhere else.
     private void SetFocusMuted(bool muted)
     {
@@ -1747,7 +1747,7 @@ public partial class Launcher : Node3D
         _focusMuted = muted;
         AudioServer.SetBusMute(MasterBus, muted);
         // Pad reads follow focus (Pads.For), so a stick drifting while alt-tabbed cannot fly
-        // the plane. The roster deliberately does not — see Pads.cs's docs/architecture.md
+        // the plane. The roster deliberately does not, see Pads.cs's docs/architecture.md
         // entry. Keyboard needs no gate: Godot releases held keys on focus loss.
         Pads.Focused = !muted;
         GD.Print(muted
@@ -1825,7 +1825,7 @@ public partial class Launcher : Node3D
     }
 
     // --perf: the headless stand-in for the editor's profiler, meaned over the window so a
-    // single hitch doesn't read as a regression — A/B two builds by comparing the same line.
+    // single hitch doesn't read as a regression, A/B two builds by comparing the same line.
     // `script_ms`/`physics_ms` are Godot's two worst-of-the-last-second monitors, kept only
     // because older records hold them. The measured terms are `proc_ms`, `phys_tick_ms` and
     // `ai_ms` (verification PERF-1, PERF-21). `max_ms`/`p95_ms` answer "how bad did it get"; no
@@ -1896,7 +1896,7 @@ public partial class Launcher : Node3D
 
 /// <summary>What a session node needs from the launcher: the settled base paths, the persistent
 /// rendering nodes it configures but does not own, the process-scoped services, and the join
-/// flow's session state. A snapshot per launch — <see cref="MenuPads"/> is the field that varies.
+/// flow's session state. A snapshot per launch, <see cref="MenuPads"/> is the field that varies.
 /// ⚠ Not a second home for args: a new flag is a <see cref="SessionSpec"/> change, never a
 /// context field.</summary>
 public sealed class LauncherContext
@@ -1916,7 +1916,7 @@ public sealed class LauncherContext
     public required OrbitCamera Orbit { get; init; }
     public required DirectionalLight3D Sun { get; init; }
     public required Godot.Environment? Env { get; init; }
-    /// <summary>Whether this process launched into the menu — Esc from flight returns there
+    /// <summary>Whether this process launched into the menu, Esc from flight returns there
     /// instead of quitting (the flight HUD's exit hint reads it too).</summary>
     public required bool MenuDriven { get; init; }
     /// <summary>Per-player pad binding from the launchscreen's join flow (null = derive from the
@@ -1929,7 +1929,7 @@ public sealed class LauncherContext
     public required System.Action ExitSession { get; init; }
 
     /// <summary>Frees this session and builds a fresh one from the same settings, behind the load
-    /// screen — the mission boards' Restart item (Instant Action and campaign). The mission's
+    /// screen, the mission boards' Restart item (Instant Action and campaign). The mission's
     /// opposition lives in the world, so putting it back means rebuilding the world, which only
     /// the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }

@@ -13,7 +13,7 @@ public sealed class CountingEmitterFactory : IEmitterFactory
 {
     private readonly List<CountingEmitter> _built = new();
 
-    /// <summary>Every fake this factory has handed out, in build order — what a suite reads to
+    /// <summary>Every fake this factory has handed out, in build order, what a suite reads to
     /// confirm the fake was actually reached rather than a real <c>Puffer</c>.</summary>
     public IReadOnlyList<CountingEmitter> Built => _built;
 
@@ -26,7 +26,7 @@ public sealed class CountingEmitterFactory : IEmitterFactory
     }
 }
 
-/// <summary>One fake emitter: no Godot type anywhere in its state, just the counts a suite reads —
+/// <summary>One fake emitter: no Godot type anywhere in its state, just the counts a suite reads,
 /// how many times it started and stopped sustaining, and whether it is sustaining now. Honest about
 /// <see cref="SustainEnd"/>-then-revive: <see cref="IsValid"/> stays true after a stop, exactly like a
 /// real <c>Puffer</c>, because <see cref="EmitterDirector"/> revives a stopped entry through its own
@@ -40,7 +40,7 @@ public sealed record CountingEmitter(string Key) : IEmitter
 
     public int LiveCount => Sustaining ? 1 : 0;
 
-    /// <summary>The world position <see cref="SustainAt"/> was last fed — what a suite reads to
+    /// <summary>The world position <see cref="SustainAt"/> was last fed, what a suite reads to
     /// confirm the emitter is following its live host rather than a pose taken once at start.</summary>
     public Vector3 LastPos { get; private set; }
 

@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The <c>fogvol.zrd</c> reader (<see cref="FogVolumeSpec"/>) and the gamez census it pairs with
-/// (<see cref="FogVolumeSpec.VolumesOf"/>) — the two halves of the authored ambient cloud field
+/// (<see cref="FogVolumeSpec.VolumesOf"/>), the two halves of the authored ambient cloud field
 /// (docs/formats/fogvol.md).
 ///
 /// <para>The grammar half runs on a hand-authored fixture; the data half pins all eight chapters,
@@ -23,7 +23,7 @@ namespace CSVM.Tests;
 public class FogVolumeTests
 {
     /// <summary>Per chapter: the fvol volume census, and the spec the reader gets. Format is
-    /// "volumes|fog_zone|distance|clutter_key|blocks" then the resolved template names — so one
+    /// "volumes|fog_zone|distance|clutter_key|blocks" then the resolved template names, so one
     /// row shows both the file and the geometry it needs, which is what the split turns on.</summary>
     public static TheoryData<string, string> ChapterFogVolumes => new()
     {
@@ -38,7 +38,7 @@ public class FogVolumeTests
     };
 
     /// <summary>Per chapter: "volumes|volumes whose authored shape IS their bounding box". The
-    /// second number is the decode the scatter turns on — only C1/C2B/C4's map-spanning slabs are
+    /// second number is the decode the scatter turns on, only C1/C2B/C4's map-spanning slabs are
     /// boxes, and filling the bounds of anything else puts cloud where the data authors none.
     /// C1C's nine slab volumes are boxes and its twelve build-ups are rotated tapering frusta;
     /// C5 has two boxes among seventeen, the rest being polygonal street prisms and three strips
@@ -56,7 +56,7 @@ public class FogVolumeTests
     };
 
     /// <summary>Per chapter: the map-spanning slab the map-edge continuation would extend, or
-    /// "none". Real per-chapter numbers, not a synthetic fixture — see
+    /// "none". Real per-chapter numbers, not a synthetic fixture, see
     /// <c>docs/formats/fogvol.md</c> for <c>cardHeight</c> and the exact <c>fvol1</c>
     /// <c>model_bbox</c> values these bounds are read from.</summary>
     public static TheoryData<string, float, string> ChapterMapSpanningSlab => new()
@@ -181,7 +181,7 @@ public class FogVolumeTests
         foreach (var volume in volumes)
         {
             // A volume IS its bounding box exactly when every corner of that box is inside the
-            // authored shape — an integer test with no tolerance to argue about. Same predicate
+            // authored shape, an integer test with no tolerance to argue about. Same predicate
             // the map-edge continuation uses to pick slab candidates (FindMapSpanningSlab).
             if (volume.IsAxisAlignedBox())
             {
@@ -210,7 +210,7 @@ public class FogVolumeTests
               + $"{s.TopY.ToString("0.##", CultureInfo.InvariantCulture)}"
             : "none";
         Assert.Equal(expected, actual);
-        // No shipped chapter's slab candidates disagree on their top or fail to tile exactly —
+        // No shipped chapter's slab candidates disagree on their top or fail to tile exactly,
         // both failure branches are exercised only by the synthetic fixtures below.
         Assert.Null(skipReason);
     }
@@ -219,7 +219,7 @@ public class FogVolumeTests
     public void TwoAxisAlignedTopAnchoredPiecesThatTileExactlyAreFoundAsOneSlab()
     {
         // Two 1000x1000 boxes side by side in X, sharing the seam at x=0, both 50 m thick (a
-        // "sheet" against a 132.3 m card) at the same top altitude — C1's nine slab pieces,
+        // "sheet" against a 132.3 m card) at the same top altitude, C1's nine slab pieces,
         // shrunk to two for a hand-checkable fixture.
         var west = BoxVolume("west", new Vector3(-1000, 900, -500), new Vector3(0, 950, 500));
         var east = BoxVolume("east", new Vector3(0, 900, -500), new Vector3(1000, 950, 500));
@@ -270,7 +270,7 @@ public class FogVolumeTests
     {
         // A 1000x1000 sheet plus a much taller box off to the side (a C1C build-up stand-in,
         // except axis-aligned): the tall one fails TOP-ANCHORED and must not join the slab, even
-        // though it passes IsAxisAlignedBox on its own — the classification composes.
+        // though it passes IsAxisAlignedBox on its own, the classification composes.
         var sheet = BoxVolume("sheet", new Vector3(-1000, 900, -500), new Vector3(1000, 950, 500));
         var tower = BoxVolume("tower", new Vector3(2000, 900, -500), new Vector3(2500, 1500, 500));
 
@@ -296,7 +296,7 @@ public class FogVolumeTests
     public void ARotatedVolumeExcludesTheCornersOfItsBoundingBox()
     {
         // A square prism turned 45° in the XZ plane: its bounding box is 2x2, its own footprint is
-        // the diamond inscribed in it. Nothing here is chapter data — it is the property the
+        // the diamond inscribed in it. Nothing here is chapter data, it is the property the
         // scatter depends on, stated where it cannot silently stop holding.
         const float S = 0.70710678f;
         var faces = new[]
@@ -318,7 +318,7 @@ public class FogVolumeTests
     }
 
     // A hand-built axis-aligned FogVolumeBox: the 6 outward-facing unit-normal planes of [min,
-    // max], so IsAxisAlignedBox() is trivially true and Contains() is an exact box test — the
+    // max], so IsAxisAlignedBox() is trivially true and Contains() is an exact box test, the
     // fixture shape FindMapSpanningSlab's synthetic tests above compose.
     private static FogVolumeBox BoxVolume(string name, Vector3 min, Vector3 max) => new(
         name,

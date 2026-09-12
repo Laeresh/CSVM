@@ -8,11 +8,11 @@ namespace CSVM.Flight;
 /// <summary>
 /// Visible damage on the aircraft, driven purely by the data's injure_anims thresholds: a
 /// part's own health fraction (<see cref="OnPartDamage"/>) and the whole vehicle's health
-/// fraction (<see cref="OnHullDamage"/>) each drive their own list — see
+/// fraction (<see cref="OnHullDamage"/>) each drive their own list, see
 /// <c>docs/org/vehicleDamage.md</c>'s "Damage staging" for the two pools and why armour is in
 /// neither. What each authored stage plays is on <see cref="RigAnimFor"/>; the panel-pairing
 /// traps are on <see cref="PairHealthySkins"/>. The cockpit twins pcdp4/pcdp6 (B12) share
-/// <c>_panels</c> and flip off the same <c>pdpanelN</c> entries — no separate cockpit rule.
+/// <c>_panels</c> and flip off the same <c>pdpanelN</c> entries, no separate cockpit rule.
 /// FlightController calls <see cref="OnPartDamage"/>/<see cref="OnHullDamage"/> after each hit
 /// and <see cref="Reset"/> on respawn.
 /// </summary>
@@ -25,7 +25,7 @@ public sealed class DamageVisuals
     /// parked viewer) leaves the authored stages unplayed.</summary>
     public Action<string>? DamageEffectSink;
 
-    /// <summary>Stops everything <see cref="DamageEffectSink"/>'s plays started — the whole
+    /// <summary>Stops everything <see cref="DamageEffectSink"/>'s plays started, the whole
     /// damage-stage closure, not just the played roots, because a stopped pdpanelN cannot reach the
     /// short_firetrail instance it CALLed onto the panel, and player_damage_trail's trail sits on
     /// prop1, whose NODE_ACTIVE exit never fires (the prop stays visible). Invoked from
@@ -42,7 +42,7 @@ public sealed class DamageVisuals
 
     // Healthy-twin pairing (see the class comment): across all 11 player planes, a
     // torn panel and its true healthy skin overlap (mesh-AABB centers ≤ 0.72 m apart),
-    // while crossed-name or unrelated skins are ≥ 1.36 m away — 1.0 m splits them.
+    // while crossed-name or unrelated skins are ≥ 1.36 m away, 1.0 m splits them.
     private const float MaxPairDistance = 1.0f;
     // The autogyro's pdp2/pdp2_h sit ±0.28 m across the centerline (mirrored, NOT the
     // same spot): opposite X signs beyond this dead band reject a candidate pair.
@@ -55,7 +55,7 @@ public sealed class DamageVisuals
 
     // The original's handle arrays (inst+0x890 def-level, part+0x4c per-part), reduced to a flag
     // because our runtime stops by anim name: one slot per LADDER ENTRY, set on the downward
-    // crossing and cleared only on the upward one. Keyed on the entry and never on the anim name —
+    // crossing and cleared only on the upward one. Keyed on the entry and never on the anim name,
     // an AI ladder names one anim at six thresholds, and a name-keyed set fires it once.
     private readonly bool[] _vehicleStaged;
     private readonly Dictionary<string, bool[]> _partStaged = new(StringComparer.OrdinalIgnoreCase);
@@ -66,12 +66,12 @@ public sealed class DamageVisuals
     private bool _smoking;
     private bool _noRuntimeLogged;
 
-    /// <param name="panels">PlaneBuilder.DamagePanels — pdpN + pdpN_h nodes.</param>
+    /// <param name="panels">PlaneBuilder.DamagePanels, pdpN + pdpN_h nodes.</param>
     /// <param name="planeRoot">pairing measures panel mesh centers in this frame.</param>
     /// <param name="standInTrail">parked-viewer stand-in smoke half, burned at prop1; null in flight.</param> <param name="standInFire">its fire half.</param>
     /// <param name="panelTrails">parked-viewer stand-in pool, one firepuffer per flipped panel.</param>
     /// <param name="pairing">def-derived candidate sets; null falls back to unscoped pairing, loudly.</param>
-    /// <param name="cockpitPanels">PlaneBuilder.CockpitDamagePanels — pcdp4/pcdp6, flipped off the same pdpanelN entries (B12).</param>
+    /// <param name="cockpitPanels">PlaneBuilder.CockpitDamagePanels, pcdp4/pcdp6, flipped off the same pdpanelN entries (B12).</param>
     public DamageVisuals(IEnumerable<Node3D> panels, Node3D planeRoot, PlaneStats stats,
         Puffer? standInTrail = null, Puffer? standInFire = null, List<Puffer>? panelTrails = null,
         PanelPairing? defPairing = null, IEnumerable<Node3D>? cockpitPanels = null)
@@ -107,7 +107,7 @@ public sealed class DamageVisuals
     /// damage may hide are exactly the `*_h` nodes `plane_reset` re-ACTIVEs on reset (pdp2_h and
     /// pdp3_h, one shared def OPERAND_NODE-retargeted at every airframe), and the torn panels are
     /// the `pdpN` nodes the `pdpanelN` defs activate. What the defs do NOT encode is which torn
-    /// panel hides which skin — no def ever deactivates an `_h` node — so the co-location match
+    /// panel hides which skin, no def ever deactivates an `_h` node, so the co-location match
     /// (<see cref="PairHealthySkins"/>) still assigns pairs, scoped to these sets.</summary>
     public static PanelPairing? PanelPairingSets(IEnumerable<Mech3.AnimDefinition> defs)
     {
@@ -141,8 +141,8 @@ public sealed class DamageVisuals
     /// rig-runtime work (the cockpit gauge cycles, got_hit_anim). Membership in the curated menus
     /// the rig binds, never a program-existence rule, which would play those gauge defs on the
     /// airframe. One deliberate mapping: the data's 0.10 entry names <c>player_smoketrail</c>, but
-    /// the original's damage footage pins the heavy stage as <c>player_damage_trail</c> —
-    /// short_firetrail at prop1 plus the fire_lt nose light — so that is what plays.</summary>
+    /// the original's damage footage pins the heavy stage as <c>player_damage_trail</c>,
+    /// short_firetrail at prop1 plus the fire_lt nose light, so that is what plays.</summary>
     public static string? RigAnimFor(string injureAnim)
     {
         if (Same(injureAnim, "player_smoketrail"))
@@ -178,7 +178,7 @@ public sealed class DamageVisuals
     }
 
     /// <summary>Applies every per-part visual whose threshold the part's health fraction has
-    /// crossed (health-only, not combined armour+HP — see <c>docs/org/vehicleDamage.md</c>'s
+    /// crossed (health-only, not combined armour+HP, see <c>docs/org/vehicleDamage.md</c>'s
     /// "Damage staging"), and retracts the ones it has risen back over. Once per downward
     /// crossing, per ENTRY. The whole-vehicle stages are <see cref="OnHullDamage"/>.</summary>
     public void OnPartDamage(string partName, float healthFraction)
@@ -260,7 +260,7 @@ public sealed class DamageVisuals
     }
 
     /// <summary>Damage-lab drive (static viewer): the parked plane never moves, so the authored
-    /// distance-interval trails would emit nothing — the stand-in puffers burn in place instead,
+    /// distance-interval trails would emit nothing, the stand-in puffers burn in place instead,
     /// at <see cref="StaticBurnSpeed"/> of virtual motion per second (panel fires and, when
     /// smoking, the prop1 smoke/fire pair rise from the standing plane).</summary>
     public void UpdateStatic(float dt)
@@ -315,7 +315,7 @@ public sealed class DamageVisuals
 
     // Merged mesh-AABB center of the panel's subtree, in the plane root's
     // frame. The pdpN nodes carry transforms but the _h twins sit at the origin with
-    // their placement baked into the mesh — mesh AABBs locate both.
+    // their placement baked into the mesh, mesh AABBs locate both.
     private static bool TryMeshCenter(Node3D panel, Node3D root, out Vector3 center)
     {
         var merged = default(Aabb);
@@ -337,7 +337,7 @@ public sealed class DamageVisuals
     }
 
     // Transform of `node` relative to `root`
-    // by walking parents — works before the subtree enters the scene tree.
+    // by walking parents, works before the subtree enters the scene tree.
     private static Transform3D RelativeTo(Node3D node, Node3D root)
     {
         var xf = Transform3D.Identity;
@@ -347,7 +347,7 @@ public sealed class DamageVisuals
     }
 
     // First node under `root` whose Godot name or gamez
-    // `cs_name` meta matches — the same two names AnimRuntime resolution reads.
+    // `cs_name` meta matches, the same two names AnimRuntime resolution reads.
     private static Node3D? FindByName(Node root, string name)
     {
         if (root is Node3D n3
@@ -383,11 +383,11 @@ public sealed class DamageVisuals
                     _panelTrails.Add((torn, puffer));
             }
             // hide the healthy skin at the torn panel's own spot (paired by
-            // position — the _h names are crossed on three planes)
+            // position, the _h names are crossed on three planes)
             if (_pairedHealthy.TryGetValue("pdp" + n, out var healthySkins))
                 foreach (var healthy in healthySkins)
                     healthy.Visible = false;
-            // The cockpit-interior twin — same anim, same threshold, no separate rule (B12).
+            // The cockpit-interior twin, same anim, same threshold, no separate rule (B12).
             // pcdp4/pcdp6 carry no healthy skin of their own to hide, so nothing pairs here.
             if (_panels.TryGetValue("pcdp" + n, out var cockpitTorn))
                 cockpitTorn.Visible = true;
@@ -403,7 +403,7 @@ public sealed class DamageVisuals
 
     // The upward crossing (a repair): the entry's stage stops and its panel goes back, so the
     // entry can fire again on the next descent. Nothing stops while another entry still holds the
-    // same anim — the runtime stops by NAME, so one stop would take all six of an AI ladder's.
+    // same anim, the runtime stops by NAME, so one stop would take all six of an AI ladder's.
     private void Retract(string anim)
     {
         if (StagedEntryCount(anim) > 0)
@@ -469,7 +469,7 @@ public sealed class DamageVisuals
     }
 
     // Pairs each healthy pdpN_h skin with the nearest torn panel (mesh-AABB centers,
-    // same side of the centerline). CANDIDATE sets are def-derived when given — see
+    // same side of the centerline). CANDIDATE sets are def-derived when given, see
     // PanelPairingSets. The ASSIGNMENT inside those sets is always positional: no def
     // says which panel hides which skin, and name-based pairing is wrong on three
     // planes (docs/formats/gamez.md).

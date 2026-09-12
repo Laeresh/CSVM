@@ -238,7 +238,7 @@ internal static class DamageSuites
         });
     }
 
-    // A flat named call-site node for DamageTemplatePool — name meta set
+    // A flat named call-site node for DamageTemplatePool, name meta set
     // the way the crash rig's own anchor scaffold sets it, so resolution finds it.
     internal static Node3D PoolAnchorNode(string name, Vector3 at)
     {
@@ -341,7 +341,7 @@ internal static class DamageSuites
 
     // ---- the cockpit-interior torn panels flip off the same injure entries ---------------------------
 
-    // pcdp4/pcdp6 are driven off the very pdpanel4/pdpanel6 entries that already flip pdp4/pdp6 —
+    // pcdp4/pcdp6 are driven off the very pdpanel4/pdpanel6 entries that already flip pdp4/pdp6,
     // no separate cockpit rule. Built with cockpitInterior:true so the pair exists, this crosses
     // whichever of the two the plane's own data authors (not every plane necessarily carries
     // both), checks the cockpit panel tears alongside its exterior namesake, survives a
@@ -433,7 +433,7 @@ internal static class DamageSuites
     // fury's AI ladder names random_remote_damage at six of its seven thresholds, so a latch keyed
     // on the anim name plays five of them never. Three halves: the count over the real ladder, the
     // retraction a repair makes (cleared on the upward crossing alone, never by staying below), and
-    // the per-(part, entry) keying, which no shipped def exercises — see the synthetic ladder below.
+    // the per-(part, entry) keying, which no shipped def exercises, see the synthetic ladder below.
     [Suite("damage-stage-slots",
         "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)")]
     internal static void DamageStageSlots(TestContext ctx)
@@ -609,7 +609,7 @@ internal static class DamageSuites
                 };
 
                 // Armour off first, in one spend, then the ladder walked down one band at a time
-                // through TakeCollisionHit — the production take-hit entry, not the visuals API.
+                // through TakeCollisionHit, the production take-hit entry, not the visuals API.
                 ai.TakeCollisionHit(damage.WholeArmor, 0f, ai.GlobalPosition, 0);
                 foreach (float frac in new[] { 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
                     DestroyChoreographySuites.SpendHullTo(ai, damage, frac);
@@ -624,7 +624,7 @@ internal static class DamageSuites
                 ctx.Check(anchors.Count == 7 && offPlane == 0,
                     $"every one of the {anchors.Count} stage instances anchored inside THIS aircraft ({offPlane} elsewhere)");
 
-                // The repair: the whole ladder retracts, and each stage is stopped exactly once —
+                // The repair: the whole ladder retracts, and each stage is stopped exactly once,
                 // once per ANIM, not once per entry, or five of fury's six would stop nothing.
                 stops.Clear();
                 visuals.OnHullDamage(1f);
@@ -639,7 +639,7 @@ internal static class DamageSuites
 
                 // C16's anchor census as a live A/B: the stage defs are authored against the
                 // Devastator, and the Bloodhawk spells its elevators l_elev/r_elev. Same rig, same
-                // pinned dice, one airframe apart — so the warned set is about the airframe alone.
+                // pinned dice, one airframe apart, so the warned set is about the airframe alone.
                 ctx.Check(rig.AnchorWarnLabel == "player_fury" && rig.AnchorWarnAnimNames != null
                           && rig.AnchorWarnAnimNames.Contains("random_remote_damage"),
                     $"the AI rig is armed to name an unresolved stage anchor (label={rig.AnchorWarnLabel ?? "-"})");

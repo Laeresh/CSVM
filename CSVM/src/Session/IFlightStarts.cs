@@ -6,11 +6,11 @@ namespace CSVM.Session;
 
 /// <summary>Where every pilot in a session starts: one call answering for the whole field, never
 /// one call per player. <see cref="SpawnPicker"/> implements it directly, looping its own
-/// per-player <c>ChooseSpawn</c> — the plain behaviour for solo flight, Dogfight and any scripted
+/// per-player <c>ChooseSpawn</c>, the plain behaviour for solo flight, Dogfight and any scripted
 /// run.
 /// ⚠ Whole-field is the point of the seam: a centred fan needs the player count before any slot
 /// is known, and a worst-slot lift needs every slot probed before any answer is final. A
-/// per-player signature was rejected — it forces state across calls and leaves player 1's answer
+/// per-player signature was rejected, it forces state across calls and leaves player 1's answer
 /// wrong until player 4 has asked.</summary>
 public interface IFlightStarts
 {
@@ -22,7 +22,7 @@ public interface IFlightStarts
 }
 
 /// <summary>One pilot's start: a world position, a look-at point one unit ahead along the spawn
-/// heading, and the throttle and speed to begin on — the four values
+/// heading, and the throttle and speed to begin on, the four values
 /// <see cref="FlightController.Setup"/> takes, carried unchanged so no call site has to
 /// reinterpret them. ⚠ Throttle and speed come from the mission's own PLAYER_INIT record and are
 /// therefore per-mission, NOT per-airframe; the original has no per-plane spawn speed for the

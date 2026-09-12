@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared results board for a splitscreen stunt race — <see cref="ResultsBoard"/>'s shell.
+/// The shared results board for a splitscreen stunt race, <see cref="ResultsBoard"/>'s shell.
 /// Where the single-player <see cref="StuntScoreboard"/> shows one pilot's per-zone splits inside
 /// their own pane, this ranks the whole field and covers the entire window on its own CanvasLayer
 /// over the splitscreen panes, because the race ends for everybody at once. One row per player in
@@ -16,7 +16,7 @@ namespace CSVM.Flight;
 /// only): race totals aren't comparable across player counts.</summary>
 public sealed partial class StuntRaceBoard : ResultsBoard
 {
-    // Base metrics at 720p (scaled by window height). All TUNE — mirrors StuntScoreboard so the
+    // Base metrics at 720p (scaled by window height). All TUNE, mirrors StuntScoreboard so the
     // solo and race boards read as the same screen.
     private const int TitleFont = 26;
     private const int ContextFont = 15;

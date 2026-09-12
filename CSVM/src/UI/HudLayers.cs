@@ -22,12 +22,12 @@ internal static class HudLayers
     /// the cloud whiteout (<c>Session/WeatherRig.cs</c>) and the splitscreen pane root.</summary>
     public const int WorldOverlay = 0;
 
-    /// <summary>The lens-flare sprites — core glow and the three rings. Shares
+    /// <summary>The lens-flare sprites, core glow and the three rings. Shares
     /// <see cref="WorldOverlay"/> with the cloud whiteout and is ordered under it in tree order,
     /// so flying into a cloud swallows the flare with everything else.</summary>
     public const int FlareSprites = WorldOverlay;
 
-    /// <summary>The flight HUD and cockpit overlay — compass, gauges, reticle, readouts. Also the
+    /// <summary>The flight HUD and cockpit overlay, compass, gauges, reticle, readouts. Also the
     /// <c>--viewer</c> lab panels, which never coexist with it.</summary>
     public const int Hud = 1;
 
@@ -50,12 +50,12 @@ internal static class HudLayers
     /// lab (F5).</summary>
     public const int Lab = 5;
 
-    /// <summary>Scoreboards and the launchscreen — always on top of everything.</summary>
+    /// <summary>Scoreboards and the launchscreen, always on top of everything.</summary>
     public const int Board = 10;
 
     /// <summary>The frame-cost readout (<c>F14</c>). Above
     /// <see cref="Board"/> on purpose: the launchscreen's background is a full-screen opaque
-    /// <c>ColorRect</c> on that layer, and the readout has to read there too — fps/frame cost/GC
+    /// <c>ColorRect</c> on that layer, and the readout has to read there too, fps/frame cost/GC
     /// are process-wide facts, not something a mode screen should be able to hide.</summary>
     public const int PerfReadout = 11;
 

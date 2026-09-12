@@ -10,12 +10,12 @@ namespace CSVM.Effects;
 /// The original's ambient cloud field: the chapter's own <c>fogvol.zrd</c> clutter table scattered
 /// through its gamez <c>fvol*</c> volumes. Schema, per-chapter numbers and the decoded/undecoded
 /// split: docs/formats/fogvol.md.
-/// Built once, world-anchored, zero per-frame cost — one <see cref="MultiMeshInstance3D"/> per
+/// Built once, world-anchored, zero per-frame cost, one <see cref="MultiMeshInstance3D"/> per
 /// sprite kind, shared by every splitscreen pane; the shader billboards, fades and culls per view.
 /// ⚠ Do not re-introduce a hand-tuned cloud field. Every count, radius, size, opacity and band
 /// margin is authored data read here; this file holds exactly two TUNE constants, each marked at
 /// its own field.
-/// ⚠ C1B, C2 and C3 render nothing here on purpose — see fogvol.md. Their ambient sky is the
+/// ⚠ C1B, C2 and C3 render nothing here on purpose, see fogvol.md. Their ambient sky is the
 /// world's own placed <c>cloudparent</c> sprites, built elsewhere.
 /// </summary>
 public sealed partial class FogVolumeClutter : Node3D
@@ -29,43 +29,43 @@ public sealed partial class FogVolumeClutter : Node3D
     // Shape-classification threshold (docs/formats/fogvol.md): a volume no more than this many
     // card-heights thick reads as a sheet and is TOP-ANCHORED; taller volumes keep the full-height
     // UNIFORM draw. A judgement call from a clean gap in the volumes' own measured thickness, not
-    // authored data — see the docs page for the measurements.
+    // authored data, see the docs page for the measurements.
     private const float TopAnchorHeightFactor = 1.5f;
 
     // TUNE: the fvol cards' authored vertex colour 240 scaled to 225, applied in BuildCardMesh.
-    // No decoded mechanism — four candidates are refuted on data; see docs/formats/fogvol.md's
+    // No decoded mechanism, four candidates are refuted on data; see docs/formats/fogvol.md's
     // "sprite templates" section for the measurements.
     // ⚠ Do not stack a mechanism onto this constant if one is found; replace it instead.
-    // ⚠ fvol cards only — the placed cloudparent facades keep their own authored rules (vcol 255,
+    // ⚠ fvol cards only, the placed cloudparent facades keep their own authored rules (vcol 255,
     // range-gated opacity); see fogvol.md.
     private const float CardVertexColorTune = 225f / 240f;
 
-    /// <summary>Sprites placed, summed over every kind — the authored volumes' own placements
+    /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
     /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
     /// built and <see cref="Create"/> returned null.</summary>
     public int InstanceCount { get; private set; }
 
-    /// <summary>Sprites placed by the map-edge continuation alone — zero in every chapter whose
+    /// <summary>Sprites placed by the map-edge continuation alone, zero in every chapter whose
     /// <c>fvol*</c> volumes carry no map-spanning slab (C1B,
     /// C2, C3 render nothing at all; C5's strips and C1C's build-ups are local geometry and are
     /// never extended). <see cref="InstanceCount"/> minus this is the count the authored volumes
     /// alone would have produced.</summary>
     public int ExtensionCount { get; private set; }
 
-    /// <summary>Sprites placed inside the authored volumes alone — <see cref="InstanceCount"/>
+    /// <summary>Sprites placed inside the authored volumes alone, <see cref="InstanceCount"/>
     /// minus <see cref="ExtensionCount"/>, i.e. what the in-volume scatter produces before the
     /// continuation runs. Unaffected by the extension, which runs after the base draw and never
     /// reads the shared RNG stream the base draw uses.</summary>
     public int BaseCount => InstanceCount - ExtensionCount;
 
     /// <summary>Per-kind counts of the build, e.g. "cloudsprite1 x4471 (cloud1.tif, fade
-    /// 3100-3500 m)" — the evidence that the authored weights and fades reached the field.</summary>
+    /// 3100-3500 m)", the evidence that the authored weights and fades reached the field.</summary>
     public string Summary { get; private set; } = "";
 
     /// <summary>Builds the chapter's ambient cloud field, or null when the data asks for none:
     /// no <c>fogvol.zrd</c>, no <c>fvol*</c> volume, no resolvable template, or a
     /// <c>distance</c> that is not a usable mean spacing. Add the result to the world root at
-    /// identity — its instance transforms are absolute world coordinates.</summary>
+    /// identity, its instance transforms are absolute world coordinates.</summary>
     public static FogVolumeClutter? Create(GameZ gamez, TextureArchive textures,
         FogVolumeSpec? spec, IReadOnlyList<FogVolumeBox> volumes)
     {
@@ -104,7 +104,7 @@ public sealed partial class FogVolumeClutter : Node3D
     }
 
     // The gamez side of one clutter alternative: the sprite card its template root carries.
-    // Resolved by ClutterBuilder's own template rule — a parentless Object3d of that name whose
+    // Resolved by ClutterBuilder's own template rule, a parentless Object3d of that name whose
     // first meshed descendant is the card (docs/formats/clutter.md).
     private static List<Kind> ResolveKinds(GameZ gamez, TextureArchive textures, FogVolumeSpec spec)
     {
@@ -117,7 +117,7 @@ public sealed partial class FogVolumeClutter : Node3D
                 var card = root == null ? null : FirstWithMesh(gamez, root);
                 if (card == null)
                 {
-                    // Retail-data-normal for C1B/C2/C3 — see the class remarks.
+                    // Retail-data-normal for C1B/C2/C3, see the class remarks.
                     Log.Info("world", $"fogvol clutter template not in gamez template={reference.Node}");
                     continue;
                 }
@@ -171,7 +171,7 @@ public sealed partial class FogVolumeClutter : Node3D
         return null;
     }
 
-    // Half the card's largest local extent — what the billboard can swing outside the MultiMesh's
+    // Half the card's largest local extent, what the billboard can swing outside the MultiMesh's
     // static AABB, so it sizes ExtraCullMargin.
     private static float CardRadius(GameZMesh mesh)
     {
@@ -186,7 +186,7 @@ public sealed partial class FogVolumeClutter : Node3D
     private static float Lerp(Vector2 range, float t) => range.X + ((range.Y - range.X) * t);
 
     // The card's own source geometry (verts, UVs and the authored vertex colours), triangulated by
-    // the same fan/strip rule as SceneBuilder.EmitPolygon — the cloud cards are tri-strips.
+    // the same fan/strip rule as SceneBuilder.EmitPolygon, the cloud cards are tri-strips.
     // Recentred on the quad's centroid so the billboard pivots at its middle, like the placed cloud
     // sprites (SceneBuilder recenters those the same way); the shipped cards are already centred to
     // within 3 mm, so this moves nothing in this install and keeps a future one honest.
@@ -243,7 +243,7 @@ public sealed partial class FogVolumeClutter : Node3D
 
     // Camera-facing billboard (hand-rolled: a MultiMesh cannot use Godot's billboard flag), plus
     // the authored far fade. `cull` collapses the quad to a point past the fade's far end, so a
-    // sprite outside its draw distance costs no fragments — what lets the whole field be one
+    // sprite outside its draw distance costs no fragments, what lets the whole field be one
     // static MultiMesh with no streaming.
     // ⚠ The fade distance is the true 3D one, not the fog's horizontal cylinder: a cloud overhead
     // is as far away as one on the horizon.
@@ -289,7 +289,7 @@ public sealed partial class FogVolumeClutter : Node3D
 
     // The scatter: each volume is cut into `distance` x `distance` cells anchored on the world
     // origin, and each cell gets ONE placement drawn uniformly inside it, weighted over the
-    // resolved clutter table. `distance` is the field's areal DENSITY — an authored mean spacing,
+    // resolved clutter table. `distance` is the field's areal DENSITY, an authored mean spacing,
     // not a lattice phase. See docs/formats/fogvol.md for the density arithmetic and evidence.
     private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds)
     {
@@ -306,7 +306,7 @@ public sealed partial class FogVolumeClutter : Node3D
         }
 
         // The authored card's own extent (docs/formats/fogvol.md's "card size", e.g. 132.3 m for
-        // C1/C1C/C2B/C4, 70 m for C5) — every kind in a chapter shares one, so the largest among
+        // C1/C1C/C2B/C4, 70 m for C5), every kind in a chapter shares one, so the largest among
         // them is that chapter's card height for the TopAnchorHeightFactor test below.
         float cardHeight = 0f;
         foreach (var kind in kinds)
@@ -320,14 +320,14 @@ public sealed partial class FogVolumeClutter : Node3D
         var rng = Rng.NewSystemRandom(Rng.Clouds);
         float Rand(float a, float b) => a + ((float)rng.NextDouble() * (b - a));
 
-        // One pass per volume, not per clutter block — weights are already flattened into
+        // One pass per volume, not per clutter block, weights are already flattened into
         // Kind.Weight. Overlapping volumes (C1C's build-ups over its own slab) each get their own
         // fill; cells anchor on the world origin, not the volume.
         foreach (var volume in volumes)
         {
             var box = volume.Box;
             // Sheet-thin volumes (the slab's own AABB height) anchor their draw at the
-            // volume's own top; tall ones keep filling uniformly — see
+            // volume's own top; tall ones keep filling uniformly, see
             // TopAnchorHeightFactor and docs/formats/fogvol.md for the evidence.
             bool topAnchored = box.End.Y - box.Position.Y <= cardHeight * TopAnchorHeightFactor;
             int gx0 = Mathf.CeilToInt(box.Position.X / period), gx1 = Mathf.FloorToInt(box.End.X / period);
@@ -335,7 +335,7 @@ public sealed partial class FogVolumeClutter : Node3D
             for (int gx = gx0; gx <= gx1 && InstanceCount < MaxPlacements; gx++)
             {
                 // Cells tile the volume exactly (outermost cell of each axis takes the
-                // remainder), never a Poisson draw over the footprint — that would open holes
+                // remainder), never a Poisson draw over the footprint, that would open holes
                 // in what must read as a continuous overcast.
                 float x0 = gx == gx0 ? box.Position.X : (gx * period) - (period * 0.5f);
                 float x1 = gx == gx1 ? box.End.X : (gx * period) + (period * 0.5f);
@@ -347,11 +347,11 @@ public sealed partial class FogVolumeClutter : Node3D
                     float x = Rand(x0, x1);
                     float z = Rand(z0, z1);
                     // Top-anchored: Y is the volume's own top; perp_dist_range still adds after
-                    // containment, as for a uniform draw. ⚠ Never sample it before containment —
+                    // containment, as for a uniform draw. ⚠ Never sample it before containment,
                     // that would reject the whole field.
                     float y = topAnchored ? box.End.Y : Rand(box.Position.Y, box.End.Y);
 
-                    // The volume is its AUTHORED shape, not its bounding box — exact for C1/C2B/C4's
+                    // The volume is its AUTHORED shape, not its bounding box, exact for C1/C2B/C4's
                     // slabs, approximate-by-rejection for C1C's frusta and C5's prisms (fogvol.md).
                     // A rejected draw places nothing rather than crowding the surplus inward.
                     if (!volume.Contains(new Vector3(x, y, z)))
@@ -373,7 +373,7 @@ public sealed partial class FogVolumeClutter : Node3D
                     }
 
                     // Perturbation is applied AFTER containment, so a placement can sit up to
-                    // perturb_dist_range.y outside its own volume's wall — that is what a
+                    // perturb_dist_range.y outside its own volume's wall, that is what a
                     // perturbation means; the volume bounds the field, not each sprite.
                     var block = kind.Block;
                     float bearing = Rand(0f, Mathf.Tau);
@@ -392,11 +392,11 @@ public sealed partial class FogVolumeClutter : Node3D
 
         // Continue the map-spanning slab's own cell field past the base map. Runs after every
         // authored volume above has drawn everything it draws, and touches no state the loop above
-        // reads — it never calls `rng` at all, so it cannot realign the interior placements.
+        // reads, it never calls `rng` at all, so it cannot realign the interior placements.
         ExtendPastMapEdge(volumes, kinds, period, cardHeight, totalWeight);
     }
 
-    // Identifies the chapter's map-spanning slab from data (FogVolumeSpec.FindMapSpanningSlab —
+    // Identifies the chapter's map-spanning slab from data (FogVolumeSpec.FindMapSpanningSlab,
     // pure geometry, never a chapter name or a hardcoded fvol1..9 range) and, if one exists, tiles
     // its own `distance`-cell field outward past the map rim. C1C's build-up frusta and C5's
     // street strips fail the top-anchored test and are never extended; C1B/C2/C3 ship no fvol* at
@@ -430,8 +430,8 @@ public sealed partial class FogVolumeClutter : Node3D
 
         float bx0 = slab.MinX, bx1 = slab.MaxX, bz0 = slab.MinZ, bz1 = slab.MaxZ, topY = slab.TopY;
         // Eight regions tile the radius-margin ring with no gap and no overlap: four edge strips,
-        // four corner squares. Every inner edge is exactly bx0/bx1/bz0/bz1 — the same coordinate
-        // the interior loop clips its outermost cell to — so the join is exact by construction.
+        // four corner squares. Every inner edge is exactly bx0/bx1/bz0/bz1, the same coordinate
+        // the interior loop clips its outermost cell to, so the join is exact by construction.
         EmitExtensionRegion(bx0 - radius, bx0, bz0, bz1, period, topY, kinds, totalWeight); // west
         EmitExtensionRegion(bx1, bx1 + radius, bz0, bz1, period, topY, kinds, totalWeight); // east
         EmitExtensionRegion(bx0, bx1, bz0 - radius, bz0, period, topY, kinds, totalWeight); // south
@@ -443,8 +443,8 @@ public sealed partial class FogVolumeClutter : Node3D
     }
 
     // One rectangular slice of the extension ring, tiled with the same distance x distance cells
-    // as the interior loop. Two deliberate differences: every cell is accepted unconditionally —
-    // there is no authored shape out here to test against — and each cell draws off its own
+    // as the interior loop. Two deliberate differences: every cell is accepted unconditionally,
+    // there is no authored shape out here to test against, and each cell draws off its own
     // hashed generator (`Rng.NewSystemRandom(Rng.Clouds, gx, gz)`), not the interior's shared
     // stream, so `--det` stays stable regardless of how many cells the enumeration bounds admit.
     // Y is the slab's own constant top plus `perp_dist_range`, inheriting the interior's rule.

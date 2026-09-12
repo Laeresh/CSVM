@@ -56,7 +56,7 @@ public class StartGridTests
         }
     }
 
-    /// <summary>The line is perpendicular to the anchor's heading, not to a world axis — asserted on
+    /// <summary>The line is perpendicular to the anchor's heading, not to a world axis, asserted on
     /// an off-axis heading, where "the slots differ in X" would pass while the fan was wrong.</summary>
     [Theory]
     [InlineData(2)]
@@ -83,7 +83,7 @@ public class StartGridTests
         }
     }
 
-    /// <summary>Every pilot faces the way the anchor faces — one heading for the whole field, and
+    /// <summary>Every pilot faces the way the anchor faces, one heading for the whole field, and
     /// the anchor's own, not a rederived one.</summary>
     [Theory]
     [InlineData(0f)]
@@ -152,7 +152,7 @@ public class StartGridTests
         }
     }
 
-    /// <summary>The worst slot decides even when it is an outer one — the lift is a maximum over
+    /// <summary>The worst slot decides even when it is an outer one, the lift is a maximum over
     /// every slot, not a probe of the anchor.</summary>
     [Fact]
     public void TheWorstSlotDecidesWhereverItSits()
@@ -175,7 +175,7 @@ public class StartGridTests
 
     // ---- A sample that found nothing -----------------------------------------------------------
 
-    /// <summary>A slot with no ground under it contributes no lift — but is reported. The field is
+    /// <summary>A slot with no ground under it contributes no lift, but is reported. The field is
     /// still raised by whatever the slots that DID answer need, so one hole in the collision world
     /// cannot quietly drop a race into a hillside.</summary>
     [Fact]
@@ -201,7 +201,7 @@ public class StartGridTests
 
     /// <summary>Every sample coming back empty is the shape a physics space that has not ticked
     /// produces. The grid leaves the field on the authored spawn altitude rather than inventing a
-    /// correction — and says so loudly enough that the absence is not mistaken for flat ground at
+    /// correction, and says so loudly enough that the absence is not mistaken for flat ground at
     /// sea level.</summary>
     [Fact]
     public void AFieldWithNoGroundAnywhereIsLeftWhereTheSpawnPutItAndReported()
@@ -271,7 +271,7 @@ public class StartGridTests
     }
 
     /// <summary>The anchor is player 0's spawn, so `--spawn=N` picks which list entry the whole
-    /// field lines up on — and no other entry is consulted.</summary>
+    /// field lines up on, and no other entry is consulted.</summary>
     [Fact]
     public void TheAnchorIsTheSpawnBaseEntryAndNoOther()
     {
@@ -294,7 +294,7 @@ public class StartGridTests
     // ---- The values in force, and the report of them --------------------------------------------
 
     /// <summary>The two dialable values fall back to exactly the numbers the rest of this file
-    /// asserts, so an absent config.json places a field identically to the consts that preceded it —
+    /// asserts, so an absent config.json places a field identically to the consts that preceded it,
     /// and reading the key is what these tests are measuring, not a stale copy of the default.</summary>
     [Fact]
     public void TheConfigFallbacksAreTheGeometryTheseTestsAssert()
@@ -306,7 +306,7 @@ public class StartGridTests
     }
 
     /// <summary>Every slot reports itself. This is the only instrument a hand-flown race has for the
-    /// fan — the panes are chase-cam only, so a neighbour a spacing away is out of frame and no
+    /// fan, the panes are chase-cam only, so a neighbour a spacing away is out of frame and no
     /// screenshot can show whether the field is abreast, level or evenly spaced. The line therefore
     /// has to carry the slot, the point, the field's lift and the spacing in force.</summary>
     [Fact]
@@ -358,7 +358,7 @@ public class StartGridTests
     // Ground at one height everywhere.
     private static Func<Vector3, float?> Flat(float y) => _ => y;
 
-    // A synthetic heightfield keyed on the slot's X offset from the origin — the axis the
+    // A synthetic heightfield keyed on the slot's X offset from the origin, the axis the
     // fan runs along at heading 0°. An unlisted column is at sea level.
     private static Func<Vector3, float?> Heights(Dictionary<float, float> byX) => p =>
     {

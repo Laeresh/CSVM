@@ -51,7 +51,7 @@ public class BounceRestitutionTests
     }
 
     /// <summary>The contact-point velocity's rotational term is doubled, so a rotating contact
-    /// leaves the surface faster than <c>bounce_factor</c> permits — the decode's answer to the
+    /// leaves the surface faster than <c>bounce_factor</c> permits, the decode's answer to the
     /// above-0.6 flat-ground readings (docs/org/flightModel.md), which raising the constant instead
     /// would delete. A 2 m arm with 1 rad/s yaw gives 20.7 m/s outward, above the 18 m/s the same
     /// contact gives at rest.</summary>
@@ -132,7 +132,7 @@ public class BounceRestitutionTests
     }
 
     /// <summary>The end-to-end read on the shipped data: a Bloodhawk built from the real archives
-    /// rebounds at the authored 0.6, which is the whole point of the item — binding a constant this
+    /// rebounds at the authored 0.6, which is the whole point of the item, binding a constant this
     /// install already ships rather than inventing a pushback.</summary>
     [ExtractedDataFact]
     public void TheShippedBloodhawkReboundsAtTheAuthoredSixTenths()
@@ -144,14 +144,14 @@ public class BounceRestitutionTests
             m.BounceNormalSpeed(Vector3.Down * Sink, Vector3.Up, new Vector3(0f, 2f, 0f)), 3);
     }
 
-    // Level, unrotating, at the sink speed — the state every case above varies from.
+    // Level, unrotating, at the sink speed, the state every case above varies from.
     private static void Rest(FlightModel m)
     {
         m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
         m.BodyRates = Vector3.Zero;
     }
 
-    // The Bloodhawk's reciprocal moments with an explicit `bounce_factor` — the
+    // The Bloodhawk's reciprocal moments with an explicit `bounce_factor`, the
     // partition reads `I⁻¹`, so it is the one airframe number that matters here.
     private static FlightModel Plant(float bounceFactor) => new(new PlaneStats
     {
@@ -168,7 +168,7 @@ public class BounceRestitutionTests
 /// surface for a human, exactly at the stop for an AI), the absence of any tangential or friction
 /// term, the decoded angular impulse, and the multi-tick scrape that bleeds speed through repeated
 /// normal impulses alone. Restitution's arithmetic stays <see cref="BounceRestitutionTests"/>'s.
-/// Decode: docs/org/flightModel.md, "Collision response" — the original's whole contact path
+/// Decode: docs/org/flightModel.md, "Collision response", the original's whole contact path
 /// (sweep, integrator, damage) writes velocity ONLY through the normal impulse, so the filmed
 /// tangential losses are the placement, not a velocity term.
 /// A contact's fate is decided outside <c>Collide</c>; it sits on
@@ -180,7 +180,7 @@ public class CollideResponseTests
 
     /// <summary>The human placement is exact arithmetic with no severity scaling: the aircraft
     /// rests at <c>prev + step·stopFrac + normal·0.03</c>, the decoded literal at
-    /// <c>0x006080c4</c> — not the 0.15 the fitted push-out used.</summary>
+    /// <c>0x006080c4</c>, not the 0.15 the fitted push-out used.</summary>
     [Fact]
     public void AHumanContactRestsExactlyPushOutOffTheSweepStop()
     {
@@ -225,7 +225,7 @@ public class CollideResponseTests
     }
 
     /// <summary>A head-on human impact has no tangential component to keep, so the outcome is the
-    /// impulse alone, straight back the way it came at <c>bounce_factor · Sink</c> — the
+    /// impulse alone, straight back the way it came at <c>bounce_factor · Sink</c>, the
     /// single-axis rebound
     /// <see cref="BounceRestitutionTests.AnAxialNonRotatingContactReboundsAtExactlyBounceFactor"/>
     /// pins, arriving through <c>Collide</c>.</summary>
@@ -248,7 +248,7 @@ public class CollideResponseTests
     }
 
     /// <summary>The decoded ABSENCE, able to fail: a shallow human graze keeps its tangential
-    /// speed EXACTLY — the original's contact path carries no friction and no tangential term
+    /// speed EXACTLY, the original's contact path carries no friction and no tangential term
     /// anywhere (the whole path is traced), so the only velocity change is on the normal axis.
     /// The retired fitted friction (0.35 · vn/25 here ≈ 2.35 m/s of tangential loss) fails this
     /// by two decimal places.</summary>
@@ -274,7 +274,7 @@ public class CollideResponseTests
     /// <summary>The decoded angular impulse replaces the fitted kick: magnitude and axis are
     /// <c>(r × J)/|r|² · (1 + f_ang · bounce_factor) · 0.5</c>, net of the original's accumulator
     /// round-trip. For a 2 m arm under a 30 m/s vertical slam the hand-computed value is
-    /// 8.26 rad/s of pitch-down about body Z — an inertia moved off the authored reciprocal
+    /// 8.26 rad/s of pitch-down about body Z, an inertia moved off the authored reciprocal
     /// moments fails the partition share.</summary>
     [Fact]
     public void TheAngularImpulseMatchesTheDecodedShape()
@@ -315,7 +315,7 @@ public class CollideResponseTests
     }
 
     /// <summary>The multi-tick scrape, as the decode explains it: an oblique wall scrape bleeds
-    /// speed across ticks purely through REPEATED normal impulses — each tick the plant steers the
+    /// speed across ticks purely through REPEATED normal impulses, each tick the plant steers the
     /// velocity back into the wall, and the next contact spends the re-accumulated closing share.
     /// With the arm along the normal the per-tick outcome is exact:
     /// <c>speed' = speed · √(cos²θ + (bounce_factor · sinθ)²)</c>, monotone to a 24 % loss over
@@ -350,7 +350,7 @@ public class CollideResponseTests
     }
 
     /// <summary>The scrape control (METHOD-9): a purely tangential drag along the same wall has no
-    /// closing share to spend, so the contact costs nothing at all — the bleed above needs the
+    /// closing share to spend, so the contact costs nothing at all, the bleed above needs the
     /// re-closing, so it is the repeated impulse and not a per-contact friction that produced
     /// it. A friction term of any size fails this exactness.</summary>
     [Fact]

@@ -15,7 +15,7 @@ public static class PropParts
     // Settled fact, not a TUNE: the authored spin_rotorN/spin_rotorNb rates from
     // plane_props.json (spinprops) and autogyro.json (agyro_rotors). PropAnimator converts
     // them the same way AnimDefs.Spin converts the ambient world's XYZ_ROTATION spins
-    // (docs/formats/anim-definitions.md) — do not re-measure or treat these as tunable.
+    // (docs/formats/anim-definitions.md), do not re-measure or treat these as tunable.
     private const float PropMainDegPerSec = -220f; // propN   : XYZ_ROTATION [0,0,-220]
     private const float PropGhostDegPerSec = 60f;  // propNb  : XYZ_ROTATION [0,0, 60]
     private const float RotorMainDegPerSec = 165f; // rotor1  : XYZ_ROTATION [0,165,0]

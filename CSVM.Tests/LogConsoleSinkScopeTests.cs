@@ -29,7 +29,7 @@ public class LogConsoleSinkScopeTests
         Exception? failureA = null;
         Exception? failureB = null;
 
-        // A opens its capture FIRST and logs LAST — so a sink stored process-wide is B's by the
+        // A opens its capture FIRST and logs LAST, so a sink stored process-wide is B's by the
         // time A writes, and A's line lands in B's list instead of its own.
         var threadA = new Thread(() =>
         {
@@ -127,7 +127,7 @@ public class LogConsoleSinkScopeTests
         }
         catch (InvalidOperationException)
         {
-            // Already torn down by the other thread's failure path — nothing left to remove.
+            // Already torn down by the other thread's failure path, nothing left to remove.
         }
     }
 }

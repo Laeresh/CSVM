@@ -181,7 +181,7 @@ public class AiTargetRankingTests
             new("bloodhawk_*", -1f, 0f),
             new("bloodhawk_2", -0.5f, 0f), // shadowed: first match wins (authored order)
         };
-        // −1.0 is the exclusion, not a penalty — the dominant shipped value.
+        // −1.0 is the exclusion, not a penalty, the dominant shipped value.
         Assert.Equal(AiTargetRanking.NotRanked,
             AiTargetRanking.ObjectiveBiasFor("bloodhawk_2", biases), 1);
         Assert.Equal(0f, AiTargetRanking.ObjectiveBiasFor("piratezep", biases), 1);
@@ -274,7 +274,7 @@ public class AiTargetRankingTests
     [Fact]
     public void AnExhaustedPoolFallsBackToTheBestOverall()
     {
-        // Every candidate is held: the design's "exhausting the pool returns to the top" —
+        // Every candidate is held: the design's "exhausting the pool returns to the top",
         // the best-ranked candidate is taken anyway.
         var a = Ahead(500f, attackers: 1);
         var b = Ahead(900f, attackers: 2, xOffset: 50f);
@@ -358,7 +358,7 @@ public class AiTargetRankingTests
         Assert.Equal(321, biased);
         Assert.Equal(697, entries);
         Assert.Equal(389, minusOnes); // biases run -1.0…1.0, both signs, -1.0 dominant
-        // Measured 2026-08-13: every shipped entry is a [pattern, bias] PAIR — the exe
+        // Measured 2026-08-13: every shipped entry is a [pattern, bias] PAIR, the exe
         // comment's third element is never authored in this install (0 triples across all 53
         // files). The reader still preserves one defensively when present.
         Assert.Equal(0, thirds);

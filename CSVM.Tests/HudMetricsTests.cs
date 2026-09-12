@@ -32,7 +32,7 @@ public class HudMetricsTests
         // 32:9: half the width, centred, so the columns stand a 16:9 reading width apart.
         Check(new Vector2(5120f, 1440f), 1280f, 2560f, 1440f);
 
-        // A 2-player pane stacked on a 720p window is 1280x360, which IS 32:9 — the same law with
+        // A 2-player pane stacked on a 720p window is 1280x360, which IS 32:9, the same law with
         // no aspect branch, which is why the ultrawide symptom showed up in splitscreen first.
         Check(new Vector2(1280f, 360f), 320f, 640f, 360f);
 

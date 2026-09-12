@@ -22,7 +22,7 @@ public sealed partial class CompassTape : Control
     private const float TileDegrees = 15f;      // one compassticks2 tile
     // The original draws the tile ~25% taller than the bar, bottom-aligned (its empty
     // top rows overflow the bar and clip): that is what puts the tall ticks at 77% of
-    // the bar height and the minors at 42% — full-height mapping leaves them stubby
+    // the bar height and the minors at 42%, full-height mapping leaves them stubby
     // (measured 30 px / 17 px vs 24 px / 12 px in a 39 px bar).
     private const float TileOverscan = 1.25f;
 
@@ -117,7 +117,7 @@ public sealed partial class CompassTape : Control
         DrawTextureRectRegion(_ticks, new Rect2(w - 2f * s, tileY, 2f * s, tileH), rimSrc, rim);
     }
 
-    // Screen x of a mark Δ° off the current heading — the drum projection;
+    // Screen x of a mark Δ° off the current heading, the drum projection;
     // increasing headings run leftward (whiskey card).
     private float DrumX(float deltaDeg) =>
         Size.X / 2f - RefDrumRadius * HudMetrics.Scale(this)
@@ -125,7 +125,7 @@ public sealed partial class CompassTape : Control
 
     // Octant labels every 45°, centred on their drum position but NOT
     // drum-compressed (the original billboards them upright), fading with the same
-    // cos as the ticks — the atlas' own cream colour shows through. A child layer
+    // cos as the ticks, the atlas' own cream colour shows through. A child layer
     // only so the letters filter bilinearly while the ticks stay point-sampled.
     private sealed partial class LabelLayer : Control
     {

@@ -23,12 +23,12 @@ namespace CSVM.Flight;
 public partial class FlightController : Node3D
 {
     /// <summary><c>weapons.gunAmmoCap</c> (config.json) default: 0 = off, full stock gun capacity.
-    /// A positive value caps every firable gun group's load to that many rounds — a testing knob for
+    /// A positive value caps every firable gun group's load to that many rounds, a testing knob for
     /// the low-ammo cases (chiefly the on-empty group hand-off) that thousands of stock rounds make
     /// tedious to reach. Capped at each group's real capacity; the gauge reads full at the cap.</summary>
     public const int GunAmmoCapDefault = 0;
 
-    /// <summary><c>weapons.ordnanceCap</c> (config.json) default: 0 = off, full stock pylon load —
+    /// <summary><c>weapons.ordnanceCap</c> (config.json) default: 0 = off, full stock pylon load,
     /// the same knob as <see cref="GunAmmoCapDefault"/>, for hardpoints instead of gun groups.</summary>
     public const int OrdnanceCapDefault = 0;
 
@@ -36,7 +36,7 @@ public partial class FlightController : Node3D
     public FlightAudio? Audio;
 
     /// <summary>The positional twin of <see cref="Audio"/>, carried by an AI-flown aircraft instead
-    /// of it: engine loops on 3D emitters, culled by distance. Never both — own-ship audio is
+    /// of it: engine loops on 3D emitters, culled by distance. Never both, own-ship audio is
     /// non-positional by design, and a rig with a person in it takes <see cref="Audio"/>.</summary>
     public AiEngineAudio? EngineAudio;
 
@@ -51,7 +51,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The per-mode hiding of this pilot's OWN aircraft while a first-person view is on
     /// the screen (interior in, body out; Nose also drops markers/dontmove). Null on every rig that
-    /// was not built an interior — AI planes and the labs — which then never hides anything.</summary>
+    /// was not built an interior, AI planes and the labs, which then never hides anything.</summary>
     public CockpitVisibility? Cockpit;
 
     /// <summary>The authored instrument panel inside that interior: needles and the two warning
@@ -68,7 +68,7 @@ public partial class FlightController : Node3D
     /// interior renders in the main world instead.</summary>
     public CockpitOverlay? CockpitPass;
 
-    /// <summary>The wobble oscillators and the pivot they roll — the node the assembler hung
+    /// <summary>The wobble oscillators and the pivot they roll, the node the assembler hung
     /// <see cref="PlaneModel"/> under. Null when no rig assembly ran (parked lab planes).</summary>
     public PlaneShake? Shake;
     public Node3D? ShakePivot;
@@ -101,7 +101,7 @@ public partial class FlightController : Node3D
     /// <summary>The airframe's physics body on the aircraft collision layer, built in
     /// <c>_Ready</c> from <see cref="Collider"/>'s own boxes: what a projectile ray or another
     /// plane's sweep strikes. This plane's own queries exclude it (<see cref="AircraftBody.ExcludeSelf"/>).
-    /// Null when no collider boxes could be derived — the plane is then unhittable.</summary>
+    /// Null when no collider boxes could be derived, the plane is then unhittable.</summary>
     public AircraftBody? Body;
 
     /// <summary>Per-part hit points from the vehicle def's destroyable_parts.
@@ -136,12 +136,12 @@ public partial class FlightController : Node3D
 
 
     /// <summary>Plays a named effect def at a world point through the session's world-effects
-    /// runtime — the survivable graze's authored <c>touchdown_*</c> reaction. Same sink shape
+    /// runtime, the survivable graze's authored <c>touchdown_*</c> reaction. Same sink shape
     /// as <c>ProjectilePool.EffectSink</c>; null (no world, or a build with no effects runtime)
     /// leaves the scrape's sound without its sparks/dust/splash.</summary>
     public System.Action<string, Vector3>? GrazeEffectSink;
 
-    /// <summary>The graze family's def vector — the session's ONE <c>touchdown_*</c> table
+    /// <summary>The graze family's def vector, the session's ONE <c>touchdown_*</c> table
     /// (<c>WorldEffectsFactory.TouchdownDefs</c>), indexed by the scraped material's surface id by
     /// the same cascade <see cref="CrashDefs"/> uses. Null on a build with no world-effects runtime,
     /// which leaves a scrape with neither its def nor its bark, exactly as the original leaves it
@@ -153,7 +153,7 @@ public partial class FlightController : Node3D
     /// thresholds through the rig runtime. Optional.</summary>
     public DamageVisuals? Visuals;
 
-    /// <summary>This plane's stock loadout bound to its model — the gun groups (with independent
+    /// <summary>This plane's stock loadout bound to its model, the gun groups (with independent
     /// ammo counters) + hardpoints the firing code draws from. Null disables weapons.</summary>
     public Loadout? Loadout;
 
@@ -176,7 +176,7 @@ public partial class FlightController : Node3D
 
     /// <summary>--ammo=N: overrides both <c>weapons.gunAmmoCap</c> and <c>weapons.ordnanceCap</c> at
     /// rig build, so the low-ammo start survives <c>--det</c> (which drops config.json entirely).
-    /// Null when the flag was absent — falls through to the config.json knobs.</summary>
+    /// Null when the flag was absent, falls through to the config.json knobs.</summary>
     public int? AmmoCapOverride;
 
     /// <summary>--fire: hold the gun trigger down (scripted screenshot / soak runs), as a scripted
@@ -207,21 +207,21 @@ public partial class FlightController : Node3D
     /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Right.</summary>
     public int InitialGunSelect;
 
-    /// <summary>This airframe's DESTROY def — the anim slot the original starts the instant health
+    /// <summary>This airframe's DESTROY def, the anim slot the original starts the instant health
     /// reaches zero (<c>fury-fury</c>, <c>player-player</c>), where <see cref="CrashDefs"/> is the
     /// GROUND-IMPACT slot. Set alongside <see cref="CrashRuntime"/>; null leaves a kill with no
     /// wreck at all, which is what hiding the airframe on the death frame used to look like.</summary>
     public string? DestroyDef;
 
     /// <summary>Whether <see cref="DestroyDef"/> takes the hull over itself (an <c>ObjectMotion</c>
-    /// on <c>MAIN_ROOT_NODE</c>, with its own bounce landing) — true on all eleven airframe defs,
+    /// on <c>MAIN_ROOT_NODE</c>, with its own bounce landing), true on all eleven airframe defs,
     /// false on <c>player</c>. It says who LANDS the wreck, not who flies it: every dead hull flies
     /// itself until the def's <c>Callback 15</c>. Derived by <c>EffectCatalogue.FliesOwnHull</c>.</summary>
     public bool DestroyDefFliesWreck;
 
     /// <summary>The stunt run, when flying --stunt: danger-zone sphere
     /// detection, tested against the plane each physics frame. Deliberately NOT reset on
-    /// respawn — a mid-run crash keeps completed zones (the clock keeps running).
+    /// respawn, a mid-run crash keeps completed zones (the clock keeps running).
     /// Null in free flight.</summary>
     public StuntMission? Stunt;
 
@@ -238,7 +238,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The splitscreen stunt race this plane is one seat of, or null when
     /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
-    /// on, and R only becomes a rematch once the whole field is in — a rematch restarts every
+    /// on, and R only becomes a rematch once the whole field is in, a rematch restarts every
     /// player, so it goes through <see cref="RestartRace"/> rather than this plane alone.</summary>
     public StuntRace? Race;
 
@@ -248,7 +248,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
     /// <see cref="VersusMatch.Completed"/> the results board is up and any player's R there means
-    /// "rematch" instead of "respawn me" — checked before the crash branch, exactly the same
+    /// "rematch" instead of "respawn me", checked before the crash branch, exactly the same
     /// R-ownership rule <see cref="Race"/>/<see cref="RestartRace"/> already follow (the board
     /// owns R only while it is visible, which mirrors <c>Completed</c> exactly).</summary>
     public VersusMatch? Match;
@@ -258,7 +258,7 @@ public partial class FlightController : Node3D
     /// dogfight results board.</summary>
     public Action? RestartMatch;
 
-    /// <summary>Splitscreen pause bookkeeping — the SAME instance on every rig
+    /// <summary>Splitscreen pause bookkeeping, the SAME instance on every rig
     /// (assigned by <c>GameSession</c>, the same way <see cref="Match"/> is), so any player's
     /// Start/P here can pause everyone but only <see cref="PauseState.OwnerPlayerIndex"/> can
     /// resume. Null only where no session builds one (the suites' bare rigs), in which case
@@ -266,19 +266,19 @@ public partial class FlightController : Node3D
     /// never fires and the null is never read.</summary>
     public PauseState? PauseState;
 
-    /// <summary>0-based player index — this plane's seat in the race and its pane, and the
+    /// <summary>0-based player index, this plane's seat in the race and its pane, and the
     /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
 
     /// <summary>This pilot's target selection, or null for a seat that
     /// does no targeting (every AI rig, and the suites' bare rigs). Set by
     /// <c>HumanFlightAdapter</c> on each human pane; <see cref="StepTargeting"/> feeds it every
-    /// frame. Read <c>Targeting.Current</c> for the selected target — that is the property the
+    /// frame. Read <c>Targeting.Current</c> for the selected target, that is the property the
     /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
     public TargetSelection? Targeting;
 
     /// <summary>Appends the mission's selectable structures (the zeppelin sub-parts) to the
-    /// targeting pool each frame — <c>ZeppelinRuntime.CollectTargetParts</c>, bound by
+    /// targeting pool each frame, <c>ZeppelinRuntime.CollectTargetParts</c>, bound by
     /// <c>GameSession</c> once the zeppelins exist. Null in a session with none. A delegate because
     /// the zeppelins are BUILT AFTER the rigs, so there is no runtime to hand the assembler; the
     /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
@@ -293,7 +293,7 @@ public partial class FlightController : Node3D
     public System.Action<List<AimCandidate>>? TargetObjectives;
 
     /// <summary><c>--target=</c>'s spec, or null for an unscripted session. Applied ONCE, on
-    /// the first frame <see cref="Targeting"/>'s pool has anything in it, and never consulted again —
+    /// the first frame <see cref="Targeting"/>'s pool has anything in it, and never consulted again,
     /// it sets the initial selection, it does not hold it, so an interactive session started with the
     /// flag still cycles normally.</summary>
     public string? InitialTarget;
@@ -313,7 +313,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The non-player input source: set (with <see cref="IsHumanPiloted"/> false), it
     /// replaces the keyboard/pad read each sim step, the way a scripted hold profile does for
-    /// scripted runs — collision, weapons, damage and crash downstream are byte-for-byte the
+    /// scripted runs, collision, weapons, damage and crash downstream are byte-for-byte the
     /// player's path. ⚠ The FLIGHT MODEL is the one exception: construction selects the AI force
     /// path off this same split (<see cref="FlightModel.UsesAiForcePath"/>).</summary>
     public AiPilot? Pilot;
@@ -329,31 +329,31 @@ public partial class FlightController : Node3D
     /// flag.</summary>
     public FuelTank Fuel = new();
 
-    /// <summary>Where the human pilots are, as one snapshot per call — the seam the flight model's
+    /// <summary>Where the human pilots are, as one snapshot per call, the seam the flight model's
     /// far-field plant is selected on (<see cref="FlightModel.FarFieldPlant"/>). The session binds
     /// the same snapshot every other "who is nearest" consumer reads. Null (every rig built without
     /// a session) leaves the distance at zero, which keeps that rig on near-field aerodynamics.
     /// ⚠ Set on AI rigs. A human rig's nearest human is itself, so the distance is always 0.</summary>
     public Func<IReadOnlyList<Vector3>>? HumanPositions;
 
-    /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
+    /// <summary>The world's destructibles, when this session has a world runtime, the aim assist's
     /// third candidate list (an approximation of the original's `targets.zrd`
     /// `MStructList`). Null in every build with no world (the weapon lab, the suites), which costs
     /// the scan nothing: that pass simply iterates an empty list.</summary>
     public DestructibleRegistry? Destructibles;
 
-    /// <summary>The mission's surface vehicles, when this session built any — on the SAME candidate
+    /// <summary>The mission's surface vehicles, when this session built any, on the SAME candidate
     /// list the aircraft roster feeds (`VehicleList`, docs/org/aim-assist.md "The four lists": the
     /// decoded list holds "aircraft and AI ground/sea vehicles"), never the structure or turret one.
     /// Null in every build with no world or no hull spawned, which costs the scan nothing.</summary>
     public SurfaceVehicleRuntime? SurfaceVehicles;
 
-    /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
-    /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
+    /// <summary>Draw the collision probe, the swept ray plus the airframe boxes the
+    /// crash test sweeps each physics frame, in green (red on the impact frame).</summary>
     public bool DebugCollision;
 
-    /// <summary>The gamepad devices that fly THIS plane (splitscreen). Null — the
-    /// single-player default — means every connected pad flies it (see <see cref="PadPressed"/>).
+    /// <summary>The gamepad devices that fly THIS plane (splitscreen). Null, the
+    /// single-player default, means every connected pad flies it (see <see cref="PadPressed"/>).
     /// In splitscreen each player is bound to its own device so P2's stick never moves P1.</summary>
     public int[]? PadDevices;
 
@@ -378,7 +378,7 @@ public partial class FlightController : Node3D
     /// effect without a stunt run.</summary>
     public bool DebugCompleteStunt;
 
-    /// <summary>The numpad camera view (1–9, 5 unbound) held for the whole run — the scripted twin
+    /// <summary>The numpad camera view (1–9, 5 unbound) held for the whole run, the scripted twin
     /// of holding the key, so a capture can frame the belly or a flank of a flying plane. 0 (the
     /// default) is the chase camera, i.e. exactly today's behaviour. A key held at the controls
     /// wins over this while it is down.</summary>
@@ -398,7 +398,7 @@ public partial class FlightController : Node3D
     public Vector2 PinnedLook;
 
     /// <summary>Out of lives: this pilot stays crashed for the rest of
-    /// the mission — neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back — while
+    /// the mission, neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back, while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
     /// the session's own lives ledger (<c>InstantActionRuntime.NotifyPilotDown</c>), never from
     /// here; this node holds no mission state and decides no rule.</summary>
@@ -427,13 +427,13 @@ public partial class FlightController : Node3D
     private const int AnimRunning = 2;
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
-    private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
+    private const float GrazeReactionInterval = 1.5f; // s between graze reactions, NOT a tuned value:
                                                       // the touchdown defs stop their own puffer at
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
                                                       // reaction per scrape rather than a restart per frame
     private const int InitialTargetGrace = 300;    // frames --target= waits for the pool to fill
     private const float TargetHoldSeconds = 0.25f; // decision 7: D-pad Up past this is a HOLD,
-                                                   // not a tap. ⚠ TUNE — ours, not the original's,
+                                                   // not a tap. ⚠ TUNE, ours, not the original's,
                                                    // which needs no threshold because it has a key
                                                    // per action
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
@@ -481,13 +481,13 @@ public partial class FlightController : Node3D
     private bool _initialTargetDone;             // --target= has had its one chance
     private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
     private FlightModel _model = null!;
-    private CameraController? _cam;              // null on an AI rig — no view rides this plane
+    private CameraController? _cam;              // null on an AI rig, no view rides this plane
     private bool _deathCamera;                   // the pilot's own destruction holds the view; the
                                                  // one camera that keeps writing while crashed,
                                                  // since it re-aims at the falling wreck
     private Camera3D? _viewCamera;
     private CanvasLayer? _hudCanvas;             // the whole HUD layer; hidden while crashed (the
-                                                 // original's crash camera shows no HUD — footage);
+                                                 // original's crash camera shows no HUD, footage);
                                                  // never built on an AI rig
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
@@ -538,7 +538,7 @@ public partial class FlightController : Node3D
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
-    private GunAimSlot[][] _aimSlots = Array.Empty<GunAimSlot[]>(); // per _firableGuns group, one slot per muzzle — B2's assist state
+    private GunAimSlot[][] _aimSlots = Array.Empty<GunAimSlot[]>(); // per _firableGuns group, one slot per muzzle, B2's assist state
     private bool _aimLoggedFirst;                // verification breadcrumb: the assist's first snap logs once
     private bool _aimListsLogged;                // verification breadcrumb: the candidate list sizes log once
     private bool _groundBlowLoggedFirst;         // verification breadcrumb: ground blow's first repelling hit
@@ -551,9 +551,9 @@ public partial class FlightController : Node3D
     private bool _aiNitroArmed;                  // the current AI nitro maneuver already engaged
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
-    private int? _team;                          // Team's backing field — null until overridden (B7)
-    private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
-    private bool _cameraOwned;                   // CameraOwned's backing field — the lab's free camera has the view
+    private int? _team;                          // Team's backing field, null until overridden (B7)
+    private bool _held;                          // Held's backing field, the airframe is pinned (weapon lab)
+    private bool _cameraOwned;                   // CameraOwned's backing field, the lab's free camera has the view
     private bool _panelShown;                    // the cockpit interior is on the screen this frame
     private bool _orbitPrev;                     // edge detection for entering the orbit (halt or hold)
     private bool _reseedOrbit;                   // the free camera handed the view back; re-seed from where it left it
@@ -566,7 +566,7 @@ public partial class FlightController : Node3D
     // drawing the raw sim pose stutters the plane against the smoothly-moving chase camera at
     // any render rate above 60 fps, in proportion to speed. SimStep records the last two sim
     // poses; _Process draws between them at the physics interpolation fraction. Realtime clock
-    // only — a parent-driven (fixed-dt) clock draws the exact sim pose, keeping scripted
+    // only, a parent-driven (fixed-dt) clock draws the exact sim pose, keeping scripted
     // captures byte-identical.
     private Transform3D _simPrev = Transform3D.Identity;
     private Transform3D _simCurr = Transform3D.Identity;
@@ -595,23 +595,23 @@ public partial class FlightController : Node3D
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
     /// killer shooter id). Null for terrain, mid-air, an unowned round or any other crash cause. A
-    /// fact report, not a score — this node knows no match rules; the session subscribes and scores
+    /// fact report, not a score, this node knows no match rules; the session subscribes and scores
     /// when a match exists. Respawn emits nothing.</summary>
     public event Action<int, int?>? Downed;
 
-    /// <summary>Raised whenever <see cref="Inert"/> flips, with this aircraft — the seam a
+    /// <summary>Raised whenever <see cref="Inert"/> flips, with this aircraft, the seam a
     /// session-level roster (the E16 voice dispatch's speaker list) mirrors the state into, since
     /// nothing outside this node polls it.</summary>
     public event Action<FlightController>? InertChanged;
 
     /// <summary>Raised on every projectile hit that moved this plane's damage state without
-    /// destroying it (the destroying hit reports through <see cref="Downed"/> instead) — the
+    /// destroying it (the destroying hit reports through <see cref="Downed"/> instead), the
     /// E16 voice runtime reads the whole-vehicle summary off it for the DI distress tiers and
     /// the player's WA-HighDmg crossing. Terrain grazes do not raise it; the decoded distress
     /// sites are the combat hit path's.</summary>
     public event Action<FlightController>? DamageApplied;
 
-    /// <summary>This aircraft's team — everywhere "is this hostile" is asked reads this instead of
+    /// <summary>This aircraft's team, everywhere "is this hostile" is asked reads this instead of
     /// deriving a team from <see cref="PlayerIndex"/> (shooter ids are not team ids). Unset, it
     /// falls back to <see cref="AimAssist.TeamOfPilot"/>, so free flight and <c>--vs</c> keep every
     /// pane on its own team; a mission builder sets it to a fixed team explicitly.</summary>
@@ -660,7 +660,7 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>Current throttle (0-1), the live flight model's own value — exposed so the rig
+    /// <summary>Current throttle (0-1), the live flight model's own value, exposed so the rig
     /// assembler can seed <see cref="ThrottleSmoke"/> at build time, after <see cref="Setup"/> has
     /// already placed the plane at its spawn throttle.</summary>
     public float Throttle => _model.Throttle;
@@ -675,7 +675,7 @@ public partial class FlightController : Node3D
     /// none.</summary>
     public PilotViewMode ViewMode => _cam?.ViewMode ?? PinnedViewMode;
 
-    /// <summary>Whether this pilot is in one of the two first-person views — the session's feed for
+    /// <summary>Whether this pilot is in one of the two first-person views, the session's feed for
     /// the anim data's <c>PLAYER_1ST_PERSON</c> condition (id 120).</summary>
     public bool FirstPersonView => PilotView.IsFirstPerson(ViewMode);
 
@@ -700,7 +700,7 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>The node the crash definition anchors to (its <c>player</c> anim-root) — passed to
+    /// <summary>The node the crash definition anchors to (its <c>player</c> anim-root), passed to
     /// <see cref="AnimRuntime.Play"/> on a crash. Bound with <see cref="CrashRuntime"/>.</summary>
     public Node3D? CrashAnchor
     {
@@ -711,12 +711,12 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>Whether this aircraft's crash rig has been armed but not yet built — a spawn that
+    /// <summary>Whether this aircraft's crash rig has been armed but not yet built, a spawn that
     /// handed the build to a frame-budgeted pump. Observation only: every reader of the rig itself
     /// forces the build, so nothing outside the pump has to ask.</summary>
     public bool CrashRigPending => _pendingCrashRig != null;
 
-    /// <summary>The crash-def vector the struck surface id indexes — the original's own selection
+    /// <summary>The crash-def vector the struck surface id indexes, the original's own selection
     /// mechanism (see <see cref="SurfaceDefTable"/>). Built from the bound crash program, so it
     /// knows which slots name a def this install actually ships. The selection is
     /// <see cref="AircraftLifecycle"/>'s, which holds the table; null when no crash rig was
@@ -730,15 +730,15 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>The def the last <see cref="Crash"/> selected off <see cref="CrashDefs"/> —
+    /// <summary>The def the last <see cref="Crash"/> selected off <see cref="CrashDefs"/>,
     /// <c>player_crash_*</c> on a human rig, <c>ai_crash_*</c> on an AI plane, null before any
     /// crash or when no crash rig was built. The prefix names the family, so a suite (or a log
-    /// reader — the CRASH line prints the same value as <c>def=</c>) can pin which family
+    /// reader, the CRASH line prints the same value as <c>def=</c>) can pin which family
     /// fired.</summary>
     public string? LastCrashDef => _lifecycle.LastCrashDef;
 
-    /// <summary>Seconds a crash sits on the crash cam before this plane auto-respawns, or null —
-    /// the default — for manual R only. The session arms it (Versus: 3 s, every rig) so a downed
+    /// <summary>Seconds a crash sits on the crash cam before this plane auto-respawns, or null,
+    /// the default, for manual R only. The session arms it (Versus: 3 s, every rig) so a downed
     /// player rejoins the fight without touching a key; R still respawns early, and the timer is
     /// armed at <see cref="Crash"/>. Scripted HoldSegments runs auto-respawn regardless, on
     /// <see cref="AircraftLifecycle.AutoRespawnDelay"/> unless this says otherwise.</summary>
@@ -748,11 +748,11 @@ public partial class FlightController : Node3D
         set => _lifecycle.AutoRespawnAfter = value;
     }
 
-    /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
+    /// <summary>Whether this plane is crashed, frozen at the impact, airframe hidden, waiting
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
     public bool Crashed => _lifecycle.Crashed;
 
-    /// <summary>Whether this aircraft's hull is spent and its destroy def is playing — true from
+    /// <summary>Whether this aircraft's hull is spent and its destroy def is playing, true from
     /// the kill, through the fall, and on past the ground impact until respawn. <see cref="Crashed"/>
     /// covers a live aircraft flown into terrain as well; this is the shot-down half alone.</summary>
     public bool Destroyed => _lifecycle.Destroyed;
@@ -762,7 +762,7 @@ public partial class FlightController : Node3D
     /// its ground-impact def, whichever the airframe authors.</summary>
     public bool WreckFalling => _lifecycle.WreckFalling;
 
-    /// <summary>An aircraft that has been BUILT but held completely out of the session — not
+    /// <summary>An aircraft that has been BUILT but held completely out of the session, not
     /// stepped, drawn, collidable, hittable, or a targeting candidate. The original's wave
     /// sequencer builds waves 2-4 this way (docs/formats/instant-action.md "The ace and the
     /// waves"); <see cref="Activate"/> is CSVM's inverse.
@@ -800,7 +800,7 @@ public partial class FlightController : Node3D
     public bool Deactivated => _lifecycle.Deactivated;
 
     /// <summary>Whether this aircraft is present in the session as a real object: neither crashed
-    /// nor <see cref="Inert"/>. The single "is it there" test every roster reads — the aim assist's
+    /// nor <see cref="Inert"/>. The single "is it there" test every roster reads, the aim assist's
     /// vehicle/turret candidate lists, the projectile pool's proximity fuse and blast pass, the D12
     /// ranking's standing-target check, the HUD hostile tracker and the E11 wave-clear walk. A
     /// consumer that tests <see cref="Crashed"/> alone silently sees inert aircraft.</summary>
@@ -812,16 +812,16 @@ public partial class FlightController : Node3D
     /// this node decides nothing about the mode itself.</summary>
     public bool InPhotoMode { get; private set; }
 
-    /// <summary>The flight model's world position — the plane as a SIM value, not a node transform
+    /// <summary>The flight model's world position, the plane as a SIM value, not a node transform
     /// (the node lags it by the render interpolation). What another plane's aim assist aims at.</summary>
     public Vector3 WorldPosition => _model.Position;
 
-    /// <summary>The flight model's world velocity, m/s — the assist's intercept solve needs it, and
+    /// <summary>The flight model's world velocity, m/s, the assist's intercept solve needs it, and
     /// so does the shooter's own subtraction to relative velocity.</summary>
     public Vector3 WorldVelocity => _model.VelocityDir * _model.Speed;
 
     /// <summary>The nose axis off the SIM attitude (the render half may hold an interpolated
-    /// frame) — what the AI gunner's quick-draw cones project fore and aft from.</summary>
+    /// frame), what the AI gunner's quick-draw cones project fore and aft from.</summary>
     public Vector3 NoseDirection => -_model.Attitude.Z;
 
     /// <summary>The whole SIM attitude, body→world, nose −Z and up +Y. Roll is part of the answer:
@@ -906,7 +906,7 @@ public partial class FlightController : Node3D
         _cam = camera != null
             ? new CameraController(camera, camParams, KeyDown, PinnedView, PinnedViewMode, cockpitCameraOffset)
             : null;
-        // C22: the idle branch of the shared head-look law — set once here, since Head lives for
+        // C22: the idle branch of the shared head-look law, set once here, since Head lives for
         // the controller's whole life and _model (captured by the closure) is reassigned by every
         // respawn, not replaced.
         if (_cam != null)
@@ -972,7 +972,7 @@ public partial class FlightController : Node3D
         ApplyPresence();
         SnapCamera();
 
-        // One firing-state slot per firable gun group (turrets excluded — built inert).
+        // One firing-state slot per firable gun group (turrets excluded, built inert).
         if (Loadout != null)
         {
             var firable = new List<GunGroup>();
@@ -1009,7 +1009,7 @@ public partial class FlightController : Node3D
             _gunLoggedFirst = new bool[n];
 
             // One aim-assist slot per muzzle, seeded to "no assist" (both directions local
-            // forward) — the original's slots start unused and the forget pass alone would reach
+            // forward), the original's slots start unused and the forget pass alone would reach
             // the same state, this just skips the wait.
             double aimNow = GameClock.Current?.Time ?? 0.0;
             _aimSlots = new GunAimSlot[n][];
@@ -1044,7 +1044,7 @@ public partial class FlightController : Node3D
 
     /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
     /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
-    /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
+    /// stunt run alone, a mid-run crash deliberately keeps its zones and clock.</summary>
     public void Respawn()
     {
         _lifecycle.Respawn();
@@ -1062,7 +1062,7 @@ public partial class FlightController : Node3D
         RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
         // ⚠ The field, not the forcing property: a rig that is still armed has never played
         // anything, so there is nothing here to undo, and asking for it would build the whole rig
-        // on the frame an aeroplane is placed — which is the frame the deferral exists to spare.
+        // on the frame an aeroplane is placed, which is the frame the deferral exists to spare.
         if (_crashRuntime != null)
         {
             // Hard-stop the played def, re-hide the wreck (its RESET_STATE), and re-home the flung
@@ -1150,7 +1150,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>The inverse of building inert: re-home this aircraft at <paramref name="pos"/>
-    /// with its nose on <paramref name="lookAt"/>, put it back in play and respawn it there — the
+    /// with its nose on <paramref name="lookAt"/>, put it back in play and respawn it there, the
     /// original's teleport-then-reactivate, in one call. <see cref="Respawn"/> does the rest of the
     /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
     /// start choreography), so a wave arrives flying rather than parked. Calling this on an
@@ -1226,13 +1226,13 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
-    /// <paramref name="lookAt"/>, at zero speed — click-to-place and <c>--weapon-target=</c>. Goes
+    /// <paramref name="lookAt"/>, at zero speed, click-to-place and <c>--weapon-target=</c>. Goes
     /// through the same <see cref="FlightModel.Reset"/> + <see cref="SnapCamera"/> pair
     /// <see cref="Respawn"/> uses. Sets the pin whether or not <see cref="Held"/> is on.</summary>
     public void PlaceHeld(Vector3 pos, Vector3 lookAt)
     {
         var dir = lookAt - pos;
-        // A zero-length aim (clicked the plane's own position) would make LookingAt throw — keep
+        // A zero-length aim (clicked the plane's own position) would make LookingAt throw, keep
         // the attitude the plane already has rather than fail the placement.
         _heldAttitude = dir.LengthSquared() > 1e-6f
             ? Basis.LookingAt(dir.Normalized(), Vector3.Up)
@@ -1368,13 +1368,13 @@ public partial class FlightController : Node3D
         CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
     }
 
-    /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —
+    /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped),
     /// the programmatic twin of G / D-pad Right, which only cycles. Interactively that cycle still
     /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time
     /// equivalent and cannot be re-applied once the rig is built.</summary>
     public void SelectGunGroup(int index) => _fire?.SelectGunGroup(index);
 
-    /// <summary>Weapon lab: point the hardpoint selector at a pylon (0-based, clamped) — the
+    /// <summary>Weapon lab: point the hardpoint selector at a pylon (0-based, clamped), the
     /// programmatic twin of H. Unlike H this lands on an EMPTY pylon too (the lab picks a mount to
     /// look at, not a mount to fire); the firing path's own armed scan still advances off it when
     /// the trigger is pulled.</summary>
@@ -1434,7 +1434,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>One projectile hit on this plane: maps it to the data part and spends the weapon's
-    /// ARMOR_DAMAGE/HEALTH_DAMAGE through <see cref="PlaneDamage.Apply"/> — the decoded flow, see
+    /// ARMOR_DAMAGE/HEALTH_DAMAGE through <see cref="PlaneDamage.Apply"/>, the decoded flow, see
     /// docs/org/vehicleDamage.md. Exhausted whole-vehicle health downs the plane through
     /// <see cref="Crash"/>, as a fatal contact does. No cooldown: every round counts.
     /// <paramref name="shooter"/> carries into <see cref="Downed"/> as the killer.
@@ -1470,7 +1470,7 @@ public partial class FlightController : Node3D
         else
             Shake?.MissileHit(weapon.ArmorDamage ?? 0f, weapon.HighExplosive);
         // The shield took it: the damage pair is discarded where the original zeroes it
-        // (0x004b9ea4) and returns, so nothing below this line runs — no armour spend, no hit
+        // (0x004b9ea4) and returns, so nothing below this line runs, no armour spend, no hit
         // marker, no kill test.
         if (absorbed)
             return;
@@ -1504,7 +1504,7 @@ public partial class FlightController : Node3D
         }
 
         // The decoded kill rule: whole-vehicle health current at or below zero (never a part
-        // flag) — reachable through the zone-less overflow, so it is tested on every hit.
+        // flag), reachable through the zone-less overflow, so it is tested on every hit.
         if (Damage.IsDestroyed)
         {
             Log.Info("weapons", $"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
@@ -1593,7 +1593,7 @@ public partial class FlightController : Node3D
     /// the stunt clock.</summary>
     public void SimStep(float dt)
     {
-        // An inert airframe takes no step at all — no stunt clock, no input, no flight
+        // An inert airframe takes no step at all, no stunt clock, no input, no flight
         // model, no collision sweep, no weapons. Guarded here rather than in the session's loop so
         // every caller (the session simulation or a focused suite) honours it in one place.
         if (Inert)
@@ -1601,7 +1601,7 @@ public partial class FlightController : Node3D
 
         PollInput();
 
-        // Advance the stunt clock every physics frame — including through the crash freeze so the
+        // Advance the stunt clock every physics frame, including through the crash freeze so the
         // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
         // halted GameClock stops the calls entirely, so the timer freezes with the rest of the sim.
         Stunt?.Tick(dt);
@@ -1626,7 +1626,7 @@ public partial class FlightController : Node3D
 
         if (Stunt is { AllComplete: true } && Race == null)
         {
-            _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
+            _simPrev = _simCurr;   // hold the finish pose, no stale pair left to interpolate
             return;
         }
         _autoRestartIn = AircraftLifecycle.AutoRespawnDelay; // re-armed while the run is live
@@ -1646,7 +1646,7 @@ public partial class FlightController : Node3D
                 return;
             }
             // The one thing a dead aircraft still does: fall. No input, no weapons, no stunt
-            // clock — only the hull, on its way to its ground-impact def.
+            // clock, only the hull, on its way to its ground-impact def.
             StepWreckFall(dt);
             return;
         }
@@ -1759,12 +1759,12 @@ public partial class FlightController : Node3D
         if (_fire != null)
         {
             // The weapon lab flips these on the public fields at runtime (bank switch, toggles;
-            // GameSession also sets InfiniteAmmo post-_Ready) — mirror them into the machine.
+            // GameSession also sets InfiniteAmmo post-_Ready), mirror them into the machine.
             _fire.AutoFireRockets = AutoFireRockets;
             _fire.InfiniteAmmo = InfiniteAmmo;
             var fireInputs = new FireInputs
             {
-                // A null pool could spawn nothing — feed the triggers as released so no ammo is
+                // A null pool could spawn nothing, feed the triggers as released so no ammo is
                 // decided away on rounds that could never fire. An AI pilot's gunner IS its
                 // trigger; without one the raw controls (--fire's AutoFire included) decide.
                 FireHeld = Projectiles != null
@@ -1801,7 +1801,7 @@ public partial class FlightController : Node3D
 
         // The plane wobble: overspeed drive plus this tick's fire/hit kicks, written as
         // visual-only roll to the pivot the model hangs under. Physics, aim and the camera
-        // read this node's transform, which the pivot sits below — never the wobble.
+        // read this node's transform, which the pivot sits below, never the wobble.
         if (Shake != null)
         {
             Shake.SetSpeedRatio(_model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed));
@@ -1884,7 +1884,7 @@ public partial class FlightController : Node3D
             _cam?.SeedOrbit(_model.Position);
         }
         _orbitPrev = orbiting;
-        // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
+        // Plane state, animators, audio ramps, is sim time, so it freezes and scales with it.
         float simDt = clock?.FrameDt ?? (float)delta;
         if (!orbiting)
         {
@@ -1899,7 +1899,7 @@ public partial class FlightController : Node3D
         }
         if (CameraOwned || _cam == null)
         {
-            // The lab's free camera has the view — every camera write here would fight it —
+            // The lab's free camera has the view, every camera write here would fight it,
             // and an AI rig has no camera at all.
         }
         else if (orbiting)
@@ -1917,7 +1917,7 @@ public partial class FlightController : Node3D
         }
         else if (Crashed)
         {
-            // The authored crash camera holds the pose Crash() cut to — the original's camera does
+            // The authored crash camera holds the pose Crash() cut to, the original's camera does
             // not move after the cut (footage). The DEATH camera is the exception: its spot is
             // fixed but its aim is not, so it is stepped to keep the falling wreck framed.
             if (_deathCamera)
@@ -1954,8 +1954,8 @@ public partial class FlightController : Node3D
             else if (_cam.FirstPerson)
             {
                 // Rigid at cockpit_camera (wobble inherited), the mode's own FOV, aimed by the
-                // head. Look-back stays IN the cockpit — head to dead astern while held, as the
-                // original does — which is why this arm sits above the look-behind branch below.
+                // head. Look-back stays IN the cockpit, head to dead astern while held, as the
+                // original does, which is why this arm sits above the look-behind branch below.
                 _cam.Head.Step(simDt, _cam.BackActive(_padActions.Held(InputAction.LookBack))
                     ? new HeadLookInput(0f, -1f, 0f, 0f, false)
                     : HeadLookRead());
@@ -1965,7 +1965,7 @@ public partial class FlightController : Node3D
                 logged = _cam.ViewMode == PilotViewMode.Nose ? CameraView.Nose : CameraView.Cockpit;
             }
             // E42: this player's right-stick click looks back, the pad twin of holding
-            // numpad 0 — read here, not in CameraController, same "no pad devices in the camera"
+            // numpad 0, read here, not in CameraController, same "no pad devices in the camera"
             // rule OrbitInput/PadLookInput follow.
             else if (_cam.BackActive(_padActions.Held(InputAction.LookBack)))
             {
@@ -1978,7 +1978,7 @@ public partial class FlightController : Node3D
                 if (lookX != 0f || lookY != 0f)
                 {
                     // E42: the right stick swings the view around the plane instead of
-                    // the usual chase pose — see CameraController.PadLook.
+                    // the usual chase pose, see CameraController.PadLook.
                     _cam.PadLook(_renderPose, lookX, lookY);
                     logged = CameraView.PadLook;
                 }
@@ -1989,7 +1989,7 @@ public partial class FlightController : Node3D
                     _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
                 }
             }
-            // Keyed to the pose this frame actually took, not to the selection — a look-behind
+            // Keyed to the pose this frame actually took, not to the selection, a look-behind
             // puts the camera outside the aircraft and must bring its body back while held.
             Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
             // Same rule, so the panel is driven exactly on the frames it is on the screen.
@@ -1999,10 +1999,10 @@ public partial class FlightController : Node3D
             _cam.LogView(logged, _model.Position, _model.Attitude, fixedView: view);
         }
 
-        // heading of the nose: 0 = north (−Z), 90 = east (+X) — shared by the compass and the marker
+        // heading of the nose: 0 = north (−Z), 90 = east (+X), shared by the compass and the marker
         var nose = -_model.Attitude.Z;
         float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
-        // Player target selection: rebuild-then-input, the original's own order — the
+        // Player target selection: rebuild-then-input, the original's own order, the
         // per-frame candidate pass runs first and a handler then steps the list it just built.
         if (Targeting != null && IsHumanPiloted)
             StepTargeting(simDt);
@@ -2029,7 +2029,7 @@ public partial class FlightController : Node3D
             // One drive for both paths: the original runs ONE per-frame routine for the player and
             // every AI vehicle, so the two must never read the airframe differently.
             var engineDrive = EngineAudioCurves.DriveFrom(_model, _model.Boosting);
-            // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took —
+            // Keyed to the SELECTED view (D31), not the per-frame pose the camera actually took,
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
             Audio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead,
@@ -2082,14 +2082,14 @@ public partial class FlightController : Node3D
         TargetObjectives = null;
     }
 
-    /// <summary>Whether static world geometry blocks the segment — the turret gunners' cached
+    /// <summary>Whether static world geometry blocks the segment, the turret gunners' cached
     /// line-of-sight test. World layer only: another aircraft in the way is not cover, which is
     /// also why <see cref="HitWorld"/> (world + aircraft) is not reused here.</summary>
     internal bool WorldBlocksLine(Vector3 from, Vector3 to) =>
         World.Ray(from, to, CollisionLayers.World, null, out _);
 
-    /// <summary>What blocks the AI's avoid-crash lookahead along the segment — the static world or
-    /// another aircraft, never this plane's own body — as the struck body's name, or null for a
+    /// <summary>What blocks the AI's avoid-crash lookahead along the segment, the static world or
+    /// another aircraft, never this plane's own body, as the struck body's name, or null for a
     /// clear path. Not <see cref="WorldBlocksLine"/>; decode: docs/org/aiPilot.md, "What the ray
     /// can hit".
     /// ⚠ Do not widen this to a swept sphere. Tried and reverted 2026-08-16: it detects far more
@@ -2113,7 +2113,7 @@ public partial class FlightController : Node3D
             : Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
 
     // The struck body's numeric surface id (SceneBuilder.SurfaceIdMeta,
-    // stamped on every collider), or null when there is no struck body — the headless
+    // stamped on every collider), or null when there is no struck body, the headless
     // `--crash` force, which is the original's null-material arm and so resolves slot 0.
     // The weapon IMPACT table is read at this same id (ProjectilePool.SurfaceIdOf),
     // which answers `0` where this answers null, because that path has no null to carry.
@@ -2133,7 +2133,7 @@ public partial class FlightController : Node3D
         return Mathf.Sign(v) * t * t;
     }
 
-    // N / gamepad X — the nitro command (the original's MSG_CMD_NITROUS "Use Nitro-Booster").
+    // N / gamepad X, the nitro command (the original's MSG_CMD_NITROUS "Use Nitro-Booster").
     // A level read: the command arm engages on pressed-or-held and ignores it otherwise.
     private bool NitroPressed() => AutoNitro || _actions.Held(InputAction.Nitro);
 
@@ -2169,7 +2169,7 @@ public partial class FlightController : Node3D
             else
                 PlayAiShake();
             // Play, not PlayWithin: the def's anchor NAME ("warhawk") never resolves in this
-            // per-plane index, same as startprops/stopprops above — Play's fallback to
+            // per-plane index, same as startprops/stopprops above, Play's fallback to
             // PlaneModel is what makes those work; PlayWithin has no such fallback.
             if (PlaneModel != null)
                 CrashRuntime?.Play("nitro_boost", PlaneModel, applyReset: false);
@@ -2220,11 +2220,11 @@ public partial class FlightController : Node3D
         rig.Play(EffectCatalogue.AiShakeAnim, PlaneModel, applyReset: false);
     }
 
-    // Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
+    // Space / gamepad B, the gun trigger (caller drives the fire-rate clock);
     // `--fire` holds it down for unattended runs.
     private bool FirePressed() => AutoFire || _actions.Held(InputAction.FireGuns);
 
-    // F / gamepad A — the rocket trigger. One discrete pull launches one rocket (holding
+    // F / gamepad A, the rocket trigger. One discrete pull launches one rocket (holding
     // does NOT auto-repeat; only the 1.0 s cooldown gates it), and `--fire-rockets` auto-repeats
     // for unattended runs. ⚠ Gamepad A must not also respawn: PadPressed is a level read, so a
     // button still held when the plane goes live fires a rocket on the spawn frame, the same
@@ -2238,14 +2238,14 @@ public partial class FlightController : Node3D
     // pause-menu Resume cannot also read as the rocket trigger's next pull.
     private void SuppressRocketTriggerOnRegainedInput() => _rocketLatch.ArmIfHeld(RocketButtonDown());
 
-    // G / gamepad D-pad Right — cycles the gun selector forward through the firable groups (1 → 2 →
+    // G / gamepad D-pad Right, cycles the gun selector forward through the firable groups (1 → 2 →
     // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
     // ⚠ The D-pad side follows the cockpit dial it drives: the GUNS gauge sits in the right column
     // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
     // mis-binding at the controls.
     private bool GunSelectPressed() => _actions.Held(InputAction.SelectGunGroup);
 
-    // F3 — the same walk the other way, its own bound action because the original's own keybind
+    // F3, the same walk the other way, its own bound action because the original's own keybind
     // page carries one per direction per weapon class. The gun cycle's second direction was never
     // watched at the original's controls; it is wired because that page names it, and the pages are
     // what the port reproduces where a play session cannot reach.
@@ -2262,13 +2262,13 @@ public partial class FlightController : Node3D
     }
 #pragma warning restore SA1202
 
-    // H / gamepad D-pad Left — moves the hardpoint selector forward to the next pylon that still
-    // carries ordnance (each pylon is its own selectable slot, whatever it loads — even a plane with
+    // H / gamepad D-pad Left, moves the hardpoint selector forward to the next pylon that still
+    // carries ordnance (each pylon is its own selectable slot, whatever it loads, even a plane with
     // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
     // edge-detects.
     private bool RocketSelectPressed() => _actions.Held(InputAction.SelectOrdnance);
 
-    // F4 — the hardpoint walk the other way, over the same physical mount order and skipping the
+    // F4, the hardpoint walk the other way, over the same physical mount order and skipping the
     // same empties, so a press each way from one pylon returns to it. Caller edge-detects.
     private bool RocketSelectBackPressed() => _actions.Held(InputAction.SelectOrdnancePrev);
 
@@ -2339,7 +2339,7 @@ public partial class FlightController : Node3D
         Body?.SetHittable(InPlay);
     }
 
-    /// <summary>The selected firable gun group — the one the trigger fires — or null when there is
+    /// <summary>The selected firable gun group, the one the trigger fires, or null when there is
     /// no loadout, no fire control, no group at the selected index, or the group has no muzzle to
     /// fire from. Shared by the pipper and the targeting marker's bracket gate so both read the
     /// same "which gun is selected" answer.</summary>
@@ -2375,7 +2375,7 @@ public partial class FlightController : Node3D
 
     // One gun round's launch direction: the per-muzzle aim assist through
     // AimAssist.FireDirection, which restamps this barrel's slot so the forget timer
-    // runs from the last SHOT. ⚠ Gated on IsHumanPiloted, not pane 1 — every CSVM
+    // runs from the last SHOT. ⚠ Gated on IsHumanPiloted, not pane 1, every CSVM
     // pane is a human pilot, so every pane is assisted. An AI plane's round leaves along the
     // gunner's lead instead; a gunner-less AI and a barrel with no slot fall back to the muzzle
     // axis.
@@ -2399,7 +2399,7 @@ public partial class FlightController : Node3D
         {
             MuzzlePosition = muzzleXf.Origin,
             ShooterVelocity = inheritVel,
-            // Alignment is measured against the PLANE's nose, not this muzzle's axis — the engine
+            // Alignment is measured against the PLANE's nose, not this muzzle's axis, the engine
             // scores every candidate against the airframe's own forward row.
             Forward = -planeBasis.Z,
             Team = Team,
@@ -2422,9 +2422,9 @@ public partial class FlightController : Node3D
     // Performs one FireControl.Step's decisions against the engine: spawns
     // the commanded rounds from their live muzzle nodes (with the plane's inherited velocity),
     // launches the commanded rocket, mirrors the loop-sound state onto FlightAudio
-    // (started every wanted frame — StartGunLoop only rebuilds when the name changes, which is how
+    // (started every wanted frame, StartGunLoop only rebuilds when the name changes, which is how
     // a mid-burst group switch swaps the loop), and sounds the dry cues. The first-round-per-group
-    // and first-launches breadcrumbs log here — print throttles, not fire-control state.
+    // and first-launches breadcrumbs log here, print throttles, not fire-control state.
     private void ApplyFireOutcome(FireOutcome outcome)
     {
         var inheritVel = _model.VelocityDir * _model.Speed;
@@ -2558,10 +2558,10 @@ public partial class FlightController : Node3D
     // zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
     // scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.
 
-    // True if the segment crosses any solid collider — the static world, or another
+    // True if the segment crosses any solid collider, the static world, or another
     // aircraft's body (never this plane's own, excluded by RID); on a hit,
     // `point` is the impact position (else the segment end) and
-    // `hitName` names the collider (parent/body — e.g. a terrain
+    // `hitName` names the collider (parent/body, e.g. a terrain
     // tile's "g27889/col", or a clutter city block's "world1/clutter_bld_3_7").
     private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point, out string hitName, out Node? hitBody)
     {
@@ -2581,7 +2581,7 @@ public partial class FlightController : Node3D
 
     // Ground blow's probe (docs/org/flightModel.md "Ground blow"): a ray along the nose
     // whose nearest hit FlightModel turns into a control-response bias.
-    // ⚠ The mask is CollisionLayers.World, the decoded emitter rule — do not add an
+    // ⚠ The mask is CollisionLayers.World, the decoded emitter rule, do not add an
     // aircraft mask. ⚠ Skipped while the AI pilot is stunned; do not lift either gate.
     private void ProbeGroundBlow(ref FlightInput input)
     {
@@ -2642,8 +2642,8 @@ public partial class FlightController : Node3D
     // plays because the crash runtime renders effects and never sound: `player_crash_dirt`
     // Sounds `snd_exp_ground_a` itself, `player_crash_water`'s `snd_exp_water_a`
     // sits one level down in the `plane_big_splash` it calls, and the fallback
-    // `player_crash_default` Sounds only `plane_destroy_sg` — already played by
-    // FlightAudio.OnCrash — so it layers no surface boom at all.
+    // `player_crash_default` Sounds only `plane_destroy_sg`, already played by
+    // FlightAudio.OnCrash, so it layers no surface boom at all.
     private void PlayCrashBoom(string? crashDef)
     {
         switch (crashDef)
@@ -2663,7 +2663,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>The DEATH event: whole-vehicle health has reached zero. Starts the airframe's own
-    /// <see cref="DestroyDef"/> and leaves the wreck VISIBLE — the surface-indexed
+    /// <see cref="DestroyDef"/> and leaves the wreck VISIBLE, the surface-indexed
     /// <see cref="CrashDefs"/> family belongs to the wreck's ground contact, and playing it here is
     /// what deleted the fall, the burning wreck and the parachute (org/vehicleDamage.md).</summary>
     private void Destroy(Vector3 at, string hitName, string part, int? killer)
@@ -2738,7 +2738,7 @@ public partial class FlightController : Node3D
         SpeedCue?.Reset();
     }
 
-    // The authored crash camera: hard-cut to the static elevated vantage and hide the HUD — both
+    // The authored crash camera: hard-cut to the static elevated vantage and hide the HUD, both
     // straight off the original's crash footage. Written once, and _Process writes nothing to the
     // camera while crashed, so the pose holds until respawn.
     private void CutToCrashView(Vector3 at)
@@ -2859,7 +2859,7 @@ public partial class FlightController : Node3D
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
                 CrashRuntime.Play(crashDef, CrashAnchor, applyReset: false);
-                // The prop wind-down (staticpropN fades back in as prop1..3 fade out) — inert the
+                // The prop wind-down (staticpropN fades back in as prop1..3 fade out), inert the
                 // instant PlaneModel above hides, but keeps the def's own state consistent for
                 // whatever plays next, and matters once a shutdown can leave the airframe visible.
                 CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
@@ -2889,8 +2889,8 @@ public partial class FlightController : Node3D
     }
 
     // Resolves this seat's named actions, at most once per rendered frame. Godot's input state does
-    // not move inside a frame, so one resolve answers every read a frame makes — the sim step, the
-    // draw pass and the landing runtime alike — exactly as a direct hardware read did. Whichever of
+    // not move inside a frame, so one resolve answers every read a frame makes, the sim step, the
+    // draw pass and the landing runtime alike, exactly as a direct hardware read did. Whichever of
     // them asks first pays for it, which is why there is no fixed call site.
     private void PollInput()
     {
@@ -2910,7 +2910,7 @@ public partial class FlightController : Node3D
     }
 
     // The largest-magnitude value of the axis across this player's gamepads (0 when
-    // none) — idle phantom devices read ~0 and never mask the real stick.
+    // none), idle phantom devices read ~0 and never mask the real stick.
     private float PadAxis(JoyAxis axis)
     {
         float v = 0f;
@@ -2995,7 +2995,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>One frame of player targeting: rebuild the pool and re-resolve, prune the
-    /// attacker queue, then dispatch this frame's input. That order is the original's — its
+    /// attacker queue, then dispatch this frame's input. That order is the original's, its
     /// per-frame candidate pass runs in the sim step and a handler steps the list it just built,
     /// which is why a class change reads one frame late and self-heals.</summary>
     private void StepTargeting(float dt)
@@ -3021,7 +3021,7 @@ public partial class FlightController : Node3D
             TargetObjectives?.Invoke(_targetSites);
         }
         // The team is read off the FIELD. Deriving it from PlayerIndex is right for P1 by
-        // coincidence and wrong for every other pane the moment a mission sets teams — the
+        // coincidence and wrong for every other pane the moment a mission sets teams, the
         // wingman-in-the-marker bug (see TargetHud.OwnTeam).
         sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude,
             _targetSites);
@@ -3066,7 +3066,7 @@ public partial class FlightController : Node3D
 
         // The curated keyboard set (decision 14): every one of the original's eleven targeting keys
         // collides with our flight scheme, so these five free keys carry one action per class plus
-        // the two class-less ones. They are defaults, not a scheme — the rebind layer is its own item.
+        // the two class-less ones. They are defaults, not a scheme, the rebind layer is its own item.
         DispatchTargetKey(0, InputAction.TargetNextEnemy, () => sel.NextEnemy());
         DispatchTargetKey(1, InputAction.TargetNextAlly, () => sel.Next(TargetClass.Ally));
         DispatchTargetKey(2, InputAction.TargetNextNonAircraft, () => sel.Next(TargetClass.NonAircraft));
@@ -3177,7 +3177,7 @@ public partial class FlightController : Node3D
 #pragma warning restore SA1202
 
     // Four small static helpers for the D36 gunner-target widening (BL-363), kept beside the
-    // instance methods that are their only real callers rather than hoisted for SA1204's sake —
+    // instance methods that are their only real callers rather than hoisted for SA1204's sake,
     // the same trade the SA1202 blocks elsewhere in this file already make.
 #pragma warning disable SA1204
     // A standing gunner target's current geometry and liveness, read off whichever source type it
@@ -3294,8 +3294,8 @@ public partial class FlightController : Node3D
 
     // One AI-gunner tick: keep the standing target while it is in play (re-acquiring
     // through the D12/D36 ranking when it is gone and AiGunner.AutoTarget allows), then
-    // hand the gunner this tick's fire geometry — the SELECTED gun group's weapon and muzzle
-    // midpoint, the sim pose (never the render pose), and the target's state — so
+    // hand the gunner this tick's fire geometry, the SELECTED gun group's weapon and muzzle
+    // midpoint, the sim pose (never the render pose), and the target's state, so
     // AiGunner.WantsFire is current when the fire step reads it.
     private void DriveAiGunner(AiGunner gunner)
     {
@@ -3329,7 +3329,7 @@ public partial class FlightController : Node3D
             : null;
         if (group == null || group.Muzzles.Count == 0)
             return;
-        // The muzzle midpoint of the selected group — the same convergence point the reticle
+        // The muzzle midpoint of the selected group, the same convergence point the reticle
         // and the original's own barrel averaging use.
         var muzzlePos = Vector3.Zero;
         foreach (var m in group.Muzzles)
@@ -3515,7 +3515,7 @@ public partial class FlightController : Node3D
         primary ??= nearestHuman;
         if (primary != null)
         {
-            // Log the assigned pick with its own rank inputs (informational — rank not consulted).
+            // Log the assigned pick with its own rank inputs (informational, rank not consulted).
             int idx = _rankSources.IndexOf(primary);
             if (idx >= 0)
                 score = AiTargetRanking.Score(ownPos, ownFwd, activation, AiScorer.Jet,
@@ -3744,7 +3744,7 @@ public partial class FlightController : Node3D
         Log.Info("flight", $"graze reaction effect={effect ?? "-"} surface={surface} into={hitName} contact=({impact.X:0},{impact.Y:0},{impact.Z:0}) site=({site.X:0},{site.Y:0},{site.Z:0}) rendered={(GrazeEffectSink != null ? 1 : 0)}");
     }
 
-    // Sweeps each airframe box along this frame's motion against every solid collider —
+    // Sweeps each airframe box along this frame's motion against every solid collider,
     // world plus other aircraft's bodies (a mid-air resolves through the contact rules like any
     // other hit), own body excluded by RID. Fills the earliest hit's report. False when
     // uncollidable or nothing is in the way. `hitBody` is the caller's, not the report's: the
@@ -3870,7 +3870,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Places the camera at its settled pose immediately (spawn, respawn, the weapon
-    /// lab's re-park) — there is nothing to interpolate from at those moments.</summary>
+    /// lab's re-park), there is nothing to interpolate from at those moments.</summary>
     // Silent no-op while the lab's free camera owns the view: a respawn or a lab re-park must
     // not yank the eye back onto the plane the tester just flew away from.
     private void SnapCamera()
@@ -3931,7 +3931,7 @@ public partial class FlightController : Node3D
     }
 
     // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.
-    // Gated on ViewMode (Cockpit only — the original's option byte AND mode ≠ 7) and the options
+    // Gated on ViewMode (Cockpit only, the original's option byte AND mode ≠ 7) and the options
     // toggle here, mirroring the original's engine option byte; the magnitude/negligible-velocity
     // gate lives in HeadLook.AutoheadTarget itself.
     private (float Elevation, float Azimuth)? AutoheadTarget()

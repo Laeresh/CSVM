@@ -13,7 +13,7 @@ namespace CSVM.Session;
 /// and (as the deepening proceeds) the actor build phases, the sequencer tick and the end-condition
 /// wiring. The decoded rules stay engine-free in <see cref="InstantActionRuntime"/> and
 /// <see cref="InstantActionWaves"/>; this class is where they meet the engine. Held as
-/// <c>GameSession</c>'s one nullable director field — null outside a mission, which is what keeps
+/// <c>GameSession</c>'s one nullable director field, null outside a mission, which is what keeps
 /// every other session mode (free flight, Dogfight) untouched by its existence.
 ///
 /// Not a Node: <see cref="SessionSimulation"/> owns the tick order and calls the phases at their
@@ -29,13 +29,13 @@ public sealed class InstantActionDirector
     // E11's wave sequencer: null on dogfight_ace (every wave count is forced to 0).
     // _waveRosters[w] is wave w+1's built (inert until activated) members, indexed the same way;
     // the sequencer tick polls the current wave's alive count and activates whatever
-    // InstantActionWaves.Step hands back — through the teleport arm, or (F12, zeppelin_run)
+    // InstantActionWaves.Step hands back, through the teleport arm, or (F12, zeppelin_run)
     // through the zeppelin generator's own wave credit.
     private InstantActionWaves? _waves;
     private List<FlightController>[]? _waveRosters;
     private List<SpawnPoint>? _waveSpawnList;
 
-    // F12: the wave whose parked members the objective zeppelin's generator is releasing — the
+    // F12: the wave whose parked members the objective zeppelin's generator is releasing, the
     // decoded group stamp (FUN_0045b9d0 writes the new counter to the generator's +0x64). 0
     // outside a zeppelin run, or before the first wave becomes current.
     private int _launchWave;
@@ -57,7 +57,7 @@ public sealed class InstantActionDirector
     private List<PlayerRig>? _rigs;
     private AiGeneratorRuntime? _generators;
 
-    // The references WireEndConditions handed over — kept for the spectate hand-off and the
+    // The references WireEndConditions handed over, kept for the spectate hand-off and the
     // wrap-up, which run long after the build.
     private EndConditionInputs? _end;
 
@@ -114,7 +114,7 @@ public sealed class InstantActionDirector
 
     // Split out so a suite can drive it over a bare StuntMission. ⚠ Gated on THIS run's own
     // AllComplete, never the mission's win/loss flag: splitscreen can end with the other pilot
-    // still short. prevBest stays read before the gated record — reorder it and a completing
+    // still short. prevBest stays read before the gated record, reorder it and a completing
     // new-best run would show its own just-written time as "previous" (docs/architecture.md).
     internal static StuntSummary BuildStuntSummary(StuntMission run, ScoreStore store, string key)
     {
@@ -124,7 +124,7 @@ public sealed class InstantActionDirector
     }
 
     /// <summary>The mission's actor build: the chapter's patrol net, the ace (dogfight_ace), the
-    /// wingmen, and every wave's inert roster — one contiguous phase of GameSession's
+    /// wingmen, and every wave's inert roster, one contiguous phase of GameSession's
     /// BuildFlightRigs, called at the same point in its build order. Returns the build-summary
     /// suffix ("+ IA ace" and kin) for the session's one-line report.</summary>
     internal string BuildActors(ActorBuildInputs inputs)
@@ -264,7 +264,7 @@ public sealed class InstantActionDirector
                     if (wingman == null)
                         continue;
                     // primary_target: 0, 1 and 3 escort the player; 2 and 4 escort
-                    // wingmen 1 and 3 — FlightController.SelectRankedTarget's own by-name/"player"
+                    // wingmen 1 and 3, FlightController.SelectRankedTarget's own by-name/"player"
                     // match, the same seam the D12 ranking already reads.
                     if (pilot.Gunner != null)
                     {
@@ -306,7 +306,7 @@ public sealed class InstantActionDirector
                 {
                     for (int m = 0; m < wave.NumEnemies; m++)
                     {
-                        // Built at the origin, inert — position is irrelevant until
+                        // Built at the origin, inert, position is irrelevant until
                         // ActivateInstantActionWave teleports it in, same as the original's
                         // own "deactivated at the world origin".
                         var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
@@ -474,7 +474,7 @@ public sealed class InstantActionDirector
         }
         else if (waves.Finished)
         {
-            // Every configured wave cleared — the squadron mode's win. Reported on every mode;
+            // Every configured wave cleared, the squadron mode's win. Reported on every mode;
             // the runtime drops it on the ones that do not run on it (a zeppelin run's waves all
             // clear too, and the zeppelin is what decides that mission).
             ia.ReportObjective(InstantActionObjective.WavesCleared);
@@ -500,7 +500,7 @@ public sealed class InstantActionDirector
         else if (Runtime.Objective == InstantActionObjective.WavesCleared && _waveRosters is { } rosters)
         {
             // DebugForceCrash self-gates on InPlay, so this reaches only whatever wave
-            // is currently active — the rest are still parked inert awaiting their own turn.
+            // is currently active, the rest are still parked inert awaiting their own turn.
             foreach (var roster in rosters)
             {
                 foreach (var member in roster)
@@ -545,7 +545,7 @@ public sealed class InstantActionDirector
         }
         else if (objective == InstantActionObjective.WavesCleared && WaveEnemyCount > 0)
         {
-            // Reported by Step off InstantActionWaves.Finished — the sequencer owns "every
+            // Reported by Step off InstantActionWaves.Finished, the sequencer owns "every
             // configured wave is cleared" and nothing here re-derives it.
         }
         else if (objective == InstantActionObjective.ZonesFlown && inputs.StuntZones != null)
@@ -581,7 +581,7 @@ public sealed class InstantActionDirector
         else
         {
             // A mission that cannot be won says so at build. Deliberate, in the shape
-            // VersusMatch's disabled kill target/time limit already has — the mission still
+            // VersusMatch's disabled kill target/time limit already has, the mission still
             // flies and can still be lost.
             iaEnd.DisableObjective();
             GD.PushWarning("ia: this mission has NO win condition — " + (objective switch
@@ -605,7 +605,7 @@ public sealed class InstantActionDirector
             // G14's "Shot %": the decode's "the local player" filter, generalised to every
             // human seat for splitscreen (ProjectilePool.ScoredShooters).
             inputs.Projectiles?.ScoredShooters.Add(pilot.PlayerIndex);
-            pilot.AutoRespawnAfter = inputs.RespawnDelay; // crash cam, then back in — R skips
+            pilot.AutoRespawnAfter = inputs.RespawnDelay; // crash cam, then back in, R skips
             pilot.Downed += (victim, _) =>
             {
                 if (iaEnd.NotifyPilotDown(victim))
@@ -740,7 +740,7 @@ public sealed class InstantActionDirector
 
     // Player 1's stunt run for the wrap-up board's split section, on a stunt mission alone. The
     // best time is recorded here rather than on the board, under the same chapter/mission/plane key
-    // the solo scoreboard uses — a different mission id, so Instant Action bests stay their own.
+    // the solo scoreboard uses, a different mission id, so Instant Action bests stay their own.
     private StuntSummary? StuntSummary()
     {
         if (Runtime.Objective != InstantActionObjective.ZonesFlown)

@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The weapon-gauge pointer sweeps at a single constant rate measured from original-game
-/// footage — 168.7 °/sim-s — toward the selected belt slot, routed the shortest way round, and snaps
+/// footage, 168.7 °/sim-s, toward the selected belt slot, routed the shortest way round, and snaps
 /// instead of sweeping in when it has no prior pose (NaN: gauge just appeared, or a respawn
 /// cleared it via <c>GaugeCluster.Reset</c>). Every member here is a pure static with no engine
 /// dependency.
@@ -58,7 +58,7 @@ public class GaugeArrowTweenTests
     }
 
     /// <summary>Shortest-way wrap: 170° → -170° is only 20° apart going UP through the ±180° seam,
-    /// 340° apart going down through 0° — the step must move toward 180°, not back toward 0°.</summary>
+    /// 340° apart going down through 0°, the step must move toward 180°, not back toward 0°.</summary>
     [Fact]
     public void TheShortestWayWrapStepsUpThroughTheSeam()
     {

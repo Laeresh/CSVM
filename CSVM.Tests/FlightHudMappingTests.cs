@@ -13,8 +13,8 @@ namespace CSVM.Tests;
 /// weapon-gauge slot fills. Every member under test here is a static or Loadout-free instance method
 /// on <see cref="FlightHud"/> that returns the value a Control would be given, so none of this needs
 /// a live Godot Control (the seven collaborators are all <c>Control</c>-derived and cannot be built
-/// in this test host — see <c>LoadoutTests</c>'s own note on why binding a loadout stays in-engine).
-/// The trap: assert numbers, not the formatted SPD/ALT/THR line — a formatting change is not a
+/// in this test host, see <c>LoadoutTests</c>'s own note on why binding a loadout stays in-engine).
+/// The trap: assert numbers, not the formatted SPD/ALT/THR line, a formatting change is not a
 /// regression.
 /// </summary>
 public class FlightHudMappingTests
@@ -211,7 +211,7 @@ public class FlightHudMappingTests
     public void BeltSlotsAreIndexedByPylonNumberNotListPosition()
     {
         var slots = new List<float>();
-        // A partial stock fit: pylons 3 and 7 only, skipping 1/2/4/5/6/8 — the belt ring still has
+        // A partial stock fit: pylons 3 and 7 only, skipping 1/2/4/5/6/8, the belt ring still has
         // 8 positions (GaugeCluster.HardpointRingSize, internal), with gaps at every unfitted slot.
         var hardpoints = new List<Hardpoint>
         {
@@ -396,7 +396,7 @@ public class FlightHudMappingTests
     };
 
     // A synthetic IWorldQuery reporting a fixed hit/miss and Y, mirroring TurretLineOfSightTests'
-    // own fake — no physics world in the process.
+    // own fake, no physics world in the process.
     private sealed class FakeWorldQuery : IWorldQuery
     {
         private readonly bool _hit;

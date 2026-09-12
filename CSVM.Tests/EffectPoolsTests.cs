@@ -9,7 +9,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The effect-template pool sizes (<c>CSVM/data/effect_pools.json</c>) —
+/// The effect-template pool sizes (<c>CSVM/data/effect_pools.json</c>),
 /// committed engine config, so these run without an extraction. Parsing is tested through
 /// <see cref="EffectPools.Parse"/> rather than <c>Load</c>: the sizing decision is pure, while
 /// <c>Load</c> adds file IO and engine warnings that need a session.
@@ -24,7 +24,7 @@ public class EffectPoolsTests
     {
         var pools = Load();
         // The gun roots stay SHARED on purpose (the gun-effect throttle owns them), so a pool would be
-        // copies nothing uses — this is the one deliberate 1.
+        // copies nothing uses, this is the one deliberate 1.
         Assert.Equal(1, pools.SlotsFor("gunhit", players: 1));
         Assert.Equal(1, pools.SlotsFor("dum_gunhit", players: 1));
         Assert.Equal(1, pools.SlotsFor("mag_gunhit", players: 1));
@@ -59,7 +59,7 @@ public class EffectPoolsTests
     public void NoRootEverExceedsTheAuthoredCeiling()
     {
         var pools = Load();
-        // The cap is the memory guard — each slot is one more copy of that root's subtree.
+        // The cap is the memory guard, each slot is one more copy of that root's subtree.
         Assert.Equal(pools.MaxSlots, pools.SlotsFor("partial_damage_obj", players: 64));
         Assert.Equal(pools.MaxSlots, pools.SlotsFor("he_trails", players: 64));
     }
@@ -68,7 +68,7 @@ public class EffectPoolsTests
     public void APoolIsNeverSizedBelowOneCopy()
     {
         // A hand-edit to 0 (or a negative) would stage no template at all, which reads in-game as
-        // "the effect is broken" rather than "the pool is off" — clamp instead.
+        // "the effect is broken" rather than "the pool is off", clamp instead.
         var pools = EffectPools.Parse(Json("{\"default\":{\"base\":0},\"roots\":{\"he_ring\":{\"base\":-3}}}"));
         Assert.Equal(1, pools.SlotsFor("he_ring", 1));
         Assert.Equal(1, pools.SlotsFor("anything", 1));
@@ -134,7 +134,7 @@ public class EffectPoolsTests
         Assert.True(pools.CrashSlotsFor("large_firetrail") > 1);
         // The Balmoral's crew: three chuteman calls from one node need three copies.
         Assert.Equal(3, pools.CrashSlotsFor("chuteman"));
-        // A crash template with no entry stays single-copy — the pre-pool behaviour, right for
+        // A crash template with no entry stays single-copy, the pre-pool behaviour, right for
         // the once-per-crash choreography templates.
         Assert.Equal(1, pools.CrashSlotsFor("plane_sp_polys"));
         Assert.Equal(12, pools.CrashDepthFor(new[] { "planeflakes", "plane_sp_polys" }));
@@ -154,7 +154,7 @@ public class EffectPoolsTests
 
     private static EffectPools Load() => EffectPools.Parse(File.ReadAllBytes(ConfigPath));
 
-    // The stage-root set the shipped config is sized against — derived from C1's bound
+    // The stage-root set the shipped config is sized against, derived from C1's bound
     // program and gamez by exactly the call the world-effects build makes: the answer is chapter
     // data, not a hand table, so these two checks need the player's extraction. No Godot node is built: the resolver is
     // asked with no scope, and the closure walk is engine-free.

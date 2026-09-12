@@ -4,7 +4,7 @@ namespace CSVM.Flight;
 
 /// <summary>The original's keyboard stick: an accumulator, not an on/off flag. A held key ramps
 /// the axis toward full deflection at a fixed rate, and releasing or reversing it drops the axis
-/// to centre in one frame. Gradual on, instant off — the asymmetry is what makes fast stick
+/// to centre in one frame. Gradual on, instant off, the asymmetry is what makes fast stick
 /// cadences reach far less deflection than slow ones, and the analogue axes bypass it entirely
 /// (decode in docs/org/flightModel.md).</summary>
 public static class StickRamp

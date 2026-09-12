@@ -40,7 +40,7 @@ public sealed class MarkerRig
     };
 
     // Alternate-state subtrees that may carry their own same-named reference node distinct from
-    // the plane's one authored marker in the top-level `markers` group — the cockpit interior
+    // the plane's one authored marker in the top-level `markers` group, the cockpit interior
     // models and the wreck. Mirrors PlaneBuilder's own skip list for exactly this reason: without
     // it, a first-match walk over the whole subtree could resolve to a `cockpit1`/`cockpit2` copy
     // of `cockpit_camera` instead of the authored one (docs/formats/markers.md).
@@ -63,13 +63,13 @@ public sealed class MarkerRig
     /// <summary>Every firepoint/pylon/target under the plane, sorted kind then ordinal.</summary>
     public IReadOnlyList<Marker> Markers { get; }
 
-    /// <summary>Groups of ≥2 indices into <see cref="Markers"/> that share a position — two gun
+    /// <summary>Groups of ≥2 indices into <see cref="Markers"/> that share a position, two gun
     /// groups on one mount. Empty for the airframes whose every firepoint is distinct.</summary>
     public IReadOnlyList<IReadOnlyList<int>> CoLocated { get; }
 
     /// <summary>Classifies a node name as a weapon marker. Returns false for everything else in
     /// the markers group (cockpit_camera, exhaust*, ground_level, …) and for the bare, unnumbered
-    /// <c>firepoint</c>/<c>pylon</c> the AI airframes carry — a numeric suffix is required, which
+    /// <c>firepoint</c>/<c>pylon</c> the AI airframes carry, a numeric suffix is required, which
     /// every player firepoint/pylon has.</summary>
     public static bool Classify(string name, out MarkerKind kind, out int ordinal)
     {
@@ -135,11 +135,11 @@ public sealed class MarkerRig
         return new MarkerRig(planeRoot, markers, coLocated);
     }
 
-    /// <summary>Reads one non-weapon marker node's plane-frame position by name — e.g.
-    /// <c>cockpit_camera</c> — by the same accumulate-from-below-root walk <see cref="Extract"/>
+    /// <summary>Reads one non-weapon marker node's plane-frame position by name, e.g.
+    /// <c>cockpit_camera</c>, by the same accumulate-from-below-root walk <see cref="Extract"/>
     /// uses for weapon markers, skipping the alternate-state subtrees above. Returns
     /// <paramref name="fallback"/> (default the origin) when the plane root or the named node is
-    /// absent — the original's own fallback for a plane with no such node.</summary>
+    /// absent, the original's own fallback for a plane with no such node.</summary>
     public static Vector3 FindNamedMarker(GameZ gamez, string planeRoot, string nodeName, Vector3 fallback = default)
     {
         var root = gamez.FindByName(planeRoot);
@@ -222,8 +222,8 @@ public sealed class MarkerRig
     }
 
     /// <summary>One human-readable dump block for this plane: a header line, then every marker
-    /// with its plane-frame position and — for firepoints — its mirror pair, and — for any
-    /// co-located marker — the other names sharing that mount. This is the text the
+    /// with its plane-frame position and, for firepoints, its mirror pair, and, for any
+    /// co-located marker, the other names sharing that mount. This is the text the
     /// <c>--dump-markers</c> tool prints and the markers.md tables regenerate from.</summary>
     public string Format(string? display = null)
     {
@@ -305,7 +305,7 @@ public sealed class MarkerRig
 
     // The mirror partner ordinal of a firepoint: gun pairs are consecutive
     // (fp1,fp2)(fp3,fp4)…, so odd n pairs with n+1 and even n with n−1. The Kestrel's fp7 is the
-    // one centreline mount with no fp8 — its partner simply isn't in the rig.
+    // one centreline mount with no fp8, its partner simply isn't in the rig.
     private static int MirrorPartner(int ordinal) => (ordinal % 2 == 1) ? ordinal + 1 : ordinal - 1;
 
     private static string Vec(Vector3 v) => string.Format(CultureInfo.InvariantCulture,

@@ -24,7 +24,7 @@ public class SessionSpecParserTests
     }
 
     /// <summary>A German machine writes `0,15` for nought point one five; the parse is pinned to the
-    /// invariant culture so a command line means the same thing on every machine — and so a captured
+    /// invariant culture so a command line means the same thing on every machine, and so a captured
     /// baseline does not differ from itself across locales.</summary>
     [Fact]
     public void AVectorParsesTheSameUnderAnyCulture()
@@ -53,7 +53,7 @@ public class SessionSpecParserTests
     }
 
     /// <summary>5 has no perspective of its own (the middle of the pad is the chase camera), and
-    /// anything outside 1–9 is a typo — both give 0, which the caller reports.</summary>
+    /// anything outside 1–9 is a typo, both give 0, which the caller reports.</summary>
     [Theory]
     [InlineData("1", 1)]
     [InlineData("4", 4)]
@@ -95,7 +95,7 @@ public class SessionSpecParserTests
         Assert.Equal(0.4f, input.Throttle);
     }
 
-    /// <summary>Three colour slots — body, dark trim, light trim — and a missing one repeats the
+    /// <summary>Three colour slots, body, dark trim, light trim, and a missing one repeats the
     /// last given, so a single triple paints the whole aircraft.</summary>
     [Fact]
     public void APaintColourRepeatsTheLastSlotGiven()
@@ -281,7 +281,7 @@ public class SessionSpecParserTests
         Assert.Contains(s.Warnings, w => w.Category.Length == 0);
     }
 
-    /// <summary><c>--hitch-inject=</c>: `[alloc:]&lt;ms&gt;[@frame]` — a bare `&lt;ms&gt;` is the
+    /// <summary><c>--hitch-inject=</c>: `[alloc:]&lt;ms&gt;[@frame]`, a bare `&lt;ms&gt;` is the
     /// busy-wait form at the default frame, `@frame` overrides it, and `alloc:` switches to the
     /// allocation-burst form without disturbing either the magnitude or the frame.</summary>
     [Fact]

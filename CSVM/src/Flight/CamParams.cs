@@ -10,7 +10,7 @@ namespace CSVM.Flight;
 /// airframes overriding their own chase distance on top (docs/formats/camparam.md).
 /// <see cref="Dist"/>/<see cref="DistFactor"/> drive the chase radius
 /// (<c>d = Dist + DistFactor·V</c>) and <see cref="DistMin"/>/<see cref="DistMax"/> bound it;
-/// several other fields are decoded and carried here but deliberately dormant — see the docs page
+/// several other fields are decoded and carried here but deliberately dormant, see the docs page
 /// before wiring one in.
 /// </summary>
 public sealed class CamParams
@@ -20,7 +20,7 @@ public sealed class CamParams
     public float Dist = 13f;
 
     /// <summary>Metres of extra chase distance per m/s of speed (the original's footage measures
-    /// the Bloodhawk's slope as 0.0105 against this shipped 0.01 — 5% agreement).</summary>
+    /// the Bloodhawk's slope as 0.0105 against this shipped 0.01, 5% agreement).</summary>
     public float DistFactor = 0.01f;
 
     /// <summary>The throttle transient's gain: metres of extra distance per (m/s) of gap between
@@ -97,7 +97,7 @@ public sealed class CamParams
         }
         catch (FileNotFoundException)
         {
-            return result; // FromData stays false — the caller reports it once
+            return result; // FromData stays false, the caller reports it once
         }
         catch (DirectoryNotFoundException)
         {
@@ -141,7 +141,7 @@ public sealed class CamParams
         return result;
     }
 
-    // Overlays whichever keys the block carries, leaving the rest as resolved so far — which is
+    // Overlays whichever keys the block carries, leaving the rest as resolved so far, which is
     // what makes the per-plane blocks (three or five keys each) layer onto default.
     private void Apply(ZrdrDict d)
     {

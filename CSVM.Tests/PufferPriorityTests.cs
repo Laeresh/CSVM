@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The puffer's `PRIORITY` (see `docs/org/puffer.md`): both parsers must wire it through, and an
 /// unauthored state must keep the puffer object's own ctor default of 0 (factor 1, i.e. no size
-/// change). The size arithmetic itself — `1 + 0.02·PRIORITY` folded into `BaseSize` at spawn — is
+/// change). The size arithmetic itself, `1 + 0.02·PRIORITY` folded into `BaseSize` at spawn, is
 /// asserted in the `puffer-priority-size` engine suite, which needs a live `Puffer`; these tests
 /// cover only the two parsers.
 /// </summary>

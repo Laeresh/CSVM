@@ -66,8 +66,8 @@ internal sealed class FromToMotion : IAnimMotion
     public static FromToMotion? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime,
         FromToMotion? carryFrom = null)
     {
-        // RestOf is still called for its side effect — it records the authored pose the
-        // first time anything touches the node, which PoseRotate/PoseScale read back — and
+        // RestOf is still called for its side effect, it records the authored pose the
+        // first time anything touches the node, which PoseRotate/PoseScale read back, and
         // as the fallback when the live pose is unusable.
         var rest = rt.RestOf(target);
         var held = target.Transform;

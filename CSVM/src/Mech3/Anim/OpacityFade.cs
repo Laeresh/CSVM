@@ -6,7 +6,7 @@ namespace CSVM.Mech3.Anim;
 /// <summary>A timed translucency fade (OBJECT_OPACITY_FROM_TO): lerp the subtree's opacity
 /// from one value to another over the run time, through the same per-instance
 /// <c>csky_opacity</c> shader parameter <see cref="AnimRuntime.SetSubtreeOpacity"/> writes. This is the
-/// opacity channel — it does not touch the transform — so it coexists with a transform motion
+/// opacity channel, it does not touch the transform, so it coexists with a transform motion
 /// on the same node (see <see cref="MotionChannel"/>). The endpoints are literal opacity
 /// values (the endpoint `state` flag does not invert them; see the dispatch case), so no rest
 /// pose is needed: the two numbers fully determine the fade.</summary>

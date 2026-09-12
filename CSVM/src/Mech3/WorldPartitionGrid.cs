@@ -9,7 +9,7 @@ namespace CSVM.Mech3;
 /// cover? That is what the mission script's <c>WorldPartitionSetActive</c> verb selects by, and the
 /// only reader of this class. The grid is the gamez's own cell table, in the file's own order,
 /// which is the order the engine indexes it by. Decode: <c>docs/formats/interp.md</c>,
-/// "<c>WorldPartitionSetActive</c> — <c>NodeSetActive</c>, selected by area".
+/// "<c>WorldPartitionSetActive</c>, <c>NodeSetActive</c>, selected by area".
 /// </summary>
 public sealed class WorldPartitionGrid
 {

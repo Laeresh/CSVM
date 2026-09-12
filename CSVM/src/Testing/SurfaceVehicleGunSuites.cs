@@ -436,7 +436,7 @@ internal static class SurfaceVehicleGunSuites
 
     // One hold case: run the gunner long enough for several refire intervals and assert nothing
     // left the barrel, saying whether the target should still have been ACQUIRED. The distinction
-    // matters — a gate that silently stopped acquiring would pass a shots-only check for the
+    // matters, a gate that silently stopped acquiring would pass a shots-only check for the
     // wrong reason.
     private static void CheckHold(TestContext ctx,
         List<SurfaceVehicle> boats, SurfaceGunner gun,

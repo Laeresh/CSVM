@@ -115,7 +115,7 @@ public class SurfaceGunMountTests
     public void AimQualityIsMeasuredAgainstTheRawLeadNotTheGuardedOne()
     {
         // A target 50° up: the guard pins the mount at 30°, leaving 20° of residual. cos 20° is
-        // 0.94, under the gun's 0.9848 gate, so the shot is refused — which is the whole point.
+        // 0.94, under the gun's 0.9848 gate, so the shot is refused, which is the whole point.
         // Measured against the GUARDED direction it would read 1.0 and fire at the sky.
         float rad = Mathf.DegToRad(50f);
         var raw = new Vector3(0f, Mathf.Sin(rad), -Mathf.Cos(rad));

@@ -5,7 +5,7 @@ namespace CSVM.Flight;
 /// <summary>The view a pilot has SELECTED, as opposed to the numpad views held for as long as a
 /// key is down. The original's selector accepts exactly these three and nothing else
 /// (<c>FUN_0042c210</c> stores the accepted value, <c>FUN_004414a0</c> falls back to Cockpit for
-/// anything outside the set) — docs/org/cameraViews.md, "Only three views are player-selectable".
+/// anything outside the set), docs/org/cameraViews.md, "Only three views are player-selectable".
 /// The numbers ARE the engine's camera modes (<c>camera + 0x14c</c>), kept so a log line or a
 /// future decode reads against the same values the binary uses.</summary>
 public enum PilotViewMode
@@ -14,7 +14,7 @@ public enum PilotViewMode
     Chase = 0,
 
     /// <summary>Mode 6: first person with the <c>cockpit1</c> interior drawn (80° H in the
-    /// original). Placement is A2's, FOV A3's, interior B11's — A1 lands the mode alone.</summary>
+    /// original). Placement is A2's, FOV A3's, interior B11's, A1 lands the mode alone.</summary>
     Cockpit = 6,
 
     /// <summary>Mode 7: first person from the same <c>cockpit_camera</c> point with the interior
@@ -26,7 +26,7 @@ public enum PilotViewMode
 /// lands on, whether a mode is one of the two first-person views, and what a held numpad key does
 /// to the selection. Separate from <see cref="CameraController"/> (which owns a
 /// <c>Camera3D</c> and cannot be built without an engine) so the decisions are testable headlessly
-/// — <c>PilotViewTests</c> is that test.</summary>
+///, <c>PilotViewTests</c> is that test.</summary>
 public static class PilotView
 {
     /// <summary>Whether this mode is one of the original's two first-person views. The answer the

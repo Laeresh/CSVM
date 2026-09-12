@@ -34,7 +34,7 @@ public sealed class NetTrailerTargets
     }
 
     /// <summary>The supplier to hand <see cref="Flight.AiNetFollower"/> for this net, or null when
-    /// the net is not anchored (no trailer, no attach node, or a bare index with no name — the
+    /// the net is not anchored (no trailer, no attach node, or a bare index with no name, the
     /// three shipped shapes that carry no target). Null means "fly the authored coordinates",
     /// which is also what the supplier returning null on a given frame means.</summary>
     public Func<Vector3?>? For(AiNet net)

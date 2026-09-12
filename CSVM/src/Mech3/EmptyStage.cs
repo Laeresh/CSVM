@@ -11,7 +11,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class EmptyStage
 {
-    /// <summary>Half the ground plane's side, in metres — the stage is a 20 km square centred on
+    /// <summary>Half the ground plane's side, in metres, the stage is a 20 km square centred on
     /// the world origin, comfortably past the 40 km camera far plane's useful range and past any
     /// ballistic range in the weapons table (the longest is ~1 km).</summary>
     public const float HalfExtent = 10000f;
@@ -66,7 +66,7 @@ public sealed class EmptyStage
     /// no chapter assets present.</summary>
     public static AiNet PatrolNet { get; } = BuildPatrolNet();
 
-    /// <summary>The stage subtree — the caller adds it to the session root exactly as it adds a
+    /// <summary>The stage subtree, the caller adds it to the session root exactly as it adds a
     /// built world.</summary>
     public Node3D Root { get; private set; } = null!;
 

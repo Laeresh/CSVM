@@ -91,7 +91,7 @@ public class TextureArchiveTests
     {
         using var archive = new TextureArchive(FlagDir());
         // The engine's own terminal fallback is a flagless image, so an unresolvable name mixes
-        // rather than adding — the answer that cannot make a sprite glow where nothing should.
+        // rather than adding, the answer that cannot make a sprite glow where nothing should.
         Assert.Equal(0, archive.RenderFlags("probe_absent"));
         Assert.False(archive.IsAdditive("probe_absent"));
         // A material name arrives truncated and extensioned; the flags follow the resolved name.
@@ -116,7 +116,7 @@ public class TextureArchiveTests
         Assert.Empty(archive.MissingTextures);
     }
 
-    // The census colour is name arithmetic too — a hash, no engine — and the whole instrument
+    // The census colour is name arithmetic too, a hash, no engine, and the whole instrument
     // rests on it giving the same answer in every process. These lock that down.
 
     [Fact]
@@ -140,7 +140,7 @@ public class TextureArchiveTests
             var c = TextureDropIn.ColorForName($"probe_texture_{i}");
             Assert.True(c.R8 == 255 || c.G8 == 255 || c.B8 == 255, $"probe_texture_{i} is not full brightness: {Hex(c)}");
             // Greyness is a LINEAR-space property, because that is where the classifier measures:
-            // one channel must sit at most 0.9 of the brightest, which is 0.1 of chromaticity —
+            // one channel must sit at most 0.9 of the brightest, which is 0.1 of chromaticity,
             // twice the whole match tolerance away from white.
             var lin = c.SrgbToLinear();
             float max = System.Math.Max(lin.R, System.Math.Max(lin.G, lin.B));

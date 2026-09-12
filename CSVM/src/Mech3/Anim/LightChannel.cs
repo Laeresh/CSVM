@@ -14,7 +14,7 @@ namespace CSVM.Mech3.Anim;
 internal sealed class LightChannel
 {
     // Keyed by (light name, anchor). The anchor identifies the *instance* of the definition,
-    // and a definition's `lights` array is its own symbol table — so two refineries each get
+    // and a definition's `lights` array is its own symbol table, so two refineries each get
     // their own orange_light. It cannot be keyed by host node the way puffers are: the flicker
     // events are partial updates carrying only {name, range}, with no AT_NODE to resolve from.
     private readonly Dictionary<(string Name, Node3D? Anchor), AnimLight> _lights = new();
@@ -57,7 +57,7 @@ internal sealed class LightChannel
         if (!_lights.TryGetValue(key, out var light))
             _lights[key] = light = new AnimLight { Host = anchor };
 
-        // AT_NODE arrives as translate:{AtNode:{name, pos}} — node plus a local offset, the same
+        // AT_NODE arrives as translate:{AtNode:{name, pos}}, node plus a local offset, the same
         // shape (and the same frame) as a puffer's AT_NODE.
         if (ev.Data.Obj("translate")?.Obj("AtNode") is { } at)
         {

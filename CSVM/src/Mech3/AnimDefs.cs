@@ -34,7 +34,7 @@ public static class AnimDefs
         return defs;
     }
 
-    /// <summary>Loads one named reader file's ANIMATION_DEFINITIONs — for a consumer that wants a
+    /// <summary>Loads one named reader file's ANIMATION_DEFINITIONs, for a consumer that wants a
     /// specific family without paying for the whole archive (the parked viewer's panel-pairing
     /// derivation reads two files where <see cref="LoadArchive"/> parses hundreds). Missing file
     /// → empty list, same policy as the archive load.</summary>
@@ -107,7 +107,7 @@ public static class AnimDefs
             {
                 case "NAME": def.Name = FirstString(value) ?? def.Name; break;
                 // The multi-target form: alternating (anim-name pattern, anchor node path)
-                // pairs — the zeppelin sub-part wiring/destructible defs. Name stays empty;
+                // pairs, the zeppelin sub-part wiring/destructible defs. Name stays empty;
                 // NameResolver.Anchors resolves the recorded paths instead (M4 F18).
                 case "NAME1":
                     if (value != null)
@@ -177,7 +177,7 @@ public static class AnimDefs
                     def.PersistLog = "ON".Equals(FirstString(value), StringComparison.OrdinalIgnoreCase);
                     break;
                 case "HEALTH": def.Health = FirstNumber(value) ?? 0f; break;
-                // One argument, metres; the compiled form stores metres SQUARED with min 0 —
+                // One argument, metres; the compiled form stores metres SQUARED with min 0,
                 // the same reader↔compiled unit divergence as the PLAYER_RANGE condition,
                 // converted once here so the runtime has a single convention.
                 case "EXECUTION_BY_RANGE":
@@ -295,7 +295,7 @@ public static class AnimDefs
                     data["run_time"] = rt;
                 AddFromTo(data, fields, "translate", "TRANSLATE_FROM", "TRANSLATE_TO");
                 // ROTATE_FROM/TO are degrees in the reader (survey: 1,388 of 1,428 nonzero
-                // values exceed 2π, max 900) — the C2 roadblock swerve spun cars ~9 turns
+                // values exceed 2π, max 900), the C2 roadblock swerve spun cars ~9 turns
                 // when 135° reached FromToMotion as 135 rad.
                 AddFromTo(data, fields, "rotate", "ROTATE_FROM", "ROTATE_TO", degToRad: true);
                 AddFromTo(data, fields, "scale", "SCALE_FROM", "SCALE_TO");
@@ -364,8 +364,8 @@ public static class AnimDefs
             case "ObjectAddChild":
             case "ObjectDeleteChild":
                 // The reader writes one PARENT_CHILD pair where the compiled event has separate
-                // `parent`/`child` fields. Without this the sound-emitter attachment — the
-                // reader's third event in the SOUND_NODE triple — carries neither name.
+                // `parent`/`child` fields. Without this the sound-emitter attachment, the
+                // reader's third event in the SOUND_NODE triple, carries neither name.
                 if (fields.TryGetValue("PARENT_CHILD", out var pair) && pair is { Count: >= 2 })
                 {
                     if (pair[0] is string parent) data["parent"] = parent;
@@ -407,13 +407,13 @@ public static class AnimDefs
 
     // Normalizes a reader PUFFER_STATE body into the compiled shape FromAnimEvent reads.
     // ⚠ Without this, a reader-only puffer event carries none of its own fields, which
-    // HandlePufferState's default reads as "stop" — the C1 waterfall bug (docs/formats/
+    // HandlePufferState's default reads as "stop", the C1 waterfall bug (docs/formats/
     // anim-definitions.md).
     private static void AddPufferState(Dictionary<string, object?> data, Dictionary<string, List<object?>?> fields)
     {
         data["active_state"] = string.Equals(First(fields, "ACTIVE_STATE") as string, "ACTIVE",
             StringComparison.OrdinalIgnoreCase) ? 1f : 0f;
-        // AT_NODE is [nodeName, dx?, dy?, dz?] — the trailing offset is what the compiled
+        // AT_NODE is [nodeName, dx?, dy?, dz?], the trailing offset is what the compiled
         // shape carries separately as "translate" (verified against splashpuffer2/3, whose
         // reader AT_NODE ["waterfall01", 11, 8, -8] matches the compiled translate exactly).
         if (fields.TryGetValue("AT_NODE", out var atNode) && atNode is { Count: > 0 } && atNode[0] is string atName)
@@ -617,7 +617,7 @@ public static class AnimDefs
         if (from == null && to == null)
             return;
         var ch = new Dictionary<string, object?>(StringComparer.Ordinal);
-        // A missing FROM means "from wherever the object currently is" — left absent so the
+        // A missing FROM means "from wherever the object currently is", left absent so the
         // handler reads the live pose rather than assuming the authored rest pose.
         if (from != null) ch["from"] = from;
         if (to != null) ch["to"] = to;
@@ -731,7 +731,7 @@ public static class AnimDefs
             }
             else
             {
-                i += 1; // stray value — tolerate
+                i += 1; // stray value, tolerate
             }
         }
     }

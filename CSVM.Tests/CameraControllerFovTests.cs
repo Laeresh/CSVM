@@ -36,7 +36,7 @@ public class CameraControllerFovTests
     public void TheDerivedVerticalGivesBackTheStoredHorizontalAtTheAspectItWasStatedAt()
     {
         // The bases are the original's horizontal angles at the 4:3 it ran, so a 4:3 viewport
-        // showing this vertical shows exactly those angles across — the check that the stored
+        // showing this vertical shows exactly those angles across, the check that the stored
         // number and the derived one describe one frustum rather than two.
         Assert.InRange(HorizontalAt(CameraController.HorizontalToVerticalFovDeg(80f), Aspect4By3), 79.9f, 80.1f);
         Assert.InRange(HorizontalAt(CameraController.HorizontalToVerticalFovDeg(60f), Aspect4By3), 59.9f, 60.1f);

@@ -11,8 +11,8 @@ namespace CSVM.Mech3.Anim;
 /// <summary>An emitter's whole life on one runtime: the keying rule, the start, all four stops, the
 /// respawn wipe, the per-frame follow, and a census of what exists.
 /// ⚠ Do not collapse the four stops into one parameterised call. They vary on two independent
-/// axes — SELECTOR (key / host subtree / owning instance) × DISPOSITION (pause-revivable /
-/// pause-and-forget) — and every shipped bug in this family has been a selector error.
+/// axes, SELECTOR (key / host subtree / owning instance) × DISPOSITION (pause-revivable /
+/// pause-and-forget), and every shipped bug in this family has been a selector error.
 /// Handed already-resolved host and anchor nodes: the effect-template pool is not a keying scheme
 /// and stays out of here.
 /// </summary>
@@ -25,12 +25,12 @@ public sealed class EmitterDirector
     // required on the world runtime (C5's six same-node m_crane_go spark defs would stack six).
     private readonly Dictionary<(string Name, Node3D Node, AnimDefinition? Def), Entry> _emitters = new();
 
-    // The emitting emitters, each stamped with the INSTANT it started — the runtime
+    // The emitting emitters, each stamped with the INSTANT it started, the runtime
     // batch (one AnimRuntime.Advance pass) that dispatched its `PUFFER_STATE 1`.
     // EndOn reads the stamp; nothing else does. See _instant.
     private readonly List<(IEmitter Emitter, Node3D Node, ulong Started)> _active = new();
 
-    // Each host node's emission point in its own frame (see AnimRuntime.VisualOriginOf) — zero for
+    // Each host node's emission point in its own frame (see AnimRuntime.VisualOriginOf), zero for
     // a node whose origin sits inside its mesh bounds. Computed lazily on the first tick, never at
     // dispatch: the bootstrap dispatches PUFFER_STATE before the world enters the tree, where a
     // GlobalTransform read only returns identity and an error. Local-frame, so it stays valid when
@@ -43,7 +43,7 @@ public sealed class EmitterDirector
 
     private readonly Action<string> _count;
 
-    // The current runtime batch, bumped once per Tick — i.e. once per AnimRuntime.Advance, which is
+    // The current runtime batch, bumped once per Tick, i.e. once per AnimRuntime.Advance, which is
     // exactly the granularity at which the data's own instants exist: an event with no START_TIME is
     // "EVENT_OFFSET 0" and every zero-offset run of events fires in one Advance pass
     // (SequenceRunner). Emitters carry the value they started on so a host deactivation can tell
@@ -62,7 +62,7 @@ public sealed class EmitterDirector
     }
 
     /// <summary>How many emitters this director has actually built (not just started the owning
-    /// def). Verification checks this rather than "the def ran" — a started effect
+    /// def). Verification checks this rather than "the def ran", a started effect
     /// whose factory is retired or whose textures are missing builds nothing and renders
     /// nothing.</summary>
     public int Built { get; private set; }
@@ -72,7 +72,7 @@ public sealed class EmitterDirector
     /// says the kill reached its emitters.</summary>
     public int Prewarmed { get; private set; }
 
-    /// <summary>Every KNOWN emitter, emitting or not — the module's own answer to "what exists and
+    /// <summary>Every KNOWN emitter, emitting or not, the module's own answer to "what exists and
     /// what is running", which the `--debug-anim` line and the bootstrap line are both projections
     /// of rather than parallel re-derivations.</summary>
     public IReadOnlyList<EmitterCensusRow> Census
@@ -125,9 +125,9 @@ public sealed class EmitterDirector
             return;
         }
 
-        // No pre-built emitter for this key — something had to be made.
+        // No pre-built emitter for this key, something had to be made.
         // MaterialCreate (EmitterRenderer.Attach, reached through _factory.Create below) is
-        // nested inside this scope and is suppressed by it — its cost is folded into this one.
+        // nested inside this scope and is suppressed by it, its cost is folded into this one.
         using var _ = PerfSample.Scope(PerfSite.EffectPoolMiss);
         if (_factory.Create(PufferState.FromAnimEvent(data), out var miss) is not { } emitter)
         {
@@ -198,7 +198,7 @@ public sealed class EmitterDirector
                          : "this instance owns no emitter of that name"));
     }
 
-    /// <summary>Ends emission for every emitter on <paramref name="root"/> or its subtree — what
+    /// <summary>Ends emission for every emitter on <paramref name="root"/> or its subtree, what
     /// <c>OBJECT_ACTIVE_STATE false</c> means for emitters. Pauses rather than removes the entry,
     /// so a later <see cref="Assert"/> revives it; an emitter started this same instant is spared
     /// unless <paramref name="sparingSameInstant"/> is false.
@@ -232,11 +232,11 @@ public sealed class EmitterDirector
         }
     }
 
-    /// <summary>Pauses what an ending instance owns, KEEPING the entries — the stop for a def
+    /// <summary>Pauses what an ending instance owns, KEEPING the entries, the stop for a def
     /// carrying an ACTIVE_STATE 1 and neither authored stop (the torpedo's ground fire, C1's refuel
     /// tanks). Emission ends rather than the emitter being torn down, so live particles
-    /// finish their authored LIFETIME_RANGE — the fire fades over its last 3–4 s instead of popping
-    /// out — and a replay on this same pool slot revives the entry.</summary>
+    /// finish their authored LIFETIME_RANGE, the fire fades over its last 3–4 s instead of popping
+    /// out, and a replay on this same pool slot revives the entry.</summary>
     public void EndFor(AnimDefinition def, Node3D? anchor)
     {
         if (_emitters.Count == 0)
@@ -251,7 +251,7 @@ public sealed class EmitterDirector
 
     /// <summary>Pauses what a STOPPED instance owns and forgets the entries, so nothing of the
     /// definition can be revived after it. Same selector as <see cref="EndFor"/>, different
-    /// disposition — the pair is why the four stops do not reconcile into one.</summary>
+    /// disposition, the pair is why the four stops do not reconcile into one.</summary>
     public void Discard(AnimDefinition def, Node3D? anchor)
     {
         var keys = _emitters
@@ -299,7 +299,7 @@ public sealed class EmitterDirector
     /// frame.</summary>
     public void Tick(float dt)
     {
-        // A new runtime batch begins here — everything the instances dispatch below this point
+        // A new runtime batch begins here, everything the instances dispatch below this point
         // shares one instant, which is what EndOn's same-instant carve-out is keyed on.
         _instant++;
         for (int i = _active.Count - 1; i >= 0; i--)
@@ -328,8 +328,8 @@ public sealed class EmitterDirector
 
     private bool Emitting(IEmitter emitter) => _active.Any(a => a.Emitter == emitter);
 
-    // The host's emission point in its own frame, cached per node. Zero — and the emission
-    // point exactly the node origin, byte-identical with the pre-cache behaviour — for every node
+    // The host's emission point in its own frame, cached per node. Zero, and the emission
+    // point exactly the node origin, byte-identical with the pre-cache behaviour, for every node
     // whose origin sits inside its mesh bounds; the offset to the bounds centre for
     // absolute-modelled world subtrees, whose origin is the map corner. Local-frame, so
     // a motion-driven host carries its emission point along.

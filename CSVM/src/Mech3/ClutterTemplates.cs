@@ -27,43 +27,43 @@ public readonly record struct ClutterDamageResponse(float Health, string? Anim, 
 /// </summary>
 public sealed class ClutterKindProps
 {
-    /// <summary>The decoration model's node name, as both the file and the gamez spell it —
+    /// <summary>The decoration model's node name, as both the file and the gamez spell it,
     /// with the <c>.flt</c> suffix (<c>firtree1.flt</c>). The engine matches it to a decoration by
     /// a plain <c>strcmp</c> against the gamez node's name; every shipped
     /// name agrees exactly, so the case-insensitive lookup here is a courtesy, not a fixup.</summary>
     public string Node { get; init; } = "";
 
-    /// <summary><c>scale_range</c> — the uniform per-instance scale multiplier, drawn once per
+    /// <summary><c>scale_range</c>, the uniform per-instance scale multiplier, drawn once per
     /// stamp between the two components (the stamper's step 10, applied as a uniform scale).
     /// A FLAT pair in the file, unlike the nested pairs beside it.
     /// Default (1, 1), i.e. exactly the authored size. Authored by all 143 shipped kinds; the
     /// install's span is 0.5–3.0.</summary>
     public Vector2 ScaleRange { get; init; } = Vector2.One;
 
-    /// <summary><c>far_fade_range</c> lower bounds — <c>(nearMin, farMin)</c>, in metres, from the
+    /// <summary><c>far_fade_range</c> lower bounds, <c>(nearMin, farMin)</c>, in metres, from the
     /// file's FIRST pair. See <see cref="FarFadeMax"/> for why the pairs are read this way.</summary>
     public Vector2 FarFadeMin { get; init; }
 
-    /// <summary><c>far_fade_range</c> upper bounds — <c>(nearMax, farMax)</c>, in metres, from the
+    /// <summary><c>far_fade_range</c> upper bounds, <c>(nearMax, farMax)</c>, in metres, from the
     /// file's second pair. Decode: docs/formats/templates.md.
     /// ⚠ The two file pairs are the min and max of the two distances, not the two distances
     /// themselves; both come from one <c>rand()</c> draw. Zero <c>farMax</c> means never fades.</summary>
     public Vector2 FarFadeMax { get; init; }
 
-    /// <summary><c>translate_uv_range</c> lower bounds — <c>(uMin, vMin)</c>, in UV units, from the
+    /// <summary><c>translate_uv_range</c> lower bounds, <c>(uMin, vMin)</c>, in UV units, from the
     /// file's first pair; the same min-pair/max-pair grouping as
     /// <see cref="FarFadeMax"/> documents. The per-axis jitter added to a lattice candidate in
     /// the stamper's step 5. <b>Authored by no chapter</b>, so the whole of step 5 is inert
-    /// on retail data — which is the structural reason the original's placement has no random input
+    /// on retail data, which is the structural reason the original's placement has no random input
     /// affecting position at all.</summary>
     public Vector2 TranslateUvMin { get; init; }
 
     /// <inheritdoc cref="TranslateUvMin"/>
     public Vector2 TranslateUvMax { get; init; }
 
-    /// <summary><c>rotation_range</c> lower bounds — the per-axis minimum rotation, <b>in radians</b>
+    /// <summary><c>rotation_range</c> lower bounds, the per-axis minimum rotation, <b>in radians</b>
     /// (the file authors DEGREES; the engine multiplies by π/180 as it stores). Same
-    /// min-pair/max-pair grouping as the two above. <b>Authored by no chapter</b> — and note that
+    /// min-pair/max-pair grouping as the two above. <b>Authored by no chapter</b>, and note that
     /// the engine still draws three <c>rand()</c> values per stamp for it, so it is inert in effect
     /// rather than skipped.</summary>
     public Vector3 RotationMin { get; init; }
@@ -82,18 +82,18 @@ public sealed class ClutterKindProps
     /// cosine decreases with angle.</summary>
     public float NormalYMax { get; init; } = 1f;
 
-    /// <summary><c>align_normal</c> — a BARE FLAG (no value list): present means align the placed
+    /// <summary><c>align_normal</c>, a BARE FLAG (no value list): present means align the placed
     /// decoration to the ground normal instead of rotating it randomly. <b>Authored by no
     /// chapter</b>; default false.</summary>
     public bool AlignNormal { get; init; }
 
-    /// <summary><c>substitute</c> — the weighted model roll of the stamper's step 9, in file
+    /// <summary><c>substitute</c>, the weighted model roll of the stamper's step 9, in file
     /// order (the order matters: the engine walks the list subtracting <see
     /// cref="ClutterSubstitute.Fraction"/> from one uniform draw). Empty when the key is absent, in
     /// which case the stamp is always the decoration's own model. Authored by 41 kinds.</summary>
     public IReadOnlyList<ClutterSubstitute> Substitutes { get; init; } = Array.Empty<ClutterSubstitute>();
 
-    /// <summary><c>OnWeaponHit</c> / <c>OnCrater</c> / <c>OnCollide</c> — null when the block is
+    /// <summary><c>OnWeaponHit</c> / <c>OnCrater</c> / <c>OnCollide</c>, null when the block is
     /// absent, which is every kind of every chapter (see <see cref="ClutterDamageResponse"/>).</summary>
     public ClutterDamageResponse? OnWeaponHit { get; init; }
 
@@ -104,13 +104,13 @@ public sealed class ClutterKindProps
     public ClutterDamageResponse? OnCollide { get; init; }
 
     /// <summary>The keys this block actually carried, lowercased. Kept because a key authored AT
-    /// its default is indistinguishable from an absent one in every parsed value above — and the
+    /// its default is indistinguishable from an absent one in every parsed value above, and the
     /// census that has to agree with a per-chapter key count (C5 authors <c>scale_range</c> on all
     /// 78 of its blocks, most of them as 1.0/1.0) needs the difference.</summary>
     public IReadOnlyList<string> AuthoredKeys { get; init; } = Array.Empty<string>();
 
     /// <summary>Keys this block carried that the reader does not model. Empty for every shipped
-    /// file — the same unhandled-key assertion <c>Flight.WeaponDefs</c> makes, kept because the one
+    /// file, the same unhandled-key assertion <c>Flight.WeaponDefs</c> makes, kept because the one
     /// thing a reader over authored data must never do quietly is skip a key.</summary>
     public IReadOnlyList<string> UnknownKeys { get; init; } = Array.Empty<string>();
 
@@ -177,20 +177,20 @@ public sealed class ClutterTemplateSpec
         _byNode = byNode;
     }
 
-    /// <summary>Every block, in file order, INCLUDING a duplicate name's later blocks — the file is
+    /// <summary>Every block, in file order, INCLUDING a duplicate name's later blocks, the file is
     /// a list and the engine keeps it as one. Use <see cref="Find"/> to resolve a name the way the
     /// engine does.</summary>
     public IReadOnlyList<ClutterKindProps> Kinds { get; }
 
     /// <summary>Node names carrying more than one block, in file order. <b>C5 ships exactly one</b>
     /// (<c>cb05det01.flt</c>, whose second block drops the <c>substitute</c> the first one carries),
-    /// and the engine's own lookup is a linear scan that stops at the first match — so the block
+    /// and the engine's own lookup is a linear scan that stops at the first match, so the block
     /// that wins is the FIRST, and the substitute survives. Surfaced rather than silently collapsed
     /// because "which one wins" is exactly the question a duplicate raises.</summary>
     public IReadOnlyList<string> DuplicateNodes { get; }
 
     /// <summary>Loads a chapter's <c>templates.zrd</c>. Null when the chapter's zrdr scope has no
-    /// such file — degrades rather than throwing, like every other optional reader here. An EMPTY
+    /// such file, degrades rather than throwing, like every other optional reader here. An EMPTY
     /// file is not that case: C1C and C2B ship one, and both come back as a spec with no kinds.</summary>
     public static ClutterTemplateSpec? Load(string chapterZrdrPath)
     {
@@ -208,7 +208,7 @@ public sealed class ClutterTemplateSpec
     }
 
     /// <summary>Parses an already-loaded reader list: one block per decoration model, each an
-    /// alternating key/value list. A block with no <c>node</c> key is skipped — that is the engine's
+    /// alternating key/value list. A block with no <c>node</c> key is skipped, that is the engine's
     /// own gate (it allocates nothing without one), not leniency.</summary>
     public static ClutterTemplateSpec Parse(List<object?> root)
     {
@@ -242,13 +242,13 @@ public sealed class ClutterTemplateSpec
     }
 
     /// <summary>The properties for a decoration model name, or null when the file carries no block
-    /// for it — which the caller must read as "all defaults", never as "do not place". Resolves a
+    /// for it, which the caller must read as "all defaults", never as "do not place". Resolves a
     /// duplicated name to its FIRST block, matching the engine's scan.</summary>
     public ClutterKindProps? Find(string node) =>
         _byNode.TryGetValue(node, out var props) ? props : null;
 
     /// <summary>A one-line census: block and distinct-kind counts, then how many blocks author each
-    /// accepted key — every key listed, so unauthored reads as a measured zero.
+    /// accepted key, every key listed, so unauthored reads as a measured zero.
     /// Counted by key presence, not by parsed value, since most of C5's blocks author
     /// <c>scale_range</c> as the default 1.0/1.0.</summary>
     public string Census()
@@ -360,7 +360,7 @@ public sealed class ClutterTemplateSpec
 
     private static ClutterDamageResponse? ParseDamage(ZrdrDict? block)
     {
-        // The `health` key is what arms the block — the engine reads the model and anim only when
+        // The `health` key is what arms the block, the engine reads the model and anim only when
         // it was found, and stores the "is destructible" bit from that same test.
         if (block == null || !block.TryFloat("health", out var health))
         {

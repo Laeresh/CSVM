@@ -51,7 +51,7 @@ internal static class WorldAndToolSuites
             ctx.Check(wrote, $"exported .glb is present and non-empty path={path}");
 
             // Re-import the file the exporter just wrote and count the textured meshes that survived
-            // the material conversion — proves the shader skins became serializable StandardMaterials.
+            // the material conversion, proves the shader skins became serializable StandardMaterials.
             if (wrote)
             {
                 var doc = new GltfDocument();
@@ -634,7 +634,7 @@ internal static class WorldAndToolSuites
     }
 
     // How many MeshInstance3D in the subtree carry a material with an albedo
-    // texture — the glTF importer hands each surface back a StandardMaterial3D.
+    // texture, the glTF importer hands each surface back a StandardMaterial3D.
     internal static int CountTexturedMeshes(Node node)
     {
         int count = 0;
@@ -766,8 +766,8 @@ internal static class WorldAndToolSuites
         ctx.WriteArtifact("test-chapter-census.txt", report.ToString());
     }
 
-    // The invisible-wall tripwire: after a chapter's world has bootstrapped — mission
-    // setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep — no collider may still be
+    // The invisible-wall tripwire: after a chapter's world has bootstrapped, mission
+    // setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep, no collider may still be
     // enabled where nothing is drawn. Every chapter, because what each mission hides differs and
     // the failure is silent until someone flies into it (C1/IA1's `hk_zep`).
     internal static void CheckNothingHiddenIsSolid(TestContext ctx, string chapter, TestWorld world)
@@ -830,7 +830,7 @@ internal static class WorldAndToolSuites
     internal static void CheckDestructibleTotals(TestContext ctx, string chapter, TestWorld world,
         int instances, int anchors)
     {
-        // The registry totals, never the swept rows — the sweep is capped at
+        // The registry totals, never the swept rows, the sweep is capped at
         // Probes.SweepCap and would silently under-count.
         var registry = world.Runtime.Destructibles;
         ctx.Same(instances, registry.Count, $"{chapter} destructible instances");
@@ -1041,7 +1041,7 @@ internal static class WorldAndToolSuites
                 $"C2/MP2 builds at ZONE2's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
 
             // Below the cloud band (19024–20124 m) the camera is in weather state 1, so the edge
-            // trigger swaps to ZONE1 — and the light must ride along. Ticked twice: the first Tick
+            // trigger swaps to ZONE1, and the light must ride along. Ticked twice: the first Tick
             // publishes the rig's new state, and the swap is asserted after it has settled.
             camera.Position = new Vector3(0f, 0f, 0f);
             weatherRig.Tick(rigs);
@@ -1253,7 +1253,7 @@ internal static class WorldAndToolSuites
             }
 
             ctx.Same(expected ? 1 : 0, sunNodes, $"{chapter} gamez sun node");
-            // The gates must not merely each be right — they must AGREE. A chapter with textures
+            // The gates must not merely each be right, they must AGREE. A chapter with textures
             // and no sun (or the reverse) is data telling us something we have not decoded, and
             // the rig logs a warning for exactly that case.
             ctx.Check(slots.Count > 0 == sunNodes > 0, $"{chapter} both flare gates agree");
@@ -1442,7 +1442,7 @@ internal static class WorldAndToolSuites
         });
     }
 
-    // The first descendant (inclusive) whose cs_name contains the tag — "healthy"/"destroyed" name
+    // The first descendant (inclusive) whose cs_name contains the tag, "healthy"/"destroyed" name
     // their variant subtrees exactly as CountVariants (Probes.cs) scans for, but this returns the
     // node itself rather than a count.
     internal static Node3D? FindVariant(Node3D node, string tag)
@@ -1507,7 +1507,7 @@ internal static class WorldAndToolSuites
 
     // WorldLights.Commit fades and ranks
     // each light against the NEAREST of every pane's camera, not a single position. Driven
-    // straight against a real WorldLights instance with synthetic positions —
+    // straight against a real WorldLights instance with synthetic positions,
     // there is no per-player placement flag to give two scripted panes independent spots (the
     // same CLI gap B11/B12 hit), so the rule is pinned here instead and the visual verdict is
     // PT-52's, alongside B11/B12's own owed at-the-controls check.
@@ -1561,7 +1561,7 @@ internal static class WorldAndToolSuites
                   && lights.CommittedPositions.Contains(besideP2),
             $"with P2 present the same light is nearest to a viewer and outranks the farthest filler for a slot in the budget");
 
-        // Single viewer must read exactly as it did before this item — the goldens' own invariant.
+        // Single viewer must read exactly as it did before this item, the goldens' own invariant.
         var nearP1 = new Vector3(0f, 0f, -5f);
         lights.Begin();
         lights.Add(nearP1, Colors.White, 1f, 10f);

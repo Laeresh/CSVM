@@ -16,18 +16,18 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class WorldLights : IDisposable
 {
-    /// <summary>Rows in the data texture — the most lights that can spill at once. The shader
+    /// <summary>Rows in the data texture, the most lights that can spill at once. The shader
     /// loops over <c>csky_light_count</c> fragments-wide, so this is a real per-fragment cost
     /// bound, not just an allocation. Measured peak in this install is well under it (logged
     /// at build as "world lights: … peak N"), so nearest-N never actually drops one.</summary>
     public const int MaxActive = 16;
 
-    // The data's lights are SMALL — every startup light in this install has a range_max between
-    // 2 and 22 m — so one seen from far enough away is a sub-pixel smudge that the mission's fog
+    // The data's lights are SMALL, every startup light in this install has a range_max between
+    // 2 and 22 m, so one seen from far enough away is a sub-pixel smudge that the mission's fog
     // has already washed out. Rather than hard-cull at a radius (which pops), the contribution
     // fades to nothing between these two distances and only then leaves the set. That is what
     // makes the MaxActive bound safe: the lights nearest-N drops are ones already at ~0.
-    // Both TUNE — chosen against C1's spread (34 live, at most 13 within 600 m of each other).
+    // Both TUNE, chosen against C1's spread (34 live, at most 13 within 600 m of each other).
     private const float FadeStart = 900f;
     private const float FadeEnd = 1500f;
 
@@ -70,7 +70,7 @@ public sealed class WorldLights : IDisposable
         _omniParent = GraphicsMode.Enhanced ? parent : null;
     }
 
-    /// <summary>Highest simultaneous count seen — reported so the MaxActive bound can be
+    /// <summary>Highest simultaneous count seen, reported so the MaxActive bound can be
     /// checked against real data rather than assumed.</summary>
     public int PeakCount { get; private set; }
 
@@ -78,13 +78,13 @@ public sealed class WorldLights : IDisposable
     public int LiveCount { get; private set; }
 
     /// <summary>The positions actually packed into the shader texture by the last
-    /// <see cref="Commit"/> — never read by anything that draws (the shader reads the texture,
+    /// <see cref="Commit"/>, never read by anything that draws (the shader reads the texture,
     /// not this); it exists so the nearest-viewer budget can be asserted directly
     /// instead of decoding the packed texture back out.</summary>
     public IReadOnlyList<Vector3> CommittedPositions => _committedPositions;
 
     /// <summary>Registers the global shader parameters the world shader references. Called once
-    /// per process, before any material using them is built — the defaults (no texture, count 0)
+    /// per process, before any material using them is built, the defaults (no texture, count 0)
     /// are a no-op, so a session that never animates a light renders exactly as before.</summary>
     public static void RegisterGlobals()
     {
@@ -112,7 +112,7 @@ public sealed class WorldLights : IDisposable
     }
 
     /// <summary>Packs the frame's lights and uploads them. When more than
-    /// <see cref="MaxActive"/> are live the nearest to any viewer win — the dropped ones are
+    /// <see cref="MaxActive"/> are live the nearest to any viewer win, the dropped ones are
     /// the farthest, whose pools are the smallest on screen in every pane.</summary>
     public void Commit(IReadOnlyList<Vector3> viewerPositions)
     {
@@ -132,7 +132,7 @@ public sealed class WorldLights : IDisposable
             PeakCount = n;
         if (n > MaxActive)
         {
-            // Rank by angular size (range/distance), not raw distance — plain nearest-N would
+            // Rank by angular size (range/distance), not raw distance, plain nearest-N would
             // drop a big flare in favor of an equally-far pinpoint.
             _pending.Sort((a, b) => Significance(b, viewerPositions).CompareTo(Significance(a, viewerPositions)));
             n = MaxActive;
@@ -197,7 +197,7 @@ public sealed class WorldLights : IDisposable
                  + (_omniParent != null ? $" (enhanced: {_lastCount} omni)" : ""));
     }
 
-    /// <summary>Drops the world's lights — called when a session is torn down, so the next
+    /// <summary>Drops the world's lights, called when a session is torn down, so the next
     /// world does not inherit the previous one's spill for a frame. Also frees every spawned
     /// omni: the harness shares one host across suites, so a leaked named node would break the
     /// next suite's spawn.</summary>
@@ -284,7 +284,7 @@ public sealed class WorldLights : IDisposable
             Pos = pos; Color = color; Min = min; Max = max;
         }
 
-        /// <summary>The same light dimmed by the distance fade — the colour is the intensity,
+        /// <summary>The same light dimmed by the distance fade, the colour is the intensity,
         /// so scaling it is how a light leaves the set without popping.</summary>
         public Entry Faded(float f) => new(Pos, Color * f, Min, Max);
     }

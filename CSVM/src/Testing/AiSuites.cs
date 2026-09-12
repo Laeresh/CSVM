@@ -224,7 +224,7 @@ internal static class AiSuites
                 Textures = textures,
                 Shakes = ShakeDefs.Load(ctx.ZrdrPath),
             };
-            // worldEffects null!: never dereferenced — CrashProgram/WorldScene stay null, so the
+            // worldEffects null!: never dereferenced, CrashProgram/WorldScene stay null, so the
             // spawner's crash-runtime block (its only reader) is skipped.
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
@@ -386,7 +386,7 @@ internal static class AiSuites
         ctx.Check(turretDefs.All.Count(d => d.Carried) == 16,
             $"the 16 carried ai.zrd entries parse carried={turretDefs.All.Count(d => d.Carried)}");
 
-        // The Kestrel: a single rear turret (thirdp MSG_TUR_PAC_G3 — PITCH [20,50], YAW
+        // The Kestrel: a single rear turret (thirdp MSG_TUR_PAC_G3, PITCH [20,50], YAW
         // [105,255], the directed rear arc through 180°, DETECTION_RANGE 450, FIRE_RATE 0.4,
         // ATTACK 4 s / BORED 3 s scalars).
         const string HostPlane = "player_kestrel";
@@ -425,7 +425,7 @@ internal static class AiSuites
                 rig.Setup(new FlightModel(st), ctx.Camera, new CamParams(), pos, pos + Vector3.Forward);
                 ctx.Host.AddChild(rig);
                 // Park at zero speed: Setup leaves the model at spawn speed, and a rig this
-                // suite never steps would otherwise REPORT that velocity while standing still —
+                // suite never steps would otherwise REPORT that velocity while standing still,
                 // the turret then leads a phantom motion and every round misses.
                 rig.PlaceHeld(pos, pos + Vector3.Forward);
                 return rig;
@@ -445,15 +445,15 @@ internal static class AiSuites
             ctx.Check(turret.Weapon.Id == turret.Def.WeaponName,
                 $"WEAPON.NAME resolved as a ballistics id ({turret.Weapon.Id})");
 
-            // Load pose: the centre of each arc — yaw 180 (rearward), pitch 35.
+            // Load pose: the centre of each arc, yaw 180 (rearward), pitch 35.
             var (restYaw, restPitch) = TurretController.AnglesOfLocal(turret.BarrelLocal);
             ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - 180f, -180f, 180f)) < 0.5f
                       && Mathf.Abs(restPitch - 35f) < 0.5f,
                 $"the turret poses at its arc centre yaw={restYaw:0.#} pitch={restPitch:0.#}");
 
-            // The target: in-arc (behind and above the host — yaw ~180, elevation ~35°), inside
+            // The target: in-arc (behind and above the host, yaw ~180, elevation ~35°), inside
             // DETECTION_RANGE, on a hostile team. INACCURACY is zeroed so every gated round flies
-            // the solved line — the scatter cone itself is covered by the aim-assist suite.
+            // the solved line, the scatter cone itself is covered by the aim-assist suite.
             turret.Def.InaccuracyDeg = 0f;
             var targetStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
             var targetPos = hostPos + new Vector3(0f, 105f, 150f);
@@ -487,7 +487,7 @@ internal static class AiSuites
                 $"a CARRIED turret is never selectable, though the same scan entry is a live aim-assist candidate on a hostile team pool={carriedPool.Count}");
 
             // --- track and fire: two seconds inside the initial 4 s attack window. The barrel
-            // slews onto the target and the shots land — under the host's shooter id, so the
+            // slews onto the target and the shots land, under the host's shooter id, so the
             // rounds crossing the host's own tail (the rear arc points across it) exclude it.
             float before = Combined(target);
             Step(120);
@@ -502,7 +502,7 @@ internal static class AiSuites
                 $"the host's own airframe took nothing from its own gunner");
 
             // --- the duty cycle: run to the bored window (ATTACK 4 s from build), then move the
-            // target across the arc — firing stops, tracking does not.
+            // target across the arc, firing stops, tracking does not.
             int shotsAtBored = -1;
             for (int i = 0; i < 600 && turret.Attacking; i++)
             {
@@ -530,7 +530,7 @@ internal static class AiSuites
                 $"the barrel parks at the nearer end stop (105°, not 255°) yaw={parkedYaw:0.#}");
 
             // --- YAW [0,0] means UNRESTRICTED: with the limit spelled that way the same ahead
-            // target becomes reachable and the turret opens fire — the misread ('locked forward')
+            // target becomes reachable and the turret opens fire, the misread ('locked forward')
             // would keep it silent forever. Pitch stays authored, so keep the target elevated.
             turret.Def.YawMinDeg = 0f;
             turret.Def.YawMaxDeg = 0f;
@@ -741,7 +741,7 @@ internal static class AiSuites
                         $"…every one of them dormant by data, which is why it flies unarmed");
                     ctx.Same(14, runtime.SetActivatedUnder(mp1[0], true),
                         $"the builder's zeppelin arm arms every ring on the objective hull");
-                    // BL-403: hostile to the PLAYER, and never to the wave this hull launches —
+                    // BL-403: hostile to the PLAYER, and never to the wave this hull launches,
                     // both halves, since the band made the second half impossible.
                     ctx.Check(mp1Rings.All(t => t.Activated
                             && AimAssist.Hostile(t.Team, AimAssist.PlayerTeam)
@@ -788,7 +788,7 @@ internal static class AiSuites
                         $"the same call with the flag cleared stows them again (the b=0 arm)");
                 }
 
-                // The stand-in wakes it — explicit, counted, logged — and it engages. ⚠ BORED pinned
+                // The stand-in wakes it, explicit, counted, logged, and it engages. ⚠ BORED pinned
                 // to zero first: the windows are seeded by draw order, and a 2-4 s attack window at
                 // a 1.0-1.8 s fire rate can hold one shot before a 3-5 s bored window outlasts the leg.
                 aagun.Def.BoredMin = 0f;
@@ -839,7 +839,7 @@ internal static class AiSuites
                         $"…and the same rings engage a hostile pane there shots={AlliedShots()}");
                 }
 
-                // The aim assist's turret list now carries the emplacements too — the player's
+                // The aim assist's turret list now carries the emplacements too, the player's
                 // lock-on sees world AA, dormant or not, until it dies.
                 var candidates = new AimCandidateSet();
                 live.CollectTurrets(candidates);
@@ -873,7 +873,7 @@ internal static class AiSuites
             }
         });
 
-        // A second chapter's census (C4: the ground AA belt — aagun/tcargun/t_truck/8igun),
+        // A second chapter's census (C4: the ground AA belt, aagun/tcargun/t_truck/8igun),
         // built and freed here; placement only, no firing. b_turret sites place too.
         ctx.WithWorld("C4", collision: false, world =>
         {
@@ -898,7 +898,7 @@ internal static class AiSuites
                     $"C4 places the one 8-inch gun");
                 ctx.Same(92, runtime.Count, $"C4's whole emplacement census");
                 // The piratezep model (and its allied awake rings) is part of EVERY chapter's
-                // world — the awake set is a world-model property, not a C1 fact.
+                // world, the awake set is a world-model property, not a C1 fact.
                 ctx.Same(15, runtime.AwakeCount, $"C4's awake set is the piratezep's own rings again");
             }
             finally
@@ -1398,7 +1398,7 @@ internal static class AiSuites
             }
 
             // The AI actor: an AiPilot ordered to hold the spawn course, a null camera, no HUD,
-            // no devices — exactly what FlightRoster builds, on the suite's own stage.
+            // no devices, exactly what FlightRoster builds, on the suite's own stage.
             var spawnPos = new Vector3(0f, 500f, 0f);
             var pilot = AiPilot.HoldingCourse(spawnPos, spawnPos + Vector3.Forward);
             var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -1487,7 +1487,7 @@ internal static class AiSuites
             ctx.Check(downedKiller == shooter.PlayerIndex,
                 $"…with the kill attributed to the human shooter killer={downedKiller?.ToString() ?? "-"}");
 
-            // Back into the air for the flying half — Respawn repairs the wreck and re-arms the
+            // Back into the air for the flying half, Respawn repairs the wreck and re-arms the
             // same pilot; nothing below needs a physics query.
             ai.Respawn();
             void FlyAi(float seconds)
@@ -1500,7 +1500,7 @@ internal static class AiSuites
             }
 
             // Ticking, on its orders: 10 s of manual sim steps move it along the ordered course
-            // (world -Z) at altitude, driven by AiPilot — no keyboard, no hold script.
+            // (world -Z) at altitude, driven by AiPilot, no keyboard, no hold script.
             var before = ai.WorldPosition;
             FlyAi(10f);
             var disp = ai.WorldPosition - before;
@@ -2374,7 +2374,7 @@ internal static class AiSuites
     // runs (prewarm the accent's clips, retire the loader, play after the archive is closed).
     // The talker chance is pinned to 1 so the assertions are about the dispatch rules, not the
     // dice; audibility itself is the user's half (docs/verification.md, "What this project
-    // cannot verify itself") — what IS assertable is the dispatch decision, the resolved clip
+    // cannot verify itself"), what IS assertable is the dispatch decision, the resolved clip
     // name and the PlayOneShot call.
     [Suite("ai-voice",
         "the E16 trigger dispatch on a live AI plane against the real archive: a projectile "

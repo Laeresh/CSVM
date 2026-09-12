@@ -26,7 +26,7 @@ public sealed class ControlSurfaceAnimator
     public int Count => _surfaces.Count;
 
     /// <summary>Walks the built plane tree and collects every control-surface node;
-    /// null if the model has none (the autogyro has only its two ailerons — absence
+    /// null if the model has none (the autogyro has only its two ailerons, absence
     /// of any kind is normal and per-surface).</summary>
     public static ControlSurfaceAnimator? Build(Node3D planeRoot)
     {

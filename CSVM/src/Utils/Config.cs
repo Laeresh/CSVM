@@ -34,7 +34,7 @@ public static class Config
     private static readonly HashSet<string> _warnedType = new(StringComparer.Ordinal);
 
     // Guards _registry and the warn-once sets. xunit runs test classes in parallel, and an
-    // unguarded check-then-act on these shared statics tears — observed as this
+    // unguarded check-then-act on these shared statics tears, observed as this
     // registry's SortedDictionary throwing "duplicate key" from an indexer assignment, which is
     // impossible single-threaded. _values/_doc stay unguarded on purpose: they are written only
     // by Load/ClearOverrides, which nothing calls concurrently with reads.
@@ -177,7 +177,7 @@ public static class Config
         return fallback;
     }
 
-    /// <summary>Warn loudly about every key present in config.json that no getter ever queried —
+    /// <summary>Warn loudly about every key present in config.json that no getter ever queried,
     /// a typo or a stale key that is silently doing nothing. Call after the tunable code paths have
     /// been exercised (the startup registry warmup does this), so the registry is populated.</summary>
     public static void ReportOrphans()
@@ -196,7 +196,7 @@ public static class Config
 
     /// <summary>Exercise each Config-wired module's tunable reads once, with a throwaway instance and
     /// no game data, so Config's registry knows the full key set. That lets <see cref="ReportOrphans"/>
-    /// flag config.json typos at startup and <c>--dump-config</c> emit a complete template — without a
+    /// flag config.json typos at startup and <c>--dump-config</c> emit a complete template, without a
     /// built world. Read-through means the reads register on execution, so a single dummy step is the
     /// cheapest way to run them. Add a line here as each module is wired to Config.</summary>
     public static void WarmTuningRegistry()
@@ -208,17 +208,17 @@ public static class Config
             var fm = new FlightModel(new PlaneStats());
             fm.Reset(Vector3.Zero, Basis.Identity, 100f, 1f);
             fm.Step(default, 1f / 60f);
-            // ProjectilePool reads this only on a live rocket shot, which the warmup never fires —
+            // ProjectilePool reads this only on a live rocket shot, which the warmup never fires,
             // register it here so --dump-config still documents the weapon-fire tunable.
             GetFloat("weapons.rocketSpeedScale", ProjectilePool.RocketSpeedScale);
             // Tracer look reads only from a live Spawn/RenderTracers, which the warmup never
-            // drives (no ProjectilePool here) — register them here so --dump-config documents them.
+            // drives (no ProjectilePool here), register them here so --dump-config documents them.
             GetFloat("weapons.tracerLength", ProjectilePool.TracerLength);
             GetFloat("weapons.tracerWidth", ProjectilePool.TracerWidth);
             GetFloat("weapons.tracerBrightness", ProjectilePool.TracerBrightness);
             GetFloat("weapons.tracerMinPixels", ProjectilePool.TracerMinPixels);
             // The gun-ammo / ordnance testing caps are read only when a plane binds its loadout, which
-            // the warmup never does — register them here so --dump-config still documents them.
+            // the warmup never does, register them here so --dump-config still documents them.
             GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);
             GetInt("weapons.ordnanceCap", FlightController.OrdnanceCapDefault);
             // C22's autohead toggle. Default OFF: the original's cockpit footage shows a
@@ -230,7 +230,7 @@ public static class Config
             // refuted, so there is nothing left for them to tune (docs/formats/vehicle.md).
 
             // Puffer emitters read these at Init, which the warmup never reaches (an emitter needs
-            // a texture archive) — register them here so --dump-config still documents them.
+            // a texture archive), register them here so --dump-config still documents them.
             GetFloat("puffer.burstSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.trailSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.sustainSizeScale", Effects.Puffer.SizeScaleDefault);
@@ -250,7 +250,7 @@ public static class Config
             // bypasses this read.
             GetString(GraphicsMode.Key, GraphicsMode.Default);
             // The start grid is constructed only by a multiplayer stunt race or a co-op campaign
-            // mission, neither of which the warmup builds — register its two keys here so
+            // mission, neither of which the warmup builds, register its two keys here so
             // --dump-config documents them on any launch.
             GetFloat("startGrid.slotSpacing", Session.StartGrid.SlotSpacingDefault);
             GetFloat("startGrid.groundClearance", Session.StartGrid.GroundClearanceDefault);
@@ -324,7 +324,7 @@ public static class Config
         }
     }
 
-    // Fetch a present override, or warn once (only when a file was actually loaded — with no file
+    // Fetch a present override, or warn once (only when a file was actually loaded, with no file
     // the single Load() line already says "using defaults", and warning per key would be noise).
     private static bool TryLeaf(string key, out JsonElement el)
     {
@@ -333,7 +333,7 @@ public static class Config
             return true;
         }
         // Info, not Warn: a sparse config.json is the intended shape, so most of these misses are
-        // expected and must not read as problems. (Log.Warn is plain text either way — the reason
+        // expected and must not read as problems. (Log.Warn is plain text either way, the reason
         // this was never GD.PushWarning is that Godot appends a useless C# stack trace to each.)
         bool firstMiss;
         lock (Gate)

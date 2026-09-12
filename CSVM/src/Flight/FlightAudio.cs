@@ -9,24 +9,24 @@ namespace CSVM.Flight;
 /// Own-plane sound, all from the player's own game data: the plane's engine loop (per-plane WAV via
 /// vehicle.json 'engine_sound', throttle-driven pitch and volume, swapped for 'damaged_engine_sound'
 /// while the airframe is hurt and for 'cockpit_engine_sound' while the pilot's SELECTED view is
-/// Cockpit or Nose — <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
+/// Cockpit or Nose, <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
 /// swaps share), the overspeed whine ('prop_sound', which no shipped def names), the
 /// airframe rattle (player.json 'rattle' block), plus the prop start/stop one-shots
 /// (snd_propstart/snd_propstop). Non-positional players: these are what the pilot hears, and
-/// <see cref="AiEngineAudio"/> is the positional twin every other aircraft carries (own-ship only —
+/// <see cref="AiEngineAudio"/> is the positional twin every other aircraft carries (own-ship only,
 /// an AI rig has no selected view, so it never reads 'cockpit_engine_sound').
 /// </summary>
 public partial class FlightAudio : Node
 {
     /// <summary>Overall gain for this plane's own-ship mix. 1 for single player;
     /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
-    /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE — pending a real 4P listen.</summary>
+    /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE, pending a real 4P listen.</summary>
     public float MixGain = 1f;
 
     private const float SilenceThreshold = 0.002f;
     // s for the loop to fade to full behind snd_propstart. Sourced from startprops' authored prop
     // cross-fade (plane_props.zrd.json, OBJECT_OPACITY_FROM_TO RUN_TIME 2.0 on staticpropN→propN)
-    // — the nearest authored duration. TUNE pending a listen A/B.
+    //, the nearest authored duration. TUNE pending a listen A/B.
     private const float EngineStartRamp = 2.0f;
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
@@ -195,7 +195,7 @@ public partial class FlightAudio : Node
 
     public void StopNitroLoop() => _nitroLoop?.Stop();
 
-    /// <summary>The empty-clip cue — one shot when a dry gun's trigger is pulled.</summary>
+    /// <summary>The empty-clip cue, one shot when a dry gun's trigger is pulled.</summary>
     public void PlayEmptyClip() => PlayOneShot(_emptyClip, _emptyClipVol * MixGain);
 
     public override void _Ready() => StartEngine(); // whine/rattle start on demand
@@ -232,7 +232,7 @@ public partial class FlightAudio : Node
 
     /// <summary>Holds (or releases) the own-plane loops where they are, for the sim-clock halt:
     /// the engine/whine/rattle keep their sample position and volume instead of droning through a
-    /// frozen frame. One-shots already in flight are deliberately left to play out — they are
+    /// frozen frame. One-shots already in flight are deliberately left to play out, they are
     /// short and stopping them mid-sample is the louder artefact.</summary>
     public void SetPaused(bool paused)
     {
@@ -267,7 +267,7 @@ public partial class FlightAudio : Node
         float gain = volume * MixGain;
         _crash.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, gain));
         _crash.Play();
-        // Which of the four explosions played, plus D32's computed gain — the only
+        // Which of the four explosions played, plus D32's computed gain, the only
         // trace this pick leaves outside the speakers.
         GD.Print($"crash sound: {name} MixGain={MixGain:0.00} vol={gain:0.000}");
     }
@@ -278,7 +278,7 @@ public partial class FlightAudio : Node
     /// the `player_crash_default` fallback, or a future mid-air destruct (which plays no
     /// `player_crash_*` def at all).</summary>
     // D32: layers over OnCrash's boom in the same instant, so it takes MixGain for the
-    // same reason — a pile-up stacks this once per downed rig too.
+    // same reason, a pile-up stacks this once per downed rig too.
     public void OnGroundExplosion()
     {
         float gain = _groundExpVol * MixGain;
@@ -286,7 +286,7 @@ public partial class FlightAudio : Node
         GD.Print($"crash sound: snd_exp_ground_a MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
-    /// <summary>The sea dive's counterpart (snd_exp_water_a — the `_a` pair, not the graze's
+    /// <summary>The sea dive's counterpart (snd_exp_water_a, the `_a` pair, not the graze's
     /// lighter `_b`), layered over the plane explosion the same way. Authored one level down, in
     /// the plane_big_splash player_crash_water calls; the crash runtime renders effects only, so
     /// the sound comes from here.</summary>
@@ -300,7 +300,7 @@ public partial class FlightAudio : Node
 
     /// <summary>The survivable scrape's authored bark, alongside the <c>touchdown_*</c> effect the
     /// world-effects runtime renders: snd_exp_water_b off water, snd_exp_ground_b off everything
-    /// else. Rate-limited by the caller (FlightController), not here — a long scrape would
+    /// else. Rate-limited by the caller (FlightController), not here, a long scrape would
     /// otherwise re-fire it every physics frame.</summary>
     public void OnGraze(bool water) => PlayOneShot(water ? _grazeWater : _grazeGround,
         (water ? _grazeWaterVol : _grazeGroundVol) * MixGain);
@@ -312,7 +312,7 @@ public partial class FlightAudio : Node
     public string? OnWarningShot() => PlayGroupCue(_warningShot, _warningShotGroup);
 
     /// <summary>A gun round struck this airframe and the shield did not take it: one draw from
-    /// <c>bullet_hit_sound</c>. Every such round rings it, as the original's does — the rate limit
+    /// <c>bullet_hit_sound</c>. Every such round rings it, as the original's does, the rate limit
     /// belongs to the canopy cue. Dispatched from the projectile-hit path, never from a
     /// contact.</summary>
     public string? OnBulletHit() => PlayGroupCue(_bulletHit, _bulletHitGroup);
@@ -322,7 +322,7 @@ public partial class FlightAudio : Node
     public string? OnWindowHit() => PlayGroupCue(_windowHit, _windowHitGroup);
 
     /// <summary>Engine wind-down: plays snd_propstop and kills the loops. Layers over the crash
-    /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it — FlightController
+    /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it, FlightController
     /// calls both from the same crash/destruction moment, snd_propstop right after the boom, so
     /// the loops end on the authored cue instead of a cut. The loop-restart hook in
     /// <see cref="Update"/> is what fires snd_propstart again on the next respawn; nothing here
@@ -332,7 +332,7 @@ public partial class FlightAudio : Node
         _engine?.Stop();
         _whine?.Stop();
         _rattle?.Stop();
-        // D32: fires right after OnCrash's boom, the same crash instant — MixGain for
+        // D32: fires right after OnCrash's boom, the same crash instant, MixGain for
         // the same pile-up reason, not the "your prop" respawn cue StartEngine plays below.
         float gain = _propStopVol * MixGain;
         PlayOneShot(_propStop, gain);
@@ -442,7 +442,7 @@ public partial class FlightAudio : Node
         if (wasPlaying)
             _engine.Play();
         // The headless observable for a swap nobody can screenshot: which def the slot took and
-        // what the draw gave it. A hard cut, same as the damaged swap — no crossfade is decoded.
+        // what the draw gave it. A hard cut, same as the damaged swap, no crossfade is decoded.
         GD.Print($"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
     }
 
@@ -482,7 +482,7 @@ public partial class FlightAudio : Node
     {
         _engineRamp = 0f;
         _engine?.Play();
-        // Stays at raw volume, deliberately unlike the crash-boom family — a respawn does not
+        // Stays at raw volume, deliberately unlike the crash-boom family, a respawn does not
         // pile up with other rigs' at one instant.
         PlayOneShot(_propStart, _propStartVol);
     }

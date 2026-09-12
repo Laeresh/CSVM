@@ -25,7 +25,7 @@ public static class Difficulty
     private const float Step = 0.125f;
 
     /// <summary>What an enemy vehicle's armour and health maxima are multiplied by at spawn:
-    /// 0.75 / 1.0 / 1.25. ⚠ The low tier is 0.75, not 0.875 — the branch at <c>0x0047cb3b</c> loads
+    /// 0.75 / 1.0 / 1.25. ⚠ The low tier is 0.75, not 0.875, the branch at <c>0x0047cb3b</c> loads
     /// <c>k = -2</c>, and the spread is a symmetric two <see cref="Step"/>s either side of 1.0. It
     /// reaches only the maxima, and only a spawn <see cref="AppliesTo"/> admits; the per-spawn
     /// jitter runs after it, on the scaled pools. ⚠ An ace is NOT exempt from this one.</summary>

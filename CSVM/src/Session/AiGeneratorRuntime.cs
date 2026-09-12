@@ -28,7 +28,7 @@ public readonly record struct LaunchedVehicle(FlightController? Aircraft, Surfac
 /// uncredited and launches only what <see cref="GrantWaveCapacity"/> feeds it (a script's
 /// <c>WAKEUP_GENERATOR</c>, an Instant Action wave, or cutscene callback 800 through
 /// <see cref="BindCallbackHost"/>). ⚠ <see cref="UseInstantActionLaunches"/> chooses the launch
-/// source — see this module's entry in docs/architecture.md before touching it.</summary>
+/// source, see this module's entry in docs/architecture.md before touching it.</summary>
 public sealed partial class AiGeneratorRuntime : Node
 {
     /// <summary>The generator cutscene callback 800 credits, by host node. The original looks
@@ -176,7 +176,7 @@ public sealed partial class AiGeneratorRuntime : Node
 
     /// <summary>Instant Action's zeppelin arm: every generator hosted on
     /// <paramref name="hostNode"/> releases an already-built wave member through
-    /// <paramref name="release"/> instead of spawning a fresh aircraft — the decoded shape (this
+    /// <paramref name="release"/> instead of spawning a fresh aircraft, the decoded shape (this
     /// module's entry in docs/architecture.md). A null release is accounted like a failed spawn.
     /// Returns how many generators this claimed; 0 means the selected zeppelin carries no
     /// generator, so nothing on that mode will ever launch.</summary>
@@ -201,7 +201,7 @@ public sealed partial class AiGeneratorRuntime : Node
     /// the objective apply (<c>FUN_00469af0</c>), the wave director's top-up (<c>FUN_0045b9d0</c>)
     /// and callback 800 alike. Returns how many generators were credited. ⚠ The original's wave
     /// counter advances whether or not the top-up lands, so a wave whose zeppelin has no generator
-    /// is simply lost — the caller reports it rather than compensating.</summary>
+    /// is simply lost, the caller reports it rather than compensating.</summary>
     public int GrantWaveCapacity(string hostNode, int count)
     {
         int fed = 0;
@@ -355,7 +355,7 @@ public sealed partial class AiGeneratorRuntime : Node
             return 0;
         }
         // Stop the opposite motion first: a fast cycle can otherwise leave both from-to motions
-        // writing. Hooks are scoped to the host's subtree — C1 has three 'hangerdoors' namesakes.
+        // writing. Hooks are scoped to the host's subtree, C1 has three 'hangerdoors' namesakes.
         string? other = opening ? gen.Def.CloseAnim : gen.Def.OpenAnim;
         if (other != null && other != anim)
         {
@@ -408,7 +408,7 @@ public sealed partial class AiGeneratorRuntime : Node
         }
 
         // Instant Action's zeppelin arm (F12): release a parked wave member instead of building a
-        // new aircraft. No net pick — a released member is a wave enemy carrying its own
+        // new aircraft. No net pick, a released member is a wave enemy carrying its own
         // primary_target, not a generator-authored patroller.
         if (gen.Release is { } release)
         {

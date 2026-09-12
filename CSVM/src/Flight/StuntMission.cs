@@ -11,8 +11,8 @@ namespace CSVM.Flight;
 /// whether the player has flown through it yet.</summary>
 public sealed class StuntZone
 {
-    public string DzName = "";        // dz1..dzN — hand-placed marker/HUD anchor
-    public string PathName = "";      // dzpath1..dzpathN — route ribbon + gate pair
+    public string DzName = "";        // dz1..dzN, hand-placed marker/HUD anchor
+    public string PathName = "";      // dzpath1..dzpathN, route ribbon + gate pair
     public Vector3 Position;           // world-space HUD marker position
     public StuntGate GreenGate = null!;
     public StuntGate RedGate = null!;
@@ -21,7 +21,7 @@ public sealed class StuntZone
     public string Help = "";          // resolved action, e.g. "Fly Through"
     public bool Completed;
 
-    /// <summary>Run clock, seconds, at the moment this zone was flown through — its cumulative
+    /// <summary>Run clock, seconds, at the moment this zone was flown through, its cumulative
     /// time from run start. 0 until completed; the scoreboard's per-zone split is
     /// the delta between consecutive completions in <see cref="CompletionOrder"/>.</summary>
     public float CompletedAt;
@@ -66,18 +66,18 @@ public sealed class StuntGate
 /// </summary>
 public sealed class StuntMission
 {
-    /// <summary>Radius about the <c>dzN</c> marker centre (user-tuned). Not a scoring value —
+    /// <summary>Radius about the <c>dzN</c> marker centre (user-tuned). Not a scoring value,
     /// completion crosses the authored gate pair; retained for the marker's non-scoring
     /// consumers.</summary>
     public const float DzRadius = 15f;
 
     /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race). Empty in a
-    /// solo run, so single-player logs read exactly as before — but with four pilots clearing zones
+    /// solo run, so single-player logs read exactly as before, but with four pilots clearing zones
     /// in one shared world the completion lines are otherwise indistinguishable.</summary>
     public string LogTag = "";
 
     // Messages key for the run-start intro line ("Fly through all the Danger Zones to
-    // win!") — the marker HUD's one-shot banner.
+    // win!"), the marker HUD's one-shot banner.
     private const string IntroMsgKey = "MSG_BRF_IASF_OBJ2";
 
     private readonly List<StuntZone> _zones;
@@ -101,7 +101,7 @@ public sealed class StuntMission
 
     public IReadOnlyList<StuntZone> Zones => _zones;
 
-    /// <summary>Elapsed run time, seconds, advanced by <see cref="Tick"/> every physics frame —
+    /// <summary>Elapsed run time, seconds, advanced by <see cref="Tick"/> every physics frame,
     /// including through the crash freeze ("the clock never stops"), frozen only once the run is
     /// complete. Read by the marker HUD and scoring. Not reset on respawn (a
     /// mid-run crash keeps the same clock, like the completed zones).</summary>
@@ -124,7 +124,7 @@ public sealed class StuntMission
         }
         catch (System.IO.IOException)
         {
-            return null; // no ia.json (story/multiplayer folder) — no stunt zones
+            return null; // no ia.json (story/multiplayer folder), no stunt zones
         }
 
         var dzones = ZrdrDict.FromAlternating(root).List("dzones");
@@ -188,7 +188,7 @@ public sealed class StuntMission
 
     /// <summary>A second, independent run over the same Danger Zones (splitscreen
     /// racing): same zone list, positions and display strings, but its own completion flags, clock,
-    /// active target and events. Copying beats calling <see cref="Load"/> once per player — the
+    /// active target and events. Copying beats calling <see cref="Load"/> once per player, the
     /// ia.json/targets.json/messages parse and the gamez lookups happen once for the session.</summary>
     public StuntMission ForAnotherPlayer()
     {
@@ -209,7 +209,7 @@ public sealed class StuntMission
     }
 
     /// <summary>Physics-frame test: record any gate the plane's movement segment crossed this
-    /// frame, and complete a zone once both its gates have been crossed (order-free — several
+    /// frame, and complete a zone once both its gates have been crossed (order-free, several
     /// can complete in one pass).</summary>
     public void Update(Vector3 planePos)
     {
@@ -235,8 +235,8 @@ public sealed class StuntMission
         _lastPlanePos = planePos;
     }
 
-    /// <summary>Advance the run clock one physics frame. Called every frame — including through
-    /// the crash freeze so the clock never stops (a deliberate rule) — and stops accumulating once the
+    /// <summary>Advance the run clock one physics frame. Called every frame, including through
+    /// the crash freeze so the clock never stops (a deliberate rule), and stops accumulating once the
     /// run is complete.</summary>
     public void Tick(float dt)
     {
@@ -272,7 +272,7 @@ public sealed class StuntMission
 
     /// <summary>Start a fresh run (a results board's Restart item, or R): every zone incomplete,
     /// the clock back to zero, the active target back to the first zone. Unlike a mid-run respawn
-    /// this DOES clear progress and the clock — it is the deliberate opposite of the
+    /// this DOES clear progress and the clock, it is the deliberate opposite of the
     /// crash-keeps-everything rule.</summary>
     public void Reset()
     {
@@ -305,7 +305,7 @@ public sealed class StuntMission
         }
     }
 
-    /// <summary>The zones in the order they were flown through (for the scoreboard) — completed
+    /// <summary>The zones in the order they were flown through (for the scoreboard), completed
     /// zones by <see cref="StuntZone.CompletionOrder"/>, any still-incomplete zones appended in
     /// list order.</summary>
     public IEnumerable<StuntZone> InCompletionOrder()
@@ -342,7 +342,7 @@ public sealed class StuntMission
         CollectMeshBoxes(gz, node, worldXf, boxes);
         if (boxes.Count == 0)
         {
-            return null; // an ordinary dzN point marker — all 53 in this install land here
+            return null; // an ordinary dzN point marker, all 53 in this install land here
         }
 
         int doorCount = 0;
@@ -372,7 +372,7 @@ public sealed class StuntMission
     }
 
     // The original's own node naming is the semantic layer here, as it is for props,
-    // control surfaces, wing flares and damage panels — a hangar/garage door leaf is named for
+    // control surfaces, wing flares and damage panels, a hangar/garage door leaf is named for
     // what it is (`sgh_door1`, `sgh_door2`).
     private static bool IsDoorLeaf(string name) =>
         name.Contains("door", StringComparison.OrdinalIgnoreCase);
@@ -510,7 +510,7 @@ public sealed class StuntMission
     private void Complete(StuntZone z)
     {
         z.Completed = true;
-        z.CompletedAt = Elapsed;      // cumulative run time — the scoreboard derives splits
+        z.CompletedAt = Elapsed;      // cumulative run time, the scoreboard derives splits
         z.CompletionOrder = CompletedCount; // 0-based, before the increment below
         CompletedCount++;
         Log.Info("flight", $"stunt: {LogTag}completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");

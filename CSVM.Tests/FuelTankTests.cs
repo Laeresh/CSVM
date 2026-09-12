@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The tank the player's lever burns, and the freeze a dry one causes. Decode:
-/// docs/org/flightModel.md, "Part-throttle equilibrium" — the burn is
+/// docs/org/flightModel.md, "Part-throttle equilibrium", the burn is
 /// <c>remaining -= dt · lever · 5</c> off the live lever, and a tank at zero skips the throttle
 /// slew, holding the lever where it stands. The rate and the freeze are asserted against the
 /// decoded literals; the capacity is read off the shipped data rather than written here, because

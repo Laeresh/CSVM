@@ -10,7 +10,7 @@ namespace CSVM.Mech3;
 /// <summary>
 /// The original's UI string table, read by id from <c>extracted/rof/ui_strings.json</c>. Only the
 /// <c>langui</c> rows are kept: ids are not unique across the file's two merged tables (9-35 exist
-/// in both) and every menu range this remake reads —— docs/formats/strings.md.
+/// in both) and every menu range this remake reads, docs/formats/strings.md.
 /// Placeholders are Win32 <c>FormatMessage</c> positional specifiers (<c>%1!d!</c>), converted to
 /// composite format by <see cref="ToCompositeFormat"/> rather than handed to printf. A leading
 /// <c>[FONTID]</c> tag the extractor left in a multi-line row is stripped, being a renderer

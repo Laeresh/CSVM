@@ -34,7 +34,7 @@ public class ClutterQuadUvTests
         Assert.Equal(66.779945f, local.Z, 4);
 
         Assert.True(quad.TryUv(local, out var uv));
-        // u = (x + 256) / 512, v = (z + 256) / 512 — hand-computed in FINDINGS-A2.md.
+        // u = (x + 256) / 512, v = (z + 256) / 512, hand-computed in FINDINGS-A2.md.
         Assert.Equal(0.708715f, uv.X, UvTolerance);
         Assert.Equal(0.630430f, uv.Y, UvTolerance);
         // Already inside [0, 1), so the binary's fmod wrap is a no-op here.
@@ -69,11 +69,11 @@ public class ClutterQuadUvTests
         Assert.True(found, "no c_studebaker2 at local x = -3.651 under parklot1's ground quad");
 
         Assert.True(quad.TryUv(local, out var uv));
-        // Mirrored: u = (8 − x) / 16, not (x + 8) / 16 — and the quad is 16 wide, not 32.
+        // Mirrored: u = (8 − x) / 16, not (x + 8) / 16, and the quad is 16 wide, not 32.
         Assert.Equal((8f - local.X) / 16f, uv.X, UvTolerance);
         Assert.Equal(0.728f, uv.X, 1e-3f);
-        // The alternative this discriminates against — the scalar-period rule
-        // (x − minX) / max(extentX, extentZ) — is not merely a different labelling of the same
+        // The alternative this discriminates against, the scalar-period rule
+        // (x − minX) / max(extentX, extentZ), is not merely a different labelling of the same
         // point: it lands 0.59 UV away, over half the quad.
         float oldRule = (local.X + 8f) / 32f;
         Assert.True(Mathf.Abs(uv.X - oldRule) > 0.5f,
@@ -81,7 +81,7 @@ public class ClutterQuadUvTests
     }
 
     /// <summary>
-    /// The binary's fmod wrap, both branches — including the degenerate case where the
+    /// The binary's fmod wrap, both branches, including the degenerate case where the
     /// negative branch's <c>1 − frac</c> rounds to exactly 1.0 and must collapse back to 0. No
     /// retail decoration reaches the negative branch (every resolving quad spans 0..1), so this
     /// is the only thing that exercises it.
@@ -129,7 +129,7 @@ public class ClutterQuadUvTests
         Assert.Equal(0f, tri.AxisV.Y, 3);
         Assert.Equal(0f, tri.AxisV.Z, 3);
 
-        // Step 4: the UV bbox floored to integers is u ∈ {0, 1}, v ∈ {0, 1} — four cells.
+        // Step 4: the UV bbox floored to integers is u ∈ {0, 1}, v ∈ {0, 1}, four cells.
         Assert.Equal(0, tri.MinU);
         Assert.Equal(1, tri.MaxU);
         Assert.Equal(0, tri.MinV);
@@ -182,7 +182,7 @@ public class ClutterQuadUvTests
 
     /// <summary>
     /// The extraction side of the worked example: C1 model 953's polygon 3 is a triangle strip
-    /// whose UVs are indexed by corner position, not vertex id — corners 3 and 4 share vertex 5
+    /// whose UVs are indexed by corner position, not vertex id, corners 3 and 4 share vertex 5
     /// but carry different UVs, proving the shipped data exercises the distinction.
     /// </summary>
     [ExtractedDataFact]

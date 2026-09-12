@@ -45,7 +45,7 @@ public class MessagesTests
     [Fact]
     public void ATypeSpecAfterAPlaceholderIsConsumed()
     {
-        // "%2!d!" — the argument arrives already formatted, so the !d! marker must not print.
+        // "%2!d!", the argument arrives already formatted, so the !d! marker must not print.
         Assert.Equal("a b", Messages.Fill("%1!s! %2!d!", "a", "b"));
     }
 

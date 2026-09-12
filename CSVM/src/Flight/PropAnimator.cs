@@ -8,7 +8,7 @@ namespace CSVM.Flight;
 /// <summary>
 /// Spins a flying aircraft's propeller/rotor blur discs each frame. Cheaper and
 /// simpler than an AnimationPlayer: a flat list of (node, rest pose, rate) that the
-/// flight loop advances through <see cref="SpinMotion.ComposeSpin"/> — the same
+/// flight loop advances through <see cref="SpinMotion.ComposeSpin"/>, the same
 /// accumulate-from-rest decode <c>AnimRuntime</c> plays authored <c>XYZ_ROTATION</c>
 /// spins (zeppelin props, signage) through, so a plane's own props share one settled
 /// unit conversion instead of a second hand one. Built from a plane model that
@@ -54,7 +54,7 @@ public sealed class PropAnimator
     // One spinning disc: its rest pose and rate (radians/second, local axes),
     // accumulated total time. Recomputes an absolute pose from rest every Advance
     // via SpinMotion.ComposeSpin rather than stepping `RotateObjectLocal`,
-    // so a long session cannot drift — same reasoning as `SpinMotion` itself.
+    // so a long session cannot drift, same reasoning as `SpinMotion` itself.
     private sealed class Spinner
     {
         private readonly Node3D _node;

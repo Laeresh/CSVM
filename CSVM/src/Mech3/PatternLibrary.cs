@@ -24,11 +24,11 @@ public sealed class PaintBitmap
     public byte[] Slot3 = Array.Empty<byte>();
     public byte[]? Overlay;                      // 4n RGBA, null when the file carries none
 
-    /// <summary>True when the overlay has any non-zero texel — patterns leave it empty for
+    /// <summary>True when the overlay has any non-zero texel, patterns leave it empty for
     /// parts they do not decorate, so this skips the composite entirely.</summary>
     public bool HasOverlay;
 
-    /// <summary>Reads one `.BM`. Header is u16 height then u16 width (height first — settled
+    /// <summary>Reads one `.BM`. Header is u16 height then u16 width (height first, settled
     /// against the game's own textures of the same name, see rof.md); payload is
     /// width*height*10 bytes of planes. Null on anything malformed: paint is cosmetic and
     /// must never take a build down.</summary>
@@ -85,7 +85,7 @@ public sealed class PaintBitmap
 ///
 /// A pattern is a folder of `.BM` skins, and **it is per aircraft**: `FORTUNE` covers all
 /// eleven, every other pattern covers one to three. That is why the paint UI offers a
-/// different pattern list per plane — the Fury has four (Fortune Hunters, Black Swan, Hughes,
+/// different pattern list per plane, the Fury has four (Fortune Hunters, Black Swan, Hughes,
 /// Studio Security), the Balmoral two. <see cref="PatternsFor"/> is that list.
 ///
 /// Absent extraction is not an error: the library comes back empty, aircraft build unpainted,
@@ -109,7 +109,7 @@ public sealed class PatternLibrary
     private readonly Dictionary<(string Pattern, string Skin), PaintBitmap?> _cache = new();
     private readonly List<string> _order = new();
 
-    /// <summary>A library with no patterns — what an unpainted build uses, and the fallback
+    /// <summary>A library with no patterns, what an unpainted build uses, and the fallback
     /// when the rof extraction is absent.</summary>
     public static PatternLibrary Empty { get; } = new();
 
@@ -159,7 +159,7 @@ public sealed class PatternLibrary
     }
 
     /// <summary>The patterns that carry skins for this aircraft (its `blo`/`fur`/… prefix),
-    /// in scan order — exactly the list the original's paint UI offers for that plane.</summary>
+    /// in scan order, exactly the list the original's paint UI offers for that plane.</summary>
     public List<string> PatternsFor(string skinPrefix)
     {
         var list = new List<string>();

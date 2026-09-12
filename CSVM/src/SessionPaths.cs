@@ -35,11 +35,11 @@ public static class SessionPaths
         return Directory.Exists(dir) ? dir : zipPath;
     }
 
-    /// <summary>The chapter's texture archive — the plane skins and world textures. Prefers the
+    /// <summary>The chapter's texture archive, the plane skins and world textures. Prefers the
     /// chapter's top-budget <c>rtextureN</c> set (<c>N</c> ≈ the set's size in MB of late-90s
     /// texture memory; every chapter ships 2/4/6/8 plus one full-quality tier) over
     /// <c>texture.zip</c>: the tiers are what the original renders, and hundreds of same-name,
-    /// same-size textures differ in content from the base archive — the gauge needles only carry
+    /// same-size textures differ in content from the base archive, the gauge needles only carry
     /// their painted alpha silhouette there.</summary>
     public static string ChapterTextures(string dataRoot, string chapter)
     {
@@ -61,12 +61,12 @@ public static class SessionPaths
         return PreferUnzipped(Path.Combine(dir, best + ".zip"));
     }
 
-    /// <summary>The chapter's world GameZ (<c>extracted/&lt;chapter&gt;/gamez.zip</c>) — the single
+    /// <summary>The chapter's world GameZ (<c>extracted/&lt;chapter&gt;/gamez.zip</c>), the single
     /// <c>world1</c> node and everything under it.</summary>
     public static string ChapterGamez(string dataRoot, string chapter) =>
         PreferUnzipped(Path.Combine(dataRoot, "extracted", chapter, "gamez.zip"));
 
-    /// <summary>The chapter's zrdr scope (<c>extracted/&lt;chapter&gt;/zrdr.zip</c>) — zepstate,
+    /// <summary>The chapter's zrdr scope (<c>extracted/&lt;chapter&gt;/zrdr.zip</c>), zepstate,
     /// startanims, and the chapter-wide anim defs.</summary>
     public static string ChapterZrdr(string dataRoot, string chapter) =>
         PreferUnzipped(Path.Combine(dataRoot, "extracted", chapter, "zrdr.zip"));
@@ -103,7 +103,7 @@ public static class SessionPaths
     }
 
     /// <summary>The mission's zrdr scope (<c>extracted/&lt;chapter&gt;/&lt;mission&gt;/zrdr.zip</c>)
-    /// — spawn points, danger zones, weather, objectives, and the mission's own anim defs.</summary>
+    ///, spawn points, danger zones, weather, objectives, and the mission's own anim defs.</summary>
     public static string MissionZrdr(string dataRoot, string chapter, string mission) =>
         PreferUnzipped(Path.Combine(dataRoot, "extracted", chapter, mission, "zrdr.zip"));
 }

@@ -159,7 +159,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     public void Attach(Node3D owner, int capacity, float cullMargin)
     {
-        // Runtime shader/material build, not load-time — a new Puffer's first draw. Usually
+        // Runtime shader/material build, not load-time, a new Puffer's first draw. Usually
         // absorbed into EmitterDirector's EffectPoolMiss scope; fires alone only when nothing else
         // is already open.
         using var _ = PerfSample.Scope(PerfSite.MaterialCreate);
@@ -233,7 +233,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 Multimesh = layer._mm,
                 MaterialOverride = mat,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                // billboarding moves verts off the MultiMesh's computed AABB — pad culling; the
+                // billboarding moves verts off the MultiMesh's computed AABB, pad culling; the
                 // margin covers the largest tuned size any spawn path could produce
                 ExtraCullMargin = cullMargin,
             };

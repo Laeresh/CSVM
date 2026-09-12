@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The animated world's ambient 3D sound emitters (<c>SOUND_NODE</c>) — the waterfall roar, the
+/// The animated world's ambient 3D sound emitters (<c>SOUND_NODE</c>), the waterfall roar, the
 /// train, the firetruck and police sirens, the zeppelin nacelle engines, the fire crackle and the
 /// warning beeper. One pooled <see cref="AudioStreamPlayer3D"/> per live emitter, positioned each
 /// frame from the world node the animation attached it to. <c>SOUND_NODE</c> vs one-shot
@@ -17,7 +17,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed partial class WorldSounds : Node3D
 {
-    /// <summary>Emitters silenced because their host node's world pose is degenerate — a
+    /// <summary>Emitters silenced because their host node's world pose is degenerate, a
     /// pre-existing animation-runtime defect this path merely observes (see Tick).</summary>
     public readonly HashSet<string> DegenerateHosts = new(StringComparer.OrdinalIgnoreCase);
 
@@ -30,7 +30,7 @@ public sealed partial class WorldSounds : Node3D
     public Func<SoundDef, bool, AudioStreamWav?>? Loader;
 
     /// <summary>--debug-anim: log each emitter's host, distance and playing state once a second.
-    /// Audio cannot be screenshot-verified, so this is the headless equivalent — and it is what
+    /// Audio cannot be screenshot-verified, so this is the headless equivalent, and it is what
     /// distinguishes "silent because the mission deactivated its host" from "silent because the
     /// host never resolved", which look identical from the outside.</summary>
     public bool Debug;
@@ -47,7 +47,7 @@ public sealed partial class WorldSounds : Node3D
     private readonly Dictionary<string, AudioStreamWav?> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Emitter> _emitters = new();
 
-    // Live one-shot players (PlayOneShot). Fire-and-forget, so nothing holds them but this list —
+    // Live one-shot players (PlayOneShot). Fire-and-forget, so nothing holds them but this list,
     // swept in Tick once they stop. The grace lets Play() take effect before a not-yet-playing one
     // is mistaken for finished. FlushOneShots frees them for a harness that pumps no frames.
     private readonly List<OneShot> _oneShots = new();
@@ -84,7 +84,7 @@ public sealed partial class WorldSounds : Node3D
 
     /// <summary>Clears every <see cref="SoundGroup"/>'s last-picked memory. That memory is mutable
     /// state outside the RNG, so a re-seeded replay diverges on the first weighted pick without
-    /// this — the caller re-seeding its generator calls it in the same breath.</summary>
+    /// this, the caller re-seeding its generator calls it in the same breath.</summary>
     public void ResetGroupRecency()
     {
         foreach (var group in _groups.Values)
@@ -167,7 +167,7 @@ public sealed partial class WorldSounds : Node3D
             return null;
         if (!_streams.TryGetValue(name, out var stream))
         {
-            // Decode-on-miss for a SOUND_NODE emitter — most names are
+            // Decode-on-miss for a SOUND_NODE emitter, most names are
             // prewarmed, but not all (see this file's own Prewarm doc), so this is a live path.
             using var _ = PerfSample.Scope(PerfSite.AudioLoad);
             if (Loader == null)
@@ -221,7 +221,7 @@ public sealed partial class WorldSounds : Node3D
         return Spawn(name, pos, source, rng, bus, 1f);
     }
 
-    /// <summary>Attaches an emitter to the world node that gives it its position — the reader's
+    /// <summary>Attaches an emitter to the world node that gives it its position, the reader's
     /// <c>OBJECT_ADD_CHILD</c> or the compiled event's <c>AT_NODE</c>.</summary>
     public void Attach(object handle, Node3D host, Vector3 offset = default)
     {
@@ -231,7 +231,7 @@ public sealed partial class WorldSounds : Node3D
         e.Offset = offset;
     }
 
-    /// <summary>Switches an emitter on or off — the reader's <c>OBJECT_ACTIVE_STATE</c> or the
+    /// <summary>Switches an emitter on or off, the reader's <c>OBJECT_ACTIVE_STATE</c> or the
     /// compiled event's <c>active_state</c>.</summary>
     public void SetActive(object handle, bool active)
     {
@@ -253,7 +253,7 @@ public sealed partial class WorldSounds : Node3D
     }
 
     /// <summary>Immediately frees every live one-shot player. For the synchronous damage-test
-    /// harness, which pumps no frames — so neither <see cref="Tick"/>'s sweep nor a deferred
+    /// harness, which pumps no frames, so neither <see cref="Tick"/>'s sweep nor a deferred
     /// <c>QueueFree</c> ever runs, and the players would otherwise leak at process exit.</summary>
     public void FlushOneShots()
     {
@@ -271,7 +271,7 @@ public sealed partial class WorldSounds : Node3D
         _oneShots.Clear();
     }
 
-    /// <summary>Where the session's audio listeners are — one camera per pane, since every pane is
+    /// <summary>Where the session's audio listeners are, one camera per pane, since every pane is
     /// listener-enabled (UI.SplitScreen). For the debug log's distance column only: the engine reads
     /// the listeners itself, and reports the NEAREST one here because that is the pane whose volume
     /// wins the mix.</summary>
@@ -279,7 +279,7 @@ public sealed partial class WorldSounds : Node3D
 
     /// <summary>
     /// Positions every live emitter from its host's current world pose and gates it on the host
-    /// being visible in tree — the same rule the point lights use, and for the same reason: an
+    /// being visible in tree, the same rule the point lights use, and for the same reason: an
     /// emitter inside a subtree the mission deactivated must be silent, or a hidden destroyed
     /// variant keeps making noise through its healthy twin.
     /// </summary>
@@ -356,7 +356,7 @@ public sealed partial class WorldSounds : Node3D
         LogOnce();
     }
 
-    // Range from the closest listener to `at`, or -1 with no listeners —
+    // Range from the closest listener to `at`, or -1 with no listeners,
     // which is not a formatting quirk but the state that silences every 3D emitter, so the log says
     // it rather than printing a distance from the world origin.
     private static (float Range, int Index) NearestEar(IReadOnlyList<Vector3> ears, Vector3 at)
@@ -387,7 +387,7 @@ public sealed partial class WorldSounds : Node3D
         }
         if (!_streams.TryGetValue(resolved, out var stream))
         {
-            // Decode-on-miss for a one-shot SOUND — reachable from
+            // Decode-on-miss for a one-shot SOUND, reachable from
             // RunDeathSequence's own Sound events, same as SOUND_NODE's Create above.
             using var _ = PerfSample.Scope(PerfSite.AudioLoad);
             if (Loader == null)

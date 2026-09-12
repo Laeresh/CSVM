@@ -27,13 +27,13 @@ public sealed partial class MarkerOverlay : Node3D
     private const float GapY = 24f;
 
     // Labels are static in world space (the parked plane doesn't move), so only which ones the
-    // camera can fit changes — recompute a few times a second rather than per frame.
+    // camera can fit changes, recompute a few times a second rather than per frame.
     private const double RefreshInterval = 0.2;
 
     // Gizmo colours by role. Shared-mount firepoints get their own colour precisely because a
     // co-located pair is the thing the overlay exists to make visible.
     private static readonly Color FirepointColor = new(1.0f, 0.55f, 0.15f); // warm orange
-    private static readonly Color SharedColor = new(1.0f, 0.30f, 0.85f);    // magenta — two groups, one mount
+    private static readonly Color SharedColor = new(1.0f, 0.30f, 0.85f);    // magenta, two groups, one mount
     private static readonly Color PylonColor = new(0.30f, 0.80f, 1.0f);     // cyan
     private static readonly Color TargetColor = new(0.45f, 1.0f, 0.45f);    // green
 
@@ -147,7 +147,7 @@ public sealed partial class MarkerOverlay : Node3D
         }
     }
 
-    // Built lazily on first show — an untouched viewer session adds no nodes at all, so
+    // Built lazily on first show, an untouched viewer session adds no nodes at all, so
     // nothing it renders can differ.
     private void EnsureBuilt()
     {

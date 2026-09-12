@@ -46,11 +46,11 @@ public sealed partial class ScreenFlash : Node
         }
     }
 
-    /// <summary>How many rendered views this overlay was built over — the rig count.</summary>
+    /// <summary>How many rendered views this overlay was built over, the rig count.</summary>
     public int PaneCount => _ramps.Count;
 
     /// <summary>Builds one hidden overlay per rendered view. <paramref name="hudParents"/> is each
-    /// rig's <c>HudParent</c> — the window root with one player, the pane's SubViewport with
+    /// rig's <c>HudParent</c>, the window root with one player, the pane's SubViewport with
     /// several. <paramref name="viewers"/> is the session's viewer set, read INDEX-ALIGNED with
     /// those parents because both come from the same rig list; null (a build with no session behind
     /// it) leaves every ramp painting every pane, as it did before the routing existed.</summary>
@@ -163,7 +163,7 @@ public sealed partial class ScreenFlash : Node
         {
             // The original re-arms its frame-buffer effect for the current frame only, every
             // tick the handler runs; once the event completes nothing re-arms it and the wash is
-            // simply gone. So the ramp does not hold its `to` colour — it ends.
+            // simply gone. So the ramp does not hold its `to` colour, it ends.
             ramp.Running = false;
             ramp.Colour = new Color(0f, 0f, 0f, 0f);
             return true;
@@ -173,7 +173,7 @@ public sealed partial class ScreenFlash : Node
     }
 
     // The panes a burst at `origin` washes, into _selected: every pane whose own camera is within
-    // the def's authored gate of it — never "the hit player". Two of the three carriers are ground
+    // the def's authored gate of it, never "the hit player". Two of the three carriers are ground
     // effects that play on terrain/water impacts, where no aircraft was struck at all.
     private void SelectPanes(Vector3 origin, float radiusSquared)
     {

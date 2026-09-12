@@ -30,14 +30,14 @@ public sealed partial class SelectionService : Node
     /// <summary>Node metadata marking a subtree as another tool's DRAWING rather than world content:
     /// collider wireframes, normal lines, highlight boxes. Anything carrying it is skipped by the
     /// pick and by the box measurement, so a debug overlay can be parented onto the object it
-    /// annotates without becoming selectable — or growing the next box measured over it.</summary>
+    /// annotates without becoming selectable, or growing the next box measured over it.</summary>
     public const string OverlayMeta = "csvm_overlay";
 
     // Smallest edge the highlight box is drawn at, so a meshless pivot rung is still visible. The
-    // MEASURED box is what CurrentBox and the log report — only the drawing is grown.
+    // MEASURED box is what CurrentBox and the log report, only the drawing is grown.
     private const float MinHighlightEdge = 2f;
 
-    // How many rungs the breadcrumb prints before it elides the middle. The LOG is never elided —
+    // How many rungs the breadcrumb prints before it elides the middle. The LOG is never elided,
     // a truncated list that drops the rung under test is worse than a long one.
     private const int MaxCrumbs = 9;
 
@@ -67,7 +67,7 @@ public sealed partial class SelectionService : Node
 
     /// <summary>Fires whenever the selection changes. The flag is true for a fresh pick and false
     /// for a ladder walk, which is the difference between "show me this" and "same object, wider
-    /// scope" — the anim lab re-frames the camera on the first and only re-follows on the
+    /// scope", the anim lab re-frames the camera on the first and only re-follows on the
     /// second.</summary>
     public event Action<SelectionService, bool>? Changed;
 
@@ -77,12 +77,12 @@ public sealed partial class SelectionService : Node
     public event Action<Node3D>? CtrlPicked;
 
     /// <summary><c>--debug-select=x,y[,up]</c>: a synthetic click at a screen position on the first
-    /// frame, optionally followed by that many <see cref="StepUp"/>s — the scripted stand-in for
+    /// frame, optionally followed by that many <see cref="StepUp"/>s, the scripted stand-in for
     /// the click and the PgUp presses, which are not scriptable here. Null screen position means
     /// the middle of the viewport.</summary>
     public (Vector2? Screen, int Up)? DebugPick { get; init; }
 
-    /// <summary>Extra pickable subtrees walked in addition to the world content root — props parked
+    /// <summary>Extra pickable subtrees walked in addition to the world content root, props parked
     /// beside it rather than under it (the anim lab's <c>--plane=</c> stage prop). Read live at pick
     /// time, so the owner may populate it after construction. Each also caps its own ancestor ladder,
     /// so a pick inside it walks up to that root and no further.</summary>
@@ -97,7 +97,7 @@ public sealed partial class SelectionService : Node
     /// (not including) the world content root. Empty when nothing is selected.</summary>
     public IReadOnlyList<Node3D> Ladder => _ladder;
 
-    /// <summary>Which rung is current — 0 is the struck leaf, <c>Ladder.Count - 1</c> the outermost
+    /// <summary>Which rung is current, 0 is the struck leaf, <c>Ladder.Count - 1</c> the outermost
     /// placed object. PgUp walks toward the root, PgDn back toward the leaf, Home/End jump to the
     /// ends.</summary>
     public int Level { get; private set; }
@@ -110,7 +110,7 @@ public sealed partial class SelectionService : Node
     /// no drawing descendants.</summary>
     public Aabb CurrentBox { get; private set; }
 
-    /// <summary>The game-file name of a built node — the <c>cs_name</c> meta, never
+    /// <summary>The game-file name of a built node, the <c>cs_name</c> meta, never
     /// <c>Node.Name</c>, which Godot sanitises and auto-renames.</summary>
     public static string NameOf(Node3D n) =>
         n.HasMeta(AnimRuntime.NameMeta) ? n.GetMeta(AnimRuntime.NameMeta).AsString() : n.Name.ToString();
@@ -210,8 +210,8 @@ public sealed partial class SelectionService : Node
             case Key.Pagedown:
                 StepUp(-1);
                 break;
-            // A real ladder is deeper than the two presses the complaint imagined — C1's moored
-            // zeppelin is nine rungs from a motor's mesh to hk_zep — so both ends are one key away.
+            // A real ladder is deeper than the two presses the complaint imagined, C1's moored
+            // zeppelin is nine rungs from a motor's mesh to hk_zep, so both ends are one key away.
             case Key.Home:
                 StepUp(_ladder.Count);
                 break;
@@ -253,7 +253,7 @@ public sealed partial class SelectionService : Node
     // ---- picking ------------------------------------------------------------------------------
 
     /// <summary>Casts a ray from the camera through a screen position and selects the nearest mesh
-    /// it hits. Returns false — and says why — when nothing pickable is under the cursor.</summary>
+    /// it hits. Returns false, and says why, when nothing pickable is under the cursor.</summary>
     public bool PickAt(Vector2 screenPos)
     {
         var from = _camera.ProjectRayOrigin(screenPos);
@@ -608,7 +608,7 @@ public sealed partial class SelectionService : Node
         if (_highlight == null)
         {
             _highlight = NewBoxInstance("selection_box", Amber, 20);
-            // Parented to this service, NOT into the selected subtree — a highlight living inside
+            // Parented to this service, NOT into the selected subtree, a highlight living inside
             // the thing it measures would grow the next box it measures.
             AddChild(_highlight);
         }
@@ -654,7 +654,7 @@ public sealed partial class SelectionService : Node
         bool elided = false;
         for (int i = 0; i < _ladder.Count; i++)
         {
-            // Elide the middle — never the leaf, the current rung or the two outermost.
+            // Elide the middle, never the leaf, the current rung or the two outermost.
             bool keep = i == Level || i == 0 || i >= _ladder.Count - 2 || i < MaxCrumbs - 3;
             if (_ladder.Count > MaxCrumbs && !keep)
             {
@@ -672,7 +672,7 @@ public sealed partial class SelectionService : Node
         return string.Join(" < ", parts);
     }
 
-    // The whole ladder, one line per rung with its world-frame box — the scripted instrument. Every
+    // The whole ladder, one line per rung with its world-frame box, the scripted instrument. Every
     // rung is printed on a fresh pick so one run answers "what did that click actually select"; a
     // ladder walk prints only the rung it moved to.
     private void LogLevel(bool fresh)

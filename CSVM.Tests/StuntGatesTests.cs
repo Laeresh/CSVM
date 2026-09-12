@@ -14,7 +14,7 @@ namespace CSVM.Tests;
 /// engine-free: <see cref="StuntMission"/> logs through <see cref="Log"/> rather than touching the
 /// engine. With no sink installed that falls through to the real
 /// <c>GD.Print</c>, which crashes the whole test host outside the engine (the
-/// <c>StuntRaceTests</c> precedent) — which the process-wide no-op sink in
+/// <c>StuntRaceTests</c> precedent), which the process-wide no-op sink in
 /// <c>TestHostLogSink</c> covers, so no per-test ceremony is needed here.
 /// </summary>
 public class StuntGatesTests

@@ -19,7 +19,7 @@ public class EffectCatalogueTests
 {
     // Every player airframe's node name (the same 11 ExtractedGoldenTests
     // .ShippedChaseDistances lists), so PlaneStats.Load can walk every plane's
-    // data rather than just the one (the Devastator) that happens to carry a 0.99 entry today —
+    // data rather than just the one (the Devastator) that happens to carry a 0.99 entry today,
     // a future plane picking one up must be caught here too.
     private static readonly string[] AllPlaneNodeNames =
     {
@@ -95,7 +95,7 @@ public class EffectCatalogueTests
 
     /// <summary>The AI aircraft family rides the same cascade as the player's: against the
     /// trio this install ships, <c>dirt</c>(13) and <c>water</c>(1) resolve their own def and
-    /// every other arm — ordinary terrain, the def-less ids, out-of-range, null material — falls
+    /// every other arm, ordinary terrain, the def-less ids, out-of-range, null material, falls
     /// to slot 0, <c>ai_crash_default</c>.</summary>
     [Fact]
     public void TheAiCrashCascadeMirrorsThePlayerFamilys()
@@ -115,7 +115,7 @@ public class EffectCatalogueTests
     /// <summary>The AI family's last-resort arm is the crash family's, not touchdown's: a vector
     /// that cannot answer resolves the bare vehicle name (<c>FUN_00479240</c> interns the params
     /// NAME into the slot <c>FUN_0048b920</c> falls to), never "play nothing". Unreachable in this
-    /// install — all eight chapters ship <c>ai_crash_default</c> — but it is where the AI family
+    /// install, all eight chapters ship <c>ai_crash_default</c>, but it is where the AI family
     /// and the graze family part, so it is pinned rather than assumed.</summary>
     [Fact]
     public void AnEmptyAiCrashVectorFallsToTheBarePlaneName()
@@ -129,8 +129,8 @@ public class EffectCatalogueTests
     }
 
     /// <summary>The per-chapter census, as a golden: every chapter's compiled anim program defines
-    /// exactly the three <c>ai_crash_*</c> defs (<c>default</c>/<c>dirt</c>/<c>water</c>) — the
-    /// same trio as the player and touchdown families — carrying the shared <c>kestrel</c>
+    /// exactly the three <c>ai_crash_*</c> defs (<c>default</c>/<c>dirt</c>/<c>water</c>), the
+    /// same trio as the player and touchdown families, carrying the shared <c>kestrel</c>
     /// anim-root NAME, and the family pick follows the pilot: a human rig binds
     /// <c>player_crash_*</c>, an AI plane <c>ai_crash_*</c> off the same program.
     /// The eight loads run concurrently, not serially; assertions stay serial.</summary>
@@ -185,7 +185,7 @@ public class EffectCatalogueTests
 
     /// <summary>What the collider overlay colours by: against the three defs per
     /// family this install ships, only <c>default</c>(0), <c>water</c>(1) and <c>dirt</c>(13)
-    /// resolve to themselves — every other id resolves slot 0, because that is the def a touch
+    /// resolve to themselves, every other id resolves slot 0, because that is the def a touch
     /// there plays. Pinned as a list rather than as "the ids we ship", since which ids resolve is
     /// whatever the bound program defines.</summary>
     [Fact]
@@ -222,7 +222,7 @@ public class EffectCatalogueTests
         Assert.Equal(SurfaceRegistry.Default, grazeOnly[1]);
     }
 
-    /// <summary>A program defining nothing resolves every id to slot 0, including slot 0 itself —
+    /// <summary>A program defining nothing resolves every id to slot 0, including slot 0 itself,
     /// the overlay then draws one colour, which is honest: nothing distinguishes those surfaces on
     /// contact. The able-to-fail control for the two cases above.</summary>
     [Fact]
@@ -236,7 +236,7 @@ public class EffectCatalogueTests
     /// <summary>The per-part damage-effect shims (`DamageVisuals.OnPartDamage`'s own filter,
     /// <c>anim.EndsWith("_damage_effects")</c>): across every player airframe's
     /// <c>destroyable_parts</c>, every <c>injure_anims</c> entry that filter would fire on must be
-    /// one of <see cref="EffectCatalogue.PlaneDamageEffectAnims"/> — today only the Devastator
+    /// one of <see cref="EffectCatalogue.PlaneDamageEffectAnims"/>, today only the Devastator
     /// carries any (its 0.99 entries), the other ten carry none, but a future plane picking one up
     /// with a name the catalogue does not know would otherwise wire nothing, silently.</summary>
     [ExtractedDataFact]
@@ -264,7 +264,7 @@ public class EffectCatalogueTests
 
         Assert.True(violations.Count == 0, string.Join("\n", violations));
         // The Devastator's four parts are the shipped case (DamageVisuals' own doc: "the 10
-        // aircraft whose data carries no 0.99 entry at all") — a check that found none would be
+        // aircraft whose data carries no 0.99 entry at all"), a check that found none would be
         // passing on no evidence, exactly the trap ExtractedDataFact exists to avoid.
         Assert.True(found > 0, "no plane's data carried a *_damage_effects entry — the check ran on nothing");
     }
@@ -353,7 +353,7 @@ public class EffectCatalogueTests
         Assert.Equal("random_remote_damage", DamageVisuals.RigAnimFor("random_remote_damage"));
     }
 
-    /// <summary>The healthy↔torn candidate sets derive from the authored defs — the
+    /// <summary>The healthy↔torn candidate sets derive from the authored defs, the
     /// hideable skins are exactly the two `*_h` nodes `plane_reset` re-ACTIVEs (pdp2_h/pdp3_h,
     /// one shared def OPERAND_NODE-retargeted at every airframe) and the torn set is exactly the
     /// eight `pdpN` targets of the `pdpanelN` defs. A parse change that drops either set silently

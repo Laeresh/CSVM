@@ -50,7 +50,7 @@ public class CameraControllerFirstPersonTests
         var attitude = new Basis(Vector3.Up, Mathf.Pi / 2f);
         var offset = new Vector3(0f, 0f, 1f); // a marker offset along the plane's local +Z
         var (position, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitude, offset);
-        // attitude rotates local +Z to world +X, so the offset lands there too — placement is not
+        // attitude rotates local +Z to world +X, so the offset lands there too, placement is not
         // a bare add of the local offset, it rides the plane's own rotation (the plan's formula).
         Assert.True(position.IsEqualApprox(new Vector3(1f, 0f, 0f)));
         var forward = -basis.Z;
@@ -62,7 +62,7 @@ public class CameraControllerFirstPersonTests
     {
         var (position, basis) = CameraController.FirstPersonPose(Vector3.Zero, Basis.Identity, Vector3.Zero);
         Assert.True(position.IsEqualApprox(Vector3.Zero));
-        // Only the fixed pitch tilt moves the basis off identity — no yaw, no roll.
+        // Only the fixed pitch tilt moves the basis off identity, no yaw, no roll.
         Assert.True(basis.X.IsEqualApprox(Vector3.Right));
     }
 }

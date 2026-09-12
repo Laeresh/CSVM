@@ -6,7 +6,7 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// The session's randomness policy: one master seed, and a named generator per subsystem derived
-/// from it via <c>splitmix64(master ^ fnv1a(name))</c> — independent across subsystems, so a draw
+/// from it via <c>splitmix64(master ^ fnv1a(name))</c>, independent across subsystems, so a draw
 /// added to one cannot shift another's. Pinned for a deterministic run, time-seeded otherwise, and
 /// advanced per flight (<see cref="SortieSeed"/>) so flying again is a new mission; the resolved
 /// value logs for replay via <c>--seed=</c>. The streams are the constants below.
@@ -38,7 +38,7 @@ public static class Rng
     public const string Precip = "precip";
     // The mission's global wind gust (Effects.WorldWind). Its own stream, not Puffer's: the wind
     // is one random walk for the whole world, stepped once per frame by WeatherRig, while
-    // Rng.Puffer is drawn per emitter at spawn — sharing one would make every puffer's scatter a
+    // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a
     // function of how many frames the wind had been blowing.
     public const string Wind = "wind";
     // The plane wobble's per-shot fire-kick steps (PlaneShake random-walk accumulator, BL-266(a)
@@ -60,7 +60,7 @@ public static class Rng
     /// <summary>The seed every subsystem stream derives from.</summary>
     public static ulong Master { get; private set; }
 
-    /// <summary>True when the master was chosen rather than drawn from the clock — a deterministic
+    /// <summary>True when the master was chosen rather than drawn from the clock, a deterministic
     /// run. Purely informational; nothing branches on it.</summary>
     public static bool Pinned { get; private set; }
 
@@ -86,7 +86,7 @@ public static class Rng
     /// subsystems seeds that differ in one bit.</summary>
     public static ulong SortieSeed(ulong processSeed, int sortie) => Mix(processSeed + (ulong)sortie);
 
-    /// <summary>A master drawn from the clock — the unpinned default.</summary>
+    /// <summary>A master drawn from the clock, the unpinned default.</summary>
     public static ulong TimeSeed()
     {
         var rng = new RandomNumberGenerator();
@@ -137,7 +137,7 @@ public static class Rng
     /// function of the master.</summary>
     public static int NewIntSeed(string subsystem) => (int)Stream(subsystem).Randi();
 
-    /// <summary>A per-instance <see cref="System.Random"/> off the named subsystem's stream — the
+    /// <summary>A per-instance <see cref="System.Random"/> off the named subsystem's stream, the
     /// shape the effects code already uses.</summary>
     public static Random NewSystemRandom(string subsystem) => new(NewIntSeed(subsystem));
 

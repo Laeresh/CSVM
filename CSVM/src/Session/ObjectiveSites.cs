@@ -27,7 +27,7 @@ public enum TargetFlag
 /// selection every frame.</summary>
 public sealed class ObjectiveSite
 {
-    /// <summary>The flagged target's <see cref="ObjectiveTarget.Key"/> — this site's identity
+    /// <summary>The flagged target's <see cref="ObjectiveTarget.Key"/>, this site's identity
     /// string, what <c>--target=</c> matches: a bare node name, or <c>parent/child</c> for a site
     /// the mission authored as a path.</summary>
     public string Node { get; init; } = "";

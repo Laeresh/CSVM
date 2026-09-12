@@ -53,7 +53,7 @@ public class ControlSurfaceMixTests
     }
 
     /// <summary>The mixed pair: pitch and roll together sum on the elevators, and only there does
-    /// the ±0.6 rad clamp bind — the pure terms are authored exactly at their own clamp.</summary>
+    /// the ±0.6 rad clamp bind, the pure terms are authored exactly at their own clamp.</summary>
     [Fact]
     public void TheMixedPairSumsAndOnlyItsClampBinds()
     {

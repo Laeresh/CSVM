@@ -5,7 +5,7 @@ namespace CSVM.Mech3.Anim;
 
 /// <summary>A steady spin about the node's own axes at a fixed rate (OBJECT_MOTION's
 /// XYZ_ROTATION), which is what turns the zeppelin nacelle props and the rotating signs.
-/// Endless unless the event gave a RUN_TIME — 580 of the 590 reachable spins are endless,
+/// Endless unless the event gave a RUN_TIME, 580 of the 590 reachable spins are endless,
 /// so `Finished` staying false forever is the normal case, not a leak. Rotation is applied
 /// about the LOCAL axes like every other prop in this project (PropAnimator does the same
 /// for the player's aircraft), and accumulated from a stored rest pose rather than
@@ -39,7 +39,7 @@ internal sealed class SpinMotion : IAnimMotion
 
     public bool Finished => _runTime > 0f && _t >= _runTime;
 
-    /// <summary>Whether this spin has no authored end — <c>run_time ?? 0f</c>, which
+    /// <summary>Whether this spin has no authored end, <c>run_time ?? 0f</c>, which
     /// <see cref="Finished"/> never satisfies. Read by <see cref="MotionSet.HoldsTemplate"/>, which
     /// must not let one pin a template revealed for the session.</summary>
     public bool Endless => _runTime <= 0f;
@@ -60,7 +60,7 @@ internal sealed class SpinMotion : IAnimMotion
     }
 
     /// <summary>Rotates <paramref name="rest"/> by <paramref name="rateRadPerSec"/>·<paramref name="t"/>
-    /// about the node's own local axes — the accumulate-from-rest math this class applies per frame,
+    /// about the node's own local axes, the accumulate-from-rest math this class applies per frame,
     /// exposed so <c>PropAnimator</c> can spin the flying aircraft's prop/rotor discs through the same
     /// decode instead of stepping a separate <c>RotateObjectLocal</c> loop (which drifts over a long
     /// session; this recomputes an absolute pose every call instead of integrating one).</summary>

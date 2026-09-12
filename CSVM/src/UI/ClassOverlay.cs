@@ -81,7 +81,7 @@ public sealed partial class ClassOverlay : Node
     }
 
     /// <summary>X: show or hide the class tints. Rebuilt every time it is shown rather than cached
-    /// once — a destructible's death can swap its subtree (wreck pieces replace the healthy mesh),
+    /// once, a destructible's death can swap its subtree (wreck pieces replace the healthy mesh),
     /// so a stale cache would tint a node that no longer exists and miss the one that does.</summary>
     public void Toggle()
     {
@@ -115,7 +115,7 @@ public sealed partial class ClassOverlay : Node
         _ => SceneryColor,
     };
 
-    // One coloured word per class, straight from ColorFor — a palette change is the only edit
+    // One coloured word per class, straight from ColorFor, a palette change is the only edit
     // that can move it out of sync with the legend text.
     private static string BuildLegendText()
     {
@@ -128,7 +128,7 @@ public sealed partial class ClassOverlay : Node
     }
 
     // Which class a built world node's own mesh belongs to. `owner` is
-    // the structural node SceneBuilder built for it (the "mesh" MeshInstance3D's parent) — the
+    // the structural node SceneBuilder built for it (the "mesh" MeshInstance3D's parent), the
     // same node DestructibleRegistry.Resolve and AnimRuntime.IndexMeta
     // are keyed on.
     private string ClassOf(Node3D owner)

@@ -137,7 +137,7 @@ internal static class TargetingCandidateSuites
                 $"an authored -1.0 naming the OWNING zeppelin excludes its zone, which the zone's own name 'leng11' could never match");
 
             // --- widened acquisition: a real team now sees the structure with no aircraft in the
-            // scan at all — BL-363's TargetStruct pool, previously unreachable. Doubling as the
+            // scan at all, BL-363's TargetStruct pool, previously unreachable. Doubling as the
             // exclusion's control: the same -1.0 naming a hull this zone does not belong to.
             gunner.RatingBiases = new[] { new AiRatingBias("beowulfzep", -1f, null) };
             gunner.AutoTarget = true;

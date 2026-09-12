@@ -84,7 +84,7 @@ public class AiSpawnJitterTests
             "pitch_torque and roll_torque were scaled by the same factor");
     }
 
-    /// <summary>Same draws in, same aircraft out — the property a <c>--det</c> replay rests on, and
+    /// <summary>Same draws in, same aircraft out, the property a <c>--det</c> replay rests on, and
     /// the reason the spawn site keys its generator rather than sharing a stream.</summary>
     [Fact]
     public void TheSameDrawsGiveTheSameAircraft()
@@ -100,7 +100,7 @@ public class AiSpawnJitterTests
     }
 
     /// <summary>Two spawn ordinals off the keyed generator the spawn site uses give two different
-    /// aircraft — the other half of the replay property, and what makes a flight of four look like
+    /// aircraft, the other half of the replay property, and what makes a flight of four look like
     /// four aeroplanes rather than one repeated.</summary>
     [Fact]
     public void TwoSpawnOrdinalsGiveTwoDifferentAircraft()
@@ -116,7 +116,7 @@ public class AiSpawnJitterTests
 
     /// <summary>The whole-vehicle pair is what the original scales (<c>+0x2c4</c>/<c>+0x2cc</c>, each
     /// mirrored into its "current" slot); the per-part pools it never touches. A player airframe
-    /// authors no pair, so the port writes the resolved sum over parts out explicitly — otherwise
+    /// authors no pair, so the port writes the resolved sum over parts out explicitly, otherwise
     /// <see cref="PlaneDamage"/> would re-derive the unscaled hull and the draw would vanish.</summary>
     [Fact]
     public void TheHullPoolsAreScaledAndThePartPoolsAreNot()

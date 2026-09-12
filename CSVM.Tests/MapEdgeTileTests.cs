@@ -13,7 +13,7 @@ namespace CSVM.Tests;
 ///
 /// <para>Both are lifted out of a private <c>IsGroundTile</c> that nothing could reach by test. The
 /// failure they exist to catch: C5's continuation gets a void strip through it when three flat
-/// water sheets — each COMPLETING a border cell its base tile only partly covers — measure
+/// water sheets, each COMPLETING a border cell its base tile only partly covers, measure
 /// 256–384 m across and so fall under the classifier's 0.4-cell floor. Every figure below is a
 /// measurement off
 /// <c>--dump-tilegrid</c> on the shipped chapters, not an invention.</para>
@@ -32,7 +32,7 @@ public class MapEdgeTileTests
         Assert.Equal(MapEdgeExtender.TileVerdict.Accepted, Classify(Sheet(Cell, Cell)));
     }
 
-    /// <summary>The split half-tiles are real ground and must stay accepted — they are the whole
+    /// <summary>The split half-tiles are real ground and must stay accepted, they are the whole
     /// reason the floor is 0.4 and not something tighter (C1 bins 147 tiles into 144 cells).</summary>
     [Fact]
     public void ASplitHalfTileIsStillAGroundTile()
@@ -63,7 +63,7 @@ public class MapEdgeTileTests
     }
 
     /// <summary>The cloudlayer deck tiles are cell-sized too, so only the texture tells them from
-    /// ground — and the check runs before the span gate, so a cell-sized cloud sheet is rejected as
+    /// ground, and the check runs before the span gate, so a cell-sized cloud sheet is rejected as
     /// sky rather than accepted as terrain.</summary>
     [Fact]
     public void ACellSizedCloudSheetIsRejectedAsSky()
@@ -74,7 +74,7 @@ public class MapEdgeTileTests
                 Sheet(Cell, Cell), new string?[] { "cloudlayer1.tif" }, Cell, Cell, out _, out _));
     }
 
-    /// <summary>The AABB and centroid are reported even when the verdict is a rejection — the
+    /// <summary>The AABB and centroid are reported even when the verdict is a rejection, the
     /// census depends on it, and so does <c>AdoptComplements</c>, which only ever sees rejects.</summary>
     [Fact]
     public void ARejectedCandidateStillReportsItsFootprint()
@@ -100,8 +100,8 @@ public class MapEdgeTileTests
         Assert.True(MapEdgeExtender.IsCompletionStrip(new Vector3(x, y, z), Cell, Cell));
     }
 
-    /// <summary>⚠ The regression this test exists for. Flatness ALONE adopted 89 nodes on C5 —
-    /// hangar floors, city-block rooftops, wreck debris — because a building floor is flat too, and
+    /// <summary>⚠ The regression this test exists for. Flatness ALONE adopted 89 nodes on C5,
+    /// hangar floors, city-block rooftops, wreck debris, because a building floor is flat too, and
     /// <c>cblock*</c> (the city GROUND texture) classifies as <c>buildings</c>, so the surface class
     /// cannot separate them either. The full-cell span is what does.</summary>
     [Theory]
@@ -112,7 +112,7 @@ public class MapEdgeTileTests
         Assert.False(MapEdgeExtender.IsCompletionStrip(new Vector3(x, y, z), Cell, Cell));
     }
 
-    /// <summary>An upright object spanning a full cell in ONE axis — a fence line, a pier wall —
+    /// <summary>An upright object spanning a full cell in ONE axis, a fence line, a pier wall,
     /// is not a strip of ground. `ap_lightpole.flt` is the degenerate case: tens of metres tall on
     /// a footprint of centimetres.</summary>
     [Theory]
@@ -133,7 +133,7 @@ public class MapEdgeTileTests
 
     // ---- helpers --------------------------------------------------------------------------
 
-    // A flat horizontal quad of the given extents, centred on its own origin — the shape every
+    // A flat horizontal quad of the given extents, centred on its own origin, the shape every
     // ground tile in the install has.
     private static List<Vector3> Sheet(float x, float z) => new()
     {

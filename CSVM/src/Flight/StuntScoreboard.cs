@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The end-of-run results overlay for Stunt Flying — <see cref="ResultsBoard"/>'s shell. When the
+/// The end-of-run results overlay for Stunt Flying, <see cref="ResultsBoard"/>'s shell. When the
 /// run's last Danger Zone is cleared (<see cref="StuntMission.RunCompleted"/>) this shows a
 /// centred panel: the <see cref="StuntSplits"/> section (per-zone splits, total and best-time
 /// comparison against <see cref="ScoreStore"/>) under the plane + chapter heading. A plain
@@ -30,7 +30,7 @@ public sealed partial class StuntScoreboard : ResultsBoard
     protected override bool StillEnded => _mission.AllComplete;
 
     /// <summary>Builds the (hidden) overlay and subscribes to the run's completion. Add it to the
-    /// HUD canvas last so it draws over the marker/dials; feed nothing per-frame — it wakes itself
+    /// HUD canvas last so it draws over the marker/dials; feed nothing per-frame, it wakes itself
     /// on <see cref="StuntMission.RunCompleted"/>.</summary>
     public static StuntScoreboard Build(StuntMission mission, string planeDisplay, string context,
         ScoreStore store, string scoreKey, bool exitsToMenu, PauseState state,
@@ -63,7 +63,7 @@ public sealed partial class StuntScoreboard : ResultsBoard
         string bestSuffix = newBest ? " — NEW BEST"
             : prevBest.HasValue ? $" (best {StuntMission.FormatTime(prevBest.Value)})" : "";
         Log.Info("flight", $"stunt: run complete {StuntMission.FormatTime(total)}{bestSuffix}");
-        // Log the split table too (the splits are otherwise only visible on the rendered board —
+        // Log the split table too (the splits are otherwise only visible on the rendered board,
         // this makes a run's scoring reviewable from the headless log).
         float prev = 0f;
         int n = 1;

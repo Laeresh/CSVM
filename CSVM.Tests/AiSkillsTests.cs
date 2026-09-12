@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 /// (docs/formats/ai-rosters.md). Mechanics on the hand-authored
 /// <c>fixtures/zrdr-skills/player.json</c>; the shipped endpoint constants and the roster's
 /// worked cases (the cabbie, the dead-eye-1 mooks) as goldens against the real extraction.
-/// The between-endpoint curve is LINEAR, and — decoded as of E42 — its origin is rating 0, not
+/// The between-endpoint curve is LINEAR, and, decoded as of E42, its origin is rating 0, not
 /// rating 1: <c>value = lo + (hi-lo) · rating/9</c> (docs/org/aiControlLaw.md "The skill scalar").
 /// </summary>
 public class AiSkillsTests
@@ -114,7 +114,7 @@ public class AiSkillsTests
     public void UnsetAndMissingSlotsReadNull()
     {
         // -1 is the authored unset marker; a short block (they ship at 42-81 fields) simply
-        // omits the slots. Both read null — the engine falls back to the airframe def's own
+        // omits the slots. Both read null, the engine falls back to the airframe def's own
         // stat keys, so no default may be invented here.
         var unset = new List<object?>();
         for (int i = 0; i < 22; i++)
@@ -159,7 +159,7 @@ public class AiSkillsTests
     [ExtractedDataFact]
     public void TheCabbieAndTheMooksReadAsDocumented()
     {
-        // C5/M01's cabbie autogyro: the worked skill-vector case (9 6 6 3 3 6 9 7 8 — the two
+        // C5/M01's cabbie autogyro: the worked skill-vector case (9 6 6 3 3 6 9 7 8, the two
         // lowest values on dead_eye/quick_draw, a cabbie who cannot shoot).
         var roster = AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "M01"));
         var cabbie = roster.First(b => b.Name.StartsWith("autogyro", System.StringComparison.OrdinalIgnoreCase));

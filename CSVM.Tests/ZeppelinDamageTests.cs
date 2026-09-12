@@ -29,7 +29,7 @@ public class ZeppelinDamageTests
         Assert.False(damage.IsDead(n => !dead2.Contains(n)));
 
         // 3 destroyed → 3 survive: 3 < 4 DIES. ⚠ The inverse (destroy-count) reading would
-        // keep it alive here until 4 were destroyed — the immortal-zeppelin bug.
+        // keep it alive here until 4 were destroyed, the immortal-zeppelin bug.
         var dead3 = Dead("gasbag1", "gasbag2", "gasbag3");
         Assert.Equal(3, damage.Survivors(n => !dead3.Contains(n)));
         Assert.True(damage.IsDead(n => !dead3.Contains(n)));
@@ -50,7 +50,7 @@ public class ZeppelinDamageTests
     [Fact]
     public void DuplicateHealthyEntriesCountPerEntry()
     {
-        // C5/M01's shipped shape: gasbag5 listed twice, required 4 — the engine walks the
+        // C5/M01's shipped shape: gasbag5 listed twice, required 4, the engine walks the
         // entry list, so killing the duplicated node removes TWO survivors at once.
         var damage = new ZeppelinDamage(Def(
             healthy: new[] { "gasbag1", "gasbag2", "gasbag3", "gasbag4", "gasbag5", "gasbag5" },

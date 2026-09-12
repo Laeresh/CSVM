@@ -34,7 +34,7 @@ public static class HudMetrics
 
     /// <summary>How much this control's viewport is shrunk by splitscreen: 1.0 for a full-screen
     /// single-player view (the pane IS the window), sqrt(½) ≈ 0.71 in a 2P pane, ½ in a 4P pane.
-    /// Multiply any element that should shrink with the pane — but not vanish — by this.</summary>
+    /// Multiply any element that should shrink with the pane, but not vanish, by this.</summary>
     public static float PaneFactor(Control control)
     {
         float paneH = control.GetViewportRect().Size.Y;

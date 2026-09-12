@@ -112,7 +112,7 @@ public sealed class GodotWorldQuery : IWorldQuery
             query.Motion = Vector3.Zero;
             query.CollisionMask = mask;
             query.Exclude = exclude ?? _noExclude;
-            // One hit is enough — this only asks whether the box is free.
+            // One hit is enough, this only asks whether the box is free.
             if (space.IntersectShape(query, 1).Count > 0)
                 return true;
         }

@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 /// (0.205 and 0.165, its `fall_off` / `bank_off` console variables) that turn bank straight into
 /// angular rate. Everything here is asserted on <see cref="FlightModel.BodyRates"/> after ONE step
 /// from rest with the stick centred, where the model's own arithmetic is a closed form
-/// (<c>BodyRates = cmd · dt</c>) — so a sign flip, a missing axis or a wrong constant fails
+/// (<c>BodyRates = cmd · dt</c>), so a sign flip, a missing axis or a wrong constant fails
 /// exactly, rather than being absorbed by the integrator a hundred frames later.
 ///
 /// <para>The inverted case is the one a plausible-looking implementation gets wrong: the extra
@@ -25,7 +25,7 @@ public class BankCouplingTests
     [Fact]
     public void WingsLevelUprightCouplesNothing()
     {
-        // Both terms vanish by construction at zero bank, so cruise is untouched — the same
+        // Both terms vanish by construction at zero bank, so cruise is untouched, the same
         // property the knife-edge sag has, and the reason this change cannot reach a level-flight
         // measurement.
         var rates = OneStepFrom(Basis.Identity);
@@ -47,7 +47,7 @@ public class BankCouplingTests
         Assert.True(left.X > 0f && Mathf.Abs(left.X - right.X) < 1e-6f,
             $"bank must pull up whichever way it points: left {left.X:0.0000}, right {right.X:0.0000}");
 
-        // Nothing reaches roll — the original couples bank into two axes, not three.
+        // Nothing reaches roll, the original couples bank into two axes, not three.
         Assert.True(Mathf.Abs(left.Z) < 1e-7f, $"the coupling must not touch roll (got {left.Z:0.0000})");
     }
 
@@ -57,7 +57,7 @@ public class BankCouplingTests
         var stats = Bhawk();
         var rates = OneStepFrom(BankedLeft(90f));
         // One step from rest: the accumulated total (this tick's torque, nothing carried over) is
-        // itself subject to the tick's own exponential decay — see AngularDampingTests for the
+        // itself subject to the tick's own exponential decay, see AngularDampingTests for the
         // ordering this factor pins.
         float decay = Mathf.Exp(-Dt * stats.AngMomentumDamp);
 
@@ -111,7 +111,7 @@ public class BankCouplingTests
             + $"{invertedExtra:0.000000}");
     }
 
-    // The Bloodhawk's real dynamics — the coupling is scaled by `rec_moments_inertia`,
+    // The Bloodhawk's real dynamics, the coupling is scaled by `rec_moments_inertia`,
     // so the placeholder defaults would hide a wrong axis behind near-equal components.
     private static PlaneStats Bhawk() => new()
     {

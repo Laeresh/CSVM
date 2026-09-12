@@ -9,7 +9,7 @@ namespace CSVM.Flight;
 /// projected through the live camera at <see cref="_Draw"/> time (never cached, mirrors
 /// <see cref="TargetHud"/>). Fixed screen size scaled by <see cref="HudMetrics"/>.
 /// ⚠ Deliberately not pinned to screen centre, and it marks the nose axis, not the aim assist's
-/// line, so an assisted round does not go where the pipper points — the assist is meant to be
+/// line, so an assisted round does not go where the pipper points, the assist is meant to be
 /// felt, not seen (docs/org/aim-assist.md "What the gun pipper follows").</summary>
 public sealed partial class ImpactReticle : Control
 {
@@ -21,13 +21,13 @@ public sealed partial class ImpactReticle : Control
     /// <summary>The world-space ballistic impact point to mark (set each frame by the controller).</summary>
     public Vector3 ImpactPoint { get; set; }
 
-    /// <summary>Whether to draw this frame. False hides the pipper — no firable gun, crashed, or no
+    /// <summary>Whether to draw this frame. False hides the pipper, no firable gun, crashed, or no
     /// valid firing solution. Set by <see cref="FlightController"/>.</summary>
     public bool Active { get; set; }
 
     /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
     /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,
-    /// so no colour-keying is needed — unlike the HUD font atlas.</summary>
+    /// so no colour-keying is needed, unlike the HUD font atlas.</summary>
     public static Texture2D? LoadTexture(string rimageDir, string file)
     {
         var path = Path.Combine(rimageDir, file);
@@ -55,7 +55,7 @@ public sealed partial class ImpactReticle : Control
 
     public override void _Process(double delta)
     {
-        // Track the (resizable / splitscreen) pane and repaint — the pipper moves every frame.
+        // Track the (resizable / splitscreen) pane and repaint, the pipper moves every frame.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
         QueueRedraw();
@@ -69,7 +69,7 @@ public sealed partial class ImpactReticle : Control
         {
             return;
         }
-        // A point behind the camera unprojects mirrored through centre — never draw it (as TargetHud).
+        // A point behind the camera unprojects mirrored through centre, never draw it (as TargetHud).
         if (_camera.IsPositionBehind(ImpactPoint))
         {
             return;

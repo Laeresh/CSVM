@@ -14,7 +14,7 @@ public enum AiScorer
     /// the three geometry ones (ahead/behind, altitude, closing).</summary>
     Jet,
 
-    /// <summary><c>FUN_00421950</c>, run by everything else — a <c>ship</c>, a <c>plane</c>, a
+    /// <summary><c>FUN_00421950</c>, run by everything else, a <c>ship</c>, a <c>plane</c>, a
     /// <c>heli</c>, a <c>tank</c>. ⚠ It has the shared terms and NOTHING else: a ground or sea AI
     /// scores on base weight and the two class terms alone. Do not let the three geometry terms
     /// reach it because they read like part of one formula.</summary>
@@ -35,7 +35,7 @@ public struct RankedTargetCandidate
     /// candidate object's velocity virtual, not its nose (<c>FUN_00421ad0</c>).</summary>
     public Vector3 Velocity;
 
-    /// <summary>Whether this candidate is a human-piloted aircraft — the 0.7 weight case.</summary>
+    /// <summary>Whether this candidate is a human-piloted aircraft, the 0.7 weight case.</summary>
     public bool IsPlayer;
 
     /// <summary>Whether this candidate is an aircraft flying in <c>wingman</c> mode (a netless
@@ -51,14 +51,14 @@ public struct RankedTargetCandidate
     /// (<see cref="AiTargetRanking.ObjectiveBiasFor"/>).</summary>
     public float ObjectiveBias;
 
-    /// <summary>How many ALLIES already hold this candidate as their standing target — the
+    /// <summary>How many ALLIES already hold this candidate as their standing target, the
     /// deconfliction input. Zero whenever every pilot sits on its own default team (free flight,
     /// <c>--vs</c>); it counts real allies once a mission puts two AI on the same
     /// <see cref="FlightController.Team"/>.</summary>
     public int AlliedAttackers;
 }
 
-/// <summary>One candidate's rank and the inputs that made it — the observability shape the
+/// <summary>One candidate's rank and the inputs that made it, the observability shape the
 /// first-acquisition breadcrumb logs.</summary>
 public readonly struct TargetScore
 {
@@ -79,7 +79,7 @@ public readonly struct TargetScore
     /// <summary>The objectiveBias term, rank units.</summary>
     public float Bias { get; }
 
-    /// <summary>weight × 1200 + distance + objectiveBias — minimised; <see
+    /// <summary>weight × 1200 + distance + objectiveBias, minimised; <see
     /// cref="AiTargetRanking.NotRanked"/> beyond the activation radius.</summary>
     public float Rank { get; }
 }
@@ -89,7 +89,7 @@ public readonly struct TargetScore
 /// weight 0.7, others 1.0, +0.4 on a wingman, ±0.2 terms for ahead/behind, altitude sign and
 /// closing, −0.5 on a gasbag, <c>1e21</c> beyond the activation radius. <see cref="SelectBest"/>
 /// prefers a candidate no ally already holds (<see cref="RankedTargetCandidate.AlliedAttackers"/>),
-/// falling back to the overall best when the pool is exhausted — the design's deconfliction, a
+/// falling back to the overall best when the pool is exhausted, the design's deconfliction, a
 /// minimum reading. ⚠ Unported: the activation volume is the engine's cylinder (horizontal radius
 /// and an altitude band); this scores a sphere.</summary>
 public static class AiTargetRanking
@@ -97,7 +97,7 @@ public static class AiTargetRanking
     /// <summary>The decoded weight scale: one weight unit is worth 1200 m of distance.</summary>
     public const float WeightScale = 1200f;
 
-    /// <summary>The player's base weight — the decoded hard constant.
+    /// <summary>The player's base weight, the decoded hard constant.
     /// ⚠ Under minimisation this ranks the player AHEAD of an equal-distance AI target, by about
     /// 360 m of distance equivalence. That is the decoded arithmetic; do not "fix" it to rank the
     /// player last.</summary>
@@ -218,9 +218,9 @@ public static class AiTargetRanking
 
     /// <summary>The objectiveBias term for a named candidate, from the FIRST matching
     /// <c>rating_biases</c> entry; 0 with no list or no match. The ends saturate rather than scale:
-    /// 1.0 or more is always-target, −1.0 or less a hard exclusion — an authored −1.0 means NEVER
+    /// 1.0 or more is always-target, −1.0 or less a hard exclusion, an authored −1.0 means NEVER
     /// target, not a penalty, and is the dominant shipped value. <paramref name="isTurret"/> adds
-    /// <see cref="TurretBiasFlat"/> on top of every arm above, including the no-match case — the
+    /// <see cref="TurretBiasFlat"/> on top of every arm above, including the no-match case, the
     /// decoded flat term a turret candidate always carries.</summary>
     public static float ObjectiveBiasFor(string name, IReadOnlyList<AiRatingBias>? biases,
         bool isTurret = false) => ObjectiveBiasFor(name, null, biases, isTurret);

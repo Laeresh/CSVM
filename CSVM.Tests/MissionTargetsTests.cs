@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The mission <c>targets.json</c> reader (<c>docs/formats/missions.md</c>): a list of entries,
-/// each a list of <c>[key, value]</c> pairs — not the flat alternating reader form.
+/// each a list of <c>[key, value]</c> pairs, not the flat alternating reader form.
 /// Input is <c>fixtures/zrdr/targets.json</c>.
 /// </summary>
 public class MissionTargetsTests
@@ -35,7 +35,7 @@ public class MissionTargetsTests
     public void AnEntryWithNoNodesLabelsNothing()
     {
         // The fixture's third entry has a description but no "nodes" list, so it contributes
-        // no mapping — 4 nodes from 4 entries, not 5.
+        // no mapping, 4 nodes from 4 entries, not 5.
         Assert.Equal(4, Load().Count);
     }
 

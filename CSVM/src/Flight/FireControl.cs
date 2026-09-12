@@ -29,7 +29,7 @@ public interface IPylonSlot : IAmmoSlot
     WeaponDef Weapon { get; }
 }
 
-/// <summary>One sim tick's raw control state, polled by the caller. Held levels, not edges — all
+/// <summary>One sim tick's raw control state, polled by the caller. Held levels, not edges, all
 /// edge detection (first-shot-on-press, one-rocket-per-pull, selector steps) lives inside
 /// <see cref="FireControl"/>, where it is testable.</summary>
 public struct FireInputs
@@ -53,7 +53,7 @@ public static class AmmoSlots
 
 /// <summary>What one <see cref="FireControl.Step"/> decided, for the caller to perform against the
 /// engine. A single persistent instance is reused every tick (cleared on entry) so the 60 Hz path
-/// allocates nothing — read it before the next Step.</summary>
+/// allocates nothing, read it before the next Step.</summary>
 public sealed class FireOutcome
 {
     /// <summary>Rounds to spawn this tick, in firing order: gun-slot index + the muzzle index the
@@ -66,7 +66,7 @@ public sealed class FireOutcome
 
     /// <summary>The firing loop should be sounding this tick (the selected group is firing with
     /// ammo). Distinct from <see cref="GunLoopSound"/> because a gun without a looped sound still
-    /// wants the loop state on — the caller's start call is then a no-op, exactly as before the
+    /// wants the loop state on, the caller's start call is then a no-op, exactly as before the
     /// extraction.</summary>
     public bool GunLoopWanted { get; set; }
 
@@ -94,11 +94,11 @@ public sealed class FireOutcome
 
 /// <summary>The fire-control state machine behind <see cref="FlightController"/>:
 /// trigger edges, per-group fire-rate accumulators, muzzle rotation, ammo draw-down, the two weapon
-/// selectors with their on-empty auto-advance, the rocket launch gate and both dry-clip cues — as a
+/// selectors with their on-empty auto-advance, the rocket launch gate and both dry-clip cues, as a
 /// plain engine-free class. <see cref="Step"/> consumes raw held inputs and returns spawn/sound
 /// <b>decisions</b> (<see cref="FireOutcome"/>); the caller performs them (muzzle transforms,
 /// <see cref="ProjectilePool"/>, <see cref="FlightAudio"/>). Ammo mutates through the slot views so
-/// a decision and its state can never diverge mid-tick — the gauges keep reading the same
+/// a decision and its state can never diverge mid-tick, the gauges keep reading the same
 /// <see cref="Loadout"/> counters. <see cref="WeaponCursor"/> is this module's internal index math.
 /// Proven in <c>CSVM.Tests/FireControlTests</c>; the in-engine <c>weapons-fire</c> suite covers only
 /// the mounting census.</summary>
@@ -154,16 +154,16 @@ public sealed class FireControl
         _selectedPylon = FirstPylon();
     }
 
-    /// <summary>The firing gun slot — what the trigger fires, the gauge arrow marks and the
+    /// <summary>The firing gun slot, what the trigger fires, the gauge arrow marks and the
     /// reticle aims for.</summary>
     public int GunSel => _gunSel;
 
-    /// <summary>The selected pylon — what the hardpoint selector points at and the rocket trigger
+    /// <summary>The selected pylon, what the hardpoint selector points at and the rocket trigger
     /// launches from.</summary>
     public int SelectedPylon => _selectedPylon;
 
     /// <summary>--fire-rockets / the weapon lab's auto toggle: a held rocket trigger auto-repeats
-    /// at the cooldown cap instead of one launch per discrete pull. Runtime-mutable — the lab
+    /// at the cooldown cap instead of one launch per discrete pull. Runtime-mutable, the lab
     /// flips it live when switching banks, so the adapter mirrors it in every Step.</summary>
     public bool AutoFireRockets { get; set; }
 
@@ -171,7 +171,7 @@ public sealed class FireControl
     /// counter depletes. Runtime-mutable, mirrored like <see cref="AutoFireRockets"/>.</summary>
     public bool InfiniteAmmo { get; set; }
 
-    /// <summary>Point the gun selector at a slot (0-based, clamped) — the weapon lab's programmatic
+    /// <summary>Point the gun selector at a slot (0-based, clamped), the weapon lab's programmatic
     /// twin of G, which only cycles.</summary>
     public void SelectGunGroup(int index) =>
         _gunSel = _guns.Count > 0 ? Math.Clamp(index, 0, _guns.Count - 1) : 0;
@@ -182,7 +182,7 @@ public sealed class FireControl
     public void SelectPylon(int index) =>
         _selectedPylon = _pylons.Count > 0 ? Math.Clamp(index, 0, _pylons.Count - 1) : 0;
 
-    /// <summary>One sim tick: selector edges, then the gun fire clocks, then the rocket gate — the
+    /// <summary>One sim tick: selector edges, then the gun fire clocks, then the rocket gate, the
     /// order the flight sim always ran them in. Mutates slot ammo; returns the reused
     /// <see cref="FireOutcome"/> with everything the caller must perform.</summary>
     public FireOutcome Step(float dt, in FireInputs input)
@@ -309,7 +309,7 @@ public sealed class FireControl
         {
             var g = _guns[gi];
             var st = _states[gi];
-            // Only the selected gun slot fires — one at a time (the original's behaviour).
+            // Only the selected gun slot fires, one at a time (the original's behaviour).
             bool selected = gi == _gunSel;
             if (!fire || !selected || g.Weapon.FireRate <= 0f || g.MuzzleCount == 0)
             {
@@ -338,11 +338,11 @@ public sealed class FireControl
                     {
                         g.Ammo--;
                     }
-                    st.Warned = false; // it fired a real round — re-arm the dry warning
+                    st.Warned = false; // it fired a real round, re-arm the dry warning
                 }
                 else
                 {
-                    // The selected slot just ran dry — switch to the next slot that still has ammo
+                    // The selected slot just ran dry, switch to the next slot that still has ammo
                     // the moment it empties, not on the next trigger pull. Only when no slot has
                     // ammo left does the dry cue sound.
                     int next = WeaponCursor.NextArmed(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo);
@@ -368,7 +368,7 @@ public sealed class FireControl
     // The rocket gate: one launch per discrete trigger pull, drawn from the selected
     // pylon (it drains fully, then the cursor auto-advances to the next armed pylon the instant it
     // empties), gated by the weapon's `FIRE_RATE` cooldown. A pull with every pylon empty
-    // sounds the dry cue once — the cue check runs BEFORE the cooldown gate, so a dry pull is
+    // sounds the dry cue once, the cue check runs BEFORE the cooldown gate, so a dry pull is
     // never swallowed by a hot cooldown.
     private void StepRockets(float dt, bool held)
     {
@@ -382,7 +382,7 @@ public sealed class FireControl
         }
         bool fire = AutoFireRockets || held;
         // A human pull fires one rocket; holding does not auto-repeat. Only --fire-rockets (soak
-        // runs) auto-repeats — and either way the FIRE_RATE cooldown caps the launch rate.
+        // runs) auto-repeats, and either way the FIRE_RATE cooldown caps the launch rate.
         bool pull = AutoFireRockets ? fire : (fire && !_rocketFirePrev);
         _rocketFirePrev = fire;
         if (!pull)
@@ -390,7 +390,7 @@ public sealed class FireControl
             return;
         }
         // The selected pylon while it still has ordnance, else the next armed pylon scanning from
-        // it and wrapping — the cursor self-heals if it was somehow left on a spent pylon.
+        // it and wrapping, the cursor self-heals if it was somehow left on a spent pylon.
         int idx = NextArmedPylon(_selectedPylon, InfiniteAmmo);
         if (idx < 0)
         {
@@ -412,7 +412,7 @@ public sealed class FireControl
         if (!InfiniteAmmo)
         {
             hp.Ammo--;
-            // Advance the moment the selected pylon empties — not on the next trigger pull — so
+            // Advance the moment the selected pylon empties, not on the next trigger pull, so
             // the gauge arrow leaves the spent pylon straight away; -1 (all empty) leaves it put
             // so the next pull sounds the dry cue.
             int next = NextArmedPylon(_selectedPylon, false);

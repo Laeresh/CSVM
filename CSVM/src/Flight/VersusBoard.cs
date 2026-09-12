@@ -6,16 +6,16 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared results board for splitscreen "Dogfight" — <see cref="ResultsBoard"/>'s shell: the
+/// The shared results board for splitscreen "Dogfight", <see cref="ResultsBoard"/>'s shell: the
 /// match ends for everybody at once, so this covers the WHOLE window on its own CanvasLayer over
 /// the splitscreen panes, not a per-pane overlay. Winner (or "DRAW" on a tie) on top, then one
-/// ranked row per player — tag, kills, deaths — in their own identity colour; the winner's row is
+/// ranked row per player, tag, kills, deaths, in their own identity colour; the winner's row is
 /// highlighted the same way the race board highlights first place. R and pad Y still reach the
 /// rematch directly, for the muscle memory and for the hold-test harness.
 /// </summary>
 public sealed partial class VersusBoard : ResultsBoard
 {
-    // Base metrics at 720p (scaled by window height). All TUNE — mirrors StuntRaceBoard so the
+    // Base metrics at 720p (scaled by window height). All TUNE, mirrors StuntRaceBoard so the
     // two shared boards read as the same screen.
     private const int TitleFont = 30;
     private const int ContextFont = 15;
@@ -85,7 +85,7 @@ public sealed partial class VersusBoard : ResultsBoard
         {
             bool won = st.Rank == 1 && winners.Count == 1;
             // The winner's row wears their own identity colour; everyone else stays neutral so
-            // the placing reads at a glance — same rule StuntRaceBoard's winner row follows.
+            // the placing reads at a glance, same rule StuntRaceBoard's winner row follows.
             var color = won ? SplitScreen.PlayerColor(st.PlayerIndex) : RowColor;
             int font = (int)(RowFont * s);
             AddCell(grid, $"#{st.Rank}", font, color, HorizontalAlignment.Left, rankW);
