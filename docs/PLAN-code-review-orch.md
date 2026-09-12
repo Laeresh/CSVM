@@ -87,7 +87,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ One `Play` delegate and one `Once` for the three cinemas
 14. ☐ `ObjectiveSites` collects both target classes through one method
 15. ☐ `CameraController` reads its tuning through `_camParams` and names its views
-16. ☐ `CinemaSkips` without the repeated arms and the mirror enum
+16. ☑ `CinemaSkips` without the repeated arms and the mirror enum
 17. ☑ The export set out of `SelectionService`
 18. ☐ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
 
@@ -509,7 +509,31 @@ one place they are written. No numeric change anywhere.
 
 **⚠ Traps.** `BL-837` (the easing clock) is open on this file; do not fold it in.
 
-## B16 ☐ `CinemaSkips` without the repeated arms and the mirror enum
+## B16 ☑ `CinemaSkips` without the repeated arms and the mirror enum
+
+**Landed.** `Skips` is one expression: a press that is not `CinemaPress.None` ends the cinema when
+the set carries `AnyPress` or carries the flag that press is named by. The six arms became a private
+`NamedFlag(CinemaPress)` that answers the set's flag for a named press and `CinemaSkip.None` for a
+press no set names by itself, and the caller tests it with `&` rather than `HasFlag`, since
+`HasFlag(None)` is true for every set. The `CinemaPress` doc now states why the two enums stay
+separate, and `docs/architecture/UI.md`'s entry says it in one sentence. No behaviour change: the
+truth table is identical for all seven presses against all three authored sets.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings 0 errors.
+`.\CheckCommentCaps.ps1` and `.\CheckDocEntries.ps1` both clean.
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~Cinema|FullyQualifiedName~BootSequence" -SkipEngine
+-SkipGoldens`: 124 passed, 0 failed, 2 skipped of 126 (the two skips want extracted film data),
+including `TheBootSequenceTakesAnyPressThereIs` over all six presses.
+`.\RunTests.ps1 -Suite cinema-skip-pad -SkipUnits -SkipGoldens`: 1 passed, 0 failed, engine errors
+clean.
+
+**Evidence correction.** `CinemaPress` does not mirror `CinemaSkip` member for member, so the mirror
+enum stays. `CinemaSkip` is a `[Flags]` set of any number of bits and a `CinemaPress` is the single
+press that arrived, and the member lists differ at both ends: `CinemaPress.OtherKey` is a press no
+set names on its own, and `CinemaSkip.AnyPress` is a set no press answers to. Collapsing them would
+either make an unnamed key indistinguishable from Escape or put a wildcard in the press type.
+
+**Original approach (kept for reference).**
 
 **Goal.** The skip decision is one expression, and there is one enum for what a press is.
 

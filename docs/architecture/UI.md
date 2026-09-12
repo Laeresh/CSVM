@@ -234,12 +234,12 @@ The three authored sets live here as constants and `CinemaSkips` answers them.
 ## src/UI/CinemaSkips.cs
 Which press ends a cinema, for every screen that offers a skip. `Skips` is the one member that
 decides, and it takes a `CinemaPress` rather than a device event, so all three sets are pinned off
-engine; `PressOf` is the engine's half, reading a key, a click or a pad button into one of those
-and holding no policy of its own. A pad button is in every set, because a player holding one has no
-other press to offer and would otherwise sit through a 145-second film. It is read only where pad
-input counts at all (`--no-pads`, an unfocused window), since a pad reports its first button
-pressed as it connects. What each cinema's set is, and why they differ, is
-[../formats/cinemas.md](../formats/cinemas.md).
+engine; `PressOf` is the engine's half, reading a key, a click or a pad button into one of those and
+holding no policy of its own. A press is not a set: only an any-press set takes a key with no name
+of its own. A pad button is in every set, because a player holding one has no other press to offer
+and would otherwise sit through a 145-second film; it counts only where pad input does at all
+(`--no-pads`, an unfocused window), since a pad reports its first button as it connects. What each
+cinema's set is, and why they differ, is [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/UI/CinemaHandoff.cs
 The two things every cinema flow shares: `CinemaPlay`, the shape of the call that puts a film on
