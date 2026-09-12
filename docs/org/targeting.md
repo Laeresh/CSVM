@@ -314,13 +314,21 @@ Virtual slot `+0x34` on the target wrapper hierarchy. The base vtable at `0x0060
 > A candidate is hostile if and only if its `+0x8` differs from the shooter's team **and** neither
 > team is `0`.
 
-The canonical implementation is `FUN_004a5b90` (the aircraft/vehicle wrapper, vtable `0x0060364c`),
-which first requires the candidate's per-class targetable flags at `+0x8c` and `+0x90`, then makes
-the three comparisons at `0x004a5bb0` (equality), `0x004a5bb4` (candidate is 0) and `0x004a5bb8`
-(shooter is 0). The siblings are `FUN_004a5b20` (zeppelins and large craft, comparisons at
-`0x004a5b40`/`44`/`48`), `FUN_004a5bd0` (`0x004a5bea`/`ee`/`f2`) and `FUN_004a5c10` (emplacement
-hosts, `0x004a5c1e`/`22`/`26`). `FUN_004a5c10`'s codegen inverts polarity through
-`XOR EAX,EAX / SETZ DL` and resolves to the same truth table.
+The canonical implementation is `FUN_004a5b90` (**`TargetStruct`**, vtable `0x0060364c`), which
+first requires the candidate's per-class targetable flags at `+0x8c` and `+0x90`, then makes the
+three comparisons at `0x004a5bb0` (equality), `0x004a5bb4` (candidate is 0) and `0x004a5bb8`
+(shooter is 0). The siblings share the team core and differ only in which two liveness bytes they
+read first, so each class carries its own pair and none reads another's:
+
+| Override | Class, vtable | Liveness bytes | Team comparisons |
+|---|---|---|---|
+| `FUN_004a5b20` | `TargetVehicle`, `0x0060886c` | `+0x91d` (the dead byte) must be CLEAR, `+0x944` (awake) must be SET | `0x004a5b40`/`44`/`48` |
+| `FUN_004a5bd0` | `TargetTurret`, `0x006088cc` | `+0x6c` and `+0x6d` both set | `0x004a5bea`/`ee`/`f2` |
+| `FUN_004a5b90` | `TargetStruct`, `0x0060364c` | `+0x8c` and `+0x90` both set | `0x004a5bb0`/`b4`/`b8` |
+| `FUN_004a5c10` | emplacement hosts | none, the team test alone through the object at `+0x8` | `0x004a5c1e`/`22`/`26` |
+
+`FUN_004a5c10`'s codegen inverts polarity through `XOR EAX,EAX / SETZ DL` and resolves to the same
+truth table.
 
 Two properties matter for a port:
 
@@ -391,7 +399,8 @@ than keeping it.
 ### The two targetable bytes the predicate reads first
 
 Before the team comparison, `FUN_004a5b90` requires the candidate entity's `+0x8c` **and** `+0x90`
-to be non-zero. Both are on the combat-object base, and both are decoded:
+to be non-zero. Both are on the mission-structure object, the `TargetStruct` arm alone (an
+aeroplane takes `FUN_004a5b20`'s `+0x91d`/`+0x944` pair instead), and both are decoded:
 
 - **`+0x8c` is the scene node's active bit, walked up the parent chain.** `FUN_004a2730` rewrites it
   every frame at `0x004a2840` from `FUN_004a32c0(node)`, which returns 1 only when the node and
@@ -401,8 +410,14 @@ to be non-zero. Both are on the combat-object base, and both are decoded:
   off, and it is the only one of the two that moves at runtime.
 - **`+0x90` is a construction-time targetable byte.** `FUN_004a2570` writes 1 at `0x004a264f`, and
   exactly two sites clear it: `0x004a3000` in `FUN_004a2e00` (an object built from a `targets.zrd`
-  record) and `0x004a34b5` in `FUN_004a3360` (the same fallback path for a scene object). An
-  aeroplane keeps the 1 for its whole life. Nothing in the mission-script verb table writes it.
+  record) and `0x004a34b5` in `FUN_004a3360` (the same fallback path for a scene object). Nothing
+  in the mission-script verb table writes it, so a flagged mission-structure node keeps the 1 for
+  its whole life and a `targets.zrd`-only object never had it.
+
+⚠ **Neither byte asks whether the part's parent VEHICLE is alive**, only whether the scene chain
+above it is still active, so a destroyed airship's surviving parts stay candidates. What removes
+them in the original is the hull's own death choreography destroying them one by one, decoded in
+[`aiPilot.md`](aiPilot.md) under "A dead vehicle's surviving parts stay candidates".
 
 ### The picker's cost, and the three weights it spends
 

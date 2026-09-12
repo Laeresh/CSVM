@@ -145,16 +145,54 @@ RTTI names survive in the binary.
 
 | Class | List | Constructor | vtable | Admission | Rank offset |
 |---|---|---|---|---|---|
-| `TargetVehicle` | `DAT_0071dabc` | `FUN_004a6330` | `0x0060886c` | none | candidate `+0x340` |
-| `TargetTurret` | `DAT_0071d914` | `FUN_004a6370` | `0x006088cc` | none | scorer `+0x344` |
-| `TargetStruct` | `DAT_0071d33c`–`DAT_0071d340` | inline | `0x0060364c` | object `+0x8d` set; `+0x65` needs gasbag ordnance | scorer `+0x344` |
+| `TargetVehicle` | `DAT_0071dabc` | `FUN_004a6330` | `0x0060886c` | `0x004a5b20`: `+0x91d` clear, `+0x944` set, hostile team | candidate `+0x340` |
+| `TargetTurret` | `DAT_0071d914` | `FUN_004a6370` | `0x006088cc` | `0x004a5bd0`: `+0x6c` and `+0x6d` set, hostile team | scorer `+0x344` |
+| `TargetStruct` | `DAT_0071d33c`–`DAT_0071d340` | inline | `0x0060364c` | `FUN_004a5b90`: `+0x8c` and `+0x90` set, hostile team; plus object `+0x8d` set and `+0x65` needs gasbag ordnance | scorer `+0x344` |
 | `TargetProjectile` | `DAT_0064f78c` | `FUN_004a63b0` | `0x00608920` | object `+0x6c` set | none |
 
 `FUN_0041f9c0` carries one running minimum across all four lists, so the pick is the global minimum;
 the return chain resolves projectile, struct, turret, vehicle only because a later list records a
-winner solely when it already beat the earlier ones. `+0x344` on the scoring vehicle is a per-pilot
-handicap applied to turrets and structures but never to aircraft; `+0x340` on a candidate vehicle is
-a per-target offset. `TargetProjectile` is the consumer of the `TARGETABLE` weapon flag.
+winner solely when it already beat the earlier ones. The Admission column is the `+0x34` virtual
+[`targeting.md`](targeting.md) decodes as the hostility predicate, reached through `FUN_00422890`,
+whose own second arm (reject a candidate below the query's Y) is inert here because the query
+builder `FUN_00421e00` zeroes the enable byte at query `+0x14`. `TargetProjectile` is the consumer
+of the `TARGETABLE` weapon flag.
+
+### `target_bias` and `struct_bias` are the two class-dependent rank terms
+
+There is **no class priority** in the sweep: one running minimum, and the only terms that depend on
+what class a candidate belongs to are two `vehicle.zrd` fields the spawn path copies onto the
+entity in `FUN_00475820`, `def+0x138` to `+0x340` and `def+0x13c` to `+0x344`
+([`../formats/vehicle.md`](../formats/vehicle.md)). The vehicle constructor `FUN_004aff80` zeroes
+both at `0x004b088e`/`0x004b0894`, so a def that authors neither spends nothing.
+
+- **`target_bias`, candidate `+0x340`,** added when this entity is the candidate and only on the
+  `TargetVehicle` arm. Shipped: `-300.0` on `player_pfighter`, `-100.0` on the twelve AI aeroplane
+  defs, and unauthored on `patrolboat`, `t_truck` and every zeppelin.
+- **`struct_bias`, scorer `+0x344`,** added to every turret and structure candidate and to no
+  aircraft. Shipped: `-200.0` on eleven aeroplane defs, unauthored elsewhere.
+
+⚠ **Both are negative, so under minimisation both ATTRACT.** An equidistant structure is therefore
+ranked about 100 m AHEAD of an equidistant AI aeroplane by an aeroplane that authors both, and
+about 100 m behind the player. Read `+0x344` as a structure preference, not as the handicap its
+position in the arithmetic suggests. A turret's own picker spends neither: `FUN_004aabb0` pushes a
+literal `0` for both the second and third arguments (`0x004aaf95` and `0x004aaf99`, EBX zeroed at
+`0x004aaf93`), so `struct_bias` is an AI aircraft's term alone and a turret admits no gasbag.
+
+### A dead vehicle's surviving parts stay candidates
+
+⚠ **Nothing in the acquisition asks whether a part's parent vehicle is alive.** The only liveness
+gate a structure candidate passes is `+0x8c`, the scene node's own active bit ANDed up the parent
+chain, which `FUN_004a2730` recomputes every frame at `0x004a2840` from `FUN_004a32c0`
+(`0x004a32c0`: return 0 the moment any level of the `+0x58` chain has bit 2 of `node+0x24` clear).
+A zeppelin's death does not clear that bit on the airship node. C3/M04's `killpzep` carries exactly
+one `ObjectActiveState`, `underneath` to false, and instead destroys six of the hull's twelve engine
+destructibles outright by calling `destroy_pzleng11`/`21`/`31` and `destroy_pzreng11`/`21`/`31`,
+each of which deactivates its own `healthy` node. The other six (`leng12`/`22`/`32`,
+`reng12`/`22`/`32`, each its own `INACTIVEn` in the mission's objectives) keep their active bit and
+stay in the struct list as ordinary candidates. So a dead airship's surviving engines are an ally's
+legitimate targets in the original too, and the choreography, not the picker, is what removes the
+rest.
 
 ⚠ **World structures are always swept.** The fourth argument to `FUN_0041f9c0`, which decides
 whether the struct list is walked at all, is the literal `1` pushed at `0x00420002`. Only the
@@ -308,8 +346,10 @@ ammo whose two launch timers have run out, and the gasbag identity reaches `AiRo
 a torpedo-armed pilot that picked a gasbag launches at it.
 
 Unmodelled, named rather than guessed: the activation volume is scored as a sphere where the engine
-tests a cylinder (`+0x328`, `+0x32c`–`+0x330`); `TargetProjectile` is not part of the acquisition
-sweep at all; and `FUN_00421ad0`'s `1e21` on a candidate object whose `+0x04` reads 3 or more.
+tests a cylinder (`+0x328`, `+0x32c`–`+0x330`); `target_bias` and `struct_bias` are spent by no
+CSVM term, so a structure carries neither the original's 200 m pull nor an aeroplane its 100 m one;
+`TargetProjectile` is not part of the acquisition sweep at all; and `FUN_00421ad0`'s `1e21` on a
+candidate object whose `+0x04` reads 3 or more.
 
 ## The chapter's net table, and what "the first net" means
 

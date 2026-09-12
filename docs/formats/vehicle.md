@@ -620,6 +620,19 @@ error goes on the rudder even when the target is straight ahead. The `autogyro` 
 never reaches this law, so `balmoral` is the one aeroplane that turns onto a target with rudder
 rather than bank.
 
+**`target_bias`** and **`struct_bias`** are the AI acquisition's two class-dependent rank terms,
+decoded in [../org/aiPilot.md](../org/aiPilot.md). The spawn path copies `def+0x138` to the
+entity's `+0x340` and `def+0x13c` to `+0x344` (`FUN_00475820`), and the picker adds `+0x340` to
+this entity's own rank when it is a candidate vehicle and the scorer's `+0x344` to every turret
+and structure candidate. Both go in raw, in the same rank units as metres of distance, so the
+ranking's `1200` weight scale does not touch them. ⚠ **Both are authored NEGATIVE and the rank is
+MINIMISED, so both attract.** `target_bias` is `-300.0` on `player_pfighter` and `-100.0` on the
+twelve AI aeroplane defs, unauthored on `patrolboat`, `t_truck` and the zeppelins; `struct_bias` is
+`-200.0` on eleven aeroplane defs and unauthored elsewhere. The net effect is that an aeroplane
+authoring both ranks an equidistant structure about 100 m ahead of an equidistant AI aeroplane.
+The vehicle constructor zeroes both, so an unauthored def spends nothing, and a turret's own picker
+passes a literal `0` in place of `struct_bias`.
+
 **Def defaults for the block above** (from the def initialiser, not from any key): scales `3.5`,
 limits `1.0`, the emergency set identical, `rudder_tol` `0.2`. The AI speed clamp that sits beside
 them is fixed at `0`…`111.76 m/s` (250 mph) for every airframe and has no token at all.

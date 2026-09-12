@@ -732,20 +732,42 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
 
-- `BL-866` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Allied AI and turret gunners engage a destroyed
+- `BL-866` `[Bug]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: feel]` **Allied AI and turret gunners engage a destroyed
   zeppelin's surviving parts and non-enemy buildings while the live enemies go unfought.**
   *Evidence:* reported at the controls from CM04 (C3/M03) on: wingmen, allied aircraft and the
   Pandora's guns lock on the destroyed cargo zeppelin's engines and on buildings, leaving the
   enemy aircraft to the player. The user's recall of the original is that its allies fight the
-  aircraft. In the data a zeppelin's engines are their own destructibles and stay `healthy` after
-  the hull dies (`extracted/C3/M04/zrdr/objectives.zrd.json`'s `INACTIVE` conditions list them
-  one by one), so a ranking that asks only "is this a live destructible" keeps them. *Fix shape:*
-  decode the original's AI target ranking for two gates, whether a dead vehicle's parts stay
-  candidates and whether a structure needs an enemy team to be ranked at all, then apply both to
-  `AiGunner`'s re-acquire and the turret's selection. One item: both are the same selection
-  algorithm. *⚠ Traps:* do not special-case zeppelin engines; the gate is the vehicle's death, not
-  the part's name. *Cross-refs:* `docs/org/targeting.md` (the player's cycle, a different list),
-  `docs/org/aiPilot.md`, `CSVM/src/Flight/AiGunner.cs`.
+  aircraft. **The decode is done and it contradicts the fix this item proposed**
+  ([`docs/org/aiPilot.md`](docs/org/aiPilot.md), "`target_bias` and `struct_bias`" and "A dead
+  vehicle's surviving parts stay candidates"; [`docs/org/targeting.md`](docs/org/targeting.md),
+  "The hostility predicate"). Three findings:
+  (1) **No dead-parent gate exists.** A structure candidate's only liveness gate is `+0x8c`, the
+  scene node's active bit ANDed up the parent chain (`FUN_004a5b90`, refreshed from
+  `FUN_004a32c0`), and a dead airship keeps that bit. C3/M04's `killpzep` deactivates only
+  `underneath` and destroys six of the twelve engine destructibles by calling their own destroy
+  animations; the other six stay active and stay candidates for an ally's guns in the original too.
+  (2) **A structure does need a hostile team, and CSVM already applies it** in both pickers
+  (`SelectRankedTarget`'s team gate, `TurretController.AcquireTarget`'s `AimAssist.Hostile`), so a
+  neutral building is already never picked and a picked one carries an authored hostile team.
+  (3) **There is no class priority.** `FUN_0041f9c0` keeps one running minimum over the four pools,
+  and the only class-dependent terms are two unported `vehicle.zrd` fields: `target_bias`
+  (`-300.0` on `player_pfighter`, `-100.0` on the twelve AI aeroplane defs) and `struct_bias`
+  (`-200.0` on eleven aeroplane defs, added to turret and structure candidates only). Both are
+  negative against a MINIMISED rank, so both attract, and an aeroplane authoring both ranks an
+  equidistant structure about 100 m AHEAD of an equidistant enemy aeroplane.
+  *Question for the user, one call between two faithful readings:* the executable ranks structures
+  slightly ahead of aircraft, so is the fix (a) **faithful to the decode**, port `target_bias` and
+  `struct_bias` as they ship, which leaves allies picking structures and makes the reported
+  symptom slightly stronger, or (b) **faithful to your recall of play**, add an aircraft-first
+  preference or a dead-parent gate the original does not have, behind no setting, as a deliberate
+  departure? A third possibility worth your judgement before either: the remaining unported gate
+  is the attack volume, a cylinder with an altitude band (`+0x328`, `+0x32c`-`+0x330`) where CSVM
+  scores a 2,000 m sphere, and a band would drop the low structures without touching the ranking.
+  *⚠ Traps:* do not special-case zeppelin engines. Do not "fix" the sign of either bias to make
+  structures unattractive; the shipped values are negative and that is the decoded arithmetic.
+  *Cross-refs:* `docs/org/targeting.md` (the player's cycle, a different list),
+  `docs/org/aiPilot.md`, `docs/formats/vehicle.md` (`target_bias`/`struct_bias`),
+  `CSVM/src/Flight/AiTargetRanking.cs`, `CSVM/src/Flight/AiGunner.cs`.
 
 - `BL-877` `[Bug]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A stock fit of two or six pylons is split
   between the wings by a count heuristic that disagrees with the rig, so the Hoplite's ammo screen
