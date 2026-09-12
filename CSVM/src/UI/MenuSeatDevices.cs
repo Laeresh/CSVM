@@ -39,6 +39,11 @@ public sealed class MenuSeatDevices
     /// <see cref="BuiltInSeat"/> over a one-pad poller, and any other source has no pad of its own.</summary>
     public static int PadOf(IMenuInputSource source) => source is BuiltInSeat seat ? seat.Input.Pad : -1;
 
+    /// <summary>The poller behind a seat's source, or null for a source that has none (a device-less
+    /// seat, or a seat wearing a source of another kind). It is what a screen reading the seat's own
+    /// devices needs, and the same detail read in the same one place as the pad above.</summary>
+    public static MenuInput? PollerOf(IMenuInputSource source) => (source as BuiltInSeat)?.Input;
+
     /// <summary>The pads a seat flies with, the binding a launch carries: seat 0's poller's set,
     /// a joined pad's one device, nothing for a device-less seat.</summary>
     public IReadOnlyList<int> FlightPads(PlayerSeat seat)

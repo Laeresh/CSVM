@@ -148,6 +148,13 @@ public sealed class ControlsFeature : IMenuFeature
     /// <summary>That action's bindings on the seat being edited.</summary>
     public IReadOnlyList<Binding> Bindings(InputAction action) => Map.Bindings(action);
 
+    /// <summary>That action's bindings in a context the cursor is not standing in, for a screen
+    /// whose page lists rows from more than one keymap. A read, so it never moves
+    /// <see cref="Context"/>: stepping the context resets the cursor and drops a capture in
+    /// progress, which a screen drawing itself must not do.</summary>
+    public IReadOnlyList<Binding> Bindings(InputContext context, InputAction action) =>
+        _seats[_player].Working[context].Bindings(action);
+
     /// <summary>One row's controls as text, hiding nothing without saying so.</summary>
     public string RowText(InputAction action) => BindingLabels.Row(Map.Bindings(action), RowBindings);
 
