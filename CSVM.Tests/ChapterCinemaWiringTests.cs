@@ -17,7 +17,9 @@ namespace CSVM.Tests;
 /// the cabin arriving on the frame the film stops, a position inside a chapter opening the cabin
 /// with no film, and one instance serving both so a chapter plays once whichever door reached it.
 /// A campaign whose feature carries no cinema opens the cabin exactly as it always did, which is
-/// what every suite and every golden gets.
+/// what every suite and every golden gets. The press that skips a film is spanned rather than
+/// pressed after the hand-back, which is the only way to see the board behind the film read it:
+/// with the pointer, with a key or a pad button, and held from under the film to past its end.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ChapterCinemaWiringTests : IDisposable
@@ -298,6 +300,100 @@ public class ChapterCinemaWiringTests : IDisposable
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
     }
 
+    // The press that skips a film reaches the board on the frame the film hands back, and the board
+    // is by then the screen the film opened: the pointer's release lands on whatever stands under
+    // it. That is invisible to any check that presses only after the hand-back, so each of these
+    // spans the film with one press.
+    [Fact]
+    public void TheClickThatSkipsTheChapterFilmFiresNothingOnTheCabinItOpens()
+    {
+        var cinema = new Recorder();
+        var shell = Shell(cinema, out var campaign);
+        OpenCampaign(shell);
+        shell.Step(new MenuCommands { Typed = "Zachary" });
+        shell.Step(Accept);
+        Assert.Equal("chap1", cinema.Name);
+
+        cinema.Stop();
+        var home = shell.Rows.Single(r => r.Key == nameof(BoardButton.ReturnToMainMenu));
+        var swallowed = shell.Step(Pointer(home.X + 3f, home.Y + 3f, pressed: true, clicked: true));
+        Assert.Equal(string.Empty, shell.ArmedKey);
+        // The swallowed frame still asks for a redraw: the screen changed under the film, where no
+        // step was reading it.
+        Assert.True(swallowed.Changed);
+        shell.Step(Pointer(home.X + 3f, home.Y + 3f));
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Assert.True(campaign.IsOpen);
+
+        // And the board is not deafened: the next press is one of its own.
+        Click(shell, home.X + 3f, home.Y + 3f);
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Assert.False(campaign.IsOpen);
+    }
+
+    // A keyboard key and a pad button are one command by the time the shell reads them
+    // (MenuCommands is device-neutral), so this is both of them; which presses end which film is
+    // CinemaSkipSuites' half.
+    [Fact]
+    public void TheKeyOrPadPressThatSkipsTheChapterFilmFiresNothingOnTheCabinItOpens()
+    {
+        var cinema = new Recorder();
+        var shell = Shell(cinema, out _);
+        OpenCampaign(shell);
+        shell.Step(new MenuCommands { Typed = "Zachary" });
+        shell.Step(Accept);
+
+        cinema.Stop();
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Assert.Equal("NextMission", shell.FocusedKey);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignBriefing, shell.Screen);
+    }
+
+    // The film owns every frame it stands for, which is the other half: a press the film's own skip
+    // set does not read still reaches the board behind it, and the board is not on screen.
+    [Fact]
+    public void APressHeldAcrossTheChapterFilmWalksNothingBehindItAndFiresNothingOnItsRelease()
+    {
+        var cinema = new Recorder();
+        var shell = Shell(cinema, out _);
+        OpenCampaign(shell);
+        shell.Step(new MenuCommands { Typed = "Zachary" });
+        shell.Step(Accept);
+
+        var start = shell.Rows.Single(r => r.Key == nameof(BoardButton.Continue));
+        var step = shell.Step(Pointer(start.X + 3f, start.Y + 3f, pressed: true, clicked: true));
+        Assert.False(step.Changed);
+        Assert.Equal(string.Empty, shell.ArmedKey);
+        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
+
+        cinema.Stop();
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        shell.Step(Pointer(start.X + 3f, start.Y + 3f));
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+    }
+
+    // The negative control: a door with no film due hands its screen over inside the play call, so
+    // nothing is outstanding and the very next press is the player's own.
+    [Fact]
+    public void ACabinDoorWithNoFilmDueSwallowsNothingFromTheNextPress()
+    {
+        _store.Save(Progressed("Zachary", 3));
+        var cinema = new Recorder();
+        var shell = Shell(cinema, out _);
+        shell.OpenCampaignOver(_store);
+        Assert.True(shell.ShowCabin("Zachary"));
+        Assert.Equal(0, cinema.Plays);
+
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignBriefing, shell.Screen);
+    }
+
     private static string Airframe(int airframe) => $"node{airframe}";
 
     // The RETURN TO CABIN plaque on whatever screen the flow is showing, found by its authored
@@ -335,12 +431,15 @@ public class ChapterCinemaWiringTests : IDisposable
         Click(shell, row.X + 2f, row.Y + 2f);
     }
 
+    private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
+        new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+
     // One click as the shell reads it: the press arms the row and the release on it fires, so the
     // step that carries the activation is the second one.
     private static void Click(OriginalShell shell, float x, float y)
     {
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, true, true) });
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, false, false) });
+        shell.Step(Pointer(x, y, pressed: true, clicked: true));
+        shell.Step(Pointer(x, y));
     }
 
     private static PlayerSetupFeature Setup()

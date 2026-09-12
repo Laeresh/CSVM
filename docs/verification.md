@@ -63,6 +63,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   `sin α · [positive]`, so a sustained straight climb has exactly one solution and α is zero in it;
   the off-path force balance that reads as an explanation of the climb's 25 % speed residual is a
   transient the plant leaves in under a second (`docs/org/flightModel.md`, "The sustained climb").
+- **METHOD-30**, **Span a hand-back with the press itself: a modal that consumes a press hands
+  input back while that press is still down, so a check that presses only after the hand-back cannot
+  see the new owner read its tail.** The board behind a campaign film is live again on the frame the
+  film stops, so the click that skipped the film armed the plaque under the pointer and fired it on
+  the release; the hand-off's own tests pressed after the stop and passed throughout
+  (`ChapterCinemaWiringTests`, `CinemaFilm`).
 
 ## DIAG, chasing a symptom
 

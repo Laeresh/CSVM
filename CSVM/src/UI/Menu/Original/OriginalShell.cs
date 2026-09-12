@@ -339,6 +339,7 @@ public sealed partial class OriginalShell
     private readonly Func<CSVM.Utils.ScreenList>? _screens;
     private readonly ControlsFeature? _controls;
     private readonly SliderControl _slider = new();
+    private readonly CinemaFilm _film = new();
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -631,6 +632,19 @@ public sealed partial class OriginalShell
             return new OriginalStep(Array.Empty<string>(), null, capturing.Poll());
         }
 
+        // A film in front of the screen owns the frame, and so does the tail of the press that
+        // ended one: the board never saw that press go down, so its release fires nothing. The
+        // swallowed frame asks for a redraw, the screen having changed unread (CinemaFilm).
+        if (_film.Up)
+        {
+            return new OriginalStep(Array.Empty<string>(), null, false);
+        }
+
+        if (_film.Swallows(commands.Pointer is { Pressed: true }))
+        {
+            return new OriginalStep(Array.Empty<string>(), null, true);
+        }
+
         var cues = new List<string>();
         MenuExit? exit = null;
         SyncCampaignField();
@@ -736,7 +750,7 @@ public sealed partial class OriginalShell
                     _focus[(int)_screen] = focus;
                 }
 
-                exit = Activate(rows[over], cues);
+                exit = Activate(rows[over], cues, byPointer: true);
                 changed = true;
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -814,7 +828,7 @@ public sealed partial class OriginalShell
         _focus[(int)_screen] = focus;
         if (exit == null && commands.Accept && focus >= 0 && rows[focus].Enabled)
         {
-            exit = Activate(rows[focus], cues);
+            exit = Activate(rows[focus], cues, byPointer: false);
             changed = true;
         }
         else if (exit == null && commands.Back)
@@ -1287,7 +1301,11 @@ public sealed partial class OriginalShell
         return -1;
     }
 
-    private MenuExit? Activate(OriginalRow row, List<string> cues)
+    // byPointer is whether the gesture is a pointer release on the row rather than the cursor's
+    // Accept. Only an edit box tells the two apart: a click in one puts the caret there and does
+    // nothing else, where Accept in it takes the box's own default button (MB.JM), which on the
+    // profile screen is CM_B_START (docs/formats/campaign-screens.md).
+    private MenuExit? Activate(OriginalRow row, List<string> cues, bool byPointer)
     {
         if (row.Kind != OriginalRowKind.ListRow)
         {
@@ -1298,6 +1316,11 @@ public sealed partial class OriginalShell
         if (_dialog != null)
         {
             AnswerDialog(row.Key);
+            return null;
+        }
+
+        if (byPointer && row.Kind == OriginalRowKind.TextField)
+        {
             return null;
         }
 

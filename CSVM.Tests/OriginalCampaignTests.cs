@@ -168,6 +168,36 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal("Nathan", campaign.Profile?.Name);
     }
 
+    // The box's own gesture, which is not a start: CAMPAIGN.SCRIPT commits from CM_B_START, from
+    // Enter in the box (the box names START as its default button) and from a second click on a
+    // filled roster row. A click in the box is none of the three, so it takes the caret and leaves
+    // the screen where it was, however full the box and the roster are.
+    [Fact]
+    public void AClickInTheNameBoxTakesTheCaretAndStartsNothingWhereEnterStillStarts()
+    {
+        _store.Save(CampaignProfileDef.NewProfile("Nathan"));
+        var shell = Shell(out var campaign, out _);
+        OpenCampaign(shell);
+        var nathan = shell.Rows[1];
+        Click(shell, nathan.X + 4f, nathan.Y + 4f);
+        Assert.Equal("Nathan", shell.RosterName);
+        var box = shell.Rows[0];
+        Assert.Equal(OriginalRowKind.TextField, box.Kind);
+
+        shell.Step(Pointer(box.X + 4f, box.Y + 4f, pressed: true, clicked: true));
+        Assert.Equal("ROW:0", shell.ArmedKey);
+        var step = shell.Step(Pointer(box.X + 4f, box.Y + 4f));
+        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
+        Assert.Null(campaign.Profile);
+        Assert.Equal("ROW:0", shell.FocusedKey);
+        Assert.Equal("Nathan", shell.RosterName);
+        Assert.Contains(OriginalCues.Click, step.Cues);
+
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Assert.Equal("Nathan", campaign.Profile?.Name);
+    }
+
     [Fact]
     public void TheBoxOpensOnTheLastPlayerSeatedAndDeletePlayerAsksWithTwoAnswersOpeningOnYes()
     {

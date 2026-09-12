@@ -35,3 +35,58 @@ public static class CinemaHandoff
         };
     }
 }
+
+/// <summary>One film in front of a screen, as the screen behind it reads the span: the frames the
+/// film owns, and the tail of the press that ended it. A skip is a press the film takes and the
+/// screen never sees go down, so without this the screen reads the release (a pointer) or the edge
+/// arriving with the hand-back (a key, a pad button) as a gesture of its own and fires whatever
+/// stands under the pointer or in the focus. <c>Flight/RocketTriggerLatch.cs</c> swallows the same
+/// still-held press on the flight side.</summary>
+public sealed class CinemaFilm
+{
+    // The play call has not returned yet. A continuation reaching us inside it is a film that was
+    // never put up (none was due, or the file would not read), so no press can be outstanding.
+    private bool _handing;
+
+    // A press the screen never saw go down has not been let go of yet.
+    private bool _tail;
+
+    /// <summary>Whether a film stands in front of the screen. Every frame belongs to the film
+    /// while one does: the screen behind it is not on show and takes no input, not even a press no
+    /// skip set reads.</summary>
+    public bool Up { get; private set; }
+
+    /// <summary>Plays a film in front of the screen: <paramref name="play"/> is the call that puts
+    /// one up, taking the continuation to run on the frame it stops, and <paramref name="then"/> is
+    /// what the screen does then. A <paramref name="play"/> that runs the continuation before it
+    /// returns put no film up and leaves nothing outstanding.</summary>
+    public void Play(Action<Action> play, Action then)
+    {
+        ArgumentNullException.ThrowIfNull(play);
+        ArgumentNullException.ThrowIfNull(then);
+        _handing = true;
+        Up = true;
+        play(() =>
+        {
+            _tail = !_handing;
+            Up = false;
+            then();
+        });
+        _handing = false;
+    }
+
+    /// <summary>Whether this frame is the tail of the press that ended a film, which the screen
+    /// then ignores whole. <paramref name="pointerHeld"/> is whether the pointer's button reads
+    /// down this frame: the pointer's tail lasts until it comes up, where every other press
+    /// arrives as an edge and is spent on the frame it lands on.</summary>
+    public bool Swallows(bool pointerHeld)
+    {
+        if (!_tail)
+        {
+            return false;
+        }
+
+        _tail = pointerHeld;
+        return true;
+    }
+}

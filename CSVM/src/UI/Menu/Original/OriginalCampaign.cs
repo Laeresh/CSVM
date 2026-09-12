@@ -227,7 +227,7 @@ public sealed partial class OriginalShell
 
         if (_campaign.ClosingCinema is { } cinema && _campaign.Profile is { } seated)
         {
-            cinema.OpenScrapbook(seated, () => OpenBook(seq));
+            _film.Play(then => cinema.OpenScrapbook(seated, then), () => OpenBook(seq));
             return true;
         }
 
@@ -1018,9 +1018,11 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The profile screen: the box and CONTINUE both start on the name in the box (Enter in the
-    // box is the script's own commit path), a roster row fills the box and a second press on the
-    // filled row starts (the double-click), DELETE PLAYER asks, CANCEL leaves.
+    // The profile screen: CONTINUE and Enter in the box both start on the name in the box (the box
+    // names CM_B_START as its default button, which is the script's own commit path), a roster row
+    // fills the box and a second press on the filled row starts (the double-click), DELETE PLAYER
+    // asks, CANCEL leaves. A click in the box reaches none of this: an edit box takes the caret and
+    // nothing else, which Activate rules for every box on every screen.
     private void ActivateRoster(OriginalRow row, int pageRow)
     {
         if (RosterEntry is not { } entry || _campaign == null)
@@ -1088,7 +1090,9 @@ public sealed partial class OriginalShell
     {
         if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated)
         {
-            cinema.OpenCabin(seated, () => ShowCampaign(OriginalScreen.CampaignCabin, keepFocus));
+            _film.Play(
+                then => cinema.OpenCabin(seated, then),
+                () => ShowCampaign(OriginalScreen.CampaignCabin, keepFocus));
             return;
         }
 

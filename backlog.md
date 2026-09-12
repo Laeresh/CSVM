@@ -742,7 +742,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   trace the intro's hand-back (`Session/CutsceneController.cs`, the episode's end) to the arming
   call, and pin the intro case in the latch's suite beside the pause case. *⚠ Traps:* the latch's
   own unit tests pass; the hole is in who calls it, not in its state machine. *Cross-refs:* `PT-93`
-  (the skipper flight), `BL-871` (the same release-after-skip leak on the menu side).
+  (the skipper flight); the menu side of the same leak is closed, the Original shell consuming a
+  skip's press through its release (`UI/CinemaHandoff.cs`'s `CinemaFilm`).
 
 - `BL-859` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A custom-built plane's flak lands on one wing in
   flight while the flight check shows it on both.** *Evidence:* reported at the controls: the campaign
@@ -2314,26 +2315,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   leave the airframe as it was. *⚠ Traps:* what each of the three answers does to the record is
   not on the screenshot; `CAP-53` films it. *Cross-refs:* `CAP-53`, `docs/org/hangar.md`.
 
-- `BL-871` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Skipping a campaign movie with a click or a pad
-  press fires the hidden board's item under the pointer or in focus.** *Evidence:* reported at the
-  controls: with the pointer resting where RETURN TO MAIN MENU sits, the click that ends the
-  campaign's movie also returns the player to the main menu; a pad press does the same to the
-  focused item. The cinema takes the press (`UI/CinemaSkips.cs`, `CinemaPress.LeftMouse`), the
-  board underneath is hidden during the film and fires on the release, which nothing tells it was
-  the tail of a press it never saw. *Fix shape:* the press that ends a cinema is consumed through
-  its release: the board ignores a release with no press of its own, the way
-  `Flight/RocketTriggerLatch.cs` swallows the still-held trigger in flight; pin it in the cinema
-  hand-off suite with a press during the film and a release after. *Cross-refs:* `BL-858` (the
-  flight-side twin), `UI/CinemaHandoff.cs`.
-
-- `BL-872` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The campaign roster's name box starts the
-  campaign on a single click when a row is selected.** *Evidence:* reported at the controls: with
-  a roster row already selected, one click into the name box starts. The decode of the profile
-  screen (`docs/org/menu-inventory.md`, `CampaignScreen.Roster`; `docs/formats/campaign-screens.md`)
-  has four starts: `CM_B_START`, Enter in the box, and a second click on the filled roster row;
-  a click into the box itself is not one. *Fix shape:* the name box's click focuses the box and
-  nothing else; pin in the campaign menu suite. *Cross-refs:* `CAP-52` (f) (the keyboard walk on
-  this screen).
+- `BL-875` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's campaign
+  screens take the key or pad press that skipped a chapter or closing film.** *Evidence:* a read of
+  CSVM's own code, the twin of the leak the Original shell no longer has. `LaunchMenu` polls its
+  seats every frame (`_slots[i].Seat.Source.Poll`) and reads `Accept` as an edge, while a film's
+  stop and its hand-off both run in the input flush ahead of that poll, so the press that ended the
+  film arrives on the frame the screen it opened is first live. The mouse half is probably clear:
+  the launchscreen reads the button as an `InputEvent` in `_UnhandledInput`, which the cinema's own
+  handler takes first. *Fix shape:* the Original shell's `CinemaFilm` (`UI/CinemaHandoff.cs`) holds
+  a film's span and the tail of the press that ended it; play Built-in's two films through one of
+  those from `CampaignFlow`'s doors, and pin it with a press spanning the hand-back. *⚠ Traps:*
+  nobody has seen this at the controls, the report behind the Original fix was Original's; confirm
+  the poll order against the film's stop before writing the fix. *Cross-refs:*
+  `UI/CinemaHandoff.cs`, `docs/verification.md`'s `METHOD-30`.
 
 - `BL-854` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The pause and
   load screens always draw the opening pin-up, where the original's campaign awards a keepsake per

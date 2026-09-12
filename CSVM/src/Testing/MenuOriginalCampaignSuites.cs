@@ -39,7 +39,8 @@ internal static class MenuOriginalCampaignSuites
         + "a scratch profile store: the Campaign row opens the profile screen, a character outside "
         + "the name rule and one inside it at the cap both type nothing and cue the box's reject "
         + "sound, typed frames name a "
-        + "player and Enter seats them on the cabin, the briefing runs its reveal on the presentation's "
+        + "player, a click in the name box takes the caret and starts nothing, "
+        + "Enter seats them on the cabin, the briefing runs its reveal on the presentation's "
         + "clock and starts its narration through the host's audio once, REPLAY BRIEFING starts it "
         + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
         + "from a blank map with the narration starting over, the flight check walks two debug-joined "
@@ -157,6 +158,20 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.RosterName == Pilot && audio.Cues.Count == Pilot.Length && audio.Cues[0] == OriginalCues.Text,
             $"typed frames fill the box and cue the keystroke sound per character ({shell.RosterName}, {audio.Cues.Count})");
         ctx.Check(store.Load(Pilot) == null, $"nothing is written before the commit");
+        var box = Row(shell, "ROW:0");
+        ctx.Check(box is { Kind: OriginalRowKind.TextField }, $"the box's row is the screen's edit box ({box?.Kind})");
+        if (box != null)
+        {
+            // The box commits from Enter and from CM_B_START, never from the click that puts the
+            // caret in it: CAMPAIGN.SCRIPT's three starts are the button, Enter in the box and a
+            // second click on a filled roster row.
+            Click(host, seat, Pointer(fit, box.X + 4f, box.Y + 4f, pressed: true, clicked: true));
+            ctx.Check(
+                shell.Screen == OriginalScreen.CampaignRoster && shell.FocusedKey == "ROW:0"
+                && shell.RosterName == Pilot && campaign.Profile == null,
+                $"a click in the name box takes the caret and starts nothing ({shell.Screen}, {shell.FocusedKey}, {shell.RosterName})");
+        }
+
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && campaign.Profile?.Name == Pilot,
             $"Enter in the box seats the new player on the cabin ({shell.Screen}, {campaign.Profile?.Name})");

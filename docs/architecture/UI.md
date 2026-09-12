@@ -242,13 +242,14 @@ and would otherwise sit through a 145-second film; it counts only where pad inpu
 cinema's set is, and why they differ, is [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/UI/CinemaHandoff.cs
-The two things every cinema flow shares: `CinemaPlay`, the shape of the call that puts a film on
-screen, which `Session/Launcher.cs` satisfies by handing over `PlayCinema` itself, and `Once`, which
-wraps the continuation a film hands off to. A skip can land on the frame the film plays out and both
-paths end it, so the next screen opens once however many times the cinema reports it stopped; the
-chapter films and the closing film go through that one latch, and the boot block, whose
-continuations start the next film, chains unwrapped. Which presses end a film is
-`CinemaSkips.cs`'s, not this file's.
+What every cinema flow shares. `CinemaPlay` is the shape of the call that puts a film on screen, which
+`Session/Launcher.cs` satisfies by handing over `PlayCinema` itself. `Once` wraps the continuation a film hands off to: a
+skip can land on the frame the film plays out and both paths end it, so the next screen opens once however many times the
+cinema reports it stopped; the boot block, whose continuations start the next film, chains unwrapped. `CinemaFilm` is for
+the screen a film stands in front of rather than a flow that chains them: `Play` spans one film, `Up` says the film owns
+the frame, and `Swallows` says this frame is the tail of the press that ended it, the pointer's lasting until the button
+comes up and every other press spent where it lands. A screen without it reads the release of a press it never saw go
+down as a gesture of its own. Which presses end a film is `CinemaSkips.cs`'s, not this file's.
 
 ## src/UI/BootSequence.cs
 `fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
@@ -799,14 +800,14 @@ missions with every objective bit set, plus the scratch build store the export a
 `user://Profiles` or `user://Planes`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
-The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free
-Flight, player-setup, Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer
-injected. It owns the top level composed from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options
-screen over the decoded Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
-screens are its own partials, below. `Step` applies one seat's frame, `Compose` is the screen as a `ComposedBoard` whose
-backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here, `OriginalSlider` among them.
-A pointer press arms a row and only the release still on it activates (`ArmedKey`); the pointer's bitmap answers an
-enter or leave (`PointerLive`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
+Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
+from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome, and the messagebox
+idiom every refusal and confirm goes through; the other screens are its own partials, below. `Step` applies one seat's frame, `Compose` is
+the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
+`OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
+caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
+in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalDropList.cs
 The one rule every open dropdown of the Original shell follows, a partial of it: a page hands over its key, its items,

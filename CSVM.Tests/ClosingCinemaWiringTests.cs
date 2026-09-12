@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -15,7 +16,8 @@ namespace CSVM.Tests;
 /// the scrapbook in each, the book arriving on the frame the film stops, an unfinished campaign
 /// reaching the book with no film, and one instance serving both so the film plays once. A campaign
 /// whose feature carries no closing cinema opens the book exactly as it always did, which is what
-/// every suite and every golden gets.
+/// every suite and every golden gets. The click that skips the film is spanned across the hand-back,
+/// so the book it opens fires nothing on the release.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ClosingCinemaWiringTests : IDisposable
@@ -128,6 +130,26 @@ public class ClosingCinemaWiringTests : IDisposable
         Assert.True(shell.ShowScrapbook("Zachary", 2));
 
         Assert.Equal(0, closing.Plays);
+        Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
+    }
+
+    // The closing film hands back through the same latch the chapter films do: the press that skips
+    // it is consumed through its release, so the book it opens fires nothing under the pointer.
+    [Fact]
+    public void TheClickThatSkipsTheClosingFilmFiresNothingOnTheBookItOpens()
+    {
+        _store.Save(Flown("Zachary", CampaignSequence.MissionCount));
+        var closing = new Recorder();
+        var shell = Shell(closing, out _);
+        shell.OpenCampaignOver(_store);
+        Assert.True(shell.ShowScrapbook("Zachary", 23));
+
+        closing.Stop();
+        Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
+        var cabin = shell.Rows.Single(r => r.Key == nameof(BoardButton.ReturnToCabin));
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(cabin.X + 3f, cabin.Y + 3f, true, true) });
+        Assert.Equal(string.Empty, shell.ArmedKey);
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(cabin.X + 3f, cabin.Y + 3f, false, false) });
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
     }
 
