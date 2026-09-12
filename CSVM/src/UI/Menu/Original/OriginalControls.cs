@@ -599,7 +599,7 @@ public sealed partial class OriginalShell
             return;
         }
 
-        float top = page.LineY(0, _keysTop);
+        float top = page.WindowY;
         float height = page.Rows * page.ItemHeight;
         float trackHeight = height - (2f * page.ArrowHeight);
         int at = Math.Clamp(_keysTop, 0, count - page.Rows);
@@ -775,7 +775,7 @@ public sealed partial class OriginalShell
         var up = StripArt(list?.Art ?? Array.Empty<string>(), 1);
         var down = StripArt(list?.Art ?? Array.Empty<string>(), 2);
         var bar = StripArt(list?.Art ?? Array.Empty<string>(), 0, 1);
-        float top = page.LineY(0, _keysTop);
+        float top = page.WindowY;
         float trackHeight = (page.Rows * page.ItemHeight) - (2f * page.ArrowHeight);
         float thumbY = ListWindow.ThumbYFor(top + page.ArrowHeight, trackHeight, page.ThumbHeight,
             Math.Clamp(_keysTop, 0, count - page.Rows), count - page.Rows);
@@ -841,6 +841,11 @@ public sealed partial class OriginalShell
         float ControlBX, float ControlBWidth, float HeadY,
         float BarX, float ArrowWidth, float ArrowHeight, float ThumbHeight)
     {
+        // The window's own first line, where the scrollbar stands. ⚠ Do not anchor the bar at
+        // LineY(0, top): a scrolled-away first row's line sits above the window, so the bar would
+        // slide up with the list instead of holding still under its thumb.
+        public float WindowY => ListY + ItemHeight;
+
         // The category heading stands on the window's first line, so a row sits one line below it.
         public float LineY(int row, int top) => ListY + ((row - top + 1) * ItemHeight);
     }

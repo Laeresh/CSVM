@@ -12,7 +12,8 @@ namespace CSVM.Testing;
 /// Original's rebinding pages through the presentation boundary over the install's decoded layout:
 /// the Preferences page's CONTROLS door, the CONTROLS page's seat row and KEYS AND BUTTONS door,
 /// the KEYS page's tabs and control cells, a capture armed on a cell and abandoned with Escape,
-/// a second capture that binds, and ACCEPT CHANGES writing the seat's own keymap file.
+/// a second capture that binds, ACCEPT CHANGES writing the seat's own keymap file, and the list's
+/// scrollbar over a category longer than its window.
 /// </summary>
 internal static class MenuOriginalControlsSuites
 {
@@ -27,8 +28,10 @@ internal static class MenuOriginalControlsSuites
         + "CHANGES, a click on a control cell arms a capture on that row's own action and slot, "
         + "Escape abandons it with the live keymap untouched, a second capture binds the key it is "
         + "given, ACCEPT CHANGES returns to the CONTROLS page and writes player 1's keymap file "
-        + "carrying it, a tab press stands another category, and CANCEL CHANGES on the CONTROLS "
-        + "page returns to the Options screen")]
+        + "carrying it, the scrollbar of a category longer than its window keeps its top and its "
+        + "arrows on the window's first line while only the thumb walks the track, a tab press "
+        + "stands another category, and CANCEL CHANGES on the CONTROLS page returns to the Options "
+        + "screen")]
     internal static void MenuOriginalControls(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -78,6 +81,7 @@ internal static class MenuOriginalControlsSuites
             var controls = host.Features.Get<ControlsFeature>();
             Doors(ctx, host, seat, shell, fit, controls);
             Capture(ctx, host, seat, shell, fit, controls, written);
+            Scrollbar(ctx, host, seat, shell, fit);
             Leave(ctx, host, seat, shell, fit, exits);
         }
         finally
@@ -179,6 +183,49 @@ internal static class MenuOriginalControlsSuites
             $"the saved keymap read back carries the rebind on {BindingLabels.Name(action)}");
     }
 
+    // The list's scrollbar over the one category longer than its window: the bar spans the window,
+    // so its top and its arrows hold still while the list scrolls under them and the thumb alone
+    // walks the track. Ends back on the CONTROLS page, which is where it was entered from.
+    private static void Scrollbar(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
+    {
+        Click(host, seat, shell, fit, OriginalShell.KeysDoorKey);
+        Click(host, seat, shell, fit, OriginalShell.KeysTabKey(OriginalShell.KeysTabCount - 1));
+        if (KeysWindow(shell) is not { } head)
+        {
+            ctx.Check(false, $"the last category's list is longer than its window and carries a bar");
+            return;
+        }
+
+        ctx.Check(head.Count > head.Rows,
+            $"the last category is longer than its window ({head.Count} rows over {head.Rows})");
+        float arrowHeight = head.TrackTop - head.Y;
+        ctx.Check(Same(head.Y, Row(shell, OriginalShell.KeysCellKey(0, second: false))?.Y ?? -1f),
+            $"its bar stands on the window's first line ({head.Y})");
+
+        Wheel(host, seat, fit, head, head.Count);
+        ctx.Check(shell.KeysTop == head.LastTop,
+            $"a wheel step scrolls the list to its last window (top {shell.KeysTop} of {head.LastTop})");
+        if (KeysWindow(shell) is not { } end)
+        {
+            ctx.Check(false, $"the scrolled list still carries its bar");
+            return;
+        }
+
+        ctx.Check(Same(end.Y, head.Y) && Same(end.TrackTop, head.TrackTop),
+            $"the bar's top and its track stay put over the scrolled list ({end.Y} was {head.Y})");
+        ctx.Check(Same(end.Y, Row(shell, OriginalShell.KeysCellKey(shell.KeysTop, second: false))?.Y ?? -1f),
+            $"which is still the window's first line, now the tab's row {shell.KeysTop}");
+        ctx.Check(end.ThumbY > head.ThumbY
+            && Same(end.ThumbY, end.TrackTop + end.TrackHeight - end.ThumbHeight),
+            $"and the thumb alone walks the track, flush at its foot ({head.ThumbY} to {end.ThumbY})");
+        var tops = BarTops(shell.Compose(), end.ThumbX);
+        ctx.Check(tops.Count >= 2 && Same(Lowest(tops), end.Y) && Holds(tops, end.ThumbY)
+            && Highest(tops) <= end.Y + end.Height - arrowHeight + 0.5f,
+            $"the drawn bar's marks all stand inside the window, its head on that line ({tops.Count} marks)");
+        Click(host, seat, shell, fit, OriginalShell.KeysCancelKey);
+    }
+
     // The way out: a tab press stands another category, and the CONTROLS page's CANCEL CHANGES
     // returns to the Options screen without an exit.
     private static void Leave(
@@ -230,6 +277,90 @@ internal static class MenuOriginalControlsSuites
         }
 
         return null;
+    }
+
+    // The KEYS page's action list as the pointer sees it, or null while the standing tab fits its
+    // window and the page draws no bar.
+    private static ListWindow? KeysWindow(OriginalShell shell)
+    {
+        foreach (var list in shell.Lists)
+        {
+            if (list.Key == OriginalShell.KeysListKey)
+            {
+                return list.Window;
+            }
+        }
+
+        return null;
+    }
+
+    // Every picture or fill standing in the scrollbar's own column, by its top, so the arrows and
+    // the thumb are read wherever the page's art puts them.
+    private static List<float> BarTops(ComposedBoard board, float barX)
+    {
+        var tops = new List<float>();
+        foreach (var picture in board.Pictures)
+        {
+            if (Same(picture.X, barX))
+            {
+                tops.Add(picture.Y);
+            }
+        }
+
+        foreach (var fill in board.Fills)
+        {
+            if (Same(fill.X, barX))
+            {
+                tops.Add(fill.Y);
+            }
+        }
+
+        return tops;
+    }
+
+    private static bool Same(float a, float b) => Math.Abs(a - b) < 0.5f;
+
+    private static bool Holds(List<float> tops, float y)
+    {
+        foreach (float top in tops)
+        {
+            if (Same(top, y))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static float Lowest(List<float> tops)
+    {
+        float y = float.MaxValue;
+        foreach (float top in tops)
+        {
+            y = Math.Min(y, top);
+        }
+
+        return y;
+    }
+
+    private static float Highest(List<float> tops)
+    {
+        float y = float.MinValue;
+        foreach (float top in tops)
+        {
+            y = Math.Max(y, top);
+        }
+
+        return y;
+    }
+
+    // A wheel of that many rows at the middle of a list's window, in window pixels.
+    private static void Wheel(MenuHost host, ScriptedSeat seat, BoardFit fit, ListWindow window, int steps)
+    {
+        float x = fit.X(window.X + (window.Width / 2f));
+        float y = fit.Y(window.Y + (window.Height / 2f));
+        Press(host, seat, new MenuCommands { Pointer = new MenuPointer(x, y, false, false, steps) });
     }
 
     // One click on a row by key: the press arms it and the release still on it fires, so a click is
