@@ -53,11 +53,12 @@ public sealed class TurretController
     /// per tick on a lease of zero instead (docs/org/weaponFire.md).</summary>
     public const float VoiceLeaseSeconds = 0.5f;
 
-    /// <summary>How much of an emplacement's line-of-sight ray, off its own muzzle, is not tested:
-    /// the body the gun stands in, which the original never counts as its own cover. Past it the
-    /// same hull DOES block. Clear of the mount's own bodies, which engulf a ring out to about
-    /// 1 m, and under the 2 m at which a hull skin stands over one (docs/formats/turrets.md
-    /// "Acquiring").</summary>
+    /// <summary>How much of an emplacement's line-of-sight ray, off its own node, is not tested:
+    /// the body a hull ring stands in, which the original never counts as its own cover. Past it
+    /// the same hull DOES block. Clear of a ring's own bodies, which engulf it out to about 1 m,
+    /// and under the 2 m at which a hull skin stands over one. ⚠ It does not clear a ground gun's
+    /// rig, which answers out to 6 m; that gun excludes its own rig by RID instead
+    /// (docs/formats/turrets.md "Acquiring").</summary>
     public const float MountSkirtM = 1.5f;
 
     private readonly FlightController? _host;
@@ -445,18 +446,26 @@ public sealed class TurretController
         world.Ray(from, to, CollisionLayers.World, null, out _);
 
     /// <summary>An emplacement's line-of-sight rule, as a query a suite can sweep bearing by
-    /// bearing: the world-layer ray, blind to its first <see cref="MountSkirtM"/> so the thing the
-    /// gun is bolted to is never its own cover, and solid over everything past that.
-    /// ⚠ Never separate the mount from its hull by node identity instead. A mounting group holds
-    /// the far side of the same hull, which is how a ring shoots through it.</summary>
+    /// bearing: the world-layer ray, blind to its first <see cref="MountSkirtM"/>, solid over
+    /// everything past that except <paramref name="exclude"/>, which a gun on the world root fills
+    /// with its own rig (docs/formats/turrets.md "Acquiring": the skirt clears a ring, not a gun).
+    /// ⚠ Never pass a hull ring's mounting section. A mounting group holds the far side of the
+    /// same hull, which is how a ring shoots through it.</summary>
     public static bool WorldBlocksEmplacementLine(PhysicsDirectSpaceState3D space, Vector3 from,
-        Vector3 to)
+        Vector3 to, Godot.Collections.Array<Rid>? exclude = null)
     {
         var span = to - from;
         float len = span.Length();
-        return len > MountSkirtM
-            && space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                from + span * (MountSkirtM / len), to, CollisionLayers.World)).Count > 0;
+        if (len <= MountSkirtM)
+        {
+            return false;
+        }
+        var query = PhysicsRayQueryParameters3D.Create(from + span * (MountSkirtM / len), to, CollisionLayers.World);
+        if (exclude is { Count: > 0 })
+        {
+            query.Exclude = exclude;
+        }
+        return space.IntersectRay(query).Count > 0;
     }
 
     /// <summary>Writes the team the acquisition gate runs on, for the fan a zeppelin record's team
@@ -627,6 +636,11 @@ public sealed class TurretController
         return _platformColliders;
     }
 
+    /// <summary>Whether this gunner's own sight-line rule reads <paramref name="target"/> as
+    /// blocked right now, uncached. Internal for the suite that proves a ground gun sees past its
+    /// own rig and not past a stranger's.</summary>
+    internal bool OwnSightLineBlocked(Vector3 target) => WorldRayBlocked(WorldPosition, target + Vector3.Up * 0.2f);
+
     private static float AngularDistance(float a, float b) =>
         Mathf.Abs(Mathf.Wrap(a - b, -180f, 180f));
 
@@ -745,10 +759,13 @@ public sealed class TurretController
     }
 
     // FlightController.WorldBlocksLine's twin for a gunner with no host rig, against the space its
-    // own node lives in.
+    // own node lives in. A gun whose platform is its own site stands on the world root, so its
+    // platform colliders are its own rig and nothing of anyone else's; a ring's platform is a hull
+    // section and stays in the cast.
     private bool WorldRayBlocked(Vector3 from, Vector3 to) =>
         (YawNode ?? PitchNode).GetWorld3D()?.DirectSpaceState is { } space
-        && WorldBlocksEmplacementLine(space, from, to);
+        && WorldBlocksEmplacementLine(space, from, to,
+            _site != null && ReferenceEquals(_platform, _site) ? PlatformColliderRids() : null);
 
     // The bounded slew: the barrel chases the clamped aim direction at SlewRate per second,
     // renormalised each tick, snapping whole once one frame covers the turn. Same degenerate
