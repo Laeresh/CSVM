@@ -653,6 +653,23 @@ against `BL-389` rather than against the wash routing.
   *Blocks:* `BL-537`. ⚠ Raise only a root that logs a recycle, never the default; the three gun
   roots stay at 1, and a root sized 0 clamps to 1.
 
+### CM07 (C1/M02) · the fort's flak, external view
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:6
+```
+
+- `PT-142` `[Own]` **The five AA guns at the fort open fire once the mission wakes them, on a
+  plane anywhere above them.** A ground emplacement's sight line used to strike its own mount past
+  the 1.5 m skirt in every direction, so the guns tracked and never fired; a gun standing on the
+  world root now excludes its own rig from the cast (`git log --grep=BL-830`). Fly the mission to
+  `OBJECTIVE1`'s `WAKEUP_TURRETS`, then circle the fort at a few hundred metres, steep overhead and
+  low across, and watch the guns from the external view. *Look for:* tracer and muzzle flash from
+  every gun that is pointing at you, at the authored one to two rounds a second in bursts of two to
+  four seconds; a gun that tracks you and stays silent for more than a bored pause of five seconds
+  reopens the item. *Blocks:* nothing.
+
+
 ### CM01 (C3/M01) · two to four pilots — join, flight check, death and skip
 
 ```powershell

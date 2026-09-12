@@ -727,31 +727,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
 
-- `BL-830` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A ground AA emplacement's sight line is blocked
-  by its own mount, so the world AA belt never fires in a live session.** *Evidence:* the
-  line-of-sight cast for a hostless emplacement starts at the gun's yaw node, inside the mount, and
-  skips only `TurretController.MountSkirtM` (1.5 m, measured on zeppelin rings). An `aagun` mount is
-  far larger: probed from a `--fly --chapter=C1 --mission=M02 --wake-turrets --det` session, all
-  five `aagun` emplacements read `Blocked`, and aagun32's ray toward targets at 16 bearings and
-  elevations (6 to 64 degrees) struck its own `healthy/l2/g20/col`, `gun/col` or `col_buildings`
-  at 1.67 m to 5.69 m every time. `world-turrets` and `c1-aa-guns` pass only because the suite
-  harness's physics space is missing two of the mount's three enabled shapes in a single-process
-  run (`BL-831`); a four-shard run sometimes has them, which is the `world-turrets` failure that
-  reverted `BL-696`'s close. *Fix shape:* for an emplacement whose platform is its own site
-  (`PlatformOf` returns the site when its parent is the world root), exclude
-  `PlatformColliderRids()` from the sight-line cast in `WorldRayBlocked`; keep the skirt rule for
-  rings on hulls, whose section holds the far side of the zeppelin. Then rewrite the paragraph in
-  `docs/formats/turrets.md` that says the 1.5 m clears every standalone entry, and make
-  `world-turrets` cast with the mount present so the suite can fail. *⚠ Traps:* the previous
-  diagnosis blamed the gun's ATTACK/BORED windows and the uncached first cast; both were ruled out
-  with a ray trace, and the parked `bl-696-parked` branch's clock step and BORED pin are not a fix.
-  Casting from the muzzle does not help alone: the firepoint sits on the gun's own collision
-  surface (a hit at 0.009 m). Do not fix it by lengthening the skirt: 6 m would let a ring shoot
-  through its own hull skin at 2 m. *Playtest after fix:* CM07 (C1/M02), fly over the fort after
-  `WAKEUP_TURRETS` and watch for flak; `world-turrets` and `c1-aa-guns` must pass under `-Shards 4`
-  three times running. *Cross-refs:* `BL-831` (the harness gap that hid this), `BL-696` (parked
-  on it), `docs/formats/turrets.md` ("Acquiring"), `docs/org/targeting.md`.
-
 ## Flight model & collision physics
 
 - `BL-447` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The mouse-flying arm's `is_autogyro` roll/yaw exchange has
@@ -2781,7 +2756,8 @@ usual.
   pyramid shape of `col` answered no ray, overlap or sphere query while `CollisionShape3D.Disabled`
   was false, `PhysicsServer3D.BodyGetShapeCount` listed them and the body was in the space; the
   72-face base shape of the same body did answer. In some four-shard runs of the same list all
-  three answered, which is how `BL-830` surfaced as a shard-only failure. Node transforms written
+  three answered, which is how the ground AA guns' self-blocked sight line surfaced as a
+  shard-only failure (`git log --grep=BL-830`). Node transforms written
   during a suite never reach the physics server either (`BodyGetState` stays at the build pose
   while the barrel slews), which the existing `ForceUpdateTransform` in `world-query-reuse` works
   around one node at a time. The mechanism behind the missing shapes is not found; it is not the
@@ -2792,8 +2768,9 @@ usual.
   brings the physics space in step with the scene before a suite casts, and have `world-turrets`
   assert the mount is present. *⚠ Traps:* a suite that passes alone and fails sharded is not
   load flakiness by default; trace the ray. A live session (`--fly` with `--log-file` and a
-  `Log.Info` probe) is the reference for what physics holds. *Cross-refs:* `BL-830` (the bug this
-  hid), `docs/verification.md`, `CSVM/src/Testing/TestHarness.cs` (`WithPrivateWorld`).
+  `Log.Info` probe) is the reference for what physics holds. *Cross-refs:* `PT-142` (the flak
+  flight the fix this hid still owes), `docs/verification.md`, `CSVM/src/Testing/TestHarness.cs`
+  (`WithPrivateWorld`).
 
 ## Misc
 
