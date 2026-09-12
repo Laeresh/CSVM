@@ -74,11 +74,14 @@ public sealed partial class OriginalShell
     public int AirframeTop => _airframeTop;
 
     /// <summary>Whether Start on a free pad joins a seat on the standing screen: the four screens
-    /// that launch a flight. The two sortie screens give a joined seat an aircraft column, the
-    /// flight check a check of its own; Instant Action opens so a second pilot can join before
-    /// FLY MISSION rather than nowhere at all. Everywhere else a pad's Start does nothing.</summary>
+    /// that launch a flight, and the CONTROLS page. The two sortie screens give a joined seat an
+    /// aircraft column, the flight check a check of its own; Instant Action opens so a second pilot
+    /// can join before FLY MISSION rather than nowhere at all; the CONTROLS page opens because its
+    /// seat chooser is the only door to a second player's keymap. Everywhere else a pad's Start
+    /// does nothing.</summary>
     public bool JoiningOpen =>
-        _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight or OriginalScreen.InstantAction or OriginalScreen.CampaignFlightCheck;
+        _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight or OriginalScreen.InstantAction
+            or OriginalScreen.CampaignFlightCheck or OriginalScreen.ControlsPrefs;
 
     private bool IsSortie => _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight;
 

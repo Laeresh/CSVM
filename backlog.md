@@ -591,32 +591,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   numbers does not change that, and must not be used to try to.
   *Cross-refs:* `PT-120` (the pad sitting that judges the three), `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
-- `BL-696` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Original presentation has no way into the rebinding screen, so the
-  keymap is editable in Built-in alone.** *Decided:* the door is built, and it is a fidelity fix
-  rather than a divergence. The author settled it at the controls over `PLAN-M5-polish-13`'s closing
-  sortie: "The original has a binding screen in the Prefences: 'Controls' with multiple sub screens.
-  We even have a greyed out button in our Prefences screen". *Evidence (traced):* `PF_B_CONTROLS` draws disabled
-  (`CSVM/src/UI/Menu/Original/OriginalShell.cs:178`), and the two pages behind it are decoded and
-  unbuilt: `ControlsPrefs` (12 rows, layout only) and `Keys` behind `CP_B_KEYS` (17 rows, the
-  composition of all seven category tabs, with `KB_B_ACCEPTCHANGES` / `KB_B_CANCELCHANGES` returning
-  to `ControlsPrefs`) — `docs/org/menu-inventory.md`:392-394, :482-483. Both were put out of scope of
-  the menu plan because no shared option stood behind them; `ControlsFeature` is now that option, so
-  the reason has expired. The feature, the capture, the staged Accept/Cancel, the steal rule and the
-  persistence are all shared and built, so what is missing is the presentation's screen graph alone.
-  *Fix shape:* the two pages over the extracted artwork, the seven tabs, the two control columns, the
-  three buttons, and `PF_B_CONTROLS` wired live. The Keys page's exit pair is authored the other way
-  round from every other leaf's, `KB_B_CANCELCHANGES` at X=202 left of `KB_B_ACCEPTCHANGES` at X=511
-  on one line at Y=550 (`extracted/rof/menu_layout.json`), which is the order `CAP-51` t=96 shows;
-  take it from the data rather than from the sibling pages.
-  *⚠ Traps:* **The seven tabs are the original's action groups, not this port's three input
-  contexts.** Movement, Throttle, Weapons, Targeting, Views 1, Views 2 and Other have no home for the
-  menu and free-camera actions, which the original does not bind at all, so a faithful tab strip
-  strands two contexts and needs a decision rather than a mapping. **Control A and Control B are
-  positions in a four-slot row, not two fields** (`docs/org/input.md`), and this port holds an
-  unbounded list: Built-in shows four and appends "+N more", while two authored columns would hide
-  bindings, which is the trap `BL-398`'s screen was written against.
-  *Cross-refs:* `BL-296`, `BL-398`, `docs/org/menu-inventory.md`, `docs/org/input.md`,
-  `docs/menu-presentations.md`.
 
 - `BL-399` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
   undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the

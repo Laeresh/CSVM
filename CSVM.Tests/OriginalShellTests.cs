@@ -482,7 +482,7 @@ public class OriginalShellTests
         // The logo and the plate are the backdrop, not pictures. A board draws its fills between the
         // two layers, so a plate among the pictures would paint over the focused row's own mark and
         // the page would show no focus at all.
-        Assert.Equal(new[] { "PM_Logo.png", "PP_ApBack.png" }, board.Backdrop.Select(p => p.Art.Name));
+        Assert.Equal(new[] { "PM_Flag.MPG", "PM_Logo.png", "PP_ApBack.png" }, board.Backdrop.Select(p => p.Art.Name));
         Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_ApBack.png");
         Assert.Contains(board.Lines, l => l.Text == "AUDIO" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Master" && l.X == 130f && l.Y == 250f && l.Width == 112f);
@@ -888,8 +888,9 @@ public class OriginalShellTests
 
         var board = shell.Compose();
         // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its
-        // fills between the two layers, so a plate among the pictures buries every focus mark.
-        Assert.Equal(new[] { "PM_Logo.png", "PP_GoBack.png" }, board.Backdrop.Select(p => p.Art.Name));
+        // fills between the two layers, so a plate among the pictures buries every focus mark. The
+        // leaf authors no movie row, so the Preferences page's own runs under it.
+        Assert.Equal(new[] { "PM_Flag.MPG", "PM_Logo.png", "PP_GoBack.png" }, board.Backdrop.Select(p => p.Art.Name));
         Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_GoBack.png");
         Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
@@ -942,7 +943,7 @@ public class OriginalShellTests
         var board = shell.Compose();
         // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its
         // fills between the two layers, so a plate among the pictures buries every focus mark.
-        Assert.Equal(new[] { "PM_Logo.png", "PP_VpBack.png" }, board.Backdrop.Select(p => p.Art.Name));
+        Assert.Equal(new[] { "PM_Flag.MPG", "PM_Logo.png", "PP_VpBack.png" }, board.Backdrop.Select(p => p.Art.Name));
         Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_VpBack.png");
         Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Monitor" && l.X == 130f && l.Y == 245f && l.Width == 90f);

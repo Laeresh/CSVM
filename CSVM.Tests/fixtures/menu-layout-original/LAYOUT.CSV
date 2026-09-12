@@ -109,6 +109,47 @@ VP_D_Effects=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_Dro
 VP_T_ShadowsTitle=T,IDS_VP_SHADOWS_TITLE,130,425,50,162,20,<TCOLOR>,0
 VP_T_ShadowsDESC=T,IDS_VP_SHADOWS_DESC,340,425,50,0,0,<TCOLOR>,0
 
+;The CONTROLS page behind the Preferences page's fourth door: the shipped section's keys and both
+;return edges on invented lines and art, with the Controller Type dropdown the seat chooser takes,
+;the Mouse Sensitivity slider the page does not draw, and the KEYS AND BUTTONS door.
+[@ControlsPrefs@]
+V1=TCOLOR,0xFFFFDDC4
+CP_BACKGROUND=P,PP_CpBack.png,100,200,0,1,0,1,0
+CP_B_CANCELCHANGES=B,PP_B_Cancel.png,450,470,0,0,Preferences,0x1020,1,,,,,,
+CP_B_ACCEPTCHANGES=B,PP_B_Accept.png,200,470,0,0,Preferences,0x1020,1,,,,,,
+CP_B_KEYS=B,PP_B_Keys.png,110,420,0,0,Keys,0x1000,1,,,,,,
+CP_T_TITLE=T,IDS_CP_TITLE,120,220,50,200,28,0XFFC0BAAD,1
+CP_T_JoystickTitle=T,IDS_CP_JOYSTICK_TITLE,130,285,0,170,20,<TCOLOR>,0
+CP_T_MouseTitle=T,IDS_CP_MOUSE_TITLE,130,355,0,170,20,<TCOLOR>,0
+CP_T_JoystickDesc=T,IDS_CP_JOYSTICK_DESC,340,295,0,310,40,<TCOLOR>,0
+CP_T_MouseDesc=T,IDS_CP_MOUSE_DESC,340,365,0,310,40,<TCOLOR>,0
+CP_T_KeysDesc=T,IDS_CP_KEYS_DESC,380,420,0,285,40,<TCOLOR>,0
+CP_D_Fly=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,128,305,0,175,17,4
+CP_S_MOUSE=Z,136,381,100,1,100,50,PP_B_SliderSlot.png,PP_B_Slider.png,0,-10,1,-10
+
+;The KEYS AND BUTTONS page behind the CONTROLS page's own door: the seven category strips on one
+;invented pitch, the three column heads, the listbox whose window and pitch the rows take, and the
+;exit pair authored the other way round from every other leaf's, CANCEL left of ACCEPT.
+[@Keys@]
+V1=TCOLOR,0xFFFFDDC4
+KB_BACKGROUND=P,PP_KbBack.png,10,200,0,1,0,1,0
+KB_B_CANCELCHANGES=B,PP_B_Cancel.png,200,540,0,0,ControlsPrefs,0x1000,1,,,,,,
+KB_B_ACCEPTCHANGES=B,PP_B_Accept.png,500,540,0,0,ControlsPrefs,0x1000,1,,,,,,
+KB_B_RESET=B,PP_B_Reset.png,185,495,0,0,,0x1000,0,,,,,,
+KB_B_CAT1=B,PP_B_Large.png,35,280,0,0,,,,,,,,,
+KB_B_CAT2=B,PP_B_Large.png,35,310,0,0,,,,,,,,,
+KB_B_CAT3=B,PP_B_Large.png,35,340,0,0,,,,,,,,,
+KB_B_CAT4=B,PP_B_Large.png,35,370,0,0,,,,,,,,,
+KB_B_CAT5=B,PP_B_Large.png,35,400,0,0,,,,,,,,,
+KB_B_CAT6=B,PP_B_Large.png,35,430,0,0,,,,,,,,,
+KB_B_CAT7=B,PP_B_Large.png,35,460,0,0,,,,,,,,,
+KB_T_TITLE=T,IDS_KB_TITLE,120,220,50,200,28,0XFFC0BAAD,1
+KB_T_COMMANDTITLE=T,IDS_KB_COMMAND_TITLE,195,280,50,220,20,<TCOLOR>,0
+KB_T_CONTTITLEA=T,IDS_KB_CONTA_TITLE,450,280,50,180,20,<TCOLOR>,0
+KB_T_CONTTITLEB=T,IDS_KB_CONTB_TITLE,640,280,50,170,20,<TCOLOR>,0
+KB_T_DEFAULTDESC=T,IDS_KB_DEFAULT_DESC,440,500,50,340,40,0XFFC0BAAD,0
+KB_L_Controls=L,PP_B_KbBar.png,PP_B_KbUp.png,PP_B_KbDown.png,200,300,0,600,16,12
+
 [@Credits@]
 CR_BackGround=P,PC_Back.jpg,0,0,1,1,0,0,0
 CR_B_Exit=B,PC_B_Done.png,650,550,0,0,MainMenu,0x1000,1,,,,,,
