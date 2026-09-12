@@ -81,23 +81,17 @@ public sealed class BootSequence
     // one would teach them the opposite right before a 145-second film.
     private const CinemaSkip Keys = CinemaScreen.BootKeys;
 
-    private readonly PlayFilm _film;
+    private readonly CinemaPlay _film;
     private readonly ShowStill _still;
     private readonly DropStill _drop;
 
     /// <summary>Builds the sequence over the three calls that change what is on screen.</summary>
-    public BootSequence(PlayFilm film, ShowStill still, DropStill drop)
+    public BootSequence(CinemaPlay film, ShowStill still, DropStill drop)
     {
         _film = film;
         _still = still;
         _drop = drop;
     }
-
-    /// <summary>How a film reaches the screen: its name, the continuation to run on the frame it
-    /// stops (played out or skipped), and the presses that end it early.
-    /// <c>Session/Launcher.cs</c>'s <c>PlayCinema</c> has this shape; a suite hands over a stand-in
-    /// that records what it was asked for.</summary>
-    public delegate void PlayFilm(string name, Action then, CinemaSkip skip);
 
     /// <summary>How a still reaches the screen: which one, how long it holds, and the continuation
     /// to run when the hold ends or a press ends it early.</summary>

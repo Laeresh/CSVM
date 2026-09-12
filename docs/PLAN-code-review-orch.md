@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ One stopwatch bank for the three `--perf` cost meters
 12. ☑ `TemplateStage` freed-key walk shared
-13. ☐ One `Play` delegate and one `Once` for the three cinemas
+13. ☑ One `Play` delegate and one `Once` for the three cinemas
 14. ☐ `ObjectiveSites` collects both target classes through one method
 15. ☐ `CameraController` reads its tuning through `_camParams` and names its views
 16. ☐ `CinemaSkips` without the repeated arms and the mirror enum
@@ -405,7 +405,31 @@ maps. Keep the stale-key count `BL-682`'s suite reads.
 **Verify.** The `TemplateStage` unit tests and `BL-682`'s able-to-fail suite green; 23 goldens
 identical.
 
-## B13 ☐ One `Play` delegate and one `Once` for the three cinemas
+## B13 ☑ One `Play` delegate and one `Once` for the three cinemas
+
+**Landed.** New `CSVM/src/UI/CinemaHandoff.cs` holds the `CinemaPlay` delegate
+(`void (string name, Action then, CinemaSkip skip)`) and a public static `CinemaHandoff.Once(Action)`
+carrying the latch comment. `ChapterCinema`, `ClosingCinema` and `BootSequence` dropped their own
+nested delegate declarations and the two copies of `Once`, and take `CinemaPlay`; `BootCard.Play`
+takes it too, since its parameter was typed `BootSequence.PlayFilm`. `Launcher` builds both cinemas
+with the `PlayCinema` method group instead of a forwarding lambda. The tests needed no edit: they
+pass method groups, which bind to the new type unchanged. `docs/architecture/UI.md` gained the new
+entry and `docs/architecture.md` its index bullet; the `BootSequence` entry and the two
+`docs/architecture/Session.md` cinema entries name `CinemaPlay` and `Once`.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings 0 errors.
+`.\CheckCommentCaps.ps1` and `.\CheckDocEntries.ps1` both clean.
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~Cinema|FullyQualifiedName~BootSequence" -SkipEngine
+-SkipGoldens`: 124 passed, 0 failed, 2 skipped of 126 (the two skips want extracted film data).
+`.\RunTests.ps1 -Suite cinema-skip-pad -SkipUnits -SkipGoldens`: 1 passed, 0 failed, engine errors
+clean.
+
+**Evidence correction.** The three files are `CSVM/src/Session/ChapterCinema.cs`,
+`CSVM/src/Session/ClosingCinema.cs` and `CSVM/src/Session/Launcher.cs`, not under `CSVM/src/UI/`;
+only `BootSequence.cs` is a UI file. The `Launcher` lambda pair sits at `:1379-1380`. The evidence
+missed `BootCard.cs:37`, the one other reference to a removed delegate type.
+
+**Original approach (kept for reference).**
 
 **Goal.** `ChapterCinema`, `ClosingCinema` and `BootSequence` share one `Play` delegate type and
 one `Once(Action)`; `Launcher` passes the method group.

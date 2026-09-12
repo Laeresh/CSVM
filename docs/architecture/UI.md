@@ -241,11 +241,20 @@ input counts at all (`--no-pads`, an unfocused window), since a pad reports its 
 pressed as it connects. What each cinema's set is, and why they differ, is
 [../formats/cinemas.md](../formats/cinemas.md).
 
+## src/UI/CinemaHandoff.cs
+The two things every cinema flow shares: `CinemaPlay`, the shape of the call that puts a film on
+screen, which `Session/Launcher.cs` satisfies by handing over `PlayCinema` itself, and `Once`, which
+wraps the continuation a film hands off to. A skip can land on the frame the film plays out and both
+paths end it, so the next screen opens once however many times the cinema reports it stopped; the
+chapter films and the closing film go through that one latch, and the boot block, whose
+continuations start the next film, chains unwrapped. Which presses end a film is
+`CinemaSkips.cs`'s, not this file's.
+
 ## src/UI/BootSequence.cs
 `fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
 800x600 space out of the extraction's own art, message-table strings and font metrics, and `Run`
-calls the block's eight actions in the reader's order over three injected delegates, one that plays
-a film, one that puts up a still and one that takes the card down as the first film starts. Every
+calls the block's eight actions in the reader's order over three injected delegates, a `CinemaPlay`
+for a film, one that puts up a still and one that takes the card down as the first film starts. Every
 name, position and duration is the reader's ([../formats/cinemas.md](../formats/cinemas.md)), which
 is also where the card's one showing, the unseen fade and the films running back to back are
 settled; `Held` is the one member that says how much of an authored hold reaches the screen.

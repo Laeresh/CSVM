@@ -21,21 +21,15 @@ public sealed class ClosingCinema
     /// under both presentations; the lookup is case-blind either way.</summary>
     public const string Name = "Final.MPG";
 
-    private readonly Play _play;
+    private readonly CinemaPlay _play;
 
     private bool _played;
 
     /// <summary>Builds a closing cinema over the call that puts one on screen.</summary>
-    public ClosingCinema(Play play) => _play = play;
+    public ClosingCinema(CinemaPlay play) => _play = play;
 
-    /// <summary>How a cinema reaches the screen: the film's name, the continuation to run on the
-    /// frame it stops (played out or skipped), and the presses that end it early.
-    /// <c>Session/Launcher.cs</c>'s <c>PlayCinema</c> has this shape; a suite hands over a
-    /// stand-in that records what it was asked for.</summary>
-    public delegate void Play(string name, Action then, CinemaSkip skip);
-
-    /// <summary>Whether the film has been handed to <see cref="Play"/>. It is what keeps a second
-    /// finished mission, or a second visit to the book, from replaying it.</summary>
+    /// <summary>Whether the film has been handed to <see cref="CinemaPlay"/>. It is what keeps a
+    /// second finished mission, or a second visit to the book, from replaying it.</summary>
     public bool Played => _played;
 
     /// <summary>Opens the scrapbook for a profile, playing the closing film first when that profile
@@ -58,25 +52,7 @@ public sealed class ClosingCinema
 
         // ⚠ Do not unify these presses with the chapter cinema's. Space and Return skip a chapter
         // cinema and do nothing here, which the two scripts author separately.
-        _play(Name, Once(showScrapbook), CinemaScreen.ClosingKeys);
+        _play(Name, CinemaHandoff.Once(showScrapbook), CinemaScreen.ClosingKeys);
         return true;
-    }
-
-    // ⚠ Do not hand the continuation over unwrapped. A skip can land on the frame the cinema plays
-    // out and both paths end the film, which is what the original's own EC latch stands against, so
-    // the book must open once however many times the cinema says it stopped.
-    private static Action Once(Action handoff)
-    {
-        bool ran = false;
-        return () =>
-        {
-            if (ran)
-            {
-                return;
-            }
-
-            ran = true;
-            handoff();
-        };
     }
 }

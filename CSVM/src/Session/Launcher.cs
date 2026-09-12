@@ -1376,8 +1376,8 @@ public partial class Launcher : Node3D
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
         // The campaign feature carries both cinemas because both presentations already read that
         // one feature, and neither of them can reach a Launcher to play a film through.
-        _chapterCinema ??= new ChapterCinema((name, then, skip) => PlayCinema(name, then, skip));
-        _closingCinema ??= new ClosingCinema((name, then, skip) => PlayCinema(name, then, skip));
+        _chapterCinema ??= new ChapterCinema(PlayCinema);
+        _closingCinema ??= new ClosingCinema(PlayCinema);
         host.Features.Add(new CampaignFeature(
             strings, PlanePickerRoster.AirframeNode, _chapterCinema, _closingCinema));
         // The keymap editor writes through C21's per-player store. The write is injected rather
