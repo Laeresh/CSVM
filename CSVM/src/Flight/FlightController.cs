@@ -3634,7 +3634,11 @@ public partial class FlightController : Node3D
                 Position = c.Position,
                 Velocity = c.Velocity,
                 IsPlayer = human,
+                IsAircraft = fc != null,
                 IsWingman = fc?.Pilot?.Escort != null,
+                // target_bias is the CANDIDATE's own field on the vehicle arm, so a hull, which
+                // carries no def of its own here, spends nothing, as the shipped hull defs do.
+                ClassBias = fc?.Stats?.AiTargetBias ?? 0f,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
                     human ? AiTargetRanking.PlayerRole : TargetPool.NameOf(c.Source),
                     gunner.RatingBiases),
@@ -3667,7 +3671,7 @@ public partial class FlightController : Node3D
         // so a mode plane or heli aeroplane should take Other. Deriving it here would change what
         // those aircraft target, which is a behaviour claim wanting its own evidence.
         int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, AiScorer.Jet,
-            _rankCandidates, out score);
+            AiTargetRanking.AircraftFirst, _rankCandidates, out score);
         return best >= 0 ? _rankSources[best] : null;
     }
 
@@ -3713,7 +3717,11 @@ public partial class FlightController : Node3D
                 Position = c.Position,
                 Velocity = c.Velocity,
                 IsPlayer = false,
+                IsStructureClass = true,
                 IsGasbag = gasbag,
+                // struct_bias is the SCORER's own field, spent on every turret and structure
+                // candidate alike, so it is read off this aeroplane and never off the candidate.
+                ClassBias = Stats?.AiStructBias ?? 0f,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
                     TargetPool.NameOf(c.Source), _biasOwners,
                     gunner.RatingBiases, isTurret),

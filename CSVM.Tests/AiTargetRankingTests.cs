@@ -40,7 +40,7 @@ public class AiTargetRankingTests
         Assert.Equal(1.0f + 0.2f - 0.2f - 0.2f, sAi.Weight, 3);
         Assert.Equal(360f, sAi.Rank - sPlayer.Rank, 1);
 
-        int pick = AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        int pick = AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { ai, player }, out var best);
         Assert.Equal(1, pick);
         Assert.Equal(sPlayer.Rank, best.Rank, 2);
@@ -52,9 +52,9 @@ public class AiTargetRankingTests
         // The 0.3 player-weight delta equals 360 m: an AI target 500 m closer wins, one only
         // 300 m closer still loses.
         var player = Ahead(900f, isPlayer: true, xOffset: 100f);
-        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { Ahead(400f, xOffset: -100f), player }, out _));
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { Ahead(600f, xOffset: -100f), player }, out _));
         // One ±0.2 term flip is 480 rank units: a target ahead loses to one 400 m farther
         // astern (ahead/behind is the only differing term; the astern one flies away too, so
@@ -62,7 +62,7 @@ public class AiTargetRankingTests
         var behind = Ahead(800f);
         behind.Position = OwnPos + new Vector3(0f, 0f, 800f);
         behind.Velocity = new Vector3(0f, 0f, 60f);
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { Ahead(400f), behind }, out _));
     }
 
@@ -72,7 +72,7 @@ public class AiTargetRankingTests
         var near = Ahead(500f);
         var far = Ahead(900f);
         Assert.Equal(400f, RankOf(far) - RankOf(near), 1);
-        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { near, far }, out _));
     }
 
@@ -82,7 +82,7 @@ public class AiTargetRankingTests
         var outside = Ahead(Activation + 1f);
         Assert.Equal(AiTargetRanking.NotRanked, RankOf(outside));
         // Even alone, an out-of-activation target is never selected.
-        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { outside }, out _));
         // At the radius it still ranks (the cutoff is strictly beyond).
         Assert.True(RankOf(Ahead(Activation)) < AiTargetRanking.NotRanked);
@@ -145,7 +145,7 @@ public class AiTargetRankingTests
         Assert.Equal(-AiTargetRanking.GasbagWeight * AiTargetRanking.WeightScale,
             RankOf(gasbag) - RankOf(plain), 1);
         // 600 m in the gasbag's favour: it beats an equal aircraft 500 m nearer.
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { Ahead(500f), Ahead(1000f, xOffset: 50f) with { IsGasbag = true } }, out _));
     }
 
@@ -249,12 +249,12 @@ public class AiTargetRankingTests
     {
         // The whole point of the exclusion: a −1.0 target is not merely deprioritised.
         var excluded = Ahead(500f, bias: AiTargetRanking.NotRanked);
-        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { excluded }, out _));
 
         // …and a plain target beats it however much farther away it is, inside the radius.
         var plain = Ahead(1900f, xOffset: 50f);
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { excluded, plain }, out _));
     }
 
@@ -266,7 +266,7 @@ public class AiTargetRankingTests
         // The better-ranked candidate is already held by an ally: the free peer wins.
         var held = Ahead(500f, attackers: 1);
         var free = Ahead(900f, xOffset: 50f);
-        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { held, free }, out var best));
         Assert.Equal(900f, best.Distance, 1);
     }
@@ -278,7 +278,7 @@ public class AiTargetRankingTests
         // the best-ranked candidate is taken anyway.
         var a = Ahead(500f, attackers: 1);
         var b = Ahead(900f, attackers: 2, xOffset: 50f);
-        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet, aircraftFirst: false,
             new[] { a, b }, out var best));
         Assert.Equal(500f, best.Distance, 1);
     }
@@ -320,6 +320,94 @@ public class AiTargetRankingTests
         fields[33] = null; // the 93 null blocks
         Assert.Empty(AiSkills.RosterRatingBiases(fields));
         Assert.Empty(AiSkills.RosterRatingBiases(new List<object?> { 0f }));
+    }
+
+    // ---- the class biases and the aircraft-first preference -------------------------------------
+
+    [Fact]
+    public void TheClassBiasGoesInRawBesideTheObjectiveOneAndAttracts()
+    {
+        // Rank units, not metres scaled by anything: the shipped -200 moves a structure exactly
+        // 200 rank units in its favour, and it adds to an authored objective bias rather than
+        // replacing it.
+        var plain = Ahead(800f);
+        var biased = Ahead(800f) with { ClassBias = -200f };
+        Assert.Equal(-200f, RankOf(biased) - RankOf(plain), 1);
+        var both = Ahead(800f, bias: -300f) with { ClassBias = -200f };
+        Assert.Equal(-500f, both.ObjectiveBias + both.ClassBias, 1);
+        Assert.Equal(-500f, RankOf(both) - RankOf(plain), 1);
+        // The readout reproduces the rank: weight x 1200 + distance + bias, with both terms in it.
+        var s = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, AiScorer.Jet, both);
+        Assert.Equal(s.Rank, s.Weight * AiTargetRanking.WeightScale + s.Distance + s.Bias, 1);
+    }
+
+    [Fact]
+    public void TheShippedBiasesRankAnEquidistantStructureAheadOfAnEquidistantAeroplane()
+    {
+        // The decoded order, and the reason the departure exists: a wingman authoring both
+        // (-100 target_bias, -200 struct_bias) puts an equidistant structure 100 rank units ahead
+        // of an equidistant enemy aeroplane.
+        var aeroplane = Ahead(800f) with { IsAircraft = true, ClassBias = -100f };
+        var structure = Ahead(800f, xOffset: 50f) with { IsStructureClass = true, ClassBias = -200f };
+        Assert.Equal(100f, RankOf(aeroplane) - RankOf(structure), 1);
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftFirst: false, new[] { aeroplane, structure }, out _));
+    }
+
+    [Fact]
+    public void TheAircraftFirstPreferenceWithdrawsStructuresWhileAnAircraftRanks()
+    {
+        // The same pool under the preference: the far aeroplane wins over the near structure,
+        // however the biases fall.
+        var aeroplane = Ahead(1900f) with { IsAircraft = true, ClassBias = -100f };
+        var structure = Ahead(300f, xOffset: 50f) with { IsStructureClass = true, ClassBias = -200f };
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftFirst: true, new[] { aeroplane, structure }, out _));
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftFirst: false, new[] { aeroplane, structure }, out _));
+
+        // With no aircraft in reach the structure is fought: the preference is a priority, never
+        // a filter that leaves a gunner with nothing.
+        var outOfReach = Ahead(Activation + 1f) with { IsAircraft = true };
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftFirst: true, new[] { outOfReach, structure }, out _));
+        // An excluded aeroplane is not in reach either: a -1.0 target must not shield a structure.
+        var excluded = Ahead(300f, bias: AiTargetRanking.NotRanked) with { IsAircraft = true };
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftFirst: true, new[] { excluded, structure }, out _));
+    }
+
+    [Fact]
+    public void AHullIsNeitherClassAndKeepsItsRankedPlaceUnderThePreference()
+    {
+        // A surface hull is a vehicle candidate that is not an aircraft, so the preference neither
+        // promotes nor withdraws it: it competes on rank with the aeroplane beside it.
+        var hull = Ahead(400f) with { Velocity = Vector3.Zero };
+        var aeroplane = Ahead(1200f, xOffset: 50f) with { IsAircraft = true };
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftFirst: true, new[] { hull, aeroplane }, out _));
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftFirst: false, new[] { hull, aeroplane }, out _));
+    }
+
+    [ExtractedDataFact]
+    public void TheShippedDefsAuthorTheBiasesTheDecodeMeasured()
+    {
+        // Read off vehicle.json, never typed in: a wingman def carries -100 target_bias and -200
+        // struct_bias, a bare enemy AI def carries neither, and the player chain's own
+        // player_airplane carries the -300 that makes a human the most attractive candidate.
+        string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var wingman = PlaneStats.LoadForAi(zrdr, "player_bhawk", "wbloodhawk");
+        Assert.Equal(-100f, wingman.AiTargetBias, 1);
+        Assert.Equal(-200f, wingman.AiStructBias, 1);
+
+        var enemy = PlaneStats.LoadForAi(zrdr, "player_bhawk");
+        Assert.Equal(0f, enemy.AiTargetBias, 1);
+        Assert.Equal(0f, enemy.AiStructBias, 1);
+
+        var human = PlaneStats.Load(zrdr, "player_bhawk");
+        Assert.Equal(-300f, human.AiTargetBias, 1);
+        Assert.Equal(0f, human.AiStructBias, 1);
     }
 
     // ---- goldens against the shipped extraction ------------------------------------------------
@@ -417,7 +505,7 @@ public class AiTargetRankingTests
         Assert.Equal(400f,
             ScoreAs(AiScorer.Other, Ahead(900f)).Rank - ScoreAs(AiScorer.Other, Ahead(500f)).Rank, 1);
         Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation, AiScorer.Other,
-            new[] { Ahead(500f), Ahead(900f) }, out _));
+            aircraftFirst: false, new[] { Ahead(500f), Ahead(900f) }, out _));
     }
 
     private static TargetScore ScoreAs(AiScorer scorer, in RankedTargetCandidate c) =>

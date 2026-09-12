@@ -345,10 +345,26 @@ closing term on the candidate's velocity, and the gasbag **−0.5**. The gasbag 
 ammo whose two launch timers have run out, and the gasbag identity reaches `AiRocketeer.Solve`, so
 a torpedo-armed pilot that picked a gasbag launches at it.
 
+Both class terms are ported as they ship. `PlaneStats.AiTargetBias` and `PlaneStats.AiStructBias`
+read `target_bias` and `struct_bias` off the def chain the vehicle spawns as, so an AI variant takes
+its own and a flown aeroplane takes `player_airplane`'s **−300**, and `AiTargetRanking.Score` adds
+whichever the class calls for in raw rank units beside the objective bias, signs untouched. A
+structure candidate therefore carries the 200 m pull and a vehicle candidate its own 100 m one, in
+the aeroplane picker and in a `mode ship` hull's gun alike. A turret's own picker spends neither,
+which is what the original does.
+
+CSVM then departs from the original deliberately. `AiTargetRanking.AircraftFirst`, on by default and
+settled once per launch from `--ai-targeting=` ([`../cli.md`](../cli.md)), withdraws every turret and
+structure candidate while any aircraft still ranks, in `FlightController.SelectRankedTarget` and
+`TurretController.AcquireTarget` both, so a wingman and the guns of the airship beside it go after
+the same enemies and an ally fights a structure only with no aeroplane in reach. A hull is neither
+class and keeps its ranked place. `--ai-targeting=decoded` puts the single running minimum back, and
+the order is then the two biases' alone. `Session/SurfaceGunner` never takes the preference, since it
+drops non-aircraft candidates anyway.
+
 Unmodelled, named rather than guessed: the activation volume is scored as a sphere where the engine
-tests a cylinder (`+0x328`, `+0x32c`–`+0x330`); `target_bias` and `struct_bias` are spent by no
-CSVM term, so a structure carries neither the original's 200 m pull nor an aeroplane its 100 m one;
-`TargetProjectile` is not part of the acquisition sweep at all; and `FUN_00421ad0`'s `1e21` on a
+tests a cylinder (`+0x328`, `+0x32c`–`+0x330`); `TargetProjectile` is not part of the acquisition
+sweep at all; and `FUN_00421ad0`'s `1e21` on a
 candidate object whose `+0x04` reads 3 or more.
 
 ## The chapter's net table, and what "the first net" means

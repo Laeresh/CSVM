@@ -435,6 +435,9 @@ public partial class Launcher : Node3D
         {
             Pads.Disabled = true;
         }
+        // Read by both AI pickers, for the same reason the two statics above are statics: it
+        // settles once per launch and no pilot or gunner chooses it for itself.
+        Flight.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Testing.CaptureDirector(_spec);
         _gltfExporter = new Testing.GltfExporter(_spec);
         _pendingJoin = _spec.DebugJoin;

@@ -108,11 +108,11 @@ Schema: [../formats/turrets.md](../formats/turrets.md); the team space:
 One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host off the vehicle def's
 `TurretMount`s, ticked from `FlightController.SimStep`) and world emplacement (`BuildEmplacements`,
 per matched `NODES` pattern node, ticked by `Session/TurretEmplacementRuntime`). Per tick it takes
-the nearest hostile out of the vehicle list and then the mission structures in the decoded pass
-order, solves the lead through `AimAssist.TryIntercept`, slews the PARTS nodes inside the authored
-arcs, and runs the fire gates: activation, the attack window, the barrel-on-solution cone, a cached
-line of sight and the `FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`.
-Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
+the nearest hostile out of the vehicle list and then the mission structures, stopping at the vehicle
+pass while `AiTargetRanking.AircraftFirst` holds and an aircraft is in reach, solves the lead through
+`AimAssist.TryIntercept`, slews the PARTS nodes inside the authored arcs, and runs the fire gates:
+activation, the attack window, the barrel-on-solution cone, a cached line of sight and the
+`FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`. Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
@@ -471,13 +471,12 @@ resolver rather than from def presence. Pinned by `AiVoiceDispatcherTests` and t
 
 ## src/Flight/AiTargetRanking.cs
 The decoded target-ranking formula ([../org/aiPilot.md](../org/aiPilot.md) "Target acquisition"): a
-rank built from a weight, the distance and an objective bias, and MINIMISED, with the player carrying
+rank built from a weight, the distance and the bias terms, and MINIMISED, with the player carrying
 a lower base weight than everyone else, a wingman a higher one, a gasbag a lower one, ±0.2 terms for
 ahead/behind on a half-metre deadband, altitude sign and closing, and an effectively infinite rank
 beyond the activation radius. `AiScorer` names the engine's two implementations and is required
 because the wrong one is silent: `Other` drops those three geometry terms. Snapshots in, index and
-score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `ObjectiveBiasFor`
-matches `rating_biases` patterns, first match wins, saturating at always-target and at exclusion.
+score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins, saturating at always-target and at exclusion; a candidate's `ClassBias` carries the def's `target_bias`/`struct_bias` in raw rank units beside the objective bias, both negative and so both attracting. `AircraftFirst`, the launch-scoped switch behind `--ai-targeting=`, is CSVM's departure: while any aircraft ranks, every structure-class candidate is withdrawn, so a picker fights a structure only with no aeroplane in reach.
 
 ## src/Flight/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
@@ -507,8 +506,7 @@ the def's `turrets` block as `TurretMount`s, engines.json stock engine power, an
 globals, which are the flight constants plus the tuning the cue, aim-assist, head-look and damage
 paths read. It also carries the `crash` block's restitution ceiling, the engine sound defs and their
 curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
-`collision` probe list. `Load` resolves down the player chain, `LoadForAi` takes only the damage
-model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
+`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
@@ -1069,7 +1067,7 @@ one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactRepor
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
 damage are the player's path exactly. `Held`, `Inert`, `Spectating`, `CameraOwned` and
-`AllowLiveRespawn` are the flags a session or a lab pins it with. Read `AircraftLifecycle.cs` next.
+`AllowLiveRespawn` are the flags a session or a lab pins it with. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it to `AiTargetRanking.SelectBest` under the session's targeting order. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs
 The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle

@@ -631,7 +631,8 @@ twelve AI aeroplane defs, unauthored on `patrolboat`, `t_truck` and the zeppelin
 `-200.0` on eleven aeroplane defs and unauthored elsewhere. The net effect is that an aeroplane
 authoring both ranks an equidistant structure about 100 m ahead of an equidistant AI aeroplane.
 The vehicle constructor zeroes both, so an unauthored def spends nothing, and a turret's own picker
-passes a literal `0` in place of `struct_bias`.
+passes a literal `0` in place of `struct_bias`. CSVM reads both into
+`PlaneStats.AiTargetBias`/`AiStructBias` off the def chain the vehicle spawns as.
 
 **Def defaults for the block above** (from the def initialiser, not from any key): scales `3.5`,
 limits `1.0`, the emergency set identical, `rudder_tol` `0.2`. The AI speed clamp that sits beside

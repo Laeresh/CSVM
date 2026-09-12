@@ -436,6 +436,208 @@ internal static class TargetingCandidateSuites
         }
     }
 
+    // The aircraft-first preference, over the shape the complaint came from: a dead cargo
+    // zeppelin's two surviving engines nearer than the one live enemy aeroplane, with the scorer a
+    // wingman def, which is the family that authors both biases. Default, the aeroplane; under
+    // --ai-targeting=decoded, the nearer engine, which is what the shipped arithmetic picks.
+    [Suite("aircraft-first-targeting",
+        "the aircraft-first preference (BL-866): an ally's aeroplane picker and a turret gunner " +
+        "both rank a live enemy aeroplane ahead of a dead zeppelin's nearer surviving engines, " +
+        "and under --ai-targeting=decoded both take the nearer engine instead, the ported " +
+        "target_bias and struct_bias ranking it about 100 m ahead of the aeroplane")]
+    internal static void AircraftFirstTargeting(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        const string PlaneNode = "player_bhawk";
+        const string WingmanDef = "wbloodhawk";
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var allyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode, WingmanDef);
+        var enemyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
+        var stock = StockLoadouts.Load().All.Values.First(d => d.Model == allyStats.NodeName);
+
+        // Read off vehicle.json, never typed in: the departure only means anything against the
+        // arithmetic these two numbers make.
+        ctx.Check(allyStats.AiTargetBias < 0f && allyStats.AiStructBias < 0f,
+            $"the wingman def authors both biases: target_bias={allyStats.AiTargetBias:0} struct_bias={allyStats.AiStructBias:0}");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? ally = null;
+        FlightController? enemy = null;
+        Node3D? engineNode1 = null;
+        Node3D? engineNode2 = null;
+        Node3D? hullNode = null;
+        Node3D? siteNode = null;
+        bool preferenceWas = AiTargetRanking.AircraftFirst;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            int allyTeam = AimAssist.PlayerTeam + 1;
+            int enemyTeam = AimAssist.PlayerTeam;
+            int zepTeam = allyTeam + 1;
+            var registry = new DestructibleRegistry();
+            live.Structures = registry;
+
+            // The airship itself, destroyed: its pool is no candidate any more, and nothing gates
+            // its parts on it, which is the decoded reading this suite stands on.
+            hullNode = new Node3D { Name = "cargozep1", Position = new Vector3(0f, 500f, -60f) };
+            ctx.Host.AddChild(hullNode);
+            var hull = registry.Register(
+                new AnimDefinition { Name = "cargozep1", AnimName = "zep_zone_cargozep1" }, hullNode, 400f);
+            hull.Team = zepTeam;
+            hull.Status = DestructibleRegistry.State.Destroyed;
+
+            DestructibleRegistry.Instance Engine(string name, Vector3 at, out Node3D node)
+            {
+                node = new Node3D { Name = name, Position = at };
+                ctx.Host.AddChild(node);
+                var inst = registry.Register(
+                    new AnimDefinition { Name = name, AnimName = $"zep_zone_{name}" }, node, 200f);
+                inst.Team = zepTeam;
+                inst.Owner = "cargozep1";
+                return inst;
+            }
+
+            var near = Engine("leng12", new Vector3(0f, 500f, 0f), out engineNode1);
+            Engine("leng22", new Vector3(0f, 500f, -120f), out engineNode2);
+
+            FlightController Rig(PlaneStats st, Vector3 pos, Vector3 lookAt, int team, int shooterId,
+                AiPilot? pilot)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(st.NodeName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = shooterId,
+                    IsHumanPiloted = false,
+                    Pilot = pilot,
+                    Projectiles = live,
+                    Destructibles = registry,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Loadout = Loadout.Bind(stock, model, weapons);
+                rig.Setup(new FlightModel(st), null, new CamParams(), pos, lookAt);
+                ctx.Host.AddChild(rig);
+                rig.Held = true;
+                rig.PlaceHeld(pos, lookAt);
+                rig.Team = team;
+                return rig;
+            }
+
+            // The one live enemy aeroplane, 900 m out, PAST both engines, so distance alone can
+            // never hand it the pick.
+            var enemyPos = new Vector3(0f, 500f, -400f);
+            enemy = Rig(enemyStats, enemyPos, enemyPos + Vector3.Forward, enemyTeam,
+                FlightRoster.ShooterIdBase + 1, null);
+
+            var allyPos = new Vector3(0f, 500f, 500f);
+            var allyPilot = AiPilot.HoldingCourse(allyPos, new Vector3(0f, 500f, 0f));
+            allyPilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260913 });
+            ally = Rig(allyStats, allyPos, new Vector3(0f, 500f, 0f), allyTeam,
+                FlightRoster.ShooterIdBase, allyPilot);
+            ctx.Check(ally.WorldPosition.DistanceTo(near.Anchor.GlobalPosition)
+                < ally.WorldPosition.DistanceTo(enemyPos),
+                $"the nearer engine is {ally.WorldPosition.DistanceTo(near.Anchor.GlobalPosition):0} m out and the enemy aeroplane {ally.WorldPosition.DistanceTo(enemyPos):0} m");
+
+            object? Acquire(bool aircraftFirst)
+            {
+                AiTargetRanking.AircraftFirst = aircraftFirst;
+                allyPilot.Gunner.Target = null;
+                allyPilot.Gunner.AutoTarget = true;
+                ally!.SimStep(1f / 60f);
+                return allyPilot.Gunner.Target;
+            }
+
+            var picked = Acquire(true);
+            ctx.Check(ReferenceEquals(picked, enemy),
+                $"the aeroplane picker takes the enemy aeroplane over the nearer engines target={TargetPool.NameOf(picked)}");
+            var decoded = Acquire(false);
+            ctx.Check(ReferenceEquals(decoded, near),
+                $"and under the decoded order the nearer engine target={TargetPool.NameOf(decoded)}");
+
+            // What the ported struct_bias is worth, measured rather than asserted from the def:
+            // with the enemy aeroplane moved 50 m INSIDE the engine, the decoded order still takes
+            // the engine, which only the -200 in its favour can do.
+            var closerPos = new Vector3(0f, 500f, 50f);
+            enemy.PlaceHeld(closerPos, closerPos + Vector3.Forward);
+            float engineRange = ally.WorldPosition.DistanceTo(near.Anchor.GlobalPosition);
+            float enemyRange = ally.WorldPosition.DistanceTo(closerPos);
+            var biased = Acquire(false);
+            ctx.Check(ReferenceEquals(biased, near),
+                $"struct_bias is spent in the live picker: the engine at {engineRange:0} m beats an enemy aeroplane at {enemyRange:0} m target={TargetPool.NameOf(biased)}");
+            ctx.Check(ReferenceEquals(Acquire(true), enemy),
+                $"and the preference still takes the aeroplane there");
+            enemy.PlaceHeld(enemyPos, enemyPos + Vector3.Forward);
+
+            // A hand-placed emplacement on the ally's side, standing between the engines and the
+            // enemy, so the same two candidates are both inside its field with the engines nearer.
+            siteNode = new Node3D { Name = "test_ally_gun", Position = new Vector3(0f, 500f, 300f) };
+            ctx.Host.AddChild(siteNode);
+            var pitchNode = new Node3D();
+            pitchNode.SetMeta(AnimRuntime.NameMeta, "pitch");
+            siteNode.AddChild(pitchNode);
+            var muzzleNode = new Node3D();
+            muzzleNode.SetMeta(AnimRuntime.NameMeta, "muzzle");
+            siteNode.AddChild(muzzleNode);
+            var gunDef = turretDefs.All.First(d => !d.Carried);
+            gunDef.YawNode = null;
+            gunDef.PitchNode = "pitch";
+            gunDef.Firepoints = new[] { "muzzle" };
+            gunDef.HealthyNode = null;
+            gunDef.Team = allyTeam;
+            // The suite fixes the geometry rather than the shipped field, so neither candidate can
+            // fall outside DETECTION_RANGE on a data change.
+            gunDef.DetectionRange = 1200f;
+            gunDef.NodePatterns = new List<IReadOnlyList<string>> { new List<string> { "test_ally_gun" } };
+            var guns = TurretController.BuildEmplacements(turretDefs, weapons,
+                (name, _) => name == "test_ally_gun" ? new[] { siteNode } : System.Array.Empty<Node3D>(),
+                live);
+            ctx.Check(guns.Length == 1, $"the hand-placed ally gun resolves turrets={guns.Length}");
+            if (guns.Length != 1)
+                return;
+            var gun = guns[0];
+            gun.SetActivated(true);
+
+            object? GunPick(bool aircraftFirst)
+            {
+                AiTargetRanking.AircraftFirst = aircraftFirst;
+                gun.SimStep(1f / 30f);
+                return gun.TargetSource;
+            }
+
+            ctx.Check(ReferenceEquals(GunPick(true), enemy),
+                $"the turret gunner agrees with the wingmen beside it target={TargetPool.NameOf(gun.TargetSource)}");
+            ctx.Check(ReferenceEquals(GunPick(false), near),
+                $"and under the decoded order it takes the nearest candidate of any class target={TargetPool.NameOf(gun.TargetSource)}");
+        }
+        finally
+        {
+            AiTargetRanking.AircraftFirst = preferenceWas;
+            pool?.Free();
+            ally?.Free();
+            enemy?.Free();
+            engineNode1?.Free();
+            engineNode2?.Free();
+            hullNode?.Free();
+            siteNode?.Free();
+            textures.Dispose();
+        }
+    }
+
     // AddRankedNonAircraft walked every turret with no discriminator on TurretController.Site, so
     // a carried gunner rode the ranked pool as a second entry beside its own aircraft's Vehicle
     // entry, one silhouette read as two candidates. Mirrors the guard TargetPool.Offer already
