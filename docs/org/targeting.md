@@ -16,7 +16,9 @@ remembered behaviour, the decode wins and the disagreement is a note.
 different scorer, is [`aim-assist.md`](aim-assist.md). The AI's own standing target, which lives in
 the same plane field but is chosen by entirely different rules, is [`aiPilot.md`](aiPilot.md). The
 HUD elements this page does not cover (compass, gauges, pipper) are
-[`../formats/hud.md`](../formats/hud.md).
+[`../formats/hud.md`](../formats/hud.md). The off-screen marker's arrow geometry and the round live
+picture Shift+S puts beside it, one object driven by one function, are
+[`spyglass.md`](spyglass.md).
 
 ## The headline
 
@@ -960,8 +962,11 @@ clamps each line into the viewport with a 3-pixel margin. The bracket box hides 
 because `FUN_004574d0`'s near-plane test fails. That is the `HUD.png` reading: an edge arrow with
 the tag and the clock bearing stacked beside it.
 
-⚠ **The edge arrow sprite itself was not traced.** Its position is `FUN_0049d940`'s output; which
-element draws the triangle, and how it is rotated, is unresolved.
+**The edge arrow, and the round live picture beside it, are [`spyglass.md`](spyglass.md).**
+`FUN_0049d940` is that page's function: it owns the arrow's shaft and head, the Shift+S toggle, the
+96 x 96 camera-2 window and the label anchor this section reads, and the anchor's own vertical
+offset (3 pixels below the marker in the screen's upper half, 45 above in the lower) is decoded
+there.
 
 ## What this means for CSVM
 
@@ -1002,7 +1007,6 @@ element is the right port and is a deliberate divergence, not a fidelity loss.
 
 - What clears the player's target on the player's **own** death or respawn. `FUN_00421500` and
   `FUN_00469e20` both zero a plane's `+0x948`; neither was traced to the player's respawn path.
-- The edge arrow sprite: which element draws it and how it is oriented.
 - Whether `FUN_004bc1e0` de-duplicates the attacker queue.
 - The `aiv.zrd` key names behind entity `+0x28` (label), `+0x3c` (category), `+0x4c` and `+0x4d`.
   The name at `+0x14` is settled (above, slot 20 `title`), and the other two are read from the same

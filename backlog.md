@@ -2118,24 +2118,39 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   own pilot takes the player shape (per-pane, the decoded intent read per viewer) or only seat 0;
   then key on the pane's viewer, pinned in the `ground-shadow` suite over a two-pane session.
   *Cross-refs:* `BL-331` (the shadow's open halves), `docs/verification.md` SRC-12.
-- `BL-857` `[Feature]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **The spyglass: Shift+S toggles a round live
+- `BL-857` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The spyglass: Shift+S toggles a round live
   picture of the selected target at its off-screen marker, and the marker's arrow and text sit
-  differently from ours.** *Evidence:* the mission recordings under `OriginalScreenshots/Videos/`
-  show an off-screen target's marker carrying a round window with a live render toward the
-  target, the camera standing at the player's aircraft, so an occluded target shows the terrain
-  in front of it; it works for every marked class (aircraft, objectives, structures), the text
-  sits further in from the edge than ours and the arrow is longer. The user's recall: it toggles
-  on Shift+S and is drawn only while the target is inside a range. The strings decode has
-  `MSG_CAM2_TOG` "Toggle Spyglass" as a camera command, camera 2, on `0x41f` Shift+S
-  ([`docs/formats/strings.md`](docs/formats/strings.md) "Views", `docs/org/input.md`), and every
-  chapter ships the engine roots `spyglass` and `sgwin` (`docs/formats/gamez.md`), the window
-  and its render target. *Fix shape:* decode first: the range gate and its constant, what camera
-  2 looks from and at, the window's size and placement on the marker, and the arrow and text
-  offsets; then a `SubViewport` render per human into a round mask at the marker, toggled by a
-  new `InputAction`, plus the marker geometry corrections. *⚠ Traps:* the edge marker's placement
-  law (`Flight/EdgeMarker.cs`) stays engine-free; the window is a layer over it, not a rewrite.
-  The range is decoded, never read off footage. *Cross-refs:* `docs/org/targeting.md`
-  (`FUN_0049d940`, the off-screen case), `CONTEXT.md` "Edge marker", `BL-181`.
+  differently from ours.** *Evidence:* decoded in full into
+  [`docs/org/spyglass.md`](docs/org/spyglass.md). The spyglass and the edge marker are ONE object,
+  `DAT_0071d284`, driven by one function `FUN_0049d940`, so the arrow, the "N o'clock" tag and the
+  picture stop and start together. Shift+S (action `0x30`, `LAB_00489260`) flips a byte that is
+  `1` at level load and is refused only while the player's plane is dead (`+0x91d`); every other
+  gate is re-read per frame. The picture appears only while the target is OFF SCREEN and inside
+  `fogNear + (fogFar - fogNear) * 0.8` capped at 2000, engaging at 0.875 of that (the fog range is
+  the live per-zone one, `FUN_004da920` on `world1`); no target class is tested anywhere. The
+  window is the `sgwin` gamez node, 96 x 96 device pixels in every chapter, its origin MOVED each
+  frame to the marker and masked by a circle of radius `ftol((96 + 1) * 0.5)` = 48. Camera 2 stands
+  at the player's aircraft and aims at the target, field of view `2 * atan(1.1 * R / d)` clamped to
+  `[1.5 deg, 90 deg]` with `1.1 * R` kept as a high-water mark, and its roll is zeroed for anything
+  but an aircraft. The marker anchor is the projected point clamped into the viewport inset by 5%
+  per axis plus half the window; the arrow is a SHAFT from that anchor (pushed out to the disc's
+  rim when the disc is up) to the point clamped to the FULL viewport, plus a head 20 px long and
+  10 px across (`0x006035e4`, `0x006036bc`); the label anchor keeps the anchor's x and offsets y by
+  `+3` in the screen's upper half, `-45` in the lower (`0x006035d0`, `0x006082d4`), or
+  `discBottom + 3` / `discTop - 45` when the disc is up. *Fix shape:* three separable pieces.
+  (a) `Flight/TargetHud.cs` geometry: `RefArrowLen` 18 to 20 and `RefArrowHalf` 8 to 5, add the
+  shaft `DrawArrow` never draws, and replace the `RefArrowLen + RefTextGap` back-off along the
+  arrow direction with the decoded vertical `+3` / `-45` rule. (b) `Flight/EdgeMarker.cs`: the flat
+  `RefEdgeMargin = 46f` becomes 5% of each pane axis, and `Resolve` gains the second clamp
+  rectangle (the full pane) that the arrow's tip needs, since one call now yields two points.
+  (c) the picture itself: a `SubViewport` per human with the decoded pose and field of view, a
+  round mask 96 reference px across, toggled by a new `InputAction`. *⚠ Traps:* `EdgeMarker` stays
+  engine-free, so the second clamp is another `Placement` field, not a camera reference. Do NOT
+  port the occluder pass (`FUN_004c8f70` walk): the retail build records each class-5 node's field
+  and flag and writes the same values back, a no-op. Do NOT port the slot-9 branch (60 degrees, 15
+  units ahead): every `Target` vtable carries the constant-zero stub there. *Cross-refs:*
+  [`docs/org/spyglass.md`](docs/org/spyglass.md), `docs/org/targeting.md` (the label lines it
+  anchors), `CONTEXT.md` "Edge marker", `BL-181`.
 
 - `BL-875` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's campaign
   screens take the key or pad press that skipped a chapter or closing film.** *Evidence:* a read of
