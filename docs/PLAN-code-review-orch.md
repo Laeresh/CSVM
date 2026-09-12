@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ `New-ItemId.ps1` gets its BOM and loses its em dashes
 22. ☐ `SetNet` reports a missing net as no move
 23. ☐ A death choreography is only the def's death sequence
-24. ☐ `KeepsTheShot` holds only the episode that raised the ending
+24. ❌ `KeepsTheShot` holds only the episode that raised the ending
 25. ☐ A queued start past the budget still gets its zero-dt advance
 26. ☑ A turret voice culls at 1.1x its range, as decoded
 27. ☐ `ADD_OTHER_TARGET` and its remove reach the mode table's points
@@ -770,7 +770,47 @@ disproven.
 **Verify.** `death-not-a-revival` green on the Barracuda and a lifesaver; a constructed def with
 a repair in a non-death sequence revives.
 
-## C24 ☐ `KeepsTheShot` holds only the episode that raised the ending
+## C24 ❌ `KeepsTheShot` holds only the episode that raised the ending
+
+**Landed.** Nothing, and the item is closed as disproven. The gate can only misfire on an episode
+that begins after a campaign result exists, and no such episode is reachable.
+`CampaignDirector.OnMissionEnded` sets `Result` and `_leaving` in the same statement pair, so a
+result always implies the leaving hold. `SessionSimulation.StepPhases` then short-circuits the
+whole phase list to `StepEndingHold` while `CampaignDirector.Leaving` is true, and
+`GameSession.HoldEndingFrame` sets both `GameClock.SimHeld` and `GameClock.AuthoredAnimationHeld`,
+neither of which any session path clears again. `AnimRuntime._Process` returns on
+`AuthoredAnimationHeld` and `GameClock.PhysicsDt` answers zero under it, so authored animation is
+frozen from the ending's frame for the rest of the session. The only live caller of
+`CutsceneController.Host` is the animation runtime's `CALLBACK` dispatch, taken through the host
+chain `GameSession` wires at the world build, and that dispatch needs an advance, so after a result
+no code reaches the host at all. `Begin` runs only under `!Playing`, and an episode already playing
+when the result lands never restores while it is held, so a code arriving on the ending's own frame
+joins that episode instead of starting a new one. `_cutscene` and `_campaign` are both constructed
+per `StartSession`, so a retry and the next mission get a fresh host beside a fresh director with no
+result on it.
+
+The original behaves the same way, which is why the gate reads the result rather than the raiser:
+`docs/formats/objectives.md` ("The mission-end path, and what the player sees after it") reads
+`FUN_00443090`'s own `DAT_0071d290 = 5000` as parking the flying state's presenter past the fade, so
+nothing of the film, and nothing else, plays on after an ending. A latch on "this episode raised the
+ending" would also give the wrong answer for the one case that is reachable, a loss landing under a
+film that film did not raise, which is the second fade path below and keeps the film's shot
+deliberately. The item's line numbers have drifted: `KeepsTheShot` is at `CutsceneController.cs:827`,
+the hand-off at `:452-476`, the skip at `:522`.
+
+**Verified.** <pending orchestrator run> No file under `CSVM/` changed.
+`dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors. `CheckCommentCaps.ps1` and
+`CheckDocEntries.ps1` clean. `RunTests.ps1 -Suite campaign-mission-end -SkipUnits -SkipGoldens`:
+PASS, 1 passed, 0 failed, engine errors clean, flown over `c1/m02`. The suite's three fade paths are
+`EndingUnderAFilm(byDocking: true)`, a win raised by the docking film's own code 13;
+`EndingUnderAFilm(byDocking: false)`, a loss reported from the anim side while a film plays; and
+`EndingInFreeFlight`, a win with no film up. The first two exercise the hold, each asserting
+`HeldForEnding` with the skip refused for the whole leaving hold; the third is the control and
+asserts the host stays down. There is no red run and no new phase, because the phase the item asked
+for would have to start a second episode after a result, which is the state the engine cannot reach.
+`PT-137` stays owed: the look is unclaimed.
+
+**Original approach (kept for reference).**
 
 **Goal.** An episode that starts after a campaign result exists can still hand off and be
 skipped.
