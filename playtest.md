@@ -665,8 +665,10 @@ against `BL-389` rather than against the wash routing.
 
 - `PT-142` `[Own]` **The five AA guns at the fort open fire once the mission wakes them, on a
   plane anywhere above them.** A ground emplacement's sight line used to strike its own mount past
-  the 1.5 m skirt in every direction, so the guns tracked and never fired; a gun standing on the
-  world root now excludes its own rig from the cast (`git log --grep=BL-830`). Fly the mission to
+  the 1.5 m skirt in every direction, so the guns tracked and never fired; every emplacement now
+  excludes its own site's rig from the cast, wherever that site hangs (`git log --grep=BL-830`,
+  `git log --grep=BL-861`). CM03 (C3/M02) is the same look on guns parked under a grouping node,
+  the three on the ridge and the two in the airbase. Fly the mission to
   `OBJECTIVE1`'s `WAKEUP_TURRETS`, then circle the fort at a few hundred metres, steep overhead and
   low across, and watch the guns from the external view. *Look for:* tracer and muzzle flash from
   every gun that is pointing at you, at the authored one to two rounds a second in bursts of two to

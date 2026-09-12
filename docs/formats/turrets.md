@@ -301,11 +301,11 @@ the data. Measured the hard way in the remake: with the mount in the cast, C1/IA
 reported blocked by their own `turret` body at 0.5 m and by their own hull panels at 19–25 m of a
 150–400 m shot.
 
-What the remake keeps out of the cast depends on what the gun stands on. Every emplacement skips
-the first **1.5 m** off its own node. A gun whose site is a direct child of the world root, which
-is every ground entry (`aagun`, `maagun`, `tcargun`, `t_truck`, `8igun`), also excludes its own
-rig's collider bodies by RID, the same set `PlatformColliderRids` hands the hit ray as the bodies a
-round it fires owns. A ring on a hull or a gun on a balloon gets the skirt alone.
+What the remake keeps out of the cast is two things, for every emplacement alike: the first
+**1.5 m** off the gun's own node, and the collider bodies of **the gun's own site subtree**, by
+RID. The site subtree is the rig the `NODES` match resolved against, so that exclusion is the
+mount and nothing wider. `SiteColliderRids` collects it; `PlatformColliderRids`, the wider set a
+round this gun fires owns, is deliberately not the same set.
 
 The skirt alone cannot serve a ground gun. An `aagun` rig carries a 12 m by 12 m base, a pyramid
 reaching 3.5 m over the gun's node and the `col_buildings` pad, and probed from a live C1/M02
@@ -315,15 +315,30 @@ skirt. Five guns, five `Blocked` gates, from the first frame on. The suites that
 on this rule were reading a physics space with two of the three shapes missing, which is the
 harness gap `BL-831` names.
 
+⚠ **The site's PARENT is the unit of exclusion in neither direction.** A chapter parks its ground
+guns wherever the modeller left them: C1's five `aagun`s hang off the world root, while C3's hang
+off grouping nodes, one carrying the three guns `aagun30` to `aagun32`, one carrying `aagun01` and
+`aagun02` amid a whole airbase of hangars and towers, and the `barracuda` submarine's own `dbase`
+carrying `aagun98`, `aagun99` and `8igun01`. Excluding that parent would clear the airbase a gun
+stands in the middle of, which is cover. Keying the exclusion on the parent being the world root
+instead leaves every grouped gun blocked by its own base: probed live on C3 with the turrets woken,
+`aagun30` read 12 of its 16 swept directions blocked and gated `Blocked` with the player in clear
+air 325 m overhead, against 1 of 16 (real scenery, at 6 degrees) once its own site was excluded,
+and all three guns of that group then engaged where only the two 200 m to 300 m off did before.
+
+A hull ring gets the same site exclusion and needs it. Of the swept directions of `piratezep`'s 17
+rings on C1/M04, 94 are obstructed past the skirt by the ring's own `turret` or `gun` body and by
+nothing else, and `doublecannon4`, `doublecannon5` and five of the six `ltur` rings have no other
+obstruction anywhere in arc, so with their own rig in the cast those seven never fire at all.
+
 A node-group exclusion is still wrong for anything mounted on a hull, whichever group is chosen:
-excluding a zeppelin entire lets its rings shoot straight through their own hull, excluding only
-the gun's own rig blocks all 14 of them because the panel colliders engulf the ring they carry,
-and excluding the **mounting section** in between leaks just as badly, because a section is a
-modelling group and holds the far side of the same hull. On `piratezep` the section rule left
-**422 of 517** in-arc bearings that cross 120 m or more of the hull's own body clear, and the
-belly rings `ctur1` to `ctur3` fired straight through 162 to 255 m of it. The distance rule leaves
-172, and every ring keeps 54 % to 79 % of its in-arc field of fire. A ground gun's site holds
-nothing but the gun, so for it the own-rig exclusion is the mount and nothing wider.
+excluding a zeppelin entire lets its rings shoot straight through their own hull, excluding the
+**mounting section** leaks just as badly, because a section is a modelling group and holds the far
+side of the same hull, and a ring's own rig is not that section: the panel colliders that engulf a
+ring belong to the hull. On `piratezep` the section rule left **422 of 517** in-arc bearings that
+cross 120 m or more of the hull's own body clear, and the belly rings `ctur1` to `ctur3` fired
+straight through 162 to 255 m of it. The distance rule leaves 172, and every ring keeps 54 % to
+79 % of its in-arc field of fire.
 
 The 1.5 m is measured, not decoded: a ring's own bodies engulf it out to about 1 m (`g21` and
 `gun` answer at 0 to 1 m), and the nearest hull skin standing over one answers at 2 m. The

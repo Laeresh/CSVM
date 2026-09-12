@@ -753,6 +753,14 @@ one sentence of measured evidence; everything else belongs in the commit that la
   because the fixture's thumb art measures 128 pixels against a 68-pixel track and covered it;
   clamping a proportional thumb to its own track put the press back on the arrow.
 
+- **INSTR-62**, **A `--fly --mission=M0x` probe of a mission carrying an authored intro cutscene
+  steps no simulation while the intro's world hold stands, and that hold outlasts a bounded probe:
+  `SimHeld` skips every AI, turret and projectile phase while the clock, the frame counter and the
+  screenshot all advance normally, so the instrument reads as dead rather than as held.** A C3/M02
+  turret probe logged nothing over 1500 sim frames; the same probe on C3/IA1, the same chapter
+  world, produced its 1179 lines at once. Reach a chapter's own geometry through a mission with no
+  intro and place the plane with `--pos=`.
+
 - **INSTR-59**, **A positional-audio check must read the node the CULL measures from, not only
   whether the emitter is playing: an audible verdict passes while the two are different nodes, as
   long as the wrong one happens to stand near the listener.** `GunVoice` moved its child

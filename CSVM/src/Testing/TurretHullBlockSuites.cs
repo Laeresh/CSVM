@@ -106,9 +106,11 @@ internal static class TurretHullBlockSuites
                 // rest pose BaseBasis reads: per (yaw, pitch), whether the shipped sight-line rule
                 // meets the hull inside DETECTION_RANGE.
                 var candidates = new List<(TurretController Ring, Vector3 Dir, float Fraction)>();
+                int ownRigOnly = 0;
                 foreach (var ring in rings)
                 {
                     var ringPos = ring.WorldPosition;
+                    var ownRig = ring.SiteColliderRids();
                     var anchor = ring.YawNode ?? ring.PitchNode;
                     var parentBasis = (anchor.GetParent() as Node3D)?.GlobalBasis ?? Basis.Identity;
                     var baseBasis = (parentBasis * anchor.Transform.Basis).Orthonormalized();
@@ -126,9 +128,21 @@ internal static class TurretHullBlockSuites
                             var dir = baseBasis * TurretController.LocalDir(yaw, pitch);
                             var to = ringPos + dir * ring.Def.DetectionRange;
                             var span = to - ringPos;
-                            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                                ringPos + span * (TurretController.MountSkirtM / span.Length()),
-                                to, CollisionLayers.World));
+                            var from = ringPos + span * (TurretController.MountSkirtM / span.Length());
+                            // ⚠ The sweep runs the SHIPPED rule, own rig excluded. Without it the
+                            // direction picked is the ring's own barrel, which the live gate reads
+                            // as clear, and the probe below asserts on a ring with no hull in front.
+                            var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World);
+                            if (ownRig.Count > 0)
+                            {
+                                query.Exclude = ownRig;
+                            }
+                            var hit = space.IntersectRay(query);
+                            if (hit.Count == 0 && space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                                from, to, CollisionLayers.World)).Count > 0)
+                            {
+                                ownRigOnly++;
+                            }
                             if (hit.Count > 0)
                             {
                                 blockedDir = dir;
@@ -179,7 +193,7 @@ internal static class TurretHullBlockSuites
                         rig.PlaceHeld(tryPos, ringPos);
                         var checkTo = rig.WorldPosition + Vector3.Up * 0.2f;
                         if (ringSpace != null && TurretController.WorldBlocksEmplacementLine(
-                            ringSpace, ring.WorldPosition, checkTo))
+                            ringSpace, ring.WorldPosition, checkTo, ring.SiteColliderRids()))
                         {
                             confirmedPos = tryPos;
                             break;
@@ -229,6 +243,7 @@ internal static class TurretHullBlockSuites
 
                 ctx.WriteArtifact("test-turret-hull-block.txt", report.ToString());
                 ctx.Note($"{candidates.Count} of {rings.Count} ring(s) had an in-arc hull-blocked direction; {ringsConfirmed} confirmed, all held fire there");
+                ctx.Note($"{ownRigOnly} swept direction(s) were obstructed by the ring's own rig alone, which the sight-line rule reads as clear");
             }
             finally
             {

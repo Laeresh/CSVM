@@ -746,18 +746,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   stored rows. *⚠ Traps:* not the page and not the commit; the array on disk is right.
   *Cross-refs:* `docs/org/hangar.md` (the build record), `CSVM/src/Session/CampaignLoadout.cs`.
 
-- `BL-861` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[CM03]` **CM03 (C3/M02): the AA guns hold on a
-  "blocked" sight line with nothing between them and the player.** *Evidence:* reported at the
-  controls on main after `BL-830` landed: the F15 targeting overlay names `blocked` as the gate on
-  every gun at the site while the player circles in clear air, so the guns track and never fire.
-  `BL-830` excluded a ground emplacement's own rig from its cover cast at CM07's fort; this site
-  still reads cover where the eye sees none. *Fix shape:* fly CM03 with `--debug-targets` and a
-  `Log.Info` probe on `TurretController`'s cover cast naming what it strikes, then extend the
-  exclusion to whatever it names (the site's own building, a neighbouring gun's rig) if that is
-  its own structure, or fix the cast if it is air. *⚠ Traps:* `BL-831`, the suite harness can miss
-  enabled shapes, so settle it in a live session, not a suite. *Cross-refs:* `BL-830` (the fix
-  that did not reach this site), `PT-142` (CM07's owed flight), `CSVM/src/Flight/TurretController.cs`.
-
 - `BL-866` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Allied AI and turret gunners engage a destroyed
   zeppelin's surviving parts and non-enemy buildings while the live enemies go unfought.**
   *Evidence:* reported at the controls from CM04 (C3/M03) on: wingmen, allied aircraft and the
@@ -2877,8 +2865,8 @@ usual.
   identity, range, health and AI mode on the targeting HUD) is reachable by launch flag only,
   which is the one a flight test wants under the thumb. *Fix shape:* rebind F16 to toggle the
   markers HUD, drop the labels' key and leave them on their flag (a viewer tool, not a flight
-  one); update `docs/controls.md` and `docs/cli.md`. *Cross-refs:* `BL-861` (a flight that wants
-  it), `CSVM/src/Bindings/DefaultBindings.cs`.
+  one); update `docs/controls.md` and `docs/cli.md`. *Cross-refs:*
+  `CSVM/src/Bindings/DefaultBindings.cs`.
 
 - `BL-848` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **About 140 dated clauses remain in `backlog.md` entries that predate the no-dates rule.** *Evidence:* `Select-String '\d{4}-\d\d-\d\d'` over the file; every one is event narration ("landed 2026-08-05", "measured 2026-08-04 from the CAP-07 re-take") of the kind the writing rule sends to the closing commit's message. *Fix shape:* decide whether the old entries are swept (each date dropped, the standing fact kept, the evidence findable through `git log --grep`) or grandfathered until the entry closes. A sweep is mechanical but every clause needs a reading. *Cross-refs:* PLAN-code-review-orch A5 (the one dated clause the review found).
 

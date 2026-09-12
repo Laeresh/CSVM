@@ -57,8 +57,8 @@ public sealed class TurretController
     /// the body a hull ring stands in, which the original never counts as its own cover. Past it
     /// the same hull DOES block. Clear of a ring's own bodies, which engulf it out to about 1 m,
     /// and under the 2 m at which a hull skin stands over one. ⚠ It does not clear a ground gun's
-    /// rig, which answers out to 6 m; that gun excludes its own rig by RID instead
-    /// (docs/formats/turrets.md "Acquiring").</summary>
+    /// rig, which answers out to 6 m; every emplacement excludes its own site subtree by RID as
+    /// well (docs/formats/turrets.md "Acquiring").</summary>
     public const float MountSkirtM = 1.5f;
 
     private readonly FlightController? _host;
@@ -83,6 +83,7 @@ public sealed class TurretController
     private bool _hasLastPos;
     private bool _firstShotLogged;
     private Godot.Collections.Array<Rid>? _platformColliders;
+    private Godot.Collections.Array<Rid>? _siteColliders;
 
     private TurretController(TurretDef def, WeaponDef weapon, FlightController? host,
         IWorldQuery? worldQuery, ProjectilePool pool, Node3D? yawNode, Node3D pitchNode,
@@ -447,10 +448,10 @@ public sealed class TurretController
 
     /// <summary>An emplacement's line-of-sight rule, as a query a suite can sweep bearing by
     /// bearing: the world-layer ray, blind to its first <see cref="MountSkirtM"/>, solid over
-    /// everything past that except <paramref name="exclude"/>, which a gun on the world root fills
-    /// with its own rig (docs/formats/turrets.md "Acquiring": the skirt clears a ring, not a gun).
-    /// ⚠ Never pass a hull ring's mounting section. A mounting group holds the far side of the
-    /// same hull, which is how a ring shoots through it.</summary>
+    /// everything past that except <paramref name="exclude"/>, which an emplacement fills with its
+    /// own site subtree (docs/formats/turrets.md "Acquiring": the skirt clears a ring, not a gun).
+    /// ⚠ Never pass the site's PARENT group. It holds a neighbouring gun on the same pad and a
+    /// whole airbase around one, which are cover, and a hull ring's far side.</summary>
     public static bool WorldBlocksEmplacementLine(PhysicsDirectSpaceState3D space, Vector3 from,
         Vector3 to, Godot.Collections.Array<Rid>? exclude = null)
     {
@@ -611,35 +612,43 @@ public sealed class TurretController
     /// from behaviour. RIDs are stable for the world's lifetime and the subtree gains no
     /// colliders after the build (a destroyed part hides, it is not re-parented). Empty for a
     /// section that resolved to nothing.</summary>
-    internal Godot.Collections.Array<Rid> PlatformColliderRids()
-    {
-        if (_platformColliders != null)
-        {
-            return _platformColliders;
-        }
-        _platformColliders = new Godot.Collections.Array<Rid>();
-        if (_platform != null && GodotObject.IsInstanceValid(_platform))
-        {
-            void Walk(Node node)
-            {
-                if (node is CollisionObject3D body)
-                {
-                    _platformColliders.Add(body.GetRid());
-                }
-                foreach (var child in node.GetChildren())
-                {
-                    Walk(child);
-                }
-            }
-            Walk(_platform);
-        }
-        return _platformColliders;
-    }
+    internal Godot.Collections.Array<Rid> PlatformColliderRids() =>
+        _platformColliders ??= ColliderRidsUnder(_platform);
+
+    /// <summary>This gunner's own rig: the collider RIDs under its site, collected once. The
+    /// line-of-sight exclusion, since a gun never counts the thing it is bolted to as its own
+    /// cover. ⚠ Narrower than <see cref="PlatformColliderRids"/> on purpose: a site's parent
+    /// group holds whatever else was modelled beside it, from a second gun on the same pad to an
+    /// airbase, and that geometry blocks (docs/formats/turrets.md "Acquiring").</summary>
+    internal Godot.Collections.Array<Rid> SiteColliderRids() =>
+        _siteColliders ??= ColliderRidsUnder(_site);
 
     /// <summary>Whether this gunner's own sight-line rule reads <paramref name="target"/> as
     /// blocked right now, uncached. Internal for the suite that proves a ground gun sees past its
     /// own rig and not past a stranger's.</summary>
     internal bool OwnSightLineBlocked(Vector3 target) => WorldRayBlocked(WorldPosition, target + Vector3.Up * 0.2f);
+
+    private static Godot.Collections.Array<Rid> ColliderRidsUnder(Node3D? root)
+    {
+        var rids = new Godot.Collections.Array<Rid>();
+        if (root == null || !GodotObject.IsInstanceValid(root))
+        {
+            return rids;
+        }
+        void Walk(Node node)
+        {
+            if (node is CollisionObject3D body)
+            {
+                rids.Add(body.GetRid());
+            }
+            foreach (var child in node.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(root);
+        return rids;
+    }
 
     private static float AngularDistance(float a, float b) =>
         Mathf.Abs(Mathf.Wrap(a - b, -180f, 180f));
@@ -759,13 +768,12 @@ public sealed class TurretController
     }
 
     // FlightController.WorldBlocksLine's twin for a gunner with no host rig, against the space its
-    // own node lives in. A gun whose platform is its own site stands on the world root, so its
-    // platform colliders are its own rig and nothing of anyone else's; a ring's platform is a hull
-    // section and stays in the cast.
+    // own node lives in. The exclusion is the site subtree, which is the gun's rig and nothing
+    // else, whatever the site hangs off: a chapter can park a ground gun under a grouping node
+    // rather than on the world root, and the hull a ring is bolted to is not in the site.
     private bool WorldRayBlocked(Vector3 from, Vector3 to) =>
         (YawNode ?? PitchNode).GetWorld3D()?.DirectSpaceState is { } space
-        && WorldBlocksEmplacementLine(space, from, to,
-            _site != null && ReferenceEquals(_platform, _site) ? PlatformColliderRids() : null);
+        && WorldBlocksEmplacementLine(space, from, to, SiteColliderRids());
 
     // The bounded slew: the barrel chases the clamped aim direction at SlewRate per second,
     // renormalised each tick, snapping whole once one frame covers the turn. Same degenerate

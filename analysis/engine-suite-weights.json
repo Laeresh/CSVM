@@ -276,6 +276,7 @@
     "trail-world-anchor": 0.011,
     "turret-death-effect-world-anchor": 0.003,
     "turret-death-fire-follows-hull": 1.452,
+    "turret-grouped-site-sightline": 0.1,
     "turret-hull-blocks-own-fire": 1.823,
     "turret-own-mount-sightline": 0.1,
     "turret-self-fire": 2.826,
