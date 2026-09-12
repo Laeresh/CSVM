@@ -1242,7 +1242,7 @@ internal static class DestroyChoreographySuites
                 }
                 rig.ManualAdvance = true;
 
-                machine.NotifyDamage(10f, Vector3.Forward);
+                machine.NotifyDamage(10f);
                 bool armed = machine.Executor is { Maneuver.Nitro: true };
                 ctx.Check(armed,
                     $"the mode machine is flying '{machine.Executor?.Maneuver.Name ?? "-"}', a nitro-flagged maneuver");

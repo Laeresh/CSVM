@@ -1193,8 +1193,8 @@ internal static class CampaignRosterSuites
                 // A certain steady-hand failure, which is the worst the roll can do: the reaction
                 // runs rather than being rolled away, and the aircraft must still hold its net.
                 hit.SteadyHandChance = 1f;
-                hit.NotifyDamage(20f, Vector3.Right);
-                wasHit = hit.Mode != AiMode.Patrol;
+                hit.NotifyDamage(20f);
+                wasHit = hit.Mode != AiMode.Patrol || hit.Evading;
                 report.AppendLine($"t={i * StepDt:0}s hit {bombers[1].Name}: mode={AiModeMachine.NameOf(hit.Mode)}");
             }
             int node = bombers[0].Pilot!.Patrol!.CurrentIndex;

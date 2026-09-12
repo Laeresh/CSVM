@@ -93,7 +93,7 @@ The three fields `D31` was told to account for:
 |---|---|
 | `obj+0x948` | The **current target**, a `Target*` (RTTI `TargetVehicle` when it is a vehicle). Not a flag. Null means no target, which reverts the order above and short-circuits the tail of the brain |
 | `obj+0x2F0` | The **current order**, selecting the driver: 0 and 2 navigate, 1 fights. `obj+0x2f4` holds the default it reverts to, `obj+0x300`/`+0x308` its timer |
-| `obj+0xBA` | The **evade flag**. Set to 1 by the damage handler `FUN_004b9bc0` when the steady-hand test fails ("Absorbed %f damage; steady hand test failed. Evading.", `0x62b1e8`), cleared in `FUN_0041d9f0` (`0x41deaf`) once the pursuer's nose alignment on this aircraft drops below 0.85. While set it suppresses the lay-off branch and the voice callouts |
+| `obj+0xBA` | The **evade flag**, set by the damage handler and cleared on the pursuer's alignment. It is not the whole of the damage reaction and it is not a mode: see [The evade flag](#the-evade-flag-objbba) below |
 
 `obj+0x358` is the mode enum already documented in [flightModel.md](flightModel.md). Both drivers
 switch on it identically for a class-0 aeroplane: mode 0 steers, mode 1 hands off to the maneuver
@@ -320,6 +320,115 @@ standoff = 106.68                                       when speed <= 20.576 m/s
 That is 350 ft rising to 850 ft over 46 to 230 mph. Inside 400 m, an overshoot test compares
 closing speed against 0.8 of own speed and 0.8 of the target's, and either swings the aim point
 500 m off to reposition or biases the aim vertically by up to 0.3 to bleed the overshoot.
+
+## The evade flag, `obj+0xBA`
+
+### What a hit does
+
+The damage handler `FUN_004b9bc0` reaches its reaction block only for a class-0 or class-4 vehicle
+(`+0x67c`), on a weapon whose type word carries bit `0x40` (the gun/bullet arm), and with `+0xf8`
+clear. It then reads the flag at `0x004b9efa`:
+
+- **Flag already set:** the handler only restamps `+0xbc` with `clock + 8.0` (`0x004b9f10`, the 8.0
+  at `0x00608d60`) and returns. **No second steady-hand test is taken while an evade is running.**
+- **Flag clear:** it rolls the steady-hand test `FUN_004b1160` (`0x004b9f1e`). A pass prints
+  "steady hand test passed" (`0x62b220`) and nothing else happens. A failure prints
+  "Absorbed %f damage; steady hand test failed. Evading." (`0x62b1e8`) and runs four steps in order:
+
+```
+0x004b9f65   +0xba  = 1                          the flag
+0x004b9f78   +0xbc  = clock + 8.0                a stamp nothing reads
+0x004b9f92   when [DAT_0071c298 + 0xc] == DAT_00a1d7c8 (FUN_005ad440):
+             +0x948 = new TargetVehicle(DAT_0071c298)     re-target onto the player
+0x004b9fdc   +0x94c = clock + 20.0 (FUN_004b0f20)         and hold that target 20 s
+0x004b9ff8   FUN_004201a0(-1)                    THE MANEUVER PICKER
+```
+
+`FUN_004201a0` is the maneuver library's selector, and its last act is
+`MOV dword ptr [EDI + 0x358], 1` at **`0x004208f7`**, with the program index `+0x9b0` reset to `-1`
+and the step deadline `+0x89c` set to the clock. Mode 1 is the maneuver executor `FUN_004209b0`.
+**So a failed steady-hand test does enter a maneuver, on the damage path, in the original.** The
+only case in which it does not is an empty candidate list: with nothing past the natural-touch cull
+the picker returns having written no mode at all, and the aircraft keeps flying its engagement with
+the flag set.
+
+### What the flag itself changes
+
+Every read of `+0xBA` in the image, with what it decides. The set is closed.
+
+| Address | Function | What it decides |
+|---|---|---|
+| `0x0041da1b` | `FUN_0041d9f0`, entry | In mode 0, with `clock >= +0x8a0`, runs the **dare-devil danger-zone search** `FUN_004210e0(0,0)`: a `dare_devil_chance` roll (`+0x954`) over the level's danger zones, which on success writes mode 2 and **nulls the target**, and on failure sets `+0x8a0 = clock + 5.0` and retries in 5 s |
+| `0x0041db7c` | `FUN_0041d9f0`, mode 0 | With `clock >= +0x89c` (the maneuver step deadline), re-enters `FUN_004201a0(-1)`. **A maneuver that runs out while the flag still stands chains straight into the next one** |
+| `0x0041dc02` | `FUN_0041d9f0`, mode 0 | Suppresses the bearing callouts `FUN_004afd00(0x19/0x1a)` and the clock-position call `FUN_004b86a0` |
+| `0x0041dd91` | `FUN_0041d9f0`, mode 0 | Suppresses the **lay-off branch**: the flag is one of the five conditions that force the normal-engagement arm, so an evading aircraft cannot break off and cannot claim `DAT_0064ee4d` |
+| `0x0041de58` | `FUN_0041d9f0`, mode 0 | Guards the clear test below |
+| `0x0041deb6` | `FUN_0041d9f0`, mode 0 | Skips this aircraft's own sixth-sense block while the flag stands |
+| `0x0041df13` | `FUN_0041d9f0`, mode 0 | The **target's** flag, read off `Target+4`. This is the sixth-sense trigger: a pursuer whose target is evading rolls `sixth_sense_chance` (`+0x970`) at most every 10 s (`+0xc4 = clock + 10.0`), and a failure stuns it for `+0x978` |
+| `0x0041c96a` | `FUN_0041c470` | The debug readout. With a target and mode not in 1..5, the flag picks the name **"evade"** over "pursue"/"lay off" |
+| `0x004b68e9` | `FUN_004b6820` | On a weapon carrying type bit `0x20000`, selects the negated sense of the def's `+0xa4` for the firing-cone test against `0x00608d44`/`0x00608d48` (cos 5° and cos 10°) |
+
+Writers: `0x004b0046` (the vehicle constructor `FUN_004aff80`, zero), `0x004b9f65` (the set above),
+`0x0041deaf` (the clear below), and `0x004a5dae`, a `TargetVehicle` vtable thunk at `0x004a5da0`
+(slot `+0x3c` of `0x0060886c`) that zeroes `+0xba` **and** `+0xbc` on the vehicle its target record
+points at. Its one call site is `0x004b82fd`, the top of the death routine `FUN_004b82d0`, so **a
+pursuer's death clears the flag on whatever it was chasing.**
+
+⚠ **`+0xbc` is written twice and read nowhere.** The 8-second stamp is not a timeout: no instruction
+in the image loads `[vehicle + 0xbc]`, and the two `FCOMP float ptr [reg + 0xbc]` sites in the damage
+area (`0x004b1859`, `0x004b829e`) read the **def** through `+0x64`, not the vehicle. Reading that
+stamp as the evade's duration is the mistake to avoid.
+
+### The clear
+
+At `0x0041de58`-`0x0041deaf`, in mode 0, once per frame:
+
+```
+dot = unit(targetPos - selfPos) . [DAT_0071c298 + 0x198 … + 0x1a0]     the player's BACKWARD row
+if dot < 0.85:  FUN_004afd00(0x1b, 0);  +0xba = 0
+```
+
+Because that row is backward (see step 4 above), the expression is the cosine between the **player's
+nose** and the line from the player to this aircraft, so the flag holds while the player keeps its
+nose within about 31.8° of the evader and drops the moment it does not. Note the two sides are not
+symmetric: the separation is measured to this aircraft's **own target**, while the axis is always
+the player's, which is only the clean reading because the damage handler has just pointed the target
+at the player. `FUN_004afd00(0x1b)` is the TA-SucShk callout, and it fires here and nowhere else.
+
+### How the picker weights the library
+
+`FUN_004201a0` walks the 17-entry table at `DAT_0071b210` (stride `0x1c`), culls on
+`natural_touch` (`+0x958` against table `+0`), builds a weight per survivor and takes one
+`rand()/32768`-scaled draw over the running sum:
+
+| Term | Value | Address |
+|---|---|---|
+| base | table `+0x18` (the `bias` key) `+ 1.0` | `0x004204be` |
+| the maneuver's simulated end helps the aircraft toward `+0x98c` | `+ 1.0` | `0x00420504` |
+| same as the last maneuver flown (`+0x9b4`) | `× 0.1` | `0x00420584` |
+| same as the one before that (`+0x9b8`) | `× 0.2` | `0x00420598` |
+| a roster signature entry (`+0x994`…`+0x998`) | `× 6.0` | `0x004205ca` |
+| negative after all of it | replaced by `0.1` | `0x00420607` |
+
+The two repeat penalties are what keep a chained evade from flying one program over and over, and
+they are the reason the chain reads as a varied sequence rather than a loop.
+
+### What this section does not settle
+
+- **`+0xf8`**, the byte that gates the whole reaction block (`0x004b9eec`) and also the stun handler
+  (`0x004200f6`). Written by the constructor and by `FUN_00497990`/`FUN_00498170`.
+- **`DAT_00a1d7c8`**, the global the re-target guard compares the player's `+0xc` against.
+- The **`+1.0` altitude term** above, which needs the maneuver's flown-out end state
+  (`FUN_00422840`, `FUN_004221e0`) to evaluate.
+
+### ⚠ The flag is the whole of the damage reaction — RETIRED (2026-09-12)
+
+The `obj+0xBA` row read the flag as the entire reaction: set on a failed steady-hand test, cleared
+on the 0.85 alignment, and suppressing the lay-off branch and the voice callouts while it stood.
+Every one of those claims is correct and none of them is the whole story. The row was silent on the
+call at `0x004b9ff8`, three instructions after the set, which is the maneuver picker, and on the
+mode write at `0x004208f7` inside it. Read on its own the row supports "the original only sets a
+flag where CSVM flies a maneuver", which is the opposite of what the damage path does.
 
 ## The other channel writers
 

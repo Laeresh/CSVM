@@ -1513,13 +1513,10 @@ public partial class FlightController : Node3D
             return;
         }
         DamageApplied?.Invoke(this);
-        // The round carries no shooter position, so the impact offset stands in as the threat
-        // bearing for the AI's evade turn-away.
         if (!IsHumanPiloted && Pilot?.Machine is { } machine)
         {
             machine.NotifyDamage(
-                ((weapon.HealthDamage ?? 0f) + (weapon.ArmorDamage ?? 0f)) * damageScale,
-                impact - _model.Position);
+                ((weapon.HealthDamage ?? 0f) + (weapon.ArmorDamage ?? 0f)) * damageScale);
         }
         _pilotHud.Flash(state != null
             ? $"⚠ HIT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%"

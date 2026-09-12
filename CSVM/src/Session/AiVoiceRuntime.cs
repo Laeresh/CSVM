@@ -140,7 +140,8 @@ public sealed partial class AiVoiceRuntime : Node
             Play(_dispatcher.Dispatch(evader.PlayerIndex, AiVoiceDispatcher.TaFailTail, _now));
         }
 
-        // The reaction flag clearing: the decoded TA-SucShk dispatch point.
+        // The evade flag clearing on the pursuer's nose falling away: the decoded TA-SucShk
+        // dispatch point, one call per evade episode however many maneuvers it chained.
         if (from is AiMode.Evade or AiMode.EvasiveManeuver && why == "reaction complete")
         {
             Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.TaSucShk, _now));

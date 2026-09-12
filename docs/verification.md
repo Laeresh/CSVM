@@ -758,6 +758,15 @@ one sentence of measured evidence; everything else belongs in the commit that la
   read as the nose, the shadow skew that `org/shadows.md` decoded came out backwards, putting the
   player's own shadow behind the chase camera instead of ahead of the aircraft where it is drawn.
 
+- **SRC-13** — **A decode row about a field is a decode of the field, not of the path that writes
+  it. Read on past the write before treating the field as the whole behaviour.**
+  `org/aiControlLaw.md`'s row for the AI evade flag at `obj+0xBA` recorded the set, the alignment
+  clear and the two suppressions, every one of them correct, and stopped three instructions short of
+  the same handler's call into the maneuver picker at `0x004b9ff8`, which writes the mode. Read on
+  its own the row supported "the original only sets a flag", the opposite of what the handler does,
+  and an entry was filed against the remake on the strength of it. A row that names only a field's
+  writers earns a sentence saying what else that writer does.
+
 ## What this project cannot verify itself
 
 The user must verify audio and control feel, multi-controller behaviour, skilled flying, live-input

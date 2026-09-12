@@ -416,12 +416,12 @@ makes the hold a weave rather than a tight join. Engine-free and deterministic; 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`: the mode list
 and vocabulary are the engine's own debug-readout dispatch. Decoded and wired are the activation into
-pursue inside the shipped distances, the steady-hand roll a hit provokes and the break-off a failed
-test causes, the sixth-sense roll and its stun, the `Stun` entry every stun source shares, which
-enters `Stunned` from any mode and overwrites a remaining stun rather than capping it, the seeded
-library draw an evasive maneuver plays to `ManeuverExecutor.Done`, the rubber-band `lay off` mode
-`--no-assist` disables, and `avoid crash`'s three altitude bands. Engine-free, with named inventions
-marked at their declarations. Decode: [../org/aiPilot.md](../org/aiPilot.md).
+pursue inside the shipped distances, the steady-hand roll a hit provokes, the `Evading` flag a failed
+test sets and the weighted library draw it enters, chaining a fresh maneuver each time one plays to
+`ManeuverExecutor.Done` until the pursuer's nose falls off the aircraft, the sixth-sense roll and its
+stun, the `Stun` entry every stun source shares, the rubber-band `lay off` mode `--no-assist`
+disables, and `avoid crash`'s three altitude bands. Engine-free, inventions marked where declared.
+Decode: [../org/aiPilot.md](../org/aiPilot.md), [../org/aiControlLaw.md](../org/aiControlLaw.md).
 
 ## src/Flight/ManeuverExecutor.cs
 Plays one library maneuver's timed step program as `FlightInput` values: `Next(model, dt)` each sim

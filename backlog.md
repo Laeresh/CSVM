@@ -2619,25 +2619,6 @@ usual.
   loses its floor at the same time. *Cross-refs:* `BL-523` (the same mode machine's
   patrol/pursue cycle), `docs/org/aiPilot.md`, `BL-431` (the decode session that found this).
 
-- `BL-558` `[Research]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **A damaged AI flies a full evasive maneuver where the original may only set a
-  flag.** *Evidence:* [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) records `obj+0xBA` as an
-  **evade flag**, set to 1 by the damage handler `FUN_004b9bc0` when the steady-hand test fails
-  ("Absorbed %f damage; steady hand test failed. Evading."), cleared in `FUN_0041d9f0` once the
-  pursuer's nose alignment on this aircraft drops below 0.85, and while set it suppresses the lay-off
-  branch and the voice callouts. `AiModeMachine.NotifyDamage` instead picks a maneuver and transitions
-  to `EvasiveManeuver`, falling back to an explicitly invented eight-second plain evade with random
-  60 to 120 degree heading scrambles when no maneuver is eligible. Observed at runtime: a Fury takes
-  its first 40-calibre hit, fails the roll, enters `scissors` immediately and leaves the player's
-  6-degree assist cone (`analysis/aim-assist-ttk/FINDINGS.md`). If the decode is complete, CSVM is
-  manufacturing a break-off the original does not have, and it costs hit rate on every first hit.
-  *What to settle:* whether anything else in the executable reads `+0xBA`, in particular whether the
-  mode field is written anywhere on the damage path, before deciding the flag is the whole story.
-  *⚠ Traps:* `NotifyDamage`'s own doc comment claims a decoded basis for the maneuver behaviour, so
-  two readings of the same path are in the tree and one is stale; reconcile them before touching the
-  code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
-  decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
-  *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
-
 - `BL-695` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
   all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
   without a single `[anim] damage:` line on any `lbroadNN` node anywhere in the mission window, and
@@ -2696,16 +2677,20 @@ usual.
 
 - `BL-728` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **AI aircraft rarely or never evade
   under fire.** *Evidence:* reported at the controls as "recheck evasive maneuvers", clarified as
-  "AI never or rarely evades". This is the opposite reading from `BL-558`, which found a Fury
-  entering `scissors` on its first 40-calibre hit and asks whether the original evades that early
-  at all. Both can be true if the evade fires on the steady-hand roll, which a high-rating pilot
-  passes, and so is rare on the pilots the campaign fields. *Fix shape:* fly one Instant Action
-  sortie against a low- and a high-rating pilot with the AI trace on, count `NotifyDamage` calls
-  against `EvasiveManeuver` entries, and read the steady-hand test's inputs
-  (`docs/org/aiControlLaw.md`) for the ratings the missions author. Then settle `BL-558` and this
-  together. *⚠ Traps:* the report is a feel over a whole sitting on campaign missions; do not tune
-  the roll's threshold before the count says which way it errs. *Cross-refs:* `BL-558`,
-  `docs/org/aiControlLaw.md`.
+  "AI never or rarely evades". The damage path itself is now decoded end to end and the reaction it
+  produces is faithful (`docs/org/aiControlLaw.md` "The evade flag"), so what is left is frequency:
+  the evade fires only on a failed steady-hand roll, which a high-rating pilot passes, and the
+  reaction is now one roll per episode rather than one per hit, which can only make it rarer.
+  *Fix shape:* fly one Instant Action sortie against a low- and a high-rating pilot with the AI
+  trace on, count `NotifyDamage` calls against `EvasiveManeuver` entries and against the
+  `steady hand test passed` lines, and read the roll's resolved `steady_hand_chance` for the ratings
+  the missions author. The decoded damage weighting on the roll is still unmodelled and is the first
+  suspect if the count comes out too low.
+  *⚠ Traps:* the report is a feel over a whole sitting on campaign missions; do not tune the roll's
+  threshold before the count says which way it errs. A pilot with no eligible maneuver in its
+  library reacts by setting the flag and flying on, which reads at the controls as no evade at all
+  and is the original's own behaviour; count the flag, not the mode.
+  *Cross-refs:* `docs/org/aiControlLaw.md`.
 
 - `BL-819` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **The original's
   typed cheats (the hidden mission menu, the cash grant, the gallery reveal and the one-mission

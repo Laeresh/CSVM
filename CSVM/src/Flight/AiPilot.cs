@@ -295,7 +295,7 @@ public sealed class AiPilot
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
                 quarry?.Position, quarry?.Mode, dt,
                 quarry?.Velocity, quarry?.IsHumanPiloted ?? false,
-                nose: -model.Attitude.Z);
+                nose: -model.Attitude.Z, targetNose: quarry?.Nose);
             // The two states the escort law itself short-circuits on come first, then the escort,
             // which is the whole dispatch for a wingman, a maneuver included, since the original
             // never reaches its maneuver arm from the mode-4 fork.
@@ -322,10 +322,9 @@ public sealed class AiPilot
                 case AiMode.EvasiveManeuver when machine.Executor is { } executor:
                     return executor.Next(model, dt);
 
-                case AiMode.Evade:
-                    TargetHeadingDeg = machine.EvadeHeadingDeg;
-                    TargetAltitude = machine.EvadeAltitude;
-                    return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
+                // The evade flag with nothing eligible to fly: the engagement stands, marked.
+                case AiMode.Evade when quarry is { } marked:
+                    return FlyPursuit(model, dt, marked);
 
                 case AiMode.Pursue when quarry is { } prey:
                     return FlyPursuit(model, dt, prey);

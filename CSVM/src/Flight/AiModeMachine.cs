@@ -22,7 +22,9 @@ public enum AiMode
     /// Disabled session-wide by <c>--no-assist</c> (<see cref="AiModeMachine.AssistEnabled"/>).</summary>
     LayOff,
 
-    /// <summary>Broken off after a failed steady-hand test.</summary>
+    /// <summary>The evade flag is set and no library maneuver was eligible: the pilot flies its
+    /// standing engagement, marked as evading, until the flag clears. The readout's name for the
+    /// flag on an otherwise steering pilot, not a break-off (docs/org/aiControlLaw.md).</summary>
     Evade,
 
     /// <summary>Playing one maneuver-library program through <see cref="ManeuverExecutor"/>.</summary>
@@ -63,11 +65,11 @@ public enum AiMode
 /// tag (docs/org/aiPilot.md "The danger-zone run"). ⚠ Do not add a second entry here.</summary>
 public sealed class AiModeMachine
 {
-    /// <summary>Invented: how long a plain (maneuver-less) evade runs before returning.</summary>
-    public const float EvadeDurationS = 8f;
-
-    /// <summary>Invented: seconds between evade heading scrambles.</summary>
-    public const float EvadeScrambleIntervalS = 2f;
+    /// <summary>The evade flag's clear threshold — decoded: the flag is dropped once the cosine
+    /// between the pursuer's nose and the line to this aircraft falls under 0.85, about 31.8
+    /// degrees off (<c>FUN_0041d9f0</c>, <c>0x0041deaf</c>). Nothing else times the flag out; the
+    /// 8 s stamp the damage handler writes at <c>+0xbc</c> is read nowhere in the image.</summary>
+    public const float EvadeClearAlignment = 0.85f;
 
     /// <summary>Obstacle-probe cadence floor, seconds — decoded: the original re-arms its per-plane
     /// timer to the game clock plus 0.5…1.0 s (<c>FUN_0041f810</c>), the fraction drawn as
@@ -100,9 +102,22 @@ public sealed class AiModeMachine
     /// same 1000 m <see cref="AiPilot.ClimbOutAim"/> flies. Was an invented 250.</summary>
     public const float ClimbOutM = 1000f;
 
-    /// <summary>Invented: selection weight multiplier for a roster-authored signature maneuver
-    /// ("weighted up during selection" is decoded; the factor is not).</summary>
-    public const int SignatureWeight = 3;
+    /// <summary>Selection weight multiplier for a roster-authored signature maneuver — decoded
+    /// (<c>FUN_004201a0</c>, <c>0x004205ca</c>). Was an invented 3.</summary>
+    public const float SignatureWeight = 6f;
+
+    /// <summary>Selection weight multiplier on the maneuver flown last — decoded
+    /// (<c>FUN_004201a0</c>, <c>0x00420584</c>, off the <c>+0x9b4</c> slot). This is what keeps a
+    /// chained evade from flying the same program twice running.</summary>
+    public const float RepeatWeight = 0.1f;
+
+    /// <summary>Selection weight multiplier on the maneuver flown before last — decoded
+    /// (<c>FUN_004201a0</c>, <c>0x00420598</c>, off the <c>+0x9b8</c> slot).</summary>
+    public const float SecondLastWeight = 0.2f;
+
+    /// <summary>Selection weight floor — decoded: a weight that comes out negative is replaced by
+    /// this, not clamped to zero (<c>FUN_004201a0</c>, <c>0x00420607</c>).</summary>
+    public const float MinSelectionWeight = 0.1f;
 
     /// <summary>Invented: a pursuing human this far behind has "fallen behind" — pursue eases
     /// into lay off past this gap. The mode and the intent are decoded; the distance is not.</summary>
@@ -202,11 +217,11 @@ public sealed class AiModeMachine
     private Vector3 _lastPos;
     private Vector3 _lastVelocity;
     private Vector3? _nose;
+    private string? _lastManeuver;
+    private string? _secondLastManeuver;
     private float _layOffHold;
     private float _pursuedFor;
     private float _stunRemaining;
-    private float _evadeRemaining;
-    private float _evadeScramble;
     private float _probeCooldown;
 
     public AiModeMachine(Random rng)
@@ -234,11 +249,11 @@ public sealed class AiModeMachine
     /// expiry at <c>+0xc0</c> minus the clock.</summary>
     public float StunRemainingS => Mode == AiMode.Stunned ? Mathf.Max(0f, _stunRemaining) : 0f;
 
-    /// <summary>Evade's current heading order, degrees (mission-data convention).</summary>
-    public float EvadeHeadingDeg { get; private set; }
-
-    /// <summary>Evade's current altitude order, metres.</summary>
-    public float EvadeAltitude { get; private set; }
+    /// <summary>The evade flag (the original's <c>+0xBA</c>): set by a failed steady-hand test and
+    /// held until <see cref="EvadeClearAlignment"/> clears it. While it stands, lay off cannot be
+    /// entered, a finished maneuver chains into another one, and no second steady-hand roll is
+    /// taken. It is not a mode: the pilot keeps flying its engagement.</summary>
+    public bool Evading { get; private set; }
 
     /// <summary>Avoid-crash's climb-out altitude order (entry altitude + <see cref="ClimbOutM"/>).</summary>
     public float ClimbOutAltitude { get; private set; }
@@ -272,14 +287,15 @@ public sealed class AiModeMachine
         Transition(mode, reason);
     }
 
-    /// <summary>One sim tick's transitions. <paramref name="targetPos"/> is the standing target's
-    /// position or null; <paramref name="targetMode"/> is its own machine's mode when the target
-    /// is an AI aircraft, for the sixth-sense trigger. A human target reports null: the
-    /// sixth-sense roll fires only against AI targets today (undecoded for a human).
+    /// <summary>One sim tick's transitions. <paramref name="targetMode"/> is the standing target's
+    /// own mode when it is an AI aircraft, for the sixth-sense trigger; a human target reports
+    /// null, since that roll is undecoded against a human.
     /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off
-    /// pursued test, extended only to a human-piloted pursuer.</summary>
+    /// pursued test, extended only to a human-piloted pursuer, and
+    /// <paramref name="targetNose"/> the evade flag's alignment clear.</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
-        float dt, Vector3? targetVelocity = null, bool targetIsHuman = false, Vector3? nose = null)
+        float dt, Vector3? targetVelocity = null, bool targetIsHuman = false, Vector3? nose = null,
+        Vector3? targetNose = null)
     {
         _lastPos = pos;
         _lastVelocity = velocity;
@@ -313,6 +329,7 @@ public sealed class AiModeMachine
             return Mode;
 
         UpdateAvoidCrash(pos, velocity, dt);
+        UpdateEvadeFlag(pos, targetPos, targetNose);
 
         switch (Mode)
         {
@@ -325,8 +342,11 @@ public sealed class AiModeMachine
                 }
                 break;
 
+            // Evade joins the engagement cases: the flag runs the same driver, so the target
+            // loss and the leash still apply while it stands.
             case AiMode.Pursue:
             case AiMode.LayOff:
+            case AiMode.Evade:
                 if (targetPos is not { } tp)
                 {
                     Transition(AiMode.Patrol, "target lost");
@@ -342,28 +362,15 @@ public sealed class AiModeMachine
                 }
                 break;
 
-            case AiMode.Evade:
-                _evadeRemaining -= dt;
-                _evadeScramble -= dt;
-                if (_evadeRemaining <= 0f)
-                {
-                    ReturnFromReaction(pos, targetPos);
-                }
-                else if (_evadeScramble <= 0f)
-                {
-                    _evadeScramble = EvadeScrambleIntervalS;
-                    // Invented: an unpredictable 60–120° swing to a random side, seeded.
-                    EvadeHeadingDeg = Mathf.Wrap(
-                        EvadeHeadingDeg + RandomSign() * (60f + 60f * (float)_rng.NextDouble()),
-                        -180f, 180f);
-                }
-                break;
-
             case AiMode.EvasiveManeuver:
                 if (Executor is not { Done: false })
                 {
                     Executor = null;
-                    ReturnFromReaction(pos, targetPos);
+                    Evading = Evading && PursuerStillOn(pos, targetPos, targetNose);
+                    if (Evading)
+                        StartReaction("program exhausted");
+                    else
+                        ReturnFromReaction(pos, targetPos);
                 }
                 break;
 
@@ -375,35 +382,26 @@ public sealed class AiModeMachine
         return Mode;
     }
 
-    /// <summary>The hit path's entry (decoded reaction): rolls the steady-hand test on the
-    /// absorbed damage; a FAILED test breaks off into an evasive maneuver when an eligible one
-    /// exists, plain evade otherwise. <paramref name="threatDir"/> is a world-space hint toward
-    /// the threat (the remake passes the impact offset — the shooter's position is not carried
-    /// on the round); evade's first heading turns away from it. No player-health condition is
-    /// modelled on this roll — nothing decoded supports one.</summary>
-    public void NotifyDamage(float absorbed, Vector3 threatDir)
+    /// <summary>The hit path's entry (decoded: <c>FUN_004b9bc0</c>, <c>0x004b9f1e</c> onward):
+    /// rolls the steady-hand test on the absorbed damage, and a FAILED test sets the evade flag
+    /// and picks a library maneuver. A pilot with nothing eligible does not break off at all; it
+    /// keeps its engagement with the flag set. No player-health condition is modelled on this
+    /// roll, and no second roll is taken while the flag already stands.</summary>
+    public void NotifyDamage(float absorbed)
     {
         if (Mode is AiMode.Stunned or AiMode.AvoidCrash or AiMode.NavigatingDangerZone)
-            return; // no controls / emergency override / on rails — nothing to break off
+            return; // no controls / emergency override / on rails — nothing to react with
+        if (Evading)
+            return; // the original only refreshes its stamp here, and rolls nothing
         bool failed = _rng.NextDouble() < SteadyHandChance;
         RollLogged?.Invoke(FormattableString.Invariant(
             $"absorbed {absorbed:0.0} damage; steady hand test ")
             + (failed ? "failed. Evading." : "passed. Not evading."));
         if (!failed)
             return;
+        Evading = true;
         RememberReturnMode();
-        if (Mode == AiMode.EvasiveManeuver)
-            return; // already flying one out; let it finish
-        if (PickManeuver() is { } maneuver)
-        {
-            Executor = new ManeuverExecutor(maneuver);
-            Transition(AiMode.EvasiveManeuver,
-                $"'{maneuver.Name}' natural touch {maneuver.Difficulty}/{NaturalTouch}");
-        }
-        else
-        {
-            StartPlainEvade(threatDir);
-        }
+        StartReaction("steady hand test failed");
     }
 
     /// <summary>The position-update entry (decoded vocabulary: "AI has been evaded"): rolls the
@@ -450,22 +448,47 @@ public sealed class AiModeMachine
         };
     }
 
-    // Evade needs an initial course even when entered externally: away from the
-    // threat, offset randomly (invented behaviour — the decode is thin past "Evading.").
-    private void StartPlainEvade(Vector3 threatDir)
+    // One turn of the flag's reaction: a fresh maneuver when the library offers one, and the
+    // marked engagement otherwise. The original re-enters the picker from the combat driver
+    // every frame the flag stands and the step deadline has passed, so a program that ends
+    // while the flag is still set runs straight into the next one.
+    private void StartReaction(string why)
     {
-        _evadeRemaining = EvadeDurationS;
-        _evadeScramble = EvadeScrambleIntervalS;
-        var away = -threatDir;
-        EvadeHeadingDeg = Mathf.Wrap(
-            (new Vector2(away.X, away.Z).LengthSquared() > 1e-4f
-                ? AiPilot.HeadingDegOf(away)
-                : 360f * (float)_rng.NextDouble())
-            + RandomSign() * 30f * (float)_rng.NextDouble(),
-            -180f, 180f);
-        EvadeAltitude = _lastPos.Y + RandomSign() * 150f * (float)_rng.NextDouble();
-        Transition(AiMode.Evade, "breaking off");
+        if (PickManeuver() is { } maneuver)
+        {
+            _secondLastManeuver = _lastManeuver;
+            _lastManeuver = maneuver.Name;
+            Executor = new ManeuverExecutor(maneuver);
+            Transition(AiMode.EvasiveManeuver,
+                $"'{maneuver.Name}' natural touch {maneuver.Difficulty}/{NaturalTouch}, {why}");
+        }
+        else
+        {
+            Transition(AiMode.Evade, $"{why}, no maneuver eligible");
+        }
     }
+
+    // ⚠ Do not test the flag while a maneuver is playing. The clear sits inside the steering
+    // driver's own branch, which a pilot on a program never reaches, so a running program is
+    // never cut short by it; the moment one ends is where the chain re-tests it.
+    private void UpdateEvadeFlag(Vector3 pos, Vector3? targetPos, Vector3? targetNose)
+    {
+        if (!Evading || Mode == AiMode.EvasiveManeuver
+            || PursuerStillOn(pos, targetPos, targetNose))
+            return;
+        Evading = false;
+        if (Mode == AiMode.Evade)
+            ReturnFromReaction(pos, targetPos);
+    }
+
+    // The flag's hold condition: the pursuer's nose still on this aircraft. The original measures
+    // the human player's forward axis against the line to its own target, which the damage
+    // handler has just pointed at the player. No target means no driver to test it at all, which
+    // the port reads as a clear rather than a latch.
+    private bool PursuerStillOn(Vector3 pos, Vector3? targetPos, Vector3? targetNose) =>
+        targetPos is { } tp && targetNose is { } tn && tn.LengthSquared() > 1e-4f
+            && (pos - tp).LengthSquared() > 1e-4f
+            && (pos - tp).Normalized().Dot(tn.Normalized()) >= EvadeClearAlignment;
 
     // Where a finished reaction goes back to: the prior mode when its conditions still
     // hold, patrol otherwise.
@@ -490,6 +513,14 @@ public sealed class AiModeMachine
     private void UpdateLayOff(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity, bool targetIsHuman, float dt)
     {
+        if (Evading)
+        {
+            // The flag makes the break-off branch unreachable, so a laying-off pilot that takes
+            // a hit goes straight back to the engagement.
+            if (Mode == AiMode.LayOff)
+                Transition(AiMode.Pursue, "evading");
+            return;
+        }
         _layOffHold -= dt;
         float gap = pos.DistanceTo(targetPos);
         bool pursued = AssistEnabled && targetIsHuman
@@ -597,26 +628,44 @@ public sealed class AiModeMachine
         Transition(AiMode.AvoidCrash, reason);
     }
 
-    // An eligible library maneuver, signature entries weighted up, one seeded draw;
-    // null when no library is set or nothing passes the natural-touch cull.
+    // One weighted seeded draw over the entries that pass the natural-touch cull; null when no
+    // library is set or nothing passes. The weight is the entry's own selection bias plus one,
+    // penalised for the last two flown and multiplied up for a signature entry, floored last.
+    // The original's remaining term, a point for a maneuver whose simulated end helps the
+    // aircraft toward its preferred altitude, needs the flown-out program and is not modelled.
     private Maneuver? PickManeuver()
     {
         if (Library is not { Count: > 0 } library)
             return null;
-        var pool = new List<Maneuver>();
+        var pool = new List<(Maneuver Maneuver, float Weight)>();
+        float total = 0f;
         foreach (var m in library)
         {
             if (!m.EligibleFor(NaturalTouch))
                 continue;
-            int weight = SignatureManeuvers != null
-                && SignatureManeuvers.Contains(m.Name) ? SignatureWeight : 1;
-            for (int i = 0; i < weight; i++)
-                pool.Add(m);
+            float weight = m.Bias + 1f;
+            if (m.Name == _lastManeuver)
+                weight *= RepeatWeight;
+            if (m.Name == _secondLastManeuver)
+                weight *= SecondLastWeight;
+            if (SignatureManeuvers != null && SignatureManeuvers.Contains(m.Name))
+                weight *= SignatureWeight;
+            if (weight < 0f)
+                weight = MinSelectionWeight;
+            pool.Add((m, weight));
+            total += weight;
         }
-        return pool.Count > 0 ? pool[_rng.Next(pool.Count)] : null;
+        if (pool.Count == 0)
+            return null;
+        float roll = (float)_rng.NextDouble() * total;
+        foreach (var (maneuver, weight) in pool)
+        {
+            roll -= weight;
+            if (roll <= 0f)
+                return maneuver;
+        }
+        return pool[^1].Maneuver;
     }
-
-    private float RandomSign() => _rng.Next(2) == 0 ? -1f : 1f;
 
     private void Transition(AiMode to, string reason)
     {
@@ -630,13 +679,8 @@ public sealed class AiModeMachine
             _stunRemaining = 0f; // an override out of the stun leaves no stale expiry behind
         if (to == AiMode.Stunned && _stunRemaining <= 0f)
             _stunRemaining = StunRecoveryIntervalS;
-        if (to == AiMode.Evade && _evadeRemaining <= 0f)
-        {
-            _evadeRemaining = EvadeDurationS;
-            _evadeScramble = EvadeScrambleIntervalS;
-            if (EvadeAltitude <= 0f)
-                EvadeAltitude = _lastPos.Y;
-        }
+        if (to is AiMode.Evade or AiMode.EvasiveManeuver)
+            Evading = true; // an ordered reaction carries the flag the hit path would have set
         if (to == AiMode.AvoidCrash && ClimbOutAltitude <= 0f)
             ClimbOutAltitude = _lastPos.Y + ClimbOutM;
         if (to == AiMode.LayOff)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -82,14 +82,15 @@ public class AiModeMachineTests
     [Fact]
     public void FailedSteadyHandEvadesAndAPassedOneDoesNot()
     {
-        // Chance pinned to 1: the roll always fails, in the decoded vocabulary.
+        // Chance pinned to 1: the roll always fails, in the decoded vocabulary. With no library
+        // there is nothing to fly, so the flag stands over the engagement and nothing breaks off.
         var m = Machine();
         string? logged = null;
         m.RollLogged += line => logged = line;
         PursueFrom(m, Home + new Vector3(500f, 0f, 0f));
-        m.NotifyDamage(12f, new Vector3(1f, 0f, 0f));
         m.SteadyHandChance = 1f;
-        m.NotifyDamage(12f, new Vector3(1f, 0f, 0f));
+        m.NotifyDamage(12f);
+        Assert.True(m.Evading);
         Assert.Equal(AiMode.Evade, m.Mode);
         Assert.Contains("steady hand test failed. Evading.", logged);
         Assert.Contains("absorbed 12.0 damage", logged);
@@ -100,41 +101,123 @@ public class AiModeMachineTests
         m2.RollLogged += line => logged2 = line;
         PursueFrom(m2, Home + new Vector3(500f, 0f, 0f));
         m2.SteadyHandChance = 0f;
-        m2.NotifyDamage(5f, new Vector3(1f, 0f, 0f));
+        m2.NotifyDamage(5f);
         Assert.Equal(AiMode.Pursue, m2.Mode);
+        Assert.False(m2.Evading);
         Assert.Contains("steady hand test passed. Not evading.", logged2);
     }
 
+    /// <summary>The evade flag's own life: nothing times it out, the pursuer's nose alignment is
+    /// the only thing that ends it, and it takes no second steady-hand roll while it stands.</summary>
     [Fact]
-    public void EvadeScramblesItsCourseAndReturnsToThePriorMode()
+    public void TheEvadeFlagRunsOffThePursuersAlignmentAlone()
     {
         var m = Machine();
         var target = Home + new Vector3(500f, 0f, 0f);
+        var noseOn = new Vector3(-1f, 0f, 0f); // from the pursuer, straight at this aircraft
         PursueFrom(m, target);
         m.SteadyHandChance = 1f;
-        m.NotifyDamage(8f, new Vector3(1f, 0f, 0f));
-        Assert.Equal(AiMode.Evade, m.Mode);
-        float firstHeading = m.EvadeHeadingDeg;
+        m.NotifyDamage(8f);
+        Assert.True(m.Evading);
 
-        // The invented scramble: past the interval the ordered heading has moved.
-        for (int i = 0; i < (int)(AiModeMachine.EvadeScrambleIntervalS * 60f) + 5; i++)
-            m.Update(Home, Level, target, null, 1f / 60f);
+        // Twenty seconds with the nose held on, well past any plausible timeout: still set.
+        for (int i = 0; i < 1200; i++)
+            m.Update(Home, Level, target, null, 1f / 60f, targetNose: noseOn);
+        Assert.True(m.Evading);
         Assert.Equal(AiMode.Evade, m.Mode);
-        Assert.NotEqual(firstHeading, m.EvadeHeadingDeg);
 
-        // The run expires with the target still in range: back to pursue.
-        for (int i = 0; i < (int)(AiModeMachine.EvadeDurationS * 60f); i++)
-            m.Update(Home, Level, target, null, 1f / 60f);
+        // A second hit rolls nothing at all while the flag stands.
+        string? logged = null;
+        m.RollLogged += line => logged = line;
+        m.NotifyDamage(8f);
+        Assert.Null(logged);
+
+        // The nose falls past the 0.85 cosine: the flag clears and the engagement resumes.
+        m.Update(Home, Level, target, null, 1f / 60f, targetNose: new Vector3(0f, 0f, -1f));
+        Assert.False(m.Evading);
         Assert.Equal(AiMode.Pursue, m.Mode);
 
-        // Same reaction with the target gone by the end: patrol instead.
+        // The target gone instead: the flag clears and the pilot is back on patrol.
         var m2 = Machine();
         PursueFrom(m2, target);
         m2.SteadyHandChance = 1f;
-        m2.NotifyDamage(8f, new Vector3(1f, 0f, 0f));
-        for (int i = 0; i < (int)(AiModeMachine.EvadeDurationS * 60f) + 10; i++)
-            m2.Update(Home, Level, null, null, 1f / 60f);
+        m2.NotifyDamage(8f);
+        m2.Update(Home, Level, null, null, 1f / 60f);
+        Assert.False(m2.Evading);
         Assert.Equal(AiMode.Patrol, m2.Mode);
+    }
+
+    /// <summary>A maneuver that runs out with the flag still set chains into another one, and the
+    /// repeat penalty makes that another program rather than the same one again.</summary>
+    [Fact]
+    public void AnEvadeChainsAFreshManeuverWhenTheProgramRunsOut()
+    {
+        var target = Home + new Vector3(500f, 0f, 0f);
+        var noseOn = new Vector3(-1f, 0f, 0f);
+        var model = new FlightModel(new PlaneStats());
+        int repeats = 0;
+        const int runs = 80;
+        for (int seed = 0; seed < runs; seed++)
+        {
+            var m = Machine(seed);
+            m.NaturalTouch = 9;
+            m.Library = new[] { QuickManeuver("bank_turn", 2), QuickManeuver("split_s", 8) };
+            PursueFrom(m, target);
+            m.SteadyHandChance = 1f;
+            m.NotifyDamage(8f);
+            Assert.Equal(AiMode.EvasiveManeuver, m.Mode);
+            string first = m.Executor!.Maneuver.Name;
+
+            for (int i = 0; i < 40 && !m.Executor!.Done; i++)
+                m.Executor.Next(model, 0.02f);
+            Assert.Equal(AiMode.EvasiveManeuver,
+                m.Update(Home, Level, target, null, 1f / 60f, targetNose: noseOn));
+            if (m.Executor!.Maneuver.Name == first)
+                repeats++;
+
+            // ⚠ The clear cannot cut a program short: the pursuer turning away mid-program
+            // leaves both the flag and the maneuver alone.
+            var off = new Vector3(0f, 0f, -1f);
+            Assert.Equal(AiMode.EvasiveManeuver,
+                m.Update(Home, Level, target, null, 1f / 60f, targetNose: off));
+            Assert.True(m.Evading);
+
+            // The chain ends where that program does.
+            for (int i = 0; i < 40 && !m.Executor!.Done; i++)
+                m.Executor.Next(model, 0.02f);
+            Assert.Equal(AiMode.Pursue,
+                m.Update(Home, Level, target, null, 1f / 60f, targetNose: off));
+            Assert.False(m.Evading);
+            Assert.Null(m.Executor);
+        }
+
+        // The 0.1 repeat weight against 1.0: about one draw in eleven, never the usual case.
+        Assert.InRange(repeats, 0, 20);
+    }
+
+    /// <summary>The flag makes the break-off branch unreachable, so however long a human pursuer
+    /// sits behind an evading pilot it never eases off to let them catch up.</summary>
+    [Fact]
+    public void AnEvadingPilotNeverEasesIntoLayOff()
+    {
+        var m = Machine();
+        var noseOn = new Vector3(0f, 0f, -1f); // the chaser, pointed along its own closure
+        PursueFrom(m, Astern600);
+        m.SteadyHandChance = 1f;
+        m.NotifyDamage(8f);
+        Assert.Equal(AiMode.Evade, m.Mode);
+
+        for (int i = 0; i < 300; i++)
+            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, true, targetNose: noseOn);
+        Assert.True(m.Evading);
+        Assert.Equal(AiMode.Evade, m.Mode);
+
+        // The same geometry with no flag does ease off, which is what makes the check above bite.
+        var m2 = Machine();
+        PursueFrom(m2, Astern600);
+        for (int i = 0; i < 300; i++)
+            m2.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, true);
+        Assert.Equal(AiMode.LayOff, m2.Mode);
     }
 
     [Fact]
@@ -203,7 +286,7 @@ public class AiModeMachineTests
         m2.Library = new[] { QuickManeuver("bank_turn", 2, duration: 5f) };
         PursueFrom(m2, target);
         m2.SteadyHandChance = 1f;
-        m2.NotifyDamage(8f, new Vector3(1f, 0f, 0f));
+        m2.NotifyDamage(8f);
         Assert.Equal(AiMode.EvasiveManeuver, m2.Mode);
         m2.Stun(0.5f);
         Assert.Equal(AiMode.Stunned, m2.Mode);
@@ -284,7 +367,7 @@ public class AiModeMachineTests
         PursueFrom(m, target);
         m.Stun(5f);
         m.SteadyHandChance = 1f;
-        m.NotifyDamage(10f, new Vector3(1f, 0f, 0f));
+        m.NotifyDamage(10f);
         Assert.Equal(AiMode.Stunned, m.Mode); // no controls to break off with
         m.SixthSenseChance = 0f;
         m.NotifyTargetEvaded();
@@ -306,7 +389,7 @@ public class AiModeMachineTests
         m.SteadyHandChance = 1f;
         string? reason = null;
         m.ModeChanged += (_, to, why) => { if (to == AiMode.EvasiveManeuver) reason = why; };
-        m.NotifyDamage(8f, new Vector3(1f, 0f, 0f));
+        m.NotifyDamage(8f);
 
         // Only the entry inside the natural-touch cull is playable; the stub never is.
         Assert.Equal(AiMode.EvasiveManeuver, m.Mode);
@@ -336,13 +419,13 @@ public class AiModeMachineTests
             m.SignatureManeuvers = new[] { "split_s" };
             PursueFrom(m, Home + new Vector3(500f, 0f, 0f));
             m.SteadyHandChance = 1f;
-            m.NotifyDamage(8f, new Vector3(1f, 0f, 0f));
+            m.NotifyDamage(8f);
             if (m.Executor!.Maneuver.Name == "split_s")
                 signaturePicks++;
         }
 
-        // Weight 3 against 1: the expectation is 3/4 of the draws; well above an even split.
-        Assert.InRange(signaturePicks, (int)(runs * 0.60), runs);
+        // Weight 6 against 1: the expectation is 6/7 of the draws; well above an even split.
+        Assert.InRange(signaturePicks, (int)(runs * 0.75), runs);
     }
 
     [Fact]
@@ -539,7 +622,7 @@ public class AiModeMachineTests
             for (int i = 0; i < 600; i++)
             {
                 if (i % 90 == 0)
-                    m.NotifyDamage(6f, new Vector3(1f, 0f, 0f));
+                    m.NotifyDamage(6f);
                 if (i % 240 == 120)
                     m.NotifyTargetEvaded();
                 m.Update(Home, Level, target, null, 1f / 60f);

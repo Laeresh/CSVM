@@ -1960,7 +1960,9 @@ internal static class AiSuites
     [Suite("ai-modes",
         "the D11 nine-mode machine on a live AI plane: patrol activates into pursue inside " +
         "the shipped 2000 m radius, a scripted failed steady-hand roll on a real projectile " +
-        "hit breaks off into an evasive maneuver that plays to Done and returns, a failed " +
+        "hit sets the evade flag and enters an evasive maneuver, a pursuer pointed elsewhere " +
+        "clears the flag and releases the reaction while a nose-on one holds it and chains a " +
+        "second program, a failed " +
         "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
         "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
         "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
@@ -2101,20 +2103,49 @@ internal static class AiSuites
             ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
             ctx.Check(lastRoll != null && lastRoll.Contains("steady hand test failed. Evading."),
                 $"the hit rolls steady hand in the engine's vocabulary roll={lastRoll}");
+            ctx.Check(machine.Evading, $"the failed test sets the evade flag");
             ctx.Check(machine.Mode == AiMode.EvasiveManeuver && machine.Executor != null,
-                $"the failed test breaks off into an evasive maneuver mode={AiModeMachine.NameOf(machine.Mode)}");
+                $"…and enters an evasive maneuver mode={AiModeMachine.NameOf(machine.Mode)}");
             var flown = machine.Executor?.Maneuver;
             ctx.Check(flown != null && flown.EligibleFor(machine.NaturalTouch),
                 $"…an eligible library entry name={flown?.Name} difficulty={flown?.Difficulty}/{machine.NaturalTouch}");
             machine.SteadyHandChance = 0f; // stray hits must not re-trigger mid-phase
 
-            // --- the maneuver plays to Done and the machine returns to a flyable mode.
+            // --- the hostile is parked facing away, so its nose is nowhere near the 0.85 cosine.
+            // The program still plays to Done (the clear cannot cut one short) and the flag is
+            // tested where it ends: one maneuver, then the engagement again.
             budget = 60 * 60;
             while (machine.Mode == AiMode.EvasiveManeuver && budget-- > 0)
                 Step(1);
+            ctx.Check(!machine.Evading,
+                $"a pursuer pointed elsewhere clears the flag at the end of the program");
             ctx.Check(machine.Mode is AiMode.Pursue or AiMode.Patrol,
-                $"the maneuver returns to the prior mode mode={AiModeMachine.NameOf(machine.Mode)}");
+                $"…and the reaction returns to the prior mode mode={AiModeMachine.NameOf(machine.Mode)}");
             ctx.Check(machine.Executor == null, $"…and the executor is released");
+
+            // --- the same hit with the hostile's nose held on: the flag survives the end of the
+            // program and chains straight into the next one instead of releasing.
+            target.PlaceHeld(targetPos, ai.WorldPosition);
+            machine.SteadyHandChance = 1f;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            machine.SteadyHandChance = 0f;
+            var firstProgram = machine.Executor;
+            ctx.Check(machine.Evading && firstProgram != null,
+                $"a nose-on pursuer leaves the flag set mode={AiModeMachine.NameOf(machine.Mode)}");
+            budget = 60 * 30;
+            while (machine.Evading && ReferenceEquals(machine.Executor, firstProgram) && budget-- > 0)
+                Step(1);
+            ctx.Check(machine.Evading && machine.Mode == AiMode.EvasiveManeuver
+                && !ReferenceEquals(machine.Executor, firstProgram),
+                $"the program running out chains another first={firstProgram?.Maneuver.Name} now={machine.Executor?.Maneuver.Name} mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            // --- turned away again, the chain ends at the end of the program it is on.
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+            budget = 60 * 60;
+            while (machine.Mode == AiMode.EvasiveManeuver && budget-- > 0)
+                Step(1);
+            ctx.Check(!machine.Evading && machine.Executor == null,
+                $"the pursuer turning away ends the chain mode={AiModeMachine.NameOf(machine.Mode)}");
 
             // --- a scripted FAILED sixth-sense roll stuns: gunner silent, then recovery after
             // stun_recovery_interval (the shipped value at rating 5).
