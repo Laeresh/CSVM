@@ -57,6 +57,20 @@ public sealed record BoardPalette(
         LabelActivate: new Color(1f, 0.82f, 0.38f),
         Hint: new Color(0.90f, 0.88f, 0.80f));
 
+    /// <summary>The pause sheet: the chart's objectives parchment and the four escape strips, both
+    /// printed near-black, the ink <c>fonts.zrd</c> gives <c>ObjList</c> and the strips' own labels.
+    /// The cursor's row is the flags' red, which is chosen rather than read: the original marks a
+    /// rollover with a second strip bitmap and this port has one cursor for pad, keys and pointer.</summary>
+    public static readonly BoardPalette Escape = new(
+        Row: new Color(0.063f, 0.063f, 0.063f),
+        Focus: new Color(0.60f, 0.09f, 0.06f),
+        Heading: new Color(0.031f, 0.031f, 0.031f),
+        Detail: new Color(0.20f, 0.17f, 0.13f),
+        LabelNormal: new Color(0.031f, 0.031f, 0.031f),
+        LabelRollover: new Color(0.60f, 0.09f, 0.06f),
+        LabelActivate: new Color(0f, 0f, 0f),
+        Hint: new Color(0.16f, 0.13f, 0.10f));
+
     /// <summary>The load screen's blackboard, where everything is chalk.</summary>
     public static readonly BoardPalette Chalk = new(
         Row: new Color(0.86f, 0.88f, 0.90f),

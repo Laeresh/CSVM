@@ -203,6 +203,15 @@ public sealed class CampaignDirector
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
 
+    /// <summary>The mission's storage address, the ZBD world folder number and its <c>M0n</c>
+    /// number. ⚠ Not the act and its position; it is the pair every per-mission dialog key is built
+    /// from (docs/formats/campaign-missions.md).</summary>
+    public (int Campaign, int Mission) Address => (_mission.Campaign, _mission.Mission);
+
+    /// <summary>The mission's own <c>objectives.zrd</c> path, for a screen that reads the reader
+    /// rather than this director's own graph.</summary>
+    public string MissionZrdrPath => _missionZrdrPath;
+
     /// <summary>Raised when the mission has ended and its result is banked: the session layer's cue
     /// to leave the world and put the player back in the cabin. The cabin screen itself is C22's.</summary>
     public bool ReturnToCabin { get; private set; }

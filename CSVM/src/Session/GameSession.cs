@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -47,6 +47,15 @@ public partial class GameSession : Node3D
     // Seconds a downed Versus player watches the crash cam before auto-respawning (R skips early).
     // Respawn is at the player's own spawn point, full HP/ammo, no invulnerability window.
     private const float VersusRespawnDelay = 3f;
+
+    // Nathan Zachary's own zeppelin: the world node escape.zrd's shared MYZEP icon stands for, and
+    // the name the original looks up before deciding whether to draw it at all.
+    private const string PirateZepNode = "piratezep";
+
+    // The memento the pause sheet draws. The original keeps the image name per profile and the
+    // campaign awards new ones; neither picking nor awarding one is shipped here, so it is the
+    // opening keepsake the cabin also draws. Decode: docs/org/pause-screen.md.
+    private const string PauseMemento = "ms_p_initialpinup1";
 
     private static readonly string[] InstanceShaderParams =
         { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
@@ -107,6 +116,9 @@ public partial class GameSession : Node3D
     private readonly OrbitCamera _orbit;
     // launched into the menu → the boards' Exit item returns there, not quit
     private readonly bool _menuDriven;
+    // The presentation this session's boards take, resolved by the Launcher. The only board that
+    // reads it is the pause screen, which the Original presentation composes from escape.zrd.
+    private readonly UI.Menu.PresentationId _presentation;
     // The boards' Exit item, routed by the Launcher (launchscreen or quit).
     private readonly Action _exitSession;
     // The boards' Restart item on an Instant Action or campaign mission: the Launcher frees this
@@ -259,6 +271,9 @@ public partial class GameSession : Node3D
     // Who is holding the sim clock and why — shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
+    // The Original presentation's pause sheet while it is the board in use. Its parchment carries
+    // the objectives, so the corner readout is not built beside it.
+    private Flight.OriginalPauseBoard? _originalPause;
     // Photo mode's three pieces, all null unless it is engaged: the hint/exit reader, the camera
     // holding the pane, and whose pane it is.
     private UI.PhotoModeHud? _photoHud;
@@ -329,6 +344,7 @@ public partial class GameSession : Node3D
         _sun = ctx.Sun;
         _env = ctx.Env;
         _menuDriven = ctx.MenuDriven;
+        _presentation = ctx.Presentation;
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
@@ -2276,12 +2292,25 @@ public partial class GameSession : Node3D
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. The whole-window board covers every pane; single player uses the same path.
         var pauseState = _pauseState!;
-        var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
-        pauseBoard.Restart = Rerun;
-        pauseBoard.Exit = _exitSession;
-        // Read at press time, not captured: the owner is whoever paused THIS time, and only that
-        // player drives the cursor that reached this row.
-        pauseBoard.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
+        Control pauseBoard;
+        if (BuildOriginalPauseBoard(pauseState, state.WorldRuntime) is { } sheet)
+        {
+            sheet.Restart = Rerun;
+            sheet.Exit = _exitSession;
+            _originalPause = sheet;
+            pauseBoard = sheet;
+        }
+        else
+        {
+            var builtIn = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
+            builtIn.Restart = Rerun;
+            builtIn.Exit = _exitSession;
+            // Read at press time, not captured: the owner is whoever paused THIS time, and only that
+            // player drives the cursor that reached this row.
+            builtIn.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
+            pauseBoard = builtIn;
+        }
+
         _boards.Add(pauseBoard);
         var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.HudLayers.Board };
         pauseLayer.AddChild(pauseBoard);
@@ -2993,8 +3022,14 @@ public partial class GameSession : Node3D
                 Path.Combine(_dataRoot, "extracted", "rimage"));
             foreach (var rig in _rigs)
             {
-                rig.HudParent.AddChild(
-                    UI.ObjectivesHud.Build(campaign, objectiveStrings, _pauseState!, objectiveMark));
+                // ⚠ Not beside the Original pause sheet: that screen's own parchment already
+                // carries the objectives, and two readouts over one pause is one too many.
+                if (_originalPause == null)
+                {
+                    rig.HudParent.AddChild(UI.ObjectivesHud.Build(
+                        campaign, objectiveStrings, _pauseState!, objectiveMark));
+                }
+
                 rig.HudParent.AddChild(UI.MissionEndFade.Build(campaign));
             }
             var sites = new ObjectiveSites(campaign, objectiveStrings,
@@ -3474,6 +3509,104 @@ public partial class GameSession : Node3D
     {
         var inputs = _menuInputs ??= BuildMenuInputs(null);
         return playerIndex >= 0 && playerIndex < inputs.Length ? inputs[playerIndex] : inputs[0];
+    }
+
+    // The Original presentation's pause sheet, or null where it does not apply: the Built-in
+    // presentation, a mode with no campaign mission behind it, or an extraction the sheet cannot be
+    // read out of. Falling back to the Built-in board is what keeps a pause always available.
+    private Flight.OriginalPauseBoard? BuildOriginalPauseBoard(
+        Flight.PauseState pauseState, AnimRuntime? runtime)
+    {
+        if (_presentation != UI.Menu.PresentationId.Original || _campaign is not { } campaign)
+        {
+            return null;
+        }
+
+        var (chapterNumber, missionNumber) = campaign.Address;
+        var sheet = UI.PauseSheet.Load(
+            _zrdrPath, _messagesPath,
+            UI.Menu.EscapeDialog.CampaignKey(chapterNumber, missionNumber), instantAction: false);
+        if (sheet == null)
+        {
+            Log.Warn("ui", $"pause: no escape.zrd sheet for C{chapterNumber}/M0{missionNumber}");
+            return null;
+        }
+
+        var objectives = ReadPauseObjectives(campaign);
+        return Flight.OriginalPauseBoard.Build(
+            pauseState, MenuInputFor, _dataRoot, sheet,
+            () => PauseReadout(sheet, campaign, objectives, pauseState, runtime));
+    }
+
+    // The parchment's own row order, which is the briefing's: every keyed IDENTITY by priority.
+    // The dialog's script indexes THIS list, so the graph's rows cannot stand in for it.
+    private IReadOnlyList<UI.Menu.BriefingObjective> ReadPauseObjectives(CampaignDirector campaign)
+    {
+        try
+        {
+            return UI.Menu.BriefingObjectives.Load(
+                Zrdr.LoadFile(campaign.MissionZrdrPath, "objectives.json"),
+                Messages.Load(_messagesPath));
+        }
+        catch (Exception e) when (
+            e is IOException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return Array.Empty<UI.Menu.BriefingObjective>();
+        }
+    }
+
+    private UI.PauseReadout PauseReadout(
+        UI.PauseSheet sheet,
+        CampaignDirector campaign,
+        IReadOnlyList<UI.Menu.BriefingObjective> objectives,
+        Flight.PauseState pauseState,
+        AnimRuntime? runtime)
+    {
+        var rows = new List<UI.PauseObjective>(objectives.Count);
+        foreach (var objective in objectives)
+        {
+            rows.Add(new UI.PauseObjective(
+                objective.Text, campaign.Graph?.CompletedOf(objective.Priority) ?? false));
+        }
+
+        var icons = new List<UI.PauseWorldIcon>();
+        if (sheet.Shared.OwnShip.Length > 0 && RigOf(pauseState.OwnerPlayerIndex)?.Controller is { } own)
+        {
+            var forward = -own.GlobalTransform.Basis.Z;
+            icons.Add(new UI.PauseWorldIcon(
+                sheet.Shared.OwnShip, own.GlobalPosition.X, own.GlobalPosition.Z,
+                UI.MissionMap.Heading(forward.X, forward.Z)));
+        }
+
+        // The original looks its own zeppelin up by name and draws nothing when the mission has
+        // none, which is the same answer an empty find gives here. Its icon turns with the hull,
+        // which is what the reference stills show: the art is drawn along the course flown.
+        if (sheet.Shared.MyZep.Length > 0 && runtime != null)
+        {
+            foreach (var hull in runtime.FindNodes(PirateZepNode))
+            {
+                var nose = -hull.GlobalTransform.Basis.Z;
+                icons.Add(new UI.PauseWorldIcon(
+                    sheet.Shared.MyZep, hull.GlobalPosition.X, hull.GlobalPosition.Z,
+                    UI.MissionMap.Heading(nose.X, nose.Z)));
+                break;
+            }
+        }
+
+        return new UI.PauseReadout(rows, PauseMemento, icons);
+    }
+
+    private Flight.PlayerRig? RigOf(int playerIndex)
+    {
+        foreach (var rig in _rigs)
+        {
+            if (rig.Index == playerIndex)
+            {
+                return rig;
+            }
+        }
+
+        return _rigs.Count > 0 ? _rigs[0] : null;
     }
 
     // A board menu's Restart item. An Instant Action or campaign mission is REBUILT by the

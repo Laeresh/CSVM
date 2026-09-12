@@ -160,6 +160,30 @@ public sealed class BriefingDialog
     public BriefingState? Find(int campaign, int mission) =>
         _states.TryGetValue(StateKey(campaign, mission), out var state) ? state : null;
 
+    /// <summary>Reads one reveal script into its beats. Shared with <see cref="EscapeDialog"/>,
+    /// whose <c>ESC_SCRIPT</c> is the same opcode vocabulary over the same argument spellings; an
+    /// opcode outside <see cref="BriefingOp"/> is skipped rather than throwing.</summary>
+    internal static List<BriefingStep> ParseScript(List<object?> script)
+    {
+        var steps = new List<BriefingStep>();
+        for (int i = 0; i < script.Count; i++)
+        {
+            if (script[i] is not string name || i + 1 >= script.Count
+                || script[i + 1] is not List<object?> args)
+            {
+                continue;
+            }
+
+            i++;
+            if (Enum.TryParse(name, out BriefingOp op))
+            {
+                steps.Add(ParseStep(op, args));
+            }
+        }
+
+        return steps;
+    }
+
     // A state's own art, narration and script. BACKGROUND_IMAGES is a list of [bitmap, x, y]
     // entries and every mission state ships exactly one.
     private static BriefingState? ParseState(string key, List<object?> body)
@@ -189,27 +213,6 @@ public sealed class BriefingDialog
         }
 
         return new BriefingState(key, background, sound, startMarker, steps);
-    }
-
-    private static List<BriefingStep> ParseScript(List<object?> script)
-    {
-        var steps = new List<BriefingStep>();
-        for (int i = 0; i < script.Count; i++)
-        {
-            if (script[i] is not string name || i + 1 >= script.Count
-                || script[i + 1] is not List<object?> args)
-            {
-                continue;
-            }
-
-            i++;
-            if (Enum.TryParse(name, out BriefingOp op))
-            {
-                steps.Add(ParseStep(op, args));
-            }
-        }
-
-        return steps;
     }
 
     // Most opcodes carry a bare element id then alternating key/value pairs, which ZrdrDict reads

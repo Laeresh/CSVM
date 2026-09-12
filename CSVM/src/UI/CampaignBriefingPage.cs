@@ -110,8 +110,8 @@ public sealed class CampaignBriefingPage : CampaignPage
             pictures.Add(new BoardPicture(Parchment, 0, ParchmentY));
             if (Reveal is { } reveal)
             {
-                AddElements(pictures, reveal, back: true);
-                AddElements(pictures, reveal, back: false);
+                MissionMap.Elements(pictures, reveal, back: true);
+                MissionMap.Elements(pictures, reveal, back: false);
             }
 
             return pictures;
@@ -119,25 +119,7 @@ public sealed class CampaignBriefingPage : CampaignPage
     }
 
     /// <summary>The route line a state may draw between two of its pins, at most one per mission.</summary>
-    public override IReadOnlyList<BoardStroke> Strokes
-    {
-        get
-        {
-            var strokes = new List<BoardStroke>();
-            foreach (var element in Reveal?.Elements ?? Array.Empty<BriefingElement>())
-            {
-                if (element.Visible && element.Opacity > 0f && element.Points.Count >= 2)
-                {
-                    strokes.Add(new BoardStroke(
-                        element.Points[0].X, element.Points[0].Y,
-                        element.Points[1].X, element.Points[1].Y,
-                        element.Color.R, element.Color.G, element.Color.B, element.Opacity));
-                }
-            }
-
-            return strokes;
-        }
-    }
+    public override IReadOnlyList<BoardStroke> Strokes => MissionMap.Strokes(Reveal);
 
     /// <summary>The parchment's own title widget, at the dialog's authored position.</summary>
     public override IReadOnlyList<BoardLine> Captions =>
@@ -233,22 +215,6 @@ public sealed class CampaignBriefingPage : CampaignPage
                 return true;
             default:
                 return false;
-        }
-    }
-
-    // One pass of the reveal's elements: the ToBack ones first, then the rest, both in the order
-    // the script placed them, which is the order they stack in.
-    private static void AddElements(List<BoardPicture> into, BriefingReveal reveal, bool back)
-    {
-        foreach (var element in reveal.Elements)
-        {
-            if (element.Back == back && element.Visible && element.Opacity > 0f
-                && element.Bitmap.Length > 0)
-            {
-                into.Add(new BoardPicture(
-                    new BoardArt(BoardArtLibrary.Rimage, element.Bitmap),
-                    element.At.X, element.At.Y, 0, element.Center, element.Opacity, element.Revs));
-            }
         }
     }
 

@@ -24,8 +24,7 @@ does not, is in "Where CSVM differs" at the foot of this page.
 | Address | Role |
 |---|---|
 | `FUN_004a1910` | Load-dialog constructor: picks the definition file, resolves the dialog by name, binds `PROGRESS`, runs the screen's script block |
-| `0x004a1428` | The name builder for Instant Action and campaign, `sprintf` over the format strings below |
-| `0x004a1eb0` | The name builder for multiplayer, falling through to the Instant Action branch |
+| `0x004a1eb0` | The name builder, `sprintf` over the format strings below, and the only caller of `FUN_004a1910` (at `0x004a1fbb`): the multiplayer branch first, then Instant Action, then campaign |
 | `FUN_004a2100` | The progress setter: monotonic clamp, store, repaint |
 | `0x005c3d40` | The `PROGRESS` control's repaint (its vtable slot `+0x8c`), which computes the fill width |
 | `FUN_004a18a0` | The redraw pump, wall-clock throttled |
@@ -45,9 +44,13 @@ lookup that misses retries with the literal `"default"` entry:
 
 | Format string | Address | Used for |
 |---|---|---|
-| `loading_i%d%c` | `0x0062950c` | Instant Action |
-| `loading_c%d%d` | `0x0062951c` | campaign |
+| `loading_i%d%c` | `0x00629658` | Instant Action |
+| `loading_c%d%d` | `0x00629668` | campaign |
 | `loading_m%d%c` | `0x00629648` | multiplayer |
+
+⚠ **A second copy of the first two strings sits at `0x0062950c` and `0x0062951c` and belongs to the
+pause screen**, whose own builder at `0x004a1428` reads them ([`pause-screen.md`](pause-screen.md)).
+The two screens resolve the same dialog names out of different definition files.
 
 The globals feeding them:
 
@@ -68,6 +71,12 @@ inside the multiplayer builder, and agrees entry for entry.
 `FUN_004639a0` gates the campaign-only widgets. When it holds, `FUN_004a1910` additionally binds
 `OBJECTIVESLIST` and `MEMENTO`; Instant Action and multiplayer screens carry neither, which is why
 their definitions turn `OBJECTIVESLIST` off explicitly.
+
+**What fills the two runtime bindings** is decoded in [`pause-screen.md`](pause-screen.md), whose
+own screen binds the same members through the same functions: the `MEMENTO` primitive's picture is
+the profile's memento image name with its extension stripped, and the `MAP` primitive's `CLIP` is a
+rectangle in the chart bitmap whose `WORLD` pair is a world-to-screen window. That page also carries
+the map drawer this screen shares with the pause screen and the briefing.
 
 ## The Instant Action screens are all the same screen
 

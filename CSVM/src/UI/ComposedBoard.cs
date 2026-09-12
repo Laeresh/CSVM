@@ -190,6 +190,12 @@ public readonly record struct BoardTint(byte R, byte G, byte B);
 /// the line it stands is a font measurement, so the line carrying one says no more than that.</summary>
 public readonly record struct BoardCaret(byte R, byte G, byte B, float Width, float Height);
 
+/// <summary>A rectangle of the source bitmap to draw instead of the whole frame, in the bitmap's
+/// own pixels, which is a <c>MAP</c> primitive's <c>CLIP</c>: the crop's top left lands on the
+/// picture's authored position and the drawn size is the crop's. Not a scale and not a screen
+/// clip; a crop bigger than the frame is trimmed to it.</summary>
+public readonly record struct BoardCrop(float X, float Y, float Width, float Height);
+
 /// <summary>One bitmap a board draws, and how many stacked frames it holds. A button strip is four
 /// frames (disabled, normal, rollover, depressed, in that order); everything else is one.</summary>
 public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1);
@@ -198,11 +204,12 @@ public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames =
 /// briefing script's own <c>center</c> flag: the coordinate is the middle, not the top left.
 /// <paramref name="Scale"/> grows the art about its own middle and leaves its authored corner
 /// where it is, which is the <c>scale()</c> a scrapbook scrap takes under the pointer.
-/// <paramref name="Tint"/> multiplies the pixels, null drawing them as authored.</summary>
+/// <paramref name="Tint"/> multiplies the pixels, null drawing them as authored.
+/// <paramref name="Crop"/> takes a region of the source instead of the whole frame.</summary>
 public sealed record BoardPicture(
     BoardArt Art, float X, float Y, int Frame = 0, bool Centered = false,
     float Opacity = 1f, float Revs = 0f, float Width = 0f, float Height = 0f, float Scale = 1f,
-    BoardTint? Tint = null);
+    BoardTint? Tint = null, BoardCrop? Crop = null);
 
 /// <summary>A straight connector line between two authored points in its authored colour, which
 /// is the briefing script's <c>Line</c> opcode and the only non-picture element any board draws.
@@ -252,7 +259,7 @@ public sealed record BoardLine(
 /// </summary>
 public sealed record BoardNote(
     IReadOnlyList<string> Entries, float X, float Y, float Width, float Height, float Spacing,
-    float Size, BoardInk Ink)
+    float Size, BoardInk Ink, BoardArt? Mark = null, IReadOnlyList<bool>? Marked = null)
 {
     /// <summary>The entries as placed lines, stacked from the widget's top-left and stopped at its
     /// authored height. <paramref name="height"/> measures one entry wrapped to a width, in
@@ -260,20 +267,51 @@ public sealed record BoardNote(
     public IReadOnlyList<BoardLine> Flow(Func<string, float, float> height)
     {
         var lines = new List<BoardLine>();
-        float top = Y;
-        foreach (var entry in Entries)
+        foreach (var (_, line) in Placed(height))
         {
-            float tall = height(entry, Width);
+            lines.Add(line);
+        }
+
+        return lines;
+    }
+
+    /// <summary>The mark over each flowed entry <see cref="Marked"/> says is done, centred on that
+    /// entry's own origin, which is where the original's <c>CHECKMARK</c> element puts it: over the
+    /// row's leading characters rather than in a column beside them
+    /// (<c>docs/formats/objectives.md</c>). Empty where the widget carries no mark art.</summary>
+    public IReadOnlyList<BoardPicture> Marks(Func<string, float, float> height)
+    {
+        var marks = new List<BoardPicture>();
+        if (Mark is not { } art || Marked is not { } marked)
+        {
+            return marks;
+        }
+
+        foreach (var (index, line) in Placed(height))
+        {
+            if (index < marked.Count && marked[index])
+            {
+                marks.Add(new BoardPicture(art, line.X, line.Y, 0, true));
+            }
+        }
+
+        return marks;
+    }
+
+    private IEnumerable<(int Index, BoardLine Line)> Placed(Func<string, float, float> height)
+    {
+        float top = Y;
+        for (int i = 0; i < Entries.Count; i++)
+        {
+            float tall = height(Entries[i], Width);
             if (top + tall > Y + Height)
             {
                 break;
             }
 
-            lines.Add(new BoardLine(entry, X, top, Width, Size, Ink));
+            yield return (i, new BoardLine(Entries[i], X, top, Width, Size, Ink));
             top += tall + Spacing;
         }
-
-        return lines;
     }
 }
 

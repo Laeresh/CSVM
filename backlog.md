@@ -2035,9 +2035,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   draws while this one makes it move), `BL-314` (the splitscreen
   race whose clock starts while a load screen is still up), `docs/org/loading-screen.md`.
 
-- `BL-814` `[Fidelity]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **The campaign
+- `BL-814` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The campaign
   load screen is a bare chart sheet, where the original draws the mission's map with its pins and
   icons, the objectives parchment listing the mission's objectives, and the profile's memento.**
+  *The decode and the drawer are done; only this screen's own wiring remains.* The pause screen
+  reaches all of it through the same control class from a sibling constructor, so
+  `docs/org/pause-screen.md` carries the decode and `CSVM/src/UI/MissionMap.cs` is the drawer:
+  the sheet at its crop (⚠ the `CLIP` is a rectangle in the map BITMAP, not on the screen, which is
+  what `docs/verification.md`'s SRC-16 is about), the reveal's pins and an icon placed by world
+  position. `CSVM/src/UI/Menu/EscapeDialog.cs` reads the same `MAP`, `MEMENTO` and
+  `OBJECTIVESLIST` blocks out of `escape.zrd`, whose campaign dialogs are content-identical to
+  `Loading.zrd`'s; `CSVM/src/UI/PauseScreens.cs` is the worked composition. Both open questions are
+  answered: `Objective OBJn index k` indexes `BriefingObjectives` (the keyed `IDENTITY` rows by
+  priority), and the `MEMENTO` bitmap is the profile's own memento image name with its extension
+  stripped, seeded `MS_P_InitialPinup1` by `FUN_004113b0` and awarded from a 22-entry table at
+  `0x0061af6c`. *What remains here:* `LoadScreens.CampaignSheet` still writes two lines of ours, so
+  give it the map, the parchment, the memento and the shadow the way `PauseScreens` does, keeping
+  the bar and the propeller; and decide whether the load screen places `OWNSHIP` and `MYZEP` at all,
+  since its own constructor binds neither and the pause screen's is the only one that does. Awarding
+  a memento per mission is still unbuilt, so both screens draw `ms_p_initialpinup1`.
   *Evidence:* `OriginalScreenshots/Campaign Loading Screen CM01.png` and the two clips under
   `OriginalScreenshots/Videos/` (`Loading Screen Mission CM01.mkv`, `Loading Screen Mission1.mkv`):
   the map fills the sheet's frame, the objectives parchment sits top right with the mission's
@@ -2054,50 +2070,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`momento_shad` centred on 661,454), the mission's pins (`pin1` to `pin4` at authored points),
   the zeppelin and device icons, and spins the device forms. `FUN_004a1910` binds `OBJECTIVESLIST`
   and `MEMENTO` only when `FUN_004639a0` holds (`docs/org/loading-screen.md`). Ours draws `loadframe`,
-  the unlit bar and two lines of our own text (`CSVM/src/UI/LoadBoard.cs:65-76`). *Fix shape:* first
-  decode what fills the two runtime bindings: which objective strings `Objective OBJn index k`
-  resolves to (the briefing's own `BriefingObjectives` reader is the likely source), and which
-  bitmap the `MEMENTO` primitive draws for a profile, since picking one is not shipped and the
-  cabin always shows `ms_p_initialpinup1` (`CSVM/src/UI/CampaignCabinPage.cs:89-93`), yet the film
-  shows a different photograph per mission. Then read the mission's dialog and draw it through
-  `ComposedBoard`: the map at its clip, every `Pict` the script turns on, the parchment and its
-  list, the memento and its shadow. *⚠ Traps:* the map's `WORLD` window is a world-to-screen
-  mapping, not decoration; `OWNSHIP` and `MYZEP` in the shared primitives are positioned through
-  it, so decide whether the load screen places anything by world position before drawing the map
-  as a flat bitmap. Pins on the CM01 screenshot read "?" and "4" while the other clip's read 1 to 3,
-  so which pin bitmap stands at each point is authored per dialog, not a numbered set to derive. `BriefingReveal` already draws this map with its pins and
-  route for the briefing; reuse its element model rather than a second map drawer. Do not fold this
-  into the animation (`BL-812`): the sheet is right or wrong on a still screen. *Playtest after
-  fix:* `--menu=loadboard-campaign` beside the CM01 screenshot at the same window size, then a real
-  campaign launch to see the memento and objectives follow the profile and the mission.
-  *Cross-refs:* `BL-812`, `docs/org/loading-screen.md`, `docs/formats/zrdr.md`,
-  `CSVM/src/UI/CampaignBriefingPage.cs` (the map and pin drawer to share).
-
-- `BL-821` `[Feature]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **The original's
-  pause screen is not built: a campaign pause shows CSVM's own board with the objectives readout
-  in a corner, where the original draws the mission map with its flags, the objectives parchment,
-  the profile's memento and four parchment buttons.** *Evidence:* the four
-  `OriginalScreenshots/CAP-45 Mission Pause with objective*.png` stills (C3/M01): the whole
-  screen is the mission's chart with a red numbered flag per objective point ("?" until revealed),
-  a compass rose, the objectives parchment upper right with the red check over each completed
-  number, the memento photograph lower right, and RESUME, RESTART, PREFERENCES and QUIT on
-  `escape_button1/2/3` strips. The layout is data: `extracted/zrdr/escape.zrd.json` carries the
-  `OBJECTIVESLIST` primitive (shared with the loading dialog), `OWNSHIP` and `MYZEP` map icons,
-  and the `BUTTONS` block with each button's position, three bitmaps and `BtnEscape*` fonts, and
-  `docs/formats/objectives.md` already decodes the list and the check. Ours pauses on
-  `PauseBoard` (`CSVM/src/Flight/PauseBoard.cs`) in both presentations and draws the objectives
-  through `ObjectivesHud` at a corner of its own; the readout's check now matches the original's
-  mark, but nothing else of the screen does. *Fix shape:* an Original-presentation pause screen
-  composed from `escape.zrd` the way the load and briefing screens are composed from their
-  dialogs: the map and pins through `BriefingReveal`'s element model, the parchment through the
-  shared `OBJECTIVESLIST` reader, the memento from the profile, the four buttons as a board; the
-  Built-in presentation keeps its own board. *⚠ Traps:* which flags read "?" and which read their
-  number is a reveal rule the stills show but do not explain (every "?" stayed "?" across rows 1
-  to 3 completing, while one flag reads "4"), so decode the flag state before drawing one; the
-  map sheet and pin set are per mission and are the same data `BL-814`'s load screen needs, so
-  build the drawer once. Instant Action pauses are unfilmed. *Cross-refs:* `BL-814` (the same
-  map and parchment on the load screen), `BL-802`'s closing commit (the check), `CAP-45`,
-  `docs/formats/objectives.md`, `docs/org/menu-inventory.md`.
+  the unlit bar and two lines of our own text (`CSVM/src/UI/LoadBoard.cs:65-76`). *⚠ Traps:* a
+  reader that runs the script once and stops draws no pins at all on the seven dialogs that place
+  theirs past an authored `Wait`; `PauseSheet` settles its reveal for that reason, and a load screen
+  that reuses it must too. Which pin bitmap stands at each point is authored per dialog and there is
+  no reveal rule (`pin6` is the question-mark flag and `pin6_1` the numbered six), so never derive a
+  numbered set. Do not fold this into the animation (`BL-812`): the sheet is right or wrong on a
+  still screen. *Playtest after fix:* `--menu=loadboard-campaign` beside the CM01 screenshot at the
+  same window size, then a real campaign launch to see the memento and objectives follow the profile
+  and the mission. *Cross-refs:* `BL-812`, `docs/org/pause-screen.md`,
+  `docs/org/loading-screen.md`, `docs/formats/zrdr.md`, `CSVM/src/UI/PauseScreens.cs` and
+  `CSVM/src/UI/MissionMap.cs` (the composition and the drawer to reuse).
 
 - `BL-825` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: footage]` **Whether the
   build stamp stays in the corner of the Original menu, where the original draws no text at all.**

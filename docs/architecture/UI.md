@@ -1,4 +1,4 @@
-# UI
+﻿# UI
 
 The launchscreen and splitscreen rig, plus the interactive debug labs (including its `UI/Menu/` subfolder). Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`.
 
@@ -187,10 +187,10 @@ What a composed campaign screen is made of, engine-free: the screen's fixed back
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
 plaques and flowed list widgets, each in draw order. The backdrop is its own layer so a fill can
 sit over the background and stay under the page's pictures, where a selection bar goes. `BoardNote`
-is a widget's entries plus its wrap box and `BoardCaret` an edit box's cursor on the line it
-follows, both placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a
+is a widget's entries plus its wrap box, its marks and `BoardCaret` an edit box's cursor on the line
+it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a
 plaque's states, and a plaque whose art leaves part of its frame empty carries its label's own
-baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here.
+baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -293,10 +293,29 @@ mode heading's place and nothing else. An absent or unreadable extraction yields
 than throwing, since this screen is shown while everything else is still loading. The dialogs, the
 face mapping and the line pitch: [../org/loading-screen.md](../org/loading-screen.md).
 
+## src/UI/PauseScreens.cs
+What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
+mission's chart at its authored source crop, the pins and icons its dialog's script places, the
+objectives parchment with a mark on each completed row, the profile's memento, and the four button
+strips with their labels resolved. `PauseSheet` is the authored half, read once per mission, and
+`PauseReadout` the live half, read afresh on every pause. The chart, its pins and an icon placed by
+world position all go through `MissionMap`, which the briefing shares. An unreadable extraction
+builds no sheet, which is what leaves the pause to the Built-in board rather than to nothing.
+Decode: [../org/pause-screen.md](../org/pause-screen.md).
+
+## src/UI/MissionMap.cs
+The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
+cropped picture, a reveal's visible elements as pictures in placement order over two layers, its
+connector lines as strokes, and one icon placed by world position through the map's own window. It
+exists as one module because the original reaches all of it through one control class from two
+dialog constructors, so the briefing, the pause screen and the campaign load screen cannot drift
+apart here. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+
 ## src/UI/BoardMenuItem.cs
-The rows a board menu can offer: Resume, Photo, Restart and Exit. The board owning the menu decides
-which it carries and what each does; Resume appears only on the pause board, and Exit's label
-follows whether the session can return to the launchscreen or only quit.
+The rows a board menu can offer: Resume, Photo, Restart, Preferences and Exit. The board owning the
+menu decides which it carries and what each does; Resume appears only on a pause board, Preferences
+only on the Original one, and Exit's label follows whether the session can return to the
+launchscreen or only quit.
 
 ## src/UI/CursorRow.cs
 One centred list row with its cursor marker, shared by every menu that has one: the launchscreen's
@@ -703,7 +722,18 @@ twelve-opcode beat sheet against a caller-advanced clock, blocking on an authore
 narration's cue times and keeping each element's opacity, rotation and position as its tweens
 land. Elements come out in placement order, which is draw order; with no cue points every marker
 releases at once, so the map finishes under the narration rather than a timing being invented.
-Opcodes and their arguments: [../formats/briefing.md](../formats/briefing.md).
+Opcodes and their arguments: [../formats/briefing.md](../formats/briefing.md). `ParseScript` is
+shared with `EscapeDialog`, whose `ESC_SCRIPT` is the same vocabulary.
+
+## src/UI/Menu/EscapeDialog.cs
+The pause screen's `escape.zrd` reader, engine-free: one dialog's chart sheet with its source crop
+and world window, its memento slot and its beat sheet, plus the shared block every dialog in the
+file borrows, which is the objectives parchment, the two icons the screen places by world position
+and the four button strips with their three bitmaps each. `EscapeMap.TryProject` is the world
+window: world X across, negated world Z down, and false rather than a clamp for a position off it.
+⚠ The `CLIP` is a rectangle in the bitmap and not on the screen, and every `WORLD` bound is stored
+truncated toward zero, both of which the type's own members say. The Instant Action twin
+`ia_escape.zrd` reads through the same class. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Menu/BriefingObjectives.cs
 The briefing's parchment note, read from a mission's own `objectives.zrd`: every `IDENTITY`

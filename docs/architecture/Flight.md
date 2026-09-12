@@ -697,7 +697,18 @@ completion event, it shows the pausing player's tag in their own colour and a Re
 Exit menu driven by that player alone, since `PauseState` lets only the owner resume. A fresh menu
 each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. It shares
 `ResultsBoard`'s chrome but not its shell. A campaign session's objectives readout rides the same
-pause on a layer of its own, since it belongs to the flown mission rather than to every mode.
+pause on a layer of its own, since it belongs to the flown mission rather than to every mode. The
+Original presentation puts `OriginalPauseBoard` in its place; read that next.
+
+## src/Flight/OriginalPauseBoard.cs
+The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
+over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
+player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
+the screen tests off engine and this node owns only the cursor and the four actions. Its readout is
+a delegate rather than a snapshot, since the objectives, the memento and the icons follow the
+running mission. The cursor's row wears the rollover strip and never the held one. Preferences is
+drawn and unbound, and photo mode is this port's own and stays on `PauseBoard`. Decode:
+[../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for

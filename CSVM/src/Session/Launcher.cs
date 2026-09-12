@@ -62,6 +62,10 @@ public partial class Launcher : Node3D
     // than cutting at a hard edge.
     private const float EnhancedShadowFadeStart = 0.8f;
 
+    // The memento the pause aid draws. Awarding one over the campaign is not shipped, so it is the
+    // opening keepsake, the same picture the cabin draws (docs/org/pause-screen.md).
+    private const string PauseAidMemento = "ms_p_initialpinup1";
+
     // TUNE, judged at the controls, and the pair trades against each other: lower values put
     // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
     // shadow along with it. These keep the building and aircraft silhouettes with no acne left.
@@ -323,6 +327,14 @@ public partial class Launcher : Node3D
     // what is Built-in's alone (its one-shot debug aids, its failed-build note). Null-safe under
     // Original, where both are absent by design; every other reading of the menu goes through the host.
     private LaunchMenu? BuiltInMenu => (_menuHost?.Active as BuiltInPresentation)?.Menu;
+
+    // The presentation a session's boards take. A menu launch has already settled it on the host,
+    // availability and saved option included. A CLI launch builds no host and reads no saved menu
+    // option, since it never went through the menu, so only the flags speak for it there.
+    private PresentationId SessionPresentation =>
+        _menuHost is { } host ? host.Selected
+        : _spec.ForceBuiltInPresentation ? PresentationId.BuiltIn
+        : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride, null));
 
     public override void _Ready()
     {
@@ -1094,6 +1106,81 @@ public partial class Launcher : Node3D
         AddChild(_loadLayer);
     }
 
+    // The Original presentation's pause sheet over the whole window, standing on its own with no
+    // mission behind it. The objectives are the named mission's own and the ownship icon sits on
+    // its authored PLAYER_INIT spawn, so nothing on the screen is invented; there is no world, so
+    // the zeppelin icon is absent. docs/org/pause-screen.md.
+    private void ShowPauseSheet(int ordinal, int completed)
+    {
+        var missions = Mech3.CampaignSequence.Load(_zrdrPath);
+        int seq = System.Math.Clamp(ordinal - 1, 0, System.Math.Max(0, missions.Count - 1));
+        CampaignMission? found = null;
+        foreach (var mission in missions)
+        {
+            if (mission.Seq == seq)
+            {
+                found = mission;
+            }
+        }
+
+        if (found is not { } named)
+        {
+            Log.Warn("ui", $"pause aid: cm_sequence names no mission at seq {seq}");
+            return;
+        }
+
+        string missionZrdr = SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder);
+        var sheet = UI.PauseSheet.Load(
+            _zrdrPath, _messagesPath,
+            UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission), instantAction: false);
+        if (sheet == null)
+        {
+            Log.Warn("ui", $"pause aid: no escape.zrd sheet for {named.ChapterFolder}/{named.MissionFolder}");
+            return;
+        }
+
+        var readout = PauseAidReadout(sheet, missionZrdr, completed);
+        var pause = new Flight.PauseState();
+        var board = Flight.OriginalPauseBoard.Build(
+            pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
+        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.HudLayers.Board };
+        layer.AddChild(board);
+        AddChild(layer);
+        pause.TryToggle(0);
+        Log.Info("ui",
+            $"pause aid: {named.ChapterFolder}/{named.MissionFolder} sheet with {completed} objective(s) marked");
+    }
+
+    private UI.PauseReadout PauseAidReadout(UI.PauseSheet sheet, string missionZrdr, int completed)
+    {
+        var objectives = UI.Menu.BriefingObjectives.Load(
+            Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), Mech3.Messages.Load(_messagesPath));
+        var rows = new List<UI.PauseObjective>(objectives.Count);
+        for (int i = 0; i < objectives.Count; i++)
+        {
+            rows.Add(new UI.PauseObjective(objectives[i].Text, i < completed));
+        }
+
+        var icons = new List<UI.PauseWorldIcon>();
+        if (sheet.Shared.OwnShip.Length > 0
+            && Flight.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
+        {
+            // The chart's turn is clockwise revolutions from a nose at -Z, which is what the
+            // spawn's own heading degrees already measure (CompassTape's convention).
+            icons.Add(new UI.PauseWorldIcon(
+                sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
+                init.Spawn.HeadingDeg / 360f));
+            if (sheet.State.Map is { } map
+                && !map.TryProject(init.Spawn.Position.X, init.Spawn.Position.Z, out _))
+            {
+                Log.Info("ui",
+                    $"pause aid: the mission's spawn sits off the chart's window, so no ownship icon draws");
+            }
+        }
+
+        return new UI.PauseReadout(rows, PauseAidMemento, icons);
+    }
+
     // What the load screen calls this flight: an Instant Action mission by the wizard's own name
     // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName — that is the log
     // file's and the startup line's internal tag ("fly", "stunt"), which is not a player's word.
@@ -1153,6 +1240,7 @@ public partial class Launcher : Node3D
             Env = _env,
             MenuDriven = _menuDriven,
             MenuPads = _menuPads,
+            Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
             CampaignMissionEnded = _menuDriven
@@ -1329,6 +1417,17 @@ public partial class Launcher : Node3D
             ShowLoadScreen(
                 aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal),
                 missionType.Length > 0 ? missionType : _spec.IaDef?.MissionType);
+        }
+
+        // The pause sheet stands only while a mission is halted, so a shot of it needs the same
+        // kind of door. Its arguments name the campaign mission and how many of its objectives
+        // have been marked, since that is the whole of what the reference stills differ by.
+        if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
+        {
+            var parts = aid.Split(':');
+            ShowPauseSheet(
+                parts.Length > 1 && int.TryParse(parts[1], out int cm) ? cm : 1,
+                parts.Length > 2 && int.TryParse(parts[2], out int done) ? done : 0);
         }
 
         // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
@@ -1926,6 +2025,11 @@ public sealed class LauncherContext
     /// <summary>Per-player pad binding from the launchscreen's join flow (null = derive from the
     /// connected roster, which is what every CLI launch does).</summary>
     public required int[][]? MenuPads { get; init; }
+
+    /// <summary>The presentation this session's own boards take, already resolved: the menu's
+    /// active one, or what the flags name on a CLI launch. A resolved answer rather than a flag,
+    /// which is why it rides here beside <see cref="MenuDriven"/>.</summary>
+    public required UI.Menu.PresentationId Presentation { get; init; }
 
     /// <summary>Leaves the session the way <see cref="MenuDriven"/> says: back to the launchscreen,
     /// or out of the game. The boards' Exit item calls it, so the one routing rule lives on the

@@ -391,6 +391,12 @@ public sealed partial class ComposedBoardView : Control
         }
 
         var frame = FrameRect(texture, picture.Art.Frames, picture.Frame);
+        if (picture.Crop is { } crop)
+        {
+            frame = frame.Intersection(
+                new Rect2(frame.Position.X + crop.X, frame.Position.Y + crop.Y, crop.Width, crop.Height));
+        }
+
         var span = new Vector2(
             fit.Length(picture.Width > 0f ? picture.Width : frame.Size.X),
             fit.Length(picture.Height > 0f ? picture.Height : frame.Size.Y));
@@ -538,9 +544,17 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
-        foreach (var line in note.Flow(Measure(fit, font, note)))
+        var height = Measure(fit, font, note);
+        foreach (var line in note.Flow(height))
         {
             DrawText(fit, font, line);
+        }
+
+        // Over the rows rather than under them: the mark is a brush stroke across the words it
+        // marks, and the original draws it last.
+        foreach (var mark in note.Marks(height))
+        {
+            DrawPicture(fit, mark);
         }
     }
 

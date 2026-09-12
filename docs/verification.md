@@ -802,6 +802,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   reached the right answer for the case it was built on; the engine reads bit 2 of the texture
   header's render-flags word, which no puffer sprite in the install carries
   (`org/textures.md`).
+- **SRC-16** — **A named rectangle in a dialog primitive says nothing about whether it crops the
+  source or clips the output; settle it by aligning a reference still, not by reading the name.**
+  The pause screen's `MAP` primitive authors `POSITION [16,19]` and `CLIP [211,51]..[784,551]`, and
+  the two readings put the map 195 pixels apart. Sampling a 462-point grid of the filmed still
+  against the extracted sheet gave a mean per-pixel channel-sum distance of 7.8 for the source crop
+  and 180.0 for the screen clip, which is not a close call in either direction
+  (`org/pause-screen.md`).
 
 ## What this project cannot verify itself
 

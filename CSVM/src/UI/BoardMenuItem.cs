@@ -17,6 +17,10 @@ public enum BoardMenuItem
     /// <summary>Rerun: reset the running mode in place, same seed and same world.</summary>
     Restart,
 
+    /// <summary>Open the options, which the original's pause screen offers and this port's has
+    /// nothing behind yet (docs/org/pause-screen.md).</summary>
+    Preferences,
+
     /// <summary>Leave the session, to the launchscreen or out of the game.</summary>
     Exit,
 }
