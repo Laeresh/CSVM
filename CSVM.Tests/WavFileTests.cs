@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The WAV parser and the MS ADPCM decoder (<c>docs/formats/sounds.md</c>: the game ships fmt
-/// tag 2, 4-bit, 22050 Hz). Every input here is assembled field by field below — no file from
+/// tag 2, 4-bit, 22050 Hz). Every input here is assembled field by field below, no file from
 /// the install is read, and each expected sample is derived in the comment above it from the
 /// decoder's published arithmetic, so a wrong answer is visible without running anything.
 /// </summary>

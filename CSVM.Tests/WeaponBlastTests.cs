@@ -127,7 +127,7 @@ public class WeaponBlastTests
         Assert.Equal(4f, ProjectilePool.SegmentPointDistance(a, a, new Vector3(0f, 4f, 0f)), 4);
     }
 
-    // D31: the one-shot pool's distance term — linear between a sound's own RANGE,
+    // D31: the one-shot pool's distance term, linear between a sound's own RANGE,
     // full inside the near edge, silent past the far edge, 1 (skip the term) with no nearest
     // human to measure against.
     [Fact]

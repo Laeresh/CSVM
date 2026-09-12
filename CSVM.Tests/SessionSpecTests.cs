@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The launch-argument resolution truth table: what each command line settles, rule by rule.
 ///
-/// <para>Each fact here names the rule that settles its row — not merely that a row moved. This
+/// <para>Each fact here names the rule that settles its row, not merely that a row moved. This
 /// file is the only thing standing behind the launch surface (no whole-command-line baseline
 /// backs it up), so when a rule is added or changed, add the fact with the rule.</para>
 ///
@@ -64,7 +64,7 @@ public class SessionSpecTests
     }
 
     /// <summary>⚠ The modifiers are the assertion that bites here. <c>Mode</c> alone cannot tell
-    /// this rule from the viewer-beats-fly one below — with `--viewer` also on the line, that rule
+    /// this rule from the viewer-beats-fly one below, with `--viewer` also on the line, that rule
     /// clears the same modifiers and the mode ternary reaches Freecam either way. So the case that
     /// isolates the freecam rule carries NO other mode flag: the stunt and damage-lab modifiers have
     /// nobody else to clear them.</summary>
@@ -124,7 +124,7 @@ public class SessionSpecTests
     [InlineData("--debug-anim-ui")]
     public void TheseFlagsVoteForTheAnimLab(string arg) => Assert.Equal(SessionMode.AnimLab, S(arg).Mode);
 
-    /// <summary>The four mode bools are computed from <c>Mode</c>, so exactly one is ever true —
+    /// <summary>The four mode bools are computed from <c>Mode</c>, so exactly one is ever true,
     /// the property hand-written per-mode predicates get wrong one term at a time.</summary>
     [Theory]
     [InlineData("--fly")]
@@ -213,7 +213,7 @@ public class SessionSpecTests
         Assert.Equal(15, s.VsTimeMinutes);
     }
 
-    /// <summary>0 disables the limit — a match with both at 0 has no end condition, which is
+    /// <summary>0 disables the limit, a match with both at 0 has no end condition, which is
     /// accepted here (the win/lose flow that would need to guard against it is a later item).</summary>
     [Fact]
     public void ZeroDisablesEitherVsLimit()
@@ -265,7 +265,7 @@ public class SessionSpecTests
     [Fact]
     public void CoopDefaultsToFalse() => Assert.False(S("--fly").Coop);
 
-    /// <summary>`--vs`'s FFA is explicit and outranks `--coop`, whichever order they're given in —
+    /// <summary>`--vs`'s FFA is explicit and outranks `--coop`, whichever order they're given in,
     /// dropped with a warning rather than racing `--vs` at the assembler.</summary>
     [Fact]
     public void VsDropsCoopWithAWarning()
@@ -497,7 +497,7 @@ public class SessionSpecTests
         Assert.Equal("--det", S("--det", "--run-tests").DetVia);
     }
 
-    /// <summary>A pinned CHOICE beats a pinned dice roll — a seeded pick still moves when the
+    /// <summary>A pinned CHOICE beats a pinned dice roll, a seeded pick still moves when the
     /// mission's spawn list grows. An explicit `--spawn=N` still wins.</summary>
     [Fact]
     public void DetPinsTheSpawnToIndexZeroUnlessOneWasNamed()
@@ -536,7 +536,7 @@ public class SessionSpecTests
         Assert.False(S("--freecam").SeedPinned);
     }
 
-    /// <summary>An unpinned seed is drawn from the clock by the CALLER, not here — a spec that read
+    /// <summary>An unpinned seed is drawn from the clock by the CALLER, not here, a spec that read
     /// the clock would not be a function of its args, and a baseline would differ from
     /// itself.</summary>
     [Fact]
@@ -545,11 +545,11 @@ public class SessionSpecTests
         Assert.Null(S("--fly").PinnedSeed);
         Assert.Equal(Rng.DefaultSeed, S("--det").PinnedSeed);
         Assert.Equal(9ul, S("--seed=9").PinnedSeed);
-        // Same args, same answer — twice, because that is the property at stake.
+        // Same args, same answer, twice, because that is the property at stake.
         Assert.Equal(S("--fly").PinnedSeed, S("--fly").PinnedSeed);
     }
 
-    // ---- BuildsCollision: the one shared predicate — consumers must not spell it themselves -----
+    // ---- BuildsCollision: the one shared predicate, consumers must not spell it themselves -----
 
     [Theory]
     [InlineData("--fly")]
@@ -566,7 +566,7 @@ public class SessionSpecTests
     public void TheseDoNotBuildColliders(string arg) => Assert.False(S(arg).BuildsCollision);
 
     /// <summary>`--debug-damage` is dropped outside the two observation modes, so it stops being a
-    /// term there — flight still builds colliders on its own account.</summary>
+    /// term there, flight still builds colliders on its own account.</summary>
     [Fact]
     public void DebugDamageIsNotATermWhereItIsDropped()
     {
@@ -655,7 +655,7 @@ public class SessionSpecTests
     }
 
     /// <summary>The weapon lab fires through a real FlightController, so it needs the flight mode,
-    /// not the static viewer — unlike --weapon-test, which stays a cheap plane-only probe.</summary>
+    /// not the static viewer, unlike --weapon-test, which stays a cheap plane-only probe.</summary>
     [Theory]
     [InlineData("--weapon-lab")]
     [InlineData("--weapon-mount=wep_06")]
@@ -849,7 +849,7 @@ public class SessionSpecTests
     }
 
     /// <summary>The empty stage has no mission spawn list, so the subject starts over the grid
-    /// origin — through the same fields `--pos` resolves into, so an explicit placement still wins.</summary>
+    /// origin, through the same fields `--pos` resolves into, so an explicit placement still wins.</summary>
     [Fact]
     public void TheEmptyStageDefaultsThePlacementItHasNoSpawnListFor()
     {
@@ -872,7 +872,7 @@ public class SessionSpecTests
     }
 
     /// <summary>Written with a decimal comma on a German machine, `0,5` parses as neither 0.5 nor a
-    /// number — the invariant culture is what keeps one command line meaning one thing everywhere.</summary>
+    /// number, the invariant culture is what keeps one command line meaning one thing everywhere.</summary>
     [Fact]
     public void TheVolumeIsReadInTheInvariantCulture()
     {
@@ -904,7 +904,7 @@ public class SessionSpecTests
     }
 
     /// <summary>The two audio flags are not variants of each other: `--mute` never builds the audio
-    /// subsystem, so a gain has nothing to attenuate. Neither is cleared — both spell silence — but
+    /// subsystem, so a gain has nothing to attenuate. Neither is cleared, both spell silence, but
     /// the combination loses the sounds the volume flag exists to keep audible in the log.</summary>
     [Fact]
     public void MuteAndVolumeTogetherAreCalledOut()
@@ -936,7 +936,7 @@ public class SessionSpecTests
         Assert.Empty(s.Warnings);
     }
 
-    /// <summary>Path flags are override VALUES, null when unset — the default arithmetic belongs to
+    /// <summary>Path flags are override VALUES, null when unset, the default arithmetic belongs to
     /// the caller, which is why nothing here builds a path.</summary>
     [Fact]
     public void PathFlagsAreOverrideValuesOnly()
@@ -952,7 +952,7 @@ public class SessionSpecTests
         Assert.Equal("/somewhere", s.DataRoot);
     }
 
-    /// <summary>`--ia=` is a path VALUE only — loading the file into an `InstantActionDef` is the
+    /// <summary>`--ia=` is a path VALUE only, loading the file into an `InstantActionDef` is the
     /// runtime's job, which is what keeps this type free of file
     /// I/O.</summary>
     [Fact]
@@ -963,7 +963,7 @@ public class SessionSpecTests
     }
 
     /// <summary>`--campaign=` is a plain value pair, parsed but not resolved into a store or a
-    /// mission — and, with no other mode vote, still resolves the session to Fly.</summary>
+    /// mission, and, with no other mode vote, still resolves the session to Fly.</summary>
     [Fact]
     public void CampaignIsAProfileAndSeqValueOnly()
     {
@@ -999,7 +999,7 @@ public class SessionSpecTests
         Assert.Empty(s.Warnings);
     }
 
-    /// <summary>Globals are recorded, never applied — that is what keeps the type reachable from
+    /// <summary>Globals are recorded, never applied, that is what keeps the type reachable from
     /// here, with no engine under it.</summary>
     [Fact]
     public void TheSpecRecordsGlobalsRatherThanApplyingThem()
@@ -1011,7 +1011,7 @@ public class SessionSpecTests
     }
 
     /// <summary>`--debug-anim`'s implied "anim:debug,sound:debug" is the caller's, not a parsed
-    /// spec — the flag records itself and nothing more.</summary>
+    /// spec, the flag records itself and nothing more.</summary>
     [Fact]
     public void DebugAnimDoesNotSynthesiseALogSpec()
     {

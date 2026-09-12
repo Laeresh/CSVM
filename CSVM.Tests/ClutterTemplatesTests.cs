@@ -29,8 +29,8 @@ public class ClutterTemplatesTests
         { "C2B", "blocks=0 kinds=0 duplicates=0 scale_range=0 far_fade_range=0 substitute=0" },
         { "C3", "blocks=3 kinds=3 duplicates=0 scale_range=3 far_fade_range=3 substitute=1" },
         { "C4", "blocks=4 kinds=4 duplicates=0 scale_range=4 far_fade_range=4 substitute=1" },
-        // C5's 78 blocks cover 77 distinct models: cb05det01.flt has two, and the FIRST — the one
-        // carrying the substitute — is the one the engine's linear scan finds.
+        // C5's 78 blocks cover 77 distinct models: cb05det01.flt has two, and the FIRST, the one
+        // carrying the substitute, is the one the engine's linear scan finds.
         { "C5", "blocks=78 kinds=77 duplicates=1 scale_range=78 far_fade_range=78 substitute=34" },
     };
 
@@ -51,7 +51,7 @@ public class ClutterTemplatesTests
                 "node", new List<object?> { "firtree1.flt" },
                 "scale_range", new List<object?> { 0.9f, 1.5f },
                 // Nested pairs are grouped by BOUND, not by band: [[nearMin, farMin], [nearMax,
-                // farMax]] — the grouping the engine's own fade lerps prove.
+                // farMax]], the grouping the engine's own fade lerps prove.
                 "far_fade_range", new List<object?>
                 {
                     new List<object?> { 300f, 600f },
@@ -100,7 +100,7 @@ public class ClutterTemplatesTests
             new List<object?> { "node", new List<object?> { "bush1.flt" } },
         });
 
-        // The engine's own initialiser, field for field — the state the whole install's
+        // The engine's own initialiser, field for field, the state the whole install's
         // slope/jitter/rotation behaviour actually runs on, since no chapter authors those keys.
         var kind = Assert.Single(spec.Kinds);
         Assert.Equal(Vector2.One, kind.ScaleRange);
@@ -142,7 +142,7 @@ public class ClutterTemplatesTests
     [Fact]
     public void ADamageBlockIsArmedByItsHealthKeyAndCarriesItsAnimAndModel()
     {
-        // Decoded from the binary and shipped by nothing — the reader exists so "no chapter
+        // Decoded from the binary and shipped by nothing, the reader exists so "no chapter
         // authors these" is a measurement over a reader that WOULD have read them.
         var spec = ClutterTemplateSpec.Parse(new List<object?>
         {
@@ -169,7 +169,7 @@ public class ClutterTemplatesTests
     public void ADuplicateNodeResolvesToItsFirstBlock()
     {
         // C5's cb05det01.flt, in miniature. The engine's lookup is a linear scan of
-        // the load order that stops at the first strcmp match, so the later block is unreachable —
+        // the load order that stops at the first strcmp match, so the later block is unreachable,
         // and in C5 the unreachable one is the one WITHOUT the substitute.
         var spec = ClutterTemplateSpec.Parse(new List<object?>
         {
@@ -204,7 +204,7 @@ public class ClutterTemplatesTests
     [Fact]
     public void AnEmptyFileIsAnEmptySpecAndAnAbsentOneIsNull()
     {
-        // C1C and C2B ship the four bytes `null`, which is a chapter that authors nothing — a
+        // C1C and C2B ship the four bytes `null`, which is a chapter that authors nothing, a
         // different fact from "this chapter has no such file", and the two must not collapse.
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "templates.zrd.json"), "null");
@@ -260,7 +260,7 @@ public class ClutterTemplatesTests
                 fadeLo = Mathf.Min(fadeLo, Mathf.Min(kind.FarFadeMin.X, kind.FarFadeMin.Y));
                 fadeHi = Mathf.Max(fadeHi, Mathf.Max(kind.FarFadeMax.X, kind.FarFadeMax.Y));
                 // Every authored range runs low→high, and the near distance never outruns the far
-                // one — the corroboration that the min-pair/max-pair grouping is the right one.
+                // one, the corroboration that the min-pair/max-pair grouping is the right one.
                 if (kind.ScaleRange.X <= kind.ScaleRange.Y
                     && kind.FarFadeMin.X <= kind.FarFadeMax.X
                     && kind.FarFadeMin.Y <= kind.FarFadeMax.Y

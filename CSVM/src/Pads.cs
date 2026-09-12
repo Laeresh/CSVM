@@ -27,18 +27,18 @@ public static class Pads
 
     private static readonly Godot.Collections.Array<int> NoPads = new();
 
-    /// <summary>Whether pad <i>input</i> is currently suppressed — the gate <see cref="For"/>
+    /// <summary>Whether pad <i>input</i> is currently suppressed, the gate <see cref="For"/>
     /// applies. Not a statement about which devices exist; see <see cref="Connected"/>.</summary>
     public static bool InputBlocked => Disabled || !Focused;
 
-    /// <summary>The pads that <b>exist</b> — the roster, for binding players to devices and for
+    /// <summary>The pads that <b>exist</b>, the roster, for binding players to devices and for
     /// noticing a disconnect. Empty when <see cref="Disabled"/>. Deliberately NOT gated on focus:
     /// see the class remarks.</summary>
     public static Godot.Collections.Array<int> Connected() =>
         Disabled ? NoPads : Input.GetConnectedJoypads();
 
     /// <summary>The pads a given consumer may <b>read</b>: its explicit binding when it has one
-    /// (a splitscreen player owns exactly one pad), otherwise every connected pad — and nothing
+    /// (a splitscreen player owns exactly one pad), otherwise every connected pad, and nothing
     /// at all when <see cref="InputBlocked"/>. Every per-frame stick/button read goes through
     /// here, which is what makes the focus gate a single switch.</summary>
     public static IEnumerable<int> For(IEnumerable<int>? bound) =>
@@ -84,7 +84,7 @@ public static class Pads
     }
 
     /// <summary>Log the connected roster and who flies what, for either source of the binding (the
-    /// roster split above or the launchscreen's join flow) — a silent plane is otherwise hard to
+    /// roster split above or the launchscreen's join flow), a silent plane is otherwise hard to
     /// diagnose.
     /// ⚠ Through the run log, not <c>GD.Print</c>: the binding is settled once at build and is
     /// unrecoverable afterwards, so a player reporting two pilots on one plane has nothing to hand

@@ -13,7 +13,7 @@ namespace CSVM.Session;
 public sealed class SpawnPicker : IFlightStarts
 {
     /// <summary>An active Instant Action mission's own scenario,
-    /// which <c>BuildFlightRigs</c> already draws <see cref="ChooseSpawn"/>'s spawn LIST from —
+    /// which <c>BuildFlightRigs</c> already draws <see cref="ChooseSpawn"/>'s spawn LIST from,
     /// this only keeps <see cref="LogSpawn"/>'s printed tag truthful about which list that was,
     /// rather than the stale <c>_spec.Scenario</c>. Null outside one.</summary>
     public string? ScenarioOverride;
@@ -43,7 +43,7 @@ public sealed class SpawnPicker : IFlightStarts
     /// <summary>The spawn index player 1 starts from: --spawn=N if given, else a random pick per
     /// launch like the original. Each further player takes the next index in list order (wrapping),
     /// so splitscreen players never share a spawn point.
-    /// ⚠ The random draw is <c>Rng.Stream(Rng.Spawn)</c> — keep its position relative to the
+    /// ⚠ The random draw is <c>Rng.Stream(Rng.Spawn)</c>, keep its position relative to the
     /// session's other RNG draws; reordering moves pinned --det goldens.</summary>
     public int ChooseSpawnBase(IReadOnlyList<SpawnPoint>? spawns)
     {
@@ -75,7 +75,7 @@ public sealed class SpawnPicker : IFlightStarts
 
     /// <summary>The throttle and speed every pilot in this mission starts on, out of the mission's
     /// own PLAYER_INIT (docs/formats/spawns.md). ⚠ Whole-field like <see cref="ChooseStarts"/>:
-    /// the record is one per mission, so never make this per-player — that invites a per-player
+    /// the record is one per mission, so never make this per-player, that invites a per-player
     /// answer the original does not have. <see cref="StartGrid"/> calls it rather than
     /// restating it.</summary>
     public (float ThrottleFrac, float SpeedMps) StartState(IReadOnlyList<SpawnPoint>? spawns,
@@ -106,7 +106,7 @@ public sealed class SpawnPicker : IFlightStarts
     public (Vector3 pos, Vector3 lookAt) ChooseSpawn(IReadOnlyList<SpawnPoint>? spawns,
         string missionZrdrPath, int spawnBase, int playerIndex, string tag)
     {
-        // ⚠ Tested BEFORE the spawn list — that order is why --pos beats it, and StartGrid
+        // ⚠ Tested BEFORE the spawn list, that order is why --pos beats it, and StartGrid
         // inherits the override for free by delegating here rather than reimplementing it.
         // Bypasses the list entirely: a scripted run starts short of a target, no maneuvering.
         if (_spec.SpawnAt is { } at)
@@ -130,7 +130,7 @@ public sealed class SpawnPicker : IFlightStarts
             int i = (spawnBase + playerIndex) % spawns.Count;
             return LogSpawn($"{tag}{ScenarioOverride ?? _spec.Scenario} #{i} of {spawns.Count}", spawns[i]);
         }
-        // No instant-action spawns (only IA1 folders have ia.json) — use the story-mission
+        // No instant-action spawns (only IA1 folders have ia.json), use the story-mission
         // spawn from objectives.json PLAYER_INIT (position + heading; StartState takes the rest).
         if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is { } init)
             return LogSpawn("PLAYER_INIT", init.Spawn);
@@ -166,8 +166,8 @@ public sealed class SpawnPicker : IFlightStarts
         return (at, at + dir);
     }
 
-    // Turns a spawn (position + heading) into a (position, look-at) pair — the nose
-    // (-Z) rotated by the heading (yaw about up) — and logs it for cross-checking the data.
+    // Turns a spawn (position + heading) into a (position, look-at) pair, the nose
+    // (-Z) rotated by the heading (yaw about up), and logs it for cross-checking the data.
     private (Vector3 pos, Vector3 lookAt) LogSpawn(string label, SpawnPoint s)
     {
         var forward = new Basis(Vector3.Up, Mathf.DegToRad(s.HeadingDeg)) * Vector3.Forward;

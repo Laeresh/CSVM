@@ -231,7 +231,7 @@ public static class CustomPlaneBuild
 
     // The hardpoint join: a wing's own count opens that many of its pylons, outboard first, and
     // each carries the high explosive the hangar's commit writes into every cell inside the
-    // count. The airframe's stock fit bounds nothing here — it is the AI's and Instant Action's
+    // count. The airframe's stock fit bounds nothing here, it is the AI's and Instant Action's
     // fit, while the original reads the record's two counts alone.
     private static HardpointSpec? HardpointsFor(CustomPlaneDef def)
     {

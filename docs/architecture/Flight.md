@@ -774,10 +774,10 @@ One mounted gun's firing voice: a single `AudioStreamPlayer3D` on the mount's ow
 the gun fires from and held sounding by a lease each renewal resets, so a firing spell is one
 continuous burst rather than a clip restarted per projectile. The lease is the caller's, per mount: a
 turret renews half a second per round, a hull's gun zero every tick
-([../org/weaponFire.md](../org/weaponFire.md)). `Attach` takes a `GunVoiceHome`, the
-parent-plus-archive-plus-listeners bundle a session builds once and every mount is handed. One voice
-per mount, never one per owner. The cue comes from `WeaponAudioCues`, the cull is its own authored
-audible distance off this node, and the `sound` log names the build and every cull transition.
+([../org/weaponFire.md](../org/weaponFire.md)). `Attach` takes the `GunVoiceHome` bundle of parent,
+archive and listeners a session builds once and hands every mount. One voice per mount, never one per
+owner. The cue comes from `WeaponAudioCues`, the cull is 1.1 times its authored audible distance
+off this node ([../formats/turrets.md](../formats/turrets.md)); the `sound` log names each verdict.
 
 ## src/Flight/AudioListeners.cs
 Where the session's audio listeners are, for every positional flight-audio path: the human pilots'

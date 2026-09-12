@@ -6,7 +6,7 @@ using Godot;
 
 namespace CSVM.Utils;
 
-/// <summary>The parsed <c>CSVM/data/effect_pools.json</c> — how many copies of each world-effects
+/// <summary>The parsed <c>CSVM/data/effect_pools.json</c>, how many copies of each world-effects
 /// template the stage builds, per effect template root, scaled by the session's player count.
 /// Hand-authored engine config, not extracted data: the original instances a fresh copy per
 /// CALL_ANIMATION, so every value here is a finite approximation the user can edit without a
@@ -16,7 +16,7 @@ namespace CSVM.Utils;
 /// </summary>
 public sealed class EffectPools
 {
-    /// <summary>The built-in defaults, applied when the file is absent or unreadable — the shipped
+    /// <summary>The built-in defaults, applied when the file is absent or unreadable, the shipped
     /// file's own values, so a deleted file changes nothing but the log line.</summary>
     public static readonly EffectPools Fallback = new()
     {
@@ -50,12 +50,12 @@ public sealed class EffectPools
 
     private readonly Dictionary<string, Entry> _roots = new(StringComparer.OrdinalIgnoreCase);
 
-    // The separate, smaller pool for library-root call templates — see the file's own
+    // The separate, smaller pool for library-root call templates, see the file's own
     // "_localCallAbout" for why this is not just another entry in _roots (that map is validated
     // against WorldEffectsFactory.EffectStageRoots, and these names never are one).
     private readonly Dictionary<string, Entry> _localCallRoots = new(StringComparer.OrdinalIgnoreCase);
 
-    // The crash rig's own pool — per-airframe damage/crash templates staged under the
+    // The crash rig's own pool, per-airframe damage/crash templates staged under the
     // rig's crash root, kept apart from _roots (validated against the WORLD stage's derived root
     // set) and from _localCallRoots (library-root clones). No per-player term: the whole rig is
     // already built once per player.
@@ -73,7 +73,7 @@ public sealed class EffectPools
     /// the pck, where <c>GlobalizePath</c> + System.IO cannot reach it.</summary>
     public static string DefaultPath => "res://data/effect_pools.json";
 
-    /// <summary>The hard ceiling on any root's slot count — the memory guard, since each slot is one
+    /// <summary>The hard ceiling on any root's slot count, the memory guard, since each slot is one
     /// more copy of that root's subtree. Raise it before raising a per-player term for a
     /// many-player session, not after.</summary>
     public int MaxSlots { get; private set; } = 16;
@@ -111,7 +111,7 @@ public sealed class EffectPools
         }
     }
 
-    /// <summary>Parses the file's bytes — the whole decision, with no file IO and no engine calls,
+    /// <summary>Parses the file's bytes, the whole decision, with no file IO and no engine calls,
     /// so the sizes are testable without a session. Throws <see cref="JsonException"/> on bytes that
     /// are not JSON; a well-formed file missing a key keeps that key's built-in default, since a
     /// partial file is a legitimate way to override one root.</summary>
@@ -154,7 +154,7 @@ public sealed class EffectPools
     /// <summary>How many copies of <paramref name="rootName"/> to stage for a
     /// <paramref name="players"/>-player session: <c>base + perExtraPlayer × (players − 1)</c>,
     /// clamped to 1..<see cref="MaxSlots"/>. Splitscreen and multiplayer are what the per-player
-    /// term is for — every extra aircraft is another gun and another rocket landing somewhere
+    /// term is for, every extra aircraft is another gun and another rocket landing somewhere
     /// else, so a fixed size collapses back onto one copy as the session grows.</summary>
     public int SlotsFor(string rootName, int players)
     {
@@ -163,7 +163,7 @@ public sealed class EffectPools
         return Math.Clamp(e.Base + (e.PerExtraPlayer * extra), 1, MaxSlots);
     }
 
-    /// <summary>How many copies of a death-triggered library-root call template to keep — the
+    /// <summary>How many copies of a death-triggered library-root call template to keep, the
     /// same clamp as <see cref="SlotsFor"/> but against <c>localCallRoots</c>/<c>localCallDefault</c>,
     /// never <c>roots</c>/<c>default</c>.
     /// ⚠ Do not widen <c>genx12</c> here even though it has no entry: its own <c>Targets</c>
@@ -175,9 +175,9 @@ public sealed class EffectPools
     }
 
     /// <summary>How many copies of a crash-rig template root the per-player crash stage builds
-    /// — against <c>crashRoots</c>/<c>crashDefault</c>, never <c>roots</c>/<c>default</c>
+    ///, against <c>crashRoots</c>/<c>crashDefault</c>, never <c>roots</c>/<c>default</c>
     /// (those are the WORLD stage's, validated against its derived root set). No player scaling:
-    /// the whole crash rig is already one per player. A root with no entry stays single-copy —
+    /// the whole crash rig is already one per player. A root with no entry stays single-copy,
     /// right for the crash choreography templates, which play once per crash; the per-panel
     /// damage-stage family is sized to its authored distinct call anchors.</summary>
     public int CrashSlotsFor(string rootName)
@@ -186,7 +186,7 @@ public sealed class EffectPools
         return Math.Clamp(e.Base, 1, MaxSlots);
     }
 
-    /// <summary>The crash stage's pool depth — <see cref="DepthFor"/> against the crash
+    /// <summary>The crash stage's pool depth, <see cref="DepthFor"/> against the crash
     /// sizes.</summary>
     public int CrashDepthFor(IEnumerable<string> stageRoots)
     {
@@ -197,7 +197,7 @@ public sealed class EffectPools
     }
 
     /// <summary>Names any authored <c>crashRoots</c> entry that is not one of
-    /// <paramref name="stageRoots"/> — <see cref="UnknownRoots"/> for the crash section.</summary>
+    /// <paramref name="stageRoots"/>, <see cref="UnknownRoots"/> for the crash section.</summary>
     public List<string> UnknownCrashRoots(IEnumerable<string> stageRoots)
     {
         var known = new HashSet<string>(stageRoots, StringComparer.OrdinalIgnoreCase);
@@ -208,7 +208,7 @@ public sealed class EffectPools
         return unknown;
     }
 
-    /// <summary>The pool DEPTH for a set of stage roots — the largest per-root count, i.e. how many
+    /// <summary>The pool DEPTH for a set of stage roots, the largest per-root count, i.e. how many
     /// slot containers the stage needs. Roots sized below the depth simply have no copy in the
     /// deeper slots, and a call landing there falls back to one that exists.</summary>
     public int DepthFor(IEnumerable<string> stageRoots, int players)
@@ -219,7 +219,7 @@ public sealed class EffectPools
         return depth;
     }
 
-    /// <summary>Names any authored root that is not in <paramref name="stageRoots"/> — a typo sizes
+    /// <summary>Names any authored root that is not in <paramref name="stageRoots"/>, a typo sizes
     /// nothing and would otherwise be invisible. Returns an empty list when the file is clean.</summary>
     public List<string> UnknownRoots(IEnumerable<string> stageRoots)
     {
@@ -246,6 +246,6 @@ public sealed class EffectPools
 
     /// <summary>One root's authored size: its single-player <paramref name="Base"/> and how much
     /// each additional player adds. (The file's <c>why</c> prose is documentation for the reader,
-    /// not data — it is deliberately not parsed.)</summary>
+    /// not data, it is deliberately not parsed.)</summary>
     public readonly record struct Entry(int Base, int PerExtraPlayer);
 }

@@ -12,13 +12,13 @@ namespace CSVM.Mech3.Anim;
 /// `OBJECT_ACTIVE_STATE` that the router still owns the case bodies for.
 /// ⚠ `SoundHandledElsewhere` exists because a second runtime (effects) shares the world: read it
 /// live on every call, never cache it, since the two runtimes can disagree from one dispatch to
-/// the next. `Sounds` itself is read the same way — null before the world build, non-null after,
+/// the next. `Sounds` itself is read the same way, null before the world build, non-null after,
 /// on the very same runtime instance.</summary>
 internal sealed class SoundChannel
 {
     // Keyed by (sound name, anchor), like the lights and for the same reason: the anchor
     // identifies the *instance* of the definition, so C1's four firetrucks each get their own
-    // siren rather than sharing one. It cannot be keyed by host node the way puffers are — in the
+    // siren rather than sharing one. It cannot be keyed by host node the way puffers are, in the
     // reader's triple the emitter is declared BEFORE anything says where it goes. The value
     // carries the declaring definition beside the handle, which is what a per-definition rate is
     // resolved through.
@@ -164,7 +164,7 @@ internal sealed class SoundChannel
 
         object handle = declared.Handle;
 
-        // AT_NODE — the compiled form's own placement. Absent in the reader form and in the 865
+        // AT_NODE, the compiled form's own placement. Absent in the reader form and in the 865
         // compiled events that leave it to OBJECT_ADD_CHILD.
         if (ev.Data.Obj("translate")?.Union() is { Tag: "AtNode", Value: Dictionary<string, object?> at })
         {
@@ -251,8 +251,8 @@ internal sealed class SoundChannel
     }
 
     // The emitter an event's NAME refers to, or null when the name isn't one this definition
-    // declared. This is what lets OBJECT_ACTIVE_STATE and OBJECT_ADD_CHILD — both perfectly
-    // ordinary node events elsewhere — address a sound emitter without either handler having to
+    // declared. This is what lets OBJECT_ACTIVE_STATE and OBJECT_ADD_CHILD, both perfectly
+    // ordinary node events elsewhere, address a sound emitter without either handler having to
     // guess from the name whether `snd_waterfall` is a node or a sound.
     private object? Emitter(AnimEvent ev, Node3D? anchor)
     {

@@ -51,7 +51,7 @@ public class WarningShotCueTests
     }
 
     /// <summary>A quiet interval drains the accumulator and re-arms the shield the moment it sits
-    /// below max, however much charge is left — so a gunner who lets up gives the whole thing
+    /// below max, however much charge is left, so a gunner who lets up gives the whole thing
     /// back.</summary>
     [Fact]
     public void AQuietIntervalDrainsAndReArms()

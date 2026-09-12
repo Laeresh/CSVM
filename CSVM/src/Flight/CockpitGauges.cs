@@ -274,7 +274,7 @@ public sealed class CockpitGauges
     /// engine passes to <c>FUN_004d1a30(node, 0, -heading, 0)</c>: <see cref="FlightController"/>
     /// derives heading as <c>Atan2(nose.X, -nose.Z)</c>, under which the aircraft node's own yaw is
     /// already <c>-heading</c>, so a second negation turns the drum the wrong way at the right rate
-    /// — a fault that hides at rest, where both signs read north. Do not "restore" the decode's
+    ///, a fault that hides at rest, where both signs read north. Do not "restore" the decode's
     /// sign without redoing that derivation; the engine's value is right in the engine's Euler
     /// frame, and the flip is the frame conversion, not a correction to the decode.</summary>
     private readonly struct CompassDrum
@@ -543,7 +543,7 @@ public sealed class CockpitGauges
         {
             int tier = gauges.ZoneTier(Part);
             // Negative is the blink's dark half, which the screen-space dial draws by skipping the
-            // zone outright — the authored geometry has no dark variant to swap to.
+            // zone outright, the authored geometry has no dark variant to swap to.
             Show(Node, tier >= 0);
             if (tier < 0)
             {

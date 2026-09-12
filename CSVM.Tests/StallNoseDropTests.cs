@@ -7,15 +7,15 @@ namespace CSVM.Tests;
 /// <summary>
 /// The stall nose-drop is a TORQUE about an unnormalised nose × worldUp, not a rotation of the
 /// attitude toward world-down: decoded in docs/org/flightModel.md's "The nose-drop's rate is
-/// stall_mag". These assert the mechanism — the reciprocal inertia, the momentum damping and the
-/// lift-versus-weight flag all being in the path — and never a figure measured off video.
+/// stall_mag". These assert the mechanism, the reciprocal inertia, the momentum damping and the
+/// lift-versus-weight flag all being in the path, and never a figure measured off video.
 /// </summary>
 public class StallNoseDropTests
 {
     private const float Dt = 1f / 60f;
 
     /// <summary>One step from a trimmed, wings-level, stick-centred stall is the stall torque and
-    /// nothing else — the weathervane is zero with the path on the nose, and the bank couplings are
+    /// nothing else, the weathervane is zero with the path on the nose, and the bank couplings are
     /// zero wings-level. So the resulting body pitch rate must be the decoded product exactly:
     /// stall_mag × flag × rec_moments_inertia.x × dt, decayed by the tick's own exp(−dt·damp).
     /// A term applied to the attitude instead, or one that skipped the inertia or the damping,
@@ -64,7 +64,7 @@ public class StallNoseDropTests
     /// <summary>Full back stick cannot raise the nose in a stall, by CANCELLATION rather than by
     /// magnitude: the pull lies along the drop axis and opposes it, so the sign test removes it
     /// before the drop is added. ⚠ This is the decoded replacement for the remake's hand-rolled
-    /// over-the-horizon cap; if it fails, the cancellation is gone — do not re-add a cap.</summary>
+    /// over-the-horizon cap; if it fails, the cancellation is gone, do not re-add a cap.</summary>
     [Fact]
     public void FullBackStickCannotRaiseTheNoseInAStall()
     {

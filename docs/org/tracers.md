@@ -7,8 +7,8 @@ came from, or the extracted gamez record it was read from.
 Everything here is a description of *behaviour and geometry*. No decompiler output is reproduced;
 the addresses are given so any claim can be re-checked at source.
 
-**Where the other halves live.** The authored side — the `FIRE`/`FLYOUT`/`IMPACT` bindings, the
-prototype-root table, the per-ammo texture axis — is [`formats/weapons.md`](../formats/weapons.md)
+**Where the other halves live.** The authored side, the `FIRE`/`FLYOUT`/`IMPACT` bindings, the
+prototype-root table, the per-ammo texture axis, is [`formats/weapons.md`](../formats/weapons.md)
 and [`formats/weapon-effects.md`](../formats/weapon-effects.md), which name the tracer textures but
 say nothing about how they are drawn. Our implementation is `CSVM/src/Flight/Projectile.cs`. This
 page is the original's runtime: what the engine does with the `FLYOUT MODEL` a weapon names.
@@ -18,8 +18,8 @@ decode wins and the disagreement is a note (see
 [`video-measurements-unreliable`](../../backlog.md)'s worked case). Where CSVM deliberately differs, that is listed at the bottom rather than hidden.
 
 **The headline: there is no tracer code.** No string, symbol or branch in the executable mentions a
-tracer. A tracer is a piece of *authored geometry* — a 4.5 m crossed-quad streak inside the round's
-`FLYOUT MODEL` — that the weapon module aims once at spawn and thereafter only translates.
+tracer. A tracer is a piece of *authored geometry*, a 4.5 m crossed-quad streak inside the round's
+`FLYOUT MODEL`, that the weapon module aims once at spawn and thereafter only translates.
 
 ## Function map
 
@@ -27,30 +27,30 @@ All in `D:\zipper\gamez\zweapon\` unless noted.
 
 | Address | Role |
 |---|---|
-| `FUN_005ad630` | ZWEP `BALLISTICS` reader (`zwep_init.c`) — parses every weapon key into the 0x214-byte def, and sets the billboard flag below |
-| `FUN_005ae990` | The `FIRE`/`FLYOUT`/`IMPACT` binding-block parser — `MODEL`, `EFFECT`, `ANIMATION`, `MODEL_ANIMATION`, `SURFACE_ANIMATION`, `SOUND` |
-| `FUN_005aeca0` | Projectile pool alloc — attaches the flyout model to the round's node |
-| `FUN_005aef40` | Fire/spawn — places the round and applies its **one and only** orientation |
+| `FUN_005ad630` | ZWEP `BALLISTICS` reader (`zwep_init.c`), parses every weapon key into the 0x214-byte def, and sets the billboard flag below |
+| `FUN_005ae990` | The `FIRE`/`FLYOUT`/`IMPACT` binding-block parser, `MODEL`, `EFFECT`, `ANIMATION`, `MODEL_ANIMATION`, `SURFACE_ANIMATION`, `SOUND` |
+| `FUN_005aeca0` | Projectile pool alloc, attaches the flyout model to the round's node |
+| `FUN_005aef40` | Fire/spawn, places the round and applies its **one and only** orientation |
 | `FUN_005af900` | Per-frame projectile pass over the live list |
 | `FUN_005af720` | The integrator: one pass over the live list, moving and colliding each round |
 | `FUN_005afd50` | Moves one round, accumulates its flown distance, and ends it at `RANGE` |
 | `FUN_005ac3a0` | The end-of-flight detonation: the impact/blast handler at the round's last position |
-| `FUN_005b0770` | Per-frame visual update of one live round — position, and conditional re-orientation |
-| `FUN_005aed40` | Despawn — detaches the model, resets the node's scale/rotation/position |
+| `FUN_005b0770` | Per-frame visual update of one live round, position, and conditional re-orientation |
+| `FUN_005aed40` | Despawn, detaches the model, resets the node's scale/rotation/position |
 | `FUN_005ad290` | Hands out a per-round *clone* of the flyout model (only for `MODEL_ANIMATION` carriers) |
-| `FUN_005b0cb0` | The `INSTANT`/`MULTI_TARGET` beam renderer — **dead in this install**, see below |
+| `FUN_005b0cb0` | The `INSTANT`/`MULTI_TARGET` beam renderer, **dead in this install**, see below |
 | `FUN_004d8eb0` / `LAB_004d8e90` | `zclass/Object3d.c`: subtree predicate + the "is a plain camera-facing facade" test |
-| `FUN_004cd610` | `zclass/Class.c` add-child — the multi-parent attach that makes model sharing work |
+| `FUN_004cd610` | `zclass/Class.c` add-child, the multi-parent attach that makes model sharing work |
 | `FUN_004d1a30` / `FUN_004d1d50` / `FUN_004d18d0` | Object3d set rotation / position / scale |
 
 Weapon-def offsets used below: `+0x120` = `FLYOUT`'s `MODEL` node, `+0x110` = `FLYOUT`'s
 `MODEL_ANIMATION`, `+0x54` = `GRAVITY`, `+0x74` = the flag word.
 
-## The billboard flag — bit 9 of the def flag word
+## The billboard flag, bit 9 of the def flag word
 
 At parse time (`FUN_005ad630`, in the `FLYOUT`/`PROJECTILE_BBOX` block) the reader walks the whole
 flyout-model subtree with `FUN_004d8eb0` and a predicate at `LAB_004d8e90`. The predicate reads the
-node's `+0x3c` block and returns true for `type == 1 && [+4] == 0` — a plain camera-facing facade
+node's `+0x3c` block and returns true for `type == 1 && [+4] == 0`, a plain camera-facing facade
 with no reference node. The result is **inverted** into bit 9:
 
 > **bit 9 (`0x200`) = "this flyout model contains no billboard".**
@@ -58,13 +58,13 @@ with no reference node. The result is **inverted** into bit 9:
 That is the whole decision. A model that faces the camera by itself is never rotated by the weapon
 code; a model made of fixed geometry is aimed along the shot. Nothing else consults it.
 
-## Spawn — the orientation is applied exactly once
+## Spawn, the orientation is applied exactly once
 
 `FUN_005aef40`, after the muzzle effects and before the node is made live:
 
 - if `!(flags & 0x4000)` **and** (`(flags & 0x200)` with a flyout model, or a fire effect with no
   flyout model), the round's node is rotated to `yaw = atan2(-dir.x, -dir.z)`, pitch from the same
-  direction vector — i.e. **aimed along the firing vector**;
+  direction vector, i.e. **aimed along the firing vector**;
 - then `FUN_004d1d50` places the node at the muzzle point.
 
 The negated `atan2` arguments are the engine stating that a model's local forward is **−Z**, which
@@ -72,13 +72,13 @@ is the same convention the prototype geometry is authored in.
 
 No roll is applied. `FIXED_ROTATE` (bit 8) exists to suppress the per-frame update below, not this.
 
-## Attach — one model node, many rounds
+## Attach, one model node, many rounds
 
 `FUN_005aeca0` pops a projectile from the free list and then:
 
-- **no `MODEL_ANIMATION` on `FLYOUT`** (every gun) — the *prototype node itself* is attached under
+- **no `MODEL_ANIMATION` on `FLYOUT`** (every gun), the *prototype node itself* is attached under
   the pooled projectile node via `FUN_004d1390` → `FUN_004cd610`. No copy is made.
-- **`MODEL_ANIMATION` present** (the rockets, for their trail defs) — `FUN_005ad290` pops a
+- **`MODEL_ANIMATION` present** (the rockets, for their trail defs), `FUN_005ad290` pops a
   pre-made clone from a per-weapon free list at def `+0x160`, or deep-clones the prototype
   (`FUN_004d85a0`) when that list is empty. Each round then owns its subtree, which is what lets a
   per-round def animate it.
@@ -91,11 +91,11 @@ parent's transform. Every live gun round renders the same `slug.flt` at its own 
 allocating nothing. `PROJECTILE_BBOX` (def `+0x78` bit 0) is applied to the pooled node here, not to
 the shared model.
 
-`FUN_005aed40` unwinds it symmetrically on despawn — detach every parent, detach every child, then
+`FUN_005aed40` unwinds it symmetrically on despawn, detach every parent, detach every child, then
 reset the node's scale to 1,1,1 and its rotation and position to zero, because the node goes back to
 a pool that other weapons will reuse.
 
-## Per frame — a position write, and nothing else
+## Per frame, a position write, and nothing else
 
 `FUN_005af900` walks the live list and calls `FUN_005b0770` for each round in state 1. That
 function re-orients the node from the current velocity **only if**
@@ -111,7 +111,7 @@ The re-orientation exists for ballistic drop, which this install never authors.
 
 The `0x4000` branch is the exception that proves it: those rounds are spun about Y at
 `3.4906585 rad/s` (200°/s) and scaled `1 → 5` over their first second (`s = 1 + 4t`). Nothing scales
-or fades an ordinary round — no per-frame opacity, no distance scaling, no billboarding.
+or fades an ordinary round, no per-frame opacity, no distance scaling, no billboarding.
 
 ## How a round ends: `RANGE`, and what it leaves behind
 
@@ -166,11 +166,11 @@ opacity pulse `lerp(min, max, (sin(2π·f·t)+1)/2)` and a per-segment raycast f
 branch forks it into randomly-jittered sub-segments at 0.4× each. It is gated on `INSTANT` (bit 11)
 and `MULTI_TARGET` (bit 17).
 
-**No weapon in this install sets either flag** — neither key appears anywhere in the 48 weapon
+**No weapon in this install sets either flag**, neither key appears anywhere in the 48 weapon
 entries. This is MechWarrior-3 laser/PPC code carried into the engine and never reached. Anyone
 hunting "how does the engine draw a streak?" will find this function first; it is the wrong answer.
 
-## The authored tracer — `slug.flt` and its three siblings
+## The authored tracer, `slug.flt` and its three siblings
 
 Read from `extracted/C1/gamez/{nodes,models,materials,textures}.json`. All four ammo prototypes are
 structurally identical:
@@ -208,14 +208,14 @@ just past the leading end. Four things follow, and each is checkable:
   tracked point trails 4.5 m behind the bright tip the player sees.
 - **The bright head is a head-on-only disc.** `g10` is perpendicular to the flight axis, so it
   presents its full 0.29 m face when the round flies toward or away from the viewer and goes
-  edge-on — effectively invisible — from the side. A side-on tracer is the crossed streak *alone*;
+  edge-on, effectively invisible, from the side. A side-on tracer is the crossed streak *alone*;
   the "glowing head" reading only holds for rounds coming at you.
 - **The `l5` LOD cuts off at 600 m.** Past that range both the streak and the tip stop drawing and
-  all that remains is the zero-vertex `g11` — a round beyond 600 m is **invisible while still live
+  all that remains is the zero-vertex `g11`, a round beyond 600 m is **invisible while still live
   and lethal** out to `RANGE` (900–10000 m). The disappearance is authored, not a draw-distance
   artefact.
 
-`tracer1.tif` — the generic fifth texture — is bound by no gun prototype; the four ammo types cover
+`tracer1.tif`, the generic fifth texture, is bound by no gun prototype; the four ammo types cover
 every gun in the install.
 
 **Rockets carry no streak at all.** `he_rocket` and `ap_rocket` are LOD-wrapped missile *bodies*
@@ -244,24 +244,24 @@ splashes when it runs out of range over water. Two details differ and are not ye
 |---|---|---|---|
 | Streak length | **4.5 m** | `TracerLength` 1.0 m | 4.5× short |
 | Streak width | **0.2 m** | `TracerWidth` 0.10 m | 2× narrow |
-| Where it sits | tail AT the round's position, geometry runs **forward**; head 4.56 m ahead | quad centred half a length **behind** the position | the drawn streak is on the wrong side of the simulated point — a ~5 m offset in the direction of travel |
+| Where it sits | tail AT the round's position, geometry runs **forward**; head 4.56 m ahead | quad centred half a length **behind** the position | the drawn streak is on the wrong side of the simulated point, a ~5 m offset in the direction of travel |
 | Geometry | **two perpendicular** quads, `show_backface`, fixed | **one** quad, rolled about the velocity axis to face the camera every frame | the original needs no camera at all; ours degenerates when a round flies at the eye |
 | Leading head | a **second** mesh: 0.29 m octagonal disc on its own `*tip` texture, perpendicular to flight (head-on only) | none | ours has no head-on element at all |
 | Colour | white vertex colours, texture unmodified | `TracerBrightness` ×3 overbright, additive | ours compensates for the missing tip disc and no bloom |
 | Growth | full 4.5 m from the spawn frame; nothing ever scales a gun round | length capped by distance travelled, so it grows out of the muzzle | ours is an invention; harmless at 8 shots/s but not the original |
-| Range cutoff | LOD **600 m**, then nothing draws | `TracerMinPixels` 2.0 floor *inflates* distant rounds | ⚠ direct conflict — ours deliberately shows what the original hides |
-| Who the floor is for | n/a — the LOD is per-viewer, because each pane draws its own | one shared world mesh, floored for the **nearest** bound viewer | the original's per-camera LOD has no equivalent for a shared mesh; sizing for P1 alone was the splitscreen bug |
+| Range cutoff | LOD **600 m**, then nothing draws | `TracerMinPixels` 2.0 floor *inflates* distant rounds | ⚠ direct conflict, ours deliberately shows what the original hides |
+| Who the floor is for | n/a, the LOD is per-viewer, because each pane draws its own | one shared world mesh, floored for the **nearest** bound viewer | the original's per-camera LOD has no equivalent for a shared mesh; sizing for P1 alone was the splitscreen bug |
 | Rockets | prototype body only, no streak; the trail is `MODEL_ANIMATION` puffer smoke | a `tracer1` streak at `RocketExhaustScale` 0.5 / `RocketStreakScale` 2.4 | ours invents a streak the data has no counterpart for |
 | Per-frame work | one position write per round | per-round basis rebuild against the listener camera | |
 
 **How the floor itself is computed**, since it is the one row above with no original behind it to
 check against: `screenPx = worldSize · viewportHeight / (2 · distance · tan(fov/2))`, inverted for
-the world size that covers `TracerMinPixels`. It is **linear in distance** — which is exactly why
-one shared world mesh cannot satisfy two cameras at once — and each viewer is measured with its
+the world size that covers `TracerMinPixels`. It is **linear in distance**, which is exactly why
+one shared world mesh cannot satisfy two cameras at once, and each viewer is measured with its
 **own pane height**, not the window's. Those two together are the whole splitscreen bug: a round
 1000 m from P1 and 100 m from P2, sized for P1, covers ten times its 2 px target in P2's pane. The
 rule is therefore the SMALLEST of the viewers' individual floors, and it follows that arithmetic
-rather than raw distance ordering — a nearer camera in a quarter-height pane legitimately needs a
+rather than raw distance ordering, a nearer camera in a quarter-height pane legitimately needs a
 larger world size than a farther one in a full-height pane, and wins. A viewer the projection
 cannot use (a camera sitting exactly on the round, a pane with no height) is skipped rather than
 collapsing the floor to zero for everyone, and no bound viewers at all means **no floor**, falling

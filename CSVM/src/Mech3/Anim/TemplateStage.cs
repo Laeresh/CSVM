@@ -31,7 +31,7 @@ public sealed class TemplateStage<TNode>
 
     private readonly IEqualityComparer<TNode> _identity;
 
-    // The raw ancestry walk (parent chain to the first pool-slot mark, -1 = none). Unmemoized —
+    // The raw ancestry walk (parent chain to the first pool-slot mark, -1 = none). Unmemoized,
     // the memo below is this class's, so the cache behaviour is assertable off-engine.
     private readonly Func<TNode, int> _slotMarkOf;
 
@@ -53,7 +53,7 @@ public sealed class TemplateStage<TNode>
     // Which slot each PlayEffectAt call takes next, per template ROOT name (def.Name), not per
     // anim name: two effect defs that anchor on the same root must not both be handed slot 0 and
     // collapse onto one copy again. Advances once per call and wraps, so a burst longer than the
-    // pool recycles its oldest slot — the shared-template behaviour, but only at the wrap.
+    // pool recycles its oldest slot, the shared-template behaviour, but only at the wrap.
     private readonly Dictionary<string, int> _poolCursor = new(StringComparer.OrdinalIgnoreCase);
 
     // Node → its pool slot (-1 = outside the pool), memoized on the same terms as the resolver's
@@ -82,7 +82,7 @@ public sealed class TemplateStage<TNode>
 
     private readonly Dictionary<string, int> _callerSlotCursor = new(StringComparer.OrdinalIgnoreCase);
 
-    // Effects whose instance has ended but whose template copy is still revealed — something is
+    // Effects whose instance has ended but whose template copy is still revealed, something is
     // still animating it, or another def is still playing on it (see RetireWhenIdle, and
     // Sweep for when they drain).
     private readonly List<(AnimDefinition Def, TNode? Anchor)> _hidesPending = new();
@@ -127,7 +127,7 @@ public sealed class TemplateStage<TNode>
         bool placesCalled = false,
         IEnumerable<string>? placeExempt = null)
     {
-        // ⚠ Sealed here on purpose — no setter exists. A later write (the old post-Bind
+        // ⚠ Sealed here on purpose, no setter exists. A later write (the old post-Bind
         // mirror) let two roles read different configs off one flag; do not reintroduce it.
         Pooled = pooled;
         Shown = shown;
@@ -160,7 +160,7 @@ public sealed class TemplateStage<TNode>
     public bool Shown { get; }
 
     /// <summary>Whether a CALL_ANIMATION relocates its callee's effect-template root onto the call
-    /// site (<see cref="PlaceAt"/>). Off on the world runtime — the ambient world boot must stay
+    /// site (<see cref="PlaceAt"/>). Off on the world runtime, the ambient world boot must stay
     /// byte-identical, and today's retarget only re-scopes name resolution. On for the
     /// world-effects runtime, the per-player crash rig and the animation debugger's stage, so a
     /// placeless effect template plays where it is staged instead of at its gamez origin.</summary>
@@ -168,7 +168,7 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>Every wrap onto a still-occupied copy, both flavours (<see cref="TakeNextSlot"/>'s
     /// cursor recycling a live slot, <see cref="AssignCallerSlot"/>'s claims outnumbering the
-    /// staged copies) — the shared-template collapse, bounded to the wrap instead of every call.
+    /// staged copies), the shared-template collapse, bounded to the wrap instead of every call.
     /// Zero on the goldens; what <c>effect_pools.json</c> is sized against.</summary>
     public int Recycles { get; private set; }
 
@@ -177,7 +177,7 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>The runtime-dependent hooks, wired at the handover rather than construction:
     /// the stage is built before any resolver exists, and the resolver's own
-    /// <c>ownRootsOf</c> hook is <see cref="RootsFor"/> — both directions are delegates.</summary>
+    /// <c>ownRootsOf</c> hook is <see cref="RootsFor"/>, both directions are delegates.</summary>
     public void Wire(
         Func<string, TNode?, List<TNode>> findAll,
         Func<AnimDefinition, List<TNode?>> anchors,
@@ -202,7 +202,7 @@ public sealed class TemplateStage<TNode>
         _applyResetStates = applyResetStates;
     }
 
-    /// <summary>The pool slot a node sits in — the nearest ancestor carrying the slot mark — or
+    /// <summary>The pool slot a node sits in, the nearest ancestor carrying the slot mark, or
     /// -1 for anything outside the pool (every node on a non-pooled runtime, and the runtime's
     /// own logic nodes). This is what makes "my slot" a property of the CALL rather than of the
     /// effect: a nested CALL_ANIMATION anchors on a node inside its caller's copy, so its own
@@ -249,43 +249,10 @@ public sealed class TemplateStage<TNode>
     // ⚠ Rebuild the maps; a Remove hashes the dead key it is handed.
     public int DropFreed()
     {
-        int dropped = 0;
-        var liveSlots = new List<KeyValuePair<TNode, int>>(_slotOfNode.Count);
-        foreach (var entry in _slotOfNode)
-        {
-            if (_isValid(entry.Key))
-                liveSlots.Add(entry);
-            else
-                dropped++;
-        }
-
-        if (dropped > 0)
-        {
-            _slotOfNode.Clear();
-            foreach (var entry in liveSlots)
-                _slotOfNode[entry.Key] = entry.Value;
-        }
-
+        int dropped = FreedKeys();
+        Rebuild(_slotOfNode);
         foreach (var byAnchor in _callerSlots.Values)
-        {
-            var liveClaims = new List<KeyValuePair<TNode, List<(object Site, int Slot)>>>(byAnchor.Count);
-            int gone = 0;
-            foreach (var claim in byAnchor)
-            {
-                if (_isValid(claim.Key))
-                    liveClaims.Add(claim);
-                else
-                    gone++;
-            }
-
-            if (gone == 0)
-                continue;
-            dropped += gone;
-            byAnchor.Clear();
-            foreach (var claim in liveClaims)
-                byAnchor[claim.Key] = claim.Value;
-        }
-
+            Rebuild(byAnchor);
         // The follow list holds nodes rather than keys, but PlaceOn and the hide half of Reveal
         // both match a stored Root through the identity comparer, so a freed one is the same
         // dereference between the frames FollowSites drops it on.
@@ -295,6 +262,24 @@ public sealed class TemplateStage<TNode>
         // def's WHOLE anchor list. A null anchor is a global instance and stays.
         _hidesPending.RemoveAll(p => p.Anchor is { } gone && !_isValid(gone));
         return dropped;
+
+        // Refills one identity-keyed map from its live entries. Clear hashes nothing, so it is the
+        // only way to retire a dead key; an untouched map is left alone rather than rehashed.
+        void Rebuild<TValue>(Dictionary<TNode, TValue> map)
+        {
+            var live = new List<KeyValuePair<TNode, TValue>>(map.Count);
+            foreach (var entry in map)
+            {
+                if (_isValid(entry.Key))
+                    live.Add(entry);
+            }
+
+            if (live.Count == map.Count)
+                return;
+            map.Clear();
+            foreach (var entry in live)
+                map[entry.Key] = entry.Value;
+        }
     }
 
     /// <summary>Claims a pool slot for a relocating CALL_ANIMATION whose anchor sits in no slot
@@ -321,7 +306,7 @@ public sealed class TemplateStage<TNode>
         int next = _callerSlotCursor.TryGetValue(callee.Name, out int cur) ? cur : 0;
         _callerSlotCursor[callee.Name] = next + 1;
         claims.Add((site, next));
-        // The per-site claim, log-visible beside the retarget line it pairs with — a debug
+        // The per-site claim, log-visible beside the retarget line it pairs with, a debug
         // run reads this to confirm a new tear takes a fresh copy instead of the live one.
         if (_debug())
         {
@@ -375,7 +360,7 @@ public sealed class TemplateStage<TNode>
         var anchors = _anchors(def).Where(a => a != null && _isValid(a)).ToList();
         if (!Pooled || anchors.Count <= 1 || string.IsNullOrEmpty(def.Name))
             return anchors;
-        // The distinct slots this def's roots are staged in, in slot order — its pool size. A
+        // The distinct slots this def's roots are staged in, in slot order, its pool size. A
         // root staged shared (gun family) has one slot and never cycles.
         var slots = anchors.Select(SlotOf).Where(s => s >= 0).Distinct().OrderBy(s => s).ToList();
         if (slots.Count <= 1)
@@ -400,12 +385,12 @@ public sealed class TemplateStage<TNode>
     }
 
     /// <summary>Moves an effect template's own root(s) to a call site so its puffers emit there
-    /// instead of at the template's gamez origin — the remake's stand-in for the original's
+    /// instead of at the template's gamez origin, the remake's stand-in for the original's
     /// per-call template copy. Pooled, only the call's own slot moves. With <paramref name="follow"/>
     /// the root keeps riding the site (<see cref="PlaceFollowing"/>). Docs: architecture.md.</summary>
     public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset, bool follow = false)
     {
-        // An airframe-scoped NAME is a live scene node, never a staged template — placing it
+        // An airframe-scoped NAME is a live scene node, never a staged template, placing it
         // would TopLevel-pin the aircraft itself (see _placeExempt). Resolution is untouched:
         // the callee's own node ops still run on that root, exactly as authored.
         if (!string.IsNullOrEmpty(callee.Name) && _placeExempt.Contains(callee.Name))
@@ -485,7 +470,7 @@ public sealed class TemplateStage<TNode>
     /// Docs: architecture.md.</summary>
     public bool IsAt(AnimDefinition callee, TNode site, Vector3 offset)
     {
-        // A place-exempt callee is never moved (PlaceAt), so it is never "moved away" either —
+        // A place-exempt callee is never moved (PlaceAt), so it is never "moved away" either,
         // reporting a distance here would make every poll-idiom re-call restart it while live.
         if (string.IsNullOrEmpty(callee.Name) || _placeExempt.Contains(callee.Name))
             return true;
@@ -497,7 +482,7 @@ public sealed class TemplateStage<TNode>
         return true;
     }
 
-    /// <summary>The template root(s) a definition's visibility is written through — the call's own
+    /// <summary>The template root(s) a definition's visibility is written through, the call's own
     /// pooled copy when this runtime pools them and the anchor sits in a slot, else the def's
     /// anchors.</summary>
     public IReadOnlyList<TNode?> RootsOf(AnimDefinition def, TNode? anchor) =>
@@ -505,11 +490,11 @@ public sealed class TemplateStage<TNode>
             ? RootsFor(def, anchor).Cast<TNode?>().ToList()
             : _anchors(def);
 
-    /// <summary>Whether another LIVE instance is playing on the same template root(s) — the reason
+    /// <summary>Whether another LIVE instance is playing on the same template root(s), the reason
     /// a hide cannot be a private decision. Caller and callee routinely share one root: the rear
     /// muzzle flash's own def is two instantaneous events plus a <c>CALL_ANIMATION</c> back onto
     /// <c>rear_flash_control</c>, so it finishes on the tick it starts, and hiding on its own finish
-    /// blanked the callee's flash mesh that had just been revealed there (measured — the mesh went
+    /// blanked the callee's flash mesh that had just been revealed there (measured, the mesh went
     /// from 1/2 to 0/2 the moment the hide landed, with nothing else changed).</summary>
     public bool SharedWithLiveInstance(AnimDefinition def, TNode? anchor,
         IReadOnlyList<TNode?> roots)
@@ -555,7 +540,7 @@ public sealed class TemplateStage<TNode>
             RetireWhenIdle(def, anchor);
     }
 
-    /// <summary>Hides an ended effect's template root, the other half of <see cref="Reveal"/> —
+    /// <summary>Hides an ended effect's template root, the other half of <see cref="Reveal"/>,
     /// why a staged template does not stay lit at the last hit site for the rest of the session.
     /// Deferred while the instance's motions still run, since the reveal is paired with the
     /// effect's life, not its instance's. <see cref="Sweep"/> drains the deferrals. Docs:
@@ -574,7 +559,7 @@ public sealed class TemplateStage<TNode>
             _hidesPending.Add((def, anchor));
     }
 
-    /// <summary>Retries every deferred hide — once a frame, from the runtime's own advance.</summary>
+    /// <summary>Retries every deferred hide, once a frame, from the runtime's own advance.</summary>
     public void Sweep()
     {
         for (int i = _hidesPending.Count - 1; i >= 0; i--)
@@ -588,7 +573,7 @@ public sealed class TemplateStage<TNode>
     }
 
     /// <summary>Indexes a lazily-built pooled copy for name resolution and applies its RESET_STATE
-    /// poses — the staging entry a copy passes through exactly once, when its provider builds it
+    /// poses, the staging entry a copy passes through exactly once, when its provider builds it
     /// (`facdsticks` is the worked example). The three steps are runtime services supplied as hooks: the
     /// pointer-free index pass (a copy shares its source's compiled indices, so it must NOT join
     /// the by-index map), the resolver's find-cache clear (ancestry is snapshotted at index time),
@@ -621,7 +606,7 @@ public sealed class TemplateStage<TNode>
     }
 
     // The staged copy sitting in one pool slot, mapped onto the copies that exist the same way
-    // RootsFor maps a caller's slot — so a claim past the staged count wraps rather than missing.
+    // RootsFor maps a caller's slot, so a claim past the staged count wraps rather than missing.
     private TNode? CopyInSlot(AnimDefinition callee, int slot)
     {
         var roots = _findAll(callee.Name, null);

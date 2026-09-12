@@ -4,12 +4,12 @@ Mints the next backlog/playtest item ID (BL-nnn, CAP-nn, PT-nn), safe under conc
 
 .DESCRIPTION
 The counter lives in the shared git common dir (.git/item-id-counters.json), so every worktree
-sees the same one, and it is read-increment-written under an exclusive file lock — two sessions
+sees the same one, and it is read-increment-written under an exclusive file lock, so two sessions
 can never be handed the same number. This replaced the hand-bumped "next free ID" lines in
 backlog.md / playtest.md after BL-253 and BL-262 were each minted twice by concurrent sessions.
 
 The JSON stores the LAST ISSUED number per kind. If the file is ever lost (fresh clone), re-seed
-it from the highest ID ever used — scan every *.md,since retired IDs are never reused.
+it from the highest ID ever used (scan every *.md), since retired IDs are never reused.
 
 Run this for EVERY id, every time. It is not a once-per-session lookup: an id you derive yourself
 by adding 1 to the last one, or reuse from an earlier call, was never recorded in the counter, so

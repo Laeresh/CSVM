@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The accumulate / freeze / snapshot cycle behind <see cref="PerfSample"/>:
 /// what a scope adds, what <see cref="PerfSample.EndFrame"/> hands to the next record, the
-/// remainder arithmetic, and the two properties the instrument's honesty rests on — a nested scope
+/// remainder arithmetic, and the two properties the instrument's honesty rests on, a nested scope
 /// cannot double-count, and a scope allocates nothing.
 ///
 /// <para>⚠ This is the ONLY class that writes <see cref="PerfSample"/>'s ambient statics. xUnit runs

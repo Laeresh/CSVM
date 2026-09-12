@@ -52,8 +52,8 @@ internal static class CampaignZeppelinCommandSuites
         + "puts it on M5ZepAttack, seated at the node nearest where the hull stands and still "
         + "watching the net's stop points; a hull moved to the far end of that route re-seats "
         + "there rather than at the node it had; a net the chapter does not carry leaves the "
-        + "airship where it is; a name that is no zeppelin is refused; and the director no "
-        + "longer declines the directive through its Gap line")]
+        + "airship where it is and reads as no move; a name that is no zeppelin is refused; and "
+        + "the director no longer declines the directive through its Gap line")]
     internal static void CampaignSetAiZeppelinNet(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -228,8 +228,8 @@ internal static class CampaignZeppelinCommandSuites
     private static void CheckRefusals(TestContext ctx, ZeppelinRuntime runtime, StringBuilder report)
     {
         string held = runtime.MotionFor(Hatzep)!.Follower.Net.Name;
-        ctx.Check(runtime.SetNet(Hatzep, AbsentNet),
-            $"a net the chapter does not carry still addresses the airship");
+        ctx.Check(!runtime.SetNet(Hatzep, AbsentNet),
+            $"a net the chapter does not carry reads as no move rather than as an applied clause");
         string kept = runtime.MotionFor(Hatzep)!.Follower.Net.Name;
         report.AppendLine($"refusals: '{AbsentNet}' left '{Hatzep}' on '{kept}'");
         ctx.Check(kept.Equals(held, StringComparison.OrdinalIgnoreCase),

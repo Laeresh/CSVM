@@ -38,14 +38,14 @@ public class HorizonDomeTests
     public static TheoryData<string, string, int, float, float> ZoneOneCeilings => new()
     {
         // C1 is the only chapter whose zone-1 dome carries a TEXTURE at all (sky2.tif on the
-        // vault) and the only one that scrolls it — and the only one built from two nodes.
+        // vault) and the only one that scrolls it, and the only one built from two nodes.
         { "C1", "zone1", 2, 2792.8f, 2608.7f },
         // C1C and C2B share one untextured FOG_COLOR shell (identical vertex data, different
         // model index): a four-sided prism, cap at +2374.7.
         { "C1C", "zone1", 1, 2374.7f, 1448.2f },
         { "C2B", "zone1", 1, 2374.7f, 1448.2f },
         // C4's sole zone-1 node is CONFUSINGLY NAMED h_zone2scroll (a reused name, not a scroll:
-        // its model's texture_scroll is 0) — an octagonal FOG_COLOR shell capped at +982.
+        // its model's texture_scroll is 0), an octagonal FOG_COLOR shell capped at +982.
         { "C4", "zone1", 1, 982.0f, 6400.0f },
         // C5's state-3 dome, the same shape as C4's, painted ZONE3's own [16,16,16].
         { "C5", "zone3", 1, 982.0f, 10137.1f },
@@ -62,7 +62,7 @@ public class HorizonDomeTests
     public void AZoneWithNoGeometryIsNeverBuiltBeside()
     {
         // C1B/C2/C3: the bare zone2 marker would add a dome of zero meshes and arm the gate, which
-        // would then hide the ONE real dome at state 2 — a frame with no sky in it.
+        // would then hide the ONE real dome at state 2, a frame with no sky in it.
         Assert.Equal(new[] { "zone1" }, WorldBuilder.DomeZonesToBuild(Zones(("zone1", 4, 1), ("zone2", 0, 2)), "zone1"));
     }
 
@@ -102,7 +102,7 @@ public class HorizonDomeTests
     public void TheBelowDeckCeilingIsTheZoneDomesOwnFlatCap(
         string chapter, string zone, int expectedNodes, float expectedCapY, float expectedCapRadius)
     {
-        // ⚠ The number this replaces is 396.4 (C1) — `bbox_mid.y`, a bbox statistic the plan and
+        // ⚠ The number this replaces is 396.4 (C1), `bbox_mid.y`, a bbox statistic the plan and
         // docs/formats/weather.md both carried as an "authored cap centre". Asserting the CAP
         // POLYGON instead is what tells the two apart: 2792.8 is where the geometry is.
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
@@ -147,7 +147,7 @@ public class HorizonDomeTests
         Assert.Equal(expectedCapY, capY, 1);
         Assert.Equal(expectedCapRadius, capRadius, 1);
         // The dome is camera-centred and uniformly scaled about the camera, so the ONE thing a
-        // render can measure is the elevation this cap's rim subtends — scale-invariant, and
+        // render can measure is the elevation this cap's rim subtends, scale-invariant, and
         // therefore the number any vertical-scale change has to preserve, rather than the metres.
         Assert.InRange(Mathf.RadToDeg(Mathf.Atan2(capY, capRadius)), 5f, 60f);
     }

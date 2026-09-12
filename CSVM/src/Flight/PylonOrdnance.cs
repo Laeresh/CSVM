@@ -10,7 +10,7 @@ namespace CSVM.Flight;
 /// prototype the round flies, instanced through <see cref="ProjectilePool.BuildFlyoutBody"/> and
 /// parented to the pylon marker at an identity local transform. Built once at session setup and
 /// rides the plane; freed with it.
-/// ⚠ One model per pylon, never one per <c>CLUSTER_SIZE</c> round — the original shows a single
+/// ⚠ One model per pylon, never one per <c>CLUSTER_SIZE</c> round, the original shows a single
 /// rocket per hardpoint. No plane model carries static ordnance mesh of its own (every
 /// rocket/missile/bomb/torpedo name search is empty, and pylon nodes are all <c>model_index -1</c>
 /// markers), so there is no double-up to guard against.</summary>
@@ -21,11 +21,11 @@ public sealed class PylonOrdnance
 
     private PylonOrdnance(List<Mount> mounts) => _mounts = mounts;
 
-    /// <summary>The number of pylons currently showing a mounted model — for the setup breadcrumb.</summary>
+    /// <summary>The number of pylons currently showing a mounted model, for the setup breadcrumb.</summary>
     public int Count => _mounts.Count;
 
     /// <summary>Instances one ordnance body per loaded pylon and parents it to that pylon marker,
-    /// nose-forward at the mount. Returns null when nothing could be mounted — no projectile pool, a
+    /// nose-forward at the mount. Returns null when nothing could be mounted, no projectile pool, a
     /// view without the world scene, or a chapter whose gamez lacks the prototype roots (the round
     /// then flies its streak-only fallback and the wing simply shows no ordnance).</summary>
     public static PylonOrdnance? Build(Loadout loadout, ProjectilePool? pool, bool infiniteAmmo)
@@ -55,7 +55,7 @@ public sealed class PylonOrdnance
         return mounts.Count > 0 ? new PylonOrdnance(mounts) : null;
     }
 
-    /// <summary>Takes every mounted body back off the wings — detached from its pylon
+    /// <summary>Takes every mounted body back off the wings, detached from its pylon
     /// <b>immediately</b> (not merely queued), so a caller that rebuilds in the same frame cannot
     /// leave the old model hanging beside the new one. The weapon lab's hardpoint swap is the one
     /// caller: rebuilding without this leaks a body per pylon per swap.</summary>
@@ -69,7 +69,7 @@ public sealed class PylonOrdnance
         _mounts.Clear();
     }
 
-    /// <summary>Syncs each mounted body's visibility to whether its pylon is armed — the firing
+    /// <summary>Syncs each mounted body's visibility to whether its pylon is armed, the firing
     /// path's own <see cref="AmmoSlots.Armed"/> question, <c>--infinite-ammo</c> included, so the
     /// wing can never disagree with the trigger. Cheap: writes <see cref="Node3D.Visible"/> only on
     /// a change. Driven each frame after the rocket-firing update; a respawn refill shows on the

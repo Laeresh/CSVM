@@ -18,7 +18,7 @@ internal enum FlightRowKind
     FlyMission,
 }
 
-/// <summary>One gun group's picked calibre and whether the mount carries a second barrel — the
+/// <summary>One gun group's picked calibre and whether the mount carries a second barrel, the
 /// flight check's own reading of a plane's guns, resolved either from a hangar build
 /// (<see cref="CustomPlaneDef.Guns"/>) or, for a plane with no build on file (the two starter
 /// Devastators, a granted reward aircraft), from the airframe's stock fit
@@ -304,7 +304,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 return true;
             case FlightRowKind.FlyMission:
                 // The last joined player's press launches; every earlier one advances to the
-                // next check. GoTo on the screen already showing is the re-entry — the stack
+                // next check. GoTo on the screen already showing is the re-entry, the stack
                 // returns to it rather than stacking a second copy, and the cursor opens afresh.
                 if (Flow.Field.Advance())
                 {
@@ -588,7 +588,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     // A plane's four gun groups: a hangar build's own picks when one is on file under the plane's
     // name, else the airframe's stock fit (the two starter Devastators and every granted reward
-    // aircraft carry no CustomPlaneStore entry — docs/org/hangar.md, "the campaign wallet").
+    // aircraft carry no CustomPlaneStore entry, docs/org/hangar.md, "the campaign wallet").
     private FlightCheckGun?[] ResolveGuns(OwnedPlane plane)
     {
         var groups = new FlightCheckGun?[CustomPlaneDef.GunSlots];
@@ -718,7 +718,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         _messages ??= Messages.Load(Path.Combine(root, "extracted", "messages.json"));
 
     // One airframe's blueprint TGA, the hangar's own plane preview path
-    // (extracted/rof/ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA — HangarAirframePage), reused rather
+    // (extracted/rof/ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA, HangarAirframePage), reused rather
     // than authoring new silhouette art. Decoded once and kept, including a miss.
     private HangarArt? SilhouetteFor(int airframe)
     {

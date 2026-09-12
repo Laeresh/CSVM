@@ -10,7 +10,7 @@ namespace CSVM.Session;
 /// <summary>Runs a mission's zeppelins (M4 F17 motion + F18 damage, behind <c>--zeppelins</c>):
 /// each <see cref="ZeppelinDef"/> whose world node and net resolve gets a
 /// <see cref="ZeppelinMotion"/> on B5's <see cref="AiNetFollower"/>, placed at its authored pose,
-/// and the node is flown kinematically — no <c>FlightController</c>. A hull an animation motion
+/// and the node is flown kinematically, no <c>FlightController</c>. A hull an animation motion
 /// owns (a start anim's SI script) is neither placed nor flown until that motion ends; the
 /// follower then resumes from the pose the script left. Every place/skip/hold/park and node
 /// capture prints a <c>zep:</c> line. <see cref="WireDamage"/> builds F18's per-part scalar pools
@@ -41,8 +41,8 @@ public sealed partial class ZeppelinRuntime : Node
     private readonly IReadOnlyList<AiNet> _chapterNets;
     private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
 
-    // The emplacements the record team already fans onto, kept so a script team write can fan the
-    // same way; null in a build with no turret runtime, where a hull simply carries no guns.
+    // The emplacements a team write fans onto; null in a build with no turret runtime, where a
+    // hull simply carries no guns.
     private TurretEmplacementRuntime? _turrets;
 
     private AnimRuntime? _runtime;
@@ -120,24 +120,24 @@ public sealed partial class ZeppelinRuntime : Node
         }
     }
 
-    /// <summary>Raised once when a zeppelin's survivor count crosses the threshold — the
+    /// <summary>Raised once when a zeppelin's survivor count crosses the threshold, the
     /// generator runtime disables the dead host's generator off this (decoded rule).</summary>
     public event Action<string>? ZeppelinKilled;
 
-    /// <summary>Raised once when a zeppelin's last live engine dies — Instant Action's own win
+    /// <summary>Raised once when a zeppelin's last live engine dies, Instant Action's own win
     /// signal on <c>zeppelin_run</c>, matching the original's empty-engine-vector test
     /// (<c>FUN_0045b9d0</c>; addresses in docs/formats/instant-action.md's "two winning paths").
     /// ⚠ A record authoring no engines fires this on the first step, matching the original;
     /// unobservable in this install (all 58 records author 12 or 14).</summary>
     public event Action<string>? ZeppelinEnginesDisabled;
 
-    /// <summary>Zeppelins placed on a resolved net (a dormant <c>deactivated</c> one counts — it
+    /// <summary>Zeppelins placed on a resolved net (a dormant <c>deactivated</c> one counts, it
     /// is placed and flies once a script layer wakes it).</summary>
     public int LiveCount => _live.Count;
 
     /// <summary>The record's authored team as an engine team id, or null on the 42 of 58 records
-    /// authoring none. The parser's three names mint ids in the one shared team space —
-    /// <c>ally</c> 1, <c>neutral</c> 0, <c>enemy</c> the first enemy index, 2 — and a bare integer
+    /// authoring none. The parser's three names mint ids in the one shared team space,
+    /// <c>ally</c> 1, <c>neutral</c> 0, <c>enemy</c> the first enemy index, 2, and a bare integer
     /// is the runtime id verbatim (docs/org/targeting.md "Zeppelins carry a record override").
     /// ⚠ Never substitute a value for an unauthored record: its parts fall through to
     /// <see cref="AimAssist.NeutralTeam"/>, the original's own rule.</summary>
@@ -156,6 +156,8 @@ public sealed partial class ZeppelinRuntime : Node
     /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved.</summary>
     public int FanTeamsOntoTurrets(TurretEmplacementRuntime turrets)
     {
+        // Adopted here because the caller holds them, not so a later team write can work: that one
+        // finds them for itself, and neither fan depends on the other having run.
         _turrets = turrets;
         int moved = 0;
         foreach (var zep in _live)
@@ -180,7 +182,7 @@ public sealed partial class ZeppelinRuntime : Node
 
     /// <summary>Instant Action's builder holds a zeppelin it has switched off (F12): the record
     /// stays placed, but motion/broadside/damage poll stop here. CSVM's stand-in for the
-    /// original's object-graph teardown, which has no equivalent here — see this module's entry
+    /// original's object-graph teardown, which has no equivalent here, see this module's entry
     /// in docs/architecture.md. Switching the node off is the caller's own act.
     /// Returns whether the name is a zeppelin of this mission; one-way, like the original.</summary>
     public bool Hold(string node)
@@ -198,7 +200,7 @@ public sealed partial class ZeppelinRuntime : Node
     public bool IsDormant(string node) => Find(node)?.Dormant ?? false;
 
     /// <summary>`WAKEUP_ENEMIES` on a zeppelin: the mission script puts a <c>deactivated</c> record
-    /// into play — its motion runs, its parts become targets and damageable, and the hull comes
+    /// into play, its motion runs, its parts become targets and damageable, and the hull comes
     /// back to full opacity, which is where a mission's own reveal animation then fades it in from.
     /// Returns whether the name is a dormant zeppelin of this mission; already-woken and unknown
     /// names both answer false, so the caller can report an unconsumed directive.</summary>
@@ -246,9 +248,9 @@ public sealed partial class ZeppelinRuntime : Node
     /// <summary>The zeppelin arm of <c>SET_AI_NET</c> (<c>FUN_004bd7a0</c>): a fresh follower on the
     /// named net, seated from where the hull stands, so a reassignment captures the new route
     /// instead of restarting it at node 0. ⚠ Offer the seat no heading: the nose-aligned edge pick
-    /// is the aeroplane AI's, and a zeppelin is not a vehicle in the original. A net this chapter
-    /// does not carry leaves the airship on its route. Returns whether the name is a zeppelin of
-    /// this mission, so a caller can report a name that addressed nothing.</summary>
+    /// is the aeroplane AI's, and a zeppelin is not a vehicle in the original. Returns whether the
+    /// airship moved: a net this chapter does not carry leaves it on its route and reads as no
+    /// move, as does a name that is no zeppelin of this mission.</summary>
     public bool SetNet(string node, string netName)
     {
         if (Find(node) is not { } zep)
@@ -258,8 +260,8 @@ public sealed partial class ZeppelinRuntime : Node
 
         if (AiNets.ByName(_chapterNets, netName) is not { } net)
         {
-            Log.Info("flight", $"zep: '{zep.Def.Node}' SET_AI_NET '{netName}' is not a net this chapter carries, so it keeps '{zep.Motion.Follower.Net.Name}'");
-            return true;
+            Log.Warn("flight", $"zep: '{zep.Def.Node}' SET_AI_NET '{netName}' is not a net this chapter carries, so it keeps '{zep.Motion.Follower.Net.Name}'");
+            return false;
         }
 
         // The hull's live pose, not the record's seat and not the motion's own field: while a
@@ -294,7 +296,7 @@ public sealed partial class ZeppelinRuntime : Node
             pools++;
         }
 
-        int guns = _turrets?.SetTeamUnder(zep.Host, team) ?? 0;
+        int guns = Turrets()?.SetTeamUnder(zep.Host, team) ?? 0;
         Log.Info("flight", $"zep: '{zep.Def.Node}' team {team} by the mission script, onto {pools} damage pool(s) and {guns} gun(s)");
         return true;
     }
@@ -362,7 +364,7 @@ public sealed partial class ZeppelinRuntime : Node
 
     /// <summary>The DAMAGES_ZEPPELIN routing gate (<c>ProjectilePool.WorldDamageGate</c>): a
     /// weapon without the flag cannot damage a GASBAG zone; every other target passes. The
-    /// impact effect/sound still play — only the damage is refused.</summary>
+    /// impact effect/sound still play, only the damage is refused.</summary>
     public bool GateWeaponDamage(Node? struck, WeaponDef weapon)
     {
         if (_runtime == null || ZeppelinDamage.MayDamageGasbag(weapon))
@@ -639,6 +641,25 @@ public sealed partial class ZeppelinRuntime : Node
 
     private bool Driven(Node3D host) => _transformDriven?.Invoke(host) ?? false;
 
+    // The guns a team write reaches: the emplacement runtime handed over by the record fan, else
+    // the one standing beside this runtime, which is where the session hangs the two. Resolved on
+    // the read so a script write that arrives before the record fan still reaches the guns.
+    private TurretEmplacementRuntime? Turrets()
+    {
+        if (_turrets == null && GetParent() is { } parent)
+        {
+            foreach (var sibling in parent.GetChildren())
+            {
+                if (sibling is TurretEmplacementRuntime found)
+                {
+                    _turrets = found;
+                    break;
+                }
+            }
+        }
+        return _turrets;
+    }
+
     private LiveZeppelin? Find(string node)
     {
         foreach (var zep in _live)
@@ -753,7 +774,7 @@ public sealed partial class ZeppelinRuntime : Node
     // Out of the world, or back in it. The hull is posed at the fade alpha an
     // OBJECT_OPACITY_FROM_TO reveal starts from rather than switched off, because the same rule
     // that drops a faded subtree's colliders then applies, and because a mission's own reveal
-    // animates that very parameter — writing Visible instead would leave the fade running on a
+    // animates that very parameter, writing Visible instead would leave the fade running on a
     // node the unplaced-entity poll can switch back on underneath it.
     private void SetDormancy(LiveZeppelin zep, bool dormant)
     {
@@ -783,7 +804,7 @@ public sealed partial class ZeppelinRuntime : Node
 
         // ⚠ Gated on the hull, and on the record's own engine count, not
         // ZeppelinMotion.TotalEngines (floors at 1). A death sequence that empties the nacelles
-        // must not raise this after the fact — see docs/architecture.md.
+        // must not raise this after the fact, see docs/architecture.md.
         if (!zep.Dead && !zep.EnginesDisabled && engines == 0)
         {
             zep.EnginesDisabled = true;
@@ -836,9 +857,9 @@ public sealed partial class ZeppelinRuntime : Node
     }
 
     // The authored hull death: the def anchored on the zeppelin node whose activation
-    // prerequisite counts anims (all_pzep_gasbags — pops the remaining bags and calls
+    // prerequisite counts anims (all_pzep_gasbags, pops the remaining bags and calls
     // killpzep). Data-selected, never a hardcoded name; a zeppelin shipping none logs so.
-    // ⚠ Effect templates snap to absolute world points and never track a moving host — this
+    // ⚠ Effect templates snap to absolute world points and never track a moving host, this
     // plays where the hull died at that instant, not where it drifts to afterward.
     private void PlayHullDeath(LiveZeppelin zep)
     {
@@ -902,7 +923,7 @@ public sealed partial class ZeppelinRuntime : Node
         /// </summary>
         public bool EnginesDisabled { get; set; }
 
-        /// <summary>Switched off by Instant Action's builder (F12, <see cref="Hold"/>) — placed
+        /// <summary>Switched off by Instant Action's builder (F12, <see cref="Hold"/>), placed
         /// but stepped no further, the runtime counterpart of the record's own
         /// <c>deactivated</c>.</summary>
         public bool Held { get; set; }
@@ -911,7 +932,7 @@ public sealed partial class ZeppelinRuntime : Node
         public Dictionary<string, DestructibleRegistry.Instance?> GasbagZones { get; } =
             new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>The gasbag pools as a set — what the DAMAGES_ZEPPELIN gate protects.</summary>
+        /// <summary>The gasbag pools as a set, what the DAMAGES_ZEPPELIN gate protects.</summary>
         public HashSet<DestructibleRegistry.Instance> GasbagInstances { get; } = new();
 
         public Dictionary<string, DestructibleRegistry.Instance?> EngineZones { get; } =

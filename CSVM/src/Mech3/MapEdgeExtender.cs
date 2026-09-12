@@ -11,7 +11,7 @@ namespace CSVM.Mech3;
 /// Map-edge continuation: a rolling window of repeated border-cell terrain + clutter that
 /// follows the plane past the map edge, so the world continues under the fog instead of
 /// ending in a void, matching the original's own tile-reload behaviour at the controls.
-/// ⚠ Repeats a border-cell BLOCK, never the map interior — see <see cref="RepeatInsteadOfMirror"/>
+/// ⚠ Repeats a border-cell BLOCK, never the map interior, see <see cref="RepeatInsteadOfMirror"/>
 /// and <see cref="DefaultBlockCells"/> for the per-chapter constants and their traps, and
 /// <see cref="AdoptComplements"/> for the border-strip trap. Decode: docs/formats/world-structure.md.
 /// </summary>
@@ -19,7 +19,7 @@ public sealed partial class MapEdgeExtender : Node3D
 {
     /// <summary>The tile-grid overlay's mix strength. Deliberately weaker than
     /// <c>ClassOverlay</c>'s 0.5: this overlay is read while flying, over terrain that must stay
-    /// legible as terrain, and the band boundaries — not the band colours — carry the
+    /// legible as terrain, and the band boundaries, not the band colours, carry the
     /// information.</summary>
     internal const float TintStrength = 0.2f;
 
@@ -52,7 +52,7 @@ public sealed partial class MapEdgeExtender : Node3D
 
     private static readonly Color InMapTint = new(0.80f, 0.80f, 0.85f);
 
-    // Alpha 0 is the shader's identity mix — exactly the untinted world (same convention as
+    // Alpha 0 is the shader's identity mix, exactly the untinted world (same convention as
     // ClassOverlay).
     private static readonly Color Untinted = new(0f, 0f, 0f, 0f);
 
@@ -60,7 +60,7 @@ public sealed partial class MapEdgeExtender : Node3D
     private readonly SceneBuilder _scene;
     private readonly float _x0, _z0, _tileX, _tileZ;
     private readonly int _cols, _rows;
-    // Per source cell: its ground-tile nodes (with the accumulated ancestor transform —
+    // Per source cell: its ground-tile nodes (with the accumulated ancestor transform,
     // identity for every observed tile, kept for correctness) and its clutter sprites.
     private readonly Dictionary<(int, int), List<(GameZNode Node, Transform3D ParentXf)>> _tiles = new();
     private readonly Dictionary<(int, int), List<(int Kind, Transform3D Xf, Color Fade)>> _sprites = new();
@@ -82,11 +82,11 @@ public sealed partial class MapEdgeExtender : Node3D
     private readonly IReadOnlyList<ClutterBuilder.KindExport>? _clutter;
 
     private readonly Dictionary<(int, int), Node3D> _live = new();
-    // The focus cells the current window was built around — one per player (splitscreen serves
+    // The focus cells the current window was built around, one per player (splitscreen serves
     // every pane from one window). Empty until the first Update.
     private readonly List<(int, int)> _centerCells = new();
 
-    // --dump-tilegrid's raw material: one row per node ScanTiles CONSIDERED — every Object3d with
+    // --dump-tilegrid's raw material: one row per node ScanTiles CONSIDERED, every Object3d with
     // a mesh it reached, accepted or rejected, with the reason. Null unless the census was asked
     // for. This is the only view in which a rejection is visible: the tile-grid overlay tints the
     // accepted set, so what it does NOT paint is exactly what the continuation will be missing.
@@ -116,7 +116,7 @@ public sealed partial class MapEdgeExtender : Node3D
     }
 
     /// <summary>Why <see cref="ClassifyGroundMesh"/> did, or did not, take a node as a ground tile.
-    /// Recorded per candidate by the <c>--dump-tilegrid</c> census — the tile-grid overlay shows
+    /// Recorded per candidate by the <c>--dump-tilegrid</c> census, the tile-grid overlay shows
     /// only the accepted set, so a rejection is invisible at the controls except as the void it
     /// leaves past the map edge.</summary>
     public enum TileVerdict
@@ -125,7 +125,7 @@ public sealed partial class MapEdgeExtender : Node3D
         Accepted,
 
         /// <summary>Not an <c>Object3d</c>, or its mesh index does not resolve, or it has no
-        /// vertices — not a tile candidate at all.</summary>
+        /// vertices, not a tile candidate at all.</summary>
         NoMesh,
 
         /// <summary>A polygon carries a cloud/sky texture. The cloudlayer deck tiles are cell-sized
@@ -133,11 +133,11 @@ public sealed partial class MapEdgeExtender : Node3D
         SkyOrCloud,
 
         /// <summary>Spans less than <see cref="MinSpanFraction"/> of the cell on X or Z. ⚠ A real
-        /// border terrain strip can land here, dropped for being thin — see
+        /// border terrain strip can land here, dropped for being thin, see
         /// <c>AdoptComplements</c>.</summary>
         TooSmall,
 
-        /// <summary>Spans more than <see cref="MaxSpanFraction"/> of the cell on X or Z — a
+        /// <summary>Spans more than <see cref="MaxSpanFraction"/> of the cell on X or Z, a
         /// multi-cell sheet, which the per-cell copy has no way to place.</summary>
         TooLarge,
     }
@@ -149,12 +149,12 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <see cref="DefaultBlockCells"/>.</summary>
     public int BlockCells => _blockCells;
 
-    /// <summary>Translate the block rather than alternately reflecting it. ⚠ True by default —
+    /// <summary>Translate the block rather than alternately reflecting it. ⚠ True by default,
     /// this is what the original does, A/B'd at the controls on every chapter. False alternately
     /// reflects, which is kept only to look at.</summary>
     public bool RepeatInsteadOfMirror => _repeat;
 
-    /// <summary>The widest block this world can take — a block deeper than the grid has no more
+    /// <summary>The widest block this world can take, a block deeper than the grid has no more
     /// cells to fold into. At this value the continuation mirrors the whole map.</summary>
     public int MaxBlockCells => Math.Max(1, Math.Min(_cols, _rows));
 
@@ -166,11 +166,11 @@ public sealed partial class MapEdgeExtender : Node3D
     /// feeling.</summary>
     public double LastRebuildMs { get; private set; }
 
-    /// <summary>The shader's identity mix — what the overlay stamps to clear a tint.</summary>
+    /// <summary>The shader's identity mix, what the overlay stamps to clear a tint.</summary>
     internal static Color UntintedMix => Untinted;
 
     /// <summary>The four band-parity colours, indexed <c>(x band odd ? 1 : 0) | (z band odd ? 2 : 0)</c>
-    /// — for the overlay's legend, so a palette edit here cannot drift out of sync with the key on
+    ///, for the overlay's legend, so a palette edit here cannot drift out of sync with the key on
     /// screen (the rule <c>ClassOverlay.BuildLegendText</c> follows).</summary>
     internal static IReadOnlyList<Color> ParityLegendColors => ParityTints;
 
@@ -191,7 +191,7 @@ public sealed partial class MapEdgeExtender : Node3D
 
     /// <summary>Which repetition band an out-of-map index falls in: 0 inside the map, then ±1, ±2…
     /// outward, one step per <paramref name="block"/> cells. The overlay colours by this, not by
-    /// <see cref="FoldAxis"/>'s flip — under repetition nothing ever flips, so keying on the flip
+    /// <see cref="FoldAxis"/>'s flip, under repetition nothing ever flips, so keying on the flip
     /// paints the whole continuation one colour.</summary>
     public static int FoldBandIndex(int i, int n, int block)
     {
@@ -221,8 +221,8 @@ public sealed partial class MapEdgeExtender : Node3D
         return m < b ? (a + m, false) : (a + ((2 * b) - 1 - m), true);
     }
 
-    /// <summary>The ground-tile decision, as a pure function of ONE mesh — vertices, polygon
-    /// texture names, cell size — kept separate from <see cref="IsGroundTile"/> so it can be
+    /// <summary>The ground-tile decision, as a pure function of ONE mesh, vertices, polygon
+    /// texture names, cell size, kept separate from <see cref="IsGroundTile"/> so it can be
     /// pinned by test. ⚠ A rejected node leaves a hole its cell's own width in every extension
     /// copy; see <see cref="AdoptComplements"/>. <paramref name="center"/>/<paramref name="span"/>
     /// are filled on every verdict except <see cref="TileVerdict.NoMesh"/>.</summary>
@@ -247,7 +247,7 @@ public sealed partial class MapEdgeExtender : Node3D
         float spanX = span.X, spanZ = span.Z;
         // Before the span gate: the cloudlayer deck tiles are cell-sized too, so
         // size alone cannot tell them from ground. Node names are unreliable here (cloud layers
-        // ship under generic names like 'g27517') — WorldBuilder.IsCloudOrSkyTexture is the rule.
+        // ship under generic names like 'g27517'), WorldBuilder.IsCloudOrSkyTexture is the rule.
         foreach (var tex in polygonTextures)
         {
             if (tex != null && WorldBuilder.IsCloudOrSkyTexture(tex))
@@ -268,7 +268,7 @@ public sealed partial class MapEdgeExtender : Node3D
 
     /// <summary>Whether a mesh the classifier dropped for being thin looks like a strip of ground
     /// that COMPLETES a cell: flat on both horizontal axes, and spanning the full cell on one of
-    /// them. ⚠ Flatness alone is not enough — it also matches hangar floors and city-block
+    /// them. ⚠ Flatness alone is not enough, it also matches hangar floors and city-block
     /// rooftops. A qualifying mesh is only a CANDIDATE for <see cref="AdoptComplements"/>, never
     /// an acceptance on its own.</summary>
     public static bool IsCompletionStrip(Vector3 span, float tileX, float tileZ) =>
@@ -276,7 +276,7 @@ public sealed partial class MapEdgeExtender : Node3D
         && (span.X >= 0.999f * tileX || span.Z >= 0.999f * tileZ);
 
     /// <summary>Re-points the continuation at a different block depth or fold mode, rebuilding the
-    /// whole window. Debug/prototype path only — frees and rebuilds every live cell in one frame,
+    /// whole window. Debug/prototype path only, frees and rebuilds every live cell in one frame,
     /// roughly ten times a normal cell-crossing diff, so expect a visible hitch.</summary>
     public void SetContinuation(int blockCells, bool repeat)
     {
@@ -294,7 +294,7 @@ public sealed partial class MapEdgeExtender : Node3D
         _centerCells.Clear();
     }
 
-    /// <summary>Show or hide the tile-grid tints on the extension cells. Cheap — it re-stamps a
+    /// <summary>Show or hide the tile-grid tints on the extension cells. Cheap, it re-stamps a
     /// per-instance shader parameter on what is already built and never rebuilds a cell. New cells
     /// pick the state up in <see cref="BuildCell"/> as they are born, which is why this lives here
     /// rather than in a walk-once overlay: extension cells churn on every boundary crossing, so a
@@ -309,7 +309,7 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <summary>Single-focus convenience overload (the single-player flight camera).</summary>
     public void Update(Vector3 focus) => Update(new[] { focus });
 
-    /// <summary>Re-centers the window on the focus points (one per player camera — splitscreen
+    /// <summary>Re-centers the window on the focus points (one per player camera, splitscreen
     /// serves every pane from this one window, so the wanted set is the union of the rings around
     /// each). Cheap no-op until one of them crosses into another cell; then freed/built cells diff
     /// by ~one window row. Call once per frame.</summary>
@@ -333,7 +333,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 for (int dz = -Rings; dz <= Rings; dz++)
                 {
                     var c = (fx + dx, fz + dz);
-                    // In-map cells are the real world's — never duplicated by the extension.
+                    // In-map cells are the real world's, never duplicated by the extension.
                     if (c.Item1 >= 0 && c.Item1 < _cols && c.Item2 >= 0 && c.Item2 < _rows)
                         continue;
                     wanted.Add(c);
@@ -429,7 +429,7 @@ public sealed partial class MapEdgeExtender : Node3D
             new Vector3(ox, 0, oz));
     }
 
-    // The partition-grid cell a world position falls in (may be outside the map — that is the
+    // The partition-grid cell a world position falls in (may be outside the map, that is the
     // whole point; negative/oversize indices address extension cells).
     private (int, int) CellOf(Vector3 p) => (
         Mathf.FloorToInt((p.X - _x0) / _tileX),
@@ -437,7 +437,7 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // ---------------------------------------------------------------- cell building
 
-    // One extension cell: the mirrored ground leaves (mesh + collider, no child subtrees —
+    // One extension cell: the mirrored ground leaves (mesh + collider, no child subtrees,
     // so edge buildings/props are never duplicated) under a reflection-transform holder,
     // plus the source cell's clutter sprites at mirrored positions (billboards re-face the
     // camera by shader, so mirroring a sprite is just mirroring its planted point).
@@ -483,7 +483,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // ---------------------------------------------------------------- tile-grid overlay
 
     // Stamps (or clears) one extension cell's tile-grid tint. Ground only, not the clutter
-    // multimeshes — tinting a forest's sprites one colour buries the tile boundaries the overlay
+    // multimeshes, tinting a forest's sprites one colour buries the tile boundaries the overlay
     // exists to show. Through SceneBuilder.TintParam; never MaterialOverride/MaterialOverlay,
     // a different shader entirely (see SceneBuilder.TintLine).
     private void ApplyTint(Node cell, int ix, int iz)
@@ -576,7 +576,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 MaterialOverride = kind.Material,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 // The billboard shader swings verts outside the AABB, and a scale_range draw can
-                // make a card up to 3× its authored width — ClutterBuilder measured the margin
+                // make a card up to 3× its authored width, ClutterBuilder measured the margin
                 // these placements need, so the extension uses that rather than the raw width.
                 ExtraCullMargin = kind.CullMargin,
                 Name = $"clutter_{kindIndex}",
@@ -589,10 +589,10 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // ---------------------------------------------------------------- source scan
 
-    // Collects the map's ground tiles per grid cell: every Object3d (recursively — the
+    // Collects the map's ground tiles per grid cell: every Object3d (recursively, the
     // map-center airfield tiles hang one level down under group nodes) whose own mesh is a
     // single ~cell-sized terrain/water sheet, excluding cloud/sky sheets (the cloudlayer
-    // deck tiles are cell-sized too). Verified on C1: all 144 cells covered (147 tiles —
+    // deck tiles are cell-sized too). Verified on C1: all 144 cells covered (147 tiles,
     // split half-tile strips and the coastal falls overlay bin alongside their cell's base
     // tile), zero rotated or translated ancestors.
     private void ScanTiles(GameZNode world)
@@ -621,7 +621,7 @@ public sealed partial class MapEdgeExtender : Node3D
             }
             else if (verdict == TileVerdict.TooSmall && IsCompletionStrip(span, _tileX, _tileZ))
             {
-                // Held as a spare rather than accepted outright — AdoptComplements decides.
+                // Held as a spare rather than accepted outright, AdoptComplements decides.
                 var worldCenter = xf * center;
                 int cx = Mathf.Clamp(Mathf.FloorToInt((worldCenter.X - _x0) / _tileX), 0, _cols - 1);
                 int cz = Mathf.Clamp(Mathf.FloorToInt((worldCenter.Z - _z0) / _tileZ), 0, _rows - 1);
@@ -655,7 +655,7 @@ public sealed partial class MapEdgeExtender : Node3D
             : (minX, maxX, minZ, maxZ);
     }
 
-    // How much of a cell its ground box spans, per axis, as a fraction of the cell — the census's
+    // How much of a cell its ground box spans, per axis, as a fraction of the cell, the census's
     // coverX/coverZ. Clipped to the cell, so a tile overhanging its neighbour cannot report more
     // than full coverage.
     private void CoverageOf((int, int) cell, out float coverX, out float coverZ)
@@ -733,7 +733,7 @@ public sealed partial class MapEdgeExtender : Node3D
             out center, out span);
     }
 
-    // One texture name per polygon, null where the material index does not resolve — the shape
+    // One texture name per polygon, null where the material index does not resolve, the shape
     // ClassifyGroundMesh and the census both read, so neither re-walks the material table.
     private IEnumerable<string?> PolygonTextures(GameZMesh mesh)
     {
@@ -822,7 +822,7 @@ public sealed partial class MapEdgeExtender : Node3D
         foreach (var row in _census)
         {
             var key = (row.Cx, row.Cz);
-            // An adopted sheet is reported as what it is — part of the cell's ground — with the
+            // An adopted sheet is reported as what it is, part of the cell's ground, with the
             // classifier's own verdict kept in the row, so the adoption stays legible.
             if (row.Verdict == nameof(TileVerdict.Accepted) || _adopted.Contains(row.Node))
             {
@@ -898,7 +898,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // property names ARE the report's column names.
     private sealed class CensusCandidate
     {
-        /// <summary>The gamez node index — the same stamp the built scene carries as
+        /// <summary>The gamez node index, the same stamp the built scene carries as
         /// <c>AnimRuntime.IndexMeta</c>, so a row can be tied back to what is on screen.</summary>
         public int Node { get; init; }
 
@@ -914,7 +914,7 @@ public sealed partial class MapEdgeExtender : Node3D
         /// <summary>Grid row it binned into (clamped to the grid).</summary>
         public int Cz { get; init; }
 
-        /// <summary>X span as a fraction of the cell — 1.0 is a tile that spans its cell exactly,
+        /// <summary>X span as a fraction of the cell, 1.0 is a tile that spans its cell exactly,
         /// and anything under <see cref="MinSpanFraction"/> is why a candidate was dropped.</summary>
         public float CoverX { get; init; }
 
@@ -924,7 +924,7 @@ public sealed partial class MapEdgeExtender : Node3D
         /// <summary>X span in metres.</summary>
         public float SpanX { get; init; }
 
-        /// <summary>Y span in metres — the flat/upright test. A dropped ground strip is a sheet
+        /// <summary>Y span in metres, the flat/upright test. A dropped ground strip is a sheet
         /// (a few metres of terrain relief); a dropped lamp post is tens of metres tall on a
         /// footprint of centimetres.</summary>
         public float SpanY { get; init; }
@@ -935,7 +935,7 @@ public sealed partial class MapEdgeExtender : Node3D
         /// <summary>Distinct texture names on its polygons, space-separated.</summary>
         public string Textures { get; init; } = string.Empty;
 
-        /// <summary>Distinct <c>SceneBuilder.ClassifySurface</c> results, space-separated — the
+        /// <summary>Distinct <c>SceneBuilder.ClassifySurface</c> results, space-separated, the
         /// field that decides whether a rejected candidate is terrain that SHOULD be copied or a
         /// prop that must not be.</summary>
         public string Surfaces { get; init; } = string.Empty;

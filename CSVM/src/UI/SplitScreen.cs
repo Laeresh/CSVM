@@ -17,7 +17,7 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
-    /// <summary>Panes the rig supports — the reserved visual-layer band is this wide.</summary>
+    /// <summary>Panes the rig supports, the reserved visual-layer band is this wide.</summary>
     public const int MaxPlayers = 4;
 
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
@@ -33,7 +33,7 @@ public sealed partial class SplitScreen : CanvasLayer
     // OFF, never something a new camera has to remember to switch on. It is allocated in Mech3
     // rather than here because SceneBuilder stamps it at build time, node by node.
 
-    private const int Gutter = 2;   // px between panes — confirmed at the controls
+    private const int Gutter = 2;   // px between panes, confirmed at the controls
 
     // How long the skip notice stands, in seconds of wall time. Chrome, not sim: the skip releases
     // the world hold in the same instant, so a notice on the session clock would be the one thing
@@ -42,7 +42,7 @@ public sealed partial class SplitScreen : CanvasLayer
 
     private const int SkipNoticeFontPx = 28;
 
-    // How far off the bottom edge the notice sits — clear of the letterbox card's lower bar, which
+    // How far off the bottom edge the notice sits, clear of the letterbox card's lower bar, which
     // a cutscene has over that edge for the whole time this line can be up.
     private const int SkipNoticeInsetPx = 72;
 
@@ -69,7 +69,7 @@ public sealed partial class SplitScreen : CanvasLayer
     /// HUD canvases) to it.</summary>
     public IReadOnlyList<SubViewport> Views => _views;
 
-    /// <summary>Whether pane 1 currently fills the window on its own — what a cutscene asks for,
+    /// <summary>Whether pane 1 currently fills the window on its own, what a cutscene asks for,
     /// since four small copies of one camera path is not a picture anybody framed.</summary>
     public bool Filled { get; private set; }
 
@@ -80,7 +80,7 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>Whether a 2-player split stands side by side rather than stacked. The threshold is
     /// the pane's own shape, not a screen name: side by side only once each half is still at least
     /// as wide as it is tall, which is every window from 2:1 out to an ultrawide's 32:9. A 16:9
-    /// window is not one — halving either axis lands the pane exactly as far from the reference
+    /// window is not one, halving either axis lands the pane exactly as far from the reference
     /// frame either way, and a 640x720 pane is a shape nothing in the port is calibrated for.</summary>
     public static bool SideBySide(Vector2 window) => window.X >= window.Y * 2f;
 
@@ -105,9 +105,9 @@ public sealed partial class SplitScreen : CanvasLayer
         return new Rect2(col * (paneW + Gutter), row * (paneH + Gutter), paneW, paneH);
     }
 
-    /// <summary>The private visual layer of player <paramref name="index"/> — put that player's
+    /// <summary>The private visual layer of player <paramref name="index"/>, put that player's
     /// camera-anchored copies (skydome / cloud deck) on it. The ambient cloud field is NOT one of
-    /// them — the authored fogvol clutter is world-anchored and shared (see FogVolumeClutter).</summary>
+    /// them, the authored fogvol clutter is world-anchored and shared (see FogVolumeClutter).</summary>
     public static uint PlayerVisualLayer(int index) => 1u << (PlayerLayerBit0 + index);
 
     /// <summary>Player <paramref name="index"/>'s identity colour (menu cursor, HUD tags).</summary>
@@ -122,7 +122,7 @@ public sealed partial class SplitScreen : CanvasLayer
     public static uint PlayerCullMask(int index) => (AllLayers & ~PlayerBand) | PlayerVisualLayer(index);
 
     /// <summary>Moves a whole subtree onto one visual layer (recursively, every
-    /// VisualInstance3D) — used on each player's private skydome / deck / puff copies.</summary>
+    /// VisualInstance3D), used on each player's private skydome / deck / puff copies.</summary>
     public static void SetVisualLayer(Node node, uint layer)
     {
         if (node is VisualInstance3D vi)
@@ -146,7 +146,7 @@ public sealed partial class SplitScreen : CanvasLayer
     /// (<paramref name="on"/>), or hands the panes back. The rig is not rebuilt: every pane keeps
     /// its camera, its HUD parent, its private visual layer and its cull mask, so what changes is
     /// the rect one pane covers and which panes draw at all. The main viewport's camera stays down
-    /// throughout — it is the panes that render this world, in a cutscene as in flight.</summary>
+    /// throughout, it is the panes that render this world, in a cutscene as in flight.</summary>
     public void Fill(bool on)
     {
         if (Filled == on)
@@ -223,7 +223,7 @@ public sealed partial class SplitScreen : CanvasLayer
         // and survives any future own_world_3d change.
         var world = mainViewport.World3D;
         // SubViewports don't pick up the project's msaa_3d setting (that applies to the root
-        // viewport only) — mirror it so the panes anti-alias like the single-player view.
+        // viewport only), mirror it so the panes anti-alias like the single-player view.
         var msaa = (Viewport.Msaa)(int)(ProjectSettings.GetSetting(
             "rendering/anti_aliasing/quality/msaa_3d", 0).AsInt32());
 

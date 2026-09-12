@@ -10,10 +10,9 @@ namespace CSVM.Tests;
 /// <c>--perf</c> its only term attributing frame cost to the AI. What the drain reports, that the
 /// plane count rides the same bracket as the time so a sweep can divide one by the other, and that
 /// several walks in one rendered frame sum into that frame rather than being meaned away.
-///
-/// <para>⚠ This is the ONLY class that writes <see cref="AiStepCost"/>'s ambient statics. xUnit
-/// runs test classes in parallel but the tests within one class serially, so that is what keeps
-/// these deterministic; a second class bracketing walks would have to join this one.</para>
+/// ⚠ This is the ONLY class that writes <see cref="AiStepCost"/>'s ambient statics. xUnit runs
+/// test classes in parallel but the tests within one class serially, so that is what keeps these
+/// deterministic; a second class bracketing walks would have to join this one.
 /// </summary>
 public class AiStepCostTests
 {

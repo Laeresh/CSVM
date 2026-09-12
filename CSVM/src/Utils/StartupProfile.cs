@@ -8,7 +8,7 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// The always-on startup timing report: one <c>[perf] startup …</c> line per session build,
-/// split into the phases the build spends its time in. It only reports — no thresholds, no
+/// split into the phases the build spends its time in. It only reports, no thresholds, no
 /// verdicts, no comparisons; a comparison needs a warm-up protocol this class deliberately does
 /// not own. Line grammar, the phase vocabulary and <c>boot</c>/<c>rest</c>/<c>first_frame</c>'s
 /// meaning: docs/org/startup-profile.md.
@@ -29,7 +29,7 @@ public sealed class StartupProfile
     private int _framesSinceBuild;
     private bool _emitted;
 
-    /// <param name="mode">The session shape (<c>fly</c>, <c>freecam</c>, …) — the same token the
+    /// <param name="mode">The session shape (<c>fly</c>, <c>freecam</c>, …), the same token the
     /// log file is named after.</param>
     /// <param name="bootMs">Milliseconds from engine start to this constructor.</param>
     public StartupProfile(string mode, double bootMs)
@@ -44,7 +44,7 @@ public sealed class StartupProfile
     public static StartupProfile? Current { get; set; }
 
     /// <summary>What this session built, as one ready-formatted <c>key=value</c> fragment
-    /// (<c>chapter=C1</c>, <c>plane=player_bhawk</c>) — the line's scenario identity.</summary>
+    /// (<c>chapter=C1</c>, <c>plane=player_bhawk</c>), the line's scenario identity.</summary>
     public string Subject { get; set; } = "";
 
     /// <summary>The recorded phases in the order first seen, for a reader that wants to aggregate
@@ -58,7 +58,7 @@ public sealed class StartupProfile
 
     /// <summary>Adds the time since <paramref name="mark"/> to a phase of the session being timed.
     /// A no-op when no session is under measurement, so the shared build code carries the calls
-    /// unconditionally. Repeated calls with the same name accumulate — the three
+    /// unconditionally. Repeated calls with the same name accumulate, the three
     /// <c>GameZ.Load</c>s of a flight session are one <c>gamez</c> figure.</summary>
     public static void Record(string phase, long mark)
     {
@@ -77,7 +77,7 @@ public sealed class StartupProfile
     }
 
     /// <summary>Closes the session build; everything after this counts towards
-    /// <c>first_frame</c>. Idempotent — the first call wins, so a build that returns through
+    /// <c>first_frame</c>. Idempotent, the first call wins, so a build that returns through
     /// several paths cannot restart the clock.</summary>
     public void EndBuild()
     {
@@ -123,7 +123,7 @@ public sealed class StartupProfile
         Log.Info("perf", $"startup {Format()}");
     }
 
-    /// <summary>The line body — every <c>key=value</c> after <c>startup</c>. Pure and invariant
+    /// <summary>The line body, every <c>key=value</c> after <c>startup</c>. Pure and invariant
     /// (no Godot API, no current culture), so it is readable from a test host and a decimal point
     /// never turns into a field separator.</summary>
     public string Format()

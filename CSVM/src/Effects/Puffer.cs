@@ -10,8 +10,8 @@ using Godot;
 namespace CSVM.Effects;
 
 /// <summary>The three camera-distance switches plus the original's own far-band multiplier, forced
-/// instead of read from <c>config.json</c>. Only <see cref="Puffer.CreateWith"/> — the test entry
-/// point — accepts one; the real path always reads Config, whose keys default to exactly the
+/// instead of read from <c>config.json</c>. Only <see cref="Puffer.CreateWith"/>, the test entry
+/// point, accepts one; the real path always reads Config, whose keys default to exactly the
 /// original's behaviour (<c>true</c>, <c>true</c>, <c>true</c>,
 /// <see cref="Puffer.GlobalFadeFactorDefault"/>).</summary>
 public readonly record struct PufferFadeSwitches(
@@ -24,7 +24,7 @@ public readonly record struct PufferFadeSwitches(
 /// sprites per <see cref="TimeInterval"/>, each with a random velocity, size, and
 /// lifetime, cycling a flipbook of textures over its age.
 ///
-/// Only the fields we currently render are parsed; the reader carries more — added here as
+/// Only the fields we currently render are parsed; the reader carries more, added here as
 /// they're needed. Distances/velocities are meters and seconds, matching the world;
 /// TEXTURE_SEQUENCE times are the exception, being fractions of a particle's lifetime.
 /// </summary>
@@ -56,17 +56,17 @@ public sealed class PufferState
 
     /// <summary>Random particle birth age in seconds (<c>Rand(StartAgeMin, StartAgeMax)</c>), both
     /// default 0. ⚠ The engine's real birth age adds a sub-frame term computed in
-    /// <see cref="SustainAt"/> and can skip creating a particle outright — see
+    /// <see cref="SustainAt"/> and can skip creating a particle outright, see
     /// <c>docs/org/puffer.md</c>.</summary>
     public float StartAgeMin, StartAgeMax;
 
     /// <summary>How strongly this puffer's particles are carried by the world's wind
-    /// (<see cref="WorldWind"/>). ⚠ Default is 1, not 0 — an unauthored puffer is FULLY
+    /// (<see cref="WorldWind"/>). ⚠ Default is 1, not 0, an unauthored puffer is FULLY
     /// wind-carried. Inert unless <see cref="Friction"/> is non-zero. See
     /// <c>docs/org/puffer.md</c>.</summary>
     public float WindFactor = 1f;
 
-    /// <summary>Camera-distance bands, in metres of view-space depth — see
+    /// <summary>Camera-distance bands, in metres of view-space depth, see
     /// <see cref="Puffer.DistanceAlpha"/> for their meaning.
     /// ⚠ Do not infer field order from the authored values; most near pairs are descending. See
     /// <c>docs/formats/effects.md</c> and <c>docs/org/puffer.md</c>.</summary>
@@ -76,14 +76,14 @@ public sealed class PufferState
     public float FarFadeStart = float.MaxValue, FarFadeEnd = float.MaxValue;
 
     /// <summary>A per-puffer sprite-size nudge, almost certainly a depth-priority constant reused
-    /// for this — the size use is the only one known. The original's draw scales the screen radius
+    /// for this, the size use is the only one known. The original's draw scales the screen radius
     /// by <c>1 + K·PRIORITY</c>, folded into <see cref="Particle.BaseSize"/> at spawn instead
     /// (<see cref="Puffer.PriorityScaleDefault"/>). Default 0, so an unauthored puffer's factor is
-    /// exactly 1 — 47 puffers in the install author a non-zero value, 192 compiled events.</summary>
+    /// exactly 1, 47 puffers in the install author a non-zero value, 192 compiled events.</summary>
     public float Priority;
 
     /// <summary>AT_NODE's optional trailing offset (AT_NODE is [nodeName, dx?, dy?, dz?]),
-    /// in the host node's own frame — the same convention as <see cref="LocalVelocity"/>.
+    /// in the host node's own frame, the same convention as <see cref="LocalVelocity"/>.
     /// This is what spreads a multi-emitter effect around its anchor instead of stacking
     /// every emitter on the anchor's exact origin: C1's waterfall attaches three splash
     /// puffers to the single node <c>waterfall01</c>, offset ±11 m sideways and 8 m up so
@@ -96,11 +96,11 @@ public sealed class PufferState
     public float DistanceInterval;
 
     /// <summary>Flipbook: texture name to show once the particle has lived Time of its lifetime
-    /// (ascending, 0–1 — a FRACTION of LIFETIME_RANGE, not seconds; see
+    /// (ascending, 0–1, a FRACTION of LIFETIME_RANGE, not seconds; see
     /// <see cref="Puffer.FrameFor"/>).</summary>
     public IReadOnlyList<(float Time, string Texture)> TextureSequence = Array.Empty<(float, string)>();
 
-    /// <summary>Static texture pool (the TEXTURES key — smoke101/102/103): each
+    /// <summary>Static texture pool (the TEXTURES key, smoke101/102/103): each
     /// particle picks one at random and keeps it. Alternative to TextureSequence.</summary>
     public IReadOnlyList<string> Textures = Array.Empty<string>();
 
@@ -109,7 +109,7 @@ public sealed class PufferState
     /// dense_firetrail smoke is born orange (255,164,90) and turns near-black.</summary>
     public IReadOnlyList<(float Frac, Color Color)> Colors = Array.Empty<(float, Color)>();
 
-    /// <summary>Whether this state authors <c>START_AGE_RANGE</c> at all — gates the extra
+    /// <summary>Whether this state authors <c>START_AGE_RANGE</c> at all, gates the extra
     /// <c>Rand()</c> draw at spawn so the ~2,900 puffers that don't author it consume no extra
     /// draw and stay bit-identical.</summary>
     public bool HasStartAgeRange => StartAgeMin != 0f || StartAgeMax != 0f;
@@ -162,7 +162,7 @@ public sealed class PufferState
 
     /// <summary>Builds a state from a compiled animation's PUFFER_STATE event payload, as opposed
     /// to <see cref="Parse"/>'s reader form. ⚠ The emission interval, whether it's Time or
-    /// Distance, and the growth-factor ramp all need special handling — see
+    /// Distance, and the growth-factor ramp all need special handling, see
     /// <c>docs/formats/anim-definitions.md</c> for PUFFER_STATE before changing this.</summary>
     public static PufferState FromAnimEvent(AnimData d)
     {
@@ -197,9 +197,9 @@ public sealed class PufferState
             LifetimeMax = Range("lifetime_range", "max", 1f),
             StartAgeMin = Range("start_age_range", "min", 0f),
             StartAgeMax = Range("start_age_range", "max", 0f),
-            // Absent (null) falls back to the ctor's 1.0, never to 0 — see WindFactor's remark.
+            // Absent (null) falls back to the ctor's 1.0, never to 0, see WindFactor's remark.
             WindFactor = d.Num("wind_factor") ?? 1f,
-            // `unk_range` IS NEAR_FADE — see docs/formats/effects.md. Absent stays at the ctor's
+            // `unk_range` IS NEAR_FADE, see docs/formats/effects.md. Absent stays at the ctor's
             // no-fade, no-cull defaults.
             NearFadeStart = Range("unk_range", "min", 0f),
             NearFadeEnd = Range("unk_range", "max", 0f),
@@ -255,13 +255,13 @@ public sealed class PufferState
 
         // FADE_RANGE and FAR_FADE are two spellings of one block (the parser accepts both onto
         // the same flag bit). The install authors FADE_RANGE 574 times and
-        // FAR_FADE exactly once — C3's volcanosmoke — so the alias is not hypothetical.
+        // FAR_FADE exactly once, C3's volcanosmoke, so the alias is not hypothetical.
         string farKey = d.Has("FADE_RANGE") ? "FADE_RANGE" : "FAR_FADE";
 
         var s = new PufferState
         {
             Name = d.Str("NAME") ?? "",
-            // Unauthored, the cadence is the constructor's 1.0 s — except on a DISTANCE_INTERVAL
+            // Unauthored, the cadence is the constructor's 1.0 s, except on a DISTANCE_INTERVAL
             // block, where it is not the emission cadence at all but our still-host sputter, and
             // all 146 reader blocks that omit the key are of that kind.
             TimeInterval = d.Has("TIME_INTERVAL") ? d.Float("TIME_INTERVAL")
@@ -278,10 +278,10 @@ public sealed class PufferState
             LifetimeMax = d.Float("LIFETIME_RANGE", 1f, 1),
             StartAgeMin = d.Float("START_AGE_RANGE", 0f, 0),
             StartAgeMax = d.Float("START_AGE_RANGE", 0f, 1),
-            // Absent falls back to the ctor's 1.0, never to 0 — see WindFactor's remark. Only 5
+            // Absent falls back to the ctor's 1.0, never to 0, see WindFactor's remark. Only 5
             // reader blocks in the install author the key at all (3 at 0.3, 2 at 1.0).
             WindFactor = d.Float("WIND_FACTOR", 1f),
-            // The two bands — see NearFadeStart for which end is which, and DO NOT read it off
+            // The two bands, see NearFadeStart for which end is which, and DO NOT read it off
             // these values: five of the six authored near pairs are descending.
             NearFadeStart = d.Float("NEAR_FADE", 0f, 0),
             NearFadeEnd = d.Float("NEAR_FADE", 0f, 1),
@@ -292,7 +292,7 @@ public sealed class PufferState
             DeviationDistance = d.Float("DEVIATION_DISTANCE"),
             Number = (int)d.Float("NUMBER", 1f),
             DistanceInterval = d.Float("DISTANCE_INTERVAL"),
-            // AT_NODE is [nodeName, dx?, dy?, dz?] — the offset starts at index 1, past the name.
+            // AT_NODE is [nodeName, dx?, dy?, dz?], the offset starts at index 1, past the name.
             AtNodeOffset = new Vector3(d.Float("AT_NODE", 0f, 1), d.Float("AT_NODE", 0f, 2), d.Float("AT_NODE", 0f, 3)),
         };
 
@@ -327,8 +327,8 @@ public sealed class PufferState
 
 /// <summary>A running instance of a <see cref="PufferState"/>: a CPU-simulated burst of billboard
 /// sprites, handed one frame at a time to an <see cref="IEmitterRenderer"/>. The CPU integration
-/// honours the reader parameters directly — random velocity, friction, size growth, and the
-/// non-uniform flipbook timing — which map awkwardly onto Godot's built-in particle material.
+/// honours the reader parameters directly, random velocity, friction, size growth, and the
+/// non-uniform flipbook timing, which map awkwardly onto Godot's built-in particle material.
 /// Everything past that integration is behind the renderer seam, so <see cref="CreateWith"/> can
 /// reach all three emission modes with no GPU and no <c>TextureArchive</c>. See
 /// <c>docs/architecture.md</c> for plumbing and <c>docs/org/puffer.md</c> for the decode.
@@ -337,13 +337,13 @@ public sealed partial class Puffer : Node3D
 {
     /// <summary>Default for config.json <c>puffer.*SizeScale</c> (per-spawn-path size multipliers).
     /// Not a tune: <c>SIZE_RANGE</c> is a screen-space half-extent, so the sprite spans
-    /// <c>2 × SIZE_RANGE</c> — this is the decoded radius→diameter conversion. See
+    /// <c>2 × SIZE_RANGE</c>, this is the decoded radius→diameter conversion. See
     /// <c>docs/org/puffer.md</c>.</summary>
     public const float SizeScaleDefault = 2f;
 
     // ⚠ Do not add a rise/lifetime multiplier for the fire family (`puffer.fireRiseScale`,
     // `puffer.fireLifetimeScale`). A prior tune of this kind measured 2.11x too tall against
-    // footage. The authored numbers reach on their own — see docs/org/puffer.md, "The fire pair".
+    // footage. The authored numbers reach on their own, see docs/org/puffer.md, "The fire pair".
 
     /// <summary>Default for config.json <c>puffer.globalFadeFactor</c> (<c>PufferSetGlobalFadeFactor</c>
     /// in the original). Multiplies only the FAR band's measured distance; near comparisons stay
@@ -351,7 +351,7 @@ public sealed partial class Puffer : Node3D
     public const float GlobalFadeFactorDefault = 1f;
 
     /// <summary>The <c>K</c> in the original's <c>1 + K·PRIORITY</c> screen-radius scale. The
-    /// engine constant is <c>0.01</c> on the software path and <c>0.02</c> on the hardware one —
+    /// engine constant is <c>0.01</c> on the software path and <c>0.02</c> on the hardware one,
     /// this project has no software path (see <see cref="DistanceAlpha"/>'s remark on the same
     /// split), so this is the hardware value. Default <c>PRIORITY</c> is 0, so the factor is 1
     /// unless authored.</summary>
@@ -361,7 +361,7 @@ public sealed partial class Puffer : Node3D
     // smoke. ⚠ This decides only the soft-particle depth fade, never the blend: blend is the
     // texture's own additive bit (docs/org/textures.md). Dark sprites sit at ground-level sites
     // where the fade would zero every fresh puff against the terrain behind it, and the measured
-    // population separates cleanly here — fire_f06 0.018 and thickblksmoke 0.004 below, nothing
+    // population separates cleanly here, fire_f06 0.018 and thickblksmoke 0.004 below, nothing
     // above it under 0.12. See docs/org/puffer.md.
     private const float SmokeLuminance = 16f / 255f;
 
@@ -378,7 +378,7 @@ public sealed partial class Puffer : Node3D
     private const int ContinuousPoolMax = 8192;
     // The original's teleport guard on the DISTANCE path: it
     // accumulates the frame's motion length into the emitter's interval counter only
-    // `if (len &lt; 200.0)` — a respawned or pooled emitter that jumps across the world
+    // `if (len &lt; 200.0)`, a respawned or pooled emitter that jumps across the world
     // lays no line of puffs along the jump. The time path has no equivalent test: there the
     // engine accumulates `dt` unconditionally.
     private const float TeleportGuardMeters = 200f;
@@ -399,12 +399,12 @@ public sealed partial class Puffer : Node3D
     private float _trailSizeScale = SizeScaleDefault;
     private float _sustainSizeScale = SizeScaleDefault;
 
-    // 1 + K·PRIORITY, read once at Init off the authored state — not a config knob, since it
+    // 1 + K·PRIORITY, read once at Init off the authored state, not a config knob, since it
     // is a decoded engine constant rather than a tuning surface.
     private float _priorityFactor = 1f;
 
     // The three distance switches (config.json puffer.distanceFade / farCull / nearCull), read
-    // once at Init. All default TRUE — every one of them reproduces the original, and a flag that
+    // once at Init. All default TRUE, every one of them reproduces the original, and a flag that
     // shipped off would be a silent divergence wearing a config key. See DistanceAlpha.
     private bool _distanceFade = true;
     private bool _farCull = true;
@@ -412,7 +412,7 @@ public sealed partial class Puffer : Node3D
     private float _globalFadeFactor = GlobalFadeFactorDefault;
 
     // 1/(end - start) per band, precomputed at Init exactly as the original's setters do at
-    // set time — and, as they do, left as the raw difference (0) when the two ends are equal,
+    // set time, and, as they do, left as the raw difference (0) when the two ends are equal,
     // which is the unauthored far band's FLT_MAX/FLT_MAX case.
     private float _nearRecip;
     private float _farRecip;
@@ -420,7 +420,7 @@ public sealed partial class Puffer : Node3D
     private PufferState _state = null!;
     private IEmitterRenderer _renderer = null!;
     // The world state this emitter reads but does not own (the wind and the camera position).
-    // Still air unless a caller wired the session's own — see EffectAmbience.
+    // Still air unless a caller wired the session's own, see EffectAmbience.
     private EffectAmbience _ambience = EffectAmbience.Still;
     private Particle[] _particles = Array.Empty<Particle>();
     private int _liveCount;
@@ -450,7 +450,7 @@ public sealed partial class Puffer : Node3D
     /// fired without parsing a log.</summary>
     public int TeleportGuardCount => _teleportGuardCount;
 
-    /// <summary>Live particle count — diagnostics only (the <c>--debug-anim</c> puffer census, which
+    /// <summary>Live particle count, diagnostics only (the <c>--debug-anim</c> puffer census, which
     /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
     public int LiveCount => _liveCount;
 
@@ -471,7 +471,7 @@ public sealed partial class Puffer : Node3D
             return null;
         // The whole blend verdict: the texture's own additive bit, read per frame because the
         // sprite changes under the particle. Neither the COLORS ramp nor the sprite's darkness
-        // enters into it — see docs/org/textures.md.
+        // enters into it, see docs/org/textures.md.
         var additive = new bool[frameNames.Count];
         for (int i = 0; i < frameNames.Count; i++)
             additive[i] = textures.IsAdditive(frameNames[i]);
@@ -482,7 +482,7 @@ public sealed partial class Puffer : Node3D
         return puffer;
     }
 
-    /// <summary>Builds an emitter over a supplied <paramref name="renderer"/> — the same modes and
+    /// <summary>Builds an emitter over a supplied <paramref name="renderer"/>, the same modes and
     /// pool sizing as <see cref="Create"/>, with no atlas and no <c>TextureArchive</c>, so the
     /// three modes are assertable by a test. ⚠ Constructing a <c>Puffer</c> draws one RNG seed off
     /// <see cref="Rng.Puffer"/>; calling this on a capture path moves every puffer-bearing golden.
@@ -517,7 +517,7 @@ public sealed partial class Puffer : Node3D
         TopLevel = true; // ignore parent transform: the fireball stays put in world space
         // Toggling TopLevel PRESERVES the node's global transform (Godot 4), so the parent's
         // rotation at this moment would silently stick as this node's basis and skew every
-        // local-space particle — set the whole transform, never just the position.
+        // local-space particle, set the whole transform, never just the position.
         GlobalTransform = new Transform3D(Basis.Identity, worldPosition);
         _liveCount = 0;
         _sinceStart = 0f;
@@ -570,7 +570,7 @@ public sealed partial class Puffer : Node3D
             SustainAt(worldPos, worldBasis, dt);
     }
 
-    /// <summary>Stops a continuous run: trail AND sustain together, unconditionally — the
+    /// <summary>Stops a continuous run: trail AND sustain together, unconditionally, the
     /// ghost-trail rule: a pooled slot is teleported
     /// between call sites, so a trail origin kept across the pause would draw a puff line from
     /// the previous site on revival. Idempotent; live particles finish their own lifetimes
@@ -641,7 +641,7 @@ public sealed partial class Puffer : Node3D
             }
 
             // A negative-age particle is still drawn on the frame it's born, pinned to ramp stop 0
-            // — see docs/org/puffer.md. Distance gate before any draw work: discarded means unwritten.
+            //, see docs/org/puffer.md. Distance gate before any draw work: discarded means unwritten.
             float distAlpha = 1f;
             if (fading && !NearestViewerAlpha(nodeOrigin + p.Pos, viewers, out distAlpha))
                 continue;
@@ -691,7 +691,7 @@ public sealed partial class Puffer : Node3D
     }
 
     // Packs the frames side by side into one atlas, and measures whether a particle DIES
-    // on a dark sprite — the flipbook's last frame, or a static pool's mean luminance. That
+    // on a dark sprite, the flipbook's last frame, or a static pool's mean luminance. That
     // measurement drives the soft-particle default alone (see SmokeLuminance), and distinguishes
     // "fire_n_smoke", whose flipbook ends near-black despite starting bright. Null atlas when a
     // frame is missing.
@@ -728,7 +728,7 @@ public sealed partial class Puffer : Node3D
             (sequenced ? lastLum : meanLum) < SmokeLuminance);
     }
 
-    // A sprite's mean luminance weighted by its own alpha — what it actually
+    // A sprite's mean luminance weighted by its own alpha, what it actually
     // contributes when composited, rather than what its unmasked pixels contain.
     private static float MeanLuminance(Image img)
     {
@@ -783,7 +783,7 @@ public sealed partial class Puffer : Node3D
 
     // The camera-distance alpha for ONE viewer, decoded verbatim from the original's
     // per-particle draw; `false` means the particle is discarded this frame. The distance is
-    // view-space DEPTH, not euclidean range. ⚠ The near ramp reads the FAR band's origin — not a
+    // view-space DEPTH, not euclidean range. ⚠ The near ramp reads the FAR band's origin, not a
     // typo, verified in raw assembly, and must not be "repaired". `_distanceFade`/`_farCull`/
     // `_nearCull` are three separate mechanisms, not one switch. See
     // `docs/formats/effects.md` and `docs/org/puffer.md`.
@@ -792,7 +792,7 @@ public sealed partial class Puffer : Node3D
     {
         alpha = 1f;
         float d = camFwd.Dot(worldPos - camPos);
-        float scaled = d * _globalFadeFactor;   // the far band only — see GlobalFadeFactorDefault
+        float scaled = d * _globalFadeFactor;   // the far band only, see GlobalFadeFactorDefault
         if (_farCull && _state.FarFadeEnd <= scaled)
             return false;
         if (scaled <= _state.FarFadeStart)
@@ -804,7 +804,7 @@ public sealed partial class Puffer : Node3D
                 return false;
             if (_state.NearFadeEnd <= d || !_distanceFade)
                 return true;                    // the engine's `goto`: alpha 1, past the >0 gate
-            alpha = (d - _state.FarFadeStart) * _nearRecip;   // ⚠ FarFadeStart — the cross-wire
+            alpha = (d - _state.FarFadeStart) * _nearRecip;   // ⚠ FarFadeStart, the cross-wire
         }
         else
         {
@@ -860,7 +860,7 @@ public sealed partial class Puffer : Node3D
 
     // Static-viewer variant of TrailAdvance: emits the trail's
     // per-meter puffs AT a fixed world point, spending `speedMps`
-    // meters of virtual motion per second — the damage lab's parked plane, whose
+    // meters of virtual motion per second, the damage lab's parked plane, whose
     // panels burn in place (the puffs' own random velocity and growth make the
     // stacked emissions read as a flickering fire). Same carry, pool and spawn
     // path as the moving trail, with no motion to spread along and no sub-frame age.
@@ -904,7 +904,7 @@ public sealed partial class Puffer : Node3D
     // since the previous call rather than stacked on today's pose (batch `k` at
     // `frac = (k+1)·interval/accumulator` along `prevOrigin → origin`). Call every frame
     // while the puffer is on; SustainEnd stops emission and lets particles decay.
-    // ⚠ No per-frame batch cap — see `docs/org/puffer.md` for why a cap is actively wrong.
+    // ⚠ No per-frame batch cap, see `docs/org/puffer.md` for why a cap is actively wrong.
     private void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
     {
         var origin = worldPos + worldBasis * _state.AtNodeOffset;
@@ -916,14 +916,14 @@ public sealed partial class Puffer : Node3D
             SetActive(true);
             Visible = true;
             _sustainCarry = _state.TimeInterval; // emit on the very first frame
-            // No prior pose to interpolate from — re-home here rather than trailing from a
+            // No prior pose to interpolate from, re-home here rather than trailing from a
             // stale point, exactly as TrailAdvance's own homing rule: without this a revive
             // after Stop() would draw a line of puffs from wherever the emitter last was.
             _sustainPrevOrigin = origin;
         }
         _sustainCarry += dt;
         // ⚠ The age offset rides the RAW dt, unclamped, exactly as the engine does. Clamping it to
-        // keep long-hitch batches alive is an invented divergence — see docs/org/puffer.md.
+        // keep long-hitch batches alive is an invented divergence, see docs/org/puffer.md.
         EmitBatches(_sustainPrevOrigin, origin, worldBasis, dt, ref _sustainCarry, _state.TimeInterval, _sustainSizeScale);
         _sustainPrevOrigin = origin;
     }
@@ -960,7 +960,7 @@ public sealed partial class Puffer : Node3D
         else if (sustained)
         {
             // Number per interval, each living up to LIFETIME_RANGE's max, plus one interval's
-            // worth of headroom — the authored lifetime is the whole story.
+            // worth of headroom, the authored lifetime is the whole story.
             int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
                                          / Mathf.Max(state.TimeInterval, 1e-3f)) + state.Number;
             _particles = new Particle[Mathf.Clamp(steady, SustainPoolMin, SustainPoolMax)];
@@ -1063,14 +1063,14 @@ public sealed partial class Puffer : Node3D
         float d = _state.DeviationDistance;
         for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
         {
-            // ±0.5·d, not ±d — see SpawnSustained's comment.
+            // ±0.5·d, not ±d, see SpawnSustained's comment.
             var pos = new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
             var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
             float size = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale * _priorityFactor;
             float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
-            // START_AGE_RANGE: see SpawnSustained's comment — gated draw, right after Life.
+            // START_AGE_RANGE: see SpawnSustained's comment, gated draw, right after Life.
             float age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f;
-            // The engine's born-dead skip — see SpawnSustained. The burst path has no sub-frame
+            // The engine's born-dead skip, see SpawnSustained. The burst path has no sub-frame
             // term either (its batches are keyed off _sinceStart, not a carried accumulator), so
             // as on the trail path only an authored START_AGE_RANGE can fire it.
             if (age >= life)
@@ -1088,7 +1088,7 @@ public sealed partial class Puffer : Node3D
     }
 
     // Latest flipbook frame whose keyed time has been reached (times ascending). ⚠ The
-    // key is a FRACTION of the particle's own lifetime, not seconds — reading it as seconds
+    // key is a FRACTION of the particle's own lifetime, not seconds, reading it as seconds
     // collapsed `large_30sec_fire` into a static ball. See `docs/org/puffer.md`.
     private float FrameFor(float lifeFrac)
     {

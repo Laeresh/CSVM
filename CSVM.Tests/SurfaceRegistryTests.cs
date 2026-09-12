@@ -70,7 +70,7 @@ public class SurfaceRegistryTests
     [Fact]
     public void ANegativeIdResolvesToNull()
     {
-        // FUN_0048b920's JL test at 0x0048bab5 — the id is signed, and a negative id is one of
+        // FUN_0048b920's JL test at 0x0048bab5, the id is signed, and a negative id is one of
         // the cascade's fallback-to-slot-0 arms, not a valid lookup.
         Assert.Null(SurfaceRegistry.NameForId(-1));
     }

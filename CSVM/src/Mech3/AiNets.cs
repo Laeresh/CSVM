@@ -36,8 +36,8 @@ public readonly record struct AiNetNode(Vector3 Position, IReadOnlyList<float> T
 }
 
 /// <summary>A net's trailer attach/follow target, raw and uninterpreted. The shipped shapes:
-/// <c>[nodeIndex, "name"]</c> (76 nets, e.g. <c>[10, "player"]</c>), <c>[-1, "name"]</c> — a
-/// named target with no attach node, <see cref="NodeIndex"/> −1 — (4), and index-only
+/// <c>[nodeIndex, "name"]</c> (76 nets, e.g. <c>[10, "player"]</c>), <c>[-1, "name"]</c>, a
+/// named target with no attach node, <see cref="NodeIndex"/> −1, (4), and index-only
 /// <c>[3]</c> with a null <see cref="Name"/> (1, C2 net 33). A bare <c>[-1]</c> (133) or an
 /// omitted trailer (8) is no trailer at all: <see cref="AiNet.Trailer"/> is null.</summary>
 public readonly record struct AiNetTrailer(int NodeIndex, string? Name);
@@ -45,7 +45,7 @@ public readonly record struct AiNetTrailer(int NodeIndex, string? Name);
 /// <summary>
 /// Reads a chapter's patrol nets: every <c>ne0NNNNN.zrd.json</c> in the chapter zrdr scope
 /// (dir or zip), joined with its <c>neindex.zrd.json</c> name. A net record is
-/// <c>[null, 10.0, ×9 floats, NODES, EDGES, TRAILER?]</c> — 14 elements, 13 when the trailer
+/// <c>[null, 10.0, ×9 floats, NODES, EDGES, TRAILER?]</c>, 14 elements, 13 when the trailer
 /// is omitted. Format page: docs/formats/ai-nets.md.
 /// </summary>
 public static class AiNets
@@ -55,7 +55,7 @@ public static class AiNets
     private const int TrailerSlot = 13;
 
     /// <summary>Loads every patrol net of a chapter, sorted by id. An empty list when the
-    /// chapter ships none (no such chapter in this install — all 8 carry 18–40).</summary>
+    /// chapter ships none (no such chapter in this install, all 8 carry 18–40).</summary>
     public static List<AiNet> Load(string chapterZrdrPath)
     {
         var names = LoadIndex(chapterZrdrPath);
@@ -82,7 +82,7 @@ public static class AiNets
         return names;
     }
 
-    /// <summary>The chapter's id → name pairs from <c>neindex.zrd.json</c>, in file order — the
+    /// <summary>The chapter's id → name pairs from <c>neindex.zrd.json</c>, in file order, the
     /// engine's own net-table order. See <c>docs/formats/ai-nets.md</c> for the skipped
     /// allocation-figure first element.
     /// ⚠ Do not sort by id: "the first net" means entry 0 of this order, not the lowest id.
@@ -237,7 +237,7 @@ public static class AiNets
 }
 
 /// <summary>
-/// One chapter patrol net (<c>ne0NNNNN.zrd.json</c>): a waypoint GRAPH — positions plus an
+/// One chapter patrol net (<c>ne0NNNNN.zrd.json</c>): a waypoint GRAPH, positions plus an
 /// explicit edge list that branches and is not necessarily closed. Never assume the node order
 /// is the route; only <see cref="Edges"/> is connectivity. Referenced by name from egen
 /// (<c>vehicle.nets</c>), zeppelins (<c>net</c>) and objectives, and by <see cref="Id"/> from
@@ -245,22 +245,22 @@ public static class AiNets
 /// </summary>
 public sealed class AiNet
 {
-    /// <summary>The net id — encoded in the filename (<c>ne000010</c> → 10) and the number aiv
+    /// <summary>The net id, encoded in the filename (<c>ne000010</c> → 10) and the number aiv
     /// field 0 references.</summary>
     public required int Id { get; init; }
 
-    /// <summary>The name the chapter's <c>neindex.zrd.json</c> gives this id — the join key
+    /// <summary>The name the chapter's <c>neindex.zrd.json</c> gives this id, the join key
     /// egen/zeppelins/objectives use. Empty when the index misses the id (unseen in this
     /// install: all 222 nets resolve 1:1).</summary>
     public required string Name { get; init; }
 
     public required IReadOnlyList<AiNetNode> Nodes { get; init; }
 
-    /// <summary>Node-index pairs. The connectivity of the net — branching is normal, and a
+    /// <summary>Node-index pairs. The connectivity of the net, branching is normal, and a
     /// closed loop is one authoring choice, not the rule.</summary>
     public required IReadOnlyList<(int A, int B)> Edges { get; init; }
 
-    /// <summary>The trailer attach/follow target — see <see cref="AiNetTrailer"/> for the
+    /// <summary>The trailer attach/follow target, see <see cref="AiNetTrailer"/> for the
     /// shipped shapes. Null when the record ends with a bare <c>[-1]</c> or omits the trailer
     /// entirely.</summary>
     public AiNetTrailer? Trailer { get; init; }

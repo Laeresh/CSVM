@@ -5,29 +5,29 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>Which of the original's four candidate lists a survivor came from. The lists differ
-/// only in what they hold — scoring is identical across all four, so this is for the caller and
+/// only in what they hold, scoring is identical across all four, so this is for the caller and
 /// the suite, never for the scorer.</summary>
 public enum AimTargetKind
 {
-    /// <summary><c>VehicleList</c> — aircraft, plus the AI ground/sea vehicles M4 will add.</summary>
+    /// <summary><c>VehicleList</c>, aircraft, plus the AI ground/sea vehicles M4 will add.</summary>
     Vehicle,
 
     /// <summary>Turrets. Empty until M4 builds them.</summary>
     Turret,
 
-    /// <summary><c>MStructList</c> — the mission structures; CSVM's approximation is the
+    /// <summary><c>MStructList</c>, the mission structures; CSVM's approximation is the
     /// destructible registry.</summary>
     Structure,
 
-    /// <summary>Live proximity-fused ordnance in flight — the reason guns snap onto an incoming
+    /// <summary>Live proximity-fused ordnance in flight, the reason guns snap onto an incoming
     /// rocket by design.</summary>
     Ordnance,
 }
 
 /// <summary>One gun barrel's aim-assist state, held in plane-local space
-/// (docs/org/aim-assist.md "Per-muzzle state" — the original's eight <c>0x24</c>-byte slots at
+/// (docs/org/aim-assist.md "Per-muzzle state", the original's eight <c>0x24</c>-byte slots at
 /// plane <c>+0x3a4</c>). Indexed by (gun group, muzzle) exactly as <see cref="FireControl"/>
-/// already picks a muzzle — no re-derivation of the original's <c>weaponGroup·2+barrelToggle</c>
+/// already picks a muzzle, no re-derivation of the original's <c>weaponGroup·2+barrelToggle</c>
 /// index is needed.</summary>
 public struct GunAimSlot
 {
@@ -39,13 +39,13 @@ public struct GunAimSlot
     /// <see cref="Target"/> by the catch-up slerp.</summary>
     public Vector3 Smoothed;
 
-    /// <summary>Plane-local unit vector: what <see cref="Smoothed"/> is chasing — the candidate
+    /// <summary>Plane-local unit vector: what <see cref="Smoothed"/> is chasing, the candidate
     /// scan's winner once B4/B5 land, or <see cref="AimAssist.LocalForward"/> when the forget
     /// timer has unwound it.</summary>
     public Vector3 Target;
 
     /// <summary>Game-time seconds (<see cref="CSVM.Utils.GameClock.Time"/>) this slot was last
-    /// touched — stamped by the forget reset here, and, once B5 lands, by every round that goes
+    /// touched, stamped by the forget reset here, and, once B5 lands, by every round that goes
     /// out (the original restamps it on every shot, which is why the forget timer measures time
     /// since the barrel last fired, not time since a lock was lost).</summary>
     public double LastUpdate;
@@ -63,12 +63,12 @@ public struct AimCandidate
     public Vector3 Velocity;
 
     /// <summary>Team id (the engine's <c>+0x08</c>). Matching the shooter's rejects the pair, and
-    /// so does <see cref="AimAssist.NeutralTeam"/> on EITHER side — read off
+    /// so does <see cref="AimAssist.NeutralTeam"/> on EITHER side, read off
     /// <see cref="FlightController.Team"/> for a live aircraft, or
     /// <see cref="AimAssist.TeamOfPilot"/> for that field's own default.</summary>
     public int Team;
 
-    /// <summary>False for a candidate the engine's vtable <c>+0x14</c> predicate would reject —
+    /// <summary>False for a candidate the engine's vtable <c>+0x14</c> predicate would reject,
     /// dead, or not live yet (a crashed pilot, a destroyed structure).</summary>
     public bool Live;
 
@@ -90,7 +90,7 @@ public struct AimScan
     /// <summary>World muzzle position the intercept is solved from.</summary>
     public Vector3 MuzzlePosition;
 
-    /// <summary>The shooter's own world velocity, m/s — subtracted from each candidate's to give
+    /// <summary>The shooter's own world velocity, m/s, subtracted from each candidate's to give
     /// the solver the relative velocity it wants.</summary>
     public Vector3 ShooterVelocity;
 
@@ -101,7 +101,7 @@ public struct AimScan
     /// <summary>The shooter's team (<see cref="AimAssist.TeamOfPilot"/>).</summary>
     public int Team;
 
-    /// <summary>The round's speed, m/s — the weapon's <c>VELOCITY</c>.</summary>
+    /// <summary>The round's speed, m/s, the weapon's <c>VELOCITY</c>.</summary>
     public float Speed;
 
     /// <summary>The weapon's <c>RANGE²</c>: an intercept the round cannot reach inside it is
@@ -113,7 +113,7 @@ public struct AimScan
     public float ConeCos;
 
     /// <summary><c>sticky_bullet_dist_factor</c>, per metre. Ships at 0.0, which deletes the
-    /// distance term outright — selection is then purely most-aligned, at any range inside
+    /// distance term outright, selection is then purely most-aligned, at any range inside
     /// <c>RANGE</c>. The executable's own default is 2.5e-4; the shipped data turns it off
     /// deliberately, so a tuning pass must not "restore" it.</summary>
     public float DistFactor;
@@ -128,7 +128,7 @@ public struct AimScan
 /// (world), when the round would arrive, and the score it won on.</summary>
 public struct AimScanResult
 {
-    /// <summary>False when nothing survived the gates — the "no target found" answer, which leaves
+    /// <summary>False when nothing survived the gates, the "no target found" answer, which leaves
     /// the slot's target on the plane's forward axis.</summary>
     public bool Found;
 
@@ -150,7 +150,7 @@ public struct AimScanResult
 
 /// <summary>The per-muzzle gun aim assist: slot state (above), the per-frame forget + catch-up
 /// pass, the constant-velocity intercept solver (docs/org/aim-assist.md "The lead
-/// solver — <c>FUN_00460e30</c>") and the candidate scan with its rejection gates and scorer
+/// solver, <c>FUN_00460e30</c>") and the candidate scan with its rejection gates and scorer
 /// ("Scoring one candidate"), so the whole assist is one testable unit that
 /// <see cref="FlightController"/> calls into.</summary>
 public static class AimAssist
@@ -165,7 +165,7 @@ public static class AimAssist
     /// enemy".</summary>
     public const int NeutralTeam = 0;
 
-    /// <summary>The player's side, id 1 — the decoded turret convention (0 neutral, 1
+    /// <summary>The player's side, id 1, the decoded turret convention (0 neutral, 1
     /// ally, 2+ enemy) carried into the team model:
     /// every human and every wingman is this team, regardless of pilot index. Use this rather than
     /// <see cref="TeamOfPilot"/>(0) wherever "the player's side" is a fixed identity, not a
@@ -189,18 +189,18 @@ public static class AimAssist
 
     /// <summary>The proximity fuse that puts a round in flight on the assist's ordnance list: the
     /// engine tests the def's <c>DETONATION_DISTANCE²</c> against 0.01, i.e. a fuse longer than
-    /// 0.1 m — the 13 ordnance carriers in docs/formats/weapons.md. (The engine also admits a round
+    /// 0.1 m, the 13 ordnance carriers in docs/formats/weapons.md. (The engine also admits a round
     /// whose def sets secondary-block flag <c>0x20</c>; CSVM does not read that block, and
     /// <see cref="ProjectilePool.CollectFusedOrdnance"/> stands <c>TARGETABLE</c> in for it.)</summary>
     public const float MinFuseDistance = 0.1f;
 
-    /// <summary>Local forward — the "no target found" answer a slot's target unwinds to.</summary>
+    /// <summary>Local forward, the "no target found" answer a slot's target unwinds to.</summary>
     public static readonly Vector3 LocalForward = new(0f, 0f, -1f);
 
     // Two directions this close to parallel (or its negation) make Godot's
     // Vector3.Slerp throw "Argument is not normalized": its rotation axis comes
     // from a cross product that degenerates at 0° and 180° separation. FlightModel
-    // guards its own VelocityDir slerp the same way, for the same crash — a plane holding
+    // guards its own VelocityDir slerp the same way, for the same crash, a plane holding
     // straight and level, or a gun line that has already caught up to its target, hits this
     // every frame.
     private const float ParallelDot = 0.999f;
@@ -242,7 +242,7 @@ public static class AimAssist
 
     /// <summary>The constant-velocity intercept solver (<c>FUN_00460e30</c>, docs/org/aim-assist.md
     /// "The lead solver"): given the muzzle, the round's speed, the target position and its velocity
-    /// RELATIVE to the shooter, finds the fire direction and time of flight. Frame-agnostic — every
+    /// RELATIVE to the shooter, finds the fire direction and time of flight. Frame-agnostic, every
     /// input in the same space, and the answer comes out in that space.
     /// ⚠ Solves via <c>u = 1/t</c>, not the textbook quadratic in <c>t</c>; the docs page has the
     /// derivation. Do not swap it back in.</summary>
@@ -253,7 +253,7 @@ public static class AimAssist
         t = 0f;
 
         Vector3 displacement = targetPos - muzzlePos;
-        float a = displacement.LengthSquared(); // u's leading coefficient — see the doc comment
+        float a = displacement.LengthSquared(); // u's leading coefficient, see the doc comment
         if (a < 1e-6f)
         {
             return false; // zero separation: nothing to aim at
@@ -268,14 +268,14 @@ public static class AimAssist
 
         // The stable (Citardauq) quadratic form: avoids subtracting near-equal quantities when b
         // and sqrt(disc) are close in magnitude, which the textbook (-b±sqrt(disc))/2a form does
-        // not — do not replace this with the textbook formula.
+        // not, do not replace this with the textbook formula.
         float sq = Mathf.Sqrt(disc);
         float q = -0.5f * (b + (b >= 0f ? sq : -sq));
         float u1 = q / a;
         float u2 = Mathf.IsZeroApprox(q) ? float.NaN : c / q;
 
         // u = 1/t, so only a positive u is a forward-time solution; the larger positive root is
-        // the smaller t — the earliest intercept.
+        // the smaller t, the earliest intercept.
         float u = u1 > 0f && u2 > 0f ? Mathf.Max(u1, u2) : u1 > 0f ? u1 : u2 > 0f ? u2 : float.NaN;
         if (float.IsNaN(u) || u <= 0f)
         {
@@ -295,7 +295,7 @@ public static class AimAssist
 
     /// <summary>The assist's acceptance cone for one weapon, as a cosine in the positive-alignment
     /// convention (the engine stores <c>−cos</c> and tests both sides negated; docs/org/aim-assist.md
-    /// "Sign convention" — do not mix halves of the two). <c>CANNON_SPREAD</c> is a HALF-angle in
+    /// "Sign convention", do not mix halves of the two). <c>CANNON_SPREAD</c> is a HALF-angle in
     /// degrees, 6.0 on every stock gun. An absent key is the whole forward hemisphere, not a
     /// built-in cone: the def's secondary block is <c>calloc</c>ed, so the slot keeps 0.0 =
     /// <c>−cos(90°)</c>.</summary>
@@ -304,8 +304,8 @@ public static class AimAssist
 
     /// <summary>The cone one candidate is judged against: its own <c>+0x50</c> override (a
     /// half-angle in RADIANS) when it advertises one, else the firing weapon's. No shipped entity
-    /// sets it — the only authored writer is the turret key <c>STICKINESS</c>, which ships zero
-    /// times — but the branch is ported anyway, since dropping it is a silent behaviour change the
+    /// sets it, the only authored writer is the turret key <c>STICKINESS</c>, which ships zero
+    /// times, but the branch is ported anyway, since dropping it is a silent behaviour change the
     /// moment a mission authors one.</summary>
     public static float ConeCosFor(in AimCandidate candidate, float weaponConeCos) =>
         candidate.ConeOverride >= 0f ? Mathf.Cos(candidate.ConeOverride) : weaponConeCos;
@@ -343,7 +343,7 @@ public static class AimAssist
         }
         Vector3 axis = aimDir.Normalized();
         // "Any perpendicular": cross with whichever world axis this direction is least aligned
-        // with, so the cross never degenerates. Which one it is does not matter — the next line
+        // with, so the cross never degenerates. Which one it is does not matter, the next line
         // rolls it to a uniform angle about the aim axis anyway.
         Vector3 seed = Mathf.Abs(axis.Y) < 0.9f ? Vector3.Up : Vector3.Right;
         Vector3 perp = axis.Cross(seed).Normalized().Rotated(axis, rng.Randf() * Mathf.Tau);
@@ -385,7 +385,7 @@ public static class AimAssist
     }
 
     // One list's pass. The engine runs four byte-identical scorers differing only in the container
-    // accessor, so there is one scorer here and four calls — a list CSVM has not built yet iterates
+    // accessor, so there is one scorer here and four calls, a list CSVM has not built yet iterates
     // nothing rather than being absent (M4 wires its turrets in, and the pass is already here).
     private static void ScoreList(in AimScan scan, List<AimCandidate> list, AimTargetKind kind,
         ref AimScanResult best, ref float bestScore)
@@ -440,7 +440,7 @@ public static class AimAssist
 
 /// <summary>Everything one fire call may snap onto, kept as the engine's four lists rather than one
 /// merged list: the scan order is theirs, and a list CSVM has not built yet must be EMPTY, not
-/// absent — M4 wiring turrets in is then one <c>AddTurret</c> call and not a rediscovery of this
+/// absent, M4 wiring turrets in is then one <c>AddTurret</c> call and not a rediscovery of this
 /// item. Reused across fire calls; <see cref="Clear"/> between them.</summary>
 public sealed class AimCandidateSet
 {
@@ -456,11 +456,11 @@ public sealed class AimCandidateSet
     /// <summary>The mission structures. CSVM's analogue is
     /// <see cref="DestructibleRegistry"/>, which is an APPROXIMATION and recorded as one: it is the
     /// shootable-world-object list, where the original's is the <c>targets.zrd</c> mission-structure
-    /// list. (<c>MissionTargets</c> is not the analogue at all — objective display strings, nothing
+    /// list. (<c>MissionTargets</c> is not the analogue at all, objective display strings, nothing
     /// damageable.)</summary>
     public List<AimCandidate> Structures { get; } = new();
 
-    /// <summary>Live proximity-fused rounds in flight — a filter over the live
+    /// <summary>Live proximity-fused rounds in flight, a filter over the live
     /// <see cref="ProjectilePool"/>, not a structure of its own.</summary>
     public List<AimCandidate> Ordnance { get; } = new();
 

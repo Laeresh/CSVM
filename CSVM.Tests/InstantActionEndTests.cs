@@ -8,9 +8,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The Instant Action mission end: the per-mission-type win
-/// condition, the INVENTED per-pilot lives ledger and the one-way outcome. Runs engine-free —
+/// condition, the INVENTED per-pilot lives ledger and the one-way outcome. Runs engine-free,
 /// <see cref="InstantActionRuntime"/>'s end half holds no engine type and logs nothing, the same
-/// construction rule <c>VersusMatch</c> follows — so every rule here is pinned without a session.
+/// construction rule <c>VersusMatch</c> follows, so every rule here is pinned without a session.
 /// Each def goes in through the real <c>--ia=</c> reader rather than a hand-built record, so a
 /// change to how <c>lives</c> or <c>mission_type</c> parses moves these tests too.
 /// </summary>
@@ -26,7 +26,7 @@ public class InstantActionEndTests
         Assert.Equal(InstantActionObjective.ZonesFlown,
             InstantActionRuntime.ObjectiveFor("stunt_flying"));
         // The zeppelin run wins on the ENGINES, not the hull (FUN_0045b9d0 at 0x0045be0a tests
-        // the live engine vector before the hull's death byte) — the mode's own briefing string
+        // the live engine vector before the hull's death byte), the mode's own briefing string
         // and its "Disable Engines" target label say the same.
         Assert.Equal(InstantActionObjective.ZeppelinDisabled,
             InstantActionRuntime.ObjectiveFor("zeppelin_run"));
@@ -42,7 +42,7 @@ public class InstantActionEndTests
         var zeppelin = new InstantActionRuntime(Def("zeppelin_run"));
 
         // A zeppelin run clears all four of its waves like every other mode (F12 credits them
-        // either way) — that is not this mission's win.
+        // either way), that is not this mission's win.
         zeppelin.ReportObjective(InstantActionObjective.WavesCleared);
         zeppelin.ReportObjective(InstantActionObjective.AceDown);
         zeppelin.ReportObjective(InstantActionObjective.ZonesFlown);
@@ -154,7 +154,7 @@ public class InstantActionEndTests
         };
 
         ia.ReportObjective(InstantActionObjective.AceDown);
-        ia.NotifyPilotDown(0);             // the ace took the player with it — the win stands
+        ia.NotifyPilotDown(0);             // the ace took the player with it, the win stands
         ia.ReportObjective(InstantActionObjective.AceDown);
 
         Assert.Equal(InstantActionOutcome.Won, ia.Outcome);
@@ -187,7 +187,7 @@ public class InstantActionEndTests
         // open forever, which is exactly what StuntRace's own all-finished rule would do.
         Assert.True(InstantActionRuntime.ZoneSetsFlown(new[] { (false, true), (true, false) }));
 
-        // Nobody left flying is a LOSS, decided by the lives ledger — never a win.
+        // Nobody left flying is a LOSS, decided by the lives ledger, never a win.
         Assert.False(InstantActionRuntime.ZoneSetsFlown(new[] { (true, false), (true, true) }));
         Assert.False(InstantActionRuntime.ZoneSetsFlown(System.Array.Empty<(bool, bool)>()));
     }

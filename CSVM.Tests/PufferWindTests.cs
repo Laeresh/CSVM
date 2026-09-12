@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 ///
 /// <para>The load-bearing claim here is the DEFAULT. The puffer object's constructor writes
 /// <c>1.0</c> into the wind-factor field and the applier only overwrites it when
-/// the authoring flag is set, so an unauthored puffer is FULLY wind-coupled — 2,802 of the
+/// the authoring flag is set, so an unauthored puffer is FULLY wind-coupled, 2,802 of the
 /// install's 2,863 friction-bearing compiled events are in exactly that state. Reading an absent
 /// key as 0 would becalm all of them silently, which is why absent and explicit-zero are tested
 /// apart.</para>
@@ -74,7 +74,7 @@ public class PufferWindTests
     }
 
     /// <summary>An explicit 0 is a puffer deliberately opting OUT (the six-strong
-    /// <c>subdoors_puffer</c> family, 12 events), and must survive as a 0 — it is not the same
+    /// <c>subdoors_puffer</c> family, 12 events), and must survive as a 0, it is not the same
     /// thing as saying nothing.</summary>
     [Fact]
     public void CompiledEventExplicitZeroIsNotTheDefault()
@@ -89,7 +89,7 @@ public class PufferWindTests
         Assert.Equal(0f, PufferState.FromAnimEvent(d).WindFactor);
     }
 
-    /// <summary>The compiled surface writes <c>wind_factor: null</c> when the key is unauthored —
+    /// <summary>The compiled surface writes <c>wind_factor: null</c> when the key is unauthored,
     /// 4,423 of the install's 4,535 events. That is the ctor default, 1, not 0.</summary>
     [Fact]
     public void CompiledEventWithNullWindFactorDefaultsToOne()
@@ -135,7 +135,7 @@ public class PufferWindTests
     }
 
     /// <summary>A zero <c>RANDOM_ACCEL</c>/<c>RANDOM_ANG_VEL</c> leaves the gust magnitude at its
-    /// initial 0 forever, so the wind is exactly the static vector — the shape a mission that
+    /// initial 0 forever, so the wind is exactly the static vector, the shape a mission that
     /// authored only <c>STATIC_VELOCITY</c> would get, and the shape <see cref="WorldWind.Still"/>
     /// degenerates to.</summary>
     [Fact]
@@ -152,7 +152,7 @@ public class PufferWindTests
     /// <summary><c>RANDOM_ANG_VEL</c> is in DEGREES per second; the binary converts on the way in
     /// (<c>value * 0.017453292</c>) and so do we. With the magnitude pinned at
     /// its ceiling by a huge accel, one second of stepping at 90 deg/s must turn the heading by at
-    /// most 90 degrees from where it started — measured as the SHORTEST way round, since the
+    /// most 90 degrees from where it started, measured as the SHORTEST way round, since the
     /// engine wraps a negative heading by +2π (a small negative turn reads as ~6.08 rad). A
     /// degrees-as-radians bug turns it 57× further and lands anywhere.</summary>
     [Fact]
@@ -167,7 +167,7 @@ public class PufferWindTests
         Assert.True(fromZero > 0f, "the heading did turn at all");
     }
 
-    /// <summary>⚠ The magnitude step carries NO <c>dt</c> — traced, not an oversight (see
+    /// <summary>⚠ The magnitude step carries NO <c>dt</c>, traced, not an oversight (see
     /// <see cref="WorldWind"/>). Two winds given the same seed and the same frame COUNT must
     /// therefore reach the same magnitude regardless of the <c>dt</c> they were stepped with; only
     /// the heading differs. Asserted so the day someone "fixes" the missing <c>dt</c>, this says

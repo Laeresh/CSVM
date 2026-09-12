@@ -1,7 +1,7 @@
-# zrdr reader archives — overview
+# zrdr reader archives, overview
 
 Part of the [format documentation](README.md). `zrdr.zbd` archives hold the engine's
-"reader" files — config/definition lists (flight stats, spawns, weather, sounds, anims,
+"reader" files, config/definition lists (flight stats, spawns, weather, sounds, anims,
 effects) that mech3ax (`unzbd cs reader`) extracts to JSON files of nested arrays. The
 shared list-shape conventions (alternating key/list dicts, bare-scalar blocks, dual
 colour encoding, `kind_of` inheritance, wildcards, everything-is-float) are in the

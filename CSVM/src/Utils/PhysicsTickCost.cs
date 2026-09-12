@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using Godot;
-
 namespace CSVM.Utils;
 
 /// <summary>
@@ -10,8 +7,6 @@ namespace CSVM.Utils;
 /// routinely exceeds the worst frame in the same window. This measures the tick directly instead,
 /// with two bracket nodes at the ends of the physics priority order, and counts the ticks the
 /// engine managed. Rules and the misreading it replaces: docs/verification.md PERF-21.
-/// ⚠ Main thread only, and the two brackets must both be in the tree: a missing tail leaves the
-/// open stamp standing and the next open silently replaces it, undercounting rather than crashing.
 /// </summary>
 public static class PhysicsTickCost
 {
@@ -20,90 +15,33 @@ public static class PhysicsTickCost
     /// half that is a sim running at half speed.</summary>
     public const double NominalHz = 60.0;
 
-    private static long _openedAt;
-    private static double _accumMs;
-    private static double _maxMs;
-    private static long _ticks;
+    private static readonly WallCostBank Bank = new("PhysicsTick");
 
     /// <summary>Ticks completed since the last <see cref="Take"/>.</summary>
-    public static long Ticks => _ticks;
+    public static long Ticks => Bank.Spans;
+
+    /// <summary>Builds the head or the tail of the pair spanning the physics tick. Both ends must be
+    /// in the tree: a missing tail leaves the open stamp standing and the next open replaces it,
+    /// undercounting rather than crashing.</summary>
+    public static WallCostBracket MakeBracket(bool tail) => WallCostBracket.Make(Bank, physics: true, tail: tail);
 
     /// <summary>Stamps the start of a physics tick. Called by the head bracket.</summary>
-    public static void Open() => _openedAt = Stopwatch.GetTimestamp();
+    public static void Open() => Bank.Open();
 
-    /// <summary>Closes the tick the head bracket opened and banks its wall cost. A close with no
-    /// open standing is dropped rather than charged, so the first tick after a rebuild cannot
-    /// bank the whole build.</summary>
-    public static void Close()
-    {
-        if (_openedAt == 0)
-        {
-            return;
-        }
-        double ms = (Stopwatch.GetTimestamp() - _openedAt) * 1000.0 / Stopwatch.Frequency;
-        _accumMs += ms;
-        if (ms > _maxMs)
-        {
-            _maxMs = ms;
-        }
-        _ticks++;
-        _openedAt = 0;
-    }
+    /// <summary>Closes the tick the head bracket opened and banks its wall cost.</summary>
+    public static void Close() => Bank.Close();
 
     /// <summary>Drains the window: total banked milliseconds, the worst single tick in it, and the
-    /// tick count, then resets all three. Returns zeros when no tick closed, which is what a fully
-    /// parent-driven session reads. The worst tick is here because it is the quantity Godot's
-    /// own <c>TIME_PHYSICS_PROCESS</c> actually holds, so the two can be compared side by side.</summary>
+    /// tick count. Returns zeros when no tick closed, which is what a fully parent-driven session
+    /// reads. The worst tick is here because it is the quantity Godot's own
+    /// <c>TIME_PHYSICS_PROCESS</c> actually holds, so the two can be compared side by side.</summary>
     public static (double Ms, double MaxMs, long Ticks) Take()
     {
-        var taken = (_accumMs, _maxMs, _ticks);
-        _accumMs = 0;
-        _maxMs = 0;
-        _ticks = 0;
-        return taken;
+        var (ms, maxMs, ticks, _) = Bank.Take();
+        return (ms, maxMs, ticks);
     }
 
-    /// <summary>Drops everything, including a half-open tick — a session teardown, where the
-    /// standing open would otherwise be closed by the next session's first tail.</summary>
-    public static void Reset()
-    {
-        _openedAt = 0;
-        _accumMs = 0;
-        _maxMs = 0;
-        _ticks = 0;
-    }
-}
-
-/// <summary>One end of <see cref="PhysicsTickCost"/>'s bracket. Two of these sit at the extremes
-/// of Godot's physics priority order, so the pair spans every <c>_PhysicsProcess</c> callback in
-/// the tree whatever subtree it lives in. <see cref="ProcessModeEnum.Always"/> on both, or a pause
-/// would stop one end and not the other.</summary>
-public sealed partial class PhysicsTickBracket : Node
-{
-    private bool _tail;
-
-    /// <summary>Builds the head (stamps the start) or the tail (banks the cost).</summary>
-    public static PhysicsTickBracket Make(bool tail)
-    {
-        var node = new PhysicsTickBracket
-        {
-            Name = tail ? "PhysicsTickTail" : "PhysicsTickHead",
-            ProcessMode = ProcessModeEnum.Always,
-            ProcessPhysicsPriority = tail ? int.MaxValue : int.MinValue,
-        };
-        node._tail = tail;
-        return node;
-    }
-
-    public override void _PhysicsProcess(double delta)
-    {
-        if (_tail)
-        {
-            PhysicsTickCost.Close();
-        }
-        else
-        {
-            PhysicsTickCost.Open();
-        }
-    }
+    /// <summary>Drops everything, including a half-open tick: a session teardown, where the standing
+    /// open would otherwise be closed by the next session's first tail.</summary>
+    public static void Reset() => Bank.Reset();
 }

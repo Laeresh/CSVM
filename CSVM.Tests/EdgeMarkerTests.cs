@@ -53,7 +53,7 @@ public class EdgeMarkerTests
     public void AProjectionOnCentreFallsBackToPointingDown()
     {
         // Dead astern: the mirrored projection lands on centre, so there is no direction to
-        // normalize — the fallback points down, and nothing is NaN.
+        // normalize, the fallback points down, and nothing is NaN.
         var placed = EdgeMarker.Resolve(Pane / 2f, behind: true, Pane, Margin);
         Assert.False(placed.OnScreen);
         Assert.Equal(Vector2.Down, placed.Dir);

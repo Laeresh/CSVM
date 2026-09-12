@@ -5,12 +5,12 @@ namespace CSVM.Flight;
 /// <summary>The off-screen edge marker's placement rules, the one home for what
 /// VersusHud and TargetHud each used to carry privately (docs/architecture.md): a world target's
 /// marker sits at its projected point on screen, else clamps to the margin-inset screen edge with
-/// an outward arrow direction; the edge tag carries a clock-hour bearing. Engine-free — the
+/// an outward arrow direction; the edge tag carries a clock-hour bearing. Engine-free, the
 /// caller projects through its own camera and passes the result in, and each HUD keeps its own
 /// arrow, tag and label styling, which legitimately differs.</summary>
 public static class EdgeMarker
 {
-    /// <summary>Keep edge markers this far off the screen border (1440p reference pixels —
+    /// <summary>Keep edge markers this far off the screen border (1440p reference pixels,
     /// callers scale by HudMetrics before passing a margin to <see cref="Resolve"/>).</summary>
     public const float RefEdgeMargin = 46f;
 
@@ -38,7 +38,7 @@ public static class EdgeMarker
     }
 
     /// <summary>Relative bearing of <paramref name="targetPos"/> from the pilot's own heading in
-    /// clock hours (12 = ahead, 3 = right, 6 = behind, 9 = left) — the original's "N o'clock"
+    /// clock hours (12 = ahead, 3 = right, 6 = behind, 9 = left), the original's "N o'clock"
     /// suffix. Heading and bearing convention: 0 = north (−Z), 90 = east (+X).</summary>
     public static int ClockHour(Vector3 ownPos, float headingDeg, Vector3 targetPos)
     {

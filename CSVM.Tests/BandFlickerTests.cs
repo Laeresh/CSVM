@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The decompiled in-cloud flicker (<see cref="WeatherRig.BandFlicker"/>): two opacity remaps
-/// blended by a drifting parameter. Off-engine like <c>RngTests</c> — the class
+/// blended by a drifting parameter. Off-engine like <c>RngTests</c>, the class
 /// takes a plain <see cref="Random"/> rather than the shared Godot <c>RandomNumberGenerator</c>
 /// stream precisely so this suite can pin it without the engine running.
 /// </summary>
@@ -83,7 +83,7 @@ public class BandFlickerTests
     {
         // The --det requirement: two runs seeded identically (production seeds a fresh instance
         // per rig from Rng.NewSystemRandom(Rng.Clouds), which is itself deterministic under a
-        // pinned master — see RngTests) must read the same opacity at every matched frame index.
+        // pinned master, see RngTests) must read the same opacity at every matched frame index.
         var a = new WeatherRig.BandFlicker(new Random(42));
         var b = new WeatherRig.BandFlicker(new Random(42));
 

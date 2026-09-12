@@ -8,12 +8,12 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="WeatherState.CameraWeatherState"/>: the binary's per-frame camera weather state
-/// (1/2/3). Ships dark — nothing consumes it yet, so these tests are the only thing pinning the
+/// (1/2/3). Ships dark, nothing consumes it yet, so these tests are the only thing pinning the
 /// state machine until a consumer is wired in.
 ///
 /// <para>The fixture's <c>CLOUD_COVER</c> (<c>fixtures/zrdr/weather.json</c>) is invented, not
 /// copied from an extraction (per <c>fixtures/README.md</c>): TOP 2000/BOTTOM 1000/THICKNESS 200
-/// ⇒ band centre 1500, opaque-core bottom (<see cref="WeatherState.CloudCoreBottom"/>) 1400 — the
+/// ⇒ band centre 1500, opaque-core bottom (<see cref="WeatherState.CloudCoreBottom"/>) 1400, the
 /// state-2 threshold, which is NOT the band centre and NOT <c>BOTTOM</c>.</para>
 /// </summary>
 public class CameraWeatherStateTests
@@ -60,7 +60,7 @@ public class CameraWeatherStateTests
     public void AMissionWithNoCloudCoverIsAlwaysState1()
     {
         // A mission whose weather.json carries no CLOUD_COVER block at all (HasCloudBand false)
-        // must never reach state 2, at any altitude — the binary's gate sits inside the
+        // must never reach state 2, at any altitude, the binary's gate sits inside the
         // CLOUD_COVER-exists check.
         var weather = WeatherState.Load(TestData.Fixture("weather-no-cloud"));
         Assert.NotNull(weather);
@@ -97,7 +97,7 @@ public class CameraWeatherStateTests
     public void FogZoneDisarmedInsideAVolumeIsNotState3()
     {
         // C1-style: the chapter's fvol volumes exist but fogvol.zrd's fog_zone is 0 (present,
-        // disarmed) — FogVolumeSpec.FogZoneArmed is false, and a camera inside a volume must not
+        // disarmed), FogVolumeSpec.FogZoneArmed is false, and a camera inside a volume must not
         // pick up state 3 from geometry alone.
         var weather = WeatherState.Load(TestData.Fixture("weather-no-cloud"));
         Assert.NotNull(weather);
@@ -110,7 +110,7 @@ public class CameraWeatherStateTests
     public void State3TakesPrecedenceOverState2()
     {
         // The binary assigns state 3 after state 2: a camera above the core bottom
-        // AND inside an armed volume is state 3, not 2 — even though shipped data never actually
+        // AND inside an armed volume is state 3, not 2, even though shipped data never actually
         // exercises this overlap (C5's fog_zone-armed band sits far above any C5 volume).
         var weather = Load();
         var volumes = new[] { BoxVolume("fvol1", new Vector3(-10, 1900, -10), new Vector3(10, 1910, 10)) };
@@ -127,8 +127,8 @@ public class CameraWeatherStateTests
         return weather!;
     }
 
-    // A hand-built axis-aligned FogVolumeBox — the six outward-facing unit-normal planes of
-    // [min, max] — mirroring FogVolumeTests.BoxVolume (not shared across test files by design;
+    // A hand-built axis-aligned FogVolumeBox, the six outward-facing unit-normal planes of
+    // [min, max], mirroring FogVolumeTests.BoxVolume (not shared across test files by design;
     // each pins its own minimal fixture shape).
     private static FogVolumeBox BoxVolume(string name, Vector3 min, Vector3 max) => new(
         name,

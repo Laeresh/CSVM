@@ -34,8 +34,8 @@ internal sealed class PoseChannel
 
     private readonly Action<string> _count;
 
-    // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences —
-    // C1's `cloudparent#` re-asserts its 0.6 every frame — so without this the whole subtree
+    // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences,
+    // C1's `cloudparent#` re-asserts its 0.6 every frame, so without this the whole subtree
     // would be re-walked and re-written ~31 times a frame to set values it already holds. Same
     // lesson as LightState's per-light host cache, which cost ~7 ms/frame before it existed.
     private readonly Dictionary<Node3D, float> _opacity = new();
@@ -268,7 +268,7 @@ internal sealed class PoseChannel
             return applied;
         }
         // No motion channel: either a steady spin (below) or a bare GRAVITY/BOUNCE stub
-        // with nothing to drive (meaningless without translation — reported, not acted on).
+        // with nothing to drive (meaningless without translation, reported, not acted on).
         if (ev.Data.Obj("xyz_rotation") is not { } spin)
         {
             bool bareBallistic = ev.Data.Has("gravity") || ev.Data.Has("bounce_sequence");
@@ -363,7 +363,7 @@ internal sealed class PoseChannel
     /// the mark as it answers. See <see cref="_resumeFromLanding"/>.</summary>
     internal bool ConsumeLandingResume(Node3D target) => _resumeFromLanding.Remove(target);
 
-    /// <summary>Marks a node as having just landed by contact — see
+    /// <summary>Marks a node as having just landed by contact, see
     /// <see cref="_resumeFromLanding"/>. Called on the dispatch path, and by the
     /// <c>ground-contact</c> suite, which drives a motion set directly.</summary>
     internal void MarkLandingResume(Node3D target) => _resumeFromLanding.Add(target);
@@ -372,7 +372,7 @@ internal sealed class PoseChannel
     // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
     // alpha into one would fade every other node that happens to use it. A partial opacity
     // landing on an opaque-variant mesh (no alpha path in the shader) swaps that instance's
-    // surfaces to a fade-capable twin material for the duration — see EnsureOpacityPath;
+    // surfaces to a fade-capable twin material for the duration, see EnsureOpacityPath;
     // anything still without a path after that is counted, not swallowed.
     internal void SetSubtreeOpacity(Node3D node, float alpha)
     {
@@ -380,7 +380,7 @@ internal sealed class PoseChannel
             return;
         _opacity[node] = alpha;
 
-        // The fade is a shader parameter, which visibility knows nothing about — so a subtree
+        // The fade is a shader parameter, which visibility knows nothing about, so a subtree
         // faded to nothing is marked faded and its colliders derive from that too. Reports only
         // the crossing, not every tick of the fade.
         bool collidable = alpha > OpacityCollisionEpsilon;
@@ -395,7 +395,7 @@ internal sealed class PoseChannel
     }
 
     // The *_STATE poses use the same absolute-in-parent-frame convention as
-    // OBJECT_MOTION_FROM_TO — see FromToMotion's remarks for the evidence. OBJECT_TRANSLATE_STATE
+    // OBJECT_MOTION_FROM_TO, see FromToMotion's remarks for the evidence. OBJECT_TRANSLATE_STATE
     // carries an explicit RELATIVE flag (false in all 1143 uses in this install) and
     // OBJECT_ROTATE_STATE a BASIS of "Absolute" (6430 of ~6600), which is the data saying so
     // outright. Each returns the ops it applied (always 1), the shape every handler above shares.

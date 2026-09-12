@@ -66,7 +66,7 @@ public sealed class TanglerData
 public sealed class WeaponDef
 {
     /// <summary>The <c>IMPACT</c> table, one row per <see cref="SurfaceRegistry"/> id in slot
-    /// order — the original's own shape, an array indexed by surface id (<c>FUN_005ad630</c>
+    /// order, the original's own shape, an array indexed by surface id (<c>FUN_005ad630</c>
     /// writes each parsed block into <c>weapon + 0x15c + id*100</c>). An id the weapon names no
     /// block for holds the <c>default</c> row (see <c>InheritDefaultRow</c>); a null row is an id
     /// it named and bound nothing on, which plays nothing. Read it through
@@ -91,7 +91,7 @@ public sealed class WeaponDef
     public float? Range;              // max effective / despawn range, m (authored; see RangeSqM)
     public float? RangeMinimum;       // flyout visibility gate, m of path travelled (torpedo)
     public float? Gravity;            // projectile-gravity scale (0 throughout this install)
-    public float? CannonSpread;       // aim-assist acceptance cone half-angle, degrees — NOT a dispersion cone
+    public float? CannonSpread;       // aim-assist acceptance cone half-angle, degrees, NOT a dispersion cone
     public float? FiringHeat;         // heat per shot (base guns only); dead data, the original parses it and never reads it
     public float? TurnRate;           // guidance turn rate
 
@@ -146,7 +146,7 @@ public sealed class WeaponDef
     public WeaponEffect? Fire;
     public WeaponFlyout? Flyout;
 
-    /// <summary>Keys present on this entry that the reader does not map — empty for every entry
+    /// <summary>Keys present on this entry that the reader does not map, empty for every entry
     /// in this install (asserted by a verify pass). A non-empty list means the data grew a key
     /// this reader has not learned, and is a signal to update it, not to fail silently.</summary>
     public IReadOnlyList<string> UnhandledKeys = Array.Empty<string>();
@@ -172,7 +172,7 @@ public sealed class WeaponDef
 }
 
 /// <summary>
-/// Typed reader over the shared <c>weapons.zrd.json</c> <c>BALLISTICS</c> block — the whole
+/// Typed reader over the shared <c>weapons.zrd.json</c> <c>BALLISTICS</c> block, the whole
 /// install's 48-entry projectile catalogue (guns / rockets / ordnance). Modelled on
 /// <see cref="PlaneStats"/>: load once, index by <c>wep_*</c> id. The single source every
 /// weapon handler reads a <see cref="WeaponDef"/> from.
@@ -236,7 +236,7 @@ public sealed class WeaponDefs
     /// <summary>Every sound name this catalogue binds, each paired with the <c>LOOPED</c> flag its
     /// PLAY SITE asks for, which is not the one sounds.json carries: <c>StartGunLoop</c> forces
     /// true on a firing loop, <c>ProjectilePool.PlaySound</c> false on everything else.
-    /// ⚠ The pair is the prewarm key — <c>SoundArchive</c> caches per (wav, looped), so a gun loop
+    /// ⚠ The pair is the prewarm key, <c>SoundArchive</c> caches per (wav, looped), so a gun loop
     /// decoded unlooped is still a cold read. Whole catalogue, not one loadout: the AI and the
     /// turrets fire from it too.</summary>
     public IReadOnlyCollection<(string Name, bool Looped)> SoundCues()
@@ -362,7 +362,7 @@ public sealed class WeaponDefs
         }
         ParseImpact(d.List("IMPACT"), def.Impact);
 
-        // Anything the reader didn't map — empty for this install; a tripwire if the data grows.
+        // Anything the reader didn't map, empty for this install; a tripwire if the data grows.
         List<string>? unhandled = null;
         foreach (var k in d.Keys)
         {
@@ -398,7 +398,7 @@ public sealed class WeaponDefs
 
     // IMPACT is walked as raw name/value pairs, not through ZrdrDict, so a null row (no effect on
     // that surface) is skipped rather than read back as empty. Which names were NAMED is tracked
-    // apart from which parsed to a binding — the two decide different things; see
+    // apart from which parsed to a binding, the two decide different things; see
     // InheritDefaultRow (docs/org/weaponImpact.md).
     private static void ParseImpact(List<object?>? impact, WeaponEffect?[] into)
     {
@@ -425,7 +425,7 @@ public sealed class WeaponDefs
 
     // Gives every id the weapon names no block for the `default` row, verbatim: the original's
     // per-id loop copies row 0 whole on a miss (docs/org/weaponImpact.md). Naming an id and binding
-    // nothing on it is the opposite case and stays empty. The row is shared, not cloned — nothing
+    // nothing on it is the opposite case and stays empty. The row is shared, not cloned, nothing
     // mutates a parsed row, so one instance per weapon means this id resolves to `default`.
     private static void InheritDefaultRow(WeaponEffect?[] into, bool[] authored)
     {

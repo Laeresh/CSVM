@@ -16,7 +16,7 @@ consecutive title strings:
 | 1137 | `IDS_IAWU_SHOTS_TITLE` | Shot % |
 | 1138 | `IDS_IAWU_KILLS_TITLE` | Total Kills |
 
-**⚠ Only four of those six are actually wired to a row — "Total Kills" is not.** `LAYOUT.CSV`
+**⚠ Only four of those six are actually wired to a row, "Total Kills" is not.** `LAYOUT.CSV`
 declares exactly four `IAWU_LINE*` brushstroke panes and four value texts (`IAWU_T_TIME`,
 `IAWU_T_DESTROYED`, `IAWU_T_ZONES`, `IAWU_T_SHOTS`), plus the screen's own title
 (`IAWU_T_TITLE=T,IDS_IAWU_TITLE,…`); there is no fifth data line, no fifth value text, and no
@@ -24,16 +24,16 @@ declares exactly four `IAWU_LINE*` brushstroke panes and four value texts (`IAWU
 four strings from one callback (`callback($$E$$, 2352, GT, HT, IT, JT)`) and assigns them to the
 four value texts; no fifth variable or object exists. `RESOURCE.H` confirms the format-string side:
 there are only four `IDS_IAWU_*` **format** ids (1185 `TIME`, 1186 `KILLED`, 1187 `DANGERZONES`,
-1188 `PERCENTAGE`) feeding those four rows — no `IDS_IAWU_KILLS` format id exists at all. Of the six
+1188 `PERCENTAGE`) feeding those four rows, no `IDS_IAWU_KILLS` format id exists at all. Of the six
 title strings, `IDS_IAWU_KILLS_TITLE` alone has no reference anywhere outside `RESOURCE.H`'s own
-`#define` — every other title, including the screen heading `IDS_IAWU_TITLE`, is referenced by a
+`#define`, every other title, including the screen heading `IDS_IAWU_TITLE`, is referenced by a
 `LAYOUT.CSV` row.
 
-So the shipped wrap-up screen shows **four** rows — Time to Complete Mission, Enemies Shot Down,
-Danger Zones Completed, Shot % — not five. "Total Kills" is a defined-but-unwired string, the same
+So the shipped wrap-up screen shows **four** rows, Time to Complete Mission, Enemies Shot Down,
+Danger Zones Completed, Shot %, not five. "Total Kills" is a defined-but-unwired string, the same
 class of finding as `strings.md`'s spyglass/padlock case: present in the table, absent from the
 screen that would have used it. **This corrects the milestone goal's and A5/G14's "five rows"
-framing** — G14 should render four rows, and A5's counter decode only needs to answer for those
+framing**, G14 should render four rows, and A5's counter decode only needs to answer for those
 four (Shot %'s numerator/denominator remains the open question).
 
 | Row | Format id | Format |

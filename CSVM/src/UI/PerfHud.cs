@@ -22,19 +22,19 @@ public sealed partial class PerfHud : Node
 {
     // "A few seconds" per the Goal: long enough that a hitch you felt is still on screen a
     // moment later, short enough that the number still reads as "recent". UI cosmetic, not a
-    // measurement threshold — a plain const, the same precedent as NodeLabels' RefreshInterval.
+    // measurement threshold, a plain const, the same precedent as NodeLabels' RefreshInterval.
     private const double WorstHoldMs = 3000;
 
     // How often the label text is rebuilt. One short string either way, but there is no reason
     // to touch Label.Text sixty times a second for a number a human reads a few times a second.
     private const double RefreshIntervalMs = 150;
 
-    // The font size this readout was sized at against HudMetrics.ReferenceHeight (1440p) — bigger
+    // The font size this readout was sized at against HudMetrics.ReferenceHeight (1440p), bigger
     // than the 12 px debug-overlay labels (NodeLabels/MarkerOverlay), since this one is meant to
     // stay legible at a glance during ordinary play, not just be read up close while debugging.
     private const float ReferenceFontSize = 26f;
 
-    // Label's own line_spacing theme default (see tools/godot-docs/doc/classes/Label.xml) — not
+    // Label's own line_spacing theme default (see tools/godot-docs/doc/classes/Label.xml), not
     // scaled by our font-size override, so it stays a small constant rather than something the
     // WindowScale ratio applies to.
     private const float LabelLineSpacingPx = 3f;
@@ -76,7 +76,7 @@ public sealed partial class PerfHud : Node
     /// <summary>--debug-fps[=compact|full]: start switched on, for a scripted screenshot.</summary>
     public Mode InitialMode { get; init; } = Mode.Off;
 
-    /// <summary>The hitch detector Full's per-frame terms and the strip read from directly — never
+    /// <summary>The hitch detector Full's per-frame terms and the strip read from directly, never
     /// a history of its own, per this class's own Trap. Set once, before
     /// the first <see cref="SetMode"/> that could need it.</summary>
     public HitchMonitor Monitor { get; init; } = null!;
@@ -116,7 +116,7 @@ public sealed partial class PerfHud : Node
     }
 
     /// <summary>Feeds one rendered frame's wall cost and the same <see cref="FrameCounters"/>
-    /// <see cref="Utils.HitchMonitor.Tick"/> was just handed — one counters read serves both
+    /// <see cref="Utils.HitchMonitor.Tick"/> was just handed, one counters read serves both
     /// instruments, per <c>Launcher._Process</c>'s own comment. Runs unconditionally, Off or not:
     /// the worst-frame peak has to already be warm the instant someone presses F14, or the readout
     /// would have nothing to say about the hitch that made them look.</summary>
@@ -127,7 +127,7 @@ public sealed partial class PerfHud : Node
 
         if (_justRearmed)
         {
-            // The frame that closes over a session build/teardown is not a real hitch — the same
+            // The frame that closes over a session build/teardown is not a real hitch, the same
             // reason HitchMonitor drops its own baseline here. Seed the display only.
             _justRearmed = false;
             _lastFrameMs = frameMs;
@@ -154,7 +154,7 @@ public sealed partial class PerfHud : Node
 
         if (_mode == Mode.Off)
             return;
-        // D11: the strip redraws every frame, unthrottled — a "rolling" strip that only advanced
+        // D11: the strip redraws every frame, unthrottled, a "rolling" strip that only advanced
         // a few times a second would not look rolling. Only while Full is actually shown, so
         // Compact costs nothing extra.
         if (_mode == Mode.Full)
@@ -166,7 +166,7 @@ public sealed partial class PerfHud : Node
         Refresh();
     }
 
-    /// <summary>Drops the worst-frame peak and skips one frame of tracking — call alongside
+    /// <summary>Drops the worst-frame peak and skips one frame of tracking, call alongside
     /// <see cref="Utils.HitchMonitor.Rearm"/> after anything that legitimately stalls the frame
     /// loop (a session build, a teardown), so that stall never reads as the worst recent
     /// frame.</summary>
@@ -199,7 +199,7 @@ public sealed partial class PerfHud : Node
 
     // Mirrors HitchSidecar.FormatSamples' exact grammar (site:callsxms, comma-separated, PerfSite
     // order, "none" when nothing ran) so a breadcrumb reads the same in the readout as in the
-    // sidecar's log line — duplicated rather than shared, since the two live in different modules
+    // sidecar's log line, duplicated rather than shared, since the two live in different modules
     // for unrelated reasons (a sidecar log line vs. a live label) and the format is ten lines.
     private static string FormatSamples(PerfSampleFrame s)
     {
@@ -254,7 +254,7 @@ public sealed partial class PerfHud : Node
         _root = root;
     }
 
-    // Built lazily on first entry into Full — a session that only ever cycles to Compact
+    // Built lazily on first entry into Full, a session that only ever cycles to Compact
     // never pays for the strip's own buffer or control. Sizes the buffer off `perfHud.stripFrames`
     // (clamped to RingFrames, since asking for more than the ring
     // keeps is meaningless) once, rather than on every refresh.
@@ -288,7 +288,7 @@ public sealed partial class PerfHud : Node
             return;
         }
 
-        // D11: the current frame's own split/count/memory terms — the same FrameCounters read
+        // D11: the current frame's own split/count/memory terms, the same FrameCounters read
         // HitchMonitor.Tick was just handed, never a second sample of the engine.
         var c = _lastCounters;
         string split = string.Create(CultureInfo.InvariantCulture,
@@ -300,7 +300,7 @@ public sealed partial class PerfHud : Node
         string gc = string.Create(CultureInfo.InvariantCulture,
             $"gc0 {GC.CollectionCount(0)}  gc1 {GC.CollectionCount(1)}  gc2 {GC.CollectionCount(2)}");
         // PerfSample.SnapshotInto reads the last CLOSED frame, which Launcher._Process ends in the
-        // same call that feeds this Tick — so _lastFrameMs and this snapshot describe one frame.
+        // same call that feeds this Tick, so _lastFrameMs and this snapshot describe one frame.
         PerfSample.SnapshotInto(_samples, _lastFrameMs);
         string samples = string.Create(CultureInfo.InvariantCulture,
             $"samples={FormatSamples(_samples)}  attributed {_samples.AttributedMs:0.00}  unattributed {_samples.UnattributedMs:0.00} ms");
@@ -331,14 +331,14 @@ public sealed partial class PerfHud : Node
 
 /// <summary>
 /// D11's rolling frame-time strip: one bar per recent frame, read fresh from
-/// <see cref="Utils.HitchMonitor.CopyRing"/> on every draw — never its own history, so it can
+/// <see cref="Utils.HitchMonitor.CopyRing"/> on every draw, never its own history, so it can
 /// never disagree with what a hitch record says about the same frame (the item's own Trap).
 /// Redrawn every <see cref="PerfHud.Tick"/> while <see cref="PerfHud.Mode.Full"/> is showing,
-/// unthrottled — a rolling strip that only advanced a few times a second would not look rolling.
+/// unthrottled, a rolling strip that only advanced a few times a second would not look rolling.
 ///
 /// <para>Vertical scale is <c>max(threshold, worst bar in the buffer) × 1.1</c>, recomputed every
 /// draw: the trigger threshold is therefore always on screen (never scrolled off the top by a
-/// tall bar), which is the point — the Approach calls for the threshold to be a visible line so
+/// tall bar), which is the point, the Approach calls for the threshold to be a visible line so
 /// the relationship between what is drawn and what fires a record is legible.</para>
 /// </summary>
 public sealed partial class PerfHudStrip : Control

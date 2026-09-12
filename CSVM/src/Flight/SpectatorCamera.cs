@@ -50,7 +50,7 @@ public sealed partial class SpectatorCamera : Node
 
     private readonly Camera3D _camera;
     // The device filter: null/true (the default) reads every connected pad plus
-    // the keyboard, matching the single-seat call sites (--freecam, the anim lab, the weapon lab —
+    // the keyboard, matching the single-seat call sites (--freecam, the anim lab, the weapon lab,
     // all single-seat). A downed splitscreen pilot's spectator gets its rig's own PadDevices/
     // UseKeyboard instead, so two pilots watching at once no longer move together.
     private readonly int[]? _padDevices;
@@ -92,7 +92,7 @@ public sealed partial class SpectatorCamera : Node
         _padState = new SeatDeviceState(SeatPad, () => _padDevices);
         _camera.Position = position;
         var to = lookAt - position;
-        // Only the direction survives, not the distance — a --lookat point or a --direction
+        // Only the direction survives, not the distance, a --lookat point or a --direction
         // projected one unit ahead both frame the same way.
         if (to.LengthSquared() > 1e-6f)
         {
@@ -102,7 +102,7 @@ public sealed partial class SpectatorCamera : Node
         ApplyOrientation();
     }
 
-    /// <summary>The camera this drives — exposed so the anim lab can project mouse-pick rays
+    /// <summary>The camera this drives, exposed so the anim lab can project mouse-pick rays
     /// through it (the lab reuses this camera as its freecam).</summary>
     public Camera3D Camera => _camera;
 
@@ -134,7 +134,7 @@ public sealed partial class SpectatorCamera : Node
     }
 
     /// <summary>Places the eye to frame an AABB from a fixed front-and-above angle, at the
-    /// distance the current FOV needs to fit it — the anim lab's "focus this object". Leaves the
+    /// distance the current FOV needs to fit it, the anim lab's "focus this object". Leaves the
     /// follow state alone (the lab sets it alongside).</summary>
     public void Frame(Aabb aabb)
     {
@@ -230,7 +230,7 @@ public sealed partial class SpectatorCamera : Node
         _padState.Refresh();
         _keyActions.Poll(_keyState);
         _padActions.Poll(_padState);
-        // Locked onto a target: orbit it, unless the user asks to translate (WASD/QE / pad) —
+        // Locked onto a target: orbit it, unless the user asks to translate (WASD/QE / pad),
         // that releases the lock and this frame flies freely instead.
         if (Follow != null)
         {
@@ -305,7 +305,7 @@ public sealed partial class SpectatorCamera : Node
             FollowNode(_lockNodes[next]);
     }
 
-    // Whether this seat may read `device` — the event-side twin of the Pads.For gate the polled
+    // Whether this seat may read `device`, the event-side twin of the Pads.For gate the polled
     // reads use, so --no-pads, an unfocused window and a per-seat binding all still hold.
     private bool ReadsPad(int device)
     {
@@ -315,7 +315,7 @@ public sealed partial class SpectatorCamera : Node
         return false;
     }
 
-    // Places the eye on its orbit around the locked target and aims at it — the whole "orbit like
+    // Places the eye on its orbit around the locked target and aims at it, the whole "orbit like
     // the static viewer, but around a live object" behaviour.
     private void OrbitUpdate()
     {
@@ -366,7 +366,7 @@ public sealed partial class SpectatorCamera : Node
     private void Look(float dt)
     {
         // Keyboard fallback (IJKL) and the right stick both feed the same yaw/pitch as the
-        // mouse, so any of the three can drive a session — including a pad-only machine.
+        // mouse, so any of the three can drive a session, including a pad-only machine.
         // They keep their own rates (a stick deflects proportionally, a key is on or off).
         float kb = (_useKeyboard && !KeyboardCaptured) ? 1f : 0f;
         float yaw = (kb * _keyActions.Axis(InputAction.CameraLookRight, InputAction.CameraLookLeft) * KeyLookRate)

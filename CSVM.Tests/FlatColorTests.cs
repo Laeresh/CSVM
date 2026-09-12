@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="GameZ.VertexColorsRestateMaterialColor"/>: the untextured polygon whose vertex
-/// colours only repeat its own material's colour. Two authored slots, one authored value —
+/// colours only repeat its own material's colour. Two authored slots, one authored value,
 /// multiplying them squares it, which is what turned every skydome's below-horizon skirt into a
 /// hard band against the terrain's fog wall.
 ///
@@ -20,9 +20,9 @@ public class FlatColorTests
 {
     /// <summary>Per chapter: <c>restated-white|restated-non-white</c> over every polygon's BASE
     /// material. The white ones are identity (white × white), and are counted only so the split
-    /// stays visible. The non-white ones are the skydome skirts — C4 also has two black
-    /// <c>g206</c> polygons, which are inert either way (black × black is black) — and C5 has
-    /// none at all, because its skirt is textured rather than <c>Colored</c> — which is why C5
+    /// stays visible. The non-white ones are the skydome skirts, C4 also has two black
+    /// <c>g206</c> polygons, which are inert either way (black × black is black), and C5 has
+    /// none at all, because its skirt is textured rather than <c>Colored</c>, which is why C5
     /// renders are unaffected by the rule.</summary>
     public static TheoryData<string, string> ChapterRestatedCounts => new()
     {
@@ -69,7 +69,7 @@ public class FlatColorTests
     [Fact]
     public void ATexturedMaterialIsNeverARestatement()
     {
-        // A textured surface's vertex colours are its baked lighting over the texture — the
+        // A textured surface's vertex colours are its baked lighting over the texture, the
         // material carries no colour to restate.
         var gamez = Build(new GameZMaterial { TextureName = "sky1.tif" });
 

@@ -4,23 +4,23 @@ using CSVM.Mech3;
 
 namespace CSVM.Flight;
 
-/// <summary>One <c>TURRET</c> entry from the shared <c>zrdr/ai.zrd</c> — the gunner's whole
+/// <summary>One <c>TURRET</c> entry from the shared <c>zrdr/ai.zrd</c>, the gunner's whole
 /// behavioural spec (docs/formats/turrets.md). Two families: carried entries
 /// (<see cref="Carried"/>, looked up by <see cref="Title"/> from a host vehicle's
 /// <c>turrets</c> block) and standalone world emplacements placed at <see cref="NodePatterns"/>.
-/// Angle limits are degrees; an absent or min==max arc is UNRESTRICTED, never locked — the
+/// Angle limits are degrees; an absent or min==max arc is UNRESTRICTED, never locked, the
 /// engine's clamp is gated on <c>min != max</c>.</summary>
 public sealed class TurretDef
 {
     /// <summary>The loader's default for an absent <c>TEAM</c> key: the original's FIRST ENEMY
     /// team (its team space is 0 = neutral, 1 = ally, 2+ = enemy; the loader writes enemy team
     /// index 0 = id 2 when the key is missing). This is why the 22 no-TEAM world emplacements
-    /// are hostile — and the four authored <c>TEAM 1</c> entries (the piratezep set) are the
+    /// are hostile, and the four authored <c>TEAM 1</c> entries (the piratezep set) are the
     /// player's OWN zeppelin's defensive turrets, allied on purpose.</summary>
     public const int DefaultTeamId = 2;
 
     /// <summary>The <c>MSG_TUR_*</c> string key, and the lookup name for carried turrets. Null
-    /// never ships, but the engine's by-title lookup accepts a titleless entry unconditionally —
+    /// never ships, but the engine's by-title lookup accepts a titleless entry unconditionally,
     /// see <see cref="MatchesTitle"/>.</summary>
     public string? Title;
 
@@ -40,7 +40,7 @@ public sealed class TurretDef
     /// <summary>The host node whose destruction kills the turret (carried family).</summary>
     public string? HealthyNode;
 
-    /// <summary><c>PARTS[0]</c> of the 3-element form — the traverse ring yaw is written to.
+    /// <summary><c>PARTS[0]</c> of the 3-element form, the traverse ring yaw is written to.
     /// Null on the 2-element form, where one node takes the combined rotation.</summary>
     public string? YawNode;
 
@@ -57,29 +57,29 @@ public sealed class TurretDef
     /// <summary>Standalone-family hit points; carried turrets die with their <see cref="HealthyNode"/>.</summary>
     public float? Health;
 
-    /// <summary><c>WEAPON.NAME</c> — a BALLISTICS id (<c>wep_140</c>…), resolvable in weapons.zrd.
+    /// <summary><c>WEAPON.NAME</c>, a BALLISTICS id (<c>wep_140</c>…), resolvable in weapons.zrd.
     /// Not a display name: <c>30slug</c> is a different, inner field.</summary>
     public string WeaponName = "";
 
-    /// <summary><c>WEAPON.AMMO</c> — 9999 or 12000 shipped; real state, effectively unlimited.</summary>
+    /// <summary><c>WEAPON.AMMO</c>, 9999 or 12000 shipped; real state, effectively unlimited.</summary>
     public int Ammo;
 
-    /// <summary><c>WEAPON.FIRE_RATE</c> — seconds between shots, redrawn uniform(min,max) after
+    /// <summary><c>WEAPON.FIRE_RATE</c>, seconds between shots, redrawn uniform(min,max) after
     /// each one. A scalar authors min == max.</summary>
     public float FireRateMin, FireRateMax;
 
-    /// <summary><c>WEAPON.DETECTION_RANGE</c>, metres — the target search field.</summary>
+    /// <summary><c>WEAPON.DETECTION_RANGE</c>, metres, the target search field.</summary>
     public float DetectionRange;
 
     /// <summary>Half-angle of the shot-scatter cone, degrees. Perturbs the SHOT after the aim
-    /// solution, not the barrel — the turret aims true and the rounds spread.</summary>
+    /// solution, not the barrel, the turret aims true and the rounds spread.</summary>
     public float InaccuracyDeg;
 
     /// <summary>Elevation arc, degrees, or null when the key is absent (unrestricted). min == max
     /// is also unrestricted.</summary>
     public float? PitchMinDeg, PitchMaxDeg;
 
-    /// <summary>Traverse arc, degrees — a DIRECTED interval ([105,255] and [-155,-5] are
+    /// <summary>Traverse arc, degrees, a DIRECTED interval ([105,255] and [-155,-5] are
     /// different arcs). Null when absent; ⚠ [0,0] (or any min == max) removes the limit, it does
     /// not lock the turret.</summary>
     public float? YawMinDeg, YawMaxDeg;
@@ -87,7 +87,7 @@ public sealed class TurretDef
     /// <summary>How long a firing spell lasts, seconds, redrawn uniform(min,max) per window.</summary>
     public float AttackMin, AttackMax;
 
-    /// <summary>How long the pause between spells lasts. Bored suppresses firing ONLY — the
+    /// <summary>How long the pause between spells lasts. Bored suppresses firing ONLY, the
     /// turret keeps tracking through it.</summary>
     public float BoredMin, BoredMax;
 
@@ -95,7 +95,7 @@ public sealed class TurretDef
     public string? CannonSound;
 
     /// <summary>The team this emplacement fights on: the authored value, else the enemy default.
-    /// There is no authored-to-runtime conversion, here or anywhere — the original stores one
+    /// There is no authored-to-runtime conversion, here or anywhere, the original stores one
     /// integer per combat object and compares two of them raw
     /// (docs/org/targeting.md "The team space"). An emplacement built by its constructor takes the
     /// same id 2 an Instant Action enemy aircraft carries, which is why the original's zeppelin
@@ -120,7 +120,7 @@ public sealed class TurretDef
         Title == null || string.Equals(Title, title, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Typed reader over the shared <c>zrdr/ai.zrd</c> <c>TURRET</c> section — 42 entries in
+/// <summary>Typed reader over the shared <c>zrdr/ai.zrd</c> <c>TURRET</c> section, 42 entries in
 /// the retail install, 16 carried + 26 standalone. Tolerates the eight engine-accepted keys the
 /// data never authors (<c>DEACTIVATE</c>, <c>STICKINESS</c>, …) and the one shipped entry that
 /// mis-nests <c>PITCH</c> inside its <c>WEAPON</c> block. Schema: docs/formats/turrets.md.</summary>
@@ -156,7 +156,7 @@ public sealed class TurretDefs
     }
 
     /// <summary>The carried-turret lookup a host runs: the first entry whose <c>TITLE</c>
-    /// matches (a titleless entry matches unconditionally — the engine's own short-circuit).</summary>
+    /// matches (a titleless entry matches unconditionally, the engine's own short-circuit).</summary>
     public TurretDef? FindByTitle(string title)
     {
         foreach (var d in _all)

@@ -19,7 +19,7 @@ public sealed class WorldSession
 
     /// <summary>The built world subtree (the viewer's <c>_plane</c> in world mode): the
     /// <c>world1</c> node with the texture cycler, clutter, any debug dzpaths, and the
-    /// <see cref="AnimRuntime"/> as children. <b>Not</b> yet added to the scene tree — the caller
+    /// <see cref="AnimRuntime"/> as children. <b>Not</b> yet added to the scene tree, the caller
     /// adds it under <see cref="Options.EffectsParent"/>.</summary>
     public Node3D Root { get; private set; } = null!;
 
@@ -38,7 +38,7 @@ public sealed class WorldSession
     /// the edge extender.</summary>
     public ClutterBuilder? Clutter { get; private set; }
 
-    /// <summary>The world's cloudlayer overcast, if any — moved to follow the player by the
+    /// <summary>The world's cloudlayer overcast, if any, moved to follow the player by the
     /// caller.</summary>
     public Node3D? CloudDeck { get; private set; }
 
@@ -73,7 +73,7 @@ public sealed class WorldSession
         Array.Empty<string>();
 
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
-    /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.
+    /// are the caller's <c>using</c> locals, see the disposal-lifetime contract on the class.
     /// ⚠ Keep each phase's <see cref="StartupProfile.Record"/> call next to its step; moving one
     /// without the other makes a dropped phase read as a growing <c>rest</c>, not as missing.</summary>
     public static WorldSession Build(Options o, GameZ gamez, TextureArchive textures,
@@ -137,7 +137,7 @@ public sealed class WorldSession
         }
         s.CloudDeck = builder.CloudDeck;     // the cloudlayer overcast, moved to follow the player
 
-        // --debug-dzpaths: the mission's danger-zone route ribbons (world build skips them —
+        // --debug-dzpaths: the mission's danger-zone route ribbons (world build skips them,
         // AI/route data the original never renders). Debug inspection only.
         if (o.DebugDzPaths && builder.BuildDzPaths() is { } dzpaths)
         {
@@ -146,7 +146,7 @@ public sealed class WorldSession
         }
 
         // Clutter: forest trees, river bushes, and C2/C5's 3D city blocks (Clutter.cs). Sprites are
-        // never solid (billboards have no side to hit); 3D decorations are, in flight — both user
+        // never solid (billboards have no side to hit); 3D decorations are, in flight, both user
         // decisions; see docs/org/clutter.md for the Spruce Goose misread this settled.
         mark = StartupProfile.Mark();
         ClutterBuilder? clutterBuilder = null;
@@ -165,7 +165,7 @@ public sealed class WorldSession
         else if (clutterNames.Count > 0)
         {
             // templates.zrd drives `substitute` and `scale_range` (docs/formats/templates.md).
-            // Null when the chapter ships no such file — every decoration then stands at its
+            // Null when the chapter ships no such file, every decoration then stands at its
             // authored model and size, which is also what an empty file (C1C/C2B) produces.
             var clutterProps = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(o.DataRoot, o.Chapter));
             clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps);
@@ -178,7 +178,7 @@ public sealed class WorldSession
                              ? $" + {clutterBuilder.SolidCount} 3D decorations"
                                + (clutterBuilder.SolidCollisionShapes > 0
                                    // Shared shapes: N distinct shapes / T distinct triangles,
-                                   // attached M times — the distinct totals, not the expanded
+                                   // attached M times, the distinct totals, not the expanded
                                    // per-attachment triangle count.
                                    ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes"
                                      + $", {clutterBuilder.SolidCollisionTriangles} tris"
@@ -197,7 +197,7 @@ public sealed class WorldSession
         s.Clutter = clutterBuilder;
 
         // --debug-clutterflag: force clutter blue and print the census. Blue is the one colour
-        // the world shader cannot express itself — a decoration's own polygons are unflagged,
+        // the world shader cannot express itself, a decoration's own polygons are unflagged,
         // so without it a flagged city block misreads as clutter-eligible ground.
         if (o.DebugClutterFlag)
         {
@@ -236,7 +236,7 @@ public sealed class WorldSession
         // WorldLights spawns under it inherit the same lifetime as everything else here.
         var lights = new WorldLights(root);
         s.Lights = lights;
-        // Sealed template stage: the ambient world pools/stages nothing hidden — its templates ARE
+        // Sealed template stage: the ambient world pools/stages nothing hidden, its templates ARE
         // the world's own nodes. See Options.PlacesCalledTemplates for the one exception.
         var animRuntime = new AnimRuntime(AnimRuntime.NewTemplateStage(
             placesCalled: o.PlacesCalledTemplates, debugMotions: o.DebugAnim))
@@ -267,7 +267,7 @@ public sealed class WorldSession
             LightViewerPositions = o.LightViewerPositions,
             FirstPersonView = o.FirstPersonView,
             // On a single-subtree stage most definitions legitimately resolve nothing, so the bind
-            // has to SAY which of "no handler ever fires" and "the node is not here" happened —
+            // has to SAY which of "no handler ever fires" and "the node is not here" happened,
             // from outside they are the same still object.
             ReportResolution = o.NodeSubtree != null,
             // MaxRootLift's premise is a whole-world node count; one subtree drops under the cap
@@ -357,7 +357,7 @@ public sealed class WorldSession
                 object site = callSite ?? unkeyedSite;
                 foreach (var (copy, owner, claimed) in copies)
                     if (owner == ownerId && ReferenceEquals(claimed, site))
-                        return copy; // this call's own prior copy — reuse it, not a fresh one
+                        return copy; // this call's own prior copy, reuse it, not a fresh one
                 if (copies.Count < pools.LocalCallPoolSize(name))
                 {
                     // The staged actor IS the first copy: it is already in the tree and already in
@@ -413,7 +413,7 @@ public sealed class WorldSession
         {
             mark = StartupProfile.Mark();
             int prewarmed = builtSounds.Prewarm(animProgram.SoundNodeNames());
-            // The one-shot SOUND streams too (destruction/damage audio) — first reached at runtime
+            // The one-shot SOUND streams too (destruction/damage audio), first reached at runtime
             // from a death or damage sequence, always after this scope closes. Prewarm expands a
             // SOUND_GROUPS name to its members.
             prewarmed += builtSounds.Prewarm(animProgram.OneShotSoundNames());
@@ -630,8 +630,8 @@ public sealed class WorldSession
     // Stamps SceneBuilder.ClutterColor onto every clutter draw under
     // `clutter` as a full-strength SceneBuilder.TintParam, and
     // returns how many it painted. Per instance rather than per material because both clutter
-    // paths are MultiMeshes sharing the placed world's materials — the sprite cards' own shader
-    // and, for the 3D decorations, literally the world's — so a material-level colour would
+    // paths are MultiMeshes sharing the placed world's materials, the sprite cards' own shader
+    // and, for the 3D decorations, literally the world's, so a material-level colour would
     // repaint the ground with them.
     private static int TintClutterBlue(Node3D clutter)
     {
@@ -673,7 +673,7 @@ public sealed class WorldSession
         /// census is exactly what it was.</summary>
         public string? PlanesGamezPath { get; init; }
 
-        /// <summary>Parent for the effect siblings the bootstrap builds — the world's ambient
+        /// <summary>Parent for the effect siblings the bootstrap builds, the world's ambient
         /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session
         /// root (<c>_worldRoot</c>), a sibling of <see cref="Root"/>, not <see cref="Root"/>
         /// itself.</summary>
@@ -685,19 +685,19 @@ public sealed class WorldSession
         /// in every mode (chase cam, free camera, or the orbit eye).</summary>
         public required Func<Vector3> PlayerPosition { get; init; }
 
-        /// <summary>Every 3D audio listener's position — one per pane, since every pane camera is
+        /// <summary>Every 3D audio listener's position, one per pane, since every pane camera is
         /// listener-enabled (UI.SplitScreen). Read only by the debug sound log's distance column;
         /// the engine reads the listeners themselves. Null → <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? ListenerPositions { get; init; }
 
         /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and every
-        /// PLAYER_RANGE condition — the aircraft themselves in flight, not the
+        /// PLAYER_RANGE condition, the aircraft themselves in flight, not the
         /// chase cameras (a chase camera trails ~25 m behind, which is most of the spiderweb's
         /// 50 m radius). Null → both fall back to <see cref="PlayerPosition"/>.</summary>
         public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
 
         /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> spill
-        /// against the nearest one — the draw-rule seam (`ViewerSet.Positions`),
+        /// against the nearest one, the draw-rule seam (`ViewerSet.Positions`),
         /// not <see cref="PlayerPositions"/>. Null → the runtime falls back to
         /// <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? LightViewerPositions { get; init; }
@@ -718,7 +718,7 @@ public sealed class WorldSession
         public bool NoClutter { get; init; }
 
         /// <summary><c>--debug-clutterflag</c>: build the world recoloured by the decoded
-        /// per-polygon <c>no_clutter</c> flag — flagged red, clear green — and force whatever
+        /// per-polygon <c>no_clutter</c> flag, flagged red, clear green, and force whatever
         /// clutter is built blue, so "which ground is flagged" and "where the decorations are" can
         /// never be confused. See <see cref="SceneBuilder.DebugClutterFlag"/>.</summary>
         public bool DebugClutterFlag { get; init; }
@@ -733,7 +733,7 @@ public sealed class WorldSession
         /// runtime-reached <c>PUFFER_STATE</c> (death trails, ON_CALL dust/smoke) can still bake
         /// its atlas. True in a game session (archive freed on return-to-menu); false only where the
         /// archive is genuinely a <c>using</c> local of the build (the test harness).
-        /// ⚠ Default false is the SAFE choice, not the common one — left false by a caller that
+        /// ⚠ Default false is the SAFE choice, not the common one, left false by a caller that
         /// owns its archive, a runtime-reached puffer silently builds nothing.</summary>
         public bool TexturesOutliveBuild { get; init; }
 
@@ -741,7 +741,7 @@ public sealed class WorldSession
         /// through. Null (default) is the real <see cref="Anim.PufferEmitterFactory"/> over this
         /// build's archive, subject to <see cref="TexturesOutliveBuild"/>; a caller-supplied one
         /// (the test harness's <c>CountingEmitterFactory</c>) holds no archive reference and is
-        /// never auto-retired. ⚠ Read once, here — a post-<see cref="Build"/> swap would miss the
+        /// never auto-retired. ⚠ Read once, here, a post-<see cref="Build"/> swap would miss the
         /// bootstrap, where most <c>PUFFER_STATE</c>s fire.</summary>
         public Anim.IEmitterFactory? EmitterFactory { get; init; }
 
@@ -766,7 +766,7 @@ public sealed class WorldSession
         public bool SoundsOutliveBuild { get; init; }
 
         /// <summary>Whether the bootstrap runs the ambient-playback passes (ON_STARTUP defs +
-        /// startanims). True — the default — in every game/viewer/flight session; the animation
+        /// startanims). True, the default, in every game/viewer/flight session; the animation
         /// lab sets false for its quiet stage and runs them on demand through
         /// <see cref="AnimRuntime.StartAmbient"/>.</summary>
         public bool AutoStart { get; init; } = true;
@@ -775,7 +775,7 @@ public sealed class WorldSession
         /// call site (<see cref="Anim.TemplateStage{TNode}.Places"/>). False (default) in every
         /// game/viewer/flight session, where the ambient boot must stay byte-identical; the
         /// animation lab sets true so staged templates play at the call site. ⚠ Read once, at
-        /// construction — sealed onto the runtime's template stage, not writable
+        /// construction, sealed onto the runtime's template stage, not writable
         /// afterwards.</summary>
         public bool PlacesCalledTemplates { get; init; }
 
@@ -810,11 +810,11 @@ public sealed class WorldSession
         public Action<AnimRuntime.FogStateChange>? FogStateSink { get; init; }
 
         /// <summary>Pins the runtime's RNG for a reproducible run (see
-        /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>
+        /// <see cref="AnimRuntime.Seed"/>). Null, the default, leaves it unseeded: the game.</summary>
         public int? RuntimeSeed { get; init; }
 
         /// <summary>The <c>--node=</c> stage: build ONLY this gamez subtree instead of the whole
-        /// world. Null — the default — is the full chapter build. The caller resolves the name
+        /// world. Null, the default, is the full chapter build. The caller resolves the name
         /// (<see cref="WorldBuilder.MatchNodes"/>) so a miss can report its candidates and quit
         /// before anything is built.</summary>
         public GameZNode? NodeSubtree { get; init; }

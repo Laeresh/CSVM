@@ -19,11 +19,11 @@ public sealed class TargetSelection
     /// <c>0.9659258</c>): a hard 15° half-angle about the NOSE.</summary>
     public const float CrosshairConeCos = 0.9659258f;
 
-    /// <summary>Nearest-crosshairs' hard maximum range, metres — the running best starts at 2000.0,
+    /// <summary>Nearest-crosshairs' hard maximum range, metres, the running best starts at 2000.0,
     /// so nothing past it can ever win.</summary>
     public const float CrosshairMaxRange = 2000f;
 
-    /// <summary>Rebuilds to wait before reporting an empty pool in the count breadcrumb — a few
+    /// <summary>Rebuilds to wait before reporting an empty pool in the count breadcrumb, a few
     /// seconds at 60 Hz, long enough for the AI spawner, the zeppelins and a generator's first drop
     /// to have happened.</summary>
     private const int EmptyPoolReport = 300;
@@ -38,7 +38,7 @@ public sealed class TargetSelection
     public TargetPool Pool { get; } = new();
 
     /// <summary>Which cycle Next/Previous currently step, or <b>null for cleared</b>. Null is not
-    /// "no target yet" — it is `Target Nothing`, and it is why the clear STAYS cleared: with every
+    /// "no target yet", it is `Target Nothing`, and it is why the clear STAYS cleared: with every
     /// class flag zero the original skips the collection pass entirely, so the auto-acquire cannot
     /// fire again until a class action is pressed. Starts at <see cref="TargetClass.Enemy"/>, which
     /// is the mission-start state (<c>0x00474a6b</c>) and therefore the auto-acquire.</summary>
@@ -53,7 +53,7 @@ public sealed class TargetSelection
     /// the HUD would page through and what the suite asserts an order against.</summary>
     public IReadOnlyList<TargetRef> Ordered => _ordered;
 
-    /// <summary>The attacker queue, oldest first — see <see cref="NextEnemy"/>.</summary>
+    /// <summary>The attacker queue, oldest first, see <see cref="NextEnemy"/>.</summary>
     public IReadOnlyList<object> Attackers => _attackers;
 
     /// <summary>The cycle's sort key for one candidate (<c>FUN_004bbd60</c>): −1 for a
@@ -107,8 +107,8 @@ public sealed class TargetSelection
     /// <summary>Re-sorts the active cycle against the plane's pose and re-finds the selection by
     /// ENTITY (<c>FUN_004b6490(current, 0)</c>): the matching entry, or the list HEAD when it is
     /// gone. That single rule is the whole lifecycle. A dead target, a target that left the class,
-    /// and a class change all drop to the head of the current cycle — not to the dead entry's
-    /// neighbour — because in every one of those cases the re-find simply fails.</summary>
+    /// and a class change all drop to the head of the current cycle, not to the dead entry's
+    /// neighbour, because in every one of those cases the re-find simply fails.</summary>
     public void Resolve(Vector3 position, Basis basis)
     {
         _ordered.Clear();
@@ -136,7 +136,7 @@ public sealed class TargetSelection
         _selected = Current?.Source;
     }
 
-    /// <summary>Next Enemy/Objective (<c>0x24</c>) — the one action that consults the attacker
+    /// <summary>Next Enemy/Objective (<c>0x24</c>), the one action that consults the attacker
     /// queue first, walking it BACKWARDS from the end so the most recent shooter comes first. The
     /// queue's first entry, and an empty queue, fall through to an ordinary <c>+1</c> step.
     /// ⚠ CSVM ships every class action SILENT. <c>sg_switchtarget</c> is in the executable but in no
@@ -226,7 +226,7 @@ public sealed class TargetSelection
     }
 
     /// <summary>Target Nothing (<c>0x2e</c>): nulls the target AND every class flag. The second half
-    /// is the point — it is what stops the auto-acquire firing again, so the clear STAYS cleared
+    /// is the point, it is what stops the auto-acquire firing again, so the clear STAYS cleared
     /// until a class action. Auto-acquire at start and the drop-to-head on death are the only two
     /// automatic transitions there are; a third ("nothing selected, so pick one") would silently
     /// break this action.</summary>
@@ -325,8 +325,8 @@ public sealed class TargetSelection
     /// <summary>The death/despawn hook (<c>FUN_004a64e0</c>): drops <paramref name="entity"/> from
     /// the attacker queue, and from the selection if it was the target. The next
     /// <see cref="Resolve"/> then picks the head of the current cycle, which is the original's
-    /// switch-on-death. Calling this is optional for the switch itself — a dead candidate leaves the
-    /// pool and the re-find fails anyway — but the queue prune is not.</summary>
+    /// switch-on-death. Calling this is optional for the switch itself, a dead candidate leaves the
+    /// pool and the re-find fails anyway, but the queue prune is not.</summary>
     public void ForgetTarget(object entity)
     {
         _attackers.Remove(entity);

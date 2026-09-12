@@ -34,7 +34,7 @@ public sealed partial class BootCard : Node
     /// <summary>Runs the whole boot sequence on <paramref name="host"/>: this node puts up the
     /// stills, <paramref name="film"/> plays the three movies, and <paramref name="then"/> runs
     /// after the last of them, by which point nothing of the sequence is left on screen.</summary>
-    public static void Play(Node host, string dataRoot, BootSequence.PlayFilm film, Action then)
+    public static void Play(Node host, string dataRoot, CinemaPlay film, Action then)
     {
         var card = new BootCard(dataRoot);
         host.AddChild(card);

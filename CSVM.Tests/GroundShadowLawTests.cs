@@ -98,7 +98,7 @@ public class GroundShadowLawTests
         // No strength is no shadow at all, which in a modulate map is white.
         var none = GroundShadowLaw.Colour(DayDiffuse, DayAmbient, Vector3.Down, 0f);
         Assert.Equal(1f, none.R, 4);
-        // A brighter ambient lightens it, which is the per-mission behaviour BL-332's pair drives.
+        // A brighter ambient lightens it, the per-mission behaviour the zone's SUNLIGHT pair drives.
         var hazy = GroundShadowLaw.Colour(DayDiffuse, Vector3.One * 1.5f, Vector3.Down, 1f);
         Assert.True(hazy.R > full.R);
         // ⚠ No ambient at all falls back to the raw value rather than to a ratio: the darkest

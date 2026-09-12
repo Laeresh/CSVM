@@ -20,24 +20,24 @@ covers its bindable-command table because that data is player-facing UI text.
 | File | Strings | What it is |
 |---|---|---|
 | `langui.dll` | 1,247 | The localisable UI text. This is the one that matters. |
-| `language.dll` | 36 | GameOS engine runtime strings — joystick/sound/renderer error messages, plus the locale name (`English`), its default font (`Arial.ttf`) and LCID (`1033`). Not UI text. |
+| `language.dll` | 36 | GameOS engine runtime strings, joystick/sound/renderer error messages, plus the locale name (`English`), its default font (`Arial.ttf`) and LCID (`1033`). Not UI text. |
 
 Both are resource-only DLLs, so a localised build swaps them. `ExtractRof.ps1` emits both,
 tagged with their source in a `dll` field.
 
 ## Resource format
 
-Standard Win32, no game-specific quirks — the work is just walking the PE resource directory:
+Standard Win32, no game-specific quirks, the work is just walking the PE resource directory:
 
 - Resource type `RT_STRING` (6).
 - Strings are packed **16 per resource block**; a block's resource id is `(string_id >> 4) + 1`
   and the string's slot within it is `string_id & 15`.
 - Within a block, each of the 16 slots is a `u16` length followed by that many **UTF-16LE**
-  code units. A length of 0 marks an unused slot — blocks are not required to be full.
+  code units. A length of 0 marks an unused slot, blocks are not required to be full.
 
 ## Font prefix
 
-Most strings begin with a bracketed font tag naming the font to render them in —
+Most strings begin with a bracketed font tag naming the font to render them in,
 `[COUR9]Ford Hoplite`, `[CSB9I]The Hughes Bloodhawk is …`. It is markup, not content: strip it
 before display. 1,020 of the 1,247 strings carry one; 227 have none and fall back to the
 default.
@@ -52,7 +52,7 @@ A handful of strings also carry inline `<B>…<b>` bold markup.
 
 ## Placeholders
 
-Substitutions use the positional `FormatMessage` form — `%1!s!`, `%2!d!` — not bare printf:
+Substitutions use the positional `FormatMessage` form, `%1!s!`, `%2!d!`, not bare printf:
 
 > `Your %1!s! is worth <B>$%2!d!<b>. Are you sure you want to sell it?`
 
@@ -69,7 +69,7 @@ form.
 #define IDS_AIRFRAMEDESCRIPTION         3040
 ```
 
-It covers **327 of the 1,283 extracted rows** — the ones the GUI scripts and `LAYOUT.CSV`
+It covers **327 of the 1,283 extracted rows**, the ones the GUI scripts and `LAYOUT.CSV`
 reference by name. The rest, including most of the aircraft description block, are addressed
 numerically and have no symbol. `ExtractRof.ps1` joins the two, leaving `symbol` null where
 none exists.
@@ -92,19 +92,19 @@ Blocks are contiguous and stable, which is what makes the unnamed ranges usable:
 | 1000–1099 | Hangar and plane-customisation labels |
 | 1100–1199 | Options screens (graphics, audio, controls) |
 | 1200–1219 | Mission-results / scrapbook UI |
-| **1220–1224** | **Campaign act names** — `IDS_MISSIONAREA`: Hawaii, Northwest, Hollywood, Rocky Mountains, Manhattan |
+| **1220–1224** | **Campaign act names**, `IDS_MISSIONAREA`: Hawaii, Northwest, Hollywood, Rocky Mountains, Manhattan |
 | 1225–1299 | Purchase, inventory and key-binding labels |
-| **3000–3010** | **Aircraft full names** — "Hughes Bloodhawk", "Curtiss-Wright J2 Fury" |
-| **3020–3030** | **Aircraft short names** — "Bloodhawk", "Fury" |
-| **3040–3050** | **Aircraft descriptions** — the customisation screen's flavour text |
+| **3000–3010** | **Aircraft full names**, "Hughes Bloodhawk", "Curtiss-Wright J2 Fury" |
+| **3020–3030** | **Aircraft short names**, "Bloodhawk", "Fury" |
+| **3040–3050** | **Aircraft descriptions**, the customisation screen's flavour text |
 | 3060–3079 | Gun mount position names (`Nose Turret`, `Outer Wing Guns`) |
 | 3100–3199 | Engine names (`Ford v-8`, `Junkers Jumo 230B`, `Bristol Mercury VI`) |
 | 3200–3299 | Gun and ammunition names |
 | 3300–3399 | Engine / component descriptions |
 | 3400–3424 | Rocket names and descriptions |
 | 3425–3438 | Militia long names (`IDS_PAINTLONGNAME`) |
-| **3450–3473** | **Campaign mission long names** — `IDS_MISSIONLONGNAME`, one per mission in story order, each prefixed with its act ("Hawaii - The Lost Treasure of Sir Francis Drake") |
-| **3480–3503** | **Campaign mission short names** — `IDS_MISSIONSHORTNAME`, the same 24 in the same order |
+| **3450–3473** | **Campaign mission long names**, `IDS_MISSIONLONGNAME`, one per mission in story order, each prefixed with its act ("Hawaii - The Lost Treasure of Sir Francis Drake") |
+| **3480–3503** | **Campaign mission short names**, `IDS_MISSIONSHORTNAME`, the same 24 in the same order |
 | 3600–3618 | Instant Action mission names (`IDS_IA_CONTENTS`) |
 | 3650–3697 | Instant Action environments, mission types, militias, difficulties |
 | 3700–3799 | Squadron names (`Hoplites`, `Hellhounds`) |
@@ -119,28 +119,28 @@ strings at either id; treat those symbols as unused.
 
 The three aircraft blocks are **parallel and in the same order**, so
 `full_name = 3000 + i`, `short_name = 3020 + i`, `description = 3040 + i` for the same
-aircraft `i` — eleven entries, matching the eleven `player_*` aircraft in `planes.zbd`
+aircraft `i`, eleven entries, matching the eleven `player_*` aircraft in `planes.zbd`
 (see [gamez.md](gamez.md)). Order is Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand,
-Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk — the Hoplite and Hellhound first,
+Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk, the Hoplite and Hellhound first,
 then the remaining nine alphabetically.
 
 ## Bindable commands
 
-**This section is about the *other* string table** — `messages.json`, the `MSG_*` key table
-documented in [missions.md](missions.md) — because that is where the game keeps the labels for
+**This section is about the *other* string table**, `messages.json`, the `MSG_*` key table
+documented in [missions.md](missions.md), because that is where the game keeps the labels for
 its **controls-configuration screen**, and that list is the authoritative inventory of what the
 retail game let a player do. **74 bindable commands under seven headings** (measured), plus the
 device-name vocabulary the binding UI prints. **Recorded here as the feature-parity target for
 the remake: this is the whole player-facing command set, straight from the shipped build.**
 
 Two near neighbours are *not* commands and are excluded from the 74: `MSG_WINGMAN_SHOT_DOWN`
-("Wingman was shot down") is a notification and `MSG_DLG_CONTROLS` ("controls") a dialog title —
+("Wingman was shot down") is a notification and `MSG_DLG_CONTROLS` ("controls") a dialog title,
 both read like bindings by name.
 
 **Trust this list over any other source.** It is what the shipped binary offered to bind. It has
 already overturned one wrong conclusion: an asset-name sweep found no `spyglass` or `padlock`
 file anywhere in `rimage`, `rof` or the chapter textures and concluded both features were cut
-before release — they shipped, and the string table says so plainly. See
+before release, they shipped, and the string table says so plainly. See
 [verification.md](../verification.md) on why an absent filename proves nothing.
 
 ### The seven headings (ids 3005–3011)
@@ -158,7 +158,7 @@ before release — they shipped, and the string table says so plainly. See
 | `MSG_RUDDER_LEFT` / `MSG_RUDDER_RIGHT` | Turn Left / Right |
 | `MSG_LEVEL_TOG` | Level Off |
 | `MSG_INC_THROTTLE` / `MSG_DEC_THROTTLE` | Throttle Up / Down |
-| `MSG_THROTTLE_0`…`MSG_THROTTLE_8` | Throttle *n*/8 — **nine direct-set bindings**, an eight-notch quadrant |
+| `MSG_THROTTLE_0`…`MSG_THROTTLE_8` | Throttle *n*/8, **nine direct-set bindings**, an eight-notch quadrant |
 | `MSG_CMD_TRIGGER` | Fire Guns |
 | `MSG_FIRE_MISSILE` | Fire Rockets |
 | `MSG_CMD_CYCLE_MODE` | Cycle Weapons |
@@ -168,23 +168,23 @@ before release — they shipped, and the string table says so plainly. See
 | `MSG_CMD_NITROUS` | Use Nitro-Booster |
 | `MSG_JETTISON_FUEL` | Jettison fuel |
 
-**Gun and rocket selection is rotational, not linear** — the labels are "clockwise" and
+**Gun and rocket selection is rotational, not linear**, the labels are "clockwise" and
 "counterclockwise", i.e. the selector walks the mounts around the airframe, not up and down a
 list. The remake's single-direction `G`/`H` steppers are a simplification of this.
 
-### Targeting — three groups, four verbs
+### Targeting, three groups, four verbs
 
 The full suite shipped: `MSG_CMD_TARGET_{NEAREST,NEXT,PREVIOUS}_{ENEMY,ALLY,GROUND}` (nine
 commands), plus `MSG_CMD_TARGET_UNDER_RETICULE` "Select Target Nearest Crosshairs" and
 `MSG_CMD_TARGET_NOTHING` "Target Nothing". The three groups are labelled "Next Enemy/Objective",
-"Next Ally" and "Next Non-Aircraft" — ground vehicles, structures and, per the design, Danger
+"Next Ally" and "Next Non-Aircraft", ground vehicles, structures and, per the design, Danger
 Zones.
 
-### Views — the spyglass and padlock both shipped
+### Views, the spyglass and padlock both shipped
 
 | Key | Label |
 |---|---|
-| `MSG_CAM2_TOG` | **Toggle Spyglass** — a *camera* command (camera 2), not a targeting one |
+| `MSG_CAM2_TOG` | **Toggle Spyglass**, a *camera* command (camera 2), not a targeting one |
 | `MSG_CMD_PADLOCK_SNAP` | Access Snap Look Mode |
 | `MSG_CMD_PADLOCK_STICK` | Access Smooth Look Mode |
 | `MSG_CMD_PADLOCK_WATCH` | Track Target |
@@ -202,14 +202,14 @@ the hat-switch grid the design describes. `player.json`'s `autohead_turn_time` /
 
 | Key | Label |
 |---|---|
-| `MSG_CMD_PAUSE_GAME` | **Pause/Quit/Objectives** — the objectives display shipped, folded onto the pause key |
+| `MSG_CMD_PAUSE_GAME` | **Pause/Quit/Objectives**, the objectives display shipped, folded onto the pause key |
 | `MSG_CMD_BAIL_OUT` | Bail Out |
 | `MSG_CMD_LAUNCH_AUTO_LAND` | Auto-Dock. The in-flight prompt is `MSG_PRESS_AUTOLAND` ("Press %1 to autodock") for a key or a joystick button and `MSG_CLICK_AUTOLAND` ("Click %1 to autodock") for a mouse one |
 | `MSG_CMD_INTERP` | Comm Interp |
 | `MSG_CMD_KEYMAP_DISP` | View Help |
 | `MSG_CMD_DISPLAY_SCORES` | Display Scores (Multiplayer Only) |
 | `MSG_CHAT_ALL` / `MSG_CHAT_TEAM` | Chat to Everyone / Team |
-| `MSG_CMD_ZONE_TOGGLE` / `MSG_CMD_COLLISION_TOGGLE` | Zone toggle / Collisions — developer switches left in the shipped table |
+| `MSG_CMD_ZONE_TOGGLE` / `MSG_CMD_COLLISION_TOGGLE` | Zone toggle / Collisions, developer switches left in the shipped table |
 | `MSG_WINGMAN_ENGAGE` / `_FIRE` / `_BKT_LEFT` / `_BKT_RIGHT` | Engage/Disengage, Wingman Fire, Bracket left / right |
 
 ### Binding vocabulary
@@ -222,7 +222,7 @@ included.
 
 ## Known limit
 
-- **The leading `]` marker.** A few strings start with `]` (`]Nathan Zachary`, `]0`) — some
+- **The leading `]` marker.** A few strings start with `]` (`]Nathan Zachary`, `]0`), some
   in-band flag the shell strips, not yet identified. It appears on pilot names and on the
   4000-block counters.
 - **Aircraft index → `player_*` name.** The 3000-block order matches neither the `planes.zbd`
@@ -231,7 +231,7 @@ included.
 
 ## Extraction
 
-`ExtractRof.ps1` (repo root) writes `extracted\rof\ui_strings.json` — one row per string with
+`ExtractRof.ps1` (repo root) writes `extracted\rof\ui_strings.json`, one row per string with
 `id`, `symbol` (from `RESOURCE.H`, or null), `font` (the parsed `[FONTID]`), `text` (tag
 stripped) and `dll`. It needs the `.rof` extracted first for `RESOURCE.H`, which the same run
 does. `-Raw` skips the string table entirely.

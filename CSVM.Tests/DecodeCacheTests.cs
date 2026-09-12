@@ -63,7 +63,7 @@ public class DecodeCacheTests
     }
 
     // AnimProgram.Load tolerates every one of its five paths being absent (a user who has not
-    // re-extracted gets reader-only behaviour), so the key can be exercised on names alone — no
+    // re-extracted gets reader-only behaviour), so the key can be exercised on names alone, no
     // install, and no decode cost, which is what lets this cover data root as well as chapter.
     private static string[] Key(string root, string chapter, string mission) => new[]
     {

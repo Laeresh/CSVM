@@ -15,7 +15,7 @@ public enum InstantActionOutcome
     Lost,
 }
 
-/// <summary>The one thing that has to happen for a mission to be WON — one per mission type.
+/// <summary>The one thing that has to happen for a mission to be WON, one per mission type.
 /// Every signal source reports the objective it has just satisfied
 /// and <see cref="InstantActionRuntime.ReportObjective"/> drops the ones this mission does not run
 /// on, which is what lets a zeppelin run clear all four of its waves (F12 credits them either way)
@@ -39,7 +39,7 @@ public enum InstantActionObjective
 /// <see cref="Outcome"/>). Detail: this module's docs/architecture.md entry.
 /// The end half holds no engine type and calls no <c>GD.*</c>, the same construction rule
 /// <see cref="Flight.VersusMatch"/> follows.
-/// ⚠ Environment→chapter resolution belongs to the launch menu, never here — a --ia=&lt;path&gt;
+/// ⚠ Environment→chapter resolution belongs to the launch menu, never here, a --ia=&lt;path&gt;
 /// CLI launch already names its chapter via --chapter=.
 /// ⚠ <see cref="WingmanSlotFor"/>/<see cref="FlownWingmen"/> place and clamp only; livery, team
 /// and the AiGunner/AiModeMachine wiring stay <c>GameSession.BuildFlightRigs</c>'s job.</summary>
@@ -56,7 +56,7 @@ public sealed class InstantActionRuntime
     public const string ZeppelinRunMissionType = "zeppelin_run";
 
     /// <summary>The radius <c>FUN_0045a240</c> writes into all THREE of an Instant Action actor's
-    /// volumes — activation, attack and return — with a ±10000 m altitude band
+    /// volumes, activation, attack and return, with a ±10000 m altitude band
     /// (docs/formats/instant-action.md "Every actor is a synthetic aiv roster block"): the engine's
     /// own way of saying an Instant Action actor is always awake, always willing to engage, and
     /// never returns.</summary>
@@ -74,7 +74,7 @@ public sealed class InstantActionRuntime
         new[] { 4, 4, 4, 4, 4, 4, 4, 4, 4 },
     };
 
-    // The lives ledger (decision 15 — INVENTED, no ia.json key carries one): one counter per
+    // The lives ledger (decision 15, INVENTED, no ia.json key carries one): one counter per
     // human seat, plus the seats that have run out and are watching. Both keyed by the pilot's own
     // FlightController.PlayerIndex, never by a synthetic index.
     private readonly Dictionary<int, int> _lives = new();
@@ -95,7 +95,7 @@ public sealed class InstantActionRuntime
     /// <summary>What this mission must achieve to be won, or null for a mission type with no end
     /// condition here: <c>ground_target</c> (which every shipped map's <c>disallow_missions</c>
     /// bars and this milestone does not implement) and any unrecognised hand-authored value. Such
-    /// a mission can still be LOST — it simply cannot be won, which is a deliberate disable in
+    /// a mission can still be LOST, it simply cannot be won, which is a deliberate disable in
     /// <see cref="Flight.VersusMatch"/>'s shape rather than an error.</summary>
     public InstantActionObjective? Objective => ObjectiveFor(Def.MissionType);
 
@@ -106,7 +106,7 @@ public sealed class InstantActionRuntime
     public bool Ended => Outcome != InstantActionOutcome.Running;
 
     /// <summary>Mission time in seconds, advanced by <see cref="Advance"/> on SIM dt alone (never
-    /// wall time — a halt freezes it with the simulation, the rule the match clock already
+    /// wall time, a halt freezes it with the simulation, the rule the match clock already
     /// follows) and frozen the moment the mission ends. It is the value the wrap-up's "Time to
     /// Complete Mission" row renders; its stopping point is this item's, because the end is
     /// the only place it can be stopped.</summary>
@@ -115,7 +115,7 @@ public sealed class InstantActionRuntime
     /// <summary>False once <see cref="DisableObjective"/> has recorded that this mission's win
     /// signal can never arrive (a squadron with no wave enemy configured, a stunt mission on a
     /// chapter shipping no <c>dzones</c>, a zeppelin run with no zeppelin runtime). The mission
-    /// then runs on and can still be lost. Its caller must say so out loud — a mission that cannot
+    /// then runs on and can still be lost. Its caller must say so out loud, a mission that cannot
     /// be won and does not report it reads as a broken end condition.</summary>
     public bool ObjectiveEnabled { get; private set; } = true;
 
@@ -132,8 +132,8 @@ public sealed class InstantActionRuntime
 
     /// <summary>The mission type's own win condition: the ace down, every configured wave
     /// cleared, every player's zone set flown, or the zeppelin disabled. Null for a type with no
-    /// end condition here — see <see cref="Objective"/>.
-    /// ⚠ The zeppelin run wins on the engines first, the hull second — see "The zeppelin run is
+    /// end condition here, see <see cref="Objective"/>.
+    /// ⚠ The zeppelin run wins on the engines first, the hull second, see "The zeppelin run is
     /// won on the ENGINES" in docs/formats/instant-action.md. Do not map it to the hull alone.
     /// </summary>
     public static InstantActionObjective? ObjectiveFor(string missionType) =>
@@ -147,7 +147,7 @@ public sealed class InstantActionRuntime
             ? InstantActionObjective.ZeppelinDisabled
         : (InstantActionObjective?)null;
 
-    /// <summary>The three <c>*_zeppelin</c> node names in <c>zeppelin_type</c> order — 0 cargo,
+    /// <summary>The three <c>*_zeppelin</c> node names in <c>zeppelin_type</c> order, 0 cargo,
     /// 1 passenger, 2 military (docs/formats/instant-action.md "Which zeppelin, and which spawn
     /// list"). All eight shipped chapters author the same node three times
     /// (<c>multiplayer1zep</c>), so the list is one distinct name in every real case; a
@@ -156,8 +156,8 @@ public sealed class InstantActionRuntime
         new[] { def.CargoZeppelinNode, def.PassengerZeppelinNode, def.MilitaryZeppelinNode };
 
     /// <summary><c>zeppelin_type</c>'s own index into <see cref="ZeppelinNodes"/>:
-    /// <c>cargo</c> 0, <c>passenger</c> 1, <c>military</c> 2. ⚠ Anything else — including an
-    /// unauthored key — is <b>0</b>, not an error: <c>FUN_00458f60</c> maps an unrecognised
+    /// <c>cargo</c> 0, <c>passenger</c> 1, <c>military</c> 2. ⚠ Anything else, including an
+    /// unauthored key, is <b>0</b>, not an error: <c>FUN_00458f60</c> maps an unrecognised
     /// string to 3 and REJECTS it rather than storing it, over a record whose reset wrote
     /// <c>+0x254 = 0</c> (<c>FUN_00458ff0</c>, <c>param_1[0x95] = 0</c>), so cargo is the
     /// decoded fallback.</summary>
@@ -175,7 +175,7 @@ public sealed class InstantActionRuntime
 
     /// <summary>The ace's own spawn draw (docs/formats/instant-action.md "The ace and the
     /// waves"): <c>rand() % (count - 1)</c> over the scenario's own spawn list, with the LITERAL
-    /// last index substituted — not a re-roll — when that draw collides with the player's own
+    /// last index substituted, not a re-roll, when that draw collides with the player's own
     /// chosen index. Pure over its inputs (<paramref name="draw"/> is the caller's own
     /// <c>rand()</c> pull, so a <c>--det</c> run stays reproducible without this class touching
     /// an RNG itself). <paramref name="spawns"/> must be non-empty.</summary>
@@ -216,7 +216,7 @@ public sealed class InstantActionRuntime
     /// pilot's range gates. ⚠ Call after the spawn, and set all three: the spawner's own
     /// airframe-def fallback (docs/formats/ai-rosters.md "The three unnamed slots") must not
     /// survive an Instant Action block, which authors them.
-    /// ⚠ Stays the last word even once a patrol net is assigned — the original applies the
+    /// ⚠ Stays the last word even once a patrol net is assigned, the original applies the
     /// roster block after the net too (docs/org/aiPilot.md "Net assignment").</summary>
     public static void ApplyActorVolumes(AiModeMachine? machine)
     {
@@ -231,7 +231,7 @@ public sealed class InstantActionRuntime
 
     /// <summary>The five wingman slots' standing orders, 0-based. <paramref name="i"/> must be
     /// 0–4 (<see cref="InstantActionDef.NumWingmen"/>'s own 0–5 range, minus the clamp a flight of
-    /// 6 imposes — see <see cref="FlownWingmen"/>).</summary>
+    /// 6 imposes, see <see cref="FlownWingmen"/>).</summary>
     public static WingmanSlot WingmanSlotFor(int i)
     {
         float metres = 100f * ((i >> 1) + 1);
@@ -242,7 +242,7 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>Decision 8a's flight-size cap: the friendly flight is capped at 6 aircraft (1
-    /// pilot + 5 wingmen, the data's own maximum), and wingmen are the ones that give —
+    /// pilot + 5 wingmen, the data's own maximum), and wingmen are the ones that give,
     /// <c>min(configured, 6 - humans)</c>, never negative. Splitscreen humans add to the flight
     /// rather than consuming the wingman budget (Decision 8); below the cap the configured count
     /// is returned untouched. The clamp rule itself is INVENTED (decision 8a) and its caller must
@@ -250,7 +250,7 @@ public sealed class InstantActionRuntime
     public static int FlownWingmen(int configured, int humans) =>
         System.Math.Max(0, System.Math.Min(configured, 6 - humans));
 
-    /// <summary>One wave member's nine pilot stats — the wave sequencer's own per-aircraft roll
+    /// <summary>One wave member's nine pilot stats, the wave sequencer's own per-aircraft roll
     ///: <c>row = draw % 5</c> over <see cref="PilotPersonalities"/>. Pure over the
     /// caller's own <c>rand()</c> pull, same shape as <see cref="ChooseAceSpawn"/>; feed the
     /// result to <see cref="RepresentativeRating"/> for the one flat rating
@@ -275,7 +275,7 @@ public sealed class InstantActionRuntime
 
     /// <summary>The wingman accent range's own re-roll (docs/formats/instant-action.md "an
     /// accentID of exactly 12 is re-rolled as 12 + rand() % 5"), applied to a wave member's
-    /// <see cref="InstantActionWave.EnemyAccentId"/> at spawn time — never to the ace's or a
+    /// <see cref="InstantActionWave.EnemyAccentId"/> at spawn time, never to the ace's or a
     /// wingman's own accent, both of which are already decided elsewhere. Pure over the caller's
     /// own <c>rand()</c> pull; any other accent id (including the built-in -1 default) passes
     /// through unchanged.</summary>
@@ -284,7 +284,7 @@ public sealed class InstantActionRuntime
 
     /// <summary>"Every player has completed their zone set", with lives folded in: a pilot out
     /// of lives can never clear another gate, so this is true once every pilot who can still fly
-    /// has finished. False when nobody is left flying — that case is a loss, never a win.</summary>
+    /// has finished. False when nobody is left flying, that case is a loss, never a win.</summary>
     public static bool ZoneSetsFlown(IReadOnlyList<(bool OutOfLives, bool Finished)> pilots)
     {
         bool anyFlying = false;
@@ -305,7 +305,7 @@ public sealed class InstantActionRuntime
 
     /// <summary>The wrap-up's "Time to Complete Mission" row (docs/formats/instant-action.md
     /// "What the four numbers count"): <c>minutes = ms / 60000</c>, <c>seconds = (ms / 1000) % 60</c>,
-    /// both truncating — the decoded <c>IDS_IAWU_TIME</c> format <c>%02d:%02d</c>. Takes
+    /// both truncating, the decoded <c>IDS_IAWU_TIME</c> format <c>%02d:%02d</c>. Takes
     /// <see cref="Elapsed"/>'s own unit, seconds, and converts to milliseconds itself.</summary>
     public static string FormatElapsed(float elapsedSeconds)
     {
@@ -315,7 +315,7 @@ public sealed class InstantActionRuntime
         return $"{minutes:00}:{seconds:00}";
     }
 
-    /// <summary>The wrap-up's "Shot %" row: <c>100 × hits / fired</c>, truncating — the decoded
+    /// <summary>The wrap-up's "Shot %" row: <c>100 × hits / fired</c>, truncating, the decoded
     /// <c>ftol(100.0 × snapshot+0x22 / snapshot+0x20)</c>. ⚠ Zero rounds fired is a divergence,
     /// deliberately taken: the original's unguarded x87 divide yields a large negative number
     /// there (docs/formats/instant-action.md), which is not behaviour worth copying, so this
@@ -337,7 +337,7 @@ public sealed class InstantActionRuntime
     public void DisableObjective() => ObjectiveEnabled = false;
 
     /// <summary>A signal source reporting what it has just satisfied. The mission is WON only if
-    /// this is the objective its own type runs on — every other report is dropped, so one
+    /// this is the objective its own type runs on, every other report is dropped, so one
     /// subscription per source is safe on every mission type.</summary>
     public void ReportObjective(InstantActionObjective objective)
     {
@@ -394,9 +394,9 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>One wingman's standing order (docs/formats/instant-action.md "The player and the
-    /// wingmen"): its fan placement off the player's spawn heading —
+    /// wingmen"): its fan placement off the player's spawn heading,
     /// <c>100 · ((i &gt;&gt; 1) + 1)</c> metres out, at ±45°, the same 100 m/45° pattern the wave
-    /// sequencer uses — its <see cref="PrimaryTargetIsWingman"/> escort chain (0, 1 and 3 escort
+    /// sequencer uses, its <see cref="PrimaryTargetIsWingman"/> escort chain (0, 1 and 3 escort
     /// the player; 2 and 4 escort wingmen 1 and 3), and its authored accent id.</summary>
     public readonly record struct WingmanSlot(float MetresOut, float OffsetDeg, int? PrimaryTargetIsWingman, int AccentId);
 }

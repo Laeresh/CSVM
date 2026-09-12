@@ -38,7 +38,7 @@ public sealed partial class Precipitation : Node3D
     // POSITION is set directly, so instances stay at the node origin; only the AABB below keeps
     // them visible. INSTANCE_CUSTOM.xyz is the fixed base fraction, .w a flutter phase.
     // ⚠ Never use Godot's TIME here. This module has no per-frame C# hook, so csky_time is the
-    // only handle on the animation — TIME kept the rain falling through a halted clock.
+    // only handle on the animation, TIME kept the rain falling through a halted clock.
     private const string ShaderCode = """
         shader_type spatial;
         render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -75,7 +75,7 @@ public sealed partial class Precipitation : Node3D
             vec3 center = CAMERA_POSITION_WORLD + rel;
 
             // Alpha: fade in over the first near_fade metres (so a particle sitting on the
-            // camera doesn't blow up into a blob — this is a chase cam, not a cockpit), and
+            // camera doesn't blow up into a blob, this is a chase cam, not a cockpit), and
             // fade out past fade_start of the box radius so the box edge has no hard boundary.
             float md = length(rel);              // metres from the camera
             float dn = length(rel / box_half);   // normalized (1 ≈ box face)
@@ -112,9 +112,9 @@ public sealed partial class Precipitation : Node3D
 
     /// <summary>Builds the field for a mission's precipitation, or null if there is none.
     /// <paramref name="cloudBottom"/>/<paramref name="cloudTop"/> are the <c>CLOUD_COVER</c>
-    /// band (metres): the precipitation only shows *below* it (it falls from the cloud base —
+    /// band (metres): the precipitation only shows *below* it (it falls from the cloud base,
     /// none above the overcast). Pass an empty band (top ≤ bottom) to disable that gating.
-    /// Self-animating once added to the tree — no per-frame driving needed.</summary>
+    /// Self-animating once added to the tree, no per-frame driving needed.</summary>
     public static Precipitation? Create(WeatherState.PrecipData? precip, float cloudBottom, float cloudTop)
     {
         if (precip is not { } p)
@@ -220,7 +220,7 @@ public sealed partial class Precipitation : Node3D
             MaterialOverride = mat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             // The shader repositions every instance around the (moving) camera, far from this
-            // node's origin where the actual instance transforms sit — so give it a world-sized
+            // node's origin where the actual instance transforms sit, so give it a world-sized
             // custom AABB to never be frustum-culled. One draw call, always drawn: correct here.
             CustomAabb = new Aabb(new Vector3(-40000f, -40000f, -40000f), new Vector3(80000f, 80000f, 80000f)),
         });

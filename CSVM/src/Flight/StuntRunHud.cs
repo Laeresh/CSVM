@@ -19,7 +19,7 @@ public sealed partial class StuntRunHud : Control
     /// there. Paired with <see cref="PlayerIndex"/>.</summary>
     public StuntRace? Race;
 
-    /// <summary>Which player's pane this HUD draws in (0-based) — picks their row out of
+    /// <summary>Which player's pane this HUD draws in (0-based), picks their row out of
     /// <see cref="Race"/>.</summary>
     public int PlayerIndex;
 
@@ -55,7 +55,7 @@ public sealed partial class StuntRunHud : Control
 
     public override void _Process(double delta)
     {
-        // Track the viewport (resizable window) and repaint — the clock advances every frame.
+        // Track the viewport (resizable window) and repaint, the clock advances every frame.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
         if (_flash > 0f)
@@ -70,7 +70,7 @@ public sealed partial class StuntRunHud : Control
         if (s <= 0f)
             return;
         var font = GetThemeDefaultFont();
-        // Never round a scaled font down to 0 — a quarter-height 4P pane scales hard.
+        // Never round a scaled font down to 0, a quarter-height 4P pane scales hard.
         int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
         int bannerFont = Mathf.Max(1, Mathf.RoundToInt(RefBannerFont * s));
         float cx = Size.X / 2f;
@@ -105,7 +105,7 @@ public sealed partial class StuntRunHud : Control
 
     // The banner shown in this player's pane once they have cleared every zone. Solo: the
     // run is simply over (the results board is coming up in the same pane). In a race:
-    // their placing + finish time, held while the rest of the field still flies — the shared
+    // their placing + finish time, held while the rest of the field still flies, the shared
     // ranked board only appears when the last pilot is in.
     private string[] CompleteBanner()
     {

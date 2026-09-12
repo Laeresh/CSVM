@@ -12,7 +12,7 @@ public static class ScreenSize
     /// screen at <paramref name="distance"/> from a camera, inverting Godot's default vertical
     /// (KEEP_HEIGHT) perspective projection. Returns 0 for a degenerate
     /// distance, pixel target or viewport, which callers read as "no floor".</summary>
-    /// <param name="viewportHeight">The camera's OWN viewport height — a splitscreen pane is
+    /// <param name="viewportHeight">The camera's OWN viewport height, a splitscreen pane is
     /// shorter than the window.</param>
     public static float MinWorldSizeForPixels(float pixels, float distance, float fovDeg, float viewportHeight)
     {

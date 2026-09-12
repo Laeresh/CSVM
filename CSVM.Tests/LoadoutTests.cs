@@ -5,8 +5,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The stock-loadout config (<c>docs/formats/loadouts.md</c>) — committed engine data under
-/// <c>CSVM/data/</c>, so these run without an extraction — plus the caliber+ammo weapon-id rule.
+/// The stock-loadout config (<c>docs/formats/loadouts.md</c>), committed engine data under
+/// <c>CSVM/data/</c>, so these run without an extraction, plus the caliber+ammo weapon-id rule.
 /// Binding a loadout to a plane needs live <c>Node3D</c>s and stays with the in-engine suites.
 /// </summary>
 [Trait("Tier", "Quick")]
@@ -110,7 +110,7 @@ public class LoadoutTests
     [Fact]
     public void PylonFillOrderAlternatesWings()
     {
-        // The original fills hardpoints 1,5,2,6,3,7,4,8 — both wings alternately,
+        // The original fills hardpoints 1,5,2,6,3,7,4,8, both wings alternately,
         // not sequential 1..N. A partial stock fit (hp.Count < 8) takes this sequence's prefix.
         Assert.Equal(new[] { 1, 5, 2, 6, 3, 7, 4, 8 }, Loadout.PylonFillOrder);
     }

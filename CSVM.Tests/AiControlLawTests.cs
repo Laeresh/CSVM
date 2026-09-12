@@ -198,7 +198,7 @@ public class AiControlLawTests
         var up = AiControlLaw.Steer(Model(speed: 40f), aim, Vector3.Zero, AiLawParams.Cruise, 0.85f, Dt);
         Assert.Equal(0.85 + (0.35 * Dt), up.Throttle, 5);
 
-        // Above it, the lever falls the same way — and the cruise table's 0.8 floor catches it.
+        // Above it, the lever falls the same way, and the cruise table's 0.8 floor catches it.
         var down = AiControlLaw.Steer(Model(speed: 110f), aim, Vector3.Zero, AiLawParams.Cruise,
             0.802f, Dt);
         Assert.Equal(0.8, down.Throttle, 5);

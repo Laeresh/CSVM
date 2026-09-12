@@ -16,7 +16,7 @@ internal readonly record struct Landing(
 
 /// <summary>The runtime's live motions and the two rules that govern registering one: an owner
 /// stamp, and one motion per <c>(Target, Channel)</c>. Also answers the pending-bounce question the
-/// instance walk retires on. Holds <see cref="Node3D"/> references but dereferences none of them —
+/// instance walk retires on. Holds <see cref="Node3D"/> references but dereferences none of them,
 /// every operation here is identity comparison, so the collection's behaviour is engine-free even
 /// though its type is not.</summary>
 internal sealed class MotionSet
@@ -30,7 +30,7 @@ internal sealed class MotionSet
     public int Count => _motions.Count;
 
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies registered.
-    /// ⚠ <see cref="Reset"/> deliberately leaves it standing — every reader takes a delta across an
+    /// ⚠ <see cref="Reset"/> deliberately leaves it standing, every reader takes a delta across an
     /// event, so zeroing it here would make a crash respawn read as a negative launch count.</summary>
     public int LaunchCount { get; private set; }
 
@@ -72,7 +72,7 @@ internal sealed class MotionSet
     }
 
     /// <summary>Advances every live motion by <paramref name="dt"/>, removes the finished ones, and
-    /// returns those that owed a <c>BOUNCE_SEQUENCE</c> — empty on almost every frame. The caller
+    /// returns those that owed a <c>BOUNCE_SEQUENCE</c>, empty on almost every frame. The caller
     /// dispatches them; this class holds no runtime back-reference, and returning them rather than
     /// calling out makes remove-before-dispatch structural instead of a rule to remember.
     /// <paramref name="rate"/> is the cutscene fast-forward, which scales a motion by what its own
@@ -140,7 +140,7 @@ internal sealed class MotionSet
     public void DiscardFor(AnimDefinition def, Node3D? anchor) =>
         _motions.RemoveAll(m => m.Owner.Def == def && m.Owner.Anchor == anchor);
 
-    /// <summary>Drops every live motion — the crash rig's respawn. Leaves
+    /// <summary>Drops every live motion, the crash rig's respawn. Leaves
     /// <see cref="LaunchCount"/> alone.</summary>
     public void Reset() => _motions.Clear();
 
@@ -163,7 +163,7 @@ internal sealed class MotionSet
                           && m.Owner.Def == def && m.Owner.Anchor == anchor);
 
     /// <summary>Is some live motion already driving this node's transform? A launch onto such a
-    /// node is a TAKEOVER, not a fresh throw — see <see cref="MotionRuntime.Create"/>'s re-home
+    /// node is a TAKEOVER, not a fresh throw, see <see cref="MotionRuntime.Create"/>'s re-home
     /// rule. Asked before <see cref="Add"/> evicts the incumbent, which is the only moment the
     /// answer exists.</summary>
     public bool DrivesTransform(Node3D target) =>

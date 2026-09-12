@@ -13,7 +13,7 @@ namespace CSVM.Flight;
 /// aircraft the player is too far from. Every number comes from
 /// <see cref="EngineAudioCurves"/>, which the own-ship path reads too.
 /// ⚠ Own-ship concepts stay out: no splitscreen mix gain (the panes' listeners already decide who
-/// hears this), no start ramp, no prop-start cue, no crash or graze one-shots — an AI kill is
+/// hears this), no start ramp, no prop-start cue, no crash or graze one-shots, an AI kill is
 /// audible from the crash animation's own authored sound events.
 /// </summary>
 public sealed partial class AiEngineAudio : Node3D
@@ -147,7 +147,7 @@ public sealed partial class AiEngineAudio : Node3D
             _nitro.Stop();
     }
 
-    /// <summary>Kills every slot for good — the aircraft is down, and its crash animation owns
+    /// <summary>Kills every slot for good, the aircraft is down, and its crash animation owns
     /// everything audible from here on.</summary>
     public void Stop()
     {
@@ -238,7 +238,7 @@ public sealed partial class AiEngineAudio : Node3D
     }
 
     // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance curve
-    // the way WorldSounds maps every other 3D emitter — an approximation of the original's roll-off,
+    // the way WorldSounds maps every other 3D emitter, an approximation of the original's roll-off,
     // and TUNE for the same reason it is there.
     private AudioStreamPlayer3D? MakeLoop(SoundArchive archive,
         IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)

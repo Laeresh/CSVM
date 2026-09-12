@@ -13,7 +13,7 @@ namespace CSVM.Session;
 /// abreast on one heading is an instant head-on merge; a stunt race and a co-op campaign mission
 /// are its only callers.
 /// ⚠ Scripted paths (solo flight, --vs, zone-less chapters, and a --det race) bypass this by never
-/// constructing it — the caller picks the implementation once. Never add a bypass branch inside
+/// constructing it, the caller picks the implementation once. Never add a bypass branch inside
 /// this class; the race path's --det spawn guarantee is structural, not a runtime check.</summary>
 public sealed class StartGrid : IFlightStarts
 {

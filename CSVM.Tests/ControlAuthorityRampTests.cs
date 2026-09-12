@@ -30,7 +30,7 @@ public class ControlAuthorityRampTests
     [InlineData(30f, 0.50f)]
     [InlineData(40f, 0.75f)]
     [InlineData(50f, 1f)]      // AT turn_fade_out: full
-    [InlineData(300f, 1f)]     // and held — roll and pitch have no high-speed fade
+    [InlineData(300f, 1f)]     // and held, roll and pitch have no high-speed fade
     public void TheRampIsLinearBetweenTheAuthoredKnees(float speedMph, float expected)
     {
         var m = new FlightModel(Authored());
@@ -39,7 +39,7 @@ public class ControlAuthorityRampTests
 
     /// <summary>Read off the SHIPPED data rather than a fixture, which is what says the ramp runs on
     /// the authored 50 mph knee and not on the executable's compiled fallback of 40. At 45 mph the
-    /// two readings are 0.875 and 1.0 — the fallback has already saturated.</summary>
+    /// two readings are 0.875 and 1.0, the fallback has already saturated.</summary>
     [ExtractedDataFact]
     public void TheKneesComeFromTheAuthoredDataNotTheCompiledFallback()
     {
@@ -81,7 +81,7 @@ public class ControlAuthorityRampTests
         Assert.Equal(slow.YawAuthorityAt(30f * Mph) / slow.YawAuthorityAt(60f * Mph), yawRatio, 3);
     }
 
-    /// <summary>At <c>turn_fade_in</c> and below there is no roll or pitch left at all — the end of
+    /// <summary>At <c>turn_fade_in</c> and below there is no roll or pitch left at all, the end of
     /// the ramp described as "at 10 mph roll and pitch are gone entirely", and the one a
     /// clamped-to-a-floor implementation would quietly miss. The rudder still works there: its own
     /// curve bottoms out at <c>yaw_low_speed</c>, not at zero.</summary>
@@ -97,8 +97,8 @@ public class ControlAuthorityRampTests
         Assert.True(Mathf.Abs(m.BodyRates.Y) > 1e-4f, $"yaw rate {m.BodyRates.Y} rad/s");
     }
 
-    /// <summary>The ramp scales the STICK only. Hands-off in a 45° bank at 8 mph — where roll and
-    /// pitch authority are identically zero — the bank coupling must still drive the accumulator, so
+    /// <summary>The ramp scales the STICK only. Hands-off in a 45° bank at 8 mph, where roll and
+    /// pitch authority are identically zero, the bank coupling must still drive the accumulator, so
     /// a slow aeroplane keeps the original's coordinated-turn cheat while having no controls. An
     /// implementation that scaled the whole accumulator instead of the command would read zero on
     /// every axis here.</summary>
@@ -125,13 +125,13 @@ public class ControlAuthorityRampTests
         var m = new FlightModel(stats);
 
         // At or below yaw_max (authored 50 mph) it is identically 1, including where the yaw curve
-        // itself is far below 1 — the two are NOT the same function down there.
+        // itself is far below 1, the two are NOT the same function down there.
         Assert.Equal(1f, m.ReverseAuthorityAt(0f), 5);
         Assert.Equal(1f, m.ReverseAuthorityAt(20f * Mph), 5);
         Assert.True(m.YawAuthorityAt(20f * Mph) < 0.8f);
         Assert.Equal(1f, m.ReverseAuthorityAt(stats.YawMax), 5);
 
-        // Above it, the yaw curve — declining, and still above the floor at cruise.
+        // Above it, the yaw curve, declining, and still above the floor at cruise.
         foreach (float mph in new[] { 60f, 150f, 302f })
         {
             float v = mph * Mph;
@@ -144,7 +144,7 @@ public class ControlAuthorityRampTests
     }
 
     /// <summary>Nothing in the force path reads the factor. This is not an
-    /// omission — the assertion that breaks the day someone "restores" it as a torque scale. Full
+    /// omission, the assertion that breaks the day someone "restores" it as a torque scale. Full
     /// rudder at 400 mph against the same at 100: the achieved yaw-rate ratio is the YAW TABLE's
     /// ratio (0.193), and folding the factor in as well would put it at 0.044, so the two readings
     /// are four times apart rather than a rounding away.</summary>

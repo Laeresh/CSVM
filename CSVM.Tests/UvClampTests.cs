@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 /// The per-axis unit-square test behind the hairline-seam clamp
 /// (<see cref="SceneBuilder.UvAxesWithinUnitSquare"/>). The C1B shoreline case is the shape
 /// that motivated the axis split: U spans [0,1] across the surf strip while V tiles along
-/// the shore, so only U is safe to clamp — a both-axes test rejects the surface
+/// the shore, so only U is safe to clamp, a both-axes test rejects the surface
 /// outright and leaves the U wrap bleeding the texture's opaque edge into the water.
 /// </summary>
 public class UvClampTests

@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="Pads.AssignPads(int, IReadOnlyList{int})"/> — the pure half of the fix, engine-
+/// <see cref="Pads.AssignPads(int, IReadOnlyList{int})"/>, the pure half of the fix, engine-
 /// free so a phantom-device scenario can be asserted without real hardware. The IDs below are
 /// arbitrary; what matters is which slot in the roster they occupy.
 /// </summary>
@@ -32,7 +32,7 @@ public class PadsTests
     public void P1GetsEveryPadNobodyElseClaimed()
     {
         // 4 connected devices, 3 players: P2/P3 claim slots 1/2, P1 gets slot 0 AND the
-        // leftover slot 3 — not just the first slot, so P1 flies as long as ANY unclaimed
+        // leftover slot 3, not just the first slot, so P1 flies as long as ANY unclaimed
         // pad is real, exactly the union LaunchMenu already hands unclaimed player 1.
         var a = Pads.AssignPads(3, new List<int> { 10, 20, 30, 40 });
         Assert.Equal(new[] { 10, 40 }, a![0]);

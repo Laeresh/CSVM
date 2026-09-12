@@ -19,7 +19,7 @@ HUD captures and aircraft gauge subtrees; the implementation lives in `CompassTa
 The compass ships as two small textures in **every chapter's `texture.zbd`** (not in
 `rimage.zbd`, which holds only menu/briefing UI):
 
-- **`compassticks2`** (64×16, opaque, black background) — one repeating tick segment
+- **`compassticks2`** (64×16, opaque, black background), one repeating tick segment
   covering **15° of heading**:
   - The **tall tick** straddles the tile seam: solid-255 core at columns 62–63,
     soft falloff continuing at columns 0–3 of the next tile. Vertical span rows 6–15.
@@ -27,10 +27,10 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
     50–51, visible only in rows ~11–15.
   - Tiling segments edge-to-edge automatically produces a tall tick at every 15°
     multiple. The pattern is mirror-symmetric, so flip orientation is irrelevant.
-- **`compasstxt`** (128×32, soft alpha) — cream (~197,194,150) letter atlas laid out
+- **`compasstxt`** (128×32, soft alpha), cream (~197,194,150) letter atlas laid out
   as the four pre-kerned intercardinal pairs, **"NE SE SW NW"**, at x 1–25 / 27–51 /
   52–83 / 84–115 (letters within: N 84–95, E 40–51, S 52–63, W 64–83; singles are cut
-  from the pairs). A 5 px white→black vertical gradient block sits at x 123–127 —
+  from the pairs). A 5 px white→black vertical gradient block sits at x 123–127,
   purpose unknown; it does not appear in the in-flight compass.
 
 ## Compass rendering
@@ -39,28 +39,28 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
   a mark Δ° from the current heading renders at `x = center − R·sin(Δ)`. At 1440p the
   fit over every visible tall tick gives **R ≈ 127.6 px**; bar rect ≈ 263×40 px with
   its top at y=35, horizontally centered (scales with screen height).
-- **Headings increase to the left** (W renders left of SW, S right — a real
+- **Headings increase to the left** (W renders left of SW, S right, a real
   whiskey-compass card, mirrored vs a modern heading tape).
 - Brightness falls off as **cos(Δ)** for ticks and labels alike (center tick peaks
   ~245 = the 255 texel cores through AA; talls at Δ=40.5° ≈ 194 = 255·cos; labels
-  207 → 152 → 105 at Δ 4.5°/40.5°/49.5°). No gain/MODULATE2X — the cores are
+  207 → 152 → 105 at Δ 4.5°/40.5°/49.5°). No gain/MODULATE2X, the cores are
   already full-white in the texture.
 - The tick tile is drawn **~25% taller than the bar, bottom-aligned** (empty top rows
   clip): talls reach 77% of bar height, minors 42%. Mapping the 16 px tile to the bar
   height exactly leaves them visibly stubby.
 - Tick filtering is effectively **point-sampled** (the comb's hard 1–2 px edges and
   per-tick brightness lottery are minification aliasing); the labels are drawn
-  smooth (bilinear), **billboarded upright** at their drum x — label width does not
+  smooth (bilinear), **billboarded upright** at their drum x, label width does not
   compress with the drum (verified: edge W same width as center letters), scaled
   0.625× of the atlas (20 px tall at 1440p) with the box top ~3 px below the bar top.
-- Both bar ends are capped by a **bright tall rim tick** (~192 at the very edge — the
+- Both bar ends are capped by a **bright tall rim tick** (~192 at the very edge, the
   drum's silhouette); regular ticks fade out ~20 px before reaching the rim.
-- Labels every 45° (octants), no numeric readout, no lubber line — the current
+- Labels every 45° (octants), no numeric readout, no lubber line, the current
   heading is read from the centered, brightest label.
 
 ## Cockpit gauges
 
-**The gauge dials are 3D models inside each player plane's tree in planes.zbd** — a
+**The gauge dials are 3D models inside each player plane's tree in planes.zbd**, a
 `gauges` subtree under the (otherwise skipped) cockpit, one per plane, with mostly the
 same child names everywhere: `altimeter`, `speedometer`, `damageindicator`, plus `comp`,
 `horizn`, `gungauge`, `missilegauge`, `nitrogauge`. ⚠ `comp` and `horizn` are the DATA's own
@@ -72,17 +72,17 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
 `CycleTextureSet` texture swaps. Texture pixels live in **every chapter's
 `texture.zbd`** (not rimage.zbd).
 
-- **Face**: each dial's face is a 12-gon (radius 1) mapping the full face texture —
+- **Face**: each dial's face is a 12-gon (radius 1) mapping the full face texture,
   `altimeter.tif` / `speedometer.tif` / the per-plane `<short>_damage.tif`
   (`bldhwk_damage`, `ke_damage`, `pm_damage`, `agyro_damage`, `avenger_damage`,
   `bal_damage`, `fury_damage`, + AI planes). The face texture includes the bezel ring
   and the *unlit* (dark) LOW ALT / STALL windows; 12-gon corners cut the texture's
   square corners. Draw priority 1.
-- **Needles are single textured quads — the taper and the hub are painted in
+- **Needles are single textured quads, the taper and the hub are painted in
   `needle.tif`, not meshed.** Quad x −0.055…0.052,
   y −0.245…0.510 (pivot at the origin, tip +y = texture top). The altimeter has
   two: `hundreds` (long, priority 9, z 0.05) and
-  `thousands` (short/wider: x ±0.07, y −0.181…0.368, priority 8, z 0.025 — same
+  `thousands` (short/wider: x ±0.07, y −0.181…0.368, priority 8, z 0.025, same
   texture); the speedometer one (`speed`, priority 8). The nodes' modeled rest
   rotations are arbitrary; the engine sets absolute angles. ⚠ **The pointer shape
   lives only in the `rtexture*` tiers' copy of `needle.tif`** :
@@ -103,7 +103,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   ⚠ **The needles read absolute world Y (ASL) while the LOW ALT lamp beside them reads AGL.** The
   needle feed is `plane+0x208`, pushed at `0049f7a2`. The `ALTIMETER` debug text readout prints the
   AGL figure in feet (×3.28084 at `006076f0`), so that string is not evidence about the needles.
-- **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7 — *under* the
+- **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7, *under* the
   needles): the lit window quad (`lowalt.tif` / `stall.tif`, 64×32, red) **plus two
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
@@ -167,7 +167,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   This supersedes the plain fixed 400 ms blink and the 50 m threshold, neither of which was ever
   measured against the original.
 - **Damage display**: the dial's face is a single untextured 12-gon (the dark backing
-  disc). ⚠ **Where it is parented differs per aircraft** — verified across the whole
+  disc). ⚠ **Where it is parented differs per aircraft**, verified across the whole
   roster: on `player_bhawk` it is the `damageindicator` node's *own* mesh,
   but on **every other player plane** that node is mesh-less (`mesh_index` −1) and the
   identical 12-gon hangs off an extra generically-named child instead (`g951` on the
@@ -181,38 +181,38 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   (`greenhilite.tif`; nose = top bar, tail = bottom, wings = left/right slanted bars)
   and a **part-shaped hatch fill** tracing that part on this plane's silhouette
   (`grn_hatchptrn.tif`, 8×8, tiled UVs up to ~5×). `cockpit.gw` gives each zone a
-  4-map texture cycle — green/yellow/**orange**/red `*hilite` + `*_hatchptrn` — the
+  4-map texture cycle, green/yellow/**orange**/red `*hilite` + `*_hatchptrn`, the
   color change IS a texture swap. **So part positions are per-plane mesh data,
   nothing is computed from the silhouette texture.**
 - **Thresholds**: every player part's vehicle.json `injure_anims` carry
   `*_damage_green` at 0.72, `*_damage_yellow` at 0.46, `*_damage_red` at 0.20 (the
   anims themselves live in the undecoded cam_anim.zbd). The display uses **all four
-  cycle colors** (orange confirmed in the original) — each anim
+  cycle colors** (orange confirmed in the original), each anim
   threshold steps to the *next* color: green > 0.72, yellow ≤ 0.72, orange ≤ 0.46,
   red ≤ 0.20 (red on a still-flying plane matches the damage reference shot; the
   anim names lag their effect by one state). **The scale is the zone's COMBINED
   armor+health pool** (`BL-085`), not health alone: at stock (armor == hp) 0.72
   falls while 56 % of the armor is gone, 0.46 just past armor zero (8 % of the
-  airframe), 0.20 at 60 % of the airframe — each inside the band the game manual's
+  airframe), 0.20 at 60 % of the airframe, each inside the band the game manual's
   Crispen Mark V description gives it (yellow ≤ 50 % armor gone; orange = armor
   half-to-fully gone with ≤ 25 % airframe gone; red = 25–100 % airframe gone). The
   manual's figures are each band's envelope, not its boundary; the shipped fracs are
   the boundaries, and they sit inside. On health alone the manual's yellow band
-  would be unreachable — nothing would react while armor is being stripped. Blink: the original blinks a zone
+  would be unreachable, nothing would react while armor is being stripped. Blink: the original blinks a zone
   (fill + border) for ~5 s after it takes a hit, even inside green (user-observed).
 - **Scales** (measured off the face textures): altimeter 0–9 clockwise from top, 36°
-  per digit — long needle 360°/1,000 ft, short 360°/10,000 ft; speedometer labels
+  per digit, long needle 360°/1,000 ft, short 360°/10,000 ft; speedometer labels
   0/100/200/300 at ≈0°/69°/143°/216° clockwise → **≈0.72°/mph** linear.
 - **Screen layout** (HUD.png, 2556×1440, bezel dark-span scans): all three dials
   share **radius ≈ 85 px**; altimeter center (425.5, 1108.5), damage dial
   (426.5, 1299), speedometer mirrored ≈ 420 px from the right edge, same height as
   the altimeter. (The two reference screenshots place the cluster slightly
-  differently — HUD.png is the canonical one, matching the compass metrics.)
+  differently, HUD.png is the canonical one, matching the compass metrics.)
   ⚠ Those left and right edges are the reference frame's, so the port measures
   them from `HudMetrics.ReadingBox` (that frame's 16:9 centred in the pane), not
   from the pane, which on an ultrawide screen is far wider than the frame.
 - **The artificial horizon is decoded and driven as a node rotation, on the ball mesh named
-  `pfhorizon` — never `horizn`.** Neither `horizn`, the plain `horiz` some airframes use instead,
+  `pfhorizon`, never `horizn`.** Neither `horizn`, the plain `horiz` some airframes use instead,
   nor `comp` ever appears in `crimson.exe`; the binary's own names are `pfhorizon` (the ball) and
   `compass` (the drum). `pfhorizon` sits under a mesh-less container (named `horiz` on 10 of the 11
   player airframes, `g1167` on the eleventh) that is itself the child of a dial-face node named
@@ -224,7 +224,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   `-copysign(pi/2, m[7])`, roll = 0. Heading is discarded for this dial. The node's rotation is set
   to `N = Rz(-roll) . Rx(pitch)` (quaternions built at `0049f92e`/`0049f93d`, multiplied at
   `0049f951`) and written straight into the node's Euler fields under its own `R = Ry . Rx . Rz`
-  convention — no gain, offset, clamp or smoothing anywhere in the law. The camera's own pitch
+  convention, no gain, offset, clamp or smoothing anywhere in the law. The camera's own pitch
   offset and any look-around never enter: the source is the aircraft's attitude alone. The
   `gungauge` / `missilegauge` are decoded below; `nitrogauge` (face, `nitro_backplate`, needles
   `nitro_boost` / `nitro_charge`) is driven by `GaugeCluster` off the nitro decode in
@@ -234,7 +234,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   card is fixed to true north, so the local write exists to cancel the parent's yaw, and this port
   derives heading as `Atan2(nose.X, -nose.Z)`, under which the aircraft node's own yaw is already
   `-heading`. Writing the engine's literal a second time turns the drum the wrong way at the right
-  rate, which reads correct at rest (both signs give north) and inverted in a turn — the shape of
+  rate, which reads correct at rest (both signs give north) and inverted in a turn, the shape of
   fault that survives a sign "settled by reasoning" and dies at the controls. `CockpitGauges` finds
   the drum by the binary's own name, `compass`, first (present as the mesh-bearing node on every
   player airframe checked in `extracted/planes/nodes.json`) and falls back to `comp` (the data's own
@@ -251,13 +251,13 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   centre off the needle node and the radius off the face rather than assuming the shared rule.
 - The gauge's screen placement: the bottom of the right column, one dial-pitch below the
   speedometer, mirroring the damage dial's row on the left (user-confirmed against the
-  original). It is not above the GUNS dial — the column fills downward.
+  original). It is not above the GUNS dial, the column fills downward.
 - The needles' decoded angles are Euler-z, counter-clockwise-positive, so a screen-space draw
   whose rotation is clockwise-positive has to negate them.
 - The `hud_v2.zrd` `SW_GAUGES` block's `POSITION_1ST` / `POSITION_3RD` keys are **not** dial
   placement, despite the name. `FUN_00454e70` reads them into a text widget built per section
   (`AIR_SPEED`, `ALTIMETER`, `GUNS`, `MISSILES`, `HEALTH`, `NITRO`), and the six values share
-  one x at 0.02 spacing in y — a debug text column, written only under `DAT_00624df0`.
+  one x at 0.02 spacing in y, a debug text column, written only under `DAT_00624df0`.
 
 ## Weapon gauges
 
@@ -270,7 +270,7 @@ the **GUNS** dial the same above the speedometer; both share the other dials'
 radius (≈85 px at 1440p).
 
 Both are circular dials laid out **identically on all 11 flyable models** (unlike
-the damage dial, there is no per-plane parenting quirk — verified across the whole
+the damage dial, there is no per-plane parenting quirk, verified across the whole
 roster): the `gungauge`/`missilegauge` node is always mesh-less (`model_index` −1)
 and the labelled face (`gungauge.tif` / `missilegauge.tif`, a 12-gon, priority 1,
 carrying the baked **GUNS** / **ROCKETS** legend) hangs off a generically-named
@@ -279,44 +279,44 @@ child (`g815` / `g819`). The safe reader rule is the damage dial's:
 
 The functional children, and how `cockpit.gw` drives each:
 
-- **`4char_ammo`** — a row of **4 digit quads** (priority 7, lower centre). Each
+- **`4char_ammo`**, a row of **4 digit quads** (priority 7, lower centre). Each
   carries `CycleTextureSet` 11 mapping `zero.tif`…`nine.tif` then `SPACE.tif`
   (frames 0–10); the engine sets each cell's frame to spell the count. The remake
   shows it **right-aligned, space-padded**. **Guns: the *selected* gun group's own
-  rounds** (per group — the Balmoral's two .50s count independently). **Rockets:
-  the *per-pylon* rounds of the pylon the arrow points at (the next to fire) — NOT
+  rounds** (per group, the Balmoral's two .50s count independently). **Rockets:
+  the *per-pylon* rounds of the pylon the arrow points at (the next to fire), NOT
   the sum across pylons** (a full HE pylon reads `3`; the original's Warhawk shows
   `BOOM 3`, not `24`).
-- **`6char_type`** — a row of **6 glyph quads** (priority 7, upper centre).
+- **`6char_type`**, a row of **6 glyph quads** (priority 7, upper centre).
   `CycleTextureSet` 37 maps `A.tif`…`Z.tif`, then `zero.tif`…`nine.tif`, then
   `SPACE.tif`. Shows the selected weapon's short **`NAME`** from `weapons.json`,
   upper-cased and left-aligned (`30slug`→`30SLUG`, `BOOM`, `SONIC`).
-- **`ggindicator0..3`** (gun, 4) / **`mgindicator0..7`** (missile, 8) — the **belt
+- **`ggindicator0..3`** (gun, 4) / **`mgindicator0..7`** (missile, 8), the **belt
   lights**, one per gun slot / pylon, arranged around the ring: index 0 at the top
   (90°) and running **counter-clockwise** (gun 90° apart, missile 45°). **`mgindicator`
-  index _i_ is pylon _i+1_** (`BL-294`) — the hardpoint gauge's `WeaponGauge.Slots` is
+  index _i_ is pylon _i+1_** (`BL-294`), the hardpoint gauge's `WeaponGauge.Slots` is
   always the ring's full 8 entries indexed by `Hardpoint.Index − 1`, never the compacted
   position within a plane's bound-hardpoints list (`loadouts.md`'s fill order): a
   partial stock fit leaves the unfitted ring positions red, spread around the ring
   rather than trailing at its end. Each is a
   `Xhilite.tif` bezel bar + a `Xindicator.tif` light, both carrying a **3-frame**
-  cycle green→yellow→red (`CycleTextureSet` 3). **Every belt light is always lit** —
-  none stays dark — and **steps the colour by that slot's remaining fraction**: green
+  cycle green→yellow→red (`CycleTextureSet` 3). **Every belt light is always lit**,
+  none stays dark, and **steps the colour by that slot's remaining fraction**: green
   healthy, yellow low, red empty; a per-pylon HE rocket (3 rounds) steps
   green(3/2)→yellow(1)→red(0). A position the airframe **does not fit at all** (a
   2-gun plane's slots 2–3; turret gun groups are inert, so they don't count) reads
-  **red**, indistinguishable from a fitted-but-spent slot — that is what the original
+  **red**, indistinguishable from a fitted-but-spent slot, that is what the original
   shows. The
   green/yellow/red **thresholds are a TUNE** pending an original playtest. Guns are the only class
-  with a yellow tier at all (`GunIndicatorColor`, `BL-024`) — hardpoints/pylons step straight
+  with a yellow tier at all (`GunIndicatorColor`, `BL-024`), hardpoints/pylons step straight
   green→red. The gun yellow threshold (`GaugeCluster.IndicatorLowFrac`) is tuned
-  (`BL-142`) from 0.34 — a value inherited from the unrelated 3-round rocket-pylon coincidence
-  (1/3), never watched against a real gun belt — to **0.15**, judged from a screenshot sweep of a
+  (`BL-142`) from 0.34, a value inherited from the unrelated 3-round rocket-pylon coincidence
+  (1/3), never watched against a real gun belt, to **0.15**, judged from a screenshot sweep of a
   scaled belt drain (`--ammo=200 --gun-select=0 --fire`): at 0.34 yellow lit with ~119 sim s of
   sustained fire still left at the real 2800-round `CLUSTER_SIZE`/8 rounds-per-s, reading as
   premature; 0.15 (~53 sim s left) reads as genuinely low. Still no capture to trace either number
-  to — an eyes-on playtest against the original remains owed.
-- **`ggarrow`/`mgarrow`** — a `smallneedle.tif` pointer (priority 49, rest points
+  to, an eyes-on playtest against the original remains owed.
+- **`ggarrow`/`mgarrow`**, a `smallneedle.tif` pointer (priority 49, rest points
   up at slot 0) rotated about the dial centre to the selected slot: the gun arrow to
   the **selected gun group**, the missile arrow to the **next pylon that will fire**.
   Unlike the dial needles, the arrow's shape IS its mesh: a single 5-vertex polygon
@@ -326,14 +326,14 @@ The functional children, and how `cockpit.gw` drives each:
   by both gauges, **168.7 ± 1.6 °/sim-s**, routed the shortest way round
   (`GaugeCluster.TweenArrow`); the numeric readout above still snaps on the sweep's
   first frame. CAP-18's own end-to-end capture also carries a ~97 ms sim ease at each
-  end (not a smoothstep) that the remake does not reproduce — its shape is unmeasured
+  end (not a smoothstep) that the remake does not reproduce, its shape is unmeasured
   beyond "not a smoothstep", so a pure constant-rate sweep runs a 90° step in ~533 ms
   against the capture's ~633 ms; owed a follow-up if the still-outstanding capture A/B
   reads as visibly off at the sweep's ends.
 
 ⚠ The digit/letter/indicator textures (`zero.tif`…, `A.tif`…, `greenindicator.tif`,
 `greenhilite.tif`, `smallneedle.tif`, `gungauge.tif`, `missilegauge.tif`) live in
-**every chapter's `texture.zbd`**, like the other gauge art — not in `rimage.zbd`.
+**every chapter's `texture.zbd`**, like the other gauge art, not in `rimage.zbd`.
 
 ### The text readout (`MSG_HUD_GUNGAUGE` / `MSG_HUD_MISSLES`)
 
@@ -344,7 +344,7 @@ gauges):
 - **`MSG_HUD_GUNGAUGE`** (id 188) = `"GUNS: %1: %2!d!"`
 - **`MSG_HUD_MISSLES`** (id 189) = `"MISSILES: %1: %2!d!"` (the table's own misspelling)
 
-`%1` names the **gun group / rocket type** — which is *why* these strings exist: the counters are
+`%1` names the **gun group / rocket type**, which is *why* these strings exist: the counters are
 per gun group and per pylon, so the readout has to say *which* one. `%2!d!` is the integer count.
 The remake does not draw this text form; the two dial gauges carry the same counts. `%1` would
 take the gun group's **mount name** (`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the
@@ -357,23 +357,23 @@ placeholder grammar (`%N`, a trailing `!spec!` consumed, `%%` → literal `%`) i
 
 Decoded by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
 
-Two textures in **`extracted/rimage/`** (the menu/UI image set — *not* the chapter texture
+Two textures in **`extracted/rimage/`** (the menu/UI image set, *not* the chapter texture
 archives that carry the compass/gauge art):
 
-- **`5pointhud.png`** — the normal font.
-- **`5pointhudbrite.png`** — the brighter highlight variant, **pixel-for-pixel the same
+- **`5pointhud.png`**, the normal font.
+- **`5pointhudbrite.png`**, the brighter highlight variant, **pixel-for-pixel the same
   geometry**, differing only in green level.
 
-Both are **463×6**, a proportional **1-bit** font. Glyphs occupy **rows 0–4** (five pixels tall —
+Both are **463×6**, a proportional **1-bit** font. Glyphs occupy **rows 0–4** (five pixels tall,
 hence "5point"); row 5 is blank spacing. Colours are exactly two green levels plus a dim outline
 on black: normal core **(0,150,0)**, highlight core **(0,255,0)**, both edged with **(0,32,0)**;
 the background is pure black.
 
 **Character range: printable ASCII `0x20`–`0x7e`.** Space (`0x20`) is a blank leading cell, so the
-atlas holds **94 ink glyphs, one per code `0x21`–`0x7e` laid left-to-right in code order** — i.e.
+atlas holds **94 ink glyphs, one per code `0x21`–`0x7e` laid left-to-right in code order**, i.e.
 `glyph(code)` is the `(code − 0x21)`-th maximal run of inked columns. (The PLAN's shorthand
 "`0123456789:;<=>?@A…z`" understates it: the set begins at `!` and runs through `~`, digits and
-punctuation included.) **Letters are uppercase-only** — the `a`–`z` cells carry the `A`–`Z`
+punctuation included.) **Letters are uppercase-only**, the `a`–`z` cells carry the `A`–`Z`
 shapes. No glyph has a fully-blank interior column, so the run-per-code segmentation is exact
 (94 runs = 94 codes, verified); glyph widths vary **1–6 px**, inter-glyph gaps **1–3 px**.
 
@@ -387,23 +387,23 @@ other HUD element, so a splitscreen pane damps the text the same way the dials d
 ## Aiming reticle
 
 The aiming pipper is a single image in **`extracted/rimage/`** (the UI set, alongside the
-`5pointhud` font — *not* the chapter archives): **`impact_point.png`**, a **32×32 RGBA**
-sprite. It is a filled warm-white disc — core `(255,247,222)`, ring `(247,227,181)` — with a
+`5pointhud` font, *not* the chapter archives): **`impact_point.png`**, a **32×32 RGBA**
+sprite. It is a filled warm-white disc, core `(255,247,222)`, ring `(247,227,181)`, with a
 **cross-shaped transparent notch** cut through the centre (the PLAN's "four tick marks around an
 open centre"). The alpha channel is authored (transparent background, anti-aliased edges), so it
-draws directly with no colour-keying — unlike the black-backed font atlas.
+draws directly with no colour-keying, unlike the black-backed font atlas.
 
 **Behaviour (remake E37, `src/Flight/ImpactReticle.cs`).** The reticle is **not pinned to screen
 centre.** It marks the **projected ballistic impact point of the selected gun group's rounds at a
 fixed convergence distance**, computed with the *same* `VELOCITY`/`ACCELERATION`/`GRAVITY`
-integration `ProjectilePool` fires each round with — the pipper and the rounds agree exactly, since
+integration `ProjectilePool` fires each round with, the pipper and the rounds agree exactly, since
 a round leaves the muzzle with no scatter at all (`CANNON_SPREAD` is the unbuilt gun aim assist's
-acceptance cone, not a dispersion term; see [`org/aim-assist.md`](../org/aim-assist.md)) — from the
+acceptance cone, not a dispersion term; see [`org/aim-assist.md`](../org/aim-assist.md)), from the
 averaged muzzle pose. Because the rounds inherit the
-plane's velocity — which lags the nose during a hard roll or pull — the reticle **trails the nose**
+plane's velocity, which lags the nose during a hard roll or pull, the reticle **trails the nose**
 in a hard manoeuvre and sits on the rounds in steady flight (measured: `nose→reticle = 0.00°`
 level, up to `~0.77°` below the nose toward the velocity vector at ~15° angle-of-attack; the small
-angle is physics — bullets travel ~900 m/s against a ~55 m/s plane). It is a fixed-screen-size HUD
+angle is physics, bullets travel ~900 m/s against a ~55 m/s plane). It is a fixed-screen-size HUD
 element (drawn via `Camera3D.UnprojectPosition` at `_Draw` time so it never lags the chase camera),
 scaled through `HudMetrics` like every other widget, one per player pane.
 

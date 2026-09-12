@@ -11,7 +11,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The maneuver executor, engine-free: program timing on hand-built maneuvers over a default
-/// <see cref="PlaneStats"/> model, plus the worked demonstration — a real
+/// <see cref="PlaneStats"/> model, plus the worked demonstration, a real
 /// <see cref="FlightModel"/> on the shipped Bloodhawk stats flying shipped programs (dive,
 /// split_s), attitude and altitude asserted before vs after. Playback is pure, so there is no
 /// in-engine suite for this: nothing here needs a Node, a clock or the render path.
@@ -33,7 +33,7 @@ public class ManeuverExecutorTests
         });
         var (model, exec) = Launch(maneuver);
 
-        // 60 frames of step 0, 120 of step 1, then Done — the HoldSegments-style clock.
+        // 60 frames of step 0, 120 of step 1, then Done, the HoldSegments-style clock.
         for (int frame = 0; frame < 60; frame++)
         {
             model.Step(exec.Next(model, Dt), Dt);
@@ -110,7 +110,7 @@ public class ManeuverExecutorTests
         FlyUntil(model, exec, () => exec.Done, maxSeconds: 10f);
 
         // One step: [4 s, −60° pitch]. The nose must actually get near −60 and the altitude
-        // must fall by a real dive's worth — placeholder-law honesty: the capture takes ~1.5 s
+        // must fall by a real dive's worth, placeholder-law honesty: the capture takes ~1.5 s
         // of the 4, so the loss is hundreds of metres, not the full-program ballistic figure.
         float noseDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-model.Attitude.Z).Y, -1f, 1f)));
         Assert.True(noseDeg < -40f, $"dive ended nose at {noseDeg:0.0}°, wanted well below -40°");

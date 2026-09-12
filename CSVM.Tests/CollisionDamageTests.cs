@@ -7,7 +7,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The decoded collision damage law (<c>FUN_0048d2c0</c>), ported as
 /// <see cref="CollisionDamage"/>. Decode: docs/org/flightModel.md, "Collision damage".
-/// The property that matters most is the NEGATIVE one — there is no airspeed term — so it is
+/// The property that matters most is the NEGATIVE one, there is no airspeed term, so it is
 /// asserted directly rather than left to follow from the arithmetic.
 /// </summary>
 public class CollisionDamageTests
@@ -111,7 +111,7 @@ public class CollisionDamageTests
     }
 
     /// <summary>The entity-versus-entity cut is a fifth, and it is the value the non-player branch
-    /// applies. The player never reaches it — that asymmetry lives in FlightController, not
+    /// applies. The player never reaches it, that asymmetry lives in FlightController, not
     /// here.</summary>
     [Fact]
     public void TheEntityCutIsAFifth()

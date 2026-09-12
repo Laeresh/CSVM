@@ -237,7 +237,7 @@ public class GeneratorCycleTests
     public void AFastCyclingGeneratorLeavesItsDoorOpen()
     {
         // Gap 7 s (C1/IA1's authored ind 5 + wave 2): at the 4 s minimum only 3 s remain to
-        // the next spawn — not more than 8 — so the door never closes between spawns.
+        // the next spawn, not more than 8, so the door never closes between spawns.
         var cycle = Credited(maxActive: 99, waveSize: 1, wavePeriod: 2f, indPeriod: 5f);
         RunUntilSpawn(cycle);
         for (float t = Dt; t <= 15f; t += Dt)

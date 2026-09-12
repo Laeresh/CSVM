@@ -31,7 +31,7 @@ public sealed partial class AnimLab : Node
     /// replay the same dice.</summary>
     public const ulong DefaultSeed = Rng.DefaultSeed;
 
-    /// <summary>Show the interactive UI — status line, transport, picker and timeline. On by
+    /// <summary>Show the interactive UI, status line, transport, picker and timeline. On by
     /// default; off for a scripted <c>--screenshot</c> (kept byte-identical) unless
     /// <c>--debug-anim-ui</c> forces it on. When off, the runtime hooks are never attached.</summary>
     public bool ShowUi = true;
@@ -58,7 +58,7 @@ public sealed partial class AnimLab : Node
     // The session archives, kept open for the whole lab session (WorldSession.Options
     // .TexturesOutliveBuild + .SoundsOutliveBuild) so puffers/decals can be built at any playhead
     // time. The lab owns their disposal; it is the only mode that owns the SOUND archive that far
-    // — every other mode closes that one when the build scope ends, textures being session-owned
+    //, every other mode closes that one when the build scope ends, textures being session-owned
     // everywhere.
     private readonly TextureArchive _textures;
     private readonly SoundArchive? _sounds;
@@ -117,7 +117,7 @@ public sealed partial class AnimLab : Node
     /// still tracks what it picked.</summary>
     public SelectionService? Selection { get; init; }
 
-    // The session clock the transport drives. The lab never owns it — the session picks
+    // The session clock the transport drives. The lab never owns it, the session picks
     // the mode (accumulator when interactive, one fixed step per frame when scripted).
     private static GameClock? Clock => GameClock.Current;
 
@@ -218,7 +218,7 @@ public sealed partial class AnimLab : Node
     }
 
     /// <summary>Plays one def by ANIMATION_NAME the way a startanim starts (RESET_STATE, then
-    /// Start per anchor — <see cref="AnimRuntime.Play"/>), from a re-pinned RNG and a zeroed
+    /// Start per anchor, <see cref="AnimRuntime.Play"/>), from a re-pinned RNG and a zeroed
     /// playhead. The picker's overload focuses the timeline on the exact def picked; this entry
     /// (also <c>--play-anim</c>) focuses on the first def carrying the name.</summary>
     public void Play(string name) => Play(name, _program.ByAnimName(name).FirstOrDefault());
@@ -242,7 +242,7 @@ public sealed partial class AnimLab : Node
     // ---- render-pose smoothing (see the _renderPoses field note) -----------------------------
 
     // Puts every smoothed target back on its exact sim pose, so the steps about to run
-    // — and any event they fire that seeds a held pose from the live transform — never see an
+    //, and any event they fire that seeds a held pose from the live transform, never see an
     // interpolated render pose. Sim state stays a function of the step count alone.
     private void RestoreSimPoses()
     {
@@ -278,7 +278,7 @@ public sealed partial class AnimLab : Node
     }
 
     // Draws each smoothed target between its last two sim poses at the clock's
-    // sub-step fraction. FixedStep pins the fraction to 1 — an identity rewrite — so scripted
+    // sub-step fraction. FixedStep pins the fraction to 1, an identity rewrite, so scripted
     // captures stay byte-identical; while halted the fraction holds still, so a paused frame
     // cannot wobble between stale poses.
     private void ApplyRenderPoses(float fraction)
@@ -309,7 +309,7 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    // A single frame step, freezing playback first — the "step" transport action for both the
+    // A single frame step, freezing playback first, the "step" transport action for both the
     // button and the . key. The step itself lands in this frame's _Process, where every other
     // sim consumer takes the same one step.
     private void StepFrame()
@@ -416,7 +416,7 @@ public sealed partial class AnimLab : Node
 
     // Repositions the effect/crash stage a fixed offset in front of the camera on a
     // `fresh` Play (so the effect sits where you are looking), and leaves it put on
-    // Restart — so a seeded replay lands in exactly the same spot. Returns it as the fallback anchor
+    // Restart, so a seeded replay lands in exactly the same spot. Returns it as the fallback anchor
     // for a still-placeless def.
     private Node3D StageAnchor(bool fresh)
     {
@@ -431,14 +431,14 @@ public sealed partial class AnimLab : Node
 
     // Restart = AnimRuntime.Stop (tear down the def's live
     // motions/puffers/lights/sounds) → re-pin the RNG → re-apply RESET_STATE → Start, playhead
-    // back at step 0 — the visually-identical replay the fixed clock + seed exist for.
+    // back at step 0, the visually-identical replay the fixed clock + seed exist for.
     private void Restart()
     {
         if (_defName == null)
         {
             return;
         }
-        // freshAnchor:false — reuse the staging dummy's snapshot so a placeless def's replay is
+        // freshAnchor:false, reuse the staging dummy's snapshot so a placeless def's replay is
         // spatially identical, matching the seeded + fixed-dt clock's visual-identity contract.
         Play(_defName, _timelineDef, freshAnchor: false);
     }
@@ -460,7 +460,7 @@ public sealed partial class AnimLab : Node
     // ---- selection follow ----------------------------------------------------------------------
 
     // The lab's camera tracks the shared selection's current rung: a fresh click frames and orbits
-    // what was hit, and a PgUp/PgDn ladder walk re-aims onto the wider object WITHOUT re-framing —
+    // what was hit, and a PgUp/PgDn ladder walk re-aims onto the wider object WITHOUT re-framing,
     // re-framing on every rung would fling the camera out to the whole zeppelin's radius mid-walk.
     private void OnSelectionChanged(SelectionService selection, bool fresh)
     {
@@ -558,7 +558,7 @@ public sealed partial class AnimLab : Node
     }
 
     // Frames the camera on the played def and follows its anchor (or first resolved
-    // target node — AnimRuntime.FrameTarget), so a moving def (the train) stays in
+    // target node, AnimRuntime.FrameTarget), so a moving def (the train) stays in
     // view until the user takes the camera somewhere with WASD/QE.
     private void FrameOn(List<(AnimDefinition Def, Node3D? Anchor)> started)
     {
@@ -645,7 +645,7 @@ public sealed partial class AnimLab : Node
     private void BuildPicker(CanvasLayer layer)
     {
         // Anchored top-RIGHT (inside a full-rect Control, growing left) so it never collides with
-        // the status/transport at top-left — the same layout the livery lab uses.
+        // the status/transport at top-left, the same layout the livery lab uses.
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.85f) };
@@ -696,7 +696,7 @@ public sealed partial class AnimLab : Node
     }
 
     // Rebuilds the ItemList from the filter text. Matches a case-insensitive substring against
-    // the anim name, the activation and the anchor name — the three columns each row shows.
+    // the anim name, the activation and the anchor name, the three columns each row shows.
     private void RefreshList()
     {
         if (_list == null)
@@ -710,7 +710,7 @@ public sealed partial class AnimLab : Node
         {
             var d = _program.Defs[i];
             string anim = d.AnimName ?? "";
-            string row = $"{(anim.Length > 0 ? anim : "(no anim-name)")}   ·  {d.Activation}   ·  @{(d.Name.Length > 0 ? d.Name : "—")}";
+            string row = $"{(anim.Length > 0 ? anim : "(no anim-name)")}   ·  {d.Activation}   ·  @{(d.Name.Length > 0 ? d.Name : ", ")}";
             if (q.Length > 0
                 && !anim.Contains(q, StringComparison.OrdinalIgnoreCase)
                 && !d.Activation.Contains(q, StringComparison.OrdinalIgnoreCase)
@@ -719,7 +719,7 @@ public sealed partial class AnimLab : Node
                 continue;
             }
             int idx = _list.AddItem(row);
-            // A def with no ANIMATION_NAME can't be started through Play — dim it and note why.
+            // A def with no ANIMATION_NAME can't be started through Play, dim it and note why.
             if (anim.Length == 0)
             {
                 _list.SetItemDisabled(idx, true);

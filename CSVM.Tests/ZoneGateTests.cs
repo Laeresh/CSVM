@@ -96,13 +96,13 @@ public class ZoneGateTests
         {
             uint mask = ZoneGate.CullMask(everything, state);
             Assert.Equal(ZoneGate.LayerFor(state), mask & ZoneGate.LayerBand);
-            // Every bit outside the band — the default layer 1 and the per-player band — survives
+            // Every bit outside the band, the default layer 1 and the per-player band, survives
             // untouched, which is what lets the gate compose with splitscreen instead of fighting it.
             Assert.Equal(outside, mask & ~ZoneGate.LayerBand);
         }
 
         // Applying it twice in a row (Tick writes it every frame) is idempotent, and a state
-        // change is reversible — the band is rebuilt from scratch, never OR-ed into.
+        // change is reversible, the band is rebuilt from scratch, never OR-ed into.
         uint two = ZoneGate.CullMask(ZoneGate.CullMask(everything, 2), 2);
         Assert.Equal(ZoneGate.CullMask(everything, 2), two);
         Assert.Equal(ZoneGate.CullMask(everything, 1), ZoneGate.CullMask(two, 1));

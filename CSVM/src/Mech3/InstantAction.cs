@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>One <c>groupN</c> wave: how many enemies, and the militia/aircraft/skill they are
-/// authored with. <c>EnemySkill</c> is decoded but read by nothing on this path — a wave's
+/// authored with. <c>EnemySkill</c> is decoded but read by nothing on this path, a wave's
 /// actual pilot stats are rolled from a 5-row table instead, and the skill string's only real
 /// effect is a global difficulty multiplier for the one spawn that used it, sourced from the
 /// SETUP SCREEN rather than this key (docs/formats/instant-action.md "What novice/veteran/ace
@@ -15,7 +15,7 @@ namespace CSVM.Mech3;
 /// <see cref="EnemyGeneratorDef.Capacity"/> gives its own unresolved key. <c>EnemyAccentId</c>
 /// IS read by the wave parser and IS this wave's voice, subject to
 /// the decoded re-roll: an authored 12 (the wingman accent range's own base) becomes
-/// <c>12 + rand() % 5</c> at spawn, not at parse time — <see cref="Session.InstantActionRuntime.ResolveWaveAccentId"/>.</summary>
+/// <c>12 + rand() % 5</c> at spawn, not at parse time, <see cref="Session.InstantActionRuntime.ResolveWaveAccentId"/>.</summary>
 public readonly record struct InstantActionWave(
     int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill, int EnemyAccentId);
 
@@ -67,10 +67,10 @@ public static class InstantAction
     /// (<c>FUN_00458d00</c>'s per-wave reset, read through <see cref="MakeWave"/> with nothing to
     /// overlay). What an unconfigured launchscreen wizard wave slot resolves to, so a wizard wave
     /// left at 0 enemies and a JSON file's own omitted/null <c>groupN</c> produce byte-identical
-    /// <see cref="InstantActionWave"/> values — one build path for both.</summary>
+    /// <see cref="InstantActionWave"/> values, one build path for both.</summary>
     public static InstantActionWave EmptyWave => MakeWave(null, forceZero: false);
 
-    /// <summary>What a <c>mission_type</c> is called on screen (<c>IDS_IA_MISSIONTYPE</c>, 3660) —
+    /// <summary>What a <c>mission_type</c> is called on screen (<c>IDS_IA_MISSIONTYPE</c>, 3660),
     /// the wizard's own four labels, so the launchscreen, the load screen and the wrap-up board all
     /// name a mission the same way. An unknown key (a hand-authored <c>--ia=</c> file) reads back
     /// verbatim rather than throwing: it is a label, not a lookup anything branches on.</summary>
@@ -85,13 +85,13 @@ public static class InstantAction
 
     /// <summary>The gamez node an Instant Action display name (an
     /// <see cref="InstantActionDef.PlayerPlane"/>/<see cref="InstantActionDef.AcePlane"/> value,
-    /// e.g. <c>"Bloodhawk"</c>) builds — null when the name matches none of the eleven airframes
+    /// e.g. <c>"Bloodhawk"</c>) builds, null when the name matches none of the eleven airframes
     /// (a malformed <c>--ia=</c> file).</summary>
     public static string? PlaneNodeFor(string displayName) =>
         PlaneNodes.TryGetValue(displayName, out var node) ? node : null;
 
     /// <summary>Loads one chapter's shipped <c>ia.zrd.json</c> (the mission's own zrdr scope,
-    /// e.g. <c>&lt;chapter&gt;/IA1/zrdr</c> — only IA1 folders carry one). Throws
+    /// e.g. <c>&lt;chapter&gt;/IA1/zrdr</c>, only IA1 folders carry one). Throws
     /// <see cref="FileNotFoundException"/> when the mission has no such file.</summary>
     public static InstantActionDef Load(string missionZrdrPath)
     {
@@ -114,10 +114,10 @@ public static class InstantAction
     }
 
     /// <summary>Every field at its built-in default (<see cref="BuildDef"/>'s own reset, no key
-    /// overlaid) — an empty <c>{}</c> object read through <see cref="LoadFromJson"/> would produce
+    /// overlaid), an empty <c>{}</c> object read through <see cref="LoadFromJson"/> would produce
     /// the same record; this skips the JSON round-trip. The launchscreen wizard's fallback
     /// when an Instant Action environment's own <c>ia.zrd.json</c>
-    /// somehow fails to load — should not happen for the seven environments Instant Action offers,
+    /// somehow fails to load, should not happen for the seven environments Instant Action offers,
     /// kept for the same reason <c>--ia=</c>'s own load catches and warns rather than crashing.</summary>
     public static InstantActionDef Defaults() => BuildDef(ZrdrDict.FromAlternating(new List<object?>()));
 
@@ -227,7 +227,7 @@ public static class InstantAction
                 int v = (int)f;
                 return v is >= 1 and <= 9 ? v : (int?)null;
             }
-            return null; // an authored-but-malformed single slot — left unset, not guessed
+            return null; // an authored-but-malformed single slot, left unset, not guessed
         }
 
         return new AiSkillVector
@@ -349,28 +349,28 @@ public sealed class InstantActionDef
     public required IReadOnlyList<string> DisallowMissions { get; init; }
 
     /// <summary>The player's aircraft, the UI's singular display name (<c>"Bloodhawk"</c>, not
-    /// <c>vehicle.json</c>'s def name) — defaults to <c>"Devastator"</c> when unauthored (C2B
+    /// <c>vehicle.json</c>'s def name), defaults to <c>"Devastator"</c> when unauthored (C2B
     /// ships neither this nor <see cref="NumWingmen"/>; the setup screen supplies both at retail
     /// runtime, which this reader does not model).</summary>
     public required string PlayerPlane { get; init; }
 
     /// <summary>Clamped to 0–5, and forced to 0 whenever <see cref="MissionType"/> is
-    /// <c>dogfight_ace</c> — the ace duel is solo in the data, not only in the UI.</summary>
+    /// <c>dogfight_ace</c>, the ace duel is solo in the data, not only in the UI.</summary>
     public required int NumWingmen { get; init; }
 
-    /// <summary>The wingmen's aircraft, the UI's singular display name — defaults to
+    /// <summary>The wingmen's aircraft, the UI's singular display name, defaults to
     /// <c>"Devastator"</c> when unauthored, same as
     /// <see cref="PlayerPlane"/>/<see cref="AcePlane"/>.</summary>
     public required string WingmanPlane { get; init; }
 
-    /// <summary>Waves 1 to 4, in order (<c>group1</c>…<c>group4</c>) — always 4 entries; a wave
+    /// <summary>Waves 1 to 4, in order (<c>group1</c>…<c>group4</c>), always 4 entries; a wave
     /// with no <c>groupN</c> key at all (or an authored <c>null</c>) reads as the built-in
     /// per-wave defaults with 0 enemies. Every <see cref="InstantActionWave.NumEnemies"/> is
     /// forced to 0 alongside <see cref="NumWingmen"/> on <c>dogfight_ace</c>.</summary>
     public required IReadOnlyList<InstantActionWave> Waves { get; init; }
 
     /// <summary>Which of the three <c>*_zeppelin</c> node names below is in play
-    /// (<c>cargo</c>/<c>passenger</c>/<c>military</c>); null when unauthored — the built-in
+    /// (<c>cargo</c>/<c>passenger</c>/<c>military</c>); null when unauthored, the built-in
     /// defaults table gives no decoded fallback for this key, unlike the node names themselves.</summary>
     public string? ZeppelinType { get; init; }
 
@@ -386,7 +386,7 @@ public sealed class InstantActionDef
 
     public required string AceSkill { get; init; }
 
-    /// <summary>The ace's nine pilot-skill modifiers, in <c>vehicle.json</c>'s stat order — an
+    /// <summary>The ace's nine pilot-skill modifiers, in <c>vehicle.json</c>'s stat order, an
     /// INFERRED field order (docs/formats/spawns.md "ace_stats"): every shipped chapter carries
     /// nine 9s, so nothing in the data can settle it.</summary>
     public required AiSkillVector AceStats { get; init; }
@@ -397,12 +397,12 @@ public sealed class InstantActionDef
     /// carries one; only reachable via a hand-authored <c>--ia=</c> file).</summary>
     public PaintScheme? AceLivery { get; init; }
 
-    /// <summary>INVENTED — no <c>ia.json</c> key carries this. Default 1 is the faithful
+    /// <summary>INVENTED, no <c>ia.json</c> key carries this. Default 1 is the faithful
     /// one-life run; N gives N-1 respawns on
     /// the existing 3s <c>VersusRespawnDelay</c> path; 0 is unlimited. Per pilot, not shared.</summary>
     public int Lives { get; init; } = 1;
 
-    /// <summary>INVENTED — no <c>ia.json</c> key carries this. The fit the wizard's Wingmen step
+    /// <summary>INVENTED, no <c>ia.json</c> key carries this. The fit the wizard's Wingmen step
     /// chose, covering every wingman at once as the original's Player/Wingman radio does, or null
     /// for the stock fit. Not per wingman: one choice, one flight.</summary>
     public Flight.LoadoutChoice? WingmanLoadout { get; init; }

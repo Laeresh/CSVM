@@ -11,7 +11,7 @@ namespace CSVM.Flight;
 /// Per-mission atmosphere from the mission's own <c>weather.json</c>, a zrdr reader. Feeds the
 /// remake's distance fog, the cloud-band whiteout, and the precipitation field. Decode and reader
 /// layout: docs/formats/weather.md and docs/formats/weather/atmosphere.md.
-/// The zone names are per chapter, not a fixed pair — see <see cref="ResolveZone(string)"/> for
+/// The zone names are per chapter, not a fixed pair, see <see cref="ResolveZone(string)"/> for
 /// the fallback this requires. <see cref="CameraWeatherState"/> is the binary's per-frame camera
 /// zone 1/2/3, published each frame by <c>WeatherRig.Tick</c> but consumed by nothing yet.
 /// </summary>
@@ -42,7 +42,7 @@ public sealed class WeatherState
         DefaultDiffuse, DefaultAmbient, Colors.White, Colors.White);
 
     private readonly Dictionary<string, ZoneWeather> _zones = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<string> _zoneNames = new(); // file order — ResolveZone's fallback order
+    private readonly List<string> _zoneNames = new(); // file order, ResolveZone's fallback order
 
     public enum PrecipKind { Rain, Snow }
 
@@ -67,12 +67,12 @@ public sealed class WeatherState
 
     /// <summary>The whiteout core's BOTTOM edge: camera altitude at or above this is camera state
     /// 2 (see <see cref="CameraWeatherState"/>, which guards it). Deliberately a third spelling,
-    /// distinct from <see cref="CloudBandCentre"/> and <see cref="CloudBottom"/> — the original
+    /// distinct from <see cref="CloudBandCentre"/> and <see cref="CloudBottom"/>, the original
     /// computes state-2 and the deck-regime flip as two separate thresholds.</summary>
     public float CloudCoreBottom => CloudBandCentre - (CloudThickness * 0.5f);
 
     /// <summary>The cloud band's own colours from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
-    /// when the mission carries them (integer-RGB in the data — normalized by
+    /// when the mission carries them (integer-RGB in the data, normalized by
     /// <see cref="ParseColor"/>). Null when absent (C1/IA1 has neither). Consumed by
     /// <see cref="WhiteoutColor"/>, which documents what they are and are not.</summary>
     public Color? CloudTopColor { get; private set; }
@@ -90,7 +90,7 @@ public sealed class WeatherState
 
     public float WindRandomAccel { get; private set; }
 
-    /// <summary>The gust's turn rate in DEGREES per second, exactly as the key spells it — the
+    /// <summary>The gust's turn rate in DEGREES per second, exactly as the key spells it, the
     /// binary converts on the way into its global (multiplying by 0.017453292), and so does
     /// <see cref="CSVM.Effects.WorldWind"/>, which is where the conversion belongs.</summary>
     public float WindRandomAngVel { get; private set; }
@@ -99,7 +99,7 @@ public sealed class WeatherState
     public PrecipData? Precip { get; private set; }
 
     /// <summary>The zones this mission's weather.json actually defines, lowercased and in file
-    /// order ("zone1", "zone2" — or "zone1", "zone3" in C5). The <c>SW_*</c> software-renderer
+    /// order ("zone1", "zone2", or "zone1", "zone3" in C5). The <c>SW_*</c> software-renderer
     /// twins are excluded. Empty only if the file carries no <c>ZONE*</c> block at all.</summary>
     public IReadOnlyList<string> ZoneNames => _zoneNames;
 
@@ -170,7 +170,7 @@ public sealed class WeatherState
     /// on its own so a mission with no weather.json still gets the correction. Fires only when the
     /// request is one of the horizon's zones, builds nothing, and exactly one sibling builds
     /// something; every other shape keeps the request. ⚠ Never take the horizon's first zone as a
-    /// C5 fallback instead — see docs/formats/weather.md on the two orders disagreeing.</summary>
+    /// C5 fallback instead, see docs/formats/weather.md on the two orders disagreeing.</summary>
     public static string PreferPopulatedHorizonZone(string zone, IReadOnlyList<HorizonZone> horizonZones)
     {
         bool requestedIsAZone = false;
@@ -189,7 +189,7 @@ public sealed class WeatherState
             if (!z.BuildsGeometry)
                 continue;
             if (only != null)
-                return zone;   // more than one candidate — not decidable from the geometry
+                return zone;   // more than one candidate, not decidable from the geometry
             only = z.Name;
         }
         return only ?? zone;
@@ -229,16 +229,16 @@ public sealed class WeatherState
     }
 
 
-    /// <summary>One zone's weather ("zone1"/"zone2"/"zone3") — fog, world light and sun bearing;
+    /// <summary>One zone's weather ("zone1"/"zone2"/"zone3"), fog, world light and sun bearing;
     /// <see cref="NoFog"/> if the zone is absent. Callers should pass a <see cref="ResolveZone"/>
     /// result rather than a raw request.</summary>
     public ZoneWeather Zone(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
 
     /// <summary>Whiteout opacity 0..1 at a given altitude: a symmetric trapezoid across the
     /// cloud band (user-observed in-game). Clear sight (0) at BOTTOM and TOP, ramping
-    /// linearly to a fully-opaque core (1 — the plane is no longer visible) that is THICKNESS
+    /// linearly to a fully-opaque core (1, the plane is no longer visible) that is THICKNESS
     /// deep and centred on the band's midpoint. THICKNESS is the depth of that opaque core, not
-    /// an edge transition — so C1/IA1 (970–1124, ±30) is clear at 970/1124 and total in
+    /// an edge transition, so C1/IA1 (970–1124, ±30) is clear at 970/1124 and total in
     /// 1032–1062, with linear ramps between.</summary>
     public float WhiteoutAmount(float altitude)
     {
@@ -299,7 +299,7 @@ public sealed class WeatherState
         => zone.List(key) is { Count: >= 1 } list && list[0] is float v ? v : fallback;
 
     // The zone's `SUNLIGHT_ORIENTATION` as Godot euler RADIANS, ready to assign
-    // straight to a DirectionalLight3D's `Rotation` — see
+    // straight to a DirectionalLight3D's `Rotation`, see
     // ZoneWeather.SunOrientation for why no axis conversion is needed. The data is
     // degrees; the binary multiplies by the same 0.017453292. Absent (or short) → the binary's
     // own default, pitch −π/2: straight down.
@@ -309,7 +309,7 @@ public sealed class WeatherState
             || so[0] is not float pitch || so[1] is not float yaw)
             return new Vector3(-Mathf.Pi * 0.5f, 0f, 0f);
         // ROLL is optional in shape but present install-wide (always 0). A directional light is
-        // rotationally symmetric about its own beam, so roll cannot change the shading — it is
+        // rotationally symmetric about its own beam, so roll cannot change the shading, it is
         // carried anyway rather than dropped, so the record holds what the file holds.
         float roll = so.Count >= 3 && so[2] is float r ? r : 0f;
         return new Vector3(Mathf.DegToRad(pitch), Mathf.DegToRad(yaw), Mathf.DegToRad(roll));
@@ -388,7 +388,7 @@ public sealed class WeatherState
     // A weather.json colour triple, normalized to 0..1. Two encodings coexist: normalized
     // floats (C1 FOG_COLOR 0.69) and integer RGB (C4 FOG_COLOR [192,192,192]; every
     // TOP_COLOR/BOTTOM_COLOR). Any component strictly > 1 means the whole triple is 0–255 and
-    // is divided by 255 — verified unambiguous across all weather.json (the only 1.0-bearing
+    // is divided by 255, verified unambiguous across all weather.json (the only 1.0-bearing
     // colour is a float sky-fog [0.80,0.84,1.0], whose max is exactly 1, so it stays a float).
     // These are DX7 sRGB framebuffer values; GameSession converts them to linear for the shader.
     private static Color? ParseColor(List<object?>? list)
@@ -401,7 +401,7 @@ public sealed class WeatherState
 
     // The precipitation block (TYPE SNOW|RAIN, COLOR, WIND_DIR, WIND_VEL, GRAVITY, [PARTICLES],
     // ALPHA_GRADIENT) sits at the END of the root dict, after SHADOW_ANGLES, as bare-scalar
-    // top-level siblings — so it's walked raw from `inner` (like CLOUD_COVER/WIND), not via the
+    // top-level siblings, so it's walked raw from `inner` (like CLOUD_COVER/WIND), not via the
     // dict (which drops a key's value when it's a bare scalar rather than a list). The keys are
     // unique at inner's top level (FOG_COLOR/SUNLIGHT_* live inside the nested zone sub-lists,
     // which the flat walkers never descend into), so each first-match is the right one.

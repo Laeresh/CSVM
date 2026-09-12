@@ -6,7 +6,7 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// One <c>shakes.json</c> oscillator source: the law (frequency, damping, waveform) plus one
-/// magnitude term whose kind varies by source — a per-event <see cref="MagnitudeFactor"/>
+/// magnitude term whose kind varies by source, a per-event <see cref="MagnitudeFactor"/>
 /// (fire_bullet × caliber, the impact trio × their event quantity), a speed law
 /// (<see cref="MagnitudeQuotient"/> + <see cref="MinSpeed"/>, high_speed only), or an absolute
 /// <see cref="Magnitude"/> (nitro only). See
@@ -25,13 +25,13 @@ public sealed class ShakeSource
     public float? MagnitudeQuotient;  // magnitude = speed / quotient (high_speed)
     public float? Magnitude;          // absolute magnitude (nitro)
 
-    /// <summary>Keys this reader does not map — empty for every source in this install; a
+    /// <summary>Keys this reader does not map, empty for every source in this install; a
     /// non-empty list means the data grew a key and the reader must learn it.</summary>
     public IReadOnlyList<string> UnhandledKeys = Array.Empty<string>();
 }
 
 /// <summary>
-/// Typed reader over the shared <c>shakes.zrd.json</c> — the six authored shake-oscillator
+/// Typed reader over the shared <c>shakes.zrd.json</c>, the six authored shake-oscillator
 /// sources. Modelled on <see cref="WeaponDefs"/>: load once, index by source id, named
 /// accessors for the sources the runtime wires.
 /// </summary>

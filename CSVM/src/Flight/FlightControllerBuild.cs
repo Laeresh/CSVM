@@ -14,7 +14,7 @@ internal sealed class FlightControllerBuild
     public bool IsHumanPiloted;
     public AiPilot? Pilot;
 
-    /// <summary>When set, replaces keyboard input — used by automated screenshot runs. Each
+    /// <summary>When set, replaces keyboard input, used by automated screenshot runs. Each
     /// segment holds its input for its duration (seconds of sim time); the last segment holds
     /// forever, and a respawn restarts the sequence (deterministic runs). Such runs are
     /// unattended, so a crash auto-respawns after a short pause.</summary>
@@ -41,8 +41,8 @@ internal sealed class FlightControllerBuild
     public Func<IReadOnlyList<Vector3>>? HumanPositions;
     /// <summary>⚠ Nullable because null and empty are DIFFERENT bindings downstream
     /// (<see cref="FlightController.PadDevices"/>): null reads every connected pad, empty reads
-    /// none. The default stays empty so a builder that says nothing arms nothing — an AI rig
-    /// omitting it must not inherit the player's stick — but a single human has to be able to
+    /// none. The default stays empty so a builder that says nothing arms nothing, an AI rig
+    /// omitting it must not inherit the player's stick, but a single human has to be able to
     /// pass the null through, which a non-nullable field made impossible.</summary>
     public int[]? PadDevices = Array.Empty<int>();
     public bool UseKeyboard;

@@ -122,7 +122,7 @@ public sealed class HitchMonitor
     /// <summary>How many frames have tripped the trigger since the process started.</summary>
     public int HitchCount { get; private set; }
 
-    /// <summary>How many frames <see cref="Tick"/> has been fed so far — the same counter
+    /// <summary>How many frames <see cref="Tick"/> has been fed so far, the same counter
     /// <see cref="HitchRecord.Frame"/> reports, exposed one call early so a caller can act on
     /// "the next <see cref="Tick"/> will be frame N" (the <c>--hitch-inject=</c> synthetic
     /// stall). Never reset by <see cref="Rearm"/>: it counts from process start,
@@ -145,7 +145,7 @@ public sealed class HitchMonitor
     /// The frame-time strip sizes its own buffer off this once, at build.</summary>
     public int RingFrames => _ringFrames;
 
-    /// <summary>Copies the live ring buffer into <paramref name="destination"/>, oldest first —
+    /// <summary>Copies the live ring buffer into <paramref name="destination"/>, oldest first,
     /// unlike <see cref="Last"/>'s <c>Ring</c>, which only advances on a trigger, this reflects
     /// every <see cref="Tick"/>. A shorter <paramref name="destination"/> gets the most recent
     /// that many entries, not the oldest. Returns how many entries were written.</summary>

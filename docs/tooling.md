@@ -1,10 +1,10 @@
-# Tooling — the extraction pipeline, the launch scripts, and the fork
+# Tooling, the extraction pipeline, the launch scripts, and the fork
 
 How game files become `extracted/`, how the game gets launched, and how the mech3ax fork is
 maintained. For *which* archive types extract and how far each is validated, see
 [extraction](formats/extraction.md); for the engine's own flags, [cli.md](cli.md).
 
-## `extracted/` — the extraction workdir (git-ignored)
+## `extracted/`, the extraction workdir (git-ignored)
 
 Populated by `ExtractAssets.ps1`, mirroring the game's own ZBD folder structure: top-level
 `planes.zip` (unzbd of `planes.zbd`), `zrdr.zip`, `soundsh.zip`/`soundsl.zip`, `interp.json`,
@@ -27,7 +27,7 @@ differ in pixel content, and the tier copies are richer, never worse (see
 archives plus `ui_strings.json`. `PatternLibrary` reads the paint patterns out of it (`--rof=`,
 default `extracted/rof`).
 
-## `ExtractAssets.ps1` (repo root) — the ZBD bulk extractor
+## `ExtractAssets.ps1` (repo root), the ZBD bulk extractor
 
 Walks `CrimsonSkiesGame/ZBD` and runs `unzbd cs <mode>` on every ZBD with the right mode for its
 type, writing to the mirrored relative path under `extracted/`, basename kept:
@@ -56,7 +56,7 @@ change that invalidates old extractions.
 outside it: `unzbd cs messages` into `<Dest>\messages.json`, skipped with a note when the DLL is
 absent, in which case the engine falls back to raw `MSG_*` keys.
 
-## `ExtractRof.ps1` (repo root) — the non-ZBD half
+## `ExtractRof.ps1` (repo root), the non-ZBD half
 
 Covers the `.rof` UI archives (`GOSDATA/ASSETS/crimson.rof` plus the `crimptch.rof` patch overlay)
 and the `langui.dll`/`language.dll` string tables, all into `extracted/rof/`. It writes each member
@@ -75,7 +75,7 @@ shared `VERSION.json` one level above `-Dest`, and skips that stamp with a note 
 follows the canonical `…\extracted\rof` layout. Formats: [rof](formats/rof.md),
 [strings](formats/strings.md), [menu layout](formats/menu-layout.md).
 
-## `packaging/Extract.cmd` and `packaging/Extract.ps1` — the recipient-facing extraction
+## `packaging/Extract.cmd` and `packaging/Extract.ps1`, the recipient-facing extraction
 
 Both ship in the release zip (`packaging/MANIFEST.md`) and neither is used in the dev tree.
 `Extract.cmd` is the half a recipient double-clicks: it runs `Extract.ps1` beside it with
@@ -94,16 +94,16 @@ reticle loaders read loose PNGs there.
 
 ## Launch scripts
 
-**`RunGame.ps1` — the play entry point.** `dotnet build`, then Godot with **no user args**, so the
+**`RunGame.ps1`, the play entry point.** `dotnet build`, then Godot with **no user args**, so the
 launchscreen (`src/UI/LaunchMenu.cs`, Mode → Chapter → Plane) shows. Args are forwarded verbatim,
 so a content arg (`--fly`/`--stunt`/`--plane=`/`--chapter=`/`--screenshot=`) bypasses it.
 
-**`RunDev.ps1` — the dev helper**, same build step but with console prompts: no args gives
+**`RunDev.ps1`, the dev helper**, same build step but with console prompts: no args gives
 interactive menus (plane roster, chapter) and then `--fly`, flight flags prompt for what is
 missing, and the static views (`--plane=`, `--chapter=`, `--damage=`) pass through promptless
 apart from `--damage=`'s own plane prompt.
 
-**`RunTests.ps1` — the verification entry point.** One command, one summary block, one exit code.
+**`RunTests.ps1`, the verification entry point.** One command, one summary block, one exit code.
 Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 
 | Stage | Runs / reads its verdict from / fails on |
@@ -266,7 +266,7 @@ stamp; the Windows export preset stamps it into the exe's file and product versi
 whose Properties pane still names Godot's own template); and `ExportRelease.ps1` reads the key back
 to name the zip. The script reads the stamp off the exported exe afterwards and throws if it is not
 the version it started from, since nothing else about a missing stamp is visible. ⚠ The script
-snapshots and restores `project.godot` around the export and is its only writer — the version is
+snapshots and restores `project.godot` around the export and is its only writer, the version is
 read from that file, never written into it, and never stamped into the preset during a run.
 The zip is built through `System.IO.Compression`, since `Compress-Archive` reports success after
 writing nothing when a single file is locked.
@@ -462,7 +462,7 @@ via `EnumWindows` (SHELL-13). Every `RunTests.ps1` stage launches through its pr
 `Invoke-Godot` helper, which uses the non-console binary and redirects both streams to
 `<its --log-file>.out` / `.err` (SHELL-10).
 
-**`RunProbe.ps1` — the same launch for ad-hoc runs.** A hand-launched probe would otherwise inherit
+**`RunProbe.ps1`, the same launch for ad-hoc runs.** A hand-launched probe would otherwise inherit
 both the window flash and the console scribble a bare `& $GodotExe …` sprays over the calling
 terminal (SHELL-10): **never invoke the Godot binary directly for a scripted run, go through
 `.\RunProbe.ps1 <user args>`.** It forwards every argument verbatim (no build step, so build

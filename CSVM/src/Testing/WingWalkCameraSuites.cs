@@ -510,7 +510,7 @@ internal static class WingWalkCameraSuites
     private static float RollDegOf(Basis basis) =>
         Mathf.RadToDeg(basis.Orthonormalized().GetEuler(EulerOrder.Yxz).Z);
 
-    // The aeroplane's own parts by their gamez name — what the capture's `body`/`head`/`hatch`
+    // The aeroplane's own parts by their gamez name, what the capture's `body`/`head`/`hatch`
     // events have to reach, since the chapter's copy of this vehicle is never placed.
     private static Dictionary<string, Node3D> PartsOf(Node3D rig)
     {

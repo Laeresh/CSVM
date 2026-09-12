@@ -21,21 +21,15 @@ public sealed class ChapterCinema
     /// (docs/formats/campaign-sequence.md).</summary>
     public const int MissionsPerChapter = 5;
 
-    private readonly Play _play;
+    private readonly CinemaPlay _play;
 
     private int _played;
 
     /// <summary>Builds a chapter cinema over the call that puts one on screen.</summary>
-    public ChapterCinema(Play play) => _play = play;
+    public ChapterCinema(CinemaPlay play) => _play = play;
 
-    /// <summary>How a cinema reaches the screen: the film's name, the continuation to run on the
-    /// frame it stops (played out or skipped), and the presses that end it early.
-    /// <c>Session/Launcher.cs</c>'s <c>PlayCinema</c> has this shape; a suite hands over a
-    /// stand-in that records what it was asked for.</summary>
-    public delegate void Play(string name, Action then, CinemaSkip skip);
-
-    /// <summary>The chapter last handed to <see cref="Play"/>, or 0 when none has been. It is what
-    /// keeps a second visit to the same cabin from replaying the film.</summary>
+    /// <summary>The chapter last handed to <see cref="CinemaPlay"/>, or 0 when none has been. It
+    /// is what keeps a second visit to the same cabin from replaying the film.</summary>
     public int ChapterPlayed => _played;
 
     /// <summary>The story chapter, 1 to 5, a campaign position belongs to, or 0 for a position the
@@ -72,25 +66,7 @@ public sealed class ChapterCinema
 
         // ⚠ Do not unify these presses with the closing cinema's. Space and Return skip a chapter
         // cinema and do nothing on the closing one, which the two scripts author separately.
-        _play(NameOf(chapter), Once(showCabin), CinemaScreen.ChapterKeys);
+        _play(NameOf(chapter), CinemaHandoff.Once(showCabin), CinemaScreen.ChapterKeys);
         return true;
-    }
-
-    // ⚠ Do not hand the continuation over unwrapped. A skip can land on the frame the cinema plays
-    // out and both paths end the film, which is what the original's own EC latch stands against, so
-    // the cabin must open once however many times the cinema says it stopped.
-    private static Action Once(Action handoff)
-    {
-        bool ran = false;
-        return () =>
-        {
-            if (ran)
-            {
-                return;
-            }
-
-            ran = true;
-            handoff();
-        };
     }
 }

@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The parity ledger: every mechanism and every envelope row, on every stock airframe, in exactly
 /// one of three classes. Decoded is the executable's or the data's own value; exception is a named
-/// product decision; unsupported is not ported. There is no conflict class — a footage figure that
+/// product decision; unsupported is not ported. There is no conflict class, a footage figure that
 /// disagrees with a traced mechanism is discarded and carried as an annotation.
 /// This class both CHECKS the ledger (a plant constant or a probe row with no class fails) and
 /// GENERATES it, to <c>CSVM_LEDGER_OUT</c>, which is what docs/org/flightModel.md publishes.

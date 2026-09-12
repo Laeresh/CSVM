@@ -22,7 +22,7 @@ public sealed partial class LiveryLab : Node
 
     private readonly PlaneBuilder _builder;
     private readonly IReadOnlyList<PaintScheme> _catalog;
-    // The patterns THIS aircraft has masks for — the same list the original's paint UI offers
+    // The patterns THIS aircraft has masks for, the same list the original's paint UI offers
     // per plane (the Fury has four, the Balmoral two). Stepping is over this, not the
     // vehicle.json catalog, because a pattern the plane lacks would paint nothing.
     private readonly IReadOnlyList<string> _patterns;
@@ -59,7 +59,7 @@ public sealed partial class LiveryLab : Node
 
     /// <summary>--debug-livery[=N]: open the panel at launch (it is hidden by default so an
     /// unadorned --viewer screenshot stays byte-identical) and, with N, step the pattern N
-    /// times first — so one scripted screenshot exercises the stepper, the repaint and the
+    /// times first, so one scripted screenshot exercises the stepper, the repaint and the
     /// widget sync, not just the layout. Same role as --debug-scoreboard / --debug-join.</summary>
     public bool DebugShow { get; init; }
     public int DebugPatternSteps { get; init; }
@@ -110,7 +110,7 @@ public sealed partial class LiveryLab : Node
     }
 
     // Position of a scheme's pattern in this aircraft's pattern list. Matches on
-    // either spelling — vehicle.json says `player_fortune`, the archive folder is `FORTUNE`.
+    // either spelling, vehicle.json says `player_fortune`, the archive folder is `FORTUNE`.
     private int IndexOfPattern(PaintScheme scheme)
     {
         for (int i = 0; i < _patterns.Count; i++)
@@ -133,7 +133,7 @@ public sealed partial class LiveryLab : Node
     // ---- edits -------------------------------------------------------------------------
 
     // Steps to the next/previous pattern this aircraft carries and puts on that
-    // squadron's whole livery — colours and decals, not just the mask layout. Switching
+    // squadron's whole livery, colours and decals, not just the mask layout. Switching
     // squadron means switching to their colours; stepping the Bloodhawk's three gives you
     // Fortune Hunters red, Blake blue-gray and Hughes yellow, each with its own logos.
     // A pattern vehicle.json names no colours for (BROADWAY, ITSTAXI) keeps the current
@@ -146,7 +146,7 @@ public sealed partial class LiveryLab : Node
         LoadSquadronLivery();
     }
 
-    // (Re)loads the current pattern's shipped squadron colours and decals — the
+    // (Re)loads the current pattern's shipped squadron colours and decals, the
     // livery as the game's own defs define it. Also the panel's "squadron colours" button,
     // which is how you get back to canonical after dragging the RGB sliders.
     private void LoadSquadronLivery()
@@ -257,7 +257,7 @@ public sealed partial class LiveryLab : Node
         return name != null ? $"{index:00}  {name}" : $"{index:00}  (absent)";
     }
 
-    // The exact CLI arguments that reproduce the current livery — the lab's output.
+    // The exact CLI arguments that reproduce the current livery, the lab's output.
     // A pattern is emitted only when the colours and decals still match it verbatim;
     // otherwise the explicit colour/decal overrides carry the whole scheme.
     private string CliArgs()
@@ -265,7 +265,7 @@ public sealed partial class LiveryLab : Node
         if (_scheme == null)
             return "--paint=none";
         var s = _scheme;
-        // _patternIndex indexes THIS AIRCRAFT's pattern list, not the vehicle.json catalog —
+        // _patternIndex indexes THIS AIRCRAFT's pattern list, not the vehicle.json catalog,
         // different lists, different lengths. Resolve the catalog entry by name.
         bool clean = _patternIndex >= 0
             && CatalogFor(_patterns[_patternIndex]) is { } canonical
@@ -284,7 +284,7 @@ public sealed partial class LiveryLab : Node
         // viewer did, so every scripted screenshot stays deterministic (and byte-identical).
         // L brings the panel up. The livery itself still applies whether or not it is shown.
         _ui = new CanvasLayer { Layer = 1, Visible = false };
-        // Anchored top-RIGHT so it never collides with the damage lab's top-left panel —
+        // Anchored top-RIGHT so it never collides with the damage lab's top-left panel,
         // --viewer --damage opens both at once.
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);

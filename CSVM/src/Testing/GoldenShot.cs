@@ -8,7 +8,7 @@ namespace CSVM.Testing;
 /// <summary>
 /// The engine half of the golden-image tripwire: reduces a captured frame to one md5 and names the
 /// hardware that drew it.
-/// ⚠ Hash the raw pixel buffer (<see cref="Image.GetData"/>), never the saved PNG — see GOLD-10 in
+/// ⚠ Hash the raw pixel buffer (<see cref="Image.GetData"/>), never the saved PNG, see GOLD-10 in
 /// docs/verification.md. The adapter travels with the hash so a driver/GPU change reads as a
 /// one-line explanation rather than an unexplained mass failure.
 /// ⚠ The manifest comparison lives in PowerShell, not here: every suite in

@@ -101,9 +101,19 @@ the frame's wall cost, so the scopes and the `frame_ms` they ran inside describe
 site vocabulary, the seeded call sites and the attribution terms a record carries:
 [../org/hitch.md](../org/hitch.md).
 
+## src/Utils/WallCostBank.cs
+One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single
+span, the spans that closed, and a tally carried alongside them (the planes an AI walk stepped).
+`PhysicsTickCost`, `ProcessPassCost` and `AiStepCost` are three instances behind static facades
+that name their own terms and drop the slots their readout does not print, so the drain semantics
+are written once: a close with no open standing banks nothing, a reset drops a half-open span, and
+a span still open at the drain is carried whole into the next window. `WallCostBracket` is the node
+that opens or closes one end of a pair, named from the bank's label and pinned to an extreme of the
+process or the physics priority order.
+
 ## src/Utils/PhysicsTickCost.cs
 The wall cost of one whole Godot physics tick and how many ticks a wall second actually got,
-measured by two `PhysicsTickBracket` nodes pinned to the extremes of the physics priority order so
+measured by two `WallCostBracket` nodes pinned to the extremes of the physics priority order so
 the pair spans every `_PhysicsProcess` callback in the tree. `Take()` drains the window as total
 milliseconds, the worst single tick in it and the tick count; `NominalHz` turns that count into the
 sim seconds a wall second bought, which is what shows a sim running at half speed. Godot's
@@ -111,22 +121,23 @@ sim seconds a wall second bought, which is what shows a sim running at half spee
 `docs/verification.md` PERF-21.
 
 ## src/Utils/ProcessPassCost.cs
-The wall cost of one whole `_Process` pass, measured by two `ProcessPassBracket` nodes pinned to
-the extremes of the process priority order so the pair spans every `_Process` callback in the tree.
+The wall cost of one whole `_Process` pass, measured by two `WallCostBracket` nodes pinned to the
+extremes of the process priority order so the pair spans every `_Process` callback in the tree.
 `Take()` drains the window as total milliseconds, the worst single pass in it and the pass count
 the `--perf` window means over; a caller reading from inside the pass gets the frame in progress in
-its next window instead. `PhysicsTickCost` above is the same shape around the physics tick. Godot's
+its next window instead. `PhysicsTickCost` above is the same bank around the physics tick. Godot's
 `TIME_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-1.
 
 ## src/Utils/AiStepCost.cs
-The wall cost of the session's AI roster walks and how many aircraft they walked, banked by an
-`Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft`. It is the only `--perf`
-term that attributes frame cost to the AI: `proc_ms` and `phys_tick_ms` bracket whichever callback
-the clock mode makes the walk ride, so a plane-count sweep otherwise reads only as a whole-frame
-differential. `Take()` drains the window as total milliseconds, the walk count and the summed plane
-count, and `ai_ms` divides that total by FRAMES rather than walks, since a parent-driven clock runs
-several walks in one rendered frame. Presentation for the same aircraft stays in `proc_ms`.
+The wall cost of the flight roster's AI walks and how many aircraft they walked, banked by an
+`Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft` rather than by bracket
+nodes, since no priority order isolates the walk from the callback it rides. It is the only
+`--perf` term that attributes frame cost to the AI: `proc_ms` and `phys_tick_ms` bracket whichever
+callback the clock mode makes the walk ride, so a plane-count sweep otherwise reads only as a
+whole-frame differential. The plane count rides the bank's tally slot, so `ai_planes` comes off the
+same bracket as `ai_ms`, which divides its total by FRAMES rather than walks.
+
 ## src/Utils/GcTrace.cs
 The `--perf` GC readout: one `[perf] gc` line per ten wall seconds carrying the pause the process
 spent, the collections it spent it in, the bytes allocated, and how many FINALIZABLE objects died,
@@ -187,31 +198,31 @@ itself is written up as a divergence in `docs/architecture/Root.md`.
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
 runs to without it, since a cap only means anything with V-Sync off. `Resolve` layers the sources
 the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the `display.vsync`
-config key, then on; a word outside `DisplayWords.VSyncChoices` reads as never set. `SavedWord`
-holds the `--det` guard, so a deterministic run reads no saved display setting. `Apply` is the one
-place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are called, used by `Launcher`'s
-startup and by its Options apply, and it logs the source that won. The cap is a render rate and
-reaches no simulation. Read `Session/Launcher.cs` next for both call sites.
+config key (true turns it on), then off and uncapped; a word outside `DisplayWords.VSyncChoices`
+reads as never set, and `Default` is the word a never-set VIDEO row shows. `SavedWord` holds the
+`--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
+called, by `Launcher`'s startup and its Options apply, and logs the source that won. The cap is a
+render rate and reaches no simulation. Read `Session/Launcher.cs` next for both call sites.
 
 ## src/Utils/DisplayModeSetting.cs
 The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
 the screen, or exclusive fullscreen. `Resolve` layers the way `VSyncSetting` does with one layer fewer,
-there being no config key: the saved `displayMode` word, then windowed, which is what `project.godot`
-ships; an unknown word reads as never set. `SavedWord` holds the `--det` guard. `Apply` is the one place
-`DisplayServer.WindowSetMode` is called and skips it when the window already stands in that mode. Godot's
-names invert the reading: `Fullscreen` is the borderless window, `ExclusiveFullscreen` the exclusive mode.
-Nothing here touches focus, which `Launcher._Ready` owns (`../verification.md`'s SHELL-13); that startup
-call is skipped for a scripted run, whose hidden window is captured against the pinned viewport.
+there being no config key: the saved `displayMode` word, then borderless; an unknown word reads as never
+set. `SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetMode` is called
+and skips it when the window already stands in that mode. Godot's names invert the reading: `Fullscreen`
+is the borderless window, `ExclusiveFullscreen` the exclusive mode. Nothing here touches focus, which
+`Launcher._Ready` owns (`../verification.md`'s SHELL-13); that startup call is skipped for a scripted run,
+which keeps `project.godot`'s windowed 1280x720 viewport, so the borderless default never reaches a golden.
 
 ## src/Utils/ResolutionSetting.cs
 The window's size. Godot exposes no video-mode list, only a screen's own size, so `Sizes` builds the
-per-screen list as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that size
-and the project default, both always offerable. `Resolve` layers the saved `resolution` over the 1280x720
-`project.godot` ships. A saved size the screen does not offer falls back to that default and never to the
-nearest offered one, since every other option here falls through to its own default and a nearest match
-would hand the player an aspect ratio they did not pick. `SavedWord` holds the `--det` guard. `Apply` is
-the one place `DisplayServer.WindowSetSize` is called; it skips a window that is not windowed, whose size
-the mode owns, and re-centres one it resized, a resize otherwise growing off the screen's bottom-right.
+per-screen `SizeList` as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that
+size, the list's fallback. `Resolve` layers the saved `resolution` over it, so nothing saved runs at the
+screen's own size, which the borderless default fills anyway; a saved size the screen does not offer falls
+back to that size and never to the nearest, since a nearest match would hand the player an aspect ratio
+they did not pick. `Unknown` is the engine-free list, every candidate size over `project.godot`'s 1280x720.
+`SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetSize` is called; it
+skips a window the mode sizes (any but windowed) and re-centres one it resized, a resize growing off-screen.
 
 ## src/Utils/MonitorSetting.cs
 The screen the window sits on. `Screens` labels the machine's screens one per index, "Screen 0 (1920x1080)"
@@ -269,10 +280,10 @@ un-silence a scripted run. The `audio-levels-launch` suite drives that whole lad
 
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
-request → Built-in default, with the caller's availability check applied only after the request is
-picked. `Resolve` never rewrites what `Requested` would answer, so a fallback cannot alter
-`OptionsStore`'s saved value. Presentation names are plain strings; no presentation contract type
-lives here.
+request → the Original default, with the caller's availability check applied only after the request
+is picked, so a machine without the extracted menu data lands on Built-in with a reason. `Resolve`
+never rewrites what `Requested` would answer, so a fallback cannot alter `OptionsStore`'s saved
+value. Presentation names are plain strings; no presentation contract type lives here.
 
 ## src/Utils/WorldBackdrop.cs
 The background of the process's one `WorldEnvironment`, which is a `ProceduralSkyMaterial` as the

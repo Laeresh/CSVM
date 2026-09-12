@@ -16,7 +16,7 @@ namespace CSVM.Utils;
 /// and the --log= filter: docs/org/logging.md.
 /// ⚠ Messages are interpolated strings rendered with <see cref="CultureInfo.InvariantCulture"/>,
 /// so a float reads <c>16.667</c> on every machine, never the current-culture form.
-/// ⚠ Migration off the remaining <c>GD.Print</c> call sites is incremental by decision — a
+/// ⚠ Migration off the remaining <c>GD.Print</c> call sites is incremental by decision, a
 /// family converts when an item touches it, never a bulk sweep.
 /// </summary>
 public static class Log
@@ -34,13 +34,13 @@ public static class Log
     private const Level DefaultThreshold = Level.Info;
 
     // Lines logged before the sink opens are held here and written the moment it does. Bounded,
-    // because "never buffer in memory" is the rule the sink exists to honour — this covers only
+    // because "never buffer in memory" is the rule the sink exists to honour, this covers only
     // the few milliseconds of startup before the repo root and the session mode are known.
     private const int PreludeCap = 512;
 
     // The SCOPED console sink, one value per execution flow (see PushConsoleSink). Deliberately
     // not the same storage as ConsoleSink below: that one is the process-wide default, and it has
-    // to be, because CSVM.Tests installs it from a [ModuleInitializer] — an AsyncLocal written
+    // to be, because CSVM.Tests installs it from a [ModuleInitializer], an AsyncLocal written
     // there is invisible on the threads xunit later runs tests on, so folding the two tiers into
     // one would drop every test back onto the host-killing GD.Print fallthrough.
     private static readonly AsyncLocal<Action<string>?> ScopedSink = new();
@@ -68,8 +68,8 @@ public static class Log
     /// <summary>The PROCESS-WIDE default for console lines; null (the default) means
     /// <c>GD.Print</c> / <c>GD.PrintErr</c>. A test host installs one once, so that a plain class
     /// that logs is callable without an engine. To capture lines and assert on them, use
-    /// <see cref="PushConsoleSink"/> instead — this one is shared by every thread in the process.
-    /// The file sink is untouched by this — it always takes everything regardless.</summary>
+    /// <see cref="PushConsoleSink"/> instead, this one is shared by every thread in the process.
+    /// The file sink is untouched by this, it always takes everything regardless.</summary>
     public static Action<string>? ConsoleSink { get; set; }
 
     /// <summary>Routes this execution flow's console lines to <paramref name="sink"/> until the
@@ -86,7 +86,7 @@ public static class Log
 
     /// <summary>Applies a <c>--log=</c> filter spec: comma-separated <c>cat</c>,
     /// <c>cat:level</c>, <c>*</c>, <c>*:level</c> or a bare <c>level</c>. A bare category means
-    /// "turn it up to debug"; a bare level sets every category. Pure — it touches no Godot API,
+    /// "turn it up to debug"; a bare level sets every category. Pure, it touches no Godot API,
     /// so it is callable from a test host; an unknown category is kept (never dropped) and
     /// reported when the sink opens.</summary>
     public static void Configure(string spec)
@@ -151,7 +151,7 @@ public static class Log
         {
             Directory.CreateDirectory(dir);
             // Two sessions started in the same second collide, and on Windows the first one still
-            // holds the file — the PID makes the second run's name unique either way.
+            // holds the file, the PID makes the second run's name unique either way.
             if (File.Exists(path))
             {
                 path = Path.Combine(dir, $"{mode}-{stamp}-{System.Environment.ProcessId}.log");
@@ -211,7 +211,7 @@ public static class Log
 
     public static void Debug(string cat, FormattableString message) => Emit(Level.Debug, cat, Format(message), null);
 
-    /// <summary>Writes an already-formatted block verbatim to both sinks — the multi-line
+    /// <summary>Writes an already-formatted block verbatim to both sinks, the multi-line
     /// <c>StringBuilder</c> reports (<c>--dump-*</c>) that do not fit a one-line grammar.</summary>
     public static void Raw(string text)
     {
@@ -231,7 +231,7 @@ public static class Log
         return level <= (Thresholds.TryGetValue(cat, out var t) ? t : _threshold);
     }
 
-    /// <summary>The canonical file line for a message — the console line with its level token.
+    /// <summary>The canonical file line for a message, the console line with its level token.
     /// No timestamp column, deliberately: a <c>--det</c> run must produce a byte-identical log,
     /// so a line that needs the time carries it as an explicit <c>key=value</c>.</summary>
     public static string FileLine(Level level, string cat, string message) =>
@@ -271,7 +271,7 @@ public static class Log
 
     // The console half of a line, resolved in three tiers: this flow's scoped sink, else the
     // process-wide default, else the engine. A sink, once found, replaces GD.Print/GD.PrintErr
-    // entirely — the caller who set it decides what "console" means, including dropping the
+    // entirely, the caller who set it decides what "console" means, including dropping the
     // Error/non-Error distinction if it wants one sink for everything.
     private static void WriteConsole(string line, bool isError)
     {
@@ -313,7 +313,7 @@ public static class Log
             }
             catch (IOException e)
             {
-                // A dead sink must never take the run with it — drop it and say so once.
+                // A dead sink must never take the run with it, drop it and say so once.
                 _sink = null;
                 SinkPath = null;
                 GD.PrintErr($"ERROR [core] log sink write failed — file logging off error={Describe(e)}");
@@ -323,7 +323,7 @@ public static class Log
 
     // AutoFlush is the crash-safety contract: every line reaches the OS before the next one is
     // built, so a killed or throwing run still leaves everything it had logged. The UTF-8 BOM is
-    // deliberate: Windows PowerShell 5.1 — the shell every tool here runs in — decodes a
+    // deliberate: Windows PowerShell 5.1, the shell every tool here runs in, decodes a
     // BOM-less file as the ANSI codepage, which mangles the em dashes and box glyphs the
     // messages carry into mojibake before a grep ever sees them.
     private static StreamWriter OpenWriter(string path) =>
@@ -372,7 +372,7 @@ public static class Log
             ScopedSink.Value = sink;
         }
 
-        // Restores the enclosing SCOPE, not null — nested scopes have to compose, and the
+        // Restores the enclosing SCOPE, not null, nested scopes have to compose, and the
         // process-wide ConsoleSink is a different tier that a scope must never touch.
         public void Dispose()
         {

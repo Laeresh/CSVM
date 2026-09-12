@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The wobble-oscillator law (<c>docs/formats/shakes.md</c>): <b>fire is a random-walk accumulator</b>
-/// (BL-266(a) branch — per-shot uniform step ±7.54·(factor×caliber), explosion, pulled from an
+/// (BL-266(a) branch, per-shot uniform step ±7.54·(factor×caliber), explosion, pulled from an
 /// injected <see cref="Random"/> so the trace pins without the engine), the being-hit he_factor
 /// doubling, the overspeed gate, and determinism of the whole sum. Input is
 /// <c>fixtures/zrdr/shakes.json</c> (probe values under the real source ids; <c>bullet_impact</c>/
@@ -23,7 +23,7 @@ public class PlaneShakeTests
     [Fact]
     public void AFiredRoundStepsTheAccumulatorByABoundedRandomWalkStep()
     {
-        // One shot from a fixed seed: |step| must be in (0, 7.54·(factor×caliber)] — the decoded
+        // One shot from a fixed seed: |step| must be in (0, 7.54·(factor×caliber)], the decoded
         // uniform ±6.03e-2 law, not the old ±8e-3 sawtooth envelope.
         var shake = NewShake();
         shake.FireBullet(40f);
@@ -54,7 +54,7 @@ public class PlaneShakeTests
     public void RepeatedShotsAccumulateThenDampDecaysTheWalkBackToZero()
     {
         // A burst injects many steps; letting fire stop lets the authored damp (12.5, τ=80 ms)
-        // pull the walk back to rest — the mechanism is bounded, it does not drift monotonic.
+        // pull the walk back to rest, the mechanism is bounded, it does not drift monotonic.
         var shake = NewShake();
         float peak = 0f;
         for (int i = 0; i < 30; i++) // ~0.5 s at 60 Hz

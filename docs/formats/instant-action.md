@@ -40,10 +40,10 @@ short lists equals the item count. Two rows are windows onto a longer list rathe
 | `ia_tl_contents` | 2300 / 2302 | 14 visible | the Table of Contents, 19 preset scenarios (decoded below; the screen itself is `BL-352`) |
 
 Two behaviours matter beyond the option sets, both confirmed directly in the script. Selecting
-mission type 0 (dogfighting an ace) deactivates every enemy control — `gui_init`'s per-wave loop
+mission type 0 (dogfighting an ace) deactivates every enemy control, `gui_init`'s per-wave loop
 tests `0 == WT` and deactivates `ia_d_nenemyN`/`ia_d_egroupN`/`ia_d_planeeN`/`ia_d_difficultyN`, and
 the `20001` mailbox handler (fired on a mission-type change) repeats the same test to deactivate or
-revive them — which is the script's own statement that **dogfighting an ace takes no wave
+revive them, which is the script's own statement that **dogfighting an ace takes no wave
 configuration**. ⚠ A deactivated box is not a removed one: it keeps its place on the page, blank,
 with its arrow in the disabled frame (`CAP-50.mkv` t=13.0). A wave whose own count is 0 deactivates
 its militia, skill and aircraft the same way and keeps its count box live (t=70.0), which is the
@@ -252,7 +252,7 @@ them in.
 
 Every chapter's `ia.zrd.json` names one ace in full, not a random draw: `ace_name`, `ace_plane`,
 `ace_skill` (always `"ace"`), `ace_stats` (always `[9,9,9,9,9,9,9,9,9]`), `ace_accentID`, and a
-complete `ace_pattern`/`ace_colorN`/`ace_decalN` livery — authored in all 8 of 8 chapters, censused
+complete `ace_pattern`/`ace_colorN`/`ace_decalN` livery, authored in all 8 of 8 chapters, censused
 The full field table, the `PaintScheme` mapping and the `ace_stats` order inference are
 already on [spawns.md](spawns.md); this page does not repeat them.
 
@@ -297,7 +297,7 @@ value. Worth knowing because four of the parsed keys are authored by no chapter 
 | `ace_accentID` | -1; decals -2; colours -1 |
 | `ground_target_name` / `ground_target_node` | `Cargo Train` / `trcargo01` |
 | the three `*_zeppelin` node names | `vostokzep` |
-| `zeppelin_type` | 0 (**cargo**) — `param_1[0x95] = 0`, i.e. record `+0x254`. An unrecognised string is rejected rather than stored (below), so this is also what a typo resolves to |
+| `zeppelin_type` | 0 (**cargo**), `param_1[0x95] = 0`, i.e. record `+0x254`. An unrecognised string is rejected rather than stored (below), so this is also what a typo resolves to |
 | per wave (`FUN_00458d00`) | `num_enemies` 0, `enemy_name` `Blake Firebrand`, `enemy_plane` 6 (**Firebrand**), skill 1, decals -2, colours -1 |
 
 The aircraft index is the `IDS_IA_PLANES` order (0 Autogyro, 1 Hellhound, 2 Balmoral, 3 Bloodhawk,
@@ -419,7 +419,7 @@ the wingman accent range.
 Hunter), a wave's militia varies per chapter, and `enemy_name`'s `MSG_*` key is not a reliable
 militia abbreviation (`MSG_VEH_<ABBREV>_<PLANE>` in five of the eight chapters,
 `MSG_OBJ_*`/`MSG_DH_*` mission names in the other three). Such a wave member spawns with its own
-shipped textures — the same `shippedSkins` flag that keeps it out of the player militia's Fortune
+shipped textures, the same `shippedSkins` flag that keeps it out of the player militia's Fortune
 Hunter colours, which an enemy wearing would read as friendly.
 
 ⚠ **A militia never selects a vehicle def on this path. It selects paint.** `FUN_0045a390`, the
@@ -453,7 +453,7 @@ campaign, which names these defs; Instant Action reaches none of them.
 
 ⚠ **Broadway Bomber is the one pair that stays unpainted.** Its `BROADWAY` folder ships six masks,
 all `PEA_*`, so the aircraft is paintable, but no vehicle def anywhere authors `paint_pattern`
-`broadway` — so the install carries the masks and no colours to put in them. That member keeps its
+`broadway`, so the install carries the masks and no colours to put in them. That member keeps its
 shipped skins until the colours are read off the original the way `player_fortune`'s were
 (`formats/paint.md`).
 
@@ -596,7 +596,7 @@ through all four waves with nothing ever released.
 
 `DAT_00718f2c` is setup record `+0x254`, written from **`zeppelin_type`** through `FUN_00458f60`:
 `cargo` → 0, `passenger` → 1, `military` → 2, anything else → 3, and 3 is rejected rather than
-stored — over a record the reset left at 0, so an unauthored or misspelled `zeppelin_type` is
+stored, over a record the reset left at 0, so an unauthored or misspelled `zeppelin_type` is
 **cargo**, not an error. All 8 chapters author `cargo`, so slot 0 is the one in play throughout this
 install.
 `DAT_00718fd0[0..2]` are the three world nodes the mission builder resolved from the
@@ -611,14 +611,14 @@ blocks call the same three functions with inverted arguments:
 
 | | the loop's deactivation (`0x0045b8d6`) | the type-2 objective (`0x0045b928`) |
 |---|---|---|
-| `FUN_004bd780(zep, b)` — record byte `+0x6`, plus `+0x8 = now + 3.0` | `1` | `0` |
-| `FUN_004cca30(zep->node, b)` — **`gwNodeSetActive`** (the string at `0x0062cd28` names it; the flag is bit 2 of the node's `+0x24`) | `0` | **`1`** |
-| `FUN_004bf060(zep, b)` → `FUN_004bef70(zep->node, b)` — **the turret arm**: writes `ACTIVATED` on every turret standing anywhere in that node's subtree (below) | `0` | `1` |
-| `FUN_0045a2a0(zep->node)` — recursive teardown of the vehicle/AI objects under that node | called | **not called** |
+| `FUN_004bd780(zep, b)`, record byte `+0x6`, plus `+0x8 = now + 3.0` | `1` | `0` |
+| `FUN_004cca30(zep->node, b)`, **`gwNodeSetActive`** (the string at `0x0062cd28` names it; the flag is bit 2 of the node's `+0x24`) | `0` | **`1`** |
+| `FUN_004bf060(zep, b)` → `FUN_004bef70(zep->node, b)`, **the turret arm**: writes `ACTIVATED` on every turret standing anywhere in that node's subtree (below) | `0` | `1` |
+| `FUN_0045a2a0(zep->node)`, recursive teardown of the vehicle/AI objects under that node | called | **not called** |
 
-The objective then also gets byte `+0x4d` set on the object `FUN_004a3360` finds by its name — the
+The objective then also gets byte `+0x4d` set on the object `FUN_004a3360` finds by its name, the
 same "this is the mission's target" byte the stunt zones and the ground target get in this
-function — and a `FUN_004edc50(…, 0, 0, 0)` motion reset on a third per-type slot
+function, and a `FUN_004edc50(…, 0, 0, 0)` motion reset on a third per-type slot
 (`0x00718fc4 + type·4`) which the record reset zeroes (`param_1[0xbb..0xbd] = 0`) and nothing on the
 `ia.json` path writes, so that last call does not fire in a file-driven launch.
 
@@ -701,7 +701,7 @@ degenerate guard:
   unchanged.
 
 So the mode has **two winning paths, tested in that order**: destroy all the engines, or kill the
-hull on the gasbag threshold. The shipped text names the first and only the first —
+hull on the gasbag threshold. The shipped text names the first and only the first,
 `MSG_BRF_IAZ_OBJ2` is *"Destroy the zeppelin's engines to win!"*, `MSG_BRF_IAZ_OBJ1` is *"Cripple
 the zep so your raiding parties can hit it"*, and all eight chapters' `IA1/zrdr/targets.zrd` give
 the `multiplayer1zep` target `help_label` `MSG_OBJ_DISABLEENG` ("Disable Engines"). Neither the

@@ -14,7 +14,7 @@ namespace CSVM.UI;
 /// <see cref="CampaignFlow.AmmoTarget"/> names: <see cref="CampaignFlow.AmmoSlot"/> 0 the pilot or
 /// 1 the wingman on the seated player's check, a guest's own aircraft on theirs. Edits a working copy, the
 /// original's own model (<c>uiData</c> 2035/2034): nothing reaches <see cref="Flow"/>'s profile until
-/// ACCEPT, and CANCEL — or backing out — simply drops the copy. A gun group's build comes from the
+/// ACCEPT, and CANCEL, or backing out, simply drops the copy. A gun group's build comes from the
 /// plane's <see cref="CustomPlaneDef"/> when hangar-built, else the airframe's stock fit for the two
 /// profile-seeded starters (B13). <see cref="OwnedPlane.Ordnance"/>'s encoding, since the original's
 /// own ordnance id is undecoded, belongs to the screen rather than the save.

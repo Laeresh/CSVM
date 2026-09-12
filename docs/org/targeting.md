@@ -198,6 +198,16 @@ and the multiplayer modes read it with no director at all: their `objectives.zrd
 mission preamble (`MISSION_TIMER`, `PLAYER_INIT`, `RESTORE_ANIMS`) and not one target directive, so
 the file's own flags are the whole curated list for the whole session.
 
+**The script keys ship, and none of them sits on an objective that authors a point.** The census
+over the install's 53 `objectives.zrd` files finds 43 other-target clauses (16 `ADD_OTHER_TARGET`,
+27 `REMOVE_OTHER_TARGET`) in twelve missions: C1/M02, C1/M04, C1B/M03, C1C/M01, C2/M02, C2/M03,
+C2/M05, C2B/M04, C3/M02, C4/M03, C4/M04 and C5/M04. Klondike (`piratezep/rock_zeppelin`) is the
+repeated one, added or removed in eight of the twelve. Not one of those 43 objectives carries a
+`TRAVELERS` clause at all, so no shipped other-target site has an objective point to stand on and
+the two flags' keys reach the same point rule only as a guard. Nine objectives in the install author
+a `TRAVELERS` point, and two of them name a target: C3/M01's `OBJECTIVE5` (the village trucks) and
+its `OBJECTIVE9` (`grasshut2`), both on the `objective` half.
+
 **A roster block that flags itself is its own candidate, not a second one.** `objectiveTarget` is a
 field ON the entity, so an aeroplane whose `aiv` block authors slot 37 is offered once, as the
 aeroplane, with the flag set: the block's slot-20 name on line 2, its slots 38 and 39 as the two
@@ -836,7 +846,7 @@ The four red-listed category ids are `0x1f42`, `0x1f46`, `0x1f49` and `0x1f8d`, 
 assigns the text into the `std::string` at entity `+0x10` at `0x0047c9c8`. A key the string table
 does not know is copied verbatim instead (`0x0047ca98`–`0x0047cafd`).
 
-⚠ **A block that authors an empty `title` gets no name line at all** — the branch at `0x0047c9a7`
+⚠ **A block that authors an empty `title` gets no name line at all**, the branch at `0x0047c9a7`
 leaves the string empty. That is 239 of the install's 414 roster blocks, so most enemies in the
 original show a box and no name.
 
@@ -940,7 +950,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 | A mission structure's team | the node's own ownership slot for the mission being flown, inherited from the parent chain where it authors none | the same: `SceneBuilder` resolves the slot for the built mission (`GameZ.WorldObjectTeam`, `SceneBuilder.MissionSlot`) and stamps it, and `DestructibleRegistry.Register` reads it onto the pool, so C1/M05's hospital ship is the player's and a zeppelin's zones are the enemy's |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
-| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectOtherTargets` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle, while a world emplacement and a zeppelin sub-part stand in for the flag nothing authors for them. A loose destructible never reaches a cycle. Instant Action and the multiplayer modes take the same feed with no director behind it |
+| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectFlagged` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle, while a world emplacement and a zeppelin sub-part stand in for the flag nothing authors for them. A loose destructible never reaches a cycle. Instant Action and the multiplayer modes take the same feed with no director behind it |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
 | "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, reachable through `--target=nearest`; no key is bound to it, the original's three per-class Nearest actions being among the six CSVM does not ship |
 | Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |
@@ -953,7 +963,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 
 ⚠ **The "no reference to copy" claim once made in `VersusHud`'s module doc was false.** The
 original draws an edge arrow with a stacked tag and clock bearing, which is what CSVM's
-`DrawOpponent` edge branch already does — corrected in the code itself.
+`DrawOpponent` edge branch already does, corrected in the code itself.
 
 ⚠ **Fixed 20 × 16 pixels does not port literally.** The original never scales its box, so on a
 modern display it would be nearly invisible. Scaling through `HudMetrics` like every other CSVM HUD

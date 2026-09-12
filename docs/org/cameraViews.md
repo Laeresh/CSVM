@@ -13,7 +13,7 @@ decode wins and the disagreement is a note.
 
 **Where the neighbours live.** The engine's *external-camera tuning* (distance, catch-up, third-person
 eye height and pitch, look-behind, death/crash/flyby placement) is the shared zrdr reader
-[`../formats/camparam.md`](../formats/camparam.md) — that page carries the field rules but
+[`../formats/camparam.md`](../formats/camparam.md), that page carries the field rules but
 no FOV and no first-person data. The crash, death and flyby geometry and lifecycle live on that
 page too, field formulas included.
 
@@ -21,13 +21,13 @@ page too, field formulas included.
 
 The original has **exactly two base horizontal field-of-view numbers, 60° and 80°**, and which one
 applies is decided **per camera mode** (the live mode at `camera + 0x14c`). The wide 80° belongs to
-**exactly one view — the Cockpit view (mode 6)**; every other mode, including the Nose view (mode 7)
+**exactly one view, the Cockpit view (mode 6)**; every other mode, including the Nose view (mode 7)
 and all 3rd-person/chase modes, uses 60°.
 
 Two findings will not be guessed correctly:
 
 - **The Nose view and the Cockpit view are the same camera point.** Both place the camera at the
-  plane's **`cockpit_camera` marker** — there is **no separate nose camera marker and no per-mode
+  plane's **`cockpit_camera` marker**, there is **no separate nose camera marker and no per-mode
   camera offset** anywhere. Mode 7 (nose) is the same physical position as mode 6 (cockpit); it
   differs in *rendering* (the cockpit interior and some plane nodes are hidden), runs player
   head-look without the Cockpit-only autohead, and uses the narrower 60° FOV.
@@ -58,19 +58,19 @@ shared render-camera `FUN_0042ba70`. Only **modes `6` and `7` are first-person**
 
 | Mode | Position dispatcher | View | FOV (H) | ~V @ 4:3 | Interior | Head-look |
 |---|---|---|---|---|---|---|
-| `0` | `FUN_0042c7f0` | **Chase / 3rd-person** (smoothed, `camparam` distance) | 60° | 46.8° | — | look-around, floor `−π/2` |
-| `1` | `FUN_0042ca50` | Chase behind (fixed world angle) | 60° | 46.8° | — | — |
-| `2` | `FUN_0042c7f0` +flag | Chase variant (fixed-scale) | 60° | 46.8° | — | — |
-| `3` | `FUN_0042cb70` | Chase behind, turn-flippable (+side) | 60° | 46.8° | — | — |
-| `4` | `FUN_0042cb70` +flag | Chase, same base, −side offset | 60° | 46.8° | — | — |
-| `5` | `FUN_0042ce00` | **Crash** — one world point `crash_horiz`/`crash_y` off the impact, continuously aimed at the aircraft | 60° | 46.8° | — | — |
+| `0` | `FUN_0042c7f0` | **Chase / 3rd-person** (smoothed, `camparam` distance) | 60° | 46.8° | - | look-around, floor `−π/2` |
+| `1` | `FUN_0042ca50` | Chase behind (fixed world angle) | 60° | 46.8° | - | - |
+| `2` | `FUN_0042c7f0` +flag | Chase variant (fixed-scale) | 60° | 46.8° | - | - |
+| `3` | `FUN_0042cb70` | Chase behind, turn-flippable (+side) | 60° | 46.8° | - | - |
+| `4` | `FUN_0042cb70` +flag | Chase, same base, −side offset | 60° | 46.8° | - | - |
+| `5` | `FUN_0042ce00` | **Crash**, one world point `crash_horiz`/`crash_y` off the impact, continuously aimed at the aircraft | 60° | 46.8° | - | - |
 | **`6`** | `FUN_0042d980` | **Cockpit** | **80°** | 64.4° | **drawn** | look-around + autohead, floor `0` |
 | **`7`** | `FUN_0042d980` | **Nose** | 60° | 46.8° | hidden | look-around, floor `0` (autohead off) |
-| `8` | `FUN_0042cf10` | **Death** — one fixed world point chosen on callback event `0x0f`, continuously aimed at the destroyed player | 60° | 46.8° | — | — |
-| `9` | `FUN_0042db40` | **Flyby** — camera holds a **world** position, re-aims at the plane, re-sites to a new spot on the `camparam` flyby trigger | 60° | 46.8° | — | — |
+| `8` | `FUN_0042cf10` | **Death**, one fixed world point chosen on callback event `0x0f`, continuously aimed at the destroyed player | 60° | 46.8° | - | - |
+| `9` | `FUN_0042db40` | **Flyby**, camera holds a **world** position, re-aims at the plane, re-sites to a new spot on the `camparam` flyby trigger | 60° | 46.8° | - | - |
 
 The modes pair up around shared handlers: `(0,2)`, `(3,4)` and `(6,7)` share a placement
-function and differ only by the boolean flag each passes in — in `(6,7)`'s case the difference is
+function and differ only by the boolean flag each passes in, in `(6,7)`'s case the difference is
 the cockpit-vs-nose split below. Modes `1`, `5`, `8`, `9` each have a handler of their own. All of
 the non-first-person handlers read distance/eye geometry from the `camparam.json` chase table
 (`DAT_0064efd0`), so they are all chase/external poses rather than first-person ones.
@@ -101,13 +101,13 @@ game start / on the cycle key. So the selectable set is:
 | `6` | **Cockpit** (interior, 80°, free-look) |
 | `7` | **Nose** (no interior, 60°, player head-look with autohead off) |
 
-Modes `1`, `2`, `3`, `4`, `5`, `8`, `9` are **not** accepted by the player's three-view cycle —
+Modes `1`, `2`, `3`, `4`, `5`, `8`, `9` are **not** accepted by the player's three-view cycle,
 they are internal or context camera modes, which is why `FUN_0042c210` rejects them. Mode 9 has a
 separate direct input path: the alive-player F7 handler enters it at `00489430`–`00489447`. The
 controls data names F7 **"Access Chase View"** (`MSG_LOOK_FLYBY`) and the cycle binding **"Cycle
 Cockpit Views"** (`MSG_LOOK_FORWARD`), which walks Cockpit → Nose → Chase.
 
-**"Access Chase View" is the flyby — a world-fixed, re-siting camera**, not the ordinary following
+**"Access Chase View" is the flyby, a world-fixed, re-siting camera**, not the ordinary following
 chase. F7 enters mode **9** through the alive-player input path at `00489430`–`00489447`. Its
 handlers are `FUN_0042db40` (per-frame hold/aim/transition) and `FUN_0042e1f0` (re-site).
 `FUN_0042e1f0` chooses a fresh world position from the authored random radius and
@@ -133,7 +133,7 @@ and effect do not.
 ⚠ **This label collides with CSVM's own numpad chase look-around key set.** The chase camera runs
 the same head-look controller decoded below through
 `FUN_0042c7f0`, driven by the same numpad snap cluster and menu-labelled `F9`-`F12` **External
-Camera** keys — and the menu's `F7` **Access Chase View** binding is exactly this section's
+Camera** keys, and the menu's `F7` **Access Chase View** binding is exactly this section's
 "Access Chase View", i.e. the flyby (mode 9), not the look-around. CSVM binds `F7` to the flyby for
 that reason; the chase look-around's own binding remains `BL-435`.
 
@@ -147,7 +147,7 @@ two keys from the HUD data archive (`hud_v2.zrd`): `POSITION_1ST` (`00624f28`) a
 `MISSILES`, `HEALTH`, `NITRO`), the six values share one x at 0.02 spacing in y, and the column is
 written only under `DAT_00624df0`: a debug text readout, not dial placement
 (`docs/formats/hud.md`, "Cockpit gauges"). So the small per-view display names seen in-game come
-from the HUD/video-menu **data files**, not the ship binary — but the *selection wiring* above pins
+from the HUD/video-menu **data files**, not the ship binary, but the *selection wiring* above pins
 which mode is which player view.
 
 ### Modes 6 and 7 are the only first-person views
@@ -171,10 +171,10 @@ the wider 80° FOV.
 
 - The interior is **not** drawn (the `FUN_0049fb00` gate requires mode 6).
 - `FUN_0042d980` calls the head-look controller `FUN_0042d010` **unconditionally in both
-  first-person modes** — mode 7 does not disable head-look. What mode 7 gates off is only the
+  first-person modes**, mode 7 does not disable head-look. What mode 7 gates off is only the
   **autohead** (idle velocity-follow) branch inside that controller; player-driven look (snap,
   free-look, center key) is identical in Cockpit and Nose. A third caller runs the same controller
-  for the chase camera: `FUN_0042c7f0` calls `FUN_0042d010(0xbfc90fdb, 0)` — the literal
+  for the chase camera: `FUN_0042c7f0` calls `FUN_0042d010(0xbfc90fdb, 0)`, the literal
   `0xbfc90fdb` is `−π/2`, so chase gets a full elevation range where first person is floored at
   level (0). Decoded fully, with the states/constants/smoothing law, in
   ["Head-look controller"](#head-look-controller) below.
@@ -200,7 +200,7 @@ a data table at `0060409c` (`60°`, `80°`, `50.0`, `2.5`):
 
 The `0x3f860a92` 60° literal is also used by the player aim-camera `FUN_0049d940` and the main
 tick `FUN_004a0220`; `FUN_0042b570` (frustum/projection setup) carries `0.5235987755982` = 30° =
-60°/2. FOV is stored in radians — the animated-in-script loader `FUN_00502da0` converts degrees to
+60°/2. FOV is stored in radians, the animated-in-script loader `FUN_00502da0` converts degrees to
 radians via `0.017453292`.
 
 The two FOV functions aspect-correct the stored **horizontal** angle to the stored **vertical**
@@ -230,7 +230,7 @@ about a case the decode does not cover, not a reading of the binary.
 ⚠ **The two `CAMERA_STATE` / `CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are
 animated/in-script FOV changes only** (`.ani` `H_FOV`/`V_FOV` events). They are not the base
 per-view FOV and must not be wired to the engine's base FOV. The `.ani` cockpit sequence
-(`player-gi_1stperson`) carries **no** FOV — it only shows/hides the interior and plane — so the
+(`player-gi_1stperson`) carries **no** FOV, it only shows/hides the interior and plane, so the
 base FOV is not authored in animation data.
 
 ## Where the first-person camera sits
@@ -246,13 +246,13 @@ by the cockpit loader `FUN_00473480` from the `cockpit_camera` scene node (via `
 with a fallback of `DAT_0075d1b8/bc/c0` = `(0,0,0)` (the plane origin) when a plane has no such
 node.
 
-⚠ **No wobble is added at placement — the first-person camera inherits it from the plane.**
+⚠ **No wobble is added at placement, the first-person camera inherits it from the plane.**
 `FUN_0042d980` reads the plane's raw orientation basis directly and applies zero shake of its own;
 the random-walk wobble state is written onto the **camera object** (component blocks via
 `FUN_0042c070`, e.g. high_speed block 4 at `camera+0xd4/+0xd8/+0xdc`) and consumed by
 `FUN_0042c0e0` (in the render layer) to rock the **plane node's** rendered rotation. So both 6 and
 7, being plane-mounted, inherit the wobble automatically and are not handled differently from each
-other — see
+other, see
 [`shakes.md`](shakes.md). The chase/3rd-person modes read the plane position/attitude but sit
 outside the rocking node, which is why `damage_shakes` gives the chase camera its own authored
 half.
@@ -261,7 +261,7 @@ half.
 
 Decoded from the plane scene graphs (`extracted/…/planes/nodes.json`). The marker sits on the
 fuselage centerline, a bit above the local origin; the exact number is authored per plane. The
-current player fighter `player_pfighter` uses `(0, +0.75, −0.2)` — ~0.75 up, ~0.2 aft of the local
+current player fighter `player_pfighter` uses `(0, +0.75, −0.2)`, ~0.75 up, ~0.2 aft of the local
 origin. Selected values:
 
 | Plane node | `cockpit_camera` translate (x, y, z) |
@@ -275,20 +275,20 @@ origin. Selected values:
 
 ### Axis convention (fixed from the default fighter's cockpit sub-nodes)
 
-- **+Z = forward (nose)** — the elevators `rt_elev2`/`lft_elev2` sit at **z = −37** (the tail) and
+- **+Z = forward (nose)**, the elevators `rt_elev2`/`lft_elev2` sit at **z = −37** (the tail) and
   the pilot seat `pass_st` at **z = +37.86** (forward).
-- **±X = wingspan** — the ailerons sit at **x = ±63**.
+- **±X = wingspan**, the ailerons sit at **x = ±63**.
 - **+Y = up**.
 
 So a cockpit camera at `(0, 0.75, −0.2)` is on the fuselage centerline, 0.75 units above the local
-origin and marginally toward the tail. There is **no `nose_camera` node and no per-mode offset** —
+origin and marginally toward the tail. There is **no `nose_camera` node and no per-mode offset**,
 mode 7 reuses the exact `cockpit_camera` point.
 
 ⚠ **This is the ORIGINAL BINARY's own internal convention, not Godot's.** It disagrees with this
 codebase's own, far more broadly established one: `docs/formats/gotchas.md` (censused over 6,728
 `AT_NODE`/`PUFFER_STATE` uses) puts the extracted frame's nose at **−Z**. `PlaneBuilder`/
 `SceneBuilder` never axis-flip a GameZ node's local transform when building the Godot tree, so a
-raw translate like `cockpit_camera`'s lands in Godot's frame unswapped and is taken as-is — CSVM
+raw translate like `cockpit_camera`'s lands in Godot's frame unswapped and is taken as-is, CSVM
 places a Godot camera relative to a Godot-space plane using Godot-space marker data, the same as
 every firepoint and pylon, without ever needing to resolve which convention the original binary
 used internally.
@@ -356,30 +356,30 @@ the chase caller is `BL-435`, filed and not yet built.
 
 - **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock (`BL-399`, `BL-432`).
 - **Angles.** `DAT_0064ef60` is elevation above level (`0` = level, `π/2` = straight up, clamped to
-  `[0, π/2]` in the input paths — the original's head never looks below level in front of the
+  `[0, π/2]` in the input paths, the original's head never looks below level in front of the
   clamp; the caller-supplied floor above is a SEPARATE, per-caller bound); `DAT_0064ef64` is
   azimuth, wrapped to `±π` (`FUN_00460ab0`).
 - **Snap (state 0).** The POV/keyboard direction becomes an angle in hundredths of degrees;
   azimuth is that angle negated, ×0.01×π/180. Elevation: within 0.1° of forward → straight up
-  (`π/2`); within ±0.09° of a 45°/135°/225°/315° diagonal → 45° up (`0.7853982`) — all four
+  (`π/2`); within ±0.09° of a 45°/135°/225°/315° diagonal → 45° up (`0.7853982`), all four
   diagonals, fore and aft alike; any other direction → level. Nine key slots (`0x3a`-`0x42`)
   compose an (x, y) direction; `0x3e` is the center slot (zeroes elevation, azimuth and the zoom
   value in free-look).
 - **Free-look (state 1).** Elevation `+= 2·dt·cos(hat angle)`, azimuth `+= 2·dt·sin(hat angle)` per
-  frame — a pan rate of **2 rad/s** (~114.6°/s), `DAT_009ad744` the per-frame dt (appears as
+  frame, a pan rate of **2 rad/s** (~114.6°/s), `DAT_009ad744` the per-frame dt (appears as
   `dt + dt`).
 - **Smoothing.** The displayed angles (`DAT_0064ef58/5c`) approach their targets exponentially,
   `shown = target + (shown − target)·e^(−rate·dt)` (`FUN_00460490`; `FUN_00460410` a cubic Taylor
   `e^(−x)` for `x < 0.1`): elevation rate **3.0/s**, azimuth rate **5.0/s** (τ ≈ 0.33 s / 0.20 s).
   The external camera's zoom value smooths at 1.5/s, moves at `2·dt` on keys `0x43`/`0x44`,
-  clamped `[0, 1]` — the section above has its direction and what it feeds.
+  clamped `[0, 1]`, the section above has its direction and what it feeds.
 - **Autohead** (idle velocity-follow, the gated tail block): with the option byte `DAT_0071dacc`
   set and no look input, the plane's velocity transforms into the plane frame, scales by
   `autohead_turn_time`, caps in magnitude at `autohead_turn_max`, and the head aims along it,
   elevation floored at `autohead_turn_min_pitch` (below the input paths' own `0` floor). All three
   are `player.json` keys (loader `FUN_004735b0`, globals `0071c464/468/46c`): shipped `0.75`,
-  `2.86°` (stored ×π/180×2 = 0.0998 rad — the loader doubles the authored value), `−3.0°` (stored
-  −0.0524 rad). The flag is `DAT_0071dacc` AND mode ≠ 7 — Nose gates the whole branch off, not just
+  `2.86°` (stored ×π/180×2 = 0.0998 rad, the loader doubles the authored value), `−3.0°` (stored
+  −0.0524 rad). The flag is `DAT_0071dacc` AND mode ≠ 7, Nose gates the whole branch off, not just
   the input.
 - **Fixed head-pitch offset.** `FUN_0042d980` applies a constant extra rotation of
   **−0.08203 rad = −4.70°** (`0xbda7ff58`) about the elevation axis when building the view basis,
@@ -389,7 +389,7 @@ the chase caller is `BL-435`, filed and not yet built.
 
 | | Original | CSVM today |
 |---|---|---|
-| Per-view base FOV | two horizontal constants: **60°** base and **80°** only for cockpit mode 6 | Cockpit/Nose use the decoded 60°/80° base (`CameraController.HorizontalToVerticalFovDeg`); every external view still assumes a single **62° vertical** (`GameSession.cs`, `docs/org/tracers.md:258` — migration tracked by `BL-420`) |
+| Per-view base FOV | two horizontal constants: **60°** base and **80°** only for cockpit mode 6 | Cockpit/Nose use the decoded 60°/80° base (`CameraController.HorizontalToVerticalFovDeg`); every external view still assumes a single **62° vertical** (`GameSession.cs`, `docs/org/tracers.md:258`, migration tracked by `BL-420`) |
 | FOV axis | stored/ported as **horizontal** half-angle, converted at the 4:3 it ran | matches for Cockpit/Nose, whose vertical is then held at every viewport shape; external views still store/assume vertical |
 | First-person pair | modes 6/7 share the `cockpit_camera` position; differ in interior render, head-look, FOV | `PilotViewMode` implements Cockpit/Nose as camera modes |
 | Cockpit interior gate | drawer (`FUN_0049fb00`) draws `cockpit1` only in mode 6 | `CockpitVisibility` enforces the same mode gate |
@@ -397,7 +397,7 @@ the chase caller is `BL-435`, filed and not yet built.
 | **Death camera** | mode `8`: one spot from the `death_*` fields when the player is destroyed, held while the wreck falls | landed as `StaticCameras`, entered by the player's own destruction |
 | Static-camera terrain clearance | `crash_chord_y`/`crash_elev`, taken by the crash cut, the death camera and the flyby alike | landed as `StaticCameras.LiftClearOfWorld`, taken by all three |
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
-| Head-look controller | snap, free-look, center key, autohead — one shared state machine, three callers (first person + chase) | landed for first person as `HeadLook` (C21-C22); the chase caller is not represented (`BL-435`) |
+| Head-look controller | snap, free-look, center key, autohead, one shared state machine, three callers (first person + chase) | landed for first person as `HeadLook` (C21-C22); the chase caller is not represented (`BL-435`) |
 
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no
 hardcoded 0.75), both first-person views sitting at it, the interior drawn + head-look + 80° for

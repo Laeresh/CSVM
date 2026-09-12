@@ -313,7 +313,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
                 ctx.Check(ReferenceEquals(t.Source, tex),
                     $"…and the selection is held by the aeroplane itself, not a synthetic site");
                 // Both this file's categories (Tex's "Defend", Cabbie's "Follow") are
-                // non-destructive, so both colour blue regardless of team — the decode's own rule
+                // non-destructive, so both colour blue regardless of team, the decode's own rule
                 // (docs/org/targeting.md "Colour"), read off the category alone.
                 var color = TargetHud.MarkerColor(t, AimAssist.PlayerTeam);
                 report.AppendLine($"awake: '{block}' marker colour {color} (team={t.Team})");

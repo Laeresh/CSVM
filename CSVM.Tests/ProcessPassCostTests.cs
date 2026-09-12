@@ -10,10 +10,9 @@ namespace CSVM.Tests;
 /// drain reports, that the mean and the maximum are different quantities, and the property the
 /// <c>--perf</c> window depends on: a pass still open at the drain is carried into the next window
 /// rather than dropped, because the reader sits inside the pass it measures.
-///
-/// <para>⚠ This is the ONLY class that writes <see cref="ProcessPassCost"/>'s ambient statics.
-/// xUnit runs test classes in parallel but the tests within one class serially, so that is what
-/// keeps these deterministic; a second class bracketing passes would have to join this one.</para>
+/// ⚠ This is the ONLY class that writes <see cref="ProcessPassCost"/>'s ambient statics. xUnit
+/// runs test classes in parallel but the tests within one class serially, so that is what keeps
+/// these deterministic; a second class bracketing passes would have to join this one.
 /// </summary>
 public class ProcessPassCostTests
 {

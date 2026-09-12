@@ -17,11 +17,11 @@ namespace CSVM.Session;
 /// sites". Speakers register on their real <see cref="FlightController.Team"/>; a broadcast
 /// elects among a caller's own side.
 /// ⚠ Free flight and --vs give every pilot a default Team, so a broadcast still only elects
-/// within a "teamless" match there — wiring engages once a mission shares an explicit team
+/// within a "teamless" match there, wiring engages once a mission shares an explicit team
 /// between AI, or between an AI and the player.</summary>
 public sealed partial class AiVoiceRuntime : Node
 {
-    /// <summary>The player's WA-HighDmg broadcast threshold — decoded (id 13 fires when the
+    /// <summary>The player's WA-HighDmg broadcast threshold, decoded (id 13 fires when the
     /// player's health crosses 30 %).</summary>
     public const float PlayerHighDmgFraction = 0.30f;
 
@@ -41,7 +41,7 @@ public sealed partial class AiVoiceRuntime : Node
         _dispatcher = new AiVoiceDispatcher(rng, ResolvePlayable);
     }
 
-    /// <summary>Every line actually played: (speaker node name, trigger id, resolved clip) —
+    /// <summary>Every line actually played: (speaker node name, trigger id, resolved clip),
     /// the observability seam the ai-voice suite counts.</summary>
     public event Action<string, int, string>? LinePlayed;
 
@@ -58,7 +58,7 @@ public sealed partial class AiVoiceRuntime : Node
     /// <summary>Registers an AI aircraft as a voiced speaker: resolves the accent chain to one
     /// pilot VO id (a seeded pick over the accent's pool), then subscribes the wired event
     /// sources above. An accent that resolves to no voiced pilot logs once and registers
-    /// nothing — a silent pilot, not an error.</summary>
+    /// nothing, a silent pilot, not an error.</summary>
     public void RegisterAi(FlightController ai, int accentId, float talkerChance,
         float constitutionChance)
     {
@@ -121,7 +121,7 @@ public sealed partial class AiVoiceRuntime : Node
         string why)
     {
         // Acquisition (our chosen dispatch point, marked in combat-voice.md): committing to an
-        // attack on a human — the attacker's WA-Attack, and the flight's computed bearing
+        // attack on a human, the attacker's WA-Attack, and the flight's computed bearing
         // call-out in the warned player's own frame.
         if (to == AiMode.Pursue && from == AiMode.Patrol
             && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: true } quarry)
@@ -148,9 +148,9 @@ public sealed partial class AiVoiceRuntime : Node
         }
     }
 
-    // B8's availability contract: the resolved name must have a decoded stream behind it — for a
+    // B8's availability contract: the resolved name must have a decoded stream behind it, for a
     // variant group that means a playable member, which the group name itself cannot answer.
-    // ⚠ A CLI accent must join the prewarm set (SessionPrewarmNames' extraAccents) — unprewarmed,
+    // ⚠ A CLI accent must join the prewarm set (SessionPrewarmNames' extraAccents), unprewarmed,
     // this returns null silently, with no error anywhere else.
     private string? ResolvePlayable(int voId, string family)
     {
@@ -193,7 +193,7 @@ public sealed partial class AiVoiceRuntime : Node
         else if (decision.Rolled)
         {
             // The engine logs both roll outcomes; gate short-circuits (cooling, no clip) are
-            // silent here — they fire at hit rate.
+            // silent here, they fire at hit rate.
             GD.Print($"ai voice: {tag}: trigger #{decision.TriggerId} silent ({decision.Outcome})");
         }
     }

@@ -241,8 +241,8 @@ internal static class ZeppelinSuites
         ctx.Check(net.Nodes.Count == 13 && net.Nodes[0].StopPointId == 0,
             $"the far end (node 0) authors no stop point at all count={net.Nodes.Count} id={net.Nodes[0].StopPointId}");
         // The chain is 3-4-5-6-7-8-9-10-11-12-2-1-0: piratezep's own authored position seats it
-        // on node 3 (the NEAR end, 50 m off in altitude only), so node 0 — not the last-indexed
-        // node 12, which is a degree-2 waypoint mid-chain — is the far end it walks the whole
+        // on node 3 (the NEAR end, 50 m off in altitude only), so node 0, not the last-indexed
+        // node 12, which is a degree-2 waypoint mid-chain, is the far end it walks the whole
         // route to reach.
         const int farEnd = 0;
         const int cargoNode = 7;
@@ -614,8 +614,8 @@ internal static class ZeppelinSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        // Data-driven picks: the first flagged weapon (wep_14/wep_28 ship the flag) — a
-        // blast-less one preferred so its damage lands on exactly the struck pool — and the
+        // Data-driven picks: the first flagged weapon (wep_14/wep_28 ship the flag), a
+        // blast-less one preferred so its damage lands on exactly the struck pool, and the
         // first unflagged gun.
         WeaponDef? zepWeapon = weapons.All.FirstOrDefault(w =>
                 w.DamagesZeppelin && w.HealthDamage is > 0f && w.ImpactProximity is not > 0f)
@@ -641,7 +641,7 @@ internal static class ZeppelinSuites
             if (host == null)
                 return;
 
-            // The built pose, BEFORE ZeppelinRuntime moves the node (INSTR-13 — see summary).
+            // The built pose, BEFORE ZeppelinRuntime moves the node (INSTR-13, see summary).
             var bagNode = runtime.FindNodes("gasbag1", host).FirstOrDefault();
             var engNode = runtime.FindNodes(def.Engines[0], host).FirstOrDefault();
             ctx.Check(bagNode != null && engNode != null,
@@ -663,7 +663,7 @@ internal static class ZeppelinSuites
                 var motion = zeps.MotionFor("piratezep")!;
 
                 // Seeding: the gasbag pool carries the RECORD's 120 hp (its def has HEALTH 0),
-                // the engine pool its compiled def's 40 — record where authored, def where not.
+                // the engine pool its compiled def's 40, record where authored, def where not.
                 var bagPool = runtime.Destructibles.PoolsOn(bagNode).FirstOrDefault();
                 var engPool = runtime.Destructibles.PoolsOn(engNode).FirstOrDefault();
                 ctx.Check(bagPool != null && Mathf.IsEqualApprox(bagPool.MaxHealth, 120f),
@@ -725,7 +725,7 @@ internal static class ZeppelinSuites
                     $"…and the sqrt curve lowers the speed cap {capBefore:0.##}→{motion.EffectiveMaxSpeed:0.##} m/s");
 
                 // 4. The survivor threshold, in the engine: required 4 of 6. Two gasbags dead
-                // (survivors 4) lives; the third (survivors 3 < 4) kills — the decoded
+                // (survivors 4) lives; the third (survivors 3 < 4) kills, the decoded
                 // polarity. The design's destroy-count reading would still be alive here.
                 runtime.DamageAt(bagNode, 10_000f); // finishes gasbag1
                 runtime.DamageAt(runtime.FindNodes("gasbag2", host).FirstOrDefault(), 10_000f);
@@ -915,7 +915,7 @@ internal static class ZeppelinSuites
                     $"the idle port cannons retract (invented {ZeppelinBroadside.StowAfterIdleSeconds:0} s window) anims=[{string.Join(",", started.Where(a => a.Contains("retract")))}]");
 
                 // 3. F18 thinning: destroy one port cannon (its compiled def pool, HEALTH 60),
-                // return to the port arc — the redeployed volley is 5, not 6.
+                // return to the port arc, the redeployed volley is 5, not 6.
                 var lbroadNode = runtime.FindNodes(def.LeftCannons[0].Node, host).FirstOrDefault();
                 var lbroadPool = lbroadNode == null ? null : runtime.Destructibles.PoolsOn(lbroadNode).FirstOrDefault();
                 ctx.Check(lbroadPool != null,
@@ -956,7 +956,7 @@ internal static class ZeppelinSuites
 
                 // 5. The zeppelin-vs-zeppelin arm, constructed geometry (see summary): a near-
                 // static attacker whose target zeppelin is deactivated abeam, one gasbag
-                // placed outside the 0.707 arc — every pick lands on an IN-ARC bag.
+                // placed outside the 0.707 arc, every pick lands on an IN-ARC bag.
                 attackerHost = new Node3D { Name = "attackzep" };
                 var cb1 = new Node3D { Name = "cb1", Position = new Vector3(20f, 0f, -30f) };
                 var cb2 = new Node3D { Name = "cb2", Position = new Vector3(20f, 0f, 30f) };
@@ -1256,7 +1256,7 @@ internal static class ZeppelinSuites
         }
     }
 
-    // A copy of a shipped record with `cannon_inaccuracy` authored — the scatter
+    // A copy of a shipped record with `cannon_inaccuracy` authored, the scatter
     // phase's instrument (no C1 record authors one; C2B/M04's 10° is the shipped value).
     // The name-resolution arm the original reaches through its general node table: a `targets`
     // name that is neither `player` nor a zeppelin resolves to a world node and is fired on by
@@ -1484,7 +1484,7 @@ internal static class ZeppelinSuites
             return;
 
         // The ship sails: its build pose is kilometres from the route, and it is its own
-        // shipaground script — the branch a destroyed powerhut takes — that beaches it where the
+        // shipaground script, the branch a destroyed powerhut takes, that beaches it where the
         // Pandora is authored to hover, so that script's LAST pose is what node 7 answers to.
         var cargoPoint = net.Nodes[cargoNode].Position;
         var beached = LastPoseOf(world, "freighteraground");

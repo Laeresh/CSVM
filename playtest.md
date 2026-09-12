@@ -2,14 +2,14 @@
 
 Everything that needs a human at the controls (or the original game open for A/B), consolidated.
 **This file holds only what is actionable *today*.** Anything whose test is blocked on an unlanded
-fix lives on its `backlog.md` entry as a `*Playtest after fix:*` line instead — so an empty section
+fix lives on its `backlog.md` entry as a `*Playtest after fix:*` line instead, so an empty section
 here means the work is queued, not forgotten. Deep evidence and traps live in
 [`backlog.md`](backlog.md); the two are kept in step.
 
-**Every item carries a stable ID** — `CAP-nn` for an owed capture, `PT-nn` for something to fly.
+**Every item carries a stable ID**, `CAP-nn` for an owed capture, `PT-nn` for something to fly.
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
-Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — run
+Retired IDs disappear from this file, so never mint a new ID by scanning the entries below, run
 **`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
 `.git/item-id-counters.json` and is safe under concurrent sessions. ⚠ **Run it for EVERY id, every
 time**: it is not a once-per-session lookup, and deriving the next id by adding 1 leaves the counter
@@ -18,26 +18,26 @@ in one call when you need several. Retired IDs' verdicts are in
 the retiring commit's message (`git log --grep=<ID>`); earlier retirements are in
 the archived development log.
 
-**Structure.** Section 0 lists owed captures as themed tables — one table per filming batch, the
-theme naming the capture setup (cockpit gauges in frame, external view, …) — with fixed columns
-ID · Capture · What must be in frame · Unblocks. The theme sections are standing — an emptied
+**Structure.** Section 0 lists owed captures as themed tables, one table per filming batch, the
+theme naming the capture setup (cockpit gauges in frame, external view, …), with fixed columns
+ID · Capture · What must be in frame · Unblocks. The theme sections are standing, an emptied
 table stays, meaning nothing is currently owed in that batch. Section 1 groups flights by **flight
-profile** — one section is one sortie (chapter + plane + situation), headed by a copyable launch
+profile**, one section is one sortie (chapter + plane + situation), headed by a copyable launch
 command. Sections sort by chapter then plane; items within a section by ascending ID. An item free
-to choose its plane or chapter piggybacks on an existing profile — it never opens a section of its
+to choose its plane or chapter piggybacks on an existing profile, it never opens a section of its
 own. Every PT item is one bullet:
 
     - `PT-nn` `[A/B: <ref>]`-or-`[Own]` **What to check (`BL-NNN`).** context… *Look for:* … *Blocks:* …
 
 `[A/B: <ref>]` names the capture or `OriginalScreenshots/` shot to have open *before* launching;
 `[Own]` is a judgement call on our own remake with no original reference. A mixed item takes
-`[A/B]` — the per-check references stay in their bullets. *Look for:* holds one sub-bullet per
-check, lettered `(a)(b)(c)` when there is more than one. *Blocks:* is mandatory — name what a pass
+`[A/B]`, the per-check references stay in their bullets. *Look for:* holds one sub-bullet per
+check, lettered `(a)(b)(c)` when there is more than one. *Blocks:* is mandatory, name what a pass
 closes, or state outright that nothing tracks the outcome and a fail mints a new `BL` item.
-Optional: context prose between title and *Look for:* (a few lines at most — deep evidence lives
+Optional: context prose between title and *Look for:* (a few lines at most, deep evidence lives
 in `backlog.md`), and *Variations:* for extra flags or re-runs beyond the section's command.
 
-**Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
+**Captures staged for an item live in `playtest/<ID>/`**, git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
 survive until the item that owns them closes. Delete the folder with the item.
 
@@ -52,15 +52,15 @@ survive until the item that owns them closes. Delete the folder with the item.
 `player_kestrel` Kestrel · `player_peacemaker` Peacemaker · `player_warhawk` Warhawk.
 
 **Cross-checked against the original design documentation 2026-07-25.** A *pre-release* spec: it
-settles **system shape**, never numbers or art direction (rebalanced before release — extracted data
+settles **system shape**, never numbers or art direction (rebalanced before release, extracted data
 or an `OriginalScreenshots/` capture wins wherever either exists). **It is silent on the rest, so do
 not re-run this cross-check:** all of the splitscreen work (the original's multiplayer was
-networked, so there is no splitscreen reference at all); every *tuning* question — pitch, stall
-recovery, dive speed, camera, mix levels, weather — which it covers with qualitative rules and no
+networked, so there is no splitscreen reference at all); every *tuning* question, pitch, stall
+recovery, dive speed, camera, mix levels, weather, which it covers with qualitative rules and no
 numbers; and the C3 spiderweb, patrol-boat hit points, map-edge continuation, which world axis is
 north, and the crossed `pdpN_h` numbering.
 
-⚠ **The spec's HUD and damage material is unreliable as a class — three of its claims were
+⚠ **The spec's HUD and damage material is unreliable as a class, three of its claims were
 overturned by direct observation in one sitting (2026-07-30).** It said the low-altitude warning
 beeps (it does not), that the ammo gauge's yellow tier meant gun heat/jam rather than ammo (it is a
 real ammo tier, on gun belts only), and that the damage gauge ramps from a blue full-health state
@@ -79,10 +79,10 @@ them in a batch unblocks far more than doing them one at a time.
 cockpit panel does not settle a flight quantity: footage cannot confirm a decode, it only ranks
 readings, and it will rank a reading nobody has thought of (`docs/verification.md` DET-12, and
 DET-11 on the sim clock that makes every wall-clock rate wrong by 39 %). Flight questions go to
-`crimson.exe` — see [`docs/org/flightModel.md`](docs/org/flightModel.md). The captures below are **qualitative**: what a thing looks and
+`crimson.exe`, see [`docs/org/flightModel.md`](docs/org/flightModel.md). The captures below are **qualitative**: what a thing looks and
 sounds like, watched and frame-sampled, never measured into a constant.
 
-### HUD — ammo gauge in frame
+### HUD, ammo gauge in frame
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
@@ -124,20 +124,21 @@ draws its authored 800x600 space one-to-one.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-39` | Cockpit view while firing | In the original, hold the guns for a second or two IN the cockpit view (mode 6), ideally at dusk or against a dark cliff so a light flash reads. A sweep of all 130 existing clips found no cockpit-view firing footage: every gun clip is nose or chase view. *Look for:* how bright and how warm the flash reads inside the canopy, and where it lands — CSVM implements `muzzle_burst`'s authored first-person lights (`testfp`'s `PLAYER_1ST_PERSON` branch: `bigmuzzle_lt` + `muzzle_lt` at the authored offsets, ranges and colour), so the clip CALIBRATES their look rather than settling whether the interior lights at all. Energy is a declared TUNE (the data carries none, so both lights start at the third-person stand-in's 2.5), and the emphasis to match is the canopy struts above the head, which is where the original puts it at the controls; the windshield bullet-hole decals on taking window hits ride the same sortie if one happens | `BL-436` (the muzzle-light energy TUNE), `BL-431` |
-| `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: our per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), plausibly an authoring leftover (was `BL-090` item 2, closed — `git log --grep=BL-090`). If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281` |
-| `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)** — added 2026-08-07 — a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
+| `CAP-39` | Cockpit view while firing | In the original, hold the guns for a second or two IN the cockpit view (mode 6), ideally at dusk or against a dark cliff so a light flash reads. A sweep of all 130 existing clips found no cockpit-view firing footage: every gun clip is nose or chase view. *Look for:* how bright and how warm the flash reads inside the canopy, and where it lands, CSVM implements `muzzle_burst`'s authored first-person lights (`testfp`'s `PLAYER_1ST_PERSON` branch: `bigmuzzle_lt` + `muzzle_lt` at the authored offsets, ranges and colour), so the clip CALIBRATES their look rather than settling whether the interior lights at all. Energy is a declared TUNE (the data carries none, so both lights start at the third-person stand-in's 2.5), and the emphasis to match is the canopy struts above the head, which is where the original puts it at the controls; the windshield bullet-hole decals on taking window hits ride the same sortie if one happens | `BL-436` (the muzzle-light energy TUNE), `BL-431` |
+| `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original, a light scrape is enough, with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: our per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), plausibly an authoring leftover (was `BL-090` item 2, closed, `git log --grep=BL-090`). If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281` |
+| `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)**, added 2026-08-07, a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
 | `CAP-38` | Beeper and seeker hits ON an aircraft, **with audio** | In the original, fire the beeper (`wep_10`) and the seeker (`wep_11`) at an aircraft and film the hit itself, external/chase, close enough to read the burst on the airframe. Both weapons author `ANIMATION large_fireball` on their aircraft `IMPACT` row and ours plays exactly that on a struck plane; a fused burst reads the `default` row in the original and in ours (`docs/org/ordnanceTypes.md` "Which row a burst reads"), so the beeper's near miss draws nothing and the seeker's draws its white flare at the round. The ground-side look is already signed off, so this clip is only the on-plane half. *Look for:* whether a direct strike shows the large fireball on the plane, something smaller, or nothing beyond the paint; whether a near miss shows nothing (beeper) or the flare (seeker); and the per-type impact sound on the same take (`snd_missile_beeper` / `snd_missile_seeker`) | Nothing tracks the outcome; a mismatch with our on-plane burst mints a new `BL` |
 | `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. **Reduced 2026-08-15 by the `BL-297` decode**, which answered all three questions out of `crimson.exe` (`docs/org/vehicleDamage.md`, "Damage staging"): (a) effects land at the node the def names, so a nose hit DOES spark wing sites; (b) nothing per-part fires at all while a part's armor absorbs; (c) each entry fires once per downward crossing, so a panel tears once until repaired. **What is still owed is the look:** watch one panel cross its tear threshold and judge whether the flung debris reads as a piece of that panel or as generic flakes, and what visibly changes on the airframe. The other three are now confirmation, worth capturing on the same take if the framing allows but not worth a dedicated sortie | `BL-297` |
 | `CAP-47` | A gasbag burning out, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and set the Gemini's gasbags alight, holding one bag in frame from ignition through to whatever ends it, close enough to read both the fire and the envelope under it. *Look for:* what a finished gasbag looks like (a collapsed or missing envelope, a scorched one that stays, or a fire that simply stops), and what the zeppelin does once **three of its five** have finished, which is the authored death gate (`all_gmzep_gasbags` carries `MINIMUM_TO_SATISFY 3` over the five `finish_gmzepgasbagN` animations). Qualitative only: no burn duration is read off this clip as a constant | `BL-639` |
 | `CAP-55` | The Gemini's own death and where its wreck rests, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and torpedo three of the Gemini's five gasbags down **without destroying any left broadside bay**, then hold the hull in frame from the first bag falling through to where the wreck settles and stops moving. *Look for:* (a) how many gasbags separate and fall, counted against the hull (ours sheds five, and the eye agrees with the data), and whether every one of them stays on the water, since ours drops the front and back bags through it (`BL-698`); (b) whether the gondola/underside disappears as it settles (`breakunder` switches `underneath` inactive); (c) the waterline against the three left broadside bays and their hatches once it is at rest, since ours puts at least one bay under the sea; (d) a gun burst fired into whichever bay sits nearest the water, held long enough to see whether it takes damage; (e) the pause-screen objectives readout before and after that burst. Qualitative only: no distance or rest height is read off this clip as a constant. | `BL-698`, `BL-695`, and `PT-119` (b) and (d): whether the original leaves a bay unreachable at all, where ours no longer needs one, since the hull's own death demolishes every bay |
+| `CAP-57` | The Barracuda taking three flak rockets on the hull, CM04 (C3/M03) | In the original, fly the mission to the submarine and put three flak rockets into its hull from outside the hangar, external view, the hull and the hangar mouth both in frame; then, if it survives, three more into the open hangar. *Look for:* whether the hull takes damage at all (a hit effect, a damage readout, the mission's voice) and whether three on the hull kill it, since ours dies to exactly that. One take answers `BL-515`'s two questions, the angle and the count. Qualitative only: no hit-point figure is read off this clip | `BL-515` |
 
 ### World
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 
-### AI flight — an AI aircraft flying itself, external view
+### AI flight, an AI aircraft flying itself, external view
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
@@ -147,7 +148,7 @@ draws its authored 800x600 space one-to-one.
 
 ## 1 · Actionable now (`PT-nn`)
 
-### C1 · Campaign — the mission-end result carry (`BL-622` `B12`)
+### C1 · Campaign, the mission-end result carry (`BL-622` `B12`)
 
 ```powershell
 ./RunGame.ps1
@@ -175,9 +176,9 @@ draws its authored 800x600 space one-to-one.
   keeps stepping into later missions' own pages, the back arrow returns the same way and offers
   nothing at the very front of the book, stepping away from the flown mission's page shows a Current
   Mission bookmark that jumps straight back to it and disappears once there, REPLAY MISSION acts on
-  whichever page is currently shown rather than always the flight just flown — fly the win case, let
+  whichever page is currently shown rather than always the flight just flown, fly the win case, let
   Next Mission's position advance on the cabin, browse back to the flown mission with the bookmark,
-  then confirm Replay Mission still targets it and not the new current one — and RETURN TO CABIN
+  then confirm Replay Mission still targets it and not the new current one, and RETURN TO CABIN
   lands on the cabin with that session's own state (funds, Next Mission). A wrong mission on Replay,
   stale numbers, a missing stamp or scrap, a scrap that will not open, an arrow or the bookmark
   appearing where it should not (or not appearing where it should), or landing straight on the cabin
@@ -198,7 +199,7 @@ draws its authored 800x600 space one-to-one.
   Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
   purpose): that is not a fault of these three numbers and must not be tuned against.
 
-### C1 · Bloodhawk — the overcast sky, ground to above the deck
+### C1 · Bloodhawk, the overcast sky, ground to above the deck
 
 ```powershell
 ./RunGame.ps1 --plane=player_bhawk --chapter=C1
@@ -208,8 +209,8 @@ draws its authored 800x600 space one-to-one.
   (`OriginalScreenshots/C1 IA1 Fog river.png`, `.../C1 IA1 Fog above clouddeck.png`,
   `playtest/CAP-12/`; the matching work is complete,
   completed 2026-08-09; it closed `BL-118`, `BL-312`, `BL-303`, `BL-100`, `BL-101`, whose records
-  are in that plan and in `git log --grep=<ID>`). Three waves rebuilt this sky — the sprite
-  scatter, the fog model and the deck's brightness — and every number in the plan's final tables
+  are in that plan and in `git log --grep=<ID>`). Three waves rebuilt this sky, the sprite
+  scatter, the fog model and the deck's brightness, and every number in the plan's final tables
   is a still. This is the one sortie that judges it **in motion**, which is the half no box can
   reach: climb from the river up through the whiteout and out above the deck, then do it again
   looking back down.
@@ -220,44 +221,44 @@ draws its authored 800x600 space one-to-one.
   a slightly different pitch from ours, so judge *character* against them, not the horizon's
   height in frame (the plan's `SHOT-23` and its C24 tables have the numbers).
   *Look for:*
-  - (a) **below the deck, and while climbing** — the ceiling is one mottled sheet that reaches the
+  - (a) **below the deck, and while climbing**, the ceiling is one mottled sheet that reaches the
     horizon and dies into the fog wall with no sky stripe and no visible rim. The 13-px bright
     strip at the deck's edge that used to appear on a climb should be gone (it is now ~4 px, hidden
     inside the dome wall's own gradient). Climb slowly from 200 m to 900 m watching the horizon:
     nothing should slide, step or brighten as you go;
-  - (b) **the whiteout crossing** — entering the band at ~970 m the world should ramp to a total
+  - (b) **the whiteout crossing**, entering the band at ~970 m the world should ramp to a total
     whiteout in the core (1032–1062 m) and clear again by ~1124 m, with no snap and no hard edge
     at either end, and no cloud card visibly punching through the pane;
-  - (c) **above the deck, the tops and the floor are ONE tone** — the straight-edged wedges the
+  - (c) **above the deck, the tops and the floor are ONE tone**, the straight-edged wedges the
     deck floor used to cut through the near cards are gone (measured: floor↔card gap +49 → −4).
     Look down and forward: no hard colour cut anywhere along the mesh↔sprite boundary, and nothing
     darker than the fog colour showing between cards;
-  - (d) **C1C above its band** (`--chapter=C1C`, climb past 1082 m) — this one is **expected to
+  - (d) **C1C above its band** (`--chapter=C1C`, climb past 1082 m), this one is **expected to
     look WORSE than C1**, and judging how much worse is the point. Its `fvol` cards author
     `lighting: true` where C1's do not, so its frame holds three cloud tones at once: placed cloud
     facades 235, deck floor 196, `fvol` cards 164. The flag is decoded: the original shades a lit
     card per vertex from its own normals, brighter across the top and swinging with the heading,
     where we apply one flat `csky_world_light` (`docs/org/vertexLighting.md`). Your verdict on how
     bad the flat version reads is what prioritises replacing it;
-  - (e) **density and character against the original** — cloud spacing and size versus `CAP-12`'s
+  - (e) **density and character against the original**, cloud spacing and size versus `CAP-12`'s
     own climb, at grazing angles along the tops and along the base: no lattice or comb at any
     angle, no visible field edge over the base map, and the sheet's mottling reading as
-    multi-scale rather than smooth broad bands (ours is measurably blurrier than the original's —
-    high-pass RMS ≈ 0.2 against ≈ 0.9 — so say whether that is visible in motion).
-  - (f) **the in-band flicker** (`BL-329`) — hold still a few
+    multi-scale rather than smooth broad bands (ours is measurably blurrier than the original's,
+    high-pass RMS ≈ 0.2 against ≈ 0.9, so say whether that is visible in motion).
+  - (f) **the in-band flicker** (`BL-329`), hold still a few
     seconds in the whiteout RAMP, not the opaque core (~970–1032 m or ~1062–1124 m; the fully
     white core in between is a flat colour by design and never flickers): the pane should shimmer
     subtly rather than sit dead flat, on a pace of roughly a couple to several seconds per swing.
     The rate is a declared TUNE (`BandFlicker.DefaultRate`), not a decoded figure, so judge
-    whether it reads as "clouds breathing" at all — too fast reads as a strobe, too slow reads as
+    whether it reads as "clouds breathing" at all, too fast reads as a strobe, too slow reads as
     nothing happening.
 
-  *Blocks:* this is the plan's own exit verdict — a pass confirms it. A fail on (a), (b), (c) or
+  *Blocks:* this is the plan's own exit verdict, a pass confirms it. A fail on (a), (b), (c) or
   (e) is fresh evidence on the closed item's successor, not a reopening: name which check failed
   and mint against the mechanism it belongs to (`A7`/`C25`/`C26` for (a), `CLOUD_COVER` for (b),
   `C23`'s fork for (c), `BL-312`'s scatter or `BL-327`'s far-field half for (e)). (d) has its
   item already: it feeds `BL-327`. (f) feeds `BL-329`.
-  *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0 — its
+  *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0, its
   deck must look exactly as it did, and its cards must still be *there* above the band.
 
 - `PT-121` `[A/B: HUD.png]` **The compass tape's overscan, rim and nearest-tick look
@@ -270,7 +271,7 @@ draws its authored 800x600 space one-to-one.
     steady through a slow turn instead of stepping or flickering between neighbours.
   *Blocks:* `BL-113`.
 
-### C1 · Bloodhawk vs AI — the kill sequence, sound on
+### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
 ```powershell
 ./RunGame.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury --ai-attack=9 --volume=1.0 --no-det
@@ -283,7 +284,7 @@ reasons that have nothing to do with any of these checks.
   original divides health alone at both the def level and the per-part level, armour never entering
   either quotient, and a part whose armour still covers the hit takes no health damage at all, so an
   armoured zone should cross no threshold whatever.
-  *Variations:* take the fire rather than give it —
+  *Variations:* take the fire rather than give it,
   `--ai=player_pfighter,player_pfighter --ai-attack=9`.
   *Look for:*
   - (a) nothing at all shows on a zone while its armour is still absorbing, the 0.99 spark shim
@@ -421,7 +422,7 @@ reasons that have nothing to do with any of these checks.
 
 - `PT-133` `[Own]` **The HUD's reading box is the right width at the controls on a 32:9 screen.**
   The dials, the SPD/ALT/THR block and the pause screen's objectives panel measure from a 16:9 box
-  centred in the pane rather than from the pane's own edges — that box is the frame every one of
+  centred in the pane rather than from the pane's own edges, that box is the frame every one of
   those offsets was measured in (`HUD.png`, 2556x1440). Whether the width reads right on a
   5120-wide screen, where the two columns end up 1280 px in from each edge, is a judgement no
   instrument makes. Fly it with the window fullscreen (Options → VIDEO → Display Mode) so the pane
@@ -430,7 +431,7 @@ reasons that have nothing to do with any of these checks.
   - (a) the dials and the status block sit within comfortable reading width, neither out at the
     edges of peripheral vision nor huddled into the middle;
   - (b) an off-screen target's edge arrow still comes from the TRUE screen edge and points
-    usefully — that element deliberately keeps the pane, since the box is not where the target
+    usefully, that element deliberately keeps the pane, since the box is not where the target
     left;
   - (c) nothing has moved at 16:9: the same sortie windowed looks exactly as it did.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
@@ -456,7 +457,7 @@ reasons that have nothing to do with any of these checks.
   question about what else the original does to those sprites; it mints a new `BL` naming the
   emitter and what it should look like. A pass retires this item.
 
-### C1 · two pilots — Dogfight (splitscreen VS)
+### C1 · two pilots, Dogfight (splitscreen VS)
 
 ```powershell
 ./RunGame.ps1 --vs --players=2 --chapter=C1
@@ -466,22 +467,22 @@ reasons that have nothing to do with any of these checks.
   The fade now runs its bands against every pane's camera and each particle takes the most
   favourable pane's alpha, so a trail near player 2 draws in player 2's pane. What no instrument
   here can judge is the remaining divergence: one alpha per particle for the whole world, so a pane
-  can see a puff its own camera would have faded further. A scripted shot cannot set this up —
+  can see a puff its own camera would have faded further. A scripted shot cannot set this up,
   there is no per-player placement flag and no scripted fire, so both panes spawn near-coincident.
   *Launch:* `./RunGame.ps1 --fly --players=2 --chapter=C3` (plain 2-pane free flight, two pads or
-  pad + keyboard) — the section's Dogfight launch above works too if a target is wanted.
-  *Look for:* (a) the reported repro is gone — P2 astern of P1 fires a rocket past him and sees the
+  pad + keyboard), the section's Dogfight launch above works too if a target is wanted.
+  *Look for:* (a) the reported repro is gone, P2 astern of P1 fires a rocket past him and sees the
   whole trail, not just the stretch beside P1; (b) neither pane shows a puffer popping in or out as
   the OTHER player turns or flies away (the shared-alpha tell); (c) flying through an emitter still
   culls it in the pane that flew through it rather than filling that screen.
-  *Blocks:* the fidelity verdict for the nearest/union boundary rule — per-pane alpha (one MultiMesh per pane) is
+  *Blocks:* the fidelity verdict for the nearest/union boundary rule, per-pane alpha (one MultiMesh per pane) is
   reached for only if (b) visibly fails, and a fail mints its own `BL` item.
   *Variations:* C3 (`--chapter=C3`, the waterfalls' `spew_puffer` is the tightest authored band);
   `--players=4` for the same question with four alphas competing.
   *Also carries B12 (`BL-340` landed 2026-08-15):* the `FBFX_COLOR_FROM_TO` screen wash now paints
   only the panes whose camera is inside the burst's authored 100 m radius, and the same missing
   levers (no per-player placement, no scripted fire) keep it off the scripted path. In the same
-  session: put P2 over the ground alone and have him rocket the terrain — P2's pane flashes
+  session: put P2 over the ground alone and have him rocket the terrain, P2's pane flashes
   white/violet and P1's, a few hundred metres off, does not; then fly the pair in together and both
   flash. A wash that still paints all panes, or one that paints none, is the failure.
 
@@ -502,16 +503,16 @@ reasons that have nothing to do with any of these checks.
   angle and widen horizontally like any other viewport, so a cropped cockpit in one is a new fault
   rather than a known one.
 
-### C1 · two pilots — stunt race (splitscreen starting grid)
+### C1 · two pilots, stunt race (splitscreen starting grid)
 
 ```powershell
 ./RunGame.ps1 --stunt --players=2 --chapter=C1
 ```
 
 - `PT-45` `[Own]` **The abreast race starting grid** (landed 2026-08-08;
-  it closed `BL-084`, whose record is in that commit — `git log --grep=BL-084`).
+  it closed `BL-084`, whose record is in that commit, `git log --grep=BL-084`).
   Two pads (or pad + keyboard); menu path: Stunt → C1 → both press Start. Splitscreen stunt racing is
-  our invention — the original had no splitscreen at all — so every call here is a judgement on our
+  our invention, the original had no splitscreen at all, so every call here is a judgement on our
   own remake, with no reference to A/B against.
 
   **Why this sitting is the only evidence there will ever be for a race.** On the race path the grid
@@ -522,7 +523,7 @@ reasons that have nothing to do with any of these checks.
   does place a field with it; that is a different caller and settles nothing about a race start.)
   The grid geometry is also not
   photographable: the panes are chase-cam only, so at the default 60 m spacing your neighbour sits
-  outside your own frustum. **Read the geometry off the console instead** — every launch logs one
+  outside your own frustum. **Read the geometry off the console instead**, every launch logs one
   line per slot, e.g. `spawn [P1 grid slot 1 of 4] pos=(-4974,260,-3771) heading=90° spacing=60m
   lift=81m`, with the anchor's own line above them. On C1 with `--spawn=0` the field lifts 81 m.
 
@@ -530,33 +531,33 @@ reasons that have nothing to do with any of these checks.
   (default **60 m** between neighbouring slots) and `groundClearance` (default **100 m** of air the
   lowest slot must have under it) are read from `config.json` as `startGrid.slotSpacing` and
   `startGrid.groundClearance`, listed by `--dump-config`, and take effect on the next launch with no
-  rebuild. Neither is a finding — 60 m is just the figure already in the tree — so dial them between
+  rebuild. Neither is a finding, 60 m is just the figure already in the tree, so dial them between
   launches until the start looks right and record what you landed on.
   *Look for:*
-  - (a) **does it read as a starting line** — at the moment of spawn, does the field feel like a
+  - (a) **does it read as a starting line**, at the moment of spawn, does the field feel like a
     grid you are lined up on, at 2 panes and at `--players=4`;
-  - (b) **spacing at the wingtips** — 60 m: too far apart to feel like a race start, or too close
+  - (b) **spacing at the wingtips**, 60 m: too far apart to feel like a race start, or too close
     for comfort in the first seconds of manoeuvring? Try 30 m and 100 m before deciding;
-  - (c) **the uniform lift** — the whole field rises together by whatever its worst slot needs, so
+  - (c) **the uniform lift**, the whole field rises together by whatever its worst slot needs, so
     over broken ground it can look absurd (the field hovering high over a valley) or, if clearance
     is dialled too low, too tight (an outer wingtip in a hillside). Watch an outer slot, not P1;
-  - (d) **a felt end-of-grid advantage** — do the outer slots feel meaningfully better or worse than
+  - (d) **a felt end-of-grid advantage**, do the outer slots feel meaningfully better or worse than
     the middle for reaching the first Danger Zone? Slots are fixed by player index today; a *felt*
     bias is the trigger to randomise the slot order per race (not to rotate it per rematch);
-  - (e) **the anchor still varies** — relaunch a few times without `--spawn=`: the whole grid should
+  - (e) **the anchor still varies**, relaunch a few times without `--spawn=`: the whole grid should
     sit somewhere else each time (the anchor is a random pick from the mission's spawn list), not on
     the same point every launch;
-  - (f) **`--pos` still wins** — `--pos=x,y,z` must still place the field where you asked, grid or
+  - (f) **`--pos` still wins**, `--pos=x,y,z` must still place the field where you asked, grid or
     no grid, since the override is resolved beneath the grid rather than beside it.
 
   *Blocks:* the two config values in (b)/(c) hardening from fallbacks into decisions; the
   slot-rotation call in (d); and `BL-314`, the race countdown, which must not be started until the
-  grid it counts down over has been flown. A structural fail — a plane in terrain, a field that is
-  not level or not on one heading — mints its own `BL` item.
+  grid it counts down over has been flown. A structural fail, a plane in terrain, a field that is
+  not level or not on one heading, mints its own `BL` item.
   *Variations:* `--players=4` for the case (a)/(b)/(d) are really about; `--chapter=C2` for a
   different terrain profile under (c).
 
-### C1 · two pilots — the victim-routed screen wash
+### C1 · two pilots, the victim-routed screen wash
 
 ```powershell
 ./RunGame.ps1 --coop --players=2 --chapter=C1 --debug-wash=2
@@ -595,7 +596,7 @@ the constant: a decode is not contested with a measurement read off a running pi
   *Variations:* `--debug-wash=3` in a two-pane session, which answers to no pane and must paint
   nothing at all.
 
-### C1 · four pilots — the four-viewer ordnance pass
+### C1 · four pilots, the four-viewer ordnance pass
 
 ```powershell
 ./RunGame.ps1 --coop --players=4 --chapter=C1 --rocket=wep_08 --infinite-ammo
@@ -670,7 +671,7 @@ against `BL-389` rather than against the wash routing.
   reopens the item. *Blocks:* nothing.
 
 
-### CM01 (C3/M01) · two to four pilots — join, flight check, death and skip
+### CM01 (C3/M01) · two to four pilots, join, flight check, death and skip
 
 ```powershell
 ./RunGame.ps1
@@ -687,7 +688,7 @@ is a judgement on our own remake.
   - (a) Start on an unclaimed pad joins a guest from the roster, the briefing and the flight check
     alike, with the player chip strip naming everyone who has joined;
   - (b) FLY MISSION on the seated pilot's own check opens `FLIGHT CHECK P2` rather than launching,
-    and does the same for P3 and P4 as each joins — one window, one player at a time;
+    and does the same for P3 and P4 as each joins, one window, one player at a time;
   - (c) FLY MISSION on the LAST joined player's check is what actually launches the mission;
   - (d) B on a guest's pad drops that guest back out (roster, briefing or flight check alike)
     without disturbing P1's own flow, which keeps its ordinary Back/Next meaning throughout.
@@ -695,7 +696,7 @@ is a judgement on our own remake.
   with no scripted-input driver for a pad press on a menu screen): a fail mints a new `BL`.
 
 - `PT-92` `[Own]` **A downed human spectates, and the last one lost ends the mission.**
-  Fly two humans into CM01 and crash one — into the sea or a hillside, `R` to restart the pane if
+  Fly two humans into CM01 and crash one, into the sea or a hillside, `R` to restart the pane if
   the first attempt is too gentle to register as a loss.
   *Look for:*
   - (a) the downed human's pane switches to an orbiting spectator camera on their own wreck, not a
@@ -703,7 +704,7 @@ is a judgement on our own remake.
   - (b) that spectating pane takes its own pad's input for the orbit, so a second downed human (at
     three or four players) does not orbit in lockstep with the first;
   - (c) crashing the LAST human still flying ends the mission on a loss the instant no wreck is
-    still falling — that human is not handed a camera, since there is nothing left to watch;
+    still falling, that human is not handed a camera, since there is nothing left to watch;
   - (d) `--no-crash-loss` (`--campaign=<profile>:0 --players=2 --no-crash-loss`) turns all of this
     off together: a crashed human keeps flying, no pane is taken and nothing ends.
   *Blocks:* nothing tracks the outcome (`B13` landed on an engine suite alone, with no scripted
@@ -716,13 +717,13 @@ is a judgement on our own remake.
   - (a) the intro collapses to one pane filling the whole window, letterboxed, with no gutter and
     no second pane drawn behind it;
   - (b) any key or pad button (not Escape) skips it, and the on-screen name is the SKIPPER'S,
-    in that player's own colour — P2's skip must never read as P1's;
+    in that player's own colour, P2's skip must never read as P1's;
   - (c) the skip (or the intro's own end) restores every pane and HUD exactly as they were before
     the collapse, with nobody's pad input lost in the process.
   *Blocks:* nothing tracks the outcome (`B14` landed on an engine suite and a code-review pass at
   the controls, with no scripted-input driver for a pad-button skip): a fail mints a new `BL`.
 
-### CM02 (C3/M05) · guest capture — the Balmoral wing-walk
+### CM02 (C3/M05) · guest capture, the Balmoral wing-walk
 
 ```powershell
 ./RunGame.ps1 --campaign=<profile>:1 --players=2
@@ -731,14 +732,14 @@ is a judgement on our own remake.
 - `PT-91` `[Own]` **Whichever human triggers the capture ends up in the captured aeroplane.** Fly both humans to CM02's wing-walk rescue, and have
   the GUEST (not P1) be the one to fly into the trigger.
   *Look for:*
-  - (a) the guest, not P1, is the one re-flown into the Balmoral once the cutscene ends — the swap
+  - (a) the guest, not P1, is the one re-flown into the Balmoral once the cutscene ends, the swap
     follows whoever triggered it rather than always landing on P1;
   - (b) the OTHER human's aircraft and position are undisturbed for the whole cutscene, not stacked
     onto the capture point;
   - (c) the newly-captured Balmoral shows its own hook and wing-fold choreography rather than
     Bloodhawk/Fury geometry left over from the airframe the guest flew in;
   - (d) relaunching and letting P1 trigger it instead puts P1 in the Balmoral and leaves the guest's
-    own airframe alone — the same behaviour, the other human.
+    own airframe alone, the same behaviour, the other human.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
 

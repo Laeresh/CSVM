@@ -53,7 +53,7 @@ public sealed class PufferEmitterFactory : IEmitterFactory
 /// names the miss, and says so once out loud.
 ///
 /// <para>⚠ The warning is the point, and it stays. A null object that swallows the request silently
-/// is a world with no fire, no dust and no smoke reading as a clean log — however
+/// is a world with no fire, no dust and no smoke reading as a clean log, however
 /// polite its type name. The bootstrap census cannot cover this: it prints before the first death,
 /// ON_CALL sequence or range-deferred def can reach a PUFFER_STATE. Once per runtime rather than
 /// once per name, because the condition is one build-time contract rather than one datum per

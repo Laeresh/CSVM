@@ -197,7 +197,7 @@ public class HangarFlowTests : IDisposable
         Assert.Empty(_store.List());
     }
 
-    /// <summary>An overweight build is refused —— a Balmoral loaded past its 15760 lb
+    /// <summary>An overweight build is refused, a Balmoral loaded past its 15760 lb
     /// capacity (the figures HangarEconomyTests pins).</summary>
     [Fact]
     public void AnOverweightBuildIsRefused()

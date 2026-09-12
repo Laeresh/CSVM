@@ -7,8 +7,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// The original's keyboard stick: a held key ramps the axis at 2.5/s, a released or reversed one
 /// drops it to centre in a single frame. Decode: docs/org/flightModel.md.
-/// The asymmetry is the whole mechanism. A symmetric ramp — one that walks back to centre at the
-/// same rate — matches on a held key and differs on every release and every reversal, which is
+/// The asymmetry is the whole mechanism. A symmetric ramp, one that walks back to centre at the
+/// same rate, matches on a held key and differs on every release and every reversal, which is
 /// where the pitch-cadence roll-off comes from, so those are the cases pinned here.
 /// </summary>
 public class StickRampTests

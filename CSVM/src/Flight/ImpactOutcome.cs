@@ -22,7 +22,7 @@ public enum ImpactSuppression
     Animation = 4,
 }
 
-/// <summary>What should happen when one weapon hits one surface — the effect name, the sound, the
+/// <summary>What should happen when one weapon hits one surface, the effect name, the sound, the
 /// stand-in and the damage numbers, as a value with no <c>Node3D</c> and no physics space behind
 /// it. <see cref="Resolve"/> decides; a caller performs.</summary>
 public readonly record struct ImpactOutcome
@@ -43,13 +43,13 @@ public readonly record struct ImpactOutcome
     /// play time, not here.</summary>
     public string? Sound { get; init; }
 
-    /// <summary>Which stand-in burst applies — <c>None</c> once an authored model has rendered.</summary>
+    /// <summary>Which stand-in burst applies, <c>None</c> once an authored model has rendered.</summary>
     public ImpactStandIn StandIn { get; init; }
 
     /// <summary>The weapon's <c>HEALTH_DAMAGE</c>, 0 when it carries none.</summary>
     public float Damage { get; init; }
 
-    /// <summary>The weapon's <c>IMPACT_PROXIMITY</c> — the blast/effect radius in m, 0 when it
+    /// <summary>The weapon's <c>IMPACT_PROXIMITY</c>, the blast/effect radius in m, 0 when it
     /// carries none. A radius on a zero-damage weapon is an effect radius only.</summary>
     public float BlastRadius { get; init; }
 
@@ -60,13 +60,13 @@ public readonly record struct ImpactOutcome
     /// <summary>Decides the impact from the weapon's <c>IMPACT</c> table at the struck surface id;
     /// touches no scene, sink or sound archive (docs/org/weaponImpact.md). <c>default</c> already
     /// backfills ids the weapon names no block for (<see cref="WeaponDefs.InheritDefaultRow"/>), so
-    /// do not re-add a fallback here — it would also fire on ids a weapon names and leaves empty,
+    /// do not re-add a fallback here, it would also fire on ids a weapon names and leaves empty,
     /// like <c>player</c>(6). <paramref name="modelResolved"/>, <paramref name="hasEffectsRuntime"/>
     /// and <paramref name="suppression"/> (the impact hook's answer) are caller facts.</summary>
     public static ImpactOutcome Resolve(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime, ImpactSuppression suppression = ImpactSuppression.None)
     {
-        // The struck id's IMPACT row — already carrying `default`'s binding if the weapon named no
+        // The struck id's IMPACT row, already carrying `default`'s binding if the weapon named no
         // block for this id (WeaponDefs.InheritDefaultRow).
         var effect = weapon.ImpactFor(surfaceId);
         // The hook's Animation bit removes the ANIMATION slot only; SURFACE_ANIMATION is spawned
@@ -88,7 +88,7 @@ public readonly record struct ImpactOutcome
     // The stand-in ladder, ordered: model beats all; a hardpoint weapon with no scene gets the
     // explosion; a gun on `buildings` gets ricochet sparks; everything else gets the single spark.
     // Ground has no arm of its own (backlog.md `BL-289`) but must still return non-`None`
-    // — `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
+    //, `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime)
     {

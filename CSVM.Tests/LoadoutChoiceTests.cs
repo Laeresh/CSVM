@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The Ammo Selection screen's pure core: the two dropdown rosters as the original orders them,
 /// and the choice record's apply step. The record is keyed by slot identity, so the interesting
-/// cases are the ones where the base does not have the shape the choice was built against — a
+/// cases are the ones where the base does not have the shape the choice was built against, a
 /// custom plane's fit, a stale pick for a slot that is gone.
 /// </summary>
 public class LoadoutChoiceTests
@@ -28,7 +28,7 @@ public class LoadoutChoiceTests
         Assert.Equal("Explosive", options.GunAmmo.Single(o => o.Id == "magnesium").Label);
     }
 
-    /// <summary>The rocket dropdown's eleven weapons plus None, in the screen's own order — which
+    /// <summary>The rocket dropdown's eleven weapons plus None, in the screen's own order, which
     /// is neither id order nor the wep_04–15 tier. The incendiary wep_04 is a named weapon the
     /// original does not offer, so its absence is the assertion that matters most here.</summary>
     [Fact]
@@ -72,7 +72,7 @@ public class LoadoutChoiceTests
     }
 
     /// <summary>A pylon pick is keyed by the physical pylon number, so it lands on the fill-order
-    /// entry that binds to that pylon — index 1 is pylon 5, not pylon 2.</summary>
+    /// entry that binds to that pylon, index 1 is pylon 5, not pylon 2.</summary>
     [Fact]
     public void APylonPickLandsOnItsPhysicalPylonNotItsArrayIndex()
     {
@@ -160,7 +160,7 @@ public class LoadoutChoiceTests
     }
 
     /// <summary>A picked ammo resolves through caliber + ammo, so an inherited explicit weapon id
-    /// is cleared — Loadout.Bind prefers WeaponId and would otherwise ignore the pick.</summary>
+    /// is cleared, Loadout.Bind prefers WeaponId and would otherwise ignore the pick.</summary>
     [Fact]
     public void APickedAmmoClearsAnInheritedExplicitWeaponId()
     {

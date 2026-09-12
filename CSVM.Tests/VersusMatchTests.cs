@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 /// two ways a match ends (threshold, time-out), the tie-draw rule, a rematch's re-arm, and each
 /// end condition disabled on its own. <see cref="VersusMatch"/> is a plain class with no engine
 /// dependency at all (unlike its sibling <see cref="StuntRace"/>, it needs no fake-collaborator or
-/// console-sink dance — there is nothing here that could reach <c>GD.*</c>).
+/// console-sink dance, there is nothing here that could reach <c>GD.*</c>).
 /// </summary>
 public class VersusMatchTests
 {
@@ -64,7 +64,7 @@ public class VersusMatchTests
         Assert.Equal(0, order[0].PlayerIndex);
         Assert.Equal(3, order[0].Kills);
         Assert.Equal(1, order[0].Rank);
-        Assert.NotEqual(1, order[1].Rank); // the sole leader — not a shared rank 1
+        Assert.NotEqual(1, order[1].Rank); // the sole leader, not a shared rank 1
     }
 
     [Fact]
@@ -86,8 +86,8 @@ public class VersusMatchTests
             byIndex[row.PlayerIndex] = row;
 
         Assert.Equal(1, byIndex[0].Rank);
-        Assert.Equal(1, byIndex[1].Rank); // tied at the top — a draw, not a winner
-        Assert.Equal(3, byIndex[2].Rank); // shares nothing — the tied pair pushed it down
+        Assert.Equal(1, byIndex[1].Rank); // tied at the top, a draw, not a winner
+        Assert.Equal(3, byIndex[2].Rank); // shares nothing, the tied pair pushed it down
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class VersusMatchTests
         var match = new VersusMatch(playerCount: 2, killTarget: 3, timeLimit: 0f);
 
         match.Advance(1_000_000f);
-        Assert.False(match.Completed); // the clock never moves — an untimed match never times out
+        Assert.False(match.Completed); // the clock never moves, an untimed match never times out
         Assert.Equal(0f, match.Elapsed);
 
         match.RegisterKill(shooter: 0, victim: 1);

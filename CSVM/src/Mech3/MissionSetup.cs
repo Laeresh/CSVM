@@ -37,7 +37,7 @@ public sealed class MissionSetup
 
     /// <summary>
     /// Reads <c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c> out of the interp extraction.
-    /// Null when the file or the script is missing — a mission with no setup script is normal
+    /// Null when the file or the script is missing, a mission with no setup script is normal
     /// (the engine simply leaves the world as loaded), so callers treat null as "nothing to do".
     /// </summary>
     public static MissionSetup? Load(string interpPath, string chapter, string mission)
@@ -145,7 +145,7 @@ public sealed class MissionSetup
                     SetActive(op, false);
                     break;
                 // Places the selection (14 uses: C1/M05's boats/redcross/workersvoyagezep,
-                // C3/MP1-2's cargozep1, C5/MP1's rearm_node_2) — see docs/formats/interp.md,
+                // C3/MP1-2's cargozep1, C5/MP1's rearm_node_2), see docs/formats/interp.md,
                 // "Vehicles load unplaced".
                 case "Object3DTranslate":
                     if (ParseVector3(op.Args) is { } pos)
@@ -156,7 +156,7 @@ public sealed class MissionSetup
                         }
                     break;
                 // Re-orients the selection (11 uses). The data's angle unit is ambiguous and
-                // decided per script — see RotateAsRadians and docs/formats/interp.md.
+                // decided per script, see RotateAsRadians and docs/formats/interp.md.
                 case "Object3DRotate":
                     if (ParseVector3(op.Args) is { } euler)
                     {
@@ -168,7 +168,7 @@ public sealed class MissionSetup
                         }
                     }
                     break;
-                // Acted on, but at world-build time rather than here — the rate is part of the
+                // Acted on, but at world-build time rather than here, the rate is part of the
                 // material cache key, so it has to be known before the material exists. See
                 // ScrollByModel.
                 case "Object3DSetScroll":
@@ -179,7 +179,7 @@ public sealed class MissionSetup
                     SetAreaActive(i, op, setActiveByIndex);
                     break;
                 default:
-                    // Everything else is parsed, counted and reported rather than guessed at —
+                    // Everything else is parsed, counted and reported rather than guessed at,
                     // see the class docs and docs/formats/interp.md for what is left and why.
                     _unapplied[op.Verb] = _unapplied.GetValueOrDefault(op.Verb) + 1;
                     break;
@@ -266,13 +266,13 @@ public sealed class MissionSetup
     }
 
     // A script name matches a gamez node name case-insensitively, with the model-file suffix
-    // optional on either side — the same rule AnimRuntime's node lookup uses ('ap_radiotwr' for
+    // optional on either side, the same rule AnimRuntime's node lookup uses ('ap_radiotwr' for
     // the node 'ap_radiotwr.flt'), and interp.md records the scripts using both spellings.
     private static bool NameMatches(string nodeName, string scriptName) =>
         nodeName.Equals(scriptName, StringComparison.OrdinalIgnoreCase)
         || Strip(nodeName).Equals(Strip(scriptName), StringComparison.OrdinalIgnoreCase);
 
-    // `on|off <x1> <z1> <x2> <z2>` — the rectangle in world XZ, corners in either order.
+    // `on|off <x1> <z1> <x2> <z2>`, the rectangle in world XZ, corners in either order.
     private static (float X1, float Z1, float X2, float Z2)? ParseRect(string[] args)
     {
         if (args.Length < 5

@@ -234,11 +234,11 @@ which beats the `graphics.mode` config key (`docs/cli.md`); for the difficulty i
 `SessionSpec.WithSavedDifficulty`, applied by `Launcher.LaunchSession` at every launch, where a
 parsed `--difficulty=` flag beats the saved word, a `--det` run reads no saved option, and the
 default is `normal`. For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
-the saved word, which beats the `display.vsync` config key, which beats V-Sync on, and for the
-display mode `DisplayModeSetting.Resolve`, where the saved word beats the windowed default and
+the saved word, which beats the `display.vsync` config key, which beats V-Sync off, and for the
+display mode `DisplayModeSetting.Resolve`, where the saved word beats the borderless default and
 there is no flag or config key above it. The window size is `ResolutionSetting.Resolve`, the same
-two layers over `project.godot`'s 1280x720, with the extra rule that the saved size has to be one
-the chosen screen offers: a size it does not offer falls back to that default rather than to the
+two layers over the chosen screen's own size, with the extra rule that the saved size has to be one
+that screen offers: a size it does not offer falls back to the screen's size rather than to the
 nearest, since every other option falls through to its own default and a nearest match would hand
 the player an aspect ratio they did not pick. The screen is `MonitorSetting.Resolve`, the one setting
 whose saved value can name something that is not there: an index no screen answers to is dropped like an

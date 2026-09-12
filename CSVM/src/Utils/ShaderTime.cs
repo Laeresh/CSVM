@@ -10,7 +10,7 @@ namespace CSVM.Utils;
 /// what makes a halted clock a true freeze-frame and makes a fixed-step run's pixel output a
 /// function of the rendered-frame count rather than of the machine's frame rate.
 ///
-/// <para>Between sessions — the launchscreen, and the frame after a teardown — there is no
+/// <para>Between sessions, the launchscreen, and the frame after a teardown, there is no
 /// clock; the value then keeps advancing on the wall delta from wherever the last session left
 /// it, so no on-screen animation stalls while the menu is up.</para>
 /// </summary>
@@ -34,7 +34,7 @@ public static class ShaderTime
 
     private static double _time;
 
-    /// <summary>Declares the uniform. Must run before the first shader that reads it is built —
+    /// <summary>Declares the uniform. Must run before the first shader that reads it is built,
     /// Godot refuses to compile a shader referencing an unregistered global.</summary>
     public static void RegisterGlobal()
     {

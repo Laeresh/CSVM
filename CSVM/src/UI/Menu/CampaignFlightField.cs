@@ -7,8 +7,8 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// One guest's aircraft on a co-op campaign sortie: the records the picker offers them, and which
-/// one they are on. Every record here is session-scoped — a stock airframe at rest, or a COPY of
-/// one of the seated profile's aircraft — so a guest's ammunition edits land on something the
+/// one they are on. Every record here is session-scoped, a stock airframe at rest, or a COPY of
+/// one of the seated profile's aircraft, so a guest's ammunition edits land on something the
 /// profile store never sees.
 /// </summary>
 public sealed class CampaignGuest

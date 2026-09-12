@@ -1,10 +1,10 @@
 # Upstream PR package (mech3ax CS revival, plan item 14)
 
-> **ARCHIVED — 2026-07-22. The premise below no longer holds.**
+> **ARCHIVED, 2026-07-22. The premise below no longer holds.**
 >
 > This package was written to land the CS work upstream in TerranMechworks/mech3ax. The user
 > then spoke with the mech3ax developer, which answered the question `pr-0-discussion.md` was
-> drafted to ask: **upstream removed Crimson Skies support because they could not maintain it —
+> drafted to ask: **upstream removed Crimson Skies support because they could not maintain it,
 > bandwidth, not architecture.**
 >
 > **The agreed outcome is that the CS work stays in the user's fork** (`Laeresh/mech3ax`), with
@@ -15,21 +15,21 @@
 >
 > These files are **kept, not deleted**: `pr-1-anim.md` and `pr-2-gamez.md` remain the best
 > existing description of what each branch actually contains, which is what a future upstream
-> revival — or anyone reading the fork — would need.
+> revival, or anyone reading the fork, would need.
 >
 > **The anim PR was opened before the decision, and the user closed it after** (confirmed
 > 2026-07-22). So nothing of this package is outstanding upstream: the gamez PR was never opened,
 > the anim PR is closed, and issue [#3](https://github.com/TerranMechworks/mech3ax/issues/3)
-> stands as the discussion that settled it. Neither branch is withdrawn from the *fork* — both
+> stands as the discussion that settled it. Neither branch is withdrawn from the *fork*, both
 > `pr-cs-anim` and `pr-cs-gamez` remain on `origin`, split by concern, and are what a future
 > upstream attempt would reopen from.
 >
-> The AI-assistance disclosure rule below is **not** archived with this package — it is
+> The AI-assistance disclosure rule below is **not** archived with this package, it is
 > project-wide and now lives in CLAUDE.md's top block.
 
 Prepared 2026-07-21. These are the **ready-to-open** upstream contributions for the work in
 `PLAN-mech3ax-cs-revival`. Per the project's division of labor (CLAUDE.md), the code
-here is prepared for the user, who owns all upstream/community communication — **nothing has
+here is prepared for the user, who owns all upstream/community communication, **nothing has
 been pushed or opened**. *(As written 2026-07-21, before the branches were pushed and the anim PR
 opened; the status table below is the accurate record.)*
 
@@ -40,11 +40,11 @@ Target: [TerranMechworks/mech3ax](https://github.com/TerranMechworks/mech3ax), b
 
 | Branch | Contents | Base |
 |---|---|---|
-| `pr-cs-anim` | Track B — `cam_anim.zbd`/`mis_anim.zbd` support (4 commits) | `cbb838f` (rc3) |
-| `pr-cs-gamez` | Track A — CS `gamez.zbd`/`planes.zbd` revival (1 commit) | `cbb838f` (rc3) |
+| `pr-cs-anim` | Track B, `cam_anim.zbd`/`mis_anim.zbd` support (4 commits) | `cbb838f` (rc3) |
+| `pr-cs-gamez` | Track A, CS `gamez.zbd`/`planes.zbd` revival (1 commit) | `cbb838f` (rc3) |
 | `cs-anim` | integration branch = both, what this project builds from | `cbb838f` (rc3) |
 
-The two PR branches are **independent** — either can be merged first, in either order, with no
+The two PR branches are **independent**, either can be merged first, in either order, with no
 dependency on the other. That cost one real fix (below) and is worth it: upstream can take the
 uncontroversial one without waiting on the discussion the other may need.
 
@@ -52,10 +52,10 @@ uncontroversial one without waiting on the discussion the other may need.
 
 | Step | State |
 |---|---|
-| Pre-PR question to upstream | **posted** — [#3](https://github.com/TerranMechworks/mech3ax/issues/3) |
+| Pre-PR question to upstream | **posted**, [#3](https://github.com/TerranMechworks/mech3ax/issues/3) |
 | AI-assistance disclosure on #3 | **posted** (the issue itself predated the rule) |
-| Anim PR (`pr-cs-anim`) | **opened** — *and closed by the user 2026-07-22 after the fork decision* |
-| GameZ PR (`pr-cs-gamez`) | **prepared, deliberately held** pending upstream's answer on #3 — *never opened; superseded by the fork decision* |
+| Anim PR (`pr-cs-anim`) | **opened**, *and closed by the user 2026-07-22 after the fork decision* |
+| GameZ PR (`pr-cs-gamez`) | **prepared, deliberately held** pending upstream's answer on #3, *never opened; superseded by the fork decision* |
 
 Both branches are pushed to the fork. Holding the gamez PR is the intended sequence, not an
 oversight: if upstream answers #3 with "architectural", that PR shouldn't be opened at all.
@@ -64,11 +64,11 @@ oversight: if upstream answers #3 with "architectural", that PR shouldn't be ope
 
 **Standing rule, decided 2026-07-21: all outside communication about this work discloses that
 it was done with the help of Claude Code.** That covers PR bodies, issues, discussion posts,
-comments, and any community writeup — not just the initial submission.
+comments, and any community writeup, not just the initial submission.
 
 Where it currently lives:
 
-- `pr-1-anim.md` and `pr-2-gamez.md` — a blockquote disclosure directly under the title, above
+- `pr-1-anim.md` and `pr-2-gamez.md`, a blockquote disclosure directly under the title, above
   the technical content, so a reviewer sees it before deciding how to read the PR.
 - The commits already carry a `Co-Authored-By: Claude` trailer (they did before this rule).
 - Issue #3 went out **before** this decision, so its opening post has no disclosure; the
@@ -77,15 +77,15 @@ Where it currently lives:
 
 The wording deliberately doesn't oversell: it names the tool, says the RE/implementation/
 verification were AI-assisted, states that the user reviewed it and stands behind it, and
-leaves the maintainer free to weigh that — including by declining the contribution.
+leaves the maintainer free to weigh that, including by declining the contribution.
 
 ## Suggested order
 
-1. **`pr-0-discussion.md`** — a short question to upstream *before* investing in review of (3).
+1. **`pr-0-discussion.md`**, a short question to upstream *before* investing in review of (3).
    Costs nothing and determines how much polish PR (3) is worth.
-2. **`pr-1-anim.md`** — Track B. Clean, additive, fills an "isn't implemented yet" gap; no
+2. **`pr-1-anim.md`**, Track B. Clean, additive, fills an "isn't implemented yet" gap; no
    conflict with upstream's direction. Open this one first regardless of the answer to (1).
-3. **`pr-2-gamez.md`** — Track A. Larger, and touches code upstream deliberately removed, so
+3. **`pr-2-gamez.md`**, Track A. Larger, and touches code upstream deliberately removed, so
    it is the one that may need real back-and-forth.
 
 ## What changed during PR prep (2026-07-21)
@@ -120,11 +120,11 @@ Each branch was verified **independently**, not just the combination:
 | `cargo run -p mech3ax-metadata-gen` | runs clean (389 files) | runs clean (375 files) |
 | `test.py … --release` | `--- ALL OK ---`, gamez correctly skips CS | `--- ALL OK ---`, anim correctly skips CS |
 
-And on the integration branch `cs-anim`: `test.py --- ALL OK ---` with **no** CS suite skipped
-— all 61 anim archives and all 9 gamez archives round-trip byte-identically.
+And on the integration branch `cs-anim`: `test.py --- ALL OK ---` with **no** CS suite skipped,
+all 61 anim archives and all 9 gamez archives round-trip byte-identically.
 
 The strongest check that the split changed no behaviour: `git diff df16d8e cs-anim` (the
-pre-split tip vs. the re-integrated branch) is **one reordered CHANGELOG line** — the code
+pre-split tip vs. the re-integrated branch) is **one reordered CHANGELOG line**, the code
 trees are identical.
 
 Test harness: `tools/test-versions/crimson-cs/zbd` → junction to `CrimsonSkiesGame/ZBD`, plus

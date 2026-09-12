@@ -150,7 +150,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 LightEnergy = sun.LightEnergy,
                 LightColor = sun.LightColor,
                 // Copied off the live sun, which by this point in the build already carries the
-                // flown zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses) —
+                // flown zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses),
                 // false in original mode, since the world sun's own flag never turns on there.
                 ShadowEnabled = sun.ShadowEnabled,
             };

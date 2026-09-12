@@ -14,18 +14,18 @@ namespace CSVM.Tests;
 public class GroundBlowTests
 {
     private const float Dt = 1f / 60f;
-    private const float Elev = 400f;   // groundblow_elev, m — this install's authored value
-    private const float Mag = 10f;     // groundblow_mag — likewise
+    private const float Elev = 400f;   // groundblow_elev, m, this install's authored value
+    private const float Mag = 10f;     // groundblow_mag, likewise
     private const float IntoFactor = 0.05f;
 
-    // AngMomentumDamp on Bhawk() below — needed only for the AI-law tests because, unlike the
+    // AngMomentumDamp on Bhawk() below, needed only for the AI-law tests because, unlike the
     // player law, the AI push does not read cmd, so the free dt·damp cancellation the player tests
     // exploit (baseline.Dot(v), itself already dt·damp-scaled, supplying the addition's own missing
     // factor) does not apply: the AI addition needs its dt·damp spelled out explicitly against a
     // no-hit BASELINE.
     private const float AngDamp = 5f;
 
-    // A slope ahead and below, its normal facing up and back at the aircraft — the cliff
+    // A slope ahead and below, its normal facing up and back at the aircraft, the cliff
     // case, in BODY coordinates (nose −Z, up +Y, right +X). Its escape axis is body +X, i.e. the
     // bias is pitch-up.
     private static readonly Vector3 SlopeNormalBody = new Vector3(0f, 1f, 1f).Normalized();
@@ -76,7 +76,7 @@ public class GroundBlowTests
         var v = ExpectedAxis(dist);
 
         // The pull is UP and the slope is below: the command already points along +V, so it is
-        // amplified — by 1 + mag·S² along that axis, 11× at contact with the authored 10.
+        // amplified, by 1 + mag·S² along that axis, 11× at contact with the authored 10.
         AssertMatches(baseline + v * (baseline.Dot(v) * Mag), probed, dist);
         Assert.True(probed.X > baseline.X,
             $"a pull away from the slope must be amplified: {probed.X:0.000000} vs {baseline.X:0.000000}");
@@ -87,7 +87,7 @@ public class GroundBlowTests
     {
         // 0.05 × 10 = 0.5 at contact: the offending rotation is halved, and the original cannot
         // take the stick off the pilot. A push that came back reversed would be the wrong feature
-        // entirely — an autopilot, not a bias.
+        // entirely, an autopilot, not a bias.
         var baseline = OneStep(Basis.Identity, pitch: -1f, normal: Vector3.Zero, dist: 0f);
         var probed = OneStep(Basis.Identity, pitch: -1f, normal: SlopeNormalBody, dist: 0f);
         var v = ExpectedAxis(0f);
@@ -194,7 +194,7 @@ public class GroundBlowTests
     [Fact]
     public void TheAiLawIsNeverSuppressedByCommandingIntoTheSurface()
     {
-        // The player law halves an into-obstacle command; the AI law has no such branch at all —
+        // The player law halves an into-obstacle command; the AI law has no such branch at all,
         // "independent of the AI's own command" applies to sign as much as magnitude.
         const float aiGroundBlow = 0.5f;
         var pushingInBase = OneStep(Basis.Identity, pitch: -1f, normal: Vector3.Zero, dist: 0f, ai: true);
@@ -208,7 +208,7 @@ public class GroundBlowTests
     {
         // The player law's escape axis carries S once and is then dotted with the command for a
         // second factor of S (the quadratic falloff GroundBlowTests already pins). The AI law never
-        // dots into cmd, so its only S comes from the escape axis itself — linear, not quadratic.
+        // dots into cmd, so its only S comes from the escape axis itself, linear, not quadratic.
         const float aiGroundBlow = 0.5f;
         var baseline = OneStep(Basis.Identity, pitch: 0f, normal: Vector3.Zero, dist: 0f, ai: true);
         var atHalf = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: Elev / 2f, ai: true);
@@ -263,7 +263,7 @@ public class GroundBlowTests
     }
 
     // The escape axis the law should build for SlopeNormalBody, in body
-    // coordinates and already scaled by proximity — `normalize(n × b) · S`, which for this
+    // coordinates and already scaled by proximity, `normalize(n × b) · S`, which for this
     // slope is body +X (pitch up).
     private static Vector3 ExpectedAxis(float dist) => new(ExpectedProximity(dist), 0f, 0f);
 

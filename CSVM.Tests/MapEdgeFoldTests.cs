@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 ///
 /// <para><see cref="BlockOfOneMirrorIsTheHistoricalClamp"/> pins the generalization against the
 /// closed form it generalizes, rather than against hand-copied expectations. That equivalence is
-/// not the shipping path — the original <b>repeats</b> rather than mirrors, A/B'd at the controls —
+/// not the shipping path, the original <b>repeats</b> rather than mirrors, A/B'd at the controls,
 /// but it stays as the fold's algebraic anchor: mirror at block 1 is the one case with an
 /// independent reference implementation.</para>
 /// </summary>
@@ -23,7 +23,7 @@ public class MapEdgeFoldTests
     [Fact]
     public void BlockOfOneMirrorIsTheHistoricalClamp()
     {
-        // Five map widths either side — far enough that any period error would have drifted.
+        // Five map widths either side, far enough that any period error would have drifted.
         for (int i = -5 * Grid; i < 6 * Grid; i++)
         {
             Assert.Equal(HistoricalClamp(i, Grid), MapEdgeExtender.FoldAxis(i, Grid, 1, repeat: false));
@@ -99,7 +99,7 @@ public class MapEdgeFoldTests
         }
     }
 
-    // ---- repeat: the same block, translated, never reflected — so seams step ----
+    // ---- repeat: the same block, translated, never reflected, so seams step ----
 
     [Theory]
     [InlineData(1)]
@@ -250,8 +250,8 @@ public class MapEdgeFoldTests
         Assert.Equal(expected, MapEdgeExtender.DefaultBlockCells(chapter.ToLowerInvariant()));
     }
 
-    // An unknown or absent chapter must fall back to 1 — right or indistinguishable everywhere it
-    // has been looked at — never to 2, which is only known right where it was measured.
+    // An unknown or absent chapter must fall back to 1, right or indistinguishable everywhere it
+    // has been looked at, never to 2, which is only known right where it was measured.
     [Theory]
     [InlineData(null)]
     [InlineData("")]

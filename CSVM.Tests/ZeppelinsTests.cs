@@ -229,7 +229,7 @@ public class ZeppelinsTests
         Assert.Equal(500f, zep.CannonFireRange);
         Assert.Equal(new[] { "player" }, zep.Targets);
         Assert.Empty(zep.CannonHealth);
-        Assert.False(zep.Deactivated);   // the key is authored 0 here — the value decides
+        Assert.False(zep.Deactivated);   // the key is authored 0 here, the value decides
     }
 
     // BL-670: the arrival floor has to clear every shipped zeppelin leg, campaign and

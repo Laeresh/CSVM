@@ -7,7 +7,7 @@
 > **Disclosure:** this work was done with the help of Claude Code (Anthropic's agentic coding
 > tool). The reverse engineering, implementation and the verification described below were
 > AI-assisted; the commits carry a `Co-Authored-By: Claude` trailer. I've reviewed it and I'm
-> putting my name to it, but you should weigh that when deciding how closely to read it — and
+> putting my name to it, but you should weigh that when deciding how closely to read it, and
 > I'm happy to walk through any part of the format reasoning myself if that helps review.
 
 This fills the CS row of the anim support matrix, which currently reads "not supported yet".
@@ -29,7 +29,7 @@ Four commits, each round-trip-verified on the full install:
    `gamez.zbd`/`planes.zbd` entries, 132-byte records), the anim-file list (common
    `AnimDefFileC` shape, but the counts live in the header), PM's `AnimInfoC` verbatim, every
    anim def with its support arrays and sequences, and the SI-script pool (PM's `SiScriptC`
-   verbatim) — with event blobs and script frames kept as raw bytes at this stage.
+   verbatim), with event blobs and script frames kept as raw bytes at this stage.
 
    CS's `AnimDefC` is 272 bytes: PM's 268-byte layout plus one dword, with three structures PM
    reserves but never uses being live in CS (a 36-byte-record unknowns array, a `u32` index
@@ -41,7 +41,7 @@ Four commits, each round-trip-verified on the full install:
    decoded into the shared API types. A new `EventCs` trait dispatches, delegating to PM for
    all events whose payloads match. CS-specific: e12 `OBJECT_MOTION_SI_SCRIPT` (64 B, indexing
    the def's script-id list), CS-only e46 `SOUND_ADJUST` and e47 `OBJECT_MOTION_SI_SCRIPT`
-   `ALL_NAMES` (payloads preserved raw — I have no reader-side source for these), extra
+   `ALL_NAMES` (payloads preserved raw, I have no reader-side source for these), extra
    `If`/`Elseif` conditions (`NODE_BELOW_ALT`, `ANIM_HEALTH` + range, `NODE_ACTIVE`), the
    `MAIN_ROOT_NODE` (−100) sentinel, and `INPUT_NODE` in e01/e42. Duplicate node names are
    disambiguated with a reversible `~N` suffix.
@@ -57,7 +57,7 @@ Four commits, each round-trip-verified on the full install:
 
    Rotate semantics, measured and documented for consumers: per-axis cubics in **half-angle
    radians relative to the frame's base quaternion**, composed in the parent frame as
-   `q(t) = exp(v(t)) * base`, with `delta` the average rate — verified by L-exp closure on
+   `q(t) = exp(v(t)) * base`, with `delta` the average rate, verified by L-exp closure on
    53,515 / 60,411 consecutive rotate pairs to < 1e-5. Splines stay raw bytes, matching the
    existing MW/PM choice; `pfighter11.zan` (C1/M04) carries uninitialized spline memory that
    would break any semantic float validation.
@@ -72,19 +72,19 @@ Four commits, each round-trip-verified on the full install:
 All optional and absent for MW/PM/RC:
 
 - `AnimMetadata.base_files` and `AnimMetadata.ptrs`
-  (`defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`) — CS container data with no
+  (`defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`), CS container data with no
   existing slot. A 61-archive info-block survey argued **against** modelling this as a
   PM-style `Mission` pointer table (56 distinct `defs_ptr` values) and pinned every other
   field constant, so they're asserted the way PM asserts its own.
 - `AnimDef.flags_raw` / `node_path` / `si_script_ids` / `unknown_seq`.
 - Events `SoundAdjust` and `ObjectMotionSiScriptAllNames`.
-- `TranslateData`/`RotateData`/`ScaleData.delta_raw` — see below.
+- `TranslateData`/`RotateData`/`ScaleData.delta_raw`, see below.
 
 ## One wrinkle worth flagging: NaN in the data
 
 `carneypkup_cam.zan;camera1` (C5/M02) contains a degenerate frame whose translate and rotate
 `delta` vectors are six `0xFFC00000` NaNs. `serde_json` writes those as `null`, which then
-fails to parse back — so the archive round-tripped in memory but not through the CLI.
+fails to parse back, so the archive round-tripped in memory but not through the CLI.
 
 A field-by-field survey showed these are the **only** non-finite decoded floats in the entire
 install (bases, frame times and all other deltas are finite), so rather than change the

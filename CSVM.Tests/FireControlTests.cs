@@ -25,7 +25,7 @@ public class FireControlTests
     public void TheFirstShotLeavesTheBarrelTheInstantTheTriggerGoesDown()
     {
         // A low fire rate (interval way bigger than dt) so the press-edge boost can only ever
-        // produce one shot this tick, not a burst — isolates the "instant on press" behaviour from
+        // produce one shot this tick, not a burst, isolates the "instant on press" behaviour from
         // the rate mechanics covered separately below.
         var gun = Gun(fireRate: 1f, ammo: 1000, capacity: 1000);
         var fc = Make(new List<FakeGun> { gun }, new List<FakePylon>());
@@ -716,9 +716,9 @@ public class FireControlTests
         IReadOnlyList<int>? stepOrder = null) =>
         new(guns, pylons, autoFireRockets, infiniteAmmo, initialGunSelect, stepOrder);
 
-    // One tick. Held levels only (no edges — FireControl does its own edge
+    // One tick. Held levels only (no edges, FireControl does its own edge
     // detection), dt fixed at 60 Hz throughout. The returned FireOutcome is the SAME
-    // reused instance every call — callers must read what they need before the next Step.
+    // reused instance every call, callers must read what they need before the next Step.
     private static FireOutcome Step(FireControl fc, bool fire = false, bool rocket = false,
         bool gunSel = false, bool rocketSel = false, bool gunSelBack = false, bool rocketSelBack = false) =>
         fc.Step(Dt, new FireInputs

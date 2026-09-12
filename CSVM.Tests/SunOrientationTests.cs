@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 /// The sun's bearing is the flown zone's authored <c>SUNLIGHT_ORIENTATION</c>. Full decode:
 /// <c>docs/org/weather.md</c>. Tests the parse and the gamez-euler-to-Godot-Rotation mapping
 /// apart, since they fail apart, pinning the mapping against the original's own helper.
-/// Deliberately asserts no opinion about the bearing "looking right" — the authored value is
+/// Deliberately asserts no opinion about the bearing "looking right", the authored value is
 /// adopted with no TUNE, so that would be a tuned expectation wearing a test's clothes.
 /// </summary>
 public class SunOrientationTests
@@ -18,7 +18,7 @@ public class SunOrientationTests
     [Theory]
     // The three anchors that pin all three axes independently: identity, pitch alone, yaw alone.
     [InlineData(0f, 0f)]
-    [InlineData(-90f, 0f)]     // SHADOW_ANGLES' install-wide value — straight down
+    [InlineData(-90f, 0f)]     // SHADOW_ANGLES' install-wide value, straight down
     [InlineData(0f, 90f)]
     // ...and every distinct bearing the install actually authors, so a chapter cannot drift.
     [InlineData(-25f, 90f)]    // C1
@@ -32,7 +32,7 @@ public class SunOrientationTests
         float y = Mathf.DegToRad(yawDeg);
 
         // What WeatherRig.ApplyZone assigns, and what Godot then shines along: a DirectionalLight3D
-        // emits down its own local -Z, and Node3D's default euler order is YXZ — the same order
+        // emits down its own local -Z, and Node3D's default euler order is YXZ, the same order
         // GameZ.ParseTransform already reads every gamez node rotation in.
         var basis = Basis.FromEuler(new Vector3(p, y, 0f), EulerOrder.Yxz);
         var godot = -basis.Z;
@@ -46,7 +46,7 @@ public class SunOrientationTests
     [Fact]
     public void PitchMinus90PointsStraightDown()
     {
-        // Not redundant with the theory above, which only proves we AGREE with the binary — if both
+        // Not redundant with the theory above, which only proves we AGREE with the binary, if both
         // sides shared a sign error it would still pass. This one names the physical answer: the
         // engine's default sun (seeded at pitch -pi/2) shines straight down, -Y in Godot.
         var dir = -Basis.FromEuler(new Vector3(Mathf.DegToRad(-90f), 0f, 0f), EulerOrder.Yxz).Z;
@@ -60,7 +60,7 @@ public class SunOrientationTests
     {
         // The install's census, as a pin. Two things it catches that nothing else does: degrees
         // arriving unconverted (every value would be ~57x too large), and the chapters collapsing
-        // to one bearing — which would otherwise look exactly like success.
+        // to one bearing, which would otherwise look exactly like success.
         AssertBearing("C1", "IA1", -25f, 90f);
         AssertBearing("C1B", "IA1", -65f, 90f);
         AssertBearing("C2", "IA1", -65f, 90f);
@@ -81,7 +81,7 @@ public class SunOrientationTests
         var above = weather.Zone(weather.ZoneForState(2));
 
         // C1's two zones happen to author the SAME bearing (as does every chapter but C2), so this
-        // asserts the pair is READ, not that it differs — a state change
+        // asserts the pair is READ, not that it differs, a state change
         // must not silently return a default for one of them.
         Assert.Equal(Mathf.DegToRad(-25f), below.SunOrientation.X, 4);
         Assert.Equal(Mathf.DegToRad(-25f), above.SunOrientation.X, 4);

@@ -14,7 +14,7 @@ namespace CSVM.Testing;
 /// <summary>
 /// The assertion cores behind the <c>--dump-*</c> / <c>--damage-test</c> inspection reports.
 ///
-/// <para>One source of truth: each probe does the work once and returns <b>both</b> halves — the
+/// <para>One source of truth: each probe does the work once and returns <b>both</b> halves, the
 /// human-readable report text the <c>--dump-*</c> flag prints and writes, and a structured verdict
 /// (counts, per-row booleans, failure strings) a <c>--run-tests</c> suite asserts on. A check
 /// belongs here; never re-implement one directly in a suite.</para>
@@ -26,7 +26,7 @@ public static class Probes
 {
     /// <summary>How many defs one sweep reports on. A wildcard NAME binds many identical towers,
     /// so one representative per def is enough; the cap keeps a destructible-heavy chapter a
-    /// readable report. <b>It caps the swept rows, never the registry totals</b> — a census reads
+    /// readable report. <b>It caps the swept rows, never the registry totals</b>, a census reads
     /// <see cref="DamageResult.TotalInstances"/>.</summary>
     public const int SweepCap = 16;
 
@@ -52,7 +52,7 @@ public static class Probes
         "player_peacemaker",
     };
 
-    // The eight chapter codes an AI dump walks — every one that ships its own
+    // The eight chapter codes an AI dump walks, every one that ships its own
     // `&lt;Cx&gt;/zrdr/` patrol-net scope and mission dirs.
     private static readonly string[] AiChapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
@@ -63,7 +63,7 @@ public static class Probes
     private static readonly HashSet<string> AiChapterScopeDirs =
         new(StringComparer.OrdinalIgnoreCase) { "gamez", "texture", "cam_anim", "zrdr" };
 
-    /// <summary>The eleven stock player airframes in whole-envelope dump order — the set the parity
+    /// <summary>The eleven stock player airframes in whole-envelope dump order, the set the parity
     /// ledger classifies and <c>--dump-flight=all</c> flies.</summary>
     public static IReadOnlyList<string> StockAirframes => StockAirframeNodes;
 
@@ -340,7 +340,7 @@ public static class Probes
     // ---- mip chains ----------------------------------------------------------------------------
 
     /// <summary>What a chapter's texture archive installed as levels 1 and 2, beside the authored
-    /// siblings — mean luminance and the share of pixels above 128 per level. Built through
+    /// siblings, mean luminance and the share of pixels above 128 per level. Built through
     /// <see cref="TextureArchive.BuildMipped"/> under whatever <c>--mips=</c> policy is set, so
     /// <c>installed == authored</c> checks the policy took effect, not that files merely exist.</summary>
     public static MipResult MipChains(string texturesPath, string chapter, string filter,
@@ -428,7 +428,7 @@ public static class Probes
 
     // ---- AI data -------------------------------------------------------------------------------
 
-    /// <summary>--dump-ai[=chapter] (docs/cli.md): a pure-data report over the five AI families —
+    /// <summary>--dump-ai[=chapter] (docs/cli.md): a pure-data report over the five AI families,
     /// patrol nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators. No world, no
     /// scene: every family is read straight off the extraction, loosely, tolerating the same traps
     /// <see cref="AiNets"/> does (real block width, <c>neindex</c>'s leading number skipped).</summary>
@@ -452,7 +452,7 @@ public static class Probes
         sb.AppendLine("# See docs/formats/ai-nets.md, ai-rosters.md, turrets.md, mission-entities.md.");
         sb.AppendLine();
 
-        // Turrets: one shared, chapter-independent file — always reported in full, even under a
+        // Turrets: one shared, chapter-independent file, always reported in full, even under a
         // chapter filter, since ai.zrd.json is not chapter-scoped.
         try
         {
@@ -513,7 +513,7 @@ public static class Probes
                 {
                     var root = Zrdr.LoadFile(missionZrdr, "aiv.json");
                     // Element 0 is the header (slotId/label pairs); 1..N are [name, fields] pairs.
-                    // Never assume a fixed field count — 42/65/66/67/68/81 all ship.
+                    // Never assume a fixed field count, 42/65/66/67/68/81 all ship.
                     for (int i = 1; i < root.Count; i++)
                     {
                         if (root[i] is List<object?> { Count: 2 } pair
@@ -528,7 +528,7 @@ public static class Probes
                 }
                 catch (IOException)
                 {
-                    // No aiv.zrd.json in this mission dir — not expected among the 53 the plan
+                    // No aiv.zrd.json in this mission dir, not expected among the 53 the plan
                     // measured, but not fatal to the rest of the report either.
                 }
                 catch (Exception e)
@@ -597,7 +597,7 @@ public static class Probes
 
     /// <summary>Every enabled collision shape under a subtree. <c>SetSubtreeActive</c> toggles each
     /// shape's <c>Disabled</c> as it swaps healthy→destroyed, and the swap can resolve to geometry
-    /// outside the small anim anchor — pass <see cref="WorldRootOf"/> and compare the two sets
+    /// outside the small anim anchor, pass <see cref="WorldRootOf"/> and compare the two sets
     /// around one kill. ⚠ Report OFF and ON separately, never their signed sum: see INSTR-15 in
     /// docs/verification.md.</summary>
     public static HashSet<CollisionShape3D> EnabledColliders(Node root)
@@ -618,7 +618,7 @@ public static class Probes
         return set;
     }
 
-    /// <summary>Every collider under a subtree that is enabled while nothing is drawn there — the
+    /// <summary>Every collider under a subtree that is enabled while nothing is drawn there, the
     /// invisible-wall census. Reports the offending shape's owning node chain, leaf-first. The
     /// generic tripwire for the class the C1/IA1 zeppelin belonged to
     /// (<see cref="Mech3.WorldCollision"/>): visibility is inherited and <c>Disabled</c> is not, so
@@ -659,7 +659,7 @@ public static class Probes
         return found;
     }
 
-    /// <summary>The top <see cref="Node3D"/> above a node — the world subtree root, so a census
+    /// <summary>The top <see cref="Node3D"/> above a node, the world subtree root, so a census
     /// walks placed + partition geometry and not the UI or the Window.</summary>
     public static Node3D WorldRootOf(Node3D n)
     {
@@ -672,7 +672,7 @@ public static class Probes
     }
 
     /// <summary>Counts the <c>healthy</c>/<c>destroyed</c> variant nodes under a subtree and how
-    /// many of each are shown — the death-swap diagnostic. Names only: the swap mechanism itself
+    /// many of each are shown, the death-swap diagnostic. Names only: the swap mechanism itself
     /// keys off the definition's own <c>OBJECT_ACTIVE_STATE</c>, never a name scan.</summary>
     public static void CountVariants(Node3D root, out int healthyVisible, out int healthyAll,
         out int destroyedVisible, out int destroyedAll)
@@ -727,7 +727,7 @@ public static class Probes
             DistinctAnchors = runtime.Destructibles.DistinctAnchors,
         };
 
-        // One representative instance per distinct def — a wildcard NAME binds many identical
+        // One representative instance per distinct def, a wildcard NAME binds many identical
         // towers, and sweeping every one would just repeat the same result and start hundreds of
         // effects.
         var chosen = new List<DestructibleRegistry.Instance>();
@@ -735,7 +735,7 @@ public static class Probes
         foreach (var inst in runtime.Destructibles.All)
         {
             // Continuous-sweep mode only makes sense for staged DAMAGE_SEQUENCE defs; the
-            // discrete-kill mode applies to EVERY destructible — the doors and gates instant-die
+            // discrete-kill mode applies to EVERY destructible, the doors and gates instant-die
             // with no stages, so gating them out would hide exactly the collider cases.
             if (damageHd <= 0f && !HasDamage(inst.Def))
             {
@@ -764,7 +764,7 @@ public static class Probes
             + $"{chosen.Count} {kind} of {result.TotalInstances} destructible instance(s)");
         foreach (var inst in chosen)
         {
-            // DamageAt resolves a struck node to its authoritative instance; drive that one — the
+            // DamageAt resolves a struck node to its authoritative instance; drive that one, the
             // picked reader twin would damage the compiled instance instead and never see HP fall.
             var target = damageHd > 0f ? (runtime.Destructibles.Resolve(inst.Anchor) ?? inst) : inst;
             var row = new DamageRow
@@ -816,9 +816,9 @@ public static class Probes
             row.Destroyed = target.Status == DestructibleRegistry.State.Destroyed;
             row.StagesFired = fired.Count;
 
-            // Walk-up resolution check: resolving from a deep descendant of the anchor — the kind of
+            // Walk-up resolution check: resolving from a deep descendant of the anchor, the kind of
             // node a projectile's raycast actually strikes (a collider sits under the mesh under the
-            // anchor) — must land back on this same destructible.
+            // anchor), must land back on this same destructible.
             Node3D deep = target.Anchor;
             while (deep.GetChildCount() > 0 && deep.GetChild(0) is Node3D child)
             {
@@ -829,7 +829,7 @@ public static class Probes
             string resolve = row.Resolved ? "resolve✓" : $"resolve✗({back?.Def.Name ?? "null"})";
 
             // Death-swap check: once killed, the healthy subtree should be hidden and the destroyed
-            // subtree shown. Scan the anchor's descendants by cs_name — a test diagnostic (the
+            // subtree shown. Scan the anchor's descendants by cs_name, a test diagnostic (the
             // mechanism keys off the def's own OBJECT_ACTIVE_STATE, not names).
             string swap = "";
             if (damageHd > 0f && row.Destroyed)
@@ -846,10 +846,10 @@ public static class Probes
                 row.CollidersOn = colAfter.Count(cs => !colBefore.Contains(cs));
                 swap += $"col[off {row.CollidersOff}, on {row.CollidersOn}]; ";
                 // Debris is SCHEDULED (the water tower's at t=2.2 s), so advance past it to let it
-                // launch — done AFTER swap/col so those stay the immediate post-death, pre-tick state.
+                // launch, done AFTER swap/col so those stay the immediate post-death, pre-tick state.
                 for (int i = 0; i < 7; i++)
                 {
-                    runtime.Advance(0.5f);   // 3.5 s — past the ~2.2 s schedule, into the tumble
+                    runtime.Advance(0.5f);   // 3.5 s, past the ~2.2 s schedule, into the tumble
                 }
                 row.Debris = runtime.BallisticMotionsLaunched - debrisBefore;
                 swap += $"debris[{row.Debris} launched]; ";
@@ -884,7 +884,7 @@ public static class Probes
 
             // Reset/restore check: from a destroyed state, ResetDestructible returns the object to
             // healthy (full HP, healthy subtree visible, destroyed hidden, debris flown home), and an
-            // identical second kill takes the same hits — proving destroy→reset→destroy is idempotent.
+            // identical second kill takes the same hits, proving destroy→reset→destroy is idempotent.
             string reset = "";
             if (damageHd > 0f)
             {
@@ -927,7 +927,7 @@ public static class Probes
 
         // The world's collidable-geometry inventory, so we can confirm destructible roles
         // (healthy / destroyed / door*) are among the solid geometry. Counts per owning-mesh
-        // cs_name — a per-name census is enough to see what is solid; positions are not needed.
+        // cs_name, a per-name census is enough to see what is solid; positions are not needed.
         if (chosen.Count > 0)
         {
             var byName = new SortedDictionary<string, int>();
@@ -960,7 +960,7 @@ public static class Probes
         result.Summary = $"damage-test: {result.Rows.Count} def(s) swept of "
                          + $"{result.TotalInstances} instance(s) across {result.DistinctAnchors} node group(s)";
         // The one-shot death sounds this sweep fired are fire-and-forget nodes swept in
-        // WorldSounds.Tick — but this harness pumps no frames, so free them here or they leak.
+        // WorldSounds.Tick, but this harness pumps no frames, so free them here or they leak.
         runtime.Sounds?.FlushOneShots();
         return result;
     }
@@ -1081,7 +1081,7 @@ public static class Probes
 
     // ---- flight envelope ---------------------------------------------------------------------
 
-    /// <summary>Every stock airframe's envelope in one deterministic report — the whole-plant
+    /// <summary>Every stock airframe's envelope in one deterministic report, the whole-plant
     /// instrument, since the constants are coupled and a change to one moves rows on airframes
     /// nobody was looking at. <c>--dump-flight=all</c> and the parity ledger both run this, so the
     /// dump a change is diffed against and the ledger published from cannot disagree.</summary>
@@ -1111,7 +1111,7 @@ public static class Probes
     }
 
     /// <summary>Steps a throwaway <see cref="FlightModel"/> through the manoeuvres the original was
-    /// measured flying, and reports both numbers side by side — see docs/cli.md's <c>--dump-flight</c>
+    /// measured flying, and reports both numbers side by side, see docs/cli.md's <c>--dump-flight</c>
     /// entry and docs/org/flightModel.md. No world, no scene: it constructs the model directly and
     /// integrates it at the fixed <c>--det</c> step.
     /// ⚠ Every target is the Bloodhawk's, the only airframe recorded flying. Another plane's run
@@ -1178,7 +1178,7 @@ public static class Probes
             $"α {m.Alpha:0.0}° at finish — decoded force path; footage read 3.76 s, discarded",
             info: true);
 
-        // --- terminal dive, at 70.7° — the angle the original's "vertical" clip actually came out
+        // --- terminal dive, at 70.7°, the angle the original's "vertical" clip actually came out
         // at. The attitude-thrust scale ADDS thrust here (×1.227). The target is the decoded
         // along-path balance, not the clip's speed. docs/org/flightModel.md.
         m = Fresh(stats, Pitched(-70.7f), 0.9f * fd, 1f);
@@ -1191,7 +1191,7 @@ public static class Probes
             + "decoded thrust/drag/gravity balance at this path; the filmed 355.2 is discarded");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded. The target is the
-        // DECODE's own — quaternion angle doubles the stored half-angle rate to 181.3 °/s steady.
+        // DECODE's own, quaternion angle doubles the stored half-angle rate to 181.3 °/s steady.
         // Its 2.08 s target includes spin-up; the original's ADI stopwatch read 2.05 s.
         m = Fresh(stats, Level(), fd, 1f);
         double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f, watch: watch);
@@ -1246,7 +1246,7 @@ public static class Probes
             info: true);
 
         // --- level speed 15 m under the band edge: the atmosphere must not leak the thin band down
-        // here — the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
+        // here, the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
         m = Fresh(stats, Level(), 0.5f * fd, 1f);
         m.Position = new Vector3(0f, 1988f, 0f);
         Run(m, 1f, 180f, pitch: 0f, watch: watch);
@@ -1256,7 +1256,7 @@ public static class Probes
             + "solve as level-top-speed");
 
         // --- sustained turn: full throttle, stick full back from a 100° banked entry, settled 10 s
-        // then averaged over the original's own 15.9 s window. ⚠ Bank is left FREE, never forced —
+        // then averaged over the original's own 15.9 s window. ⚠ Bank is left FREE, never forced,
         // forcing it via atan2 breaks the moment the nose leaves horizontal. docs/org/flightModel.md.
         var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f, watch);
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
@@ -1266,7 +1266,7 @@ public static class Probes
             + "222.94 mph and 449.8° in the same window, discarded",
             info: true);
 
-        // The sink's failure direction is one-way — falling out of the turn, not climbing — which
+        // The sink's failure direction is one-way, falling out of the turn, not climbing, which
         // is why the row is read as a floor rather than a band. docs/org/flightModel.md.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, null, 0.0,
@@ -1275,7 +1275,7 @@ public static class Probes
             info: true);
 
         // The rotation path is decoded whole, so this rate is the answer and 18.95 is discarded.
-        // Do not chase the ADI's +100° — it reads attitude, not bank. docs/org/flightModel.md.
+        // Do not chase the ADI's +100°, it reads attitude, not bank. docs/org/flightModel.md.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
             turn.RateDegS, null, 0.0,
             $"{turn.RateDegS / 18.95:0.00}x the discarded footage. The footage pulls 1.6x slower BANKED than "
@@ -1300,7 +1300,7 @@ public static class Probes
             + "(docs/org/flightModel.md, 'Part-throttle equilibrium')",
             info: true);
 
-        // ⚠ ZERO throttle, not 1/8 — the footage cuts 8/8 to 0/8, so this is a pure drag probe.
+        // ⚠ ZERO throttle, not 1/8, the footage cuts 8/8 to 0/8, so this is a pure drag probe.
         // Run at 1/8 instead and the model reads 12.1 s (an artifact of the wrong throttle, not a
         // finding): 150 mph sits only 8% above that equilibrium, so the approach is asymptotic.
         m = Fresh(stats, Level(), 290f * Mph, 0f);
@@ -1310,7 +1310,7 @@ public static class Probes
             + "binary's; footage read 7.04 s, discarded", info: true);
 
         // --- zoom climb, INFORMATIONAL: full throttle, full back stick from the same take that
-        // pinned pitch-rate, so the stick history is known. ⚠ Must be a held FULL pull — a
+        // pinned pitch-rate, so the stick history is known. ⚠ Must be a held FULL pull, a
         // slower/released pull is a different flight and must not be averaged with it. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 300f * Mph, 1f);
         float apex = 0f, minSpeed = float.MaxValue, alphaAtMinSpeed = 0f;
@@ -1391,14 +1391,14 @@ public static class Probes
                 : $"{(p < 0 ? "-" : "+")}{Math.Abs(p):0.0}%";
             sb.AppendLine($"{row.Name,-22} {row.Unit,-5} {row.Model,10:0.00} "
                           + $"{target,10} {err,8}  {verdict}");
-            sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $" — {row.Detail}" : "")}");
+            sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $", {row.Detail}" : "")}");
             if (row.Margins.Length > 0)
             {
                 sb.AppendLine($"{"",-22} margins: {row.Margins}");
             }
         }
         // The knife-edge hold rides along rather than living as its own flag: it is a SHAPE
-        // comparison over 36 s, not a single number with a tolerance, so it has no row here — but
+        // comparison over 36 s, not a single number with a tolerance, so it has no row here, but
         // every instrument that dumps the envelope should carry it, or the recipe gets lost again.
         sb.AppendLine();
         sb.Append(KnifeEdge(zrdrPath, planeNodeName, watch).Text);
@@ -1430,7 +1430,7 @@ public static class Probes
     /// then left free, stick neutral, throttle TRIMMED to level (not full) at the entry speed, held
     /// 36 sim s. Reports the nose elevation, flight path, sink, heading rate and α at the original's
     /// own sample times. ⚠ The discriminating signature is the SHAPE, not one number: the original
-    /// drifts the whole 36 s with no equilibrium, where a bounded sag settles inside a second — see
+    /// drifts the whole 36 s with no equilibrium, where a bounded sag settles inside a second, see
     /// <see cref="KnifeEdgeRun.DriftDegS"/>/<see cref="KnifeEdgeRun.SettledFrac"/>, docs/org/flightModel.md.</summary>
     public static KnifeEdgeResult KnifeEdge(string zrdrPath, string planeNodeName,
                                             EnvelopeMargins? watch = null)
@@ -1488,11 +1488,11 @@ public static class Probes
 
     // ---- sustained climb -----------------------------------------------------------------------
 
-    /// <summary>The sustained full-throttle climb, speed against time — the manoeuvre the original
+    /// <summary>The sustained full-throttle climb, speed against time, the manoeuvre the original
     /// was filmed holding for forty seconds, and the one instrument that separates a
     /// climb-retention term from an attitude-thrust one, since the two predict opposite signs here.
     /// Entry at the footage's own 300 mph, attitude set once (<see cref="Banked"/>'s pitched twin,
-    /// not a continuous pull), held 18 sim s — long enough for the plateau, short enough the
+    /// not a continuous pull), held 18 sim s, long enough for the plateau, short enough the
     /// altitude clamp cannot bind. Targets and the UNDERSHOOT shape: docs/org/flightModel.md.</summary>
     public static ClimbResult SustainedClimb(string zrdrPath, string planeNodeName,
                                              EnvelopeMargins? watch = null)
@@ -1672,7 +1672,7 @@ public static class Probes
             if (stage == null)
                 continue;
             // One tick past the stop, so a deferred hide lands: what is STILL lit now belongs to an
-            // effect that is over — a template left burning at a hit site for the rest of the
+            // effect that is over, a template left burning at a hit site for the rest of the
             // session, which is the mesh half's other failure mode.
             effects.Advance(1f / 60f);
             var after = new MeshCensus();
@@ -1701,8 +1701,8 @@ public static class Probes
             sb.AppendLine(leaked.Count == 0
                 ? "  no template mesh left lit after its effect was stopped"
                 : $"  ⚠ still lit after the stop: {string.Join(", ", leaked)}");
-            // A root left REVEALED with every mesh under it off draws nothing — the data's own
-            // OBJECT_ACTIVE_STATEs turned its pieces off — so this is a note, not a defect. It is
+            // A root left REVEALED with every mesh under it off draws nothing, the data's own
+            // OBJECT_ACTIVE_STATEs turned its pieces off, so this is a note, not a defect. It is
             // printed because "nothing shows" and "nothing is left revealed" are separate claims.
             if (revealedDark.Count > 0)
                 sb.AppendLine($"  (revealed but dark afterwards: {string.Join(", ", revealedDark)})");
@@ -1718,7 +1718,7 @@ public static class Probes
         return r;
     }
 
-    // Every mission dir under a chapter — `IA1`/`M0x`/`MP1-3` — sorted so
+    // Every mission dir under a chapter, `IA1`/`M0x`/`MP1-3`, sorted so
     // campaign missions list before multiplayer ones. Empty when the chapter is not extracted
     // here. See `analysis/m4-ai-data/aiv_skill_slots.py`'s `*/*/zrdr/aiv.zrd.json` glob
     // for the same discovery done from the shell.
@@ -1745,9 +1745,9 @@ public static class Probes
     }
 
     // A mission-scope reader file that is a list of alternating-dict records wrapped in
-    // one outer element — the shape `zeppelins.zrd.json` and `egen.zrd.json` both use:
+    // one outer element, the shape `zeppelins.zrd.json` and `egen.zrd.json` both use:
     // `[[record0, record1, …]]` when the mission carries any, bare `[null]` when it
-    // ships none. Loosely parsed (a dump probe, not a typed reader — B7/F17/F20 own those).
+    // ships none. Loosely parsed (a dump probe, not a typed reader, B7/F17/F20 own those).
     private static List<List<object?>> LoadRecordList(string missionZrdrPath, string fileName)
     {
         var root = Zrdr.LoadFile(missionZrdrPath, fileName);
@@ -1772,11 +1772,11 @@ public static class Probes
     private static Basis Pitched(float deg) => Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
 
     // Attitude banked `deg`° about the nose, nose level. Over 90° is past
-    // vertical, which is where the original's ADI reads; this is the ENTRY only — the run's own
+    // vertical, which is where the original's ADI reads; this is the ENTRY only, the run's own
     // settled bank is reported beside it, because nothing holds this one there.
     private static Basis Banked(float deg) => Basis.Identity.Rotated(Vector3.Forward, Mathf.DegToRad(deg));
 
-    // A model parked at an attitude and speed, with the flight path along the nose —
+    // A model parked at an attitude and speed, with the flight path along the nose,
     // FlightModel.Reset's own convention, so a scenario starts trimmed.
     private static FlightModel Fresh(PlaneStats stats, Basis attitude, float speed, float throttle)
     {
@@ -1797,7 +1797,7 @@ public static class Probes
     }
 
     // Steps until `done` or `limit`, returning the
-    // elapsed sim seconds (the limit itself if it never finished — a scenario that ran out of time
+    // elapsed sim seconds (the limit itself if it never finished, a scenario that ran out of time
     // reports as far off rather than as a hang).
     private static double RunUntil(FlightModel m, float throttle, float limit, Func<bool> done,
                                    float pitch = 0f, float roll = 0f, float yaw = 0f,
@@ -1817,7 +1817,7 @@ public static class Probes
     }
 
     // Full throttle and full back stick from a banked entry, settled for
-    // `settle` s and then averaged over `window` s — the shape
+    // `settle` s and then averaged over `window` s, the shape
     // the original was flown in. Heading is accumulated off the flight path with wrap unfolded, so
     // a turn past 360° reports what it swept rather than what is left over; sink is the window's
     // net altitude change over its own duration, which is the quantity the original's altimeter
@@ -1954,7 +1954,7 @@ public static class Probes
     }
 
     // The lever position that holds `speed` in level flight, bisected on
-    // the model itself rather than solved against a copy of the thrust and drag formulas — the
+    // the model itself rather than solved against a copy of the thrust and drag formulas, the
     // copy is what goes stale. Saturates at 1 for a speed the airframe cannot reach, which is the
     // honest answer for it: a run entered above its own top speed decelerates whatever the
     // lever does.
@@ -2042,7 +2042,7 @@ public static class Probes
         return Math.Abs(a.Mean - b.Mean) < 0.005 && Math.Abs(a.Bright - b.Bright) < 0.0005;
     }
 
-    // Predicate that integrates the body roll rate and trips at a full turn — the rate is
+    // Predicate that integrates the body roll rate and trips at a full turn, the rate is
     // what the stopwatch and the video's bank readout both timed, and nothing else is commanded.
     private static Func<bool> RollAccum(FlightModel m)
     {
@@ -2124,7 +2124,7 @@ public static class Probes
         public string Text = "";
         public string Summary = "";
         public string? Error;
-        /// <summary>Base textures swept — those shipping at least one authored level.</summary>
+        /// <summary>Base textures swept, those shipping at least one authored level.</summary>
         public int Textures;
         /// <summary>Authored levels the archive holds for the swept textures.</summary>
         public int LevelsShipped;
@@ -2136,7 +2136,7 @@ public static class Probes
     }
 
     /// <summary>The five AI data families' install-wide census: nets, <c>aiv</c> vehicle blocks
-    /// (plus their field-count histogram — never assume 81-wide), turret entries, zeppelin
+    /// (plus their field-count histogram, never assume 81-wide), turret entries, zeppelin
     /// records and generators. Unfiltered, these should read 222/414/42/58/23 against the retail
     /// extraction ("What the data actually ships").</summary>
     public sealed class AiDumpResult
@@ -2169,7 +2169,7 @@ public static class Probes
         public bool Ok => Error == null && Bound > 0 && Failed == 0;
     }
 
-    /// <summary>One destructible def's sweep — the report line's <c>✓</c>/<c>✗</c> checks,
+    /// <summary>One destructible def's sweep, the report line's <c>✓</c>/<c>✗</c> checks,
     /// as fields.</summary>
     public sealed class DamageRow
     {
@@ -2187,13 +2187,13 @@ public static class Probes
         public int Sounds;
         public bool? ResetHealthy;     // null when the mode never reset (continuous sweep)
         public bool? RekillMatched;
-        public bool? CollideAccepted;   // the object took the damage — now true for EVERY activation
-        public bool? CollideFlyThrough; // the plane passed through it — the ACTIVATION half
+        public bool? CollideAccepted;   // the object took the damage, now true for EVERY activation
+        public bool? CollideFlyThrough; // the plane passed through it, the ACTIVATION half
         public string Line = "";
     }
 
     /// <summary>The destructible sweep as a whole: the swept rows plus the uncapped registry
-    /// totals (the swept list is capped — a census must read these, not count rows).</summary>
+    /// totals (the swept list is capped, a census must read these, not count rows).</summary>
     public sealed class DamageResult
     {
         public readonly List<DamageRow> Rows = new();
@@ -2209,7 +2209,7 @@ public static class Probes
 
     /// <summary>One flight scenario: what the model does, and the value it is judged against.
     /// <see cref="Target"/> is always decoded or a named product exception, never a figure read off
-    /// footage — a disagreeing footage number lives in <see cref="Detail"/> as a discarded
+    /// footage, a disagreeing footage number lives in <see cref="Detail"/> as a discarded
     /// annotation and gates nothing (the parity ledger's rule, docs/org/flightModel.md).
     /// A row with no target, or one flagged <see cref="Informational"/>, is reported and not
     /// asserted: the plant's own number is the finding and there is nothing to compare it to.</summary>
@@ -2233,7 +2233,7 @@ public static class Probes
         public bool Asserted => !Informational && Target != null;
         public bool Ok => !Asserted || Math.Abs(Model - Target!.Value) <= Tolerance;
 
-        /// <summary>Signed miss against the target, as a percentage — the shape that tells a
+        /// <summary>Signed miss against the target, as a percentage, the shape that tells a
         /// scale error (constant %) from drift (sign-random).</summary>
         public double? ErrorPct =>
             Target is { } t && t != 0 ? (Model - t) / t * 100.0 : null;
@@ -2284,7 +2284,7 @@ public static class Probes
 
     /// <summary>One knife-edge hold: the samples plus the two shape statistics.
     /// <see cref="SettledFrac"/> is the share of the total sag that arrived in the last third of the
-    /// hold — ≈0 for a bounded sag that settled early, ≈1/3 for a linear drift that never did.</summary>
+    /// hold, ≈0 for a bounded sag that settled early, ≈1/3 for a linear drift that never did.</summary>
     public sealed class KnifeEdgeRun
     {
         public readonly List<KnifeEdgeSample> Samples = new();
@@ -2334,7 +2334,7 @@ public static class Probes
         public double PlateauPathDeg;
 
         /// <summary>Sim seconds at which the climb crossed the 2000 m band edge, or −1 if it never
-        /// did. ⚠ A run that crosses stops being a climb measurement at that instant — above the edge
+        /// did. ⚠ A run that crosses stops being a climb measurement at that instant, above the edge
         /// the thin band leaves neither the lift nor the thrust to climb on, so every sample after it
         /// reads a ballistic coast rather than merely qualifying the climb.</summary>
         public double BandEdgeAt = -1;
@@ -2346,7 +2346,7 @@ public static class Probes
 
     /// <summary>One effect's sweep reading, both halves. <see cref="MeshPeaks"/> holds every
     /// mesh-bearing template root the census saw (peak over the window); <see cref="Residual"/>
-    /// what was still lit one tick after the stop — an over effect burning at the hit site;
+    /// what was still lit one tick after the stop, an over effect burning at the hit site;
     /// <see cref="RevealedDark"/> roots left revealed with every mesh under them off, which draw
     /// nothing and are a note, not a defect.</summary>
     public sealed class EffectRow
@@ -2381,7 +2381,7 @@ public static class Probes
 
     /// <summary>The mesh half's counting semantics, in one place: which of a template stage's
     /// meshes are drawing, per root, folded to a peak over a window. Counts are visible-IN-TREE,
-    /// never <c>Visible</c> — a mesh whose own flag is set under a hidden template root draws
+    /// never <c>Visible</c>, a mesh whose own flag is set under a hidden template root draws
     /// nothing, and that difference IS the bug this census exists to catch. Both the
     /// <see cref="Effects"/> sweep and the <c>effect-template-mesh</c> suite count through this
     /// type, so the sweep's verdicts and the suite's assertions cannot drift apart.</summary>
@@ -2393,7 +2393,7 @@ public static class Probes
 
         public int Lit => _peak.Values.Sum(r => r.Visible);
 
-        /// <summary>Instantaneous count of drawing meshes under a node — this frame, no folding.</summary>
+        /// <summary>Instantaneous count of drawing meshes under a node, this frame, no folding.</summary>
         public static int VisibleMeshes(Node node)
         {
             int vis = 0, total = 0;
@@ -2415,7 +2415,7 @@ public static class Probes
         }
 
         /// <summary>Each mesh-bearing template root's base state: how many of its meshes carry
-        /// their own visibility flag, out of how many it has — what a revealed root would show if
+        /// their own visibility flag, out of how many it has, what a revealed root would show if
         /// its def touched nothing. Read once, before anything plays.</summary>
         public static string BaseStateOfStage(Node3D stage)
         {
@@ -2439,7 +2439,7 @@ public static class Probes
         /// <summary>Folds one frame's stage state in, keeping each root's best reading. Distances
         /// are to the play point, so "renders at the call site" and "renders at the stage origin"
         /// (kilometres away in a chapter world) are different readings rather than the same count.
-        /// Roots are named, so a row says WHICH template showed — a pooled stage holds several
+        /// Roots are named, so a row says WHICH template showed, a pooled stage holds several
         /// copies of one name, and they are folded together on purpose: which SLOT a call took is
         /// the pool's business, not this census's.</summary>
         public void Sample(Node3D stage, Vector3 point)
@@ -2496,7 +2496,7 @@ public static class Probes
             }
         }
 
-        // Counts meshes that would draw if the template ROOT were revealed — the root's
+        // Counts meshes that would draw if the template ROOT were revealed, the root's
         // own flag is skipped and every flag below it honoured, since the root's is the engine's
         // to set (`TemplateStage.Shown`) and everything under it is the data's.
         private static void CountSelfVisible(Node node, bool shown, ref int selfVisible,
@@ -2511,8 +2511,8 @@ public static class Probes
 
             foreach (var child in node.GetChildren())
             {
-                // A hidden branch still contributes its TOTAL — "0 of 8" and "0 of 0" are different
-                // answers — so the walk continues rather than stopping at the first hidden node.
+                // A hidden branch still contributes its TOTAL, "0 of 8" and "0 of 0" are different
+                // answers, so the walk continues rather than stopping at the first hidden node.
                 CountSelfVisible(child, shown && (child is not Node3D c || c.Visible),
                     ref selfVisible, ref total);
             }

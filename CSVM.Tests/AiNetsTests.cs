@@ -6,14 +6,14 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The patrol-net reader (docs/formats/ai-nets.md): fixture units for the record grammar and
-/// the four trailer shapes, plus golden counts measured over the install — asserted so a
+/// the four trailer shapes, plus golden counts measured over the install, asserted so a
 /// reader or extraction change moves a test instead of silently drifting.
 /// </summary>
 public class AiNetsTests
 {
     private static readonly string[] Chapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
-    /// <summary>Net files per chapter — measured census of the install.</summary>
+    /// <summary>Net files per chapter, measured census of the install.</summary>
     public static TheoryData<string, int> ChapterNetCounts => new()
     {
         { "C1", 29 },
@@ -82,7 +82,7 @@ public class AiNetsTests
         Assert.Null(nets[1].Trailer);                                 // 13-element record, omitted
         Assert.Null(nets[2].Trailer);                                 // bare [-1]
         Assert.Equal(new AiNetTrailer(1, null), nets[3].Trailer);     // index-only (C2 net 33)
-        Assert.Equal(new AiNetTrailer(-1, "testzep"), nets[4].Trailer); // [-1, "name"] — target, no node
+        Assert.Equal(new AiNetTrailer(-1, "testzep"), nets[4].Trailer); // [-1, "name"], target, no node
     }
 
     [Fact]
@@ -172,8 +172,8 @@ public class AiNetsTests
         Assert.Equal(81, tagged2);
         Assert.Equal(12, tagged4);
         Assert.Equal(76, anchoredTrailers);   // [nodeIndex, "name"]
-        Assert.Equal(4, unanchoredTrailers);  // [-1, "name"] — the piratezep/player/dantezep four
-        Assert.Equal(1, indexOnlyTrailers);   // C2 net 33's [3] — the shape the scoping doc missed
+        Assert.Equal(4, unanchoredTrailers);  // [-1, "name"], the piratezep/player/dantezep four
+        Assert.Equal(1, indexOnlyTrailers);   // C2 net 33's [3], the shape the scoping doc missed
     }
 
     [ExtractedDataFact]

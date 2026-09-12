@@ -17,15 +17,15 @@ namespace CSVM.Flight;
 /// throttle.</summary>
 public sealed class ThrottleSlamSmoke
 {
-    // TUNE: the capture only bounds this between the two jump sizes it filmed — idle→5/8 (0.625)
+    // TUNE: the capture only bounds this between the two jump sizes it filmed, idle→5/8 (0.625)
     // fires, a single 1/8 (0.125) step does not, and 2/8-4/8 is unobserved. The smallest threshold
     // consistent with both endpoints is anything just over 0.125; 0.25 (a two-notch jump) is the
     // smallest round number that clears it.
     private const float SlamThreshold = 0.25f;
 
-    // The capture's plume is visible ≤0.5 s after the jump (onset here is 0 — the gate fires the
+    // The capture's plume is visible ≤0.5 s after the jump (onset here is 0, the gate fires the
     // trigger frame itself) and gone by ~2.5-3 wall-s after the idle→8/8 slam (t≈11.7 s to a clean
-    // t≈14.5 s sheet). Sim-seconds = wall-seconds × 1.390 — the wall figure runs 39% fast.
+    // t≈14.5 s sheet). Sim-seconds = wall-seconds × 1.390, the wall figure runs 39% fast.
     private const float DurationSimSeconds = 2.8f * 1.390f;
 
     private const float RiseEpsilon = 1e-5f;
@@ -45,7 +45,7 @@ public sealed class ThrottleSlamSmoke
     }
 
     /// <summary>Resolves the plane's <c>exhaust1..4</c> marker nodes and builds a trail puffer per
-    /// one found from <c>nitro_boost</c>'s own <c>nitropuffN</c> definition — the same authored
+    /// one found from <c>nitro_boost</c>'s own <c>nitropuffN</c> definition, the same authored
     /// puffer the boost uses, just driven independently of it. Null when the plane carries no
     /// exhaust nodes or the reader/textures are unavailable (every call site null-checks).</summary>
     public static ThrottleSlamSmoke? Build(Node3D planeRoot, string zrdrPath, TextureArchive textures,
@@ -64,7 +64,7 @@ public sealed class ThrottleSlamSmoke
     }
 
     /// <summary>Per-frame drive: feed the live throttle (0-1) every frame flight is running. Not
-    /// called while crashed/paused — see <see cref="Reset"/> for what a crash/respawn needs
+    /// called while crashed/paused, see <see cref="Reset"/> for what a crash/respawn needs
     /// instead.</summary>
     public void Update(float dt, float throttle)
     {
@@ -85,7 +85,7 @@ public sealed class ThrottleSlamSmoke
         }
         else
         {
-            // Flat or falling: the current climb (if any) is over, and a fresh one starts fresh —
+            // Flat or falling: the current climb (if any) is over, and a fresh one starts fresh,
             // never fires on a decrease, and never carries a rise's magnitude across a pause.
             _rising = false;
         }

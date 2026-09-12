@@ -6,7 +6,7 @@ namespace CSVM.Testing;
 
 /// <summary>A no-GPU stand-in for <c>MultiMeshEmitterRenderer</c>: it keeps the particles a
 /// <see cref="Puffer"/> hands it instead of drawing them, so a suite can assert on the emitter's
-/// three modes — burst, distance trail and sustain — with no atlas, no <c>TextureArchive</c> and no
+/// three modes, burst, distance trail and sustain, with no atlas, no <c>TextureArchive</c> and no
 /// <c>MultiMesh</c> anywhere in the path.
 ///
 /// <para>The mirror of <see cref="CountingEmitterFactory"/> one seam lower: that fake stands in for
@@ -20,19 +20,19 @@ public sealed class RecordingEmitterRenderer : IEmitterRenderer
     /// <summary>The node the renderer was attached under, or null if <see cref="Attach"/> never ran.</summary>
     public Node3D? Owner { get; private set; }
 
-    /// <summary>The draw pool the emitter sized — <c>-1</c> until <see cref="Attach"/> runs.</summary>
+    /// <summary>The draw pool the emitter sized, <c>-1</c> until <see cref="Attach"/> runs.</summary>
     public int Capacity { get; private set; } = -1;
 
     /// <summary>The frustum padding the emitter asked for.</summary>
     public float CullMargin { get; private set; }
 
-    /// <summary>Every particle written since the previous <see cref="Show"/> — one frame's worth.</summary>
+    /// <summary>Every particle written since the previous <see cref="Show"/>, one frame's worth.</summary>
     public IReadOnlyList<Particle> LastFrame => _last;
 
     /// <summary>The count the most recent <see cref="Show"/> published, or <c>-1</c> before the first.</summary>
     public int Shown { get; private set; } = -1;
 
-    /// <summary>The largest count any <see cref="Show"/> has published — the emitter's high-water
+    /// <summary>The largest count any <see cref="Show"/> has published, the emitter's high-water
     /// mark, which a per-frame read would miss.</summary>
     public int MaxShown { get; private set; }
 
@@ -40,7 +40,7 @@ public sealed class RecordingEmitterRenderer : IEmitterRenderer
     /// the emitter overran its own pool, which on the real renderer is an out-of-range draw call.</summary>
     public int MaxIndex { get; private set; } = -1;
 
-    /// <summary>The largest atlas column ever written — the flipbook actually advancing.</summary>
+    /// <summary>The largest atlas column ever written, the flipbook actually advancing.</summary>
     public float MaxFrame { get; private set; }
 
     public void Attach(Node3D owner, int capacity, float cullMargin)

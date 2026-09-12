@@ -13,7 +13,7 @@ public interface IFlightInputSource
     FlightInput Read(float dt);
 }
 
-/// <summary>Plays back a scripted sequence of held inputs — the profile a playtest capture or an
+/// <summary>Plays back a scripted sequence of held inputs, the profile a playtest capture or an
 /// authored demo flies instead of a live stick. Owns the segment list and its own elapsed-time
 /// clock, so a suite can construct one directly with no <see cref="FlightController"/> in the
 /// process. Segments run for their duration in order; the last one (or a duration &#8804; 0) holds
@@ -38,7 +38,7 @@ public sealed class ScriptedInputSource : IFlightInputSource
         return _segments[^1].Input;
     }
 
-    /// <summary>Restarts the sequence from its first segment — a respawn's fresh start.</summary>
+    /// <summary>Restarts the sequence from its first segment, a respawn's fresh start.</summary>
     public void Reset() => _elapsed = 0f;
 }
 

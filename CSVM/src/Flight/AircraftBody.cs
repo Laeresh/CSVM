@@ -3,12 +3,12 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>The flying aircraft's physics body: the shared <see cref="PlaneCollider"/> hulls as
-/// real collision shapes on <see cref="CollisionLayers.Aircraft"/>, so a projectile's hit ray —
-/// and another plane's airframe sweep — can strike this plane. A child of its
+/// real collision shapes on <see cref="CollisionLayers.Aircraft"/>, so a projectile's hit ray,
+/// and another plane's airframe sweep, can strike this plane. A child of its
 /// <see cref="FlightController"/>, riding exactly the transform the flight model writes: the
 /// plane stays Node3D-moved, the physics engine never pushes it, and an impact with it routes
 /// through the striking plane's own contact resolution, never a solver response.
-/// The shapes are the SAME <see cref="ConvexPolygonShape3D"/> resources the terrain sweep casts —
+/// The shapes are the SAME <see cref="ConvexPolygonShape3D"/> resources the terrain sweep casts,
 /// single-sourced from <see cref="PlaneCollider.Parts"/>, never a second derivation: a fidelity
 /// upgrade edits <see cref="PlaneCollider"/>, not this class. The hull
 /// set also answers the proximity-fuse and blast geometry questions (<see cref="NearestShape"/>,
@@ -28,7 +28,7 @@ public sealed partial class AircraftBody : AnimatableBody3D
         Rig = rig;
         Name = "airframe";
         CollisionLayer = CollisionLayers.Aircraft;
-        CollisionMask = 0;     // a query target only — the body itself tests nothing
+        CollisionMask = 0;     // a query target only, the body itself tests nothing
         SyncToPhysics = false; // no solver interaction to smooth; the node transform is the truth
         _partNames = new string[collider.Parts.Count];
         _locals = new Transform3D[collider.Parts.Count];
@@ -49,32 +49,32 @@ public sealed partial class AircraftBody : AnimatableBody3D
         BoundRadius = bound;
     }
 
-    /// <summary>The controller this body belongs to — how a struck body resolves to its plane.</summary>
+    /// <summary>The controller this body belongs to, how a struck body resolves to its plane.</summary>
     public FlightController Rig { get; }
 
     /// <summary>The identity of the rounds this plane fires (<see cref="FlightController.PlayerIndex"/>).</summary>
     public int PlayerIndex => Rig.PlayerIndex;
 
-    /// <summary>Radius of a sphere at the body origin containing every collision hull — the cheap
+    /// <summary>Radius of a sphere at the body origin containing every collision hull, the cheap
     /// reject a per-step proximity scan runs before any per-hull distance work.</summary>
     public float BoundRadius { get; }
 
-    /// <summary>This body's RID as a reusable one-entry exclusion list — what the owning plane's
+    /// <summary>This body's RID as a reusable one-entry exclusion list, what the owning plane's
     /// own queries (and its rounds' hit rays) pass so a plane never collides with itself.</summary>
     public Godot.Collections.Array<Rid> ExcludeSelf => _excludeSelf ??= new() { GetRid() };
 
     /// <summary>Maps a query's struck shape index back to its <see cref="PlaneCollider"/> part
-    /// name — the shapes were added in <c>Parts</c> order; "center" for an out-of-range index
+    /// name, the shapes were added in <c>Parts</c> order; "center" for an out-of-range index
     /// (the ray backstop's own label for a shapeless hit).</summary>
     public string PartName(int shapeIdx) =>
         shapeIdx >= 0 && shapeIdx < _partNames.Length ? _partNames[shapeIdx] : "center";
 
     /// <summary>Turns the body on/off as a target: off while crashed (the airframe is hidden and
-    /// gone — a wreck must not soak rounds or block a sweep), back on at respawn.</summary>
+    /// gone, a wreck must not soak rounds or block a sweep), back on at respawn.</summary>
     public void SetHittable(bool on) => CollisionLayer = on ? CollisionLayers.Aircraft : 0;
 
     /// <summary>One projectile hit on this plane: resolve the struck shape to its collider part
-    /// and hand the round — with the identity that fired it — to the controller's own damage path
+    /// and hand the round, with the identity that fired it, to the controller's own damage path
     /// (<see cref="FlightController.TakeProjectileHit"/>). <paramref name="damageScale"/> is the
     /// blast falloff share for a splash hit; a direct round passes 1.</summary>
     public void TakeProjectileHit(WeaponDef weapon, Vector3 point, int shapeIdx, int shooter,
@@ -83,7 +83,7 @@ public sealed partial class AircraftBody : AnimatableBody3D
 
     /// <summary>The collision hull nearest a world point: its shape index (for
     /// <see cref="PartName"/>), the distance to its surface (0 inside), and that nearest surface
-    /// point — the blast pass's falloff geometry, measured to the hull skin rather than any
+    /// point, the blast pass's falloff geometry, measured to the hull skin rather than any
     /// transform origin (the same rule the destructible blast applies). -1 with no
     /// hulls.</summary>
     public int NearestShape(Vector3 worldPoint, out float distance, out Vector3 nearestPoint)
@@ -108,10 +108,10 @@ public sealed partial class AircraftBody : AnimatableBody3D
 
     /// <summary>Closest approach of the swept segment <paramref name="from"/>→<paramref name="to"/>
     /// to this plane's collision hulls: the minimum distance, the segment fraction
-    /// <paramref name="t"/> where it occurs, and the hull surface point nearest that spot — the
+    /// <paramref name="t"/> where it occurs, and the hull surface point nearest that spot, the
     /// proximity fuse's geometry. Distance to a convex set is convex along the segment, so a
     /// ternary search per hull is exact; the whole segment is tested, never the endpoints (a rocket
-    /// covers ~20 m per step — an endpoint test misses most passes outright).</summary>
+    /// covers ~20 m per step, an endpoint test misses most passes outright).</summary>
     public float SegmentDistance(Vector3 from, Vector3 to, out float t, out Vector3 nearestPoint)
     {
         var bodyXf = GlobalTransform;

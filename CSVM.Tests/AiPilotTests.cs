@@ -55,7 +55,7 @@ public class AiPilotTests
         Assert.InRange(model.Position.Y, 320f, 480f);
 
         // Orders are mutable between steps: retarget across the compass AND re-order the
-        // altitude on the same pilot, mid-flight — the mission-script surface's requirement.
+        // altitude on the same pilot, mid-flight, the mission-script surface's requirement.
         pilot.TargetHeadingDeg = 225f;
         pilot.TargetAltitude = 500f;
         Fly(45f);
@@ -66,7 +66,7 @@ public class AiPilotTests
 
     /// <summary>Flown: the ported aim makes an AI TRACK its leg rather than chase its node. Entered
     /// 120 m off a long straight leg it stays out there, converging by the decoded tenth, where the
-    /// same flight aimed at the node pulls in hard — the able-to-fail control.
+    /// same flight aimed at the node pulls in hard, the able-to-fail control.
     /// ⚠ It does NOT settle the roll. Both flights still wallow (peak bank ~90°, mean ~48°), so
     /// `BL-387` survives this and its cause is in the plant, not in the aim point.</summary>
     [ExtractedDataFact]
@@ -422,7 +422,7 @@ public class AiPilotTests
     /// <summary>The merge's vertical bias ramp: dive at or below 50 mph, climb at or above
     /// 90 mph, linear between and zero at the 70 mph the aim velocity collapses to. ⚠ These are
     /// metres per unit of a UNIT vector's horizontal magnitude, so the whole term is worth 0.3 m
-    /// at most — see <see cref="AiPilot.MergeVerticalBias"/>.</summary>
+    /// at most, see <see cref="AiPilot.MergeVerticalBias"/>.</summary>
     [Fact]
     public void TheMergeVerticalBiasRampsFromDiveToClimbAcrossItsTwoSpeeds()
     {

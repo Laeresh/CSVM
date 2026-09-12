@@ -144,7 +144,7 @@ mid-mission pickup and hookup sequences are cutscenes by the same construction a
 A cutscene's camera keyframes are written in the frame of the node the shot is about, and
 `OBJECT_ADD_CHILD` / `OBJECT_DELETE_CHILD` are what put the camera in that frame. Both take a
 `parent` and a `child` name; an add moves the child under the parent and a delete detaches it back
-to the world root, and **neither preserves the child's world pose** — the local transform is the
+to the world root, and **neither preserves the child's world pose**, the local transform is the
 whole point.
 
 `camera1-generic_intro`'s `start_script` opens with `OBJECT_DELETE_CHILD [world1, camera1]`,
@@ -170,7 +170,7 @@ has changed yet.
 in hand. Two shots instead compose inside a node that is nowhere in that walk: a **parentless,
 childless, model-less `Object3d`** whose only job is to be the frame a shot is written in. C3's
 `wingwalk_parent` (node 661) and C5's `carney_pickup_parent` (node 5633) are the whole set in this
-install, and both are addressed the same way — named as an `OBJECT_ADD_CHILD` parent by their
+install, and both are addressed the same way, named as an `OBJECT_ADD_CHILD` parent by their
 mission's own definitions, and posed onto the vehicle the scene is about before anything plays.
 
 `britbalmoral_1-ww_balmoral1` is the worked example. Its second sequence poses `wingwalk_parent`
@@ -179,8 +179,8 @@ zeroes that node's local translation, then calls `wingwalk` `AT_NODE wingwalk_pa
 `ww_balmoral` SI script before raising 967. `wingwalk_parent-wingwalk` calls `ww_player`,
 `ww_ladder` and `ww_zachary` and drives its own node 30 m/s forward for **19.25 s** between codes
 913 and 914; `player-ww_player` adds both `player` and `camera1` under `wingwalk_parent` and runs
-SI scripts `ww_cam1`–`ww_cam4` on `camera1`. So the entire shot — the camera, the player's
-aeroplane, the wing-walk figures — is written in the frame of one node whose authored transform is
+SI scripts `ww_cam1`–`ww_cam4` on `camera1`. So the entire shot, the camera, the player's
+aeroplane, the wing-walk figures, is written in the frame of one node whose authored transform is
 the map origin, and every one of those keyframes reads as a position over the water unless that
 node is standing in the world and has been posed onto the captured aeroplane.
 
@@ -198,8 +198,8 @@ by `FUN_004ee1a0`; see [org/sequences.md](../../org/sequences.md)). The event's 
 
 | flag | branch | what it reads off the host |
 |---|---|---|
-| `0x2` `AT_NODE_XYZ` | `004e8bdc` | `Object3d::GetRotation` (`004d1b40`, class data `+0x18/+0x1c/+0x20`) or, for a `Camera` host, `Camera::GetRotation` (`004d2680`, `+0x20/+0x24/+0x28`) — the host's own stored euler triple |
-| `0x4` `AT_NODE_MATRIX` | `004e8c76` | `gwNodeBuildNodeToAncestorMatrix` (`004cef20`) then matrix→euler (`0053df30`) — the host's composed world orientation |
+| `0x2` `AT_NODE_XYZ` | `004e8bdc` | `Object3d::GetRotation` (`004d1b40`, class data `+0x18/+0x1c/+0x20`) or, for a `Camera` host, `Camera::GetRotation` (`004d2680`, `+0x20/+0x24/+0x28`), the host's own stored euler triple |
+| `0x4` `AT_NODE_MATRIX` | `004e8c76` | `gwNodeBuildNodeToAncestorMatrix` (`004cef20`) then matrix→euler (`0053df30`), the host's composed world orientation |
 
 Both branches then add the authored `state` triple componentwise and write the result through
 `Object3d::SetRotation` (`004d1a30`), which stores the target's own euler fields. A host that fails
@@ -250,7 +250,7 @@ same names in its own subtree, off the shared `balmoral`/`player_balmoral` airfr
 finds them because its first resolution tier is a depth-first walk of the definition's own root
 subtree ([org/sequences.md](../../org/sequences.md), "The tier chain"), and that root IS the
 vehicle. CSVM keeps the rig's subtree as a **scoped alias** rather than putting those names in the
-shared index — `pilot`, `body` and `healthy` are the commonest names in the archive, and a global
+shared index, `pilot`, `body` and `healthy` are the commonest names in the archive, and a global
 index of them would let any definition claim them (`AnimRuntime.IndexSpawnedVehicle`).
 
 One more thing the capture needs from the vehicle beyond its root: its first sequence re-asserts
@@ -366,7 +366,7 @@ out-of-flight state, and the pose half is the marker: while that state holds, th
 drawn on the marker's world pose and put back where the mission spawned it at the handoff. The
 drop's own end pose is not what a CSVM session starts flying from.
 
-⚠ The cross-archive names below `player` — `healthy`, `cockpit1`, `shadow`, `destroyed` — are the
+⚠ The cross-archive names below `player`, `healthy`, `cockpit1`, `shadow`, `destroyed`, are the
 DEVASTATOR's copies, since that is the airframe the archive's `player` wrapper holds. A pilot flying
 anything else leaves those four events unresolved, which is correct: the states they assert are the
 model's own base states, and the flown airframe already carries them.
@@ -380,7 +380,7 @@ C3/M01's drop-off (`tex_drop.zrd`) plays `do_approachN` → `player-texdrop`, wh
 over `chutemanparent`, `pilot` and `stamp` in turn (`snd_chuteopen` follows). `chuteman` is
 aircraft-archive node **2288** (a parentless `Object3d`, model-less, one child `chutemanparent` at
 2289, which fans to `pilot` at 2290, the parachutist's own mesh, and `stamp`, the parachute canopy,
-at 2291) — the same archive `player`/`piratefighter` come from, addressed the same way: C3's base
+at 2291), the same archive `player`/`piratefighter` come from, addressed the same way: C3's base
 7500 makes the compiled def's symbol table read `chuteman` 9788, `chutemanparent` 9789, `pilot`
 9790, `stamp` 9791, each exactly `2288..2291 + 7500`. The shared `chuteman.zrd` reader ships the
 node `INACTIVE` as its own `RESET_STATE`, which is where it differs from `piratefighter`: that
@@ -390,7 +390,7 @@ Before `BL-540`, `AircraftStage` staged `player`/`piratefighter` alone, so `chut
 never joined the runtime's node table: the drop's own definition claimed a symbol with a null
 binding and the parachutist was invisible, seen at the controls with no error (the resolver's
 "claimed-but-unbuilt index" guard is deliberately silent, `AnimRuntime.Targets`). CSVM now stages
-`chuteman` beside the other two, under the same gate (a mission whose start-anims name an intro —
+`chuteman` beside the other two, under the same gate (a mission whose start-anims name an intro,
 C3/M01 has one), switched off until the drop's own `CALL_ANIMATION` reparents and activates it. A
 mid-mission drop in a mission with no intro of its own is not staged by this path; see
 `docs/architecture.md`'s `AircraftStage` entry.
@@ -829,7 +829,7 @@ readers of this install; the compiled archives carry the same events.
 | 86 | 1 | The case at `0x0047e336`. `FUN_005aef00` walks all `DAT_00a1d788` weapon records at `DAT_00a1d78c` (stride `0x214`, the records [ordnanceTypes.md](../../org/ordnanceTypes.md) decodes) and empties each one's live-round list at `+0x88` through `FUN_005aee40`: per round, the two animation instances it holds are force-stopped, its scene node is detached from the world and the round goes back on the free list, with **no detonation, no impact effect and no damage**. The one exemption, `+0x74 & 2`, is a bit the `.zrd` dispatcher `FUN_005ad630` sets for no key, so no weapon in this install is exempt. The teardown `FUN_005ae690(0)` calls the same function, which is what it is: clearing the air of ordnance. The one occurrence is C1/M02's `hangar_3-hangar_drop`, **the same definition that raises 965**, so the drop discards what the outgoing aeroplane fired. CSVM answers it from `CutsceneController.ClearOrdnance` into `ProjectilePool.Clear` (the `cutscene-clear-ordnance` suite). One divergence: that clear also drops the muzzle, impact and smoke sprite lists, which the original keeps in separate systems this code does not reach. |
 | 123 | 8 | **not handled.** |
 | 666, 667 | 2, 3 | `DAT_00621378` gates automatic application of the camera-parameter profile when the view mode changes (see [camparam.md](../camparam.md); the applier is `FUN_00472ea0`). 666 clears the gate so a cutscene's own camera work is not overwritten; 667 restores it and resets the view mode to 0. |
-| 701–704 | 1, 1, 0, 0 | ⚠ **Not a camera-parameter set; an earlier reading of this row said so and was wrong.** The case at `0x0047e35a` takes the whole range `0x2bd`–`0x2c0` and calls `FUN_0049a210(code − 700)`, which reaches the **multiplayer flag list**: `FUN_0049a1e0` finds the object carrying that id in the linked list at `DAT_0071c794` (built by `FUN_00494f40`, torn down with the rest of the network session's lists in `FUN_004966c0`), zeroes its `+0x44`, and `FUN_0049a240` broadcasts the whole list as network message `0x1d` through `FUN_005b2640` — the same message id `FUN_004966c0` registers `FUN_0049a300` as the receiver for. The list's own per-frame walk `FUN_00499e50` is a pickup-and-drop test at 625 m² against each entry. The whole case sits behind `FUN_005b4210`, false unless a network session object exists at `DAT_009c7860` and this machine is on its thread, **so the case does nothing at all in single player**. The two authored occurrences are `player-flg_throw1` and `player-flg_throw2`, in the `MP2` mission of every chapter. **Declined by design**: CSVM hosts no multiplayer session, and the original's own case is inert without one. |
+| 701–704 | 1, 1, 0, 0 | ⚠ **Not a camera-parameter set; an earlier reading of this row said so and was wrong.** The case at `0x0047e35a` takes the whole range `0x2bd`–`0x2c0` and calls `FUN_0049a210(code − 700)`, which reaches the **multiplayer flag list**: `FUN_0049a1e0` finds the object carrying that id in the linked list at `DAT_0071c794` (built by `FUN_00494f40`, torn down with the rest of the network session's lists in `FUN_004966c0`), zeroes its `+0x44`, and `FUN_0049a240` broadcasts the whole list as network message `0x1d` through `FUN_005b2640`, the same message id `FUN_004966c0` registers `FUN_0049a300` as the receiver for. The list's own per-frame walk `FUN_00499e50` is a pickup-and-drop test at 625 m² against each entry. The whole case sits behind `FUN_005b4210`, false unless a network session object exists at `DAT_009c7860` and this machine is on its thread, **so the case does nothing at all in single player**. The two authored occurrences are `player-flg_throw1` and `player-flg_throw2`, in the `MP2` mission of every chapter. **Declined by design**: CSVM hosts no multiplayer session, and the original's own case is inert without one. |
 | 800–803 | 1 each | Colorado-specific hooks. **800 credits a launch budget:** it looks the generator `cargozep1` up by name and adds 5 to its remaining capacity (`+0x80`), the only credit C4/M03's generator ever receives, so the five freed-crew Furies launch during the beauty shot that raises it (`cg_beauty_shot`, called by the docking film `cg_hookup_player`; [enemy-generators.md](../mission-entities/enemy-generators.md), "Capacity rule and limit"). 801 to 803 reactivate the first still-deactivated `bhatwarhawk_1..6`, `bhatbrigand_n` and `bhatgyro_1..3` (`FUN_004b0f40(0)`, the primitive `WAKEUP_ENEMIES` uses); authored in C4's `bhm_warhawks`. CSVM answers 800 from `Session/AiGeneratorRuntime.cs`'s place in the `CALLBACK` host chain (five launches on `cargozep1`, the `generator-callback-credit` suite) and 801 to 803 from `Session/CampaignDirector.cs`'s own link ahead of it, which is the whole of what puts a CM19 Black Hat into the air, since no objective names one in `WAKEUP_ENEMIES` (the `campaign-launch-hook` suite). |
 | 913 | 7 | `FUN_0041f250` parks every AI vehicle that is not the player and not itself in a cutscene: sets its hold flag, pushes its next-think time far out, and deactivates its scene node. Plus `FUN_004a95f0` (detaches the wave director's node update), `FUN_004516e0(0)` and `FUN_00453660(0)`. **Clears the world of AI aircraft for the duration of the movie.** |
 | 914 | 8 | the exact inverse (`FUN_0041f2e0`, `FUN_004a9610`, `FUN_004516e0(1)`, `FUN_00453660(1)`), reactivating each AI vehicle with a randomised next-think. Skipped in multiplayer. |
@@ -1211,7 +1211,7 @@ beat deactivating it; the smooth phase between them is
   (zero for the bars) rather than an absolute pose. On the rotation the compiled field is nested
   under `basis`, but its key is `AtNodeMatrix` on the eight chapters' letterbox (8 sites) and
   `AtNodeXYZ` everywhere else in the install (172 sites, `britbalmoral_1-ww_balmoral1`'s wing-walk
-  frame among them) — the reader-normalizing front-end (`AnimDefs.AddAtNode`) only ever emits the
+  frame among them), the reader-normalizing front-end (`AnimDefs.AddAtNode`) only ever emits the
   first spelling, so the second reached no compiled extraction until the rotate handler was taught
   to read both. **The compiled def wins**, so a consumer that reads only the reader spelling sees
   the target teleported to its parent's origin. Install-wide there are 190 non-null `at_node`

@@ -6,7 +6,7 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>The sequence interpreter's view of its host runtime — the exactly three points at
+/// <summary>The sequence interpreter's view of its host runtime, the exactly three points at
 /// which <see cref="SequenceRunner"/> reaches back into <see cref="AnimRuntime"/>. Kept a
 /// 3-member seam so the interpreter is engine-free and headlessly testable: a test supplies a
 /// fake host, drives real <see cref="AnimInstance"/>/<see cref="SequenceRunner"/> objects, and
@@ -16,12 +16,12 @@ namespace CSVM.Mech3;
 public interface ISequenceHost
 {
     /// <summary>The debugger's fired-mark hook. A get-only nullable delegate, so the runner's
-    /// <c>OnEventDispatched?.Invoke(...)</c> null-conditional short-circuits the whole invocation —
-    /// including the <see cref="EventDispatch"/> construction — when no debugger is attached. This
+    /// <c>OnEventDispatched?.Invoke(...)</c> null-conditional short-circuits the whole invocation,
+    /// including the <see cref="EventDispatch"/> construction, when no debugger is attached. This
     /// is the documented zero-cost contract on the hot dispatch path.</summary>
     Action<EventDispatch>? OnEventDispatched { get; }
 
-    /// <summary>The completion test the event just dispatched installed, or null — read once,
+    /// <summary>The completion test the event just dispatched installed, or null, read once,
     /// immediately after a <see cref="Dispatch"/> that returned true. Only a
     /// <c>WAIT_FOR_COMPLETION</c> CALL_ANIMATION installs one; it reads true while the callee
     /// the call actually reached is still running. Decode: docs/org/sequences.md.</summary>
@@ -41,15 +41,15 @@ public interface ISequenceHost
 /// Carries what the debugger's timeline needs to stamp a "fired" mark on the right authored block:
 /// the running definition and its anchor (the instance identity), the sequence lane, the event's
 /// index within that sequence, and its kind and target name. Raised only for real timed
-/// dispatches from a sequence runner, never for the instant RESET_STATE posing — so a mark
+/// dispatches from a sequence runner, never for the instant RESET_STATE posing, so a mark
 /// always corresponds to something the clock actually reached.</summary>
 public readonly record struct EventDispatch(
     AnimDefinition Def, Node3D? Anchor, string Sequence, int EventIndex,
     string EventKind, string? EventName);
 
 /// <summary>One running definition: its anchor plus a runner per active sequence. The
-/// sequences of a definition run CONCURRENTLY — the C1 train drives its four cars from
-/// four sibling sequences, each with its own SI script and its own loop — but at most ONE
+/// sequences of a definition run CONCURRENTLY, the C1 train drives its four cars from
+/// four sibling sequences, each with its own SI script and its own loop, but at most ONE
 /// runner per sequence: the original keeps a sequence's execution state inside the definition's
 /// own sequence array, so a sequence is a single instance and cannot run two copies of itself.
 /// See <see cref="CallSequence"/>.</summary>
@@ -59,7 +59,7 @@ public sealed class AnimInstance
     public readonly Node3D? Anchor;
 
     /// <summary>One slot per <see cref="AnimDefinition.Sequences"/> entry, null when that sequence
-    /// is not running — the original's per-definition sequence array (`anim+0xcc`, count
+    /// is not running, the original's per-definition sequence array (`anim+0xcc`, count
     /// `anim+0xd8`, stride 0x40), whose INDEX decides same-tick dispatch. Decode:
     /// docs/org/sequences.md.</summary>
     private readonly SequenceRunner?[] _slots;
@@ -97,7 +97,7 @@ public sealed class AnimInstance
         }
     }
 
-    /// <summary>Seconds since this instance started — the original's <c>anim+0xb0</c>, shared by
+    /// <summary>Seconds since this instance started, the original's <c>anim+0xb0</c>, shared by
     /// every sequence of it and gated on by <c>START_TIME ANIMATION</c>. Never rewound; a LOOP
     /// rewinds only the sequence's own timers. Decode: docs/org/sequences.md.</summary>
     public float Clock { get; private set; }
@@ -109,7 +109,7 @@ public sealed class AnimInstance
     /// Decode: docs/org/sequences.md.</summary>
     public int RefusedStoppedCalls { get; private set; }
 
-    /// <summary>No runner is still executing. ⚠ NOT on its own the test for retiring an instance —
+    /// <summary>No runner is still executing. ⚠ NOT on its own the test for retiring an instance,
     /// see <c>AnimRuntime.Retirable</c> and <c>MotionSet.Airborne</c>, which additionally hold an
     /// instance open while one of its bodies is still in the air, since such a launch is the last
     /// event of its sequence and its runner ends on the launch's reported duration rather than on
@@ -132,7 +132,7 @@ public sealed class AnimInstance
     public void Advance(ISequenceHost rt, float dt)
     {
         // Before the runners, so a sequence clock and the instance clock advance together within
-        // a tick — a runner reads Clock back during its own advance to gate origin ANIMATION.
+        // a tick, a runner reads Clock back during its own advance to gate origin ANIMATION.
         Clock += dt;
         for (int i = 0; i < _slots.Length; i++)
         {
@@ -163,7 +163,7 @@ public sealed class AnimInstance
     }
 
     /// <summary>CALL_SEQUENCE: starts this definition's named sequence, but only from the parked
-    /// state — a call into an already-running, already-stopped or non-ON_CALL sequence is a
+    /// state, a call into an already-running, already-stopped or non-ON_CALL sequence is a
     /// silent no-op. ⚠ Returns whether the definition HAS that sequence, never whether anything
     /// started; a no-op call must still report found. Decode: docs/org/sequences.md.</summary>
     public bool CallSequence(string name)
@@ -200,7 +200,7 @@ public sealed class AnimInstance
         return false;
     }
 
-    /// <summary>Starts a runner for one sequence — the ONE way a runner joins an instance, so
+    /// <summary>Starts a runner for one sequence, the ONE way a runner joins an instance, so
     /// nothing can put a sequence into flight behind the array's back. It lands in the sequence's
     /// own slot, which is what makes a mid-<see cref="Advance"/> call same-tick or not; a sequence
     /// the definition does not list has no slot and runs unslotted (the bootstrap's death slot and
@@ -216,7 +216,7 @@ public sealed class AnimInstance
     }
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/>, including
-    /// the caller's own, and does nothing else — no start-if-not-running path exists.
+    /// the caller's own, and does nothing else, no start-if-not-running path exists.
     /// ⚠ Stopping an ON_CALL sequence, parked or running, is a DISABLE: it stays un-callable
     /// until the definition restarts on a fresh instance. ⚠ Returns whether the name RESOLVED,
     /// never whether anything was halted. Decode: docs/org/sequences.md.</summary>
@@ -250,7 +250,7 @@ public sealed class AnimInstance
     // the largest single allocator of a flight session. Do not simplify it back.
     private LiveRunners Live() => new(_slots, _unslotted);
 
-    // Identity is the sequence OBJECT, never its name — see IsRunning: the empty name is not
+    // Identity is the sequence OBJECT, never its name, see IsRunning: the empty name is not
     // unique, so a name-keyed lookup would collapse two sequences onto one slot.
     private int SlotOf(AnimSequence seq)
     {
@@ -318,13 +318,13 @@ public sealed class AnimInstance
 /// <summary>
 /// Executes one sequence's event list on a clock. An event's <c>start</c> gives an origin
 /// ("Animation"/"Sequence"/"Event") and a delay; an absent <c>start</c> encodes as
-/// "Animation + 0.0" but behaves as "as soon as the previous event finishes" — see
+/// "Animation + 0.0" but behaves as "as soon as the previous event finishes", see
 /// <see cref="SetDue"/>. Scheduling and the origin clocks: docs/org/sequences.md; the
 /// authored `START_TIME` encoding: docs/formats/anim-definitions.md.
 /// </summary>
 public sealed class SequenceRunner
 {
-    /// <summary>One authored ANIMATION FRAME, in seconds — the unit a <c>LOOP</c> count is
+    /// <summary>One authored ANIMATION FRAME, in seconds, the unit a <c>LOOP</c> count is
     /// denominated in, measured against the original at 60 fps and at 120 fps. ⚠ Deliberately its
     /// own constant, not <see cref="Utils.GameClock.FixedDt"/>, though the two are equal today:
     /// re-stepping the sim for physics reasons must not halve authored animation timers.
@@ -333,7 +333,7 @@ public sealed class SequenceRunner
 
     private readonly AnimSequence _seq;
     // One entry per open IF: has any branch of that chain already run? Our stand-in for the
-    // original's arrival-based distinction between a fall-through and a candidate branch — see
+    // original's arrival-based distinction between a fall-through and a candidate branch, see
     // Scan for the one place the difference could show. Decode: docs/org/sequences.md.
     private readonly List<bool> _branchTaken = new();
     private int _pc;              // next event index
@@ -366,20 +366,20 @@ public sealed class SequenceRunner
         _seq = seq;
         _animClock = animClock;
         // The first event's OWN offset gates it, so the opening gate is not
-        // unconditionally zero — a sequence may legitimately start with a delay.
+        // unconditionally zero, a sequence may legitimately start with a delay.
         SetDue();
     }
 
     public bool Done => _done;
 
-    /// <summary>The authored sequence this runner is executing — the identity
+    /// <summary>The authored sequence this runner is executing, the identity
     /// <see cref="AnimInstance.CallSequence"/> matches on, since sequence NAMES are not
     /// unique within a definition.</summary>
     public AnimSequence Sequence => _seq;
 
     public string SequenceName => _seq.Name;
 
-    /// <summary>Is this runner holding on a WAIT_FOR_COMPLETION call? Observation only — the
+    /// <summary>Is this runner holding on a WAIT_FOR_COMPLETION call? Observation only, the
     /// tests and the `wait-for-completion` suite read it; nothing in the runner branches on
     /// it.</summary>
     public bool Waiting => _waitingOn != null;
@@ -393,14 +393,14 @@ public sealed class SequenceRunner
         set { if (_branchTaken.Count > 0) _branchTaken[^1] = value; }
     }
 
-    /// <summary>Halts this runner: no further events fire. Safe mid-advance — the advance loop
+    /// <summary>Halts this runner: no further events fire. Safe mid-advance, the advance loop
     /// re-tests Done after every dispatch. ⚠ Does not touch resources already launched (motions,
     /// puffers); their lifetimes outlive the sequence that launched them.</summary>
     public void Halt() => _done = true;
 
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
     {
-        // ⚠ Never charge a runner the dt of the pass it was created in — SetDue's ANIMATION
+        // ⚠ Never charge a runner the dt of the pass it was created in, SetDue's ANIMATION
         // restatement needs the two clocks in step. An unmoved instance clock is exactly that
         // case, and is the original's own test. Decode: docs/org/sequences.md.
         if (inst.Clock != _animClock)
@@ -411,7 +411,7 @@ public sealed class SequenceRunner
             if (_waitingOn())
                 return;
             // The callee finished. The wait REPLACES the call's duration, so the next event's
-            // "Event + t" offset is measured from this instant, not from when the call fired —
+            // "Event + t" offset is measured from this instant, not from when the call fired,
             // otherwise the offset is already behind the clock and collapses to zero.
             _waitingOn = null;
             _base = _clock;
@@ -432,7 +432,7 @@ public sealed class SequenceRunner
                 rt.OnEventDispatched?.Invoke(new EventDispatch(
                     inst.Def, inst.Anchor, _seq.Name, _pc, ev.Kind, EventDisplayName(ev)));
                 // This event has fired. The NEXT event's offset is measured from this
-                // moment plus this event's own run time — the offset belongs to the
+                // moment plus this event's own run time, the offset belongs to the
                 // event that CARRIES it, not to its successor. See SetDue().
                 _base = _clock + duration;
                 if (duration > 0f)
@@ -442,7 +442,7 @@ public sealed class SequenceRunner
                 _pc++;
                 SetDue();
                 // WAIT_FOR_COMPLETION gates this sequence's NEXT event only, never the runner's
-                // lifetime — a runner-lifetime reading wedges thousands of authored LOOP{-1}
+                // lifetime, a runner-lifetime reading wedges thousands of authored LOOP{-1}
                 // sequences open forever. Decode: docs/org/sequences.md.
                 if (ev.WaitsForCompletion && _pc < _seq.Events.Count
                     && rt.PendingWait is { } wait)
@@ -457,7 +457,7 @@ public sealed class SequenceRunner
             {
                 case "Loop":
                     // Counter increments THEN compares, so an authored 0 is infinite as a
-                    // consequence, not a case of its own — 26 shipped routes ship Count 0.
+                    // consequence, not a case of its own, 26 shipped routes ship Count 0.
                     // ⚠ Do not special-case 0; it must reach the compare below unchanged.
                     int authored = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
                     _loopPasses++;
@@ -524,7 +524,7 @@ public sealed class SequenceRunner
                     break;
             }
             // Control flow moved _pc without firing anything, so re-gate on whatever
-            // event we landed on. Its own offset applies (LOOP included — the bowl
+            // event we landed on. Its own offset applies (LOOP included, the bowl
             // sign's trailing `Loop {Event 1.2}` is its inter-cycle pause).
             SetDue();
             if (_frameGatePending)
@@ -550,14 +550,14 @@ public sealed class SequenceRunner
 
     private static float? CountOf(AnimEvent ev) => ev.Data.Num("Count");
 
-    // Best-effort target/name an event carries, for the timeline mark's label — the different
+    // Best-effort target/name an event carries, for the timeline mark's label, the different
     // event kinds spell it under different keys. Nothing load-bearing hangs off it; the event's
     // index within its sequence is what identifies the authored block.
     private static string? EventDisplayName(AnimEvent ev) =>
         ev.Data.Str("name") ?? ev.Data.Str("node") ?? ev.Data.Str("child");
 
     // Gate the event at _pc on ITS OWN schedule. ⚠ Do not read the offset off the event just
-    // fired and apply it to its successor — that shifts every sequence in the install by one
+    // fired and apply it to its successor, that shifts every sequence in the install by one
     // slot (the bowl-sign measurement in docs/org/sequences.md is the demonstration).
     // Control-flow events take no time and so do not advance _base, but they ARE still gated.
     private void SetDue()
@@ -573,14 +573,14 @@ public sealed class SequenceRunner
             // Restated in this runner's own clock (both tick by the same dt) so one comparison
             // gates every origin, and a LOOP that rewinds _clock re-gates through here anyway.
             "Animation" => _clock + (ev.StartTime - _animClock),
-            // Origin SEQUENCE is seq+0x24 — absolute against this sequence's own start.
+            // Origin SEQUENCE is seq+0x24, absolute against this sequence's own start.
             "Sequence" => ev.StartTime,
             // ⚠ An absent start encodes as Animation + 0.0 but must not be routed through the
             // animation clock: it would gate ~36k unstamped compiled events on an already-running
             // clock. StartOffset is null for them, so they land here; keep it that way.
             _ => _base + ev.StartTime,
         };
-        // ⚠ An authored offset counts as scheduled even when the clock has already run past it —
+        // ⚠ An authored offset counts as scheduled even when the clock has already run past it,
         // testing only `_due > _clock` misreads a short absolute period as instantaneous and
         // collects the AnimFrame floor meant for untimed poll loops. Decode: docs/org/sequences.md.
         if (_due > _clock || ev.StartTime > 0f)
@@ -589,11 +589,11 @@ public sealed class SequenceRunner
         }
     }
 
-    // The next ELSEIF/ELSE/ENDIF — where a FAILED condition continues. Lands ON the event,
+    // The next ELSEIF/ELSE/ENDIF, where a FAILED condition continues. Lands ON the event,
     // so the loop re-dispatches it as the next candidate.
     private int NextBranch(int from) => Scan(from, stopAtElse: true);
 
-    // The next ENDIF — where a branch that ran, or one skipped past its whole chain,
+    // The next ENDIF, where a branch that ran, or one skipped past its whole chain,
     // continues. Lands ON the ENDIF so it pops the frame.
     private int SkipToEnd(int from) => Scan(from, stopAtElse: false);
 

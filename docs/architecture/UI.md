@@ -234,18 +234,27 @@ The three authored sets live here as constants and `CinemaSkips` answers them.
 ## src/UI/CinemaSkips.cs
 Which press ends a cinema, for every screen that offers a skip. `Skips` is the one member that
 decides, and it takes a `CinemaPress` rather than a device event, so all three sets are pinned off
-engine; `PressOf` is the engine's half, reading a key, a click or a pad button into one of those
-and holding no policy of its own. A pad button is in every set, because a player holding one has no
-other press to offer and would otherwise sit through a 145-second film. It is read only where pad
-input counts at all (`--no-pads`, an unfocused window), since a pad reports its first button
-pressed as it connects. What each cinema's set is, and why they differ, is
-[../formats/cinemas.md](../formats/cinemas.md).
+engine; `PressOf` is the engine's half, reading a key, a click or a pad button into one of those and
+holding no policy of its own. A press is not a set: only an any-press set takes a key with no name
+of its own. A pad button is in every set, because a player holding one has no other press to offer
+and would otherwise sit through a 145-second film; it counts only where pad input does at all
+(`--no-pads`, an unfocused window), since a pad reports its first button as it connects. What each
+cinema's set is, and why they differ, is [../formats/cinemas.md](../formats/cinemas.md).
+
+## src/UI/CinemaHandoff.cs
+The two things every cinema flow shares: `CinemaPlay`, the shape of the call that puts a film on
+screen, which `Session/Launcher.cs` satisfies by handing over `PlayCinema` itself, and `Once`, which
+wraps the continuation a film hands off to. A skip can land on the frame the film plays out and both
+paths end it, so the next screen opens once however many times the cinema reports it stopped; the
+chapter films and the closing film go through that one latch, and the boot block, whose
+continuations start the next film, chains unwrapped. Which presses end a film is
+`CinemaSkips.cs`'s, not this file's.
 
 ## src/UI/BootSequence.cs
 `fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
 800x600 space out of the extraction's own art, message-table strings and font metrics, and `Run`
-calls the block's eight actions in the reader's order over three injected delegates, one that plays
-a film, one that puts up a still and one that takes the card down as the first film starts. Every
+calls the block's eight actions in the reader's order over three injected delegates, a `CinemaPlay`
+for a film, one that puts up a still and one that takes the card down as the first film starts. Every
 name, position and duration is the reader's ([../formats/cinemas.md](../formats/cinemas.md)), which
 is also where the card's one showing, the unseen fade and the films running back to back are
 settled; `Held` is the one member that says how much of an authored hold reaches the screen.
@@ -477,11 +486,12 @@ arrow keys walk the focus chain instead of reaching the aircraft or the lab's or
 ## src/UI/SelectionService.cs
 The shared world selection in `--freecam` and `--anim-lab`: a left click picks the mesh under the
 cursor, PgUp and PgDn walk its `cs_name` ancestor ladder, and a breadcrumb line and wireframe box
-show the current rung. Objects are picked by box, map-scale meshes (terrain) by triangle. Ctrl+click
-also gathers the `ExportSet` the node lab writes as one file. `Current`, `Ladder`, `Level`,
-`CurrentBox` and the `Changed` event are what the other inspect tools read; `--debug-select` replays a click for a scripted run. `ExtraRoots`
-walks props parked beside the world content, and `SubtreeWorldAabb` is the shared box measurement
-the anim runtime and the node lab read too.
+show the current rung. Objects are picked by box, map-scale meshes (terrain) by triangle. `Current`,
+`Ladder`, `Level`, `CurrentBox` and the `Changed` event are what the other inspect tools read, and
+`--debug-select` replays a click for a scripted run. A Ctrl-held pick is reported as `CtrlPicked`,
+and a tool may append a line to the breadcrumb through `HudLine`, which is how the export set
+attaches without this service knowing what an export is. `ExtraRoots` walks props parked beside the
+world content; `SubtreeWorldAabb`, `NewBoxInstance` and `DrawBox` are shared with the other tools.
 
 ## src/UI/TargetingOverlay.cs
 The targeting overlay (key F15, `--debug-targets`): a per-frame line from every turret gunner and AI
@@ -535,10 +545,18 @@ what happens when you touch it, and neither answers "what is this object".
 
 ## src/UI/NodeLab.cs
 The node lab (key N) in `--freecam` and `--anim-lab`: the world's `cs_name` tree, a search box,
-per-node frame, hide and glTF export into `Exports/`, the export set's toggle, combined export and clear, a dependency readout for the current selection (anim defs, destructible
+per-node frame, hide and glTF export into `Exports/`, the export set's three buttons, a dependency readout for the current selection (anim defs, destructible
 pools, geometry and textures, colliders) and a destructibles view with coverage columns, plus
 top-level branches for props parked beside the world content. `--debug-nodelab` is the scripted
 twin. A row's text and colour follow live visibility, re-read on the panel's own status cadence.
+
+## src/UI/ExportSet.cs
+The node lab's export set: the nodes gathered with Ctrl+click or the panel's ± set, written as one
+timestamped GLB in `Exports/` at their world transforms. It rides `SelectionService.CtrlPicked`
+rather than reading the mouse itself, outlines each member in a cyan box that follows that member's
+transform, and puts the count on the selection's breadcrumb through `HudLine`, because a set is
+gathered whether or not the panel was ever opened. A member freed under it (a destructible swapping
+to its wreck) leaves on its own. Nothing is drawn until the first node joins.
 
 ## src/UI/WorldDamageLab.cs
 The world damage lab (key F5) in `--freecam` and `--anim-lab`: the destructible pools of whatever

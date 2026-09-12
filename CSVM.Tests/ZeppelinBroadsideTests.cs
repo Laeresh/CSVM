@@ -31,7 +31,7 @@ public class ZeppelinBroadsideTests
             ZeppelinBroadside.TargetSide(0f, 0f, 1f, hull, new Vector3(0f, 0f, -100f)));
 
         // The decoded boundary: 44° off the lateral axis is inside (cos 44° = 0.719 > 0.707),
-        // 46° is out (0.695) — the > 0.707 gate, a 45° half-angle.
+        // 46° is out (0.695), the > 0.707 gate, a 45° half-angle.
         Vector3 OffRight(float deg) => new(
             Mathf.Cos(Mathf.DegToRad(deg)) * 100f, 0f, -Mathf.Sin(Mathf.DegToRad(deg)) * 100f);
         Assert.Equal(BroadsideSide.Right, ZeppelinBroadside.TargetSide(0f, 0f, 1f, hull, OffRight(44f)));
@@ -42,7 +42,7 @@ public class ZeppelinBroadsideTests
     public void ArcRidesTheMovingHull()
     {
         // The hull yawed to fly +X (yaw −90°): starboard swings to +Z, and the world point
-        // that was starboard at yaw 0 is now dead ahead — out of both arcs.
+        // that was starboard at yaw 0 is now dead ahead, out of both arcs.
         float yaw = -Mathf.Pi / 2f;
         var hull = new Vector3(50f, 200f, -30f);
         Assert.Equal(BroadsideSide.Right,

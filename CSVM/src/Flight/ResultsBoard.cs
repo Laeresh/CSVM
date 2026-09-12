@@ -39,7 +39,7 @@ public abstract partial class ResultsBoard : Control
     /// board's own state exactly as it found it.</summary>
     public System.Action? PhotoMode { get; set; }
 
-    /// <summary>The standard menu while it is up, or null — the test harness's way to drive the
+    /// <summary>The standard menu while it is up, or null, the test harness's way to drive the
     /// activation routing without a device.</summary>
     internal BoardMenu? StandardMenu => _host?.Menu;
 
@@ -54,7 +54,7 @@ public abstract partial class ResultsBoard : Control
         // Track the window (resizable) so the backdrop always covers it.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        // A rerun clears the subclass's live flag — retire the board and release the clock until
+        // A rerun clears the subclass's live flag, retire the board and release the clock until
         // the next run ends. R and pad Y reach the rerun without the menu, so the release belongs
         // here rather than only on the menu's own Restart.
         if (Visible && !StillEnded)
@@ -178,7 +178,7 @@ public abstract partial class ResultsBoard : Control
         _state.Clear(HaltReason.Ended);
     }
 
-    // The board spans the whole window, not a pane — so it scales on the window height alone
+    // The board spans the whole window, not a pane, so it scales on the window height alone
     // (no HudMetrics pane damping, which is for HUD elements drawn inside a pane). The one
     // per-pane board, StuntScoreboard, overrides this.
     protected virtual float BoardScale() => Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / 720f : 1f);

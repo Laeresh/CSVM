@@ -34,7 +34,7 @@ public sealed partial class NodeLab : Node
 
     // Unresolved destructibles get a far larger allowance than the resolved ones, because that is
     // the list somebody is scanning for a specific entry; a full world has a dozen. A slice has
-    // hundreds by construction, so the cap exists — and the elided count is always printed.
+    // hundreds by construction, so the cap exists, and the elided count is always printed.
     private const int MaxUnresolvedListed = 40;
 
     private const float StatusPeriod = 0.25f;
@@ -45,6 +45,7 @@ public sealed partial class NodeLab : Node
 
     private readonly Node3D _world;
     private readonly SelectionService _selection;
+    private readonly ExportSet _set;
     private readonly AnimRuntime? _runtime;
     private readonly AnimProgram? _program;
     private readonly SceneBuilder? _scene;
@@ -80,6 +81,7 @@ public sealed partial class NodeLab : Node
     {
         _world = world;
         _selection = selection;
+        _set = new ExportSet(selection);
         _runtime = runtime;
         _program = program;
         _scene = scene;
@@ -87,7 +89,7 @@ public sealed partial class NodeLab : Node
         Name = "node_lab";
     }
 
-    /// <summary>Extra subtrees to list alongside the world content — props parked beside it rather
+    /// <summary>Extra subtrees to list alongside the world content, props parked beside it rather
     /// than under it (the anim lab's <c>--plane=</c> stage prop), which the tree, the search index
     /// and <see cref="SelectByName"/> would otherwise miss. Shares the selection's list by
     /// reference, populated after construction; read when the tree/index are first built.</summary>
@@ -97,17 +99,17 @@ public sealed partial class NodeLab : Node
     /// after this lab is, so the reference cannot be captured at construction.</summary>
     public Func<SpectatorCamera?>? CameraSource { get; init; }
 
-    /// <summary>Pixels of window kept clear below the panel — the anim lab parks its timeline
+    /// <summary>Pixels of window kept clear below the panel, the anim lab parks its timeline
     /// strip there, plain freecam does not.</summary>
     public int BottomMargin { get; init; } = 16;
 
     /// <summary><c>--debug-nodelab[=deps,dest,open,node=&lt;cs_name&gt;]</c>: open the panel at
-    /// launch and dump the requested readouts to the log once the selection has settled — the
+    /// launch and dump the requested readouts to the log once the selection has settled, the
     /// scripted stand-in for pressing N and reading the panel, which live input cannot do here.</summary>
     public string? DebugSpec { get; init; }
 
     /// <summary>Whether the panel is showing. Nothing is built until it first opens, so a capture
-    /// without N — and without <c>--debug-nodelab</c> — renders as if this file did not exist.</summary>
+    /// without N, and without <c>--debug-nodelab</c>, renders as if this file did not exist.</summary>
     public bool IsOpen => _open;
 
     /// <summary>Parses <c>--debug-nodelab[=spec]</c>: a comma-separated list of <c>deps</c>,
@@ -130,7 +132,7 @@ public sealed partial class NodeLab : Node
                 kept.Add(token);
                 continue;
             }
-            // A caller that supplies the list wants the tokens back as data, not in the log — that
+            // A caller that supplies the list wants the tokens back as data, not in the log, that
             // is what lets the spec normalise a value without a Godot runtime to print into.
             if (rejected != null)
             {
@@ -144,6 +146,9 @@ public sealed partial class NodeLab : Node
 
     public override void _Ready()
     {
+        // The set joins the tree whether or not the panel is ever opened: Ctrl+click gathers it
+        // through the selection, and it draws nothing until a node is in it.
+        AddChild(_set);
         _selection.Changed += OnSelectionChanged;
         if (DebugSpec != null)
         {
@@ -249,7 +254,7 @@ public sealed partial class NodeLab : Node
         Log.Info("ui", $"nodelab frame node={SelectionService.NameOf(node)} centre=({c.X:0.0},{c.Y:0.0},{c.Z:0.0}) size=({box.Size.X:0.0},{box.Size.Y:0.0},{box.Size.Z:0.0})");
     }
 
-    /// <summary>Flips the selected subtree's <c>Visible</c> — nothing is torn down, so it is
+    /// <summary>Flips the selected subtree's <c>Visible</c>, nothing is torn down, so it is
     /// reversible, and an animation that re-shows the node afterwards is the data working, not a
     /// bug. The panel reports live <c>Visible</c> so that reads as what it is.</summary>
     public void ToggleHide()
@@ -287,28 +292,11 @@ public sealed partial class NodeLab : Node
             Log.Info("ui", $"nodelab set — nothing is selected");
             return;
         }
-        _selection.ToggleInSet(node);
+        _set.Toggle(node);
         UpdateStatus();
     }
 
-    /// <summary>Writes every export set member into one timestamped GLB in <c>Exports/</c>, each at
-    /// its world transform.</summary>
-    public void ExportSet()
-    {
-        var set = _selection.ExportSet.Where(IsInstanceValid).ToList();
-        if (set.Count == 0)
-        {
-            Log.Info("ui", $"nodelab export set — the set is empty (Ctrl+click objects, or ± set on a selection)");
-            return;
-        }
-        Log.Info("ui", $"nodelab export set count={set.Count} nodes=[{string.Join(" ", set.Select(SelectionService.NameOf))}]");
-        string name = set.Count == 1
-            ? SelectionService.NameOf(set[0])
-            : $"{SelectionService.NameOf(set[0])}+{set.Count - 1}";
-        GltfExporter.ExportSetToExports(set, name);
-    }
-
-    /// <summary>The dependency readout for one node as plain lines — the same text the panel shows
+    /// <summary>The dependency readout for one node as plain lines, the same text the panel shows
     /// and the scripted dump logs, so the two can never disagree. Null node yields the
     /// nothing-selected notice.</summary>
     public List<string> DependencyLines(Node3D? node)
@@ -330,7 +318,7 @@ public sealed partial class NodeLab : Node
         return lines;
     }
 
-    /// <summary>Selects a node by <c>cs_name</c> — the tree panel's own entry, and the way to reach
+    /// <summary>Selects a node by <c>cs_name</c>, the tree panel's own entry, and the way to reach
     /// anything the click cannot (hidden, or off screen). An exact match wins; failing that the first substring match, with the full candidate list logged so an
     /// ambiguous name is visible rather than silently resolved.</summary>
     public bool SelectByName(string name)
@@ -380,7 +368,7 @@ public sealed partial class NodeLab : Node
         return node.Visible ? name : name + "  (hidden)";
     }
 
-    // The nearest `cs_name`-bearing descendants of a node — the exact inverse of
+    // The nearest `cs_name`-bearing descendants of a node, the exact inverse of
     // the selection ladder's ancestor walk, so the tree's parent/child relation and the
     // breadcrumb's rungs are the same relation. SceneBuilder's unnamed wrappers are stepped
     // through, never shown.
@@ -484,7 +472,7 @@ public sealed partial class NodeLab : Node
         return Log.Format($"anim def={DefLabel(def)} rel={relation} activation={def.Activation} health={def.Health:0.#} source={(def.Archive != null ? "compiled" : "reader")} seqs=[{string.Join(" ", seqs)}]");
     }
 
-    // The descending ANIM_HEALTH tests a DAMAGE_SEQUENCE branches on — how many progressive stages
+    // The descending ANIM_HEALTH tests a DAMAGE_SEQUENCE branches on, how many progressive stages
     // the object can escalate through.
     private static int CountThresholds(AnimSequence damage) =>
         damage.Events.Count(e => e.Kind is "If" or "Elseif");
@@ -596,7 +584,7 @@ public sealed partial class NodeLab : Node
         var setRow = new HBoxContainer();
         setRow.AddThemeConstantOverride("separation", 4);
         setRow.AddChild(Btn("± set", ToggleSetMembership));
-        setRow.AddChild(Btn("Export set", ExportSet));
+        setRow.AddChild(Btn("Export set", _set.WriteGltf));
         setRow.AddChild(Btn("Clear set", ClearSet));
         _setLabel = Small("");
         _setLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -645,7 +633,7 @@ public sealed partial class NodeLab : Node
 
     private void ClearSet()
     {
-        _selection.ClearSet();
+        _set.Clear();
         UpdateStatus();
     }
 
@@ -675,7 +663,7 @@ public sealed partial class NodeLab : Node
         _status.Text = sel;
         if (_setLabel != null)
         {
-            var set = _selection.ExportSet;
+            var set = _set.Members;
             _setLabel.Text = set.Count == 0
                 ? "set empty — Ctrl+click adds"
                 : $"set {set.Count}: {string.Join(" ", set.Where(IsInstanceValid).Select(SelectionService.NameOf))}";
@@ -689,7 +677,7 @@ public sealed partial class NodeLab : Node
     }
 
     // Re-reads live `Visible` for every bound row on the panel's existing 4 Hz
-    // status cadence, so a def re-showing a node updates its row without user input — the row
+    // status cadence, so a def re-showing a node updates its row without user input, the row
     // reflects the node, it never latches what a button last did.
     private void RefreshTreeVisibility()
     {
@@ -936,7 +924,7 @@ public sealed partial class NodeLab : Node
         }
     }
 
-    // Turns a placeholder branch into its real rows. Idempotent — a branch already populated, or
+    // Turns a placeholder branch into its real rows. Idempotent, a branch already populated, or
     // one that never had a placeholder, is left alone.
     private void Expand(TreeItem item)
     {

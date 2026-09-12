@@ -28,6 +28,11 @@ internal static class SurfaceVehicleGunSuites
     // wep_29's own LOOPED_SOUND_NAME, the cue both surface defs therefore carry.
     private const string HullCue = "snd_turretgun";
 
+    // The margin the sound manager leaves over a definition's audible distance before it silences
+    // the voice (docs/formats/turrets.md). Held here as the decode's own figure rather than read
+    // off GunVoice, so a build that culls at the RANGE pair itself fails this suite.
+    private const float CullMargin = 1.1f;
+
     // Long enough for the mount to slew onto any bearing (it closes 1/7.5 of what is left per
     // step at this dt) and for several 0.3 s refire intervals to come round.
     private const int FiringSteps = 150;
@@ -197,14 +202,16 @@ internal static class SurfaceVehicleGunSuites
     [Suite("surface-gun-voices",
         "a mode ship hull is heard firing (BL-820): over C5/M01, which places both classes, a "
         + "patrol boat and a turret truck each build their own positional snd_turretgun emitter "
-        + "from the armed weapon's LOOPED_SOUND_NAME rather than a SOUNDS.CANNON lease, culled at "
-        + "that definition's own 400 m and placed at the hull origin the engine hands its sound "
-        + "slot rather than at the firepoint the rounds leave; a hull is silent with nothing to "
-        + "shoot at, sounds by the frame its first round leaves, and holds the loop unbroken "
+        + "from the armed weapon's LOOPED_SOUND_NAME rather than a SOUNDS.CANNON lease, attenuated "
+        + "over that definition's own 400 m and culled at 1.1 times it, the margin the sound "
+        + "manager leaves over the RANGE pair, and placed at the hull origin the engine hands its "
+        + "sound slot rather than at the firepoint the rounds leave; a hull is silent with nothing "
+        + "to shoot at, sounds by the frame its first round leaves, holds the loop unbroken "
         + "across every one of the def's 0.3 s refire intervals while the target is held, because "
-        + "the fire decision renews the voice per TICK ahead of the refire timer; and on a lease "
-        + "of zero it goes quiet within two steps of the pass that stops selecting the gun, where "
-        + "the turret path's half-second lease would still be sounding")]
+        + "the fire decision renews the voice per TICK ahead of the refire timer, and is still "
+        + "heard from just past that audible distance while being silenced past the cull; and on a "
+        + "lease of zero it goes quiet within two steps of the pass that stops selecting the gun, "
+        + "where the turret path's half-second lease would still be sounding")]
     internal static void SurfaceGunVoices(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -303,7 +310,7 @@ internal static class SurfaceVehicleGunSuites
 
                 rigs.Add(CheckHullVoice(ctx, hulls, boat, cue, planesGamez, textures, live, ears, 0));
                 rigs.Add(CheckHullVoice(ctx, hulls, truck, cue, planesGamez, textures, live, ears, 1));
-                ctx.Note($"a patrolboat and a t_truck each sound {HullCue} from their own hull, cull {cue.RangeMax:0} m, lease {SurfaceGunner.VoiceLeaseSeconds:0.00} s renewed per tick");
+                ctx.Note($"a patrolboat and a t_truck each sound {HullCue} from their own hull, audible {cue.RangeMax:0} m, cull {cue.RangeMax * CullMargin:0} m, lease {SurfaceGunner.VoiceLeaseSeconds:0.00} s renewed per tick");
             });
         }
         finally
@@ -338,8 +345,9 @@ internal static class SurfaceVehicleGunSuites
 
         string what = $"{hull.Plan.Def} '{hull.Name}'";
         var emitter = voice.Emitter();
-        ctx.Check(emitter.Name == HullCue && Mathf.IsEqualApprox(emitter.RangeMax, cue.RangeMax),
-            $"{what} voices {emitter.Name}, culled at its own authored {emitter.RangeMax:0} m");
+        ctx.Check(emitter.Name == HullCue && Mathf.IsEqualApprox(emitter.RangeMax, cue.RangeMax)
+            && Mathf.IsEqualApprox(emitter.Cull, cue.RangeMax * CullMargin),
+            $"{what} voices {emitter.Name}, attenuated over its own authored {emitter.RangeMax:0} m and culled at {emitter.Cull:0} m, the {CullMargin:0.0}x of it the sound manager allows");
         TurretVoiceSuites.CheckPlayers(ctx, voice);
 
         ears[0] = hull.Position;
@@ -385,6 +393,23 @@ internal static class SurfaceVehicleGunSuites
             && emitterAt.Position.DistanceTo(gun.MuzzlePosition) > 0.5f,
             $"…from the hull origin, {emitterAt.Position.DistanceTo(gun.MuzzlePosition):0.##} m off the firepoint the rounds leave");
 
+        // The cull, moved by the listener rather than by the hull. Both placements are past the
+        // distance the definition calls audible and only the far one is past the margin over it,
+        // so a build culling at the RANGE pair itself falls silent on the near one.
+        ears[0] = emitterAt.Position + new Vector3(cue.RangeMax * 1.05f, 0f, 0f);
+        Step(hulls, 1);
+        float justOut = voice.Emitter().Position.DistanceTo(ears[0]) / cue.RangeMax;
+        ctx.Check(voice.Sounding && justOut > 1f && justOut < CullMargin,
+            $"…still heard from {justOut:0.00}x the {cue.RangeMax:0} m the definition calls audible, inside the {emitterAt.Cull:0} m cull");
+        ears[0] = emitterAt.Position + new Vector3(cue.RangeMax * 1.15f, 0f, 0f);
+        Step(hulls, 1);
+        float wellOut = voice.Emitter().Position.DistanceTo(ears[0]) / cue.RangeMax;
+        ctx.Check(!voice.Sounding && wellOut > CullMargin,
+            $"…and silent from {wellOut:0.00}x it, past that {CullMargin:0.0}x cull");
+        ears[0] = hull.Position;
+        Step(hulls, 1);
+        ctx.Check(voice.Sounding, $"…and sounds again with the ear back at the hull");
+
         // The far end. The lease is ZERO, so one pass that does not select the gun ends it: the
         // first tick spends the renewal it already had and the next stops the player.
         quarry.Team = InstantActionRuntime.EnemyTeam;
@@ -411,7 +436,7 @@ internal static class SurfaceVehicleGunSuites
 
     // One hold case: run the gunner long enough for several refire intervals and assert nothing
     // left the barrel, saying whether the target should still have been ACQUIRED. The distinction
-    // matters — a gate that silently stopped acquiring would pass a shots-only check for the
+    // matters, a gate that silently stopped acquiring would pass a shots-only check for the
     // wrong reason.
     private static void CheckHold(TestContext ctx,
         List<SurfaceVehicle> boats, SurfaceGunner gun,

@@ -15,7 +15,7 @@ internal static class DestroyChoreographySuites
     // ---- CALLBACK: the two vehicle-death codes ---------------------------------------------------
 
     // A destroy def's CALLBACK events reach the seams the rig supplies: 16 hands the instance the
-    // wreck's velocity, 15 stops the damage stages. Both are asserted on shipped defs — player-player
+    // wreck's velocity, 15 stops the damage stages. Both are asserted on shipped defs, player-player
     // (which authors 3, then 16 and 15 through destroy_craft) and the AI's fury-fury.
     // ⚠ Assert the unknown code and the unwired control too. A handler that acted on every code
     // would pass the two arms and still be inventing behaviour, and one wired to nothing at all
@@ -155,7 +155,7 @@ internal static class DestroyChoreographySuites
                 runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind));
 
                 // The fireball: activate_puffer names its ON_CALL stopper at EVENT_OFFSET 0.3 while
-                // nothing runs under that name — the stop halts nothing and must START nothing,
+                // nothing runs under that name, the stop halts nothing and must START nothing,
                 // so the stopper's teardown never dispatches at all.
                 runtime.Start(fireball[0], stage);
                 for (int i = 0; i < 60; i++)
@@ -180,7 +180,7 @@ internal static class DestroyChoreographySuites
                 ctx.Same(0, stopperDispatches, $"stop_p1trail dispatches nothing within 1 s");
 
                 // The 30 s fire: fire_n_smoke is a running Loop{-1} poll re-asserting its emitter
-                // every frame — the ANIMATION_OFFSET 30 stop must HALT it (the halt idiom), or the
+                // every frame, the ANIMATION_OFFSET 30 stop must HALT it (the halt idiom), or the
                 // re-assert would revive the puffer one frame after the paired INACTIVE.
                 float t0 = clock;
                 runtime.Start(fire30[0], stage);
@@ -255,7 +255,7 @@ internal static class DestroyChoreographySuites
 
     // Condition 120 answered a hardwired false until the Cockpit/Nose view modes existed (A1), so
     // no branch behind it had ever been taken. Subject: the shipped `bullet1` def, whose first
-    // Initial sequence is `IF PLAYER_1ST_PERSON / ELSE CALL_ANIMATION two_bulletholes_a / ENDIF` —
+    // Initial sequence is `IF PLAYER_1ST_PERSON / ELSE CALL_ANIMATION two_bulletholes_a / ENDIF`,
     // the exterior bulletholes are what a pilot NOT in a cockpit gets. Its second Initial sequence
     // runs either way and is the control: it proves the def ran at all, so a zero call count reads
     // as "the branch was taken", never as "nothing happened".
@@ -383,7 +383,7 @@ internal static class DestroyChoreographySuites
     // ---- a start-state swap must reach the pool, not only the node -----------------------------
 
     // A destructible whose own Initial sequence authors the healthy/destroyed role swap directly
-    // is dispatched through the same Start() call a mission's start-state script reaches — never
+    // is dispatched through the same Start() call a mission's start-state script reaches, never
     // through DamageAt. A pool that does not follow stays Healthy at full HP while the swap
     // already reads destroyed, so a later hit finds a live pool and replays the whole death
     // choreography on an object that looks dead already. Subject: the first shipped destructible
@@ -481,7 +481,7 @@ internal static class DestroyChoreographySuites
     // ⚠ Read the pool twice, once in the frames after the kill and once past the sink. The two
     // events are a minute apart, so a fix covering only the synchronous death burst passes the first.
     [Suite("death-not-a-revival",
-        "the Barracuda's own death switches its dbase node off and sinks its destroyed hull away a minute later, and a lifesaver's switches `destroyed` itself off in the same breath as `healthy`; none of the three hands the killed pool its health back")]
+        "the Barracuda's own death switches its dbase node off and sinks its destroyed hull away a minute later, a lifesaver's switches `destroyed` itself off in the same breath as `healthy`, and a constructed def clears its wreck away from the ON_CALL sequence its death calls; none of the four hands the killed pool its health back, while a baseline outside that chain still revives it")]
     internal static void OwnDeathIsNotARevival(TestContext ctx)
     {
         ctx.WithWorld("C3", collision: false, mission: "M03", world =>
@@ -538,6 +538,8 @@ internal static class DestroyChoreographySuites
             ctx.Check(boat.Status == DestructibleRegistry.State.Destroyed && boat.Health <= 0f,
                 $"the lifesaver's own death leaves its pool dead status={boat.Status} hp={boat.Health:0.##}");
         });
+
+        WreckClearedFromACalledSequence(ctx);
     }
 
     // ---- a carried pose reaches the pieces a called sequence hides -----------------------------
@@ -903,7 +905,7 @@ internal static class DestroyChoreographySuites
                             .Where(c => c.Lit > 0)
                             .Select(c => $"'{c.Root}' slot{c.Slot} lights {c.Lit}"));
                         ctx.Check(lit.Length == 0,
-                            $"{model}: every staged template copy is dark after the bind{(lit.Length == 0 ? "" : $" — {lit}")}");
+                            $"{model}: every staged template copy is dark after the bind{(lit.Length == 0 ? "" : $", {lit}")}");
 
                         // A real tear: the damage sink's own call shape. The CALLed gimmeflakes
                         // copy must light at its pdp5 site, and the panel def's instance ending on
@@ -949,7 +951,7 @@ internal static class DestroyChoreographySuites
                             .Where(c => c.Lit > 0)
                             .Select(c => $"'{c.Root}' slot{c.Slot} lights {c.Lit}"));
                         ctx.Check(leftover.Length == 0,
-                            $"{model}: respawn leaves no crash template revealed{(leftover.Length == 0 ? "" : $" — {leftover}")}");
+                            $"{model}: respawn leaves no crash template revealed{(leftover.Length == 0 ? "" : $", {leftover}")}");
 
                         controller.Position += new Vector3(400, 0, 0);
                         runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
@@ -970,7 +972,7 @@ internal static class DestroyChoreographySuites
                                         && c.Copy.GlobalTransform.Origin.DistanceTo(here) > 150f)
                             .Select(c => $"'{c.Root}' slot{c.Slot} at {c.Copy.GlobalTransform.Origin.DistanceTo(here):0} m"));
                         ctx.Check(stale.Length == 0,
-                            $"{model}: every template the second crash reveals plays at its own site{(stale.Length == 0 ? "" : $" — {stale}")}");
+                            $"{model}: every template the second crash reveals plays at its own site{(stale.Length == 0 ? "" : $", {stale}")}");
                         ctx.Check(!crashRoot.TopLevel,
                             $"{model}: the crash scaffold is never world-pinned by a crash's own calls");
                     }
@@ -989,7 +991,7 @@ internal static class DestroyChoreographySuites
     }
 
     // nitro_boost/nitro_decay anchor as NAME "warhawk" (plane_props.zrd), which never resolves in
-    // a per-plane crash rig's own index — the shape startprops/stopprops share, fixed by Play's
+    // a per-plane crash rig's own index, the shape startprops/stopprops share, fixed by Play's
     // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN (that disc geometry
     // ships only on the separate bare-named library root); the fix restores what the flown
     // plane's own nodes CAN show, the nitropuffN exhaust puffers at exhaust1..4.
@@ -1444,7 +1446,7 @@ internal static class DestroyChoreographySuites
         WorldEffectsPrewarm(ctx);
     }
 
-    // Every wreck node's rest pose — the local mirror of
+    // Every wreck node's rest pose, the local mirror of
     // `WorldEffectsFactory.CollectRestPoses`, so the suite's respawn ritual can re-home the
     // flung pieces the way `FlightController.Respawn` does.
     internal static void CollectRestPoses(Node3D node, List<(Node3D Node, Transform3D RestPose)> into)
@@ -1459,7 +1461,7 @@ internal static class DestroyChoreographySuites
         }
     }
 
-    // Meshes drawing under one staged template copy — visibility taken in-tree, so a
+    // Meshes drawing under one staged template copy, visibility taken in-tree, so a
     // parent the reset pass switched off darkens the whole copy the way it does on screen.
     internal static int LitMeshCount(Node3D copy)
     {
@@ -1655,7 +1657,7 @@ internal static class DestroyChoreographySuites
                 if (wreck != null)
                     wreck.Visible = true;
 
-                // A crash on a known surface: a struck body stamped dirt(13) — the id cascade's
+                // A crash on a known surface: a struck body stamped dirt(13), the id cascade's
                 // own-slot arm, through the production Crash path.
                 dirt = new StaticBody3D { Name = "dirt_probe" };
                 dirt.SetMeta(SceneBuilder.SurfaceIdMeta, 13);
@@ -1961,7 +1963,7 @@ internal static class DestroyChoreographySuites
             var posAtKill = ai.WorldPosition;
             var velAtKill = ai.WorldVelocity;
 
-            // The kill through the production ram entry, both magnitudes — standing armour would
+            // The kill through the production ram entry, both magnitudes, standing armour would
             // otherwise null the health damage outright (PlaneDamage.Spend).
             float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
             ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
@@ -2286,7 +2288,7 @@ internal static class DestroyChoreographySuites
                 $"…and the wreck stopped flying itself on that contact falling={ai.WreckFalling}");
 
             // The landing does NOT cancel the destroy def, so its Callback 15 still arrives at the
-            // authored 3.0 s and the stages this hull was wearing end there — the ground reaching
+            // authored 3.0 s and the stages this hull was wearing end there, the ground reaching
             // the wreck first must not cost it its stop (BL-422).
             for (float t = landedAt; t < 4f; t += Dt)
             {
@@ -2324,7 +2326,7 @@ internal static class DestroyChoreographySuites
                 UseKeyboard = false,
                 PadDevices = System.Array.Empty<int>(),
                 AllowPause = false,
-                // The ledger the production assembler gives a human rig — without it the take-hit
+                // The ledger the production assembler gives a human rig, without it the take-hit
                 // path returns early and nothing can reach Destroy.
                 Damage = PlaneDamage.For(stats),
             };
@@ -2367,7 +2369,7 @@ internal static class DestroyChoreographySuites
             var healthy = Find(planeModel, "healthy");
             var wreck = Find(crashRoot, "destroyed");
 
-            // The kill, through the production ram entry — not a visuals API. Both magnitudes, or
+            // The kill, through the production ram entry, not a visuals API. Both magnitudes, or
             // standing armour nulls the health damage outright (PlaneDamage.Spend).
             float overkill = (player.Damage!.WholeHealthMax + player.Damage.WholeArmorMax) * 4f;
             player.TakeCollisionHit(overkill, overkill, player.GlobalPosition, 1);
@@ -2424,7 +2426,7 @@ internal static class DestroyChoreographySuites
                 ? chuteman.GlobalBasis.GetEuler() * (180f / Mathf.Pi) : Vector3.Zero;
             ctx.Check(chuteman != null && chuteEuler.Length() < 1f,
                 $"{planeName}: the canopy hangs level, world rot ({chuteEuler.X:0.0}, {chuteEuler.Y:0.0}, {chuteEuler.Z:0.0}), under a wreck at ({player.GlobalRotationDegrees.X:0.0}, {player.GlobalRotationDegrees.Y:0.0}, {player.GlobalRotationDegrees.Z:0.0})");
-            // ⚠ The eject hides the SEATED pilot, never the parachutist's body — both nodes are
+            // ⚠ The eject hides the SEATED pilot, never the parachutist's body, both nodes are
             // named `pilot`, and the staged chute copy hangs under the crash root `cpeject1`
             // anchors on.
             var seatedPilot = Find(planeModel, "pilot");
@@ -2440,7 +2442,7 @@ internal static class DestroyChoreographySuites
         }
     }
 
-    // Steps the rig at 60 Hz until the beat lands, and returns when — or -1 after the budget. A
+    // Steps the rig at 60 Hz until the beat lands, and returns when, or -1 after the budget. A
     // fixed frame count cannot express "once the eject completes"; the wait is authored, not timed.
     private static float AdvanceUntil(AnimRuntime rig, float budgetSeconds, System.Func<bool> beat)
     {
@@ -2459,7 +2461,7 @@ internal static class DestroyChoreographySuites
     }
 
     // The first descendant carrying this authored NAME (or Godot name), the way a def's own
-    // resolution finds it — a suite must not assume the Godot node name survived staging.
+    // resolution finds it, a suite must not assume the Godot node name survived staging.
     private static Node3D? Find(Node root, string name)
     {
         foreach (var child in root.GetChildren())
@@ -2504,4 +2506,94 @@ internal static class DestroyChoreographySuites
 
         return pools;
     }
+
+    // The third authored shape of a wreck removing itself: the clear-away step sits in an ON_CALL
+    // sequence the death itself calls, which is C5's agyrobus (destroy_craft calls randomdestseq,
+    // and that switches `destroyed` off as the wreck is launched). Constructed rather than flown,
+    // because the shipped case opens on IF RandomWeight and only one draw reaches the switch.
+    // ⚠ Assert the repair outside the chain in the same pass. A guard that swallowed every
+    // backward swap would pass the first check and silently retire the revival branch.
+    private static void WreckClearedFromACalledSequence(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const string Anim = "wreck_clears_itself";
+        var stage = new Node3D { Name = "RevivalStage" };
+        var anchor = new Node3D { Name = Anim };
+        anchor.AddChild(new Node3D { Name = "healthy" });
+        anchor.AddChild(new Node3D { Name = "destroyed" });
+        stage.AddChild(anchor);
+        var runtime = new AnimRuntime
+        {
+            AutoStart = false,
+            ManualAdvance = true,
+            SoundHandledElsewhere = true,
+        };
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, AnimProgram.FromDefinitions(new[] { WreckClearingDef(Anim) }));
+            var pool = runtime.Destructibles.All.FirstOrDefault(i => i.Def.AnimName == Anim);
+            ctx.Check(pool != null,
+                $"the constructed def registers its pool pools={runtime.Destructibles.All.Count}");
+            if (pool is not { } wreck)
+            {
+                return;
+            }
+
+            runtime.DamageAt(wreck.Anchor, wreck.MaxHealth + 1f);
+            for (int i = 0; i < 4; i++)
+            {
+                runtime.Advance(Tick);
+            }
+
+            ctx.Check(wreck.Status == DestructibleRegistry.State.Destroyed && wreck.Health <= 0f,
+                $"the wreck its called sequence clears away leaves the pool dead status={wreck.Status} hp={wreck.Health:0.##}");
+
+            // The other direction: a RESET_STATE is outside the death chain, so the same backward
+            // swap read from there is the repair it looks like.
+            runtime.RunResetStateEvents(Anim);
+            ctx.Check(wreck.Status == DestructibleRegistry.State.Healthy && wreck.Health >= wreck.MaxHealth,
+                $"a baseline outside that chain still revives the pool status={wreck.Status} hp={wreck.Health:0.##}");
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+        }
+    }
+
+    // A destructible whose death hides `healthy`, shows `destroyed` and then calls the ON_CALL
+    // sequence that clears the wreck away, with a RESET_STATE naming the standing pose.
+    private static AnimDefinition WreckClearingDef(string animName)
+    {
+        var def = new AnimDefinition { Name = animName, AnimName = animName, Health = 10f };
+        var death = new AnimSequence();
+        death.Events.Add(SwitchEvent("healthy", false));
+        death.Events.Add(SwitchEvent("destroyed", true));
+        death.Events.Add(new AnimEvent
+        {
+            Kind = "CallSequence",
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = "clear_away" }),
+        });
+        var clear = new AnimSequence { Name = "clear_away", OnCallOnly = true };
+        clear.Events.Add(SwitchEvent("destroyed", false));
+        def.Sequences.Add(death);
+        def.Sequences.Add(clear);
+        var reset = new AnimSequence();
+        reset.Events.Add(SwitchEvent("healthy", true));
+        reset.Events.Add(SwitchEvent("destroyed", false));
+        def.ResetState = reset;
+        return def;
+    }
+
+    private static AnimEvent SwitchEvent(string node, bool state) => new()
+    {
+        Kind = "ObjectActiveState",
+        Data = new AnimData(new Dictionary<string, object?>
+        {
+            ["node"] = node,
+            ["state"] = state,
+        }),
+    };
 }

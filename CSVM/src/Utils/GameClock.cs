@@ -3,7 +3,7 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>
-/// The session's simulation clock — one object owning "how much sim time does this rendered
+/// The session's simulation clock, one object owning "how much sim time does this rendered
 /// frame advance". GameSession translates it into requests to SessionSimulation, so pausing,
 /// single-stepping and fixed-dt replay all enter one ordered step. Modes and published-instance
 /// shape: this module's entry in docs/architecture.md; the shader tie-in is <c>ShaderTime.cs</c>'s
@@ -26,7 +26,7 @@ public sealed class GameClock
     public RunMode Mode = RunMode.Realtime;
 
     /// <summary>Sim frozen in place: no steps advance until <see cref="StepOnce"/> queues one.
-    /// Orthogonal to the mode — every mode can halt.</summary>
+    /// Orthogonal to the mode, every mode can halt.</summary>
     public bool Halted;
 
     /// <summary>Time-scale multiplier (the animation lab's 0.1×–4× transport). 1 = real speed.</summary>
@@ -69,17 +69,17 @@ public sealed class GameClock
     /// <summary>Sim seconds advanced since the session started.</summary>
     public double Time { get; private set; }
 
-    /// <summary>Sub-steps this rendered frame — 0 while halted, 1 in Realtime/FixedStep,
+    /// <summary>Sub-steps this rendered frame, 0 while halted, 1 in Realtime/FixedStep,
     /// 0..15 in FixedAccum.</summary>
     public int Steps { get; private set; }
 
     /// <summary>Seconds per sub-step this rendered frame.</summary>
     public float Dt { get; private set; } = FixedDt;
 
-    /// <summary>Total sim seconds this rendered frame — what a once-per-frame consumer wants.</summary>
+    /// <summary>Total sim seconds this rendered frame, what a once-per-frame consumer wants.</summary>
     public float FrameDt => Dt * Steps;
 
-    /// <summary>How far the wall clock has run into the NEXT sim step, 0..1 — the render
+    /// <summary>How far the wall clock has run into the NEXT sim step, 0..1, the render
     /// interpolation fraction for a consumer drawing between fixed steps. Meaningful only in
     /// FixedAccum (the interactive animation lab); the other modes report 1, "draw the current
     /// sim pose exactly", so a scripted FixedStep frame stays byte-identical.</summary>

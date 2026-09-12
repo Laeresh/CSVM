@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first — it has the project description,
+Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first, it has the project description,
 architecture decisions, repo layout, the Godot project + CLI reference, coding conventions, and
 the "Current status" pointer. This file holds only what's specific to Claude Code as a tool.
 
@@ -17,7 +17,7 @@ landing gate for any change under `CSVM/`.
 - **Hooks:** `.claude/settings.json` runs four `PreToolUse` hooks. (1) A shell-syntax guard that
   rejects a PowerShell here-string (`@'…'@`) sent to the **Bash** tool, and a heredoc or
   `/dev/null` sent to the **PowerShell** tool. (2) The **Bash** tool is blocked outright with
-  "Use Powershell instead of bash" — the one exception is a command whose every `&&`/`||`/`;`/`|`
+  "Use Powershell instead of bash", the one exception is a command whose every `&&`/`||`/`;`/`|`
   segment starts with `git` or `gh`, since those behave identically in either shell.
   (3) The format gate, [`FormatBeforeTests.ps1`](FormatBeforeTests.ps1): `dotnet format` and a
   `-t:Rebuild` that blocks on remaining StyleCop warnings, before an *invocation* of
@@ -38,7 +38,7 @@ landing gate for any change under `CSVM/`.
   `BL-`/`PT-`/`CAP-` ID twice, or a `backlog.md` header tag outside the vocabularies the file's
   own header documents), [`CheckGoldenProse.ps1`](CheckGoldenProse.ps1) (an `exercises`
   field in `analysis/goldens/manifest.json` over 250 chars, or carrying an item id, a date or an
-  "also exercises" clause — that field says what a shot covers *today* and is REWRITTEN on a
+  "also exercises" clause, that field says what a shot covers *today* and is REWRITTEN on a
   re-pin, never appended to, since the history is `git log -p` on the file),
   [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) over `CSVM/src` and `CSVM.Tests` (`-Summary` for
   one line per file), and [`CheckDocEntries.ps1`](CheckDocEntries.ps1) (`docs/architecture/*.md`
@@ -73,7 +73,7 @@ landing gate for any change under `CSVM/`.
   to a harness.
 - ⚠ **PowerShell 5.1 corrupts UTF-8 silently.** It reads BOM-less files as ANSI, so a
   `Get-Content`/`Set-Content` round-trip without `-Encoding utf8` on **both** ends turns every
-  em dash, arrow and warning sign into double-encoded garbage — and a BOM-less `.ps1` containing
+  em dash, arrow and warning sign into double-encoded garbage, and a BOM-less `.ps1` containing
   non-ASCII is mangled by the *interpreter itself* before it runs. Edit repo text with the
   Read/Edit/Write tools; when a script must write a repo file, pass `-Encoding utf8` (or use
   `[IO.File]` with an explicit `UTF8Encoding`) and keep the script itself pure ASCII, building
@@ -85,11 +85,11 @@ landing gate for any change under `CSVM/`.
   literal `@` lines, committing a corrupted message. The `-F` form has no shell quoting at all,
   so it cannot go wrong in either tool. Hook (1) above is the backstop, not the plan.
 - Agent worktrees/workspaces created with `isolation: worktree` land in
-  `.claude/worktrees/` / `.claude/workspaces/` — both gitignored, swept by
+  `.claude/worktrees/` / `.claude/workspaces/`, both gitignored, swept by
   `CleanScratch.ps1`.
 - ⚠ **Never create junctions or symlinks from a worktree (or `.scratch/`) into the main
   checkout.** Git-ignored media (`OriginalScreenshots\`, `playtest\`) is absent from worktrees
-  by design — read it via absolute path (`Z:\CSVM\OriginalScreenshots\...`) instead of linking
+  by design, read it via absolute path (`Z:\CSVM\OriginalScreenshots\...`) instead of linking
   it in. PowerShell 5.1's recursive delete follows junctions into their *target*, so a link
   left behind turns any later cleanup into a deletion of irreplaceable original-game footage.
   `CleanScratch.ps1` unlinks reparse points before sweeping as a backstop, but other tools'

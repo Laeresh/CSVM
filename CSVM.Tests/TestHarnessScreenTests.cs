@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="TestHarness.Screen"/> — the error classifier the in-engine harness applies to the
+/// <see cref="TestHarness.Screen"/>, the error classifier the in-engine harness applies to the
 /// run's engine log. It is the one part of the harness that can run outside Godot, and the part
 /// that most needs proving: an allowlist that quietly absorbed an unfamiliar error would turn the
 /// whole harness into a rubber stamp.
@@ -81,7 +81,7 @@ public class TestHarnessScreenTests
     public void LogsOwnErrorLinesAreNotEngineErrors()
     {
         // Log writes "ERROR [cat] …" with no colon. Those are the harness's own failures, already
-        // counted by the suite that emitted them — screening them again would double-report.
+        // counted by the suite that emitted them, screening them again would double-report.
         var screen = TestHarness.Screen(new[] { "ERROR [test] FAIL weapon defs expected=48 actual=47" });
         Assert.Equal(0, screen.Total);
         Assert.True(screen.Ok);

@@ -52,7 +52,7 @@ public static class TestHarness
     };
 
     // The engine's own error format (print_error): "ERROR: …", "SCRIPT ERROR: …", "USER ERROR: …".
-    // Log's own error lines read "ERROR [cat] …" — no colon — and are deliberately out of scope
+    // Log's own error lines read "ERROR [cat] …", no colon, and are deliberately out of scope
     // here, because the suite that emitted one has already failed on it.
     private static readonly Regex EngineError = new(@"^(ERROR|SCRIPT ERROR|USER ERROR): ", RegexOptions.Compiled);
 
@@ -179,7 +179,7 @@ public static class TestHarness
             totalOverrunSeconds += overrunSeconds;
             totalWorldsBuilt += ctx.WorldsBuilt;
             // One line per suite: the phase breakdown rides on the existing verdict line rather
-            // than adding one, and only for a suite that actually built a world — a no-world suite
+            // than adding one, and only for a suite that actually built a world, a no-world suite
             // has nothing to attribute (the ⚠ trap this item names: chatter on the timing path).
             string phaseSuffix = ctx.WorldsBuilt > 0
                 ? $" worlds={ctx.WorldsBuilt} build={buildSeconds:0.00}s"
@@ -207,7 +207,7 @@ public static class TestHarness
         int fail = results.Count(r => r.Status == SuiteStatus.Fail);
         int skip = results.Count(r => r.Status == SuiteStatus.Skip);
         // An unknown error fails the run; an over-cap allowance fails it; no log SKIPs the engine
-        // errors row — it never counts as a pass, but it never fails the run either.
+        // errors row, it never counts as a pass, but it never fails the run either.
         bool screenFailed = screen is { Ok: false };
 
         var phaseTotals = new PhaseTotals(totals, totalBuildSeconds, totalDisposalSeconds,
@@ -257,8 +257,8 @@ public static class TestHarness
     }
 
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
-    /// allowlist covers, which are unknown, and which allowed pattern went over its cap. Pure — no
-    /// Godot API, no file access — so it is unit-testable outside the engine.</summary>
+    /// allowlist covers, which are unknown, and which allowed pattern went over its cap. Pure, no
+    /// Godot API, no file access, so it is unit-testable outside the engine.</summary>
     public static StderrScreen Screen(IEnumerable<string> lines)
     {
         var counts = new Dictionary<string, int>();
@@ -571,7 +571,7 @@ public static class TestHarness
     private static string Sec(double seconds) => seconds.ToString("0.000", CultureInfo.InvariantCulture);
 
     // The DLL this process actually loaded, matched by the SAME fixed path RunTests.ps1's perf
-    // stage hashes as $PerfDll — not Assembly.GetExecutingAssembly().Location, which Godot's own
+    // stage hashes as $PerfDll, not Assembly.GetExecutingAssembly().Location, which Godot's own
     // Mono host returns empty for (confirmed live: every report before this fix wrote "").
     private static string BinaryPath(TestContext ctx) =>
         Path.Combine(ctx.RepoRoot, "CSVM", ".godot", "mono", "temp", "bin", "Debug", "CSVM.dll");
@@ -627,7 +627,7 @@ public static class TestHarness
     /// <summary>The run-wide sums <see cref="WriteReport"/> needs, computed once in <see cref="Run"/>
     /// rather than re-derived from <c>results</c> there (<see cref="SuiteResult"/> already holds the
     /// per-suite figures these are sums of).</summary>
-    /// <summary>Which shard this process ran, of how many, out of how big a selection — written
+    /// <summary>Which shard this process ran, of how many, out of how big a selection, written
     /// into the report so an aggregator can prove the shards cover the selection exactly once
     /// rather than assuming they did.</summary>
     private readonly record struct ShardPlan(int Index, int Count, int SelectedTotal,
@@ -677,7 +677,7 @@ public sealed class TestWorld
     public required Node3D Stage { get; init; }
 
     /// <summary>The chapter's parsed gamez, kept past the build so a suite can build real geometry
-    /// of its own from it — the effect-template stage the world-effects runtime stages,
+    /// of its own from it, the effect-template stage the world-effects runtime stages,
     /// which is meshes and cannot be faked with named empty nodes. Not disposable, and
     /// not the texture archive, which IS and is closed with the build.</summary>
     public required GameZ Gamez { get; init; }
@@ -736,17 +736,17 @@ public sealed class TestContext
     public required bool Mute { get; init; }
 
     /// <summary><c>--loadout=&lt;def&gt;</c>: bind every plane to that def instead of its own. A
-    /// cross-binding control — passing a def whose markers the airframe does not carry is how the
+    /// cross-binding control, passing a def whose markers the airframe does not carry is how the
     /// <c>loadout-bind</c> suite is shown able to fail on real bad input rather than a planted
     /// assertion.</summary>
     public string? LoadoutOverride { get; init; }
 
     /// <summary>Installs a fake in place of the real <c>PufferEmitterFactory</c> for the next world
-    /// this builds — null (the default) leaves <see cref="WorldSession.Options.EmitterFactory"/> null
+    /// this builds, null (the default) leaves <see cref="WorldSession.Options.EmitterFactory"/> null
     /// too, so a suite that never touches this gets the real adapter exactly as before. Mutable, not
     /// <c>init</c>: a suite sets it right before its own <see cref="WithWorld"/> call, on a chapter
-    /// other than <see cref="Chapter"/> so the cached default-chapter world — built with whatever this
-    /// property held first — is never silently reused in its place.</summary>
+    /// other than <see cref="Chapter"/> so the cached default-chapter world, built with whatever this
+    /// property held first, is never silently reused in its place.</summary>
     public IEmitterFactory? EmitterFactory { get; set; }
 
     /// <summary>Extra sound-group names to prewarm for the next world this builds, a mission's own
@@ -761,7 +761,7 @@ public sealed class TestContext
     /// per-chapter census counts.</summary>
     public bool CutsceneRoots { get; set; }
 
-    /// <summary>Where a suite parents anything that must be in the scene tree — a built plane whose
+    /// <summary>Where a suite parents anything that must be in the scene tree, a built plane whose
     /// markers are read by global transform, a chapter world whose death sequences are ticked.</summary>
     public required Node3D Host { get; init; }
 
@@ -778,7 +778,7 @@ public sealed class TestContext
     /// hits happened rather than only that the wall time moved.</summary>
     internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
 
-    /// <summary>Records a check. A false verdict fails the suite but does not stop it — the rest of
+    /// <summary>Records a check. A false verdict fails the suite but does not stop it, the rest of
     /// the checks still run, so one report names every broken thing rather than the first.</summary>
     public void Check(bool ok, FormattableString what)
     {
@@ -799,7 +799,7 @@ public sealed class TestContext
         Check(expected == actual, $"{Log.Format(what)} expected={expected} actual={actual}");
     }
 
-    /// <summary>Something worth having in the report that is not a verdict — a measured count, a
+    /// <summary>Something worth having in the report that is not a verdict, a measured count, a
     /// caveat about what this run could not see.</summary>
     public void Note(FormattableString what)
     {
@@ -842,7 +842,7 @@ public sealed class TestContext
     /// <summary>Builds a world nothing else will ever see and frees it when <paramref name="body"/>
     /// returns: never read from the shared cache, never written to it. What a suite whose build
     /// options differ from every other suite's needs, so its choices cannot ride into a later
-    /// suite's world — an installed <see cref="EmitterFactory"/> above all.</summary>
+    /// suite's world, an installed <see cref="EmitterFactory"/> above all.</summary>
     public void WithPrivateWorld(string chapter, bool collision, Action<TestWorld> body)
     {
         var world = BuildWorld(chapter, collision, Mission);
@@ -858,7 +858,7 @@ public sealed class TestContext
 
     /// <summary>The mission-override form: builds the chapter at a mission other than the
     /// run's own (the zeppelin damage suite wants C1 at M04, where <c>piratezep</c> is live).
-    /// An overridden-mission world is never cached — the cache is keyed by chapter alone, so
+    /// An overridden-mission world is never cached, the cache is keyed by chapter alone, so
     /// storing it would hand the wrong mission to every later same-chapter suite.</summary>
     public void WithWorld(string chapter, bool collision, string? mission, Action<TestWorld> body)
     {
@@ -952,7 +952,7 @@ public sealed class TestContext
     }
 
     // Times one Destroy() call. Never attributed to a suite when it happens outside one (the
-    // shared cache's own teardown after every suite has run — TestHarness.Run times that itself,
+    // shared cache's own teardown after every suite has run, TestHarness.Run times that itself,
     // as the run's finalDisposalSeconds, since no single suite owns a world every suite shared).
     private static double TimeDestroy(TestWorld world)
     {
@@ -1076,13 +1076,13 @@ public sealed class SuiteResult
     /// manual simulation plus assertion work. See <see cref="PhaseAttribution.Rest"/>.</summary>
     public double RestSeconds { get; init; }
 
-    /// <summary>How far <c>BuildSeconds + DisposalSeconds</c> overran <see cref="Seconds"/> — zero
+    /// <summary>How far <c>BuildSeconds + DisposalSeconds</c> overran <see cref="Seconds"/>, zero
     /// on a clean measurement. See <see cref="PhaseAttribution.Overrun"/>.</summary>
     public double OverrunSeconds { get; init; }
 }
 
 /// <summary>A native engine error the run is known to emit and that no suite here caused. Each
-/// carries a cap, so the same message appearing MORE often than measured still fails — an
+/// carries a cap, so the same message appearing MORE often than measured still fails, an
 /// allowlist that swallowed an unbounded count would hide the next regression in the shape of an
 /// old one.</summary>
 public sealed record ErrorAllowance(string Pattern, int Max, string Why);

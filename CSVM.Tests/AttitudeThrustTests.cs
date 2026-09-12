@@ -23,7 +23,7 @@ public class AttitudeThrustTests
 
     /// <summary>The decoded numbers themselves: two coefficients, the second one-sided, so a
     /// vertical climb keeps (1 − 0.24)(1 − 0.13) = 0.6612 of available thrust and a vertical dive
-    /// gets 1.24 — not 1.24 and 1/1.24, and not symmetric.</summary>
+    /// gets 1.24, not 1.24 and 1/1.24, and not symmetric.</summary>
     [Fact]
     public void TheScaleIsTwoCoefficientsAndOnlyOneOfThemIsTwoSided()
     {
@@ -58,7 +58,7 @@ public class AttitudeThrustTests
         Assert.Equal(1.24f, dive / level, 3);
     }
 
-    /// <summary>Level flight is untouched — the scale is exactly 1 with the nose on the horizon, so
+    /// <summary>Level flight is untouched, the scale is exactly 1 with the nose on the horizon, so
     /// every wings-level measurement in the pinned envelope is inert by construction, and
     /// this change cannot have bought its climb behaviour by moving the top speed.</summary>
     [Fact]
@@ -108,7 +108,7 @@ public class AttitudeThrustTests
         return delta.Length() / Dt;
     }
 
-    // The Bloodhawk's real dynamics — the placeholder `PlaneStats()` defaults are the
+    // The Bloodhawk's real dynamics, the placeholder `PlaneStats()` defaults are the
     // executable's fallback aircraft and carry a different weight and reference area.
     private static PlaneStats Bhawk() => new()
     {

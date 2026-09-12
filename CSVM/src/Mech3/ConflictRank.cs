@@ -8,7 +8,7 @@ namespace CSVM.Mech3;
 /// The cross-node draw-order tie-break: a dense rank over the world's conflict graph, ranking
 /// only nodes with a genuine coplanar, same-priority, same-<c>no_clutter</c> conflict.
 /// ⚠ Ranking by flat node index instead (<see cref="SceneBuilder.NodeOrderBias"/>) spends the
-/// whole index range and lets a within-mesh surface rank out-bid it — see analysis/bl-053-dense-rank.
+/// whole index range and lets a within-mesh surface rank out-bid it, see analysis/bl-053-dense-rank.
 /// Every edge runs low node index → high node index, so the longest-path layering is a
 /// topological order of the original's own draw order and cannot invert authored layering.
 /// The bias-value derivation lives on <see cref="SceneBuilder.ConflictRankBias"/>.
@@ -27,7 +27,7 @@ internal static class ConflictRank
     /// <summary>
     /// Ranks the nodes of one world. <paramref name="nodes"/> is every node the world build will
     /// reach, with the world transform it will be built at; <paramref name="excluded"/> names the
-    /// walk roots whose subtrees take no part (the origin-parked pile — see the caller).
+    /// walk roots whose subtrees take no part (the origin-parked pile, see the caller).
     /// </summary>
     public static Report Compute(GameZ gamez, IReadOnlyList<(GameZNode Node, Transform3D World)> nodes,
         int excludedRoots)
@@ -45,7 +45,7 @@ internal static class ConflictRank
                 if (n < 3)
                     continue;
                 // Triangulated exactly as SceneBuilder.EmitPolygon does. A tri_strip's raw index
-                // list is NOT a polygon outline — fanning it measures a shape nothing draws, and
+                // list is NOT a polygon outline, fanning it measures a shape nothing draws, and
                 // manufactured a 6.8 million m² phantom overlap the first time this was measured.
                 if (poly.TriangleStrip)
                 {
@@ -132,7 +132,7 @@ internal static class ConflictRank
     }
 
     // One bucket = one world plane. Projects it to 2D and finds the cross-node pairs that
-    // genuinely overlap there — an AABB touch is not an overlap (verification.md rule 9, which
+    // genuinely overlap there, an AABB touch is not an overlap (verification.md rule 9, which
     // has already cost this bug two wrong diagnoses), so the area is clipped for real.
     private static int Pair(List<Tri> tris, Dictionary<int, HashSet<int>> successors)
     {
@@ -245,7 +245,7 @@ internal static class ConflictRank
 
     // Longest-path layering: rank(b) >= rank(a) + 1 for every edge a -> b. Edges only ever run
     // low index -> high index, so visiting nodes in ascending index order settles each one before
-    // it is read — no iteration to a fixed point is needed, and no cycle can exist.
+    // it is read, no iteration to a fixed point is needed, and no cycle can exist.
     private static Dictionary<int, int> Layer(Dictionary<int, HashSet<int>> successors)
     {
         var ranks = new Dictionary<int, int>();

@@ -29,7 +29,7 @@ internal static class AnimationAndEffectsSuites
         {
             var names = Session.EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
             // The staged set is DERIVED, so this census stages what the
-            // real world-effects build stages, from the same call — a root the closure gains and
+            // real world-effects build stages, from the same call, a root the closure gains and
             // this chapter's gamez cannot supply throws here, naming the def and the anchor.
             var roots = Session.WorldEffectsFactory.EffectStageRootNames(world.Session.Program, world.Gamez);
             var stage = new Node3D { Name = "EffectCensusStage" };
@@ -64,12 +64,12 @@ internal static class AnimationAndEffectsSuites
                         .Select(pk => $"{row.Name}: {pk.Root} @{pk.Distance:0} m"))
                     .ToList();
                 ctx.Check(far.Count == 0,
-                    $"every lit template mesh peaked at the CALL SITE, not the stage origin{(far.Count == 0 ? "" : $" — {string.Join("; ", far)}")}");
+                    $"every lit template mesh peaked at the CALL SITE, not the stage origin{(far.Count == 0 ? "" : $", {string.Join("; ", far)}")}");
                 var lit = r.Rows.Where(row => row.Residual.Count > 0)
                     .Select(row => $"{string.Join("/", row.Residual.Select(x => x.Root))} after {row.Name}")
                     .ToList();
                 ctx.Check(lit.Count == 0,
-                    $"no template mesh left lit after its effect was stopped{(lit.Count == 0 ? "" : $" — {string.Join("; ", lit)}")}");
+                    $"no template mesh left lit after its effect was stopped{(lit.Count == 0 ? "" : $", {string.Join("; ", lit)}")}");
                 ctx.Check(r.Puffered == 30,
                     $"the puffer half's tally holds under suite conditions ({r.Puffered} built one, expected 30)");
                 // The 19 includes `biggun_flying_parts` (its eight parts fly their solved parabola
@@ -89,7 +89,7 @@ internal static class AnimationAndEffectsSuites
             // one side sizes nothing, silently.
             var unsized = Utils.EffectPools.Load().UnknownRoots(roots);
             ctx.Check(unsized.Count == 0,
-                $"effect_pools.json sizes only roots this bind stages — {ctx.Chapter}{(unsized.Count == 0 ? "" : $" — sizes nothing: {string.Join(", ", unsized)}")}");
+                $"effect_pools.json sizes only roots this bind stages — {ctx.Chapter}{(unsized.Count == 0 ? "" : $", sizes nothing: {string.Join(", ", unsized)}")}");
 
             CrashStageRootTripwire(ctx, world);
         });
@@ -284,7 +284,7 @@ internal static class AnimationAndEffectsSuites
                 }
             }
 
-            // 1 — the SWEEP tier cuts the flight short and rests the body ON the surface.
+            // 1, the SWEEP tier cuts the flight short and rests the body ON the surface.
             var hit = Run(CollisionLayers.World, _ => false);
             ctx.Check(hit.Tier == MotionContactTier.Sweep,
                 $"do_intersections selects the sweep tier={hit.Tier}");
@@ -299,11 +299,11 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(hit.SweepLandings == 1 && hit.ColumnLandings == 0,
                 $"and it is tallied as a sweep landing sweep={hit.SweepLandings} column={hit.ColumnLandings}");
 
-            // 2 — the same contact over water takes the water branch.
+            // 2, the same contact over water takes the water branch.
             var wet = Run(CollisionLayers.World, _ => true);
             ctx.Check(wet.Bounce == Wet, $"a water surface picks the water branch bounce={wet.Bounce ?? "(none)"}");
 
-            // 1b — the DEFAULT tier. The identical body with `do_intersections` off, which is how
+            // 1b, the DEFAULT tier. The identical body with `do_intersections` off, which is how
             // 1,466 of the install's gravity-bearing events are authored, must land too and rest in
             // the same place. Before C6 this body sank through the world and ran its 20 s clock out.
             var column = Run(CollisionLayers.World, _ => false, Body(flagged: false));
@@ -318,7 +318,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(column.ColumnLandings == 1 && column.SweepLandings == 0,
                 $"and is tallied apart from the sweep column={column.ColumnLandings} sweep={column.SweepLandings}");
 
-            // 1b2 — a body that is ALREADY under the surface. The original's column is a query at
+            // 1b2, a body that is ALREADY under the surface. The original's column is a query at
             // (x, z) that answers whatever the body's height, and `y + stepY < height` then lifts
             // it back on; a query that only looks down answers nothing and the body keeps falling.
             const float Sunk = -25f;
@@ -334,7 +334,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(sunk.EndY >= surfaceY - 1f && sunk.EndY <= surfaceY + 2f,
                 $"and rests it there rather than {-Sunk:0} m down endY={sunk.EndY:0.00} surfaceY={surfaceY:0.00}");
 
-            // 1c — NO_ALTITUDE is the opt-out, and it vetoes the COLUMN only. `gunshell` is its one
+            // 1c, NO_ALTITUDE is the opt-out, and it vetoes the COLUMN only. `gunshell` is its one
             // author install-wide, and it must keep falling through the world exactly as before.
             var optedOut = Run(CollisionLayers.World, _ => false, Body(flagged: false, noAltitude: true));
             ctx.Check(optedOut.Tier == MotionContactTier.None,
@@ -342,7 +342,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(!optedOut.ByContact && optedOut.EndY < surfaceY - 100f,
                 $"so the body falls straight through endY={optedOut.EndY:0.00} surfaceY={surfaceY:0.00}");
 
-            // 1d — and it does not suppress an explicitly authored sweep. The original's branch
+            // 1d, and it does not suppress an explicitly authored sweep. The original's branch
             // order reaches the veto only on an unflagged body, so a reading that treats the two
             // flags as independent conditions fails right here.
             var bothFlags = Run(CollisionLayers.World, _ => false, Body(flagged: true, noAltitude: true));
@@ -360,7 +360,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(untimed.Bounce == Land,
                 $"its branch comes from the surface it struck bounce={untimed.Bounce ?? "(none)"}");
 
-            // 1g — THE WATCHDOG ITSELF, which nothing else here can fire: the same untimed body
+            // 1g, THE WATCHDOG ITSELF, which nothing else here can fire: the same untimed body
             // with a mask no collider answers. The tier is selected (the mask is non-zero) but
             // every query comes back empty, which is the only thing that charges the accumulator.
             // Without it this body would fly forever, since an untimed launch has no clock.
@@ -524,8 +524,8 @@ internal static class AnimationAndEffectsSuites
                 }
             }
 
-            // 3 — THE CONTROL. No mask: neither tier, so the body runs its full clock and ends far
-            // below the surface — which is also the no-collision-world fallback every golden
+            // 3, THE CONTROL. No mask: neither tier, so the body runs its full clock and ends far
+            // below the surface, which is also the no-collision-world fallback every golden
             // capture takes.
             var free = Run(0u, _ => false);
             ctx.Check(free.Tier == MotionContactTier.None && !free.ByContact,
@@ -587,7 +587,7 @@ internal static class AnimationAndEffectsSuites
                     ["run_time"] = runTime,
                 });
 
-            // The same tumble on the VECTOR launch form — the shape the crash pieces author. `dir` is
+            // The same tumble on the VECTOR launch form, the shape the crash pieces author. `dir` is
             // the compiled direction cache the extractor names `rnd_xz`.
             static AnimData Vector(float rate, Vector3 dir) =>
                 new(new Dictionary<string, object?>
@@ -625,7 +625,7 @@ internal static class AnimationAndEffectsSuites
                 }
             }
 
-            // 1 — the axis. A flat throw along +X (azimuth 0, h = 1) turns about (0, 0, −1): after a
+            // 1, the axis. A flat throw along +X (azimuth 0, h = 1) turns about (0, 0, −1): after a
             // quarter turn at π/2 rad/s the body's own up axis points along the throw and its own X
             // points down, which is an end-over-end tumble FORWARD over the launch.
             var alongX = Pose(Ranged(0f, 0f, Mathf.Pi / 2f), 1f);
@@ -638,7 +638,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(alongZ.Y.IsEqualApprox(Vector3.Back),
                 $"and a throw along +Z pitches forward over THAT up={alongZ.Y}");
 
-            // 2 — the rate is a RATE, not an angle over the run time. Two bodies with the same
+            // 2, the rate is a RATE, not an angle over the run time. Two bodies with the same
             // authored number and different run times must be in the same pose at the same instant;
             // under the ÷ run_time reading the 2 s body would have turned 2.5× as far.
             var slow = Pose(Ranged(0f, 0f, 1f, runTime: 5f), 1f);
@@ -648,27 +648,27 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(Mathf.Abs(slow.GetEuler(EulerOrder.Yxz).Z + 1f) < 1e-3f,
                 $"one second of 1 rad/s is one radian euler={slow.GetEuler(EulerOrder.Yxz)}");
 
-            // 3 — the launch's own horizontal length scales it, which is what makes a steep throw
+            // 3, the launch's own horizontal length scales it, which is what makes a steep throw
             // tumble slowly off the same authored number. At 60° of elevation h = 1/3.
             var steep = Pose(Ranged(0f, 60f, 1f), 1f);
             float steepAngle = -steep.GetEuler(EulerOrder.Yxz).Z;
             ctx.Check(Mathf.Abs(steepAngle - (1f / 3f)) < 1e-3f,
                 $"a 60° launch turns at h = 1 − |elev|/90 of the authored rate angle={steepAngle:0.000} rad expected=0.333");
 
-            // 4 — `delta` is the rate's own acceleration, integrated rather than dropped: from rest
+            // 4, `delta` is the rate's own acceleration, integrated rather than dropped: from rest
             // at 2 rad/s², one second is 1 rad.
             var ramped = Pose(Ranged(0f, 0f, 0f, accel: 2f), 1f);
             float rampedAngle = -ramped.GetEuler(EulerOrder.Yxz).Z;
             ctx.Check(Mathf.Abs(rampedAngle - 1f) < 1e-3f,
                 $"forward_rotation.delta accelerates the rate angle={rampedAngle:0.000} rad expected=1.000");
 
-            // 5 — the vector launch form turns about the direction the PARSER compiled into its
+            // 5, the vector launch form turns about the direction the PARSER compiled into its
             // third triple, the same cache the ranged form draws: a +Z launch pitches over +Z.
             var vecZ = Pose(Vector(Mathf.Pi / 2f, Vector3.Back), 1f);
             ctx.Check(vecZ.Y.IsEqualApprox(Vector3.Back),
                 $"a vector-translation launch tumbles about its compiled direction up={vecZ.Y}");
 
-            // 6 — and with that triple zero (a vertical launch, or a hand-built shape) there is no
+            // 6, and with that triple zero (a vertical launch, or a hand-built shape) there is no
             // axis to turn about, so the body holds its orientation however large the authored rate.
             var vec = Pose(Vector(15.708f, Vector3.Zero), 1f);
             ctx.Check(vec.IsEqualApprox(Basis.Identity),
@@ -895,7 +895,7 @@ internal static class AnimationAndEffectsSuites
     // callee's INVALIDATE_ANIMATION latch a name the caller has yet to call, which the original
     // cannot reach. Decode: docs/org/sequences.md.
     [Suite("anim-call-start-order",
-        "a CALL_ANIMATION callee takes its first step after the caller's remaining events of the same tick rather than inside the call, so a callee that invalidates a name the caller calls one event later cannot cancel that call")]
+        "a CALL_ANIMATION callee takes its first step after the caller's remaining events of the same tick rather than inside the call, so a callee that invalidates a name the caller calls one event later cannot cancel that call; a fan-out past the walk's start budget still gives every one of its callees that first step at zero dt, on the walk after")]
     internal static void CallStartOrder(TestContext ctx)
     {
         const float Tick = 1f / 30f;
@@ -948,6 +948,8 @@ internal static class AnimationAndEffectsSuites
             runtime.Free();
             stage.Free();
         }
+
+        QueuedStartsPastTheBudget(ctx);
     }
 
     // ---- the MAIN_ROOT_NODE self-reference: a launch onto the def's own anchor -------------------
@@ -1010,14 +1012,14 @@ internal static class AnimationAndEffectsSuites
                 runtime.Advance(Tick);
                 runtime.Advance(Tick);
 
-                // 1 — the sentinel resolved. Without it the OBJECT_MOTION dispatches, targets
+                // 1, the sentinel resolved. Without it the OBJECT_MOTION dispatches, targets
                 // nothing, and registers no body at all: launches+0, which is the only way that
                 // failure shows in the log.
                 var driver = DriverOf(anchor);
                 ctx.Check(driver is MotionRuntime,
                     $"the MAIN_ROOT_NODE launch drives the def's own anchor driver={driver?.GetType().Name ?? "(none)"} launches+{runtime.Motions.LaunchCount - launchesWas}");
 
-                // 2 — and it took over from the playback rather than re-basing on the map origin.
+                // 2, and it took over from the playback rather than re-basing on the map origin.
                 var launchedAt = anchor.GlobalPosition;
                 ctx.Check((launchedAt - flown).Length() < 5f,
                     $"the launch starts where the bus was, not at its authored rest jump={(launchedAt - flown).Length():0.0} m rest={(launchedAt - origin).Length():0} m away");
@@ -1027,7 +1029,7 @@ internal static class AnimationAndEffectsSuites
                     runtime.Advance(Tick);
                 }
 
-                // 3 — the wreck falls instead of flying on. Both halves show here: the fly script
+                // 3, the wreck falls instead of flying on. Both halves show here: the fly script
                 // is off the node, and the horizontal travel collapses from the ~60 m/s route to
                 // the ballistic drift of a hull with no launch velocity.
                 var after = anchor.GlobalPosition;
@@ -1094,7 +1096,7 @@ internal static class AnimationAndEffectsSuites
             }
 
             // A shared cached world reaches this suite already swept by damage-hd, and DamageAt is
-            // a no-op on something already destroyed — heal first so the death actually runs.
+            // a no-op on something already destroyed, heal first so the death actually runs.
             if (tank.Status == DestructibleRegistry.State.Destroyed)
             {
                 runtime.ResetDestructible(tank);
@@ -1156,7 +1158,7 @@ internal static class AnimationAndEffectsSuites
             CheckFlight(ctx, "part4", "sparkout4", LaunchAt("part4"), BounceAt("sparkout4"),
                 Part4Min, Part4Max + Tick);
 
-            // The bounce sequence is what deactivates the flying piece and pops its fireball —
+            // The bounce sequence is what deactivates the flying piece and pops its fireball,
             // both of its events must run, not just the first.
             ctx.Same(2, timeline.Count(e => e.Seq == "sparkout3"), $"sparkout3 events dispatched");
             ctx.Same(2, timeline.Count(e => e.Seq == "sparkout4"), $"sparkout4 events dispatched");
@@ -1219,7 +1221,7 @@ internal static class AnimationAndEffectsSuites
 
     // One bounce-terminated piece: it must launch, and its bounce sequence must fire a
     // flight time later that lands inside the band its authored `translation_range` allows.
-    // A missing launch and a missing landing are reported apart — they are different bugs.
+    // A missing launch and a missing landing are reported apart, they are different bugs.
     internal static void CheckFlight(
         TestContext ctx, string node, string seq, float launchAt, float bounceAt, float min, float max)
     {
@@ -1289,9 +1291,9 @@ internal static class AnimationAndEffectsSuites
                         {
                             switchedOff[name] = clock;
                         }
-                        // Nothing here names a bounce, so nothing may owe one — the widened gate
+                        // Nothing here names a bounce, so nothing may owe one, the widened gate
                         // must solve the flight WITHOUT arming a landing sequence that does not
-                        // exist — the over-generalization to watch for.
+                        // exist, the over-generalization to watch for.
                         bounceOwed |= runtime.Motions.OwesBounce(d.Def, d.Anchor);
                     };
                     runtime.PlayEffectAt("biggun_flying_parts", point);
@@ -1406,7 +1408,7 @@ internal static class AnimationAndEffectsSuites
                     }
                 };
                 runtime.Start(defs[0], stage);
-                for (int i = 0; i < 480; i++)   // 8 s — well past the splash's authored 3.0 s
+                for (int i = 0; i < 480; i++)   // 8 s, well past the splash's authored 3.0 s
                 {
                     clock += 1f / 60f;
                     runtime.Advance(1f / 60f);
@@ -1491,7 +1493,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(EmitterOn(runtime, pufferName, "sp_1") == true,
                 $"{pufferName} survives the sp_1 deactivation it shares an instant with (BL-229)");
 
-            for (int i = 0; i < 18; i++)   // 0.3 s — inside the callee's authored 0.5 s run
+            for (int i = 0; i < 18; i++)   // 0.3 s, inside the callee's authored 0.5 s run
             {
                 runtime.Advance(1f / 60f);
             }
@@ -1552,7 +1554,7 @@ internal static class AnimationAndEffectsSuites
                 }
             };
             runtime.Start(defs[0], stage);
-            for (int i = 0; i < 300; i++)   // 5 s — past the landing and past the instance's own end
+            for (int i = 0; i < 300; i++)   // 5 s, past the landing and past the instance's own end
             {
                 clock += 1f / 60f;
                 runtime.Advance(1f / 60f);
@@ -1576,7 +1578,7 @@ internal static class AnimationAndEffectsSuites
 
     // Is the emitter `name` ON `host` emitting? Null when
     // no such emitter is known. Host-qualified on purpose: puffer names are NOT unique across
-    // definitions — `small_fireball` declares a `trailpuffer2` of its own, and a name-only read
+    // definitions, `small_fireball` declares a `trailpuffer2` of its own, and a name-only read
     // answers about whichever row comes first, which lets a debris assertion pass against a
     // runtime with the stop deleted outright.
     internal static bool? EmitterOn(AnimRuntime runtime, string name, string host)
@@ -1683,7 +1685,7 @@ internal static class AnimationAndEffectsSuites
                 $"the ap gun hit's chunk mesh is visible while it plays ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")})");
 
             // Past the def's own authored ACTIVE_STATE 0 at +0.1 s, which ends the instance well
-            // inside the 0.3 s TTL — the case that would otherwise leave the mesh lit for the session.
+            // inside the 0.3 s TTL, the case that would otherwise leave the mesh lit for the session.
             for (int i = 0; i < 30; i++)
             {
                 runtime.Advance(1f / 60f);
@@ -1744,7 +1746,7 @@ internal static class AnimationAndEffectsSuites
                     ctx.Check(fired[i].From.IsEqualApprox(wantFrom[i]) && fired[i].To.IsEqualApprox(wantTo[i]),
                         $"step {i + 1} ramps its authored colours ({fired[i].From} → {fired[i].To})");
                 }
-                // Each step must start one previous run time after the one before it — the
+                // Each step must start one previous run time after the one before it, the
                 // collapse this suite exists to catch, which no per-step assertion above can see.
                 for (int i = 1; i < 6; i++)
                 {
@@ -1809,7 +1811,7 @@ internal static class AnimationAndEffectsSuites
                 $"and starts no RAMP in pane 2: the two channels are separate states ({flash.RunningFor(1)})");
 
             // A proximity ramp reaching both panes: pane 1 shows the ramp alone, pane 2 the wash
-            // over the ramp — the pixel the ramp would have painted, with red laid over it.
+            // over the ramp, the pixel the ramp would have painted, with red laid over it.
             flash.Play(white, violet, 0.2f, Vector3.Zero, gate);
             ctx.Check(flash.CurrentFor(0).IsEqualApprox(white),
                 $"an HE ramp reaching both panes paints pane 1 exactly as before the blend channel existed ({flash.CurrentFor(0)})");
@@ -1875,7 +1877,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(!flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(clear),
                 $"and leaves P2's pane, 170 m away, clear — the BL-340 report ({flash.CurrentFor(1)})");
 
-            // 50 m past P2, 170 m from P1 — the same case from the other side, while P1's own ramp
+            // 50 m past P2, 170 m from P1, the same case from the other side, while P1's own ramp
             // is still running: two panes, two independent states.
             flash.Play(violet, white, 0.2f, new Vector3(0f, 0f, 170f), gate);
             ctx.Check(flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(violet),
@@ -1919,10 +1921,10 @@ internal static class AnimationAndEffectsSuites
         }
     }
 
-    // The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
+    // The wash's own gate, `If PlayerRange 10000`, answers to the NEAREST human, not
     // one camera: a burst still fires while the camera this stage was built
     // against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
-    // gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
+    // gate. This is upstream of B12's routing (which panes a fired wash reaches), here nothing
     // has fired yet, so no pane would have anything to route.
     internal static void PlayerRangeNearestHuman(TestContext ctx)
     {
@@ -1936,7 +1938,7 @@ internal static class AnimationAndEffectsSuites
                 runtime.ScreenFlash = (from, to, seconds, at, gateSq) => fired.Add(seconds);
 
                 // Every known human 5 km out: nowhere near the def's own 100 m gate. 150 steps
-                // (2.5 s) is the same margin FbfxFlash drives the full chain for above — long
+                // (2.5 s) is the same margin FbfxFlash drives the full chain for above, long
                 // enough that a gate wrongly left open would have fired well within it.
                 runtime.PlayerPositions = () => new[] { point + new Vector3(0f, 0f, -5000f) };
                 runtime.PlayEffectAt("he_ground_effect", point);
@@ -1957,7 +1959,7 @@ internal static class AnimationAndEffectsSuites
         });
     }
 
-    // A two-pane ScreenFlash over bare HUD parents — the shape
+    // A two-pane ScreenFlash over bare HUD parents, the shape
     // `GameSession` builds from the rigs, with nothing but the parents and the viewer set,
     // since that is all the routing reads.
     internal static (ScreenFlash Flash, Node[] Panes) PaneFlash(TestContext ctx, ViewerSet? viewers)
@@ -1992,8 +1994,8 @@ internal static class AnimationAndEffectsSuites
         ctx.WriteArtifact("ordnance-burst-timeline.txt", report.ToString());
     }
 
-    // `he_ring-he_ground_effect.json` — five sequences, two of them unnamed and Initial,
-    // three ON_CALL — plus `flame_ball_01-large_fireball.json`, which its fourth CALL_ANIMATION
+    // `he_ring-he_ground_effect.json`, five sequences, two of them unnamed and Initial,
+    // three ON_CALL, plus `flame_ball_01-large_fireball.json`, which its fourth CALL_ANIMATION
     // reaches and which carries the parked-stopper case.
     internal static void HeBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
     {
@@ -2050,7 +2052,7 @@ internal static class AnimationAndEffectsSuites
             new BurstStep(5, "FbfxColorFromTo", null, 1.1f),
         });
         // The callee. `activate_puffer` shows the fireball, calls `p1trail` (which starts the
-        // emitter) and then, at an authored `Event + 0.3`, STOPs `stop_p1trail` — an ON_CALL
+        // emitter) and then, at an authored `Event + 0.3`, STOPs `stop_p1trail`, an ON_CALL
         // sequence nothing has called, so it is parked and the stop halts nothing.
         var fireball = new[]
         {
@@ -2079,7 +2081,7 @@ internal static class AnimationAndEffectsSuites
         });
     }
 
-    // `flash_control-flash_effect.json` — the pure light case, two sequences. The one
+    // `flash_control-flash_effect.json`, the pure light case, two sequences. The one
     // timed event in it is a `START_TIME ANIMATION 1.5`, read against the instance clock.
     internal static void FlashBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
     {
@@ -2090,7 +2092,7 @@ internal static class AnimationAndEffectsSuites
                 new BurstStep(0, "ObjectActiveState", "lens_flash", 0f),
                 new BurstStep(1, "CallSequence", "flash_flashes", 0f),
                 new BurstStep(2, "CallAnimation", "call_flasher", 0f),
-                // `Animation + 1.5` — the instance clock, which for this Initial sequence is also
+                // `Animation + 1.5`, the instance clock, which for this Initial sequence is also
                 // its own, so the value is the assertion and the origin is not (sonic's second
                 // `sonic_light_seq` pass is where the two clocks differ).
                 new BurstStep(3, "ObjectActiveState", "lens_flash", 1.5f),
@@ -2107,7 +2109,7 @@ internal static class AnimationAndEffectsSuites
             fired => CheckLanes(ctx, "flash_effect", fired, lanes, report));
     }
 
-    // `sonic_effect-sonic_ground_effect.json` — four sequences, two unnamed and Initial.
+    // `sonic_effect-sonic_ground_effect.json`, four sequences, two unnamed and Initial.
     // The repeat-call case: the first Initial sequence calls `sonic_light_seq` at #0 and again at #4,
     // 1.2 s later.
     internal static void SonicBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
@@ -2133,7 +2135,7 @@ internal static class AnimationAndEffectsSuites
             new BurstStep(14, "CallAnimation", "sonic_emit_downer", 1.2f),
         });
         // The second Initial sequence: four rising rings at once, then one at `START_TIME
-        // SEQUENCE 1.2` — an absolute gate against this sequence's own clock, not the instance's.
+        // SEQUENCE 1.2`, an absolute gate against this sequence's own clock, not the instance's.
         var rings = new BurstLane("", new[]
         {
             new BurstStep(0, "CallAnimation", "ring_up1", 0f),
@@ -2300,6 +2302,94 @@ internal static class AnimationAndEffectsSuites
                 ctx.Check(Mathf.Abs(at[l][s] - step.At) <= BurstSlack,
                     $"{tag} #{step.Index} {step.Kind} fires at its authored {step.At:0.###} s ({at[l][s]:0.###} s)");
             }
+        }
+    }
+
+    // One walk drains 512 queued starts and leaves the rest for the next walk, which still owes
+    // each of them the zero-dt advance it was queued for. A start dropped from the queue instead
+    // takes that walk's real dt as its first advance, and its t=0 events then land in the same
+    // advance as an event stamped inside the first tick.
+    // ⚠ Read both events of a callee, never the count of first advances. Every callee fires its
+    // t=0 event whatever dt it was first advanced with, so only the stamped one tells the two apart.
+    private static void QueuedStartsPastTheBudget(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const float Stamped = 0.02f;    // inside one tick, so only a charged first advance reaches it
+        const int Fans = 3;             // one sequence's runner fires at most 256 events per advance
+        const int PerFan = 200;         // so three of them queue 600 starts in one walk, past the 512
+        const int Callees = Fans * PerFan;
+        const string Caller = "budget_caller";
+        const string Nothing = "budget_nothing";
+        var defs = new List<AnimDefinition>();
+        var caller = new AnimDefinition { Name = Caller, AnimName = Caller };
+        for (int fan = 0; fan < Fans; fan++)
+        {
+            var seq = new AnimSequence { Name = $"fan{fan}" };
+            for (int i = 0; i < PerFan; i++)
+            {
+                string callee = $"budget_callee{(fan * PerFan) + i:000}";
+                // The first call of each fan is scheduled, so the whole fan-out is dispatched by a
+                // tick's walk rather than by the instant burst a Play runs; the rest follow it in
+                // the same tick.
+                seq.Events.Add(i == 0
+                    ? OrderEvent("CallAnimation", callee, "Sequence", 0.1f)
+                    : OrderEvent("CallAnimation", callee));
+                defs.Add(OrderDef(callee,
+                    OrderEvent("StopAnimation", Nothing),
+                    OrderEvent("InvalidateAnimation", Nothing, "Sequence", Stamped)));
+            }
+
+            caller.Sequences.Add(seq);
+        }
+
+        defs.Add(caller);
+        var stage = new Node3D { Name = "StartBudgetStage" };
+        var runtime = new AnimRuntime
+        {
+            AutoStart = false,
+            ManualAdvance = true,
+            SoundHandledElsewhere = true,
+        };
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, AnimProgram.FromDefinitions(defs));
+            int tick = 0;
+            var burst = new Dictionary<string, int>();
+            var stamped = new Dictionary<string, int>();
+            runtime.OnEventDispatched = d =>
+            {
+                string name = d.Def.AnimName ?? string.Empty;
+                if (!name.StartsWith("budget_callee", System.StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var landed = d.EventKind == "StopAnimation" ? burst : stamped;
+                if (!landed.ContainsKey(name))
+                {
+                    landed[name] = tick;
+                }
+            };
+            ctx.Same(1, runtime.Play(Caller).Count, $"the caller starts as one instance");
+            for (tick = 1; tick <= 12; tick++)
+            {
+                runtime.Advance(Tick);
+            }
+
+            ctx.Same(Callees, burst.Count, $"every one of the {Callees} calls starts its callee");
+            int charged = burst.Count(b => stamped.TryGetValue(b.Key, out int at) && at <= b.Value);
+            ctx.Same(0, charged,
+                $"every callee's first advance is at zero dt: {charged} of {burst.Count} reached an event stamped at {Stamped:0.###} s in the same advance as their t=0 one");
+            var passes = burst.Values.GroupBy(t => t).OrderBy(g => g.Key)
+                .Select(g => $"{g.Count()} in walk {g.Key}");
+            ctx.Note($"first advances by walk: {string.Join(", ", passes)}");
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
         }
     }
 

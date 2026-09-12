@@ -7,7 +7,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The original's weathervane: <c>return_rate</c> as a restoring torque that swings the nose onto
 /// the velocity vector, not extra per-axis damping. Decode: docs/org/flightModel.md, "Weathervane
-/// centring — resolved". Reads <see cref="FlightModel.WeathervaneTorque"/> directly, or the body
+/// centring, resolved". Reads <see cref="FlightModel.WeathervaneTorque"/> directly, or the body
 /// rates after one step from rest where the arithmetic is closed-form, so a sign flip or a missing
 /// halving fails exactly rather than being absorbed by the integrator.
 /// </summary>
@@ -22,7 +22,7 @@ public class WeathervaneTests
         m.Reset(Vector3.Zero, Basis.Identity, 120f, 1f);
 
         // Reset puts the velocity down the nose, so the misalignment is identically zero and the
-        // torque must be exactly zero — not small. This is the property that keeps every
+        // torque must be exactly zero, not small. This is the property that keeps every
         // wings-level, zero-α scenario in the pinned envelope untouched.
         Assert.Equal(Vector3.Zero, m.WeathervaneTorque());
     }
@@ -46,7 +46,7 @@ public class WeathervaneTests
     public void PullsTheNoseBackTowardThePathWhenItLeadsInYaw()
     {
         // Mirror case on the other axis: nose 20° left of the path yaws RIGHT (negative), and the
-        // magnitude matches the pitch case exactly — the torque is isotropic about the nose.
+        // magnitude matches the pitch case exactly, the torque is isotropic about the nose.
         var m = Model();
         m.Reset(Vector3.Zero, Yawed(20f), 120f, 1f);
         m.VelocityDir = Vector3.Forward;
@@ -81,7 +81,7 @@ public class WeathervaneTests
     public void NeverReachesTheRollAxis()
     {
         // The torque's axis is nose × v̂, which is perpendicular to the nose at every attitude, so
-        // its roll component is identically zero — a weathervane cannot bank an aeroplane. This is
+        // its roll component is identically zero, a weathervane cannot bank an aeroplane. This is
         // why roll-360 is untouched by this item on a measurement as well as on a test.
         foreach (float bank in new[] { 0f, 30f, 90f, 150f, 180f })
         {
@@ -133,7 +133,7 @@ public class WeathervaneTests
             + $"damp + return_rate folded in would give {1f - ((stats.AngMomentumDamp + stats.ReturnRate) * Dt):0.000000})");
     }
 
-    // The Bloodhawk's real dynamics — the torque is scaled by `rec_moments_inertia`,
+    // The Bloodhawk's real dynamics, the torque is scaled by `rec_moments_inertia`,
     // so the placeholder defaults would hide a wrong axis behind near-equal components.
     private static PlaneStats Stats() => new()
     {
@@ -151,7 +151,7 @@ public class WeathervaneTests
 
     private static FlightModel Model() => new(Stats());
 
-    // Nose up by `deg` — a rotation about the body starboard axis.
+    // Nose up by `deg`, a rotation about the body starboard axis.
     private static Basis Pitched(float deg) =>
         Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
 

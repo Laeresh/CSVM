@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 /// The off-engine charter for <c>src/Mech3/Anim/TemplateStage.cs</c>:
 /// slot-cursor wrap, the modulo fallback for callees staged shallower than their
 /// caller's slot, <c>Recycles</c> counting in both wrap flavours, the caller-slot
-/// stickiness, placement and the move tolerance — asserted against a plain token node type with
+/// stickiness, placement and the move tolerance, asserted against a plain token node type with
 /// no Godot engine anywhere in the path (the Godot structs used are pure math). The integration
 /// tier stays the in-engine <c>effect-template-mesh</c>/<c>effects-census</c>/
 /// <c>damage-template-pool</c> suites; nothing here re-implements those scene/visibility checks.
@@ -34,7 +34,7 @@ public class TemplateStageTests
         Assert.Same(copies[1], Assert.Single(h.Stage.TakeNextSlot(def)));
         Assert.Same(copies[2], Assert.Single(h.Stage.TakeNextSlot(def)));
         Assert.Same(copies[0], Assert.Single(h.Stage.TakeNextSlot(def))); // the wrap
-        Assert.Equal(0, h.Stage.Recycles); // nothing was live — a clean wrap is not a recycle
+        Assert.Equal(0, h.Stage.Recycles); // nothing was live, a clean wrap is not a recycle
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class TemplateStageTests
     public void RootsForFallsBackByModuloWhenTheCalleeIsStagedShallower()
     {
         // A slot-5 caller reaching a callee staged in only 2 slots must get ONE copy (5 % 2 = 1),
-        // never "all of them" — every branch returning one call's copies is what ended the
+        // never "all of them", every branch returning one call's copies is what ended the
         // shared-template collapse.
         var h = new Harness();
         var (def, copies) = h.PooledRoot("boom", slots: 2);
@@ -154,7 +154,7 @@ public class TemplateStageTests
         Assert.Equal(0, h.Stage.Recycles);
 
         var panel3 = h.Node("pdp3");
-        h.Stage.AssignCallerSlot(def, panel3); // claim 2 over 2 copies — the wrap
+        h.Stage.AssignCallerSlot(def, panel3); // claim 2 over 2 copies, the wrap
         Assert.Equal(1, h.Stage.Recycles);
         Assert.Single(h.Printed.Where(l => l.Contains("wrapped")));
         // The claim wraps through RootsFor's modulo back onto slot 0's copy.
@@ -329,7 +329,7 @@ public class TemplateStageTests
         var (def, copies) = h.PooledRoot("boom", slots: 2);
         h.Live.Add((def, copies[0]));
 
-        h.Stage.Reveal(def, copies[0], visible: true); // Shown is off — the world runtime's shape
+        h.Stage.Reveal(def, copies[0], visible: true); // Shown is off, the world runtime's shape
         Assert.False(copies[0].Visible);
     }
 
@@ -349,7 +349,7 @@ public class TemplateStageTests
     public void RevealingADefThatIsAlreadyFinishedSchedulesItsOwnHide()
     {
         // `biggun_flying_parts`: one CALL_ANIMATION, finished inside Start, so it never reaches the
-        // retire walk — the reveal must schedule the hide itself or the copy stays lit forever.
+        // retire walk, the reveal must schedule the hide itself or the copy stays lit forever.
         var h = new Harness(shown: true);
         var (def, copies) = h.PooledRoot("biggun_flying_parts", slots: 1);
 
@@ -445,7 +445,7 @@ public class TemplateStageTests
 
         h.Stage.AssignCallerSlot(def, panel);
 
-        // No claim was made, so resolution stays def-wide — the exempt family's node ops keep
+        // No claim was made, so resolution stays def-wide, the exempt family's node ops keep
         // reaching everything the NAME resolves, exactly as authored.
         Assert.Equal(2, h.Stage.RootsFor(def, panel).Count);
     }
@@ -536,7 +536,7 @@ public class TemplateStageTests
 
     // The token adapter: reference-equality nodes, a parent-chain slot walk, transform
     // reads/writes on plain fields, prints collected, and the runtime hooks backed by
-    // dictionaries — each the one-line stand-in for the engine adapter's one-line hook.
+    // dictionaries, each the one-line stand-in for the engine adapter's one-line hook.
     private sealed class Harness
     {
         public readonly Dictionary<string, List<TestNode>> Roots = new(StringComparer.OrdinalIgnoreCase);
@@ -555,7 +555,7 @@ public class TemplateStageTests
 
         /// <summary>The stage's three policy flags are sealed at construction,
         /// so a harness picks the role it is asserting rather than flipping a property
-        /// mid-test — the same shape production has, where <c>WorldEffectsFactory</c> builds a
+        /// mid-test, the same shape production has, where <c>WorldEffectsFactory</c> builds a
         /// sealed stage and hands it to the runtime.</summary>
         public Harness(bool pooled = true, bool shown = false,
             IEnumerable<string>? placeExempt = null, IEqualityComparer<TestNode>? identity = null)
@@ -608,7 +608,7 @@ public class TemplateStageTests
         public TestNode NodeInSlot(TestNode copy) => NodeUnder(copy);
 
         /// <summary>Stages <paramref name="slots"/> copies of one template root, each under its own
-        /// slot container — the shape WorldEffectsFactory builds.</summary>
+        /// slot container, the shape WorldEffectsFactory builds.</summary>
         public (AnimDefinition Def, List<TestNode> Copies) PooledRoot(string name, int slots)
         {
             var copies = new List<TestNode>();

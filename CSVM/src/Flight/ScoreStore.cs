@@ -4,14 +4,14 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// Best-time persistence for stunt runs. One JSON object in
-/// <c>user://stunt_scores.json</c> — the engine's writable user dir, never the repo (the hard
-/// no-assets rule and, besides, scores are per-player) — keyed <c>chapter/mission/plane</c>
+/// <c>user://stunt_scores.json</c>, the engine's writable user dir, never the repo (the hard
+/// no-assets rule and, besides, scores are per-player), keyed <c>chapter/mission/plane</c>
 /// (e.g. <c>C1/IA1/player_bhawk</c>) → <c>{ best: seconds, date: "YYYY-MM-DD" }</c>.
 ///
 /// Read/written through Godot's <see cref="FileAccess"/> + <see cref="Json"/> rather than
 /// System.Text.Json: only the Godot API resolves the <c>user://</c> scheme, and
 /// <see cref="Json.Stringify"/> is locale-neutral where <c>ToString()</c> is not. A missing or
-/// corrupt file is an empty store (a first run has no best), never an exception — a persistence
+/// corrupt file is an empty store (a first run has no best), never an exception, a persistence
 /// hiccup must not break the scoreboard.
 /// </summary>
 public sealed class ScoreStore
@@ -30,7 +30,7 @@ public sealed class ScoreStore
     /// <summary>Loads the store, or an empty one if the file is absent/unreadable/malformed.</summary>
     public static ScoreStore Load() => Load(DefaultStorePath);
 
-    /// <summary>The stored best total, seconds, for this run key — or null if none is recorded yet.</summary>
+    /// <summary>The stored best total, seconds, for this run key, or null if none is recorded yet.</summary>
     public float? GetBest(string key)
     {
         if (_data.TryGetValue(key, out var v) && v.VariantType == Variant.Type.Dictionary)
@@ -44,7 +44,7 @@ public sealed class ScoreStore
 
     /// <summary>Records <paramref name="total"/> as the new best for <paramref name="key"/> if it
     /// beats the stored one (or there is none), persisting immediately. Returns true when it was a
-    /// new best (the scoreboard flags NEW BEST), false when a stored time stands — never worsens a
+    /// new best (the scoreboard flags NEW BEST), false when a stored time stands, never worsens a
     /// record.</summary>
     public bool RecordIfBest(string key, float total)
     {
@@ -61,7 +61,7 @@ public sealed class ScoreStore
     }
 
     /// <summary>Loads a store at an alternate <paramref name="storePath"/>, for a suite that must
-    /// not touch the player's own <c>user://stunt_scores.json</c> — point it at a throwaway path
+    /// not touch the player's own <c>user://stunt_scores.json</c>, point it at a throwaway path
     /// (e.g. under the suite's own scratch directory) instead.</summary>
     internal static ScoreStore Load(string storePath)
     {

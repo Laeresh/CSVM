@@ -6,7 +6,7 @@ namespace CSVM.Mech3;
 /// Keeps every world collider's <c>Disabled</c> flag DERIVED from its owner's state: enabled
 /// exactly while the owner is visible in the scene tree and no ancestor is faded out. Callers
 /// that hide something write <c>Visible</c> (or <see cref="SetFaded"/>) and nothing else.
-/// ⚠ Godot visibility is INHERITED, <c>Disabled</c> is not — do not write <c>Disabled</c>
+/// ⚠ Godot visibility is INHERITED, <c>Disabled</c> is not, do not write <c>Disabled</c>
 /// independently, and do not replace this with a recursive collider walk; the two must derive
 /// from one source or the built world grows solid-but-invisible colliders.
 /// Only colliders <see cref="SceneBuilder"/> builds are tracked; other solid bodies (plane
@@ -15,7 +15,7 @@ namespace CSVM.Mech3;
 internal static class WorldCollision
 {
     // Marks a subtree root faded below the collision threshold. A meta rather than a
-    // static registry so it dies with the node — sessions build and free whole worlds.
+    // static registry so it dies with the node, sessions build and free whole worlds.
     private const string FadedMeta = "csky_col_faded";
 
     // Live faded roots, so the common case (none) skips the ancestor walk. Only a
@@ -29,7 +29,7 @@ internal static class WorldCollision
     /// <summary>Binds <paramref name="owner"/>'s colliders to its own visibility. Called once per
     /// collider-bearing node as it is built. Both signals are needed: <c>VisibilityChanged</c>
     /// fires on every descendant when an ancestor toggles (Godot propagates it down), and
-    /// <c>TreeEntered</c> covers the build itself — a world is assembled, bootstrapped and only
+    /// <c>TreeEntered</c> covers the build itself, a world is assembled, bootstrapped and only
     /// then added to the tree, and a detached node's visibility writes emit nothing.</summary>
     public static void Track(Node3D owner)
     {
@@ -103,7 +103,7 @@ internal static class WorldCollision
     // The signal path, where nothing has climbed for this node yet.
     private static void Sync(Node3D owner) => Sync(owner, FadedAbove(owner));
 
-    // The owner's own bodies only — every other collider-bearing node is tracked in its own
+    // The owner's own bodies only, every other collider-bearing node is tracked in its own
     // right and gets its own signal, so a subtree is never walked twice for one toggle.
     private static void Sync(Node3D owner, bool fadedAbove)
     {

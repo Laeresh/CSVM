@@ -10,7 +10,7 @@ namespace CSVM.Session;
 /// written by <c>ExtractAssets.ps1</c> / <c>ExtractRof.ps1</c>: which unzbd built the tree
 /// (version line, exe hash, fork commit when known), when, and under which stamp schema.
 /// The loaders prefer an unpacked sibling dir over its <c>.zip</c>, so a partially
-/// re-extracted tree can silently mix vintages — the stamp is how a "it looks wrong" report
+/// re-extracted tree can silently mix vintages, the stamp is how a "it looks wrong" report
 /// starts from a known extractor version instead of a guess.
 /// </summary>
 public static class ExtractionStamp
@@ -39,8 +39,8 @@ public static class ExtractionStamp
     }
 
     /// <summary>Compares the stamp under <paramref name="dataRoot"/> against
-    /// <see cref="Schema"/> and logs AT MOST one warning line — stale schema, missing file,
-    /// or unreadable — each naming the fix. Warn, never block: the dev tree holds years of
+    /// <see cref="Schema"/> and logs AT MOST one warning line, stale schema, missing file,
+    /// or unreadable, each naming the fix. Warn, never block: the dev tree holds years of
     /// valid extractions that predate the stamp.</summary>
     public static void Check(string dataRoot)
     {

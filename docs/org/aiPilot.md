@@ -455,7 +455,7 @@ edge+0x1c = r²
 
 **A tenth of the horizontal leg length, floored at 10 m, stored squared.** The floor is `CCENet`'s
 constructor default (`FUN_004303d0` writes `10.0f` to `+0x28`) and every shipped net leaves it
-alone — element 1 of the net record is `10.0` on all 222 files. Altitude change along a leg does not
+alone, element 1 of the net record is `10.0` on all 222 files. Altitude change along a leg does not
 widen the capture, which is consistent with the follower's other, horizontal, arrival tests.
 
 ⚠ **Porting this does not by itself steady the aeroplane.** Measured on the anchored `M4ReinfAce`
@@ -873,7 +873,7 @@ a run-to-run spread of 3 to 4). Detection is not the bottleneck, so the sweep wa
 
 What remains is the third bound, which the decode already names: **both parties answer a detection
 with the same straight-ahead 1000 m climb**, so two aeroplanes that both see each other both pull
-up along converging tracks and merge anyway. The collisions are overwhelmingly head-on — measured
+up along converging tracks and merge anyway. The collisions are overwhelmingly head-on, measured
 at impact as the angle between the two velocity vectors, 175°–178° apart on most of them.
 
 ### Measured: breaking the climb-out's symmetry is what helps
@@ -1111,8 +1111,8 @@ pursuer to its victim:
 - the victim casts to `TargetVehicle` and its `+0x67c` is 0 or 4, i.e. it is a `jet` or a
   `wingman`. A ground or sea target never arms this;
 - range under **400 m**;
-- `dot(ownVelocity, u) > 0.8 × ownSpeed` — the pursuer is flying at the victim, within about 37°;
-- `dot(victimVelocity, u) < −0.8 × victimSpeed` — the victim is flying back at the pursuer, within
+- `dot(ownVelocity, u) > 0.8 × ownSpeed`, the pursuer is flying at the victim, within about 37°;
+- `dot(victimVelocity, u) < −0.8 × victimSpeed`, the victim is flying back at the pursuer, within
   the same cone.
 
 What it then does is **not** a break-off:

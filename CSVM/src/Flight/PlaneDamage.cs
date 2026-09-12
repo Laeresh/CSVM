@@ -20,7 +20,7 @@ public sealed class PlaneDamage
     private const uint RngSeed = 0x2545F491u;
 
     private readonly Dictionary<string, PartState> _parts = new(System.StringComparer.OrdinalIgnoreCase);
-    private readonly List<PartState> _order = new(); // def order — the resolver walks it
+    private readonly List<PartState> _order = new(); // def order, the resolver walks it
     private float _wholeArmor;
     private float _wholeHealth;
     private uint _rng = RngSeed;
@@ -48,12 +48,12 @@ public sealed class PlaneDamage
 
     public float WholeHealthMax { get; }
 
-    /// <summary>The whole-vehicle current pools — the pair the decoded death test reads.</summary>
+    /// <summary>The whole-vehicle current pools, the pair the decoded death test reads.</summary>
     public float WholeArmor => _wholeArmor;
 
     public float WholeHealth => _wholeHealth;
 
-    /// <summary>Worst (lowest) combined armor+HP fraction across all parts — 1f (pristine) when
+    /// <summary>Worst (lowest) combined armor+HP fraction across all parts, 1f (pristine) when
     /// there are no parts or none has taken damage. This is the scale the def's injure_anims
     /// thresholds are on. ⚠ A zone-less AI aircraft (<see cref="PlaneStats.LoadForAi"/>) always
     /// reads a constant 1f here. <see cref="WorstHealthFraction"/> is the reading that works on
@@ -68,7 +68,7 @@ public sealed class PlaneDamage
         ? SummaryHealthFraction
         : _parts.Values.Min(p => p.HealthFraction);
 
-    /// <summary>The whole-vehicle health fraction — the real pair's current over max, no longer
+    /// <summary>The whole-vehicle health fraction, the real pair's current over max, no longer
     /// a parts-derived stand-in. Fed to the DI voice thresholds and any "how dead am I" reader;
     /// the decoded death test is this pool reaching zero.</summary>
     public float SummaryHealthFraction =>
@@ -76,7 +76,7 @@ public sealed class PlaneDamage
 
     /// <summary>The decoded kill rule (FUN_004b9bc0):
     /// whole-vehicle health current at or below zero. The <c>critical</c> flag stays parsed and
-    /// is never consulted — no code on the decoded death path reads a part flag.</summary>
+    /// is never consulted, no code on the decoded death path reads a part flag.</summary>
     public bool IsDestroyed => WholeHealthMax > 0f && _wholeHealth <= 0f;
 
     /// <summary>Seeds the ledger from a plane's stats: authored whole pair where the def chain
@@ -86,9 +86,9 @@ public sealed class PlaneDamage
 
     /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the backstop ray's
     /// "center") + the impact point in the PLANE's local frame to the data's part name: wings
-    /// split by side (x &lt; 0 = left — verified against the planes.zbd node boxes), the fuselage
+    /// split by side (x &lt; 0 = left, verified against the planes.zbd node boxes), the fuselage
     /// fore/aft between nose and tail. ⚠ The <c>tail</c> arm ignores <paramref name="localImpact"/>
-    /// — only correct because <see cref="PlaneCollider"/>'s relabelling hands it no outboard boxes.
+    ///, only correct because <see cref="PlaneCollider"/>'s relabelling hands it no outboard boxes.
     /// Do not "fix" tail sidedness here.</summary>
     public static string MapStruckPart(string colliderPart, Vector3 localImpact) => colliderPart switch
     {
@@ -107,15 +107,15 @@ public sealed class PlaneDamage
 
         _wholeArmor = WholeArmorMax;
         _wholeHealth = WholeHealthMax;
-        _rng = RngSeed; // a respawned plane redirects identically — suite determinism
+        _rng = RngSeed; // a respawned plane redirects identically, suite determinism
     }
 
     /// <summary>Spends one hit's <c>HEALTH_DAMAGE</c>/<c>ARMOR_DAMAGE</c> through the decoded
     /// take-hit flow: the named zone armor-first, a dead or unknown zone redirected to a random
     /// surviving one, the leftover draining the whole pair directly. Returns the zone actually
-    /// struck (null when zone-less) — test <see cref="IsDestroyed"/> regardless. To pre-set a zone
+    /// struck (null when zone-less), test <see cref="IsDestroyed"/> regardless. To pre-set a zone
     /// without draining the whole pool (test scaffolding), spend exact amounts: strip its armor,
-    /// then a bare-zone health spend — an overkill call still kills.</summary>
+    /// then a bare-zone health spend, an overkill call still kills.</summary>
     public PartState? Apply(string partName, float healthDamage, float armorDamage)
     {
         if (healthDamage <= 0f && armorDamage <= 0f)
@@ -135,14 +135,14 @@ public sealed class PlaneDamage
         }
 
         // The wrapper loop (FUN_004b9b30): while BOTH leftovers remain and the vehicle lives,
-        // the pair re-enters zone-less and spends against the whole pools — no recompute, so
+        // the pair re-enters zone-less and spends against the whole pools, no recompute, so
         // these dents sit outside the parts until a later part spend overwrites them.
         while (dmgA > 0f && dmgH > 0f && _wholeHealth > 0f)
             Spend(ref dmgA, ref dmgH, ref _wholeArmor, ref _wholeHealth);
         return struck;
     }
 
-    /// <summary>Spends a single damage magnitude — a collision, which the data gives equal
+    /// <summary>Spends a single damage magnitude, a collision, which the data gives equal
     /// armor and health ranges (player.json's 'crash' block).</summary>
     public PartState? Apply(string partName, float damage) => Apply(partName, damage, damage);
 
@@ -177,7 +177,7 @@ public sealed class PlaneDamage
         _wholeHealth = Mathf.Clamp(health, 0f, WholeHealthMax);
     }
 
-    /// <summary>"hull a81% h90% · nose a0% h85% · …" — the whole-vehicle pair first (the pool
+    /// <summary>"hull a81% h90% · nose a0% h85% · …", the whole-vehicle pair first (the pool
     /// the kill reads, kept visible in flight), then parts below full, armor pool then health
     /// pool; "" when pristine.</summary>
     public string Summary()
@@ -299,7 +299,7 @@ public sealed class PlaneDamage
         public float Armor;
         public required DestroyablePart Def { get; init; }
 
-        /// <summary>The combined sequential fraction — both pools against both maxima. Damage
+        /// <summary>The combined sequential fraction, both pools against both maxima. Damage
         /// walks it down through armor and then health as one progression, which is the scale
         /// the def's injure_anims thresholds are on.</summary>
         public float Fraction => Def.MaxHp + Def.MaxArmor > 0f
@@ -308,7 +308,7 @@ public sealed class PlaneDamage
 
         public float HealthFraction => Def.MaxHp > 0f ? Hp / Def.MaxHp : 0f;
 
-        /// <summary>0f for a part the data gives no armor pool — an unarmored zone, not a full
+        /// <summary>0f for a part the data gives no armor pool, an unarmored zone, not a full
         /// one.</summary>
         public float ArmorFraction => Def.MaxArmor > 0f ? Armor / Def.MaxArmor : 0f;
     }

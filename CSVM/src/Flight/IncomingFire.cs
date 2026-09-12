@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// <c>--incoming[=metres[,wep_id]]</c> — the incoming-fire test rig: a phantom shooter sitting on
+/// <c>--incoming[=metres[,wep_id]]</c>, the incoming-fire test rig: a phantom shooter sitting on
 /// each player's six, walking a burst up the tailpipe. Reaches both incoming-fire cues and the
 /// shield behind them deterministically, without an AI gunner (which has to find its shot) or a
 /// second pilot in splitscreen. Fires the target's own gun (or the named weapon) into the shared
@@ -18,7 +18,7 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class IncomingFire : Node
 {
-    /// <summary>The shooter identity these rounds carry — outside every player index, so no
+    /// <summary>The shooter identity these rounds carry, outside every player index, so no
     /// aircraft ever excludes them as its own.</summary>
     public const int ShooterId = 10_000;
 
@@ -26,13 +26,13 @@ public sealed partial class IncomingFire : Node
     /// on the airframe, which is the only thing the original answers at all.</summary>
     public const float DefaultPass = 0f;
 
-    // How far behind the target the phantom muzzle sits. A round leaves dead straight (A1 —
+    // How far behind the target the phantom muzzle sits. A round leaves dead straight (A1,
     // CANNON_SPREAD is not a dispersion cone), so the offset achieved at the aircraft is the
     // requested one whatever this figure is. No data-driven reason remains for this exact number;
     // left at 120 m since nothing needs it changed.
     private const float Standoff = 120f;   // m
     // s between rounds, four a second: comfortably inside the shipped warning_shot_interval, so
-    // every interval closes with a hit and the shield charges to the full transition — passes, then
+    // every interval closes with a hit and the shield charges to the full transition, passes, then
     // ricochets and real damage. A slower rig leaves a quiet interval in every cycle, which re-arms
     // the shield forever and never shows the second half.
     private const float FireInterval = 0.25f;

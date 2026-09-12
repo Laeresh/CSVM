@@ -8,8 +8,8 @@ carried forward.
 Everything here is a description of *behaviour and constants*. No decompiler output is reproduced;
 the addresses are given so any claim can be re-checked at source.
 
-**Where the other halves live.** The authored side — the `OBJECT_MOTION` key list, the compiled
-event schema, the three `gravity` booleans as they reach us — is
+**Where the other halves live.** The authored side, the `OBJECT_MOTION` key list, the compiled
+event schema, the three `gravity` booleans as they reach us, is
 [`formats/anim-definitions.md`](../formats/anim-definitions.md), and the destructible's-eye view of
 what a kill throws is [`formats/destructibles.md`](../formats/destructibles.md). Our implementation
 is `CSVM/src/Mech3/Anim/MotionRuntime.cs`, whose entry in
@@ -25,22 +25,22 @@ appear, and both are retired findings rather than live ones. Where CSVM delibera
 is listed at the bottom rather than hidden.
 
 ⚠ **Scope.** This is the `OBJECT_MOTION` event kind alone. `OBJECT_MOTION_FROM_TO` and
-`OBJECT_MOTION_SI_SCRIPT` share a `RUN_TIME` field name and nothing else — different events,
+`OBJECT_MOTION_SI_SCRIPT` share a `RUN_TIME` field name and nothing else, different events,
 different update paths, none of this applies to them.
 
 ## Function map
 
 | Address | Role |
 |---|---|
-| `FUN_004e8fa0` | The per-frame `OBJECT_MOTION` update — every behaviour on this page below the parser |
+| `FUN_004e8fa0` | The per-frame `OBJECT_MOTION` update, every behaviour on this page below the parser |
 | `FUN_00508590` | The event parser: one token-block per authored key, each setting a bit in the event's flag word at `+0xc` |
-| `FUN_004e9e30` | The **default** contact tier — the ground-column test, and the surface pick |
+| `FUN_004e9e30` | The **default** contact tier, the ground-column test, and the surface pick |
 | `FUN_004c76e0` | The terrain-grid column query `FUN_004e9e30` calls: floors `(x, z)` into the world database's cell and returns that cell's surface records |
-| `FUN_004c8ec0` | The `DO_INTERSECTIONS` contact tier — a full geometry sweep against the same world database |
-| `FUN_004cf200` | Hands the column query the flying node's **origin** — the reason a landing rests the origin on the polygon, with no bounding-box term anywhere in the chain |
+| `FUN_004c8ec0` | The `DO_INTERSECTIONS` contact tier, a full geometry sweep against the same world database |
+| `FUN_004cf200` | Hands the column query the flying node's **origin**, the reason a landing rests the origin on the polygon, with no bounding-box term anywhere in the chain |
 | `FUN_0055bbc0` / `FUN_0055d5c0` | Fill a struck surface record's height: walk the struck mesh's polygons, return the polygon's height at `(x, z)` |
 | `FUN_004ccf50` / `FUN_004ccf00` | The self-hit guard: clear the flying piece's own `intersect_surface` bit around the query, then restore it |
-| `FUN_0053c6c0` | The sincos the launch azimuth is passed to — the **only** trigonometry on the launch path |
+| `FUN_0053c6c0` | The sincos the launch azimuth is passed to, the **only** trigonometry on the launch path |
 | `FUN_004d25c0` / `FUN_004d1ba0` | Accumulate the tumble onto the node's own euler angles (`node+0x18..0x20`) |
 | `FUN_004d27d0` / `FUN_004d1e50` | Add one step (`dt × live velocity`) to the node's own translation (Camera class 1 / Object3d class 5); the only position write on the launch path, and it is an ADD to the live field. `FUN_004d2710` / `FUN_004d1d50` are the absolute-set twins the sweep uses to rest a piece on the surface it struck |
 | `FUN_004cef20` | `gwNodeBuildNodeToAncestorMatrix`, walking a node's parent chain; the matrix both `COMPLEX` gravity and `IMPACT_FORCE` transform through |
@@ -76,8 +76,8 @@ full table with its corroboration is in the retired `analysis/object-motion-flag
 | `0x8000` | `GRAVITY DO_INTERSECTIONS` | `00508c41` | upgrades the landing test to the geometry sweep |
 
 **The `GRAVITY` block parses five tokens and only three of them survive compilation.** `DEFAULT` and
-`LOCAL <number>` are *value selectors* — both end with one float in the gravity slot and neither sets
-a bit — so they are indistinguishable once compiled. The three booleans the extractor ships are
+`LOCAL <number>` are *value selectors*, both end with one float in the gravity slot and neither sets
+a bit, so they are indistinguishable once compiled. The three booleans the extractor ships are
 exactly the three that exist; there is nothing here for it to be taught. `COMPLEX` is the one token
 that both sets a bit and may carry the value.
 
@@ -97,16 +97,16 @@ Enough of the layout to follow the rest of the page:
 | `+0x4c`…`+0x54` | authored `delta` |
 | `+0x58`…`+0x60` | **live** velocity |
 | `+0x64`…`+0x6c` | **live** acceleration |
-| `+0x70` / `+0x74` / `+0x78` | the launch **direction cache** — x, y, z; the extractor's `translation.rnd_xz` |
+| `+0x70` / `+0x74` / `+0x78` | the launch **direction cache**, x, y, z; the extractor's `translation.rnd_xz` |
 | `+0x80` / `+0x84` | tumble `delta`, and the **live** tumble rate |
-| `+0x148` | `RUN_TIME`, or — with no `RUN_TIME` authored — the watchdog accumulator reusing the same slot |
+| `+0x148` | `RUN_TIME`, or, with no `RUN_TIME` authored, the watchdog accumulator reusing the same slot |
 
 ## The launch direction, and why it is not unit length
 
 `TRANSLATION_RANGE` (flags `0x8`/`0x10`) draws an azimuth, an elevation, a speed and a `delta` from
 their authored ranges, then builds a direction that is **linear in the elevation, not spherical**:
 
-- `dirY` is `elevation × 0.011111111` — `1/90` written out, so ±90° gives ±1.
+- `dirY` is `elevation × 0.011111111`, `1/90` written out, so ±90° gives ±1.
 - The horizontal magnitude is the **L1 remainder**, `h = 1 − |elevation|/90`, and the azimuth's
   cosine and sine are scaled by it.
 - Only the **azimuth** is converted deg→rad (`× 0.017453292`) and passed to the sincos at
@@ -138,7 +138,7 @@ on that path: `delta` is m/s², not a total speed change spread over the flight.
 folded into the acceleration's Y **once**, at creation, not per frame.
 
 Install-wide, `delta` is non-zero on **233 of the 1,226** `translation_range` events and **92 of the
-757** vector ones, so most of the data cannot tell the two readings apart — the ones that can are
+757** vector ones, so most of the data cannot tell the two readings apart, the ones that can are
 worth checking directly.
 
 ## Gravity, in two forms
@@ -149,7 +149,7 @@ acceleration:
 - **Plain** (`0x1` set, `0x2000` clear): the authored value is added to the acceleration's Y **in
   the body's own parent frame**.
 - **`COMPLEX`** (`0x2000` set): the scalar add is skipped, and the world-down vector
-  `(0, value, 0)` is run through the node's matrix into that frame instead — the identical machinery
+  `(0, value, 0)` is run through the node's matrix into that frame instead, the identical machinery
   the `IMPACT_FORCE` branch uses to bring a parent's world velocity in.
 
 The two are arithmetically identical under a world-aligned parent, which is exactly why the install
@@ -261,15 +261,15 @@ The contact block sits behind `GRAVITY` (`0x1`) and branches
 `!DO_INTERSECTIONS → !NO_ALTITUDE → column`:
 
 - **The column tier** (`FUN_004e9e30`, the default) queries a **terrain-grid column** at the body's
-  next position — the world database, the body's `(x, z)` and its `y + stepY`, handed to
+  next position, the world database, the body's `(x, z)` and its `y + stepY`, handed to
   `FUN_004c76e0`. That query floors `(x, z)` into the database's cell and walks that cell's nodes,
   admitting only those whose flags carry
-  `altitude_surface` **and** `intersect_surface`. It returns the cell's surface records — `0x2c`
+  `altitude_surface` **and** `intersect_surface`. It returns the cell's surface records, `0x2c`
   bytes each, height at `+0x14`.
 - **The sweep tier** (`FUN_004c8ec0`, `DO_INTERSECTIONS`) is a full geometry sweep against the same
   world database, and it runs **every** frame regardless of step direction.
 - **`NO_ALTITUDE` is the opt-out**, and it vetoes the **column only**. It is authored on `gunshell`
-  and nothing else — 8 events, one per chapter.
+  and nothing else, 8 events, one per chapter.
 
 **How the column picks its surface, exactly.** It takes the *first* record unconditionally, whatever
 its height, then keeps whichever candidate's height is nearest the body's y in **absolute** value,
@@ -281,7 +281,7 @@ surface below within 10 m", and it is not a downward ray.
 `COMPLEX` the query runs only on a **descending** step, with it on every step. The sweep branch
 carries no such condition.
 
-**The struck surface picks the bounce branch.** Its type at `+0x20` maps `1→1`, `4→2` — the branch
+**The struck surface picks the bounce branch.** Its type at `+0x20` maps `1→1`, `4→2`, the branch
 index for `default` / `water` / `lava`. Install-wide the `BOUNCE_SEQUENCE` blocks name `default` 324
 times and `water` 104; **no block in the install names a lava branch**.
 
@@ -292,8 +292,8 @@ state byte 3 → 0 (`004e9aa8`-`004e9acf`). It always finds a live record, becau
 record from being stopped ([sequences.md](sequences.md), "A definition ends only when no sequence of
 it is still stepping").
 
-⚠ `altitude_surface` is **not** a terrain-only bit — the great majority of world nodes carry it,
-buildings included — so filtering a column by it does not keep debris off rooftops. Any argument
+⚠ `altitude_surface` is **not** a terrain-only bit, the great majority of world nodes carry it,
+buildings included, so filtering a column by it does not keep debris off rooftops. Any argument
 that reaches for it on that reasoning is reaching for the wrong thing.
 
 ## The landing response
@@ -301,16 +301,16 @@ that reaches for it on that reasoning is reaching for the wrong thing.
 The original **replaces the step's Y**; it reflects nothing.
 
 - While any of `|vx| ≥ 0.1`, `|vz| ≥ 0.1`, `|vy| ≥ 0.5` holds:
-  `stepY = |stepY × 0.5| + height − y` — i.e. the body is set half its descending step **above** the
+  `stepY = |stepY × 0.5| + height − y`, i.e. the body is set half its descending step **above** the
   surface.
 - Once all three have fallen below: `stepY = height − y` exactly, resting the body on the surface.
 - **X and Z are left untouched**, so the body keeps its horizontal travel through the contact frame.
-- All three velocity components are then multiplied by `0.19999999` — `0.2` in float — **keeping
+- All three velocity components are then multiplied by `0.19999999`, `0.2` in float, **keeping
   their signs**.
 
 **Termination is an energy test, not a bounce count:** the body ends when `accel² > speed²` at
 contact, and damps-and-continues otherwise. Each contact takes four fifths of the speed, so under
-Earth gravity a piece striking at 20 m/s damps to 4 and ends on its next contact — one or two hops.
+Earth gravity a piece striking at 20 m/s damps to 4 and ends on its next contact, one or two hops.
 
 ⚠ The two thresholds are asymmetric on purpose, and the horizontal one is tested **per axis**, not
 on the horizontal magnitude. ⚠ A damped body whose velocity keeps its downward sign does not hop off
@@ -327,16 +327,16 @@ origin. There is no offset here to find.
 
 **With `RUN_TIME` authored** (`0x400`): the final step is shortened by the overshoot
 (`dt = frameDt − (elapsed − RUN_TIME)`) so the motion ends exactly on time, and the update returns
-"done" once elapsed ≥ `RUN_TIME`. `RUN_TIME` is a **ceiling**, universally — a body that lands first
+"done" once elapsed ≥ `RUN_TIME`. `RUN_TIME` is a **ceiling**, universally, a body that lands first
 ends first.
 
 **With no `RUN_TIME`**: `+0x148` is reused as a watchdog accumulator that ends the body at **15 s**
 on the column path and **35 s** on the sweep path. ⚠ It is charged only on a step whose contact
-query **ran and came back empty** — a body descending toward ground it can see never accumulates a
+query **ran and came back empty**, a body descending toward ground it can see never accumulates a
 tick, and a non-`COMPLEX` body climbing is not even queried. It is a backstop, not a flight timer.
 
 Both halves of the landing response also run when the watchdog fires, with a **null** surface
-record — which indexes to `default`, and is what makes an untimed body still dispatch its bounce
+record, which indexes to `default`, and is what makes an untimed body still dispatch its bounce
 branch.
 
 ## The tumble (`FORWARD_ROTATION`)
@@ -348,7 +348,7 @@ acceleration: the update seeds a live rate at `+0x84` from `initial` and integra
 Per frame it applies the euler triple `(dirZ × rate × dt, 0, −dirX × rate × dt)` off the direction
 cache at `+0x70`/`+0x78`, accumulated onto the node's own angles (`FUN_004d25c0`/`FUN_004d1ba0`).
 That is a rotation about the horizontal axis **perpendicular to the launch direction**, left
-unnormalised — so its length is the launch's own `h = 1 − |elevation|/90`, and **a steep throw
+unnormalised, so its length is the launch's own `h = 1 − |elevation|/90`, and **a steep throw
 tumbles slowly while a flat one tumbles fast off the same authored number**.
 
 **A body launched by the vector `TRANSLATION` form tumbles about the direction the parser
@@ -388,14 +388,14 @@ change, which the original never does.
 
 - `SCALE` (`0x100`) is a linear ramp, clamped at 0.001, and the authored numbers are **offsets from
   unit scale** rather than absolute sizes. CSVM ramps that offset from `Vector3.One`; whether it
-  should instead be the node's own authored scale is undecided — every node carrying this channel
+  should instead be the node's own authored scale is undecided, every node carrying this channel
   in the install is authored at exactly unit scale, so the two readings coincide.
 - `MORPH` (`0x200`) writes `node+0x3c` into `+0x24`, clamped to 1. The original reads it; this
   engine does not, and no chapter in this install authors it.
 
 ## What the install actually authors
 
-Re-derived over all 8 chapters' `cam_anim`, walking **both** `sequences` and `unknown_seq` — the
+Re-derived over all 8 chapters' `cam_anim`, walking **both** `sequences` and `unknown_seq`, the
 compiled destruction slot a real kill dispatches (the retired
 `git show analysis-archive:analysis/object-motion-flags/census.py`).
 
@@ -411,7 +411,7 @@ others:
 | false | **true** | false | 8 (`gunshell`, one per chapter) | 1 |
 
 So **1,466** bodies take the column tier, 166 the sweep, and 8 opt out. `do_intersections: true` is
-a strict subset of `complex: true`, and all 254 `COMPLEX` carriers are aircraft wreckage — the
+a strict subset of `complex: true`, and all 254 `COMPLEX` carriers are aircraft wreckage, the
 eleven airframes, `player`, both `player_crash_*`, `agyrobus`, `autogyro_loserotor`,
 `drop_smokescreen_canister`. Three of them author gravity **stronger** than Earth's (−15, −20),
 which is not what a body with gravity switched off gets authored.
@@ -420,19 +420,19 @@ Over those 1,640 gravity blocks the commonest authored values are **−9.8** (63
 (408); the weak −1/−2/−3 sit on smoke trails, where floating is the authored look.
 
 **296** ballistic events author no `RUN_TIME` at all, and **every one of them carries a gravity
-block** — so every untimed body descends, and the watchdog is genuinely a backstop rather than the
+block**, so every untimed body descends, and the watchdog is genuinely a backstop rather than the
 thing that ends them. 120 of the 296 name a `BOUNCE_SEQUENCE`; the rest are switched off downstream
 by the flying piece's own `ACTIVE_STATE`.
 
 ## Where CSVM deliberately differs
 
-Everything here is a known, deliberate divergence — not a gap waiting to be closed.
+Everything here is a known, deliberate divergence, not a gap waiting to be closed.
 
 | Divergence | Why |
 |---|---|
 | **The column tier is a pair of rays, both cast DOWNWARD (from the body first, then from a column's height above it when the first answers nothing)**, not a grid-cell record pick | The engine has no terrain-grid cell database to query, so the column is drawn as a ray. Two of them are what makes the answer independent of the body's height, as the cell query's is: the first gives the nearest surface below and the second the surface standing over `(x, z)`, which is the original's own pick wherever a cell holds one ground surface. ⚠ One ray alone goes blind the moment a body is under the surface, so a step that overshoots can never be recovered and the body drifts to its watchdog. ⚠ The second may not be cast UPWARD from the body: colliders honour the polygon's own `SHOW_BACKFACE` and every water polygon in the install clears it, so a surface overhead answers nothing from below |
 | **The column reuses the collider set** (`intersect_surface`), without the original's `altitude_surface` filter | Measured, not assumed: the two sets differ by 28 nodes install-wide, every one a destructible's own sub-part rather than terrain or a building shell |
-| **`ColumnDepth` 4096 m** bounds each of the two rays | The original bounds nothing — its query is a cell lookup and the cell's surfaces come back at whatever depth they sit at. A ray needs a finite end; this one is past any chapter's vertical extent. ⚠ Shortening it invents a rule the original does not have |
+| **`ColumnDepth` 4096 m** bounds each of the two rays | The original bounds nothing, its query is a cell lookup and the cell's surfaces come back at whatever depth they sit at. A ray needs a finite end; this one is past any chapter's vertical extent. ⚠ Shortening it invents a rule the original does not have |
 | **Neither ray answers within about 4 cm of a surface** | Measured on the C1/M04 wreck: a body sitting that close reads as an empty column for a frame or two until it clears the band. Nothing rests inside it, because a contact parks the body half its descending step clear, so the effect is a short drift and not a lost landing |
 | **The sweep's `ArmDistance`/`ArmSeconds` epsilon** | Stands in for the original's own self-hit guard (`FUN_004ccf50`/`FUN_004ccf00`), which clears the flying piece's `intersect_surface` bit around the query instead |
 | **A session that wires no collision mask runs neither tier** | Structural, and it is what keeps the labs, the headless suites and 9 of the 14 goldens deterministic. The original always has a world database |
@@ -506,18 +506,18 @@ extractor's, not the binary's; do not read a mechanism out of it again.
 
 The elevation was applied as `sin(el)` with `cos(el)` on the horizontal, giving a unit-length
 direction. The binary computes `elev/90` with the L1 remainder and never passes the elevation
-through trigonometry at all. **Do not "fix" the non-unit magnitude** — a direction whose length
+through trigonometry at all. **Do not "fix" the non-unit magnitude**, a direction whose length
 varies with elevation looks like a bug and is the whole finding; normalising it reinstates the
 error. Measured at the controls, the unit-sphere reading launched `m_build03`'s 60–70° debris
 20–25 % too fast and cut six of its nine pieces at 67–72 % of their arc, still climbing.
 
-### ⚠ `DebrisTune.LaunchScale = 0.65` — DELETED (2026-08-13)
+### ⚠ `DebrisTune.LaunchScale = 0.65`, DELETED (2026-08-13)
 
 A global multiplier on every launch speed, judged at the controls against
 `OriginalScreenshots/Videos/m_build03 destruction.mp4`. It was a decode error wearing a tune's
 clothes: the elevation finding above supplies **0.745–0.81** across `m_build03`'s own 60–70° band,
 which is what the 0.65 was standing in for. ⚠ The **~0.58** that sits beside it in the older record
-is **measured off footage** — a frame comparison of that same kill — and by this project's standing
+is **measured off footage**, a frame comparison of that same kill, and by this project's standing
 rule a footage-derived measurement never contests a decode. The knob is gone in full: the class, the
 `--debris-launch`/`--debris-gravity` flags, the `debris.*` config keys and the lab panel. **If an arc
 reads wrong from here on, the answer is a further decode or a filed item, never a scalar.**
@@ -527,7 +527,7 @@ deletion.
 ### ⚠ `forward_rotation.Time.initial` as a total angle over `RUN_TIME`, about local X — RETIRED (2026-08-13)
 
 It is a rate in rad/s about the launch's own horizontal perpendicular. The reasoning that produced
-the total-angle reading — that "5π and 4.44π are clean multiples of π" — is a coincidence of the
+the total-angle reading, that "5π and 4.44π are clean multiples of π", is a coincidence of the
 authored numbers and must not be used to argue the decode back. ⚠ `CAP-16`'s wing-panel strip
 measured **20–30 °/s** (**measured off footage**) and was recorded as *confirming* the total-angle
 reading; it fits "those pieces do not tumble at all" better than either reading, and it is noted as
@@ -538,25 +538,25 @@ agreement only. No measurement off that footage decides this (`docs/verification
 The reasoning was that a change spread *over* the run time must be divided by it. The original
 stores `dir·delta` straight into the acceleration slot. The units change by the run time itself: a
 `delta` under a 5 s `RUN_TIME` now contributes **five times** as much acceleration. If a specific def
-looks wrong afterwards, re-read its block — do not reinstate the division.
+looks wrong afterwards, re-read its block, do not reinstate the division.
 
 ### ⚠ "`do_intersections: false` means the original ran no contact test" — RETIRED (2026-08-12)
 
 The default path **is** a contact test; `DO_INTERSECTIONS` only upgrades it to the geometry sweep.
 This claim is what justified 1,466 bodies sinking through the world as fidelity, and what left
-`BL-245`'s falls deferred on "a decision to diverge" that never existed. Its companion — "`RUN_TIME`
-is a flight duration" — died with it.
+`BL-245`'s falls deferred on "a decision to diverge" that never existed. Its companion, "`RUN_TIME`
+is a flight duration", died with it.
 
 ### ⚠ "`no_altitude` is gravity or spawn positioning reckoned relative to terrain altitude" — RETIRED (2026-08-13)
 
 Exactly inverted: `NO_ALTITUDE` is the **opt-out from the landing test**. The reasoning that killed
 the correct reading ran from `PT-46` (d), below.
 
-### ⚠ `PT-46` (d) — the OBSERVATION stands, the MECHANISM was misattributed
+### ⚠ `PT-46` (d), the OBSERVATION stands, the MECHANISM was misattributed
 
 At the controls, the original's debris was seen sinking through terrain, and that observation is
-real and is not withdrawn. What was wrong is the mechanism drawn from it — "so the original runs no
-ground test, and `do_intersections: false` is the proof" — which then propagated into two documents
+real and is not withdrawn. What was wrong is the mechanism drawn from it, "so the original runs no
+ground test, and `do_intersections: false` is the proof", which then propagated into two documents
 as a settled reading and killed the correct one. The decode resolves the conflict in the other
 direction: the original *does* test, and it rests a piece's node **origin** on the struck polygon
 with no extent term, so a piece whose geometry hangs below its origin looks sunk. ⚠ Recorded as a

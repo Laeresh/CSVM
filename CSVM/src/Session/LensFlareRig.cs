@@ -13,7 +13,7 @@ namespace CSVM.Session;
 /// sun→screen-centre vector, plus a full-screen white wash whose opacity rises as the sun nears
 /// centre. One instance per pane, ticked from the same per-rig block as <see cref="WeatherRig"/>.
 /// The whole spec is measured off footage, not decoded: <c>docs/org/weather.md</c>.
-/// ⚠ Two gates must agree — a gamez <c>sun</c> node and <c>LensFlareTexture</c> slots — true only
+/// ⚠ Two gates must agree, a gamez <c>sun</c> node and <c>LensFlareTexture</c> slots, true only
 /// of C2 and C3; a disagreement is a real signal about the data and is logged, not smoothed over.
 /// ⚠ C2's flare is predicted, not verified; only C3 was captured. Do not treat C2 as matched.
 /// Per-pane state lives here rather than on <see cref="PlayerRig"/>, unlike the simpler cloud
@@ -23,7 +23,7 @@ public sealed class LensFlareRig
     // ── Measured off the footage, at 1280×720 ──────────────────────────────────────────────────
     // Every pixel figure below is normalised by pane HEIGHT against this reference. Godot's default
     // KeepHeight aspect means vertical FOV stays 62° whatever the window or pane shape, so height
-    // is the axis that maps to a fixed angle — normalising by it keeps each element the same
+    // is the axis that maps to a fixed angle, normalising by it keeps each element the same
     // ANGULAR size as measured, in every pane, at every resolution. The raw measurement is kept in
     // the comments so a decoded FOV would make this a one-line conversion.
     private const float RefHeight = 720f;
@@ -44,16 +44,16 @@ public sealed class LensFlareRig
     // left alone. The pose/statistic matching and the measured values: docs/org/weather.md.
     private static readonly Element[] Elements =
     {
-        // Core — at the sun, "saturated-white disc, blue-cyan skirt", ~63 px half-max, blooming to
+        // Core, at the sun, "saturated-white disc, blue-cyan skirt", ~63 px half-max, blooming to
         // ~86 near centre. Measured Δlum: saturating, hence full intensity.
         new(0f, 63f, 1.00f),
-        // Ring A — frac 0.50, ~100–104 px, soft wide dim ring. Measured Δlum 10–12; calibrated
+        // Ring A, frac 0.50, ~100–104 px, soft wide dim ring. Measured Δlum 10–12; calibrated
         // 0.30 → 0.38, which reads 11.0 (see the calibration note below).
         new(0.50f, 102f, 0.38f),
-        // Ring B — frac 0.90, ~42–48 px, the crispest and brightest. Measured Δlum 14–21;
+        // Ring B, frac 0.90, ~42–48 px, the crispest and brightest. Measured Δlum 14–21;
         // reads 17.3, mid-band, uncalibrated.
         new(0.90f, 45f, 0.45f),
-        // Ring C — frac 1.95–2.0, ~158–170 px, the faintest. Measured Δlum 3–9; reads 5.0,
+        // Ring C, frac 1.95–2.0, ~158–170 px, the faintest. Measured Δlum 3–9; reads 5.0,
         // mid-band, uncalibrated.
         new(2.0f, 164f, 0.18f),
     };
@@ -63,13 +63,13 @@ public sealed class LensFlareRig
 
     public LensFlareRig(SessionSpec spec) => _spec = spec;
 
-    /// <summary>How many panes got a flare — 0 when the chapter authors none, which is every
+    /// <summary>How many panes got a flare, 0 when the chapter authors none, which is every
     /// chapter but C2 and C3.</summary>
     public int InstanceCount => _instances.Count;
 
     /// <summary>Reads the chapter's <c>LensFlareTexture</c> slot registrations out of the interp
     /// extraction, returning the texture name per slot in slot order. Empty when the chapter
-    /// registers none — which is the gate, not an error. Mirrors
+    /// registers none, which is the gate, not an error. Mirrors
     /// <see cref="Clutter.TemplateNames"/>, which reads <c>adjust.gw</c> from the same file the
     /// same way.</summary>
     public static List<string> FlareTextureNames(string interpPath, string chapter)
@@ -97,7 +97,7 @@ public sealed class LensFlareRig
     }
 
     /// <summary>Builds one flare per rig, or nothing at all when either gate is closed. Safe to
-    /// call for every chapter — the gates do the deciding.</summary>
+    /// call for every chapter, the gates do the deciding.</summary>
     public void Build(IReadOnlyList<PlayerRig> rigs, TextureArchive textures,
         string interpPath, string chapter)
     {
@@ -111,7 +111,7 @@ public sealed class LensFlareRig
 
         if (names.Count == 0 || !anySun)
         {
-            // Log only when the two gates DISAGREE — that is data telling us something we have not
+            // Log only when the two gates DISAGREE, that is data telling us something we have not
             // decoded. Both closed is the ordinary case for six of the eight chapters.
             if (names.Count > 0 != anySun)
             {
@@ -259,7 +259,7 @@ public sealed class LensFlareRig
         }
     }
 
-    // Instant attack, timed release — the measured shape: the rig "pops in complete" when
+    // Instant attack, timed release, the measured shape: the rig "pops in complete" when
     // the sun core enters frame and fades over ~0.1–0.15 s as it leaves.
     private static float Step(float current, bool on, double delta)
         => on ? 1f : Mathf.Max(0f, current - ((float)delta / FadeOutSeconds));
@@ -273,7 +273,7 @@ public sealed class LensFlareRig
     // One flare element: where it sits along the sun→screen-centre vector, how wide it is at
     // RefHeight, and how hard it is drawn. `Frac` 0 is the sun, 1 the screen centre.
     // ⚠ Slot order ascending the vector is a fact about this four-element rig, not a decoded
-    // rule about the format — see docs/org/weather.md.
+    // rule about the format, see docs/org/weather.md.
     private readonly record struct Element(float Frac, float DiaPx, float Intensity);
 
     private sealed class Instance

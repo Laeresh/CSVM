@@ -5,8 +5,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The row rules the two Options screens share for the four display settings: a label per
-/// vocabulary entry, the two forgiving reads (an unknown word reads as the vocabulary's first value,
-/// a size the screen does not offer reads as the project default) and the wrap a sideways step
+/// vocabulary entry, the two forgiving reads (an unknown word reads as the setting's own default,
+/// a size the screen does not offer reads as the screen's own size) and the wrap a sideways step
 /// takes. Engine-free, so the multi-screen and other-screen cases this machine cannot show are
 /// proved by handing the rules a list.</summary>
 public class DisplaySettingRowsTests
@@ -25,27 +25,30 @@ public class DisplaySettingRowsTests
     [InlineData(DisplayWords.Borderless, 1)]
     [InlineData(DisplayWords.Fullscreen, 2)]
     public void ASavedDisplayModeReadsAsItsOwnPosition(string word, int expected) =>
-        Assert.Equal(expected, DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, word));
+        Assert.Equal(expected, DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, word, DisplayModeSetting.Default));
 
     /// <summary>A word the vocabulary does not know, and no saved word at all, both read as the
-    /// first value, which each display vocabulary orders as the behaviour with no options file.</summary>
+    /// setting's own default, the behaviour with no options file, which is not the vocabulary's
+    /// first value for either display setting.</summary>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("maximised")]
-    public void AnUnknownDisplayModeReadsAsWindowed(string? word)
+    public void AnUnknownDisplayModeReadsAsTheDefault(string? word)
     {
-        Assert.Equal(0, DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, word));
-        Assert.Equal(DisplayWords.Windowed, DisplayWords.DisplayModes[0]);
+        int at = DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, word, DisplayModeSetting.Default);
+        Assert.Equal(DisplayModeSetting.Default, DisplayWords.DisplayModes[at]);
+        Assert.NotEqual(0, at);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("240")]
-    public void AnUnknownVSyncChoiceReadsAsOn(string? word)
+    public void AnUnknownVSyncChoiceReadsAsTheDefault(string? word)
     {
-        Assert.Equal(0, DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, word));
-        Assert.Equal(DisplayWords.VSyncOn, DisplayWords.VSyncChoices[0]);
+        int at = DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, word, VSyncSetting.Default);
+        Assert.Equal(VSyncSetting.Default, DisplayWords.VSyncChoices[at]);
+        Assert.NotEqual(0, at);
     }
 
     [Fact]
@@ -53,37 +56,38 @@ public class DisplaySettingRowsTests
     {
         var offered = ResolutionSetting.SizesUnder(1920, 1080);
 
-        Assert.Equal(offered.Count - 1, DisplaySettingRows.ResolutionIndex(offered, "1920x1080"));
-        Assert.Equal("1920x1080", offered[DisplaySettingRows.ResolutionIndex(offered, "1920x1080")]);
+        Assert.Equal(offered.Words.Count - 1, DisplaySettingRows.ResolutionIndex(offered, "1920x1080"));
+        Assert.Equal("1920x1080", offered.Words[DisplaySettingRows.ResolutionIndex(offered, "1920x1080")]);
     }
 
-    /// <summary>A size the screen no longer offers reads as the project default, never as the first
-    /// size in the list, which is the smallest the monitor holds rather than the size a launch with
-    /// no options file runs at. The row has to agree with `ResolutionSetting.Resolve`'s fallback or
-    /// it would name a size the window is not standing at.</summary>
+    /// <summary>A size the screen no longer offers reads as the list's own fallback, the screen's
+    /// size, never as the first size in the list, which is the smallest the monitor holds rather
+    /// than the size a launch with no options file runs at. The row has to agree with
+    /// `ResolutionSetting.Resolve`'s fallback or it would name a size the window is not standing at.</summary>
     [Theory]
     [InlineData("3840x2160")]
     [InlineData(null)]
     [InlineData("800x600")]
-    public void ASizeTheScreenDoesNotOfferReadsAsTheProjectDefault(string? saved)
+    public void ASizeTheScreenDoesNotOfferReadsAsTheScreensOwnSize(string? saved)
     {
         var offered = ResolutionSetting.SizesUnder(1600, 900);
 
-        Assert.DoesNotContain(saved ?? "", offered);
-        Assert.Equal(ResolutionSetting.Default, offered[DisplaySettingRows.ResolutionIndex(offered, saved)]);
+        Assert.DoesNotContain(saved ?? "", offered.Words);
+        Assert.Equal(offered.Fallback, offered.Words[DisplaySettingRows.ResolutionIndex(offered, saved)]);
+        Assert.Equal("1600x900", offered.Fallback);
     }
 
     /// <summary>The resolution row's words are enumerated from a screen rather than shipped as a
-    /// list, so the same saved size reads as itself on the screen that holds it and as the project
-    /// default on the one that does not. This is what a monitor step has to re-enumerate.</summary>
+    /// list, so the same saved size reads as itself on the screen that holds it and as that screen's
+    /// own size on the one that does not. This is what a monitor step has to re-enumerate.</summary>
     [Fact]
     public void TheSameSavedSizeReadsDifferentlyOnTwoScreens()
     {
         var wide = ResolutionSetting.SizesUnder(3840, 2160);
         var small = ResolutionSetting.SizesUnder(1280, 800);
 
-        Assert.Equal("2560x1440", wide[DisplaySettingRows.ResolutionIndex(wide, "2560x1440")]);
-        Assert.Equal(ResolutionSetting.Default, small[DisplaySettingRows.ResolutionIndex(small, "2560x1440")]);
+        Assert.Equal("2560x1440", wide.Words[DisplaySettingRows.ResolutionIndex(wide, "2560x1440")]);
+        Assert.Equal(small.Fallback, small.Words[DisplaySettingRows.ResolutionIndex(small, "2560x1440")]);
     }
 
     /// <summary>A monitor index no screen answers to reads as the screen the window already stands

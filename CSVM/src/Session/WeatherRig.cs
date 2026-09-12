@@ -11,8 +11,8 @@ namespace CSVM.Session;
 /// <summary>Loads and applies the flown mission's weather (<see cref="Build"/>) and drives the
 /// per-rig skydome/whiteout/deck/zone-gate update every frame (<see cref="Tick"/>). Constructed
 /// once per session, same lifetime as <see cref="LiveryResolver"/>/<see cref="SpawnPicker"/>/
-/// <see cref="WorldEffectsFactory"/>. The horizon build loop stays on <c>GameSession</c> — a
-/// <c>SceneBuilder</c> concern, not weather state — and <see cref="Build"/> only invokes it as a
+/// <see cref="WorldEffectsFactory"/>. The horizon build loop stays on <c>GameSession</c>, a
+/// <c>SceneBuilder</c> concern, not weather state, and <see cref="Build"/> only invokes it as a
 /// callback between resolving the zone and applying fog/whiteout/precip.
 /// This class is the sole owner of render visibility: <see cref="Tick"/> narrows each camera's
 /// cull mask to its own <see cref="CSVM.Mech3.ZoneGate"/> state and switches this rig's own deck
@@ -70,14 +70,14 @@ public sealed class WeatherRig
     // dissolving into the coming haze instead of vanishing the frame before it starts.
     private const float EnhancedShadowFadeStart = 0.8f;
 
-    // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
+    // ⚠ TUNE, and the FALLBACK only, a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It holds because the three reachable-band chapters that author
     // nothing measure right at this value: the original's C1 in-cloud interior reads 248 against
     // our 243, and C1C and C2B share C1's colourless CLOUD_COVER block. Do not "unify" it with the
     // zone FOG_COLOR: C1's fog is 0.69 = 176, which would darken a passing A/B by 70 units.
     private static readonly Color WhiteoutFallbackColor = new(0.95f, 0.95f, 0.96f);
 
-    // One flicker per rig, keyed like `_lastLoggedVolumeWhiteout` — the original keeps its drift
+    // One flicker per rig, keyed like `_lastLoggedVolumeWhiteout`, the original keeps its drift
     // state in a single global, but that assumes one camera, and splitscreen panes on opposite
     // sides of the band must not share a drift phase.
     private readonly Dictionary<int, BandFlicker> _bandFlicker = new();
@@ -95,7 +95,7 @@ public sealed class WeatherRig
     private readonly ViewerSet _viewers;
     // The world's one DirectionalLight3D, whose bearing is the zone's authored
     // SUNLIGHT_ORIENTATION. A constructor argument rather than a SetX() like SetDeckZoneId /
-    // SetFogVolumes, because ApplyZone cannot do its job without it — the others are optional
+    // SetFogVolumes, because ApplyZone cannot do its job without it, the others are optional
     // refinements to a rig that already works, this is not.
     private readonly DirectionalLight3D _sun;
     // The session's one Environment, written by both lighting arms: the ambient source, colour
@@ -103,18 +103,18 @@ public sealed class WeatherRig
     // the suites build rigs without one, and a null simply leaves the ambient unwritten.
     private readonly Godot.Environment? _env;
     // One rig's deck tiles and which variant they currently carry, keyed by the deck node's
-    // instance id — per rig, because each rig flies its own copy of the deck (AssignCloudDecks)
+    // instance id, per rig, because each rig flies its own copy of the deck (AssignCloudDecks)
     // through its own altitude regime.
     private readonly Dictionary<ulong, DeckLighting> _deckLighting = new();
     // The deck Y last applied to each rig's OWN deck copy (keyed by instance id, same key
-    // SetDeckDimmed uses), so Tick can log a change rather than every frame — the probe evidence
+    // SetDeckDimmed uses), so Tick can log a change rather than every frame, the probe evidence
     // that the deck sits at its authored altitude rather than the band centre.
     private readonly Dictionary<ulong, float> _lastLoggedDeckY = new();
-    // Per rig, the last in-volume whiteout density logged — so a probe's log says the curtain
+    // Per rig, the last in-volume whiteout density logged, so a probe's log says the curtain
     // engaged and how hard, without a line every frame. Only the crossings of the 0/non-0 boundary
     // and moves of 0.05 or more are said out loud.
     private readonly Dictionary<int, float> _lastLoggedVolumeWhiteout = new();
-    // Extra (sun, env) pairs that mirror the session sun and Environment in enhanced mode — the
+    // Extra (sun, env) pairs that mirror the session sun and Environment in enhanced mode, the
     // cockpit overlay's own clones, registered once each is built, so a zone crossing mid-flight
     // reaches the interior pass too rather than leaving it lit for the mission's first zone.
     private readonly List<(DirectionalLight3D Sun, Godot.Environment? Env)> _extraLighting = new();
@@ -123,19 +123,19 @@ public sealed class WeatherRig
     private string _activeZone;
     private Precipitation? _precip;
     private Vector3 _deckCenter;
-    // The deck tiles' own authored altitude (WorldBuilder.CloudDeckAltitude) — where the deck floor
+    // The deck tiles' own authored altitude (WorldBuilder.CloudDeckAltitude), where the deck floor
     // sits, world-fixed, in both regimes.
     private float _deckAltitude;
     // The deck tiles' undimmed meshes by dimmed-mesh RID (WorldBuilder.CloudDeckUndimmedMeshes).
     private IReadOnlyDictionary<Rid, ArrayMesh> _deckUndimmedMeshes = new Dictionary<Rid, ArrayMesh>();
     private bool _loggedDeckLighting;
-    // The chapter's fog-volume census + whether its fogvol.zrd arms fog_zone — the two inputs
+    // The chapter's fog-volume census + whether its fogvol.zrd arms fog_zone, the two inputs
     // CameraWeatherState's state-3 test needs. Set separately from Build for the same reason as
     // _deckCenter: this is chapter/world data (GameSession's fogVolumes census), not mission
     // weather, built once beside the world rather than per rig. Empty/false by default, which
     // simply never resolves to state 3 (most chapters).
     private IReadOnlyList<FogVolumeBox> _fogVolumes = Array.Empty<FogVolumeBox>();
-    // The same chapter data read as the in-volume WHITEOUT — the two decompiled ramps, the union
+    // The same chapter data read as the in-volume WHITEOUT, the two decompiled ramps, the union
     // and the authored fog_color (FogVolumeWhiteout). Disarmed everywhere but C5, where it costs
     // nothing: Density short-circuits on the flag before touching a volume.
     private FogVolumeWhiteout _fogWhiteout = FogVolumeWhiteout.Disarmed;
@@ -148,10 +148,10 @@ public sealed class WeatherRig
     // (WorldBuilder.CloudDeckZoneId). -1 = ungated, which is what a chapter with no deck and a
     // legacy extraction both give, and it simply keeps the node visible at every state. The domes
     // are the other such subtree and carry their zone ids per dome, on the rig
-    // (PlayerRig.HorizonDomes) — there is one per built horizon zone, not one per rig.
+    // (PlayerRig.HorizonDomes), there is one per built horizon zone, not one per rig.
     private int _deckZoneId = -1;
 
-    // The mission's global wind — the WIND block's static vector plus its random-walk gust
+    // The mission's global wind, the WIND block's static vector plus its random-walk gust
     // (Effects.WorldWind). Still air until LoadWeather reads a weather.json, and still air for a
     // mission that has none.
     private WorldWind _wind = WorldWind.Still();
@@ -205,7 +205,7 @@ public sealed class WeatherRig
         => (authoredY, cameraY < bandCentre);
 
     /// <summary>The trailing zone number of a <c>zone1</c>/<c>zone2</c>/<c>zone3</c> name, or null
-    /// for anything else — the <c>--sky-zone</c> STATE OVERRIDE. An explicit
+    /// for anything else, the <c>--sky-zone</c> STATE OVERRIDE. An explicit
     /// <c>--sky-zone=zoneN</c> forces the <see cref="CSVM.Mech3.ZoneGate"/> to state N as well as
     /// pinning the fog: the flag exists so an inspection pose reproduces, and a pose whose fog
     /// said <c>zone2</c> while its CONTENT was culled for state 1 would not be that. Public and
@@ -272,7 +272,7 @@ public sealed class WeatherRig
         panorama.Panorama = ImageTexture.CreateFromImage(image);
     }
 
-    /// <summary>Registers a second (sun, env) pair — a cockpit overlay's cloned copies — so every
+    /// <summary>Registers a second (sun, env) pair, a cockpit overlay's cloned copies, so every
     /// future zone change reaches it too, not only the zone live when it was built. Both lighting
     /// arms mirror the LEVELS and COLOURS they resolve. <paramref name="env"/> may be null (a suite
     /// rig with no Environment). Excluded: the shadow max distance, a clone's camera having its own
@@ -332,13 +332,13 @@ public sealed class WeatherRig
     /// <summary>The deck geometry's original AABB centre, so <see cref="Tick"/> can re-anchor it
     /// under each player every frame. Set separately from <see cref="Build"/> because the cloud
     /// deck is world geometry (<c>GameSession</c>'s <c>cloudDeck</c>), not weather state, and is
-    /// built whenever a chapter world loads — not only when this rig itself gets built.</summary>
+    /// built whenever a chapter world loads, not only when this rig itself gets built.</summary>
     public void SetDeckCenter(Vector3 center) => _deckCenter = center;
 
     /// <summary>The deck tiles' undimmed twin meshes
     /// (<c>WorldBuilder.CloudDeckUndimmedMeshes</c>), which is what lets <see cref="Tick"/> take
     /// the deck's SUNLIGHT dimming off above the cloud band (<c>DeckDimmed</c>). Set from
-    /// the same place as <see cref="SetDeckCenter"/>, for the same reason — the deck is world
+    /// the same place as <see cref="SetDeckCenter"/>, for the same reason, the deck is world
     /// geometry built with the chapter, not weather state. An empty map (a chapter with no deck,
     /// or a world built before this existed) simply leaves the deck as built.</summary>
     public void SetDeckUndimmedMeshes(IReadOnlyDictionary<Rid, ArrayMesh> undimmed)
@@ -360,7 +360,7 @@ public sealed class WeatherRig
         _fogWhiteout = FogVolumeWhiteout.From(spec, volumes);
     }
 
-    /// <summary>The cloud deck's own gamez <c>zone_id</c> (<c>WorldBuilder.CloudDeckZoneId</c>) —
+    /// <summary>The cloud deck's own gamez <c>zone_id</c> (<c>WorldBuilder.CloudDeckZoneId</c>),
     /// the one piece of the zone gate that cannot ride a visual layer, because the deck is a
     /// per-rig camera-anchored copy. Set from the same place as <see cref="SetDeckCenter"/>, for
     /// the same reason: the deck is world geometry built with the chapter, not mission weather.
@@ -371,24 +371,24 @@ public sealed class WeatherRig
     /// read off the built data. Set from the same place as <see cref="SetDeckCenter"/>, for the
     /// same reason: the deck is world geometry built with the chapter, not mission weather.
     /// <see cref="Tick"/> places the deck HERE rather than at
-    /// <see cref="WeatherState.CloudBandCentre"/> — the two differ by 87 m in C1. Never called
+    /// <see cref="WeatherState.CloudBandCentre"/>, the two differ by 87 m in C1. Never called
     /// leaves the deck at 0, unread where <c>rig.Deck</c> is null.</summary>
     public void SetDeckAltitude(float altitude) => _deckAltitude = altitude;
 
     /// <summary>Everything decided per camera, once per rig: re-centers the skydome, fades the
     /// cloud-band whiteout, places the cloud deck in its regime, and applies the
-    /// <see cref="CSVM.Mech3.ZoneGate"/> cull mask for that camera's weather state — plus
+    /// <see cref="CSVM.Mech3.ZoneGate"/> cull mask for that camera's weather state, plus
     /// <c>Node3D.Visible</c> on this rig's own deck and dome copies. Every camera in the session
     /// comes through here, including the freecam/probe camera, so a scripted shot obeys the same
     /// rules the player does.</summary>
     public void Tick(IReadOnlyList<PlayerRig> rigs)
     {
         // The flicker's rate input: null only outside a running session (GameClock.Current unset),
-        // which freezes the flicker rather than pacing it off a wall clock — nothing calls Tick
+        // which freezes the flicker rather than pacing it off a wall clock, nothing calls Tick
         // there anyway.
         float frameDt = GameClock.Current?.FrameDt ?? 0f;
 
-        // Stepped once per frame, ahead of the rig loop and everything that reads it — the
+        // Stepped once per frame, ahead of the rig loop and everything that reads it, the
         // original has one wind for the world, and stepping it per rig would double a
         // splitscreen session's gust rate.
         _wind.Step(frameDt);
@@ -423,8 +423,8 @@ public sealed class WeatherRig
             if (rig.Horizon != null)
                 rig.Horizon.Position = camPos;
 
-            // One overlay, two sources: the CLOUD_COVER band's altitude whiteout, and — where
-            // the chapter arms fog_zone — the fvol volumes' own curtain. See docs/org/weather.md
+            // One overlay, two sources: the CLOUD_COVER band's altitude whiteout, and, where
+            // the chapter arms fog_zone, the fvol volumes' own curtain. See docs/org/weather.md
             // "Precedence: 3 beats 2".
             if (rig.Whiteout != null && _weather != null)
             {
@@ -436,7 +436,7 @@ public sealed class WeatherRig
                 // the volume curtain for the same reason.
                 float band = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
                 // The decompiled in-cloud flicker, applied only while the band opacity sits
-                // strictly inside (0,1) — the binary's own guard. See docs/org/weather.md.
+                // strictly inside (0,1), the binary's own guard. See docs/org/weather.md.
                 if (band > 0f && band < 1f)
                     band = ApplyBandFlicker(rig.Index, band, frameDt);
                 float volume = _spec.NoFog ? 0f : _fogWhiteout.Density(camPos);
@@ -453,7 +453,7 @@ public sealed class WeatherRig
                 }
                 else
                 {
-                    // The band alone, by construction — which is what keeps the seven disarmed
+                    // The band alone, by construction, which is what keeps the seven disarmed
                     // chapters (and C5 away from its strips) on the plain band path.
                     c.A = band;
                 }
@@ -461,9 +461,9 @@ public sealed class WeatherRig
                 rig.Whiteout.Color = c;
             }
 
-            // The deck sits at its own authored altitude, X/Z-following the camera only — never
-            // pinned to the band centre (docs/org/weather.md "The band-centre deck pin —
-            // SUPERSEDED") — and docs/formats/fogvol.md has the fvol slab clearance.
+            // The deck sits at its own authored altitude, X/Z-following the camera only, never
+            // pinned to the band centre (docs/org/weather.md "The band-centre deck pin,
+            // SUPERSEDED"), and docs/formats/fogvol.md has the fvol slab clearance.
             if (rig.Deck != null && _weather is { HasCloudBand: true } weather)
             {
                 (float deckY, bool deckDimmed) = DeckRegime(camPos.Y, weather.CloudBandCentre, _deckAltitude);
@@ -472,7 +472,7 @@ public sealed class WeatherRig
                     deckY - _deckCenter.Y,
                     camPos.Z - _deckCenter.Z);
                 // Logged only on a change, so the probe's log names the exact Y this rig's deck
-                // copy renders at — the authored 960/1050, at every altitude. A SECOND line here
+                // copy renders at, the authored 960/1050, at every altitude. A SECOND line here
                 // means the deck moved, and something is wrong.
                 ulong deckId = rig.Deck.GetInstanceId();
                 if (!_lastLoggedDeckY.TryGetValue(deckId, out float lastY) || !Mathf.IsEqualApprox(lastY, deckY))
@@ -483,7 +483,7 @@ public sealed class WeatherRig
                         $"deck: player {rig.Index} camera y={camPos.Y:0.0} -> deck y={deckY:0.0} ({regime})");
                 }
                 // Below the band centre the camera sees the overcast's dimmed underside, above it
-                // the undimmed top — masked by the same opaque whiteout core the crossing sits in
+                // the undimmed top, masked by the same opaque whiteout core the crossing sits in
                 // (docs/org/weather.md "The cloud deck's two regimes").
                 SetDeckDimmed(rig.Deck, deckDimmed);
             }
@@ -507,7 +507,7 @@ public sealed class WeatherRig
                 dome.Node.Visible = !gateDomes || ZoneGate.Draws(dome.ZoneId, gate);
         }
 
-        // The camera's zone, re-applied only at the state edge — never per frame, since the deck
+        // The camera's zone, re-applied only at the state edge, never per frame, since the deck
         // rim annulus reads these same fog globals. Driven by rig 0 because these are global
         // shader uniforms, so splitscreen wears rig 0's zone (docs/org/weather.md).
         if (_weather != null && rigs.Count > 0
@@ -552,7 +552,7 @@ public sealed class WeatherRig
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 
-    // "zone2 0 meshes, zone1 3 meshes" — the evidence the pick was made on, not just its result.
+    // "zone2 0 meshes, zone1 3 meshes", the evidence the pick was made on, not just its result.
     private static List<string> HorizonZoneCounts(IReadOnlyList<HorizonZone> horizonZones)
     {
         var counts = new List<string>();
@@ -587,7 +587,7 @@ public sealed class WeatherRig
     private static Vector3 Scaled(float intensity, Color colour) =>
         new(colour.R * intensity, colour.G * intensity, colour.B * intensity);
 
-    // Says out loud that one rig's in-volume whiteout engaged, and how hard — the
+    // Says out loud that one rig's in-volume whiteout engaged, and how hard, the
     // evidence a probe reads, since a curtain that never fires and one that fires at 0.02 look
     // the same in a night frame. Only the 0 ↔ non-0 crossings and moves of 0.05 or
     // more are logged, so a pass through a street strip costs a handful of lines rather than one
@@ -612,7 +612,7 @@ public sealed class WeatherRig
     }
 
     // This rig's flicker off the band's raw `WhiteoutAmount`, seeded from the
-    // same Rng.Clouds stream every `--det` run re-derives identically —
+    // same Rng.Clouds stream every `--det` run re-derives identically,
     // created lazily so the first call for a rig is that rig's own frame 0 (the identity
     // guarantee lives in BandFlicker.Apply, not here).
     private float ApplyBandFlicker(int rigIndex, float op, float frameDt)
@@ -698,15 +698,15 @@ public sealed class WeatherRig
         }
     }
 
-    // Resolves _activeZone, the zone the fog and skydome both build from — the mission's own
+    // Resolves _activeZone, the zone the fog and skydome both build from, the mission's own
     // zone names first, then, for the default request only, the chapter's horizon geometry
     // (a bare-marker dome yields to a zone that has one). An explicit --sky-zone= is honoured
-    // literally, empty dome and all — see docs/cli.md. Called before the domes because C5's
+    // literally, empty dome and all, see docs/cli.md. Called before the domes because C5's
     // zone1+zone3 chapter needs the fallback before the zone2 default renders neither.
     private void LoadWeather(string missionZrdrPath, IReadOnlyList<HorizonZone> horizonZones)
     {
         _weather = WeatherState.Load(missionZrdrPath);
-        // The mission's WIND block, read per mission rather than baked — see docs/org/weather.md
+        // The mission's WIND block, read per mission rather than baked, see docs/org/weather.md
         // for the authored values every weather.zrd shares. A mission with no weather.json gets
         // still air, not someone else's breeze.
         _wind = _weather == null
@@ -746,7 +746,7 @@ public sealed class WeatherRig
         if (!byFile.Equals(_spec.SkyZone, StringComparison.OrdinalIgnoreCase))
             // Not a fault: a chapter that numbers its zones differently resolves here every
             // flight. C5 (zone1/zone3) does so on all 8 missions, and zone1 is the confirmed
-            // correct choice there — so this must not read as a missing-data warning.
+            // correct choice there, so this must not read as a missing-data warning.
             GD.Print($"weather: {_spec.Chapter}/{_spec.Mission} has no '{_spec.SkyZone}' "
                      + $"(zones: {string.Join("/", _weather.ZoneNames)}) — rendering '{_activeZone}'");
     }
@@ -754,7 +754,7 @@ public sealed class WeatherRig
     // Applies the loaded weather: sets the distance-fog global shader parameters for
     // the rendered sky zone (all world + aircraft surfaces pick them up), and builds the
     // full-screen cloud-band whiteout overlay (its opacity is driven each frame from the camera
-    // altitude in Tick). No-op if the mission has no weather.json — the fog
+    // altitude in Tick). No-op if the mission has no weather.json, the fog
     // globals keep their registered no-op range. Call LoadWeather first.
     private void SetupWeather(IReadOnlyList<PlayerRig> rigs)
     {
@@ -784,7 +784,7 @@ public sealed class WeatherRig
     // Applies one zone: the fog globals, the SUNLIGHT-derived world light, and the sun's
     // bearing, returning the fog range written. Called by SetupWeather at build and by Tick on
     // every zone change; every write below is idempotent, letting the second caller be an edge
-    // trigger. ⚠ Keep fog and light in one method — splitting would let one drift from the other.
+    // trigger. ⚠ Keep fog and light in one method, splitting would let one drift from the other.
     // ⚠ Every write below is GlobalShaderParameterSet, never Add: Add runs once per process in
     // Launcher._Ready, so a second Add on an in-process relaunch of a foggy mission crashes.
     private Vector2 ApplyZone(WeatherState.ZoneWeather fog)
@@ -800,16 +800,16 @@ public sealed class WeatherRig
             ? new Vector2(1e8f, 1e9f)   // out of reach; --no-fog writes the range, not the unused csky_fog_on toggle
             : FogRangeFor(new Vector2(fog.FogNear, fog.FogFar));
         WriteFogRange(fogRange);
-        // FOG_ALTITUDE: the fog cylinder's vertical extent — full fog below FogLow, fading to
-        // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original —
+        // FOG_ALTITUDE: the fog cylinder's vertical extent, full fog below FogLow, fading to
+        // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original,
         // see csky_atmosphere.gdshaderinc and docs/org/weather.md).
         WriteFogAltitude(new Vector2(fog.FogLow, fog.FogHigh));
         // World brightness from the zone's SUNLIGHT, applied as a scalar on the fullbright
-        // world/deck/dome. Applied in gamma space, matching the DX7 baked-lighting chain — see
+        // world/deck/dome. Applied in gamma space, matching the DX7 baked-lighting chain, see
         // docs/org/weather.md for the measured gamma-vs-linear difference.
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
-        // The zone's authored SUNLIGHT_ORIENTATION, adopted unconditionally — no tune, no clamp.
+        // The zone's authored SUNLIGHT_ORIENTATION, adopted unconditionally, no tune, no clamp.
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
         _sun.Rotation = fog.SunOrientation;
@@ -865,7 +865,7 @@ public sealed class WeatherRig
         }
     }
 
-    // The per-rig whiteout overlays and the mission's precipitation field — the half of
+    // The per-rig whiteout overlays and the mission's precipitation field, the half of
     // SetupWeather that builds NODES rather than writing global shader parameters,
     // split out so the zone-apply half (ApplyZone) can be re-run on a camera-state
     // change without rebuilding either.
@@ -879,7 +879,7 @@ public sealed class WeatherRig
         if (_weather.HasCloudBand || _fogWhiteout.Armed)
         {
             // One overlay per rig: in splitscreen it must dim only the pane whose player is
-            // inside the cloud. The ambient cloud field is not here — see Effects/FogVolumeClutter.
+            // inside the cloud. The ambient cloud field is not here, see Effects/FogVolumeClutter.
             foreach (var rig in rigs)
             {
                 // A pane-filling overlay so the whiteout swallows everything (terrain, plane,
@@ -899,7 +899,7 @@ public sealed class WeatherRig
         }
 
         // Rain/snow: only missions whose weather.json carries a TYPE block get a field, and it
-        // shows below the CLOUD_COVER band only. Self-animating off csky_time — see this
+        // shows below the CLOUD_COVER band only. Self-animating off csky_time, see this
         // module's own docs/architecture.md entry.
         _precip = Precipitation.Create(_weather.Precip, _weather.CloudBottom, _weather.CloudTop);
         if (_precip != null)
@@ -929,14 +929,14 @@ public sealed class WeatherRig
 
     /// <summary>What one camera-state change asks the fog chain to do: which state it is, the zone
     /// that state resolved to, whether the globals need re-writing at all
-    /// (<see cref="Applied"/> — false when two states share a zone through the file fallback), and
+    /// (<see cref="Applied"/>, false when two states share a zone through the file fallback), and
     /// whether that resolution WAS a fallback, reported once per state
     /// (<see cref="FellBack"/>).</summary>
     public readonly record struct FogZoneChange(int State, string Zone, bool Applied, bool FellBack);
 
     /// <summary>The edge trigger between <c>PlayerRig.CameraWeatherState</c> and the fog globals:
     /// answers which zone's fog is now live, and <c>null</c> every other frame.
-    /// ⚠ Edge-triggered, not per-frame-recomputed — the deck rim annulus reads these same
+    /// ⚠ Edge-triggered, not per-frame-recomputed, the deck rim annulus reads these same
     /// globals, and a per-frame rewrite would shimmer at the boundary. <see cref="Applications"/>
     /// lets a test assert the count, since a repeated write is invisible otherwise.
     /// Stays silent when <paramref name="stateDriven"/> is false (an explicit <c>--sky-zone</c>)
@@ -950,7 +950,7 @@ public sealed class WeatherRig
 
         /// <param name="stateDriven">False pins the fog to <paramref name="buildZone"/> for the
         /// whole flight (an explicit <c>--sky-zone</c>).</param>
-        /// <param name="buildZone">The zone <c>WeatherRig.Build</c> already applied — the trigger
+        /// <param name="buildZone">The zone <c>WeatherRig.Build</c> already applied, the trigger
         /// starts live on it, so a chapter whose state-1 zone is that same zone never writes a
         /// global.</param>
         public FogStateTrigger(bool stateDriven, string buildZone)
@@ -992,18 +992,18 @@ public sealed class WeatherRig
     /// ⚠ Frame 0 is not <c>t = 0</c>. Neither curve is the identity at an interior opacity, so a
     /// fresh instance instead ramps the blended remap's amplitude in from 0 over
     /// <see cref="RampFrames"/> calls, keeping <see cref="Apply"/>'s first call bit-for-bit
-    /// identity — what the golden shots and <c>FlatColorTests</c>/<c>DeckRegimeTests</c> pins
+    /// identity, what the golden shots and <c>FlatColorTests</c>/<c>DeckRegimeTests</c> pins
     /// were measured against.</summary>
     public sealed class BandFlicker
     {
-        // ⚠ TUNE — the decompile's rate multiplier is read from a per-mission weather-struct field
+        // ⚠ TUNE, the decompile's rate multiplier is read from a per-mission weather-struct field
         // (≈ +0x934) that no reader decodes and no capture pins a value for. Picked so the MIDPOINT
         // of the re-randomized drift speed (0.2..1.0, mean 0.6) traverses the full [0,1] range in a
         // few seconds: 5.5 * 0.6 * 0.1 = 0.33/s -> ~3 s at the mean, 1.8-9.2 s across the
         // randomized range.
         public const float DefaultRate = 5.5f;
 
-        // ⚠ TUNE — how many `Apply` calls (sim frames) the amplitude ramps in over: 30 = 0.5 s
+        // ⚠ TUNE, how many `Apply` calls (sim frames) the amplitude ramps in over: 30 = 0.5 s
         // at the fixed 60 Hz `--det` step. Long enough that the ramp itself is not the shimmer;
         // short enough that a flight spends effectively none of its time in it.
         public const int RampFrames = 30;
@@ -1019,11 +1019,11 @@ public sealed class WeatherRig
             _driftSpeed = RandomDriftSpeed(rng);
         }
 
-        /// <summary>The blend parameter's current value — exposed for the determinism test, not
+        /// <summary>The blend parameter's current value, exposed for the determinism test, not
         /// consumed by <see cref="WeatherRig"/>.</summary>
         public float T => _t;
 
-        /// <summary>The log-shaped curve: <c>ln(op*5+1)/ln(6)</c> — the binary computes both terms
+        /// <summary>The log-shaped curve: <c>ln(op*5+1)/ln(6)</c>, the binary computes both terms
         /// as <c>log2</c>, but the base cancels in the ratio, so natural log reproduces it
         /// exactly.</summary>
         public static float LogCurve(float op) => MathF.Log((op * 5f) + 1f) / MathF.Log(6f);
@@ -1033,15 +1033,15 @@ public sealed class WeatherRig
         public static float AtanCurve(float op) =>
             (MathF.Atan((op - 0.5f) * 10f) + 0.5f) / (MathF.Atan(5f) + 0.5f);
 
-        /// <summary>The two curves blended by <paramref name="t"/> and clamped to [0,1] — the
+        /// <summary>The two curves blended by <paramref name="t"/> and clamped to [0,1], the
         /// binary's <c>fVar3 = (logCurve - atanCurve) * t + atanCurve</c> followed by its own
         /// clamp. Both curves agree at <c>op=1</c> (both equal 1) and the clamp forces <c>op=0</c>
         /// to 0 regardless of <paramref name="t"/> (<c>AtanCurve(0)</c> is negative), which is why
-        /// the remap never moves the band's hard edges — only its interior.</summary>
+        /// the remap never moves the band's hard edges, only its interior.</summary>
         public static float Remap(float op, float t) =>
             Mathf.Clamp(AtanCurve(op) + (t * (LogCurve(op) - AtanCurve(op))), 0f, 1f);
 
-        /// <summary>Advances the drift by one frame and returns the flickered opacity — identity on
+        /// <summary>Advances the drift by one frame and returns the flickered opacity, identity on
         /// the very first call (see the class summary), and identity again whenever
         /// <paramref name="op"/> sits exactly at 0 or 1 (the binary's guard: the whole remap block,
         /// including the drift update, is skipped there, so a band pinned at a hard edge never
@@ -1079,7 +1079,7 @@ public sealed class WeatherRig
 
     // ONE rig's deck copy, resolved for the lit-variant swap: its tiles with both
     // meshes each, and which variant they are carrying now (null until the first
-    // Tick decides). Per deck copy, not per session — see
+    // Tick decides). Per deck copy, not per session, see
     // SetDeckDimmed.
     private sealed class DeckLighting
     {

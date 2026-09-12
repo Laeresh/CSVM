@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CSVM.Flight;
 
 /// <summary>One row of an Ammo Selection dropdown: the value the rig consumes and the label the
-/// original's screen shows for it. Both are authored because they diverge — the gun matrix's
+/// original's screen shows for it. Both are authored because they diverge, the gun matrix's
 /// <c>magnesium</c> reads "Explosive" on the screen, and a pylon's <c>wep_NN</c> has no
 /// player-facing name at all.</summary>
 public readonly record struct LoadoutOption(string Id, string Label);
@@ -27,7 +27,7 @@ public sealed class LoadoutOptions
 /// One pilot's edits to a fit, keyed by <b>slot identity</b> and never by position in a def's
 /// arrays: gun slots 1–4 and pylons 1–8 are the formats' own ceilings (eight firepoints taken in
 /// pairs, <see cref="Loadout.PylonFillOrder"/>'s eight). That is what lets one choice apply to a
-/// base it was not built against — a custom plane's saved fit as much as a stock one — with a
+/// base it was not built against, a custom plane's saved fit as much as a stock one, with a
 /// pick for a slot the base lacks simply dropped.
 ///
 /// <para>A null entry means "as the base authored it", which is what makes reset-to-stock a clear
@@ -109,7 +109,7 @@ public sealed class LoadoutChoice
         Array.Clear(_pylons);
     }
 
-    /// <summary>This choice laid over <paramref name="stock"/>, as a new def — the base is never
+    /// <summary>This choice laid over <paramref name="stock"/>, as a new def, the base is never
     /// mutated. The base is handed in rather than looked up so a custom plane's saved fit works
     /// here unchanged. A gun slot picked <see cref="None"/> is omitted from the result entirely
     /// rather than built with no rounds, so it never occupies a slot in the gun cycle.</summary>

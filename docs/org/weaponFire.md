@@ -28,7 +28,7 @@ at `plane + (group·3 + 0x13e)·4` (= byte offset `0x138 + 12·group`). Only **o
   one that can fire, and `FUN_004b34f0` drives the "fire when a ready group exists" logic using
   the same single `+0x604` index.
 
-There is no second "active gun" state — four groups, one armed at a time, one `+0x604` selector.
+There is no second "active gun" state, four groups, one armed at a time, one `+0x604` selector.
 That is the engine's "one gun slot at a time" model, verbatim.
 
 ## The fire tick spawns exactly ONE round
@@ -50,7 +50,7 @@ fire-tick. The interval is gated by the group's counter, decremented
 elsewhere until it drops below the fire threshold seen in `FUN_004b34f0`
 (`plane + (group·3 + 0x13e)·4 < 1`).
 
-Consequently the effective rounds per second equals the authored `FIRE_RATE` — the same data the
+Consequently the effective rounds per second equals the authored `FIRE_RATE`, the same data the
 engine already reads (8.0 for `wep_40`). The two muzzle slots are visual/aim, not a doubled rate.
 
 ## The firing sound plays from the aircraft's own position, not from a muzzle
@@ -143,22 +143,22 @@ Each gun group still has two barrel slots:
 `FUN_004b3e50` iterates **4 groups × 2 barrels** at `plane + 0x3b8 + i·0x24` (the same
 `+0x3a4 + i·0x24` slot array the aim-assist half reads for its "two barrel slots",
 [`aim-assist.md`](aim-assist.md)). It updates muzzle-flash/recoil timers
-(`_DAT_0071c45c + counter < DAT_0071c470` → reset) — visuals for a two-muzzle gun, matching the
+(`_DAT_0071c45c + counter < DAT_0071c470` → reset), visuals for a two-muzzle gun, matching the
 engine's alternating muzzles at the *same total* rate. They do not emit a second projectile.
 
 ## Why the clip read "~12–13/s" and why that is wrong
 
 The clip's counter dropped **46 rounds** (2371→2325). At the true `FIRE_RATE` 8.0/s that is a
 ~5.75 s burst. The motion-redraw window the earlier analysis used to time the burst only captured
-~4.5 s (frames 113–247 at 30 fps) — the redraw detector under-bounds the firing, and dividing the
+~4.5 s (frames 113–247 at 30 fps), the redraw detector under-bounds the firing, and dividing the
 46-counter by shorter windows inflates the rate (46/4.5 ≈ 10.2; the "12–13" figure came from an even
 narrower window). This is the same redraw-artifact trap `FINDINGS.md` already flagged. The engine's
 8.0/s is the correct rate; there is no rate shortfall to fix.
 
 ## Implication for the gun-rattle amplitude (`BL-266`(a))
 
-With rate ruled out, BL-266's remaining amplitude avenue — the "(B) 60 fps pose-interpolation"
-loss — is also ruled out and replaced by a **decode, clip-independent** finding: the shake pivot
+With rate ruled out, BL-266's remaining amplitude avenue, the "(B) 60 fps pose-interpolation"
+loss, is also ruled out and replaced by a **decode, clip-independent** finding: the shake pivot
 is written once per 60 Hz physics tick and Godot auto physics interpolation is OFF, so the 15 Hz
 sawtooth renders stepped with no smoothing loss. After that, what the engine renders is fully
 determined by decoded constants + the oscillator's own math: a kick of envelope `E` renders

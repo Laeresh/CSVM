@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The D14 gunnery gates, engine-free: <see cref="AiGunner.Solve"/> is pure over its arguments
-/// (the seeded rng feeds only the per-shot scatter, which these tests never draw — the rng is
+/// (the seeded rng feeds only the per-shot scatter, which these tests never draw, the rng is
 /// null here on purpose, and the scatter cone itself is pinned by the in-engine
 /// <c>ai-gunnery</c> suite and the aim-assist suite's Scatter cases). Geometry: shooter and
 /// target static unless stated, round at 500 m/s inside the gun's shipped 1 to 900 m window.

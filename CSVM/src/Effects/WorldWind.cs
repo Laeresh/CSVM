@@ -13,7 +13,7 @@ namespace CSVM.Effects;
 /// ⚠ Not <c>PARTICLES</c>' <c>WIND_DIR</c>/<c>WIND_VEL</c> in the same file. Those drive
 /// precipitation drift (<see cref="Precipitation"/>) and are a different mechanism.
 /// ⚠ The magnitude step carries no <c>dt</c>; only the heading step does. Reproduced as traced,
-/// not smoothed — an invented <c>dt</c> would be a breeze the original never had.
+/// not smoothed, an invented <c>dt</c> would be a breeze the original never had.
 /// </summary>
 public sealed class WorldWind
 {
@@ -47,7 +47,7 @@ public sealed class WorldWind
         _angVelRadPerSecond = randomAngVelDegrees * AngVelDegToRad;
         _rng = rng;
         // The globals live in BSS, so the original's first frame starts from heading 0 and
-        // magnitude 0 — i.e. from the static vector alone.
+        // magnitude 0, i.e. from the static vector alone.
         Velocity = staticVelocity;
     }
 
@@ -63,7 +63,7 @@ public sealed class WorldWind
     /// assertions.</summary>
     public float Magnitude => _magnitude;
 
-    /// <summary>A wind that never blows — a mission with no <c>weather.json</c>, and the
+    /// <summary>A wind that never blows, a mission with no <c>weather.json</c>, and the
     /// still-air default every <see cref="EffectAmbience"/> starts on.</summary>
     public static WorldWind Still() =>
         new(Vector3.Zero, 0f, 0f, 0f, new Random(0));
@@ -71,7 +71,7 @@ public sealed class WorldWind
     /// <summary>Advances the gust one frame, exactly in the engine's order: turn the
     /// heading, step the magnitude, reflect a negative magnitude through +π, clamp to the ceiling,
     /// then compose. The heading wrap happens BEFORE the reflection and is not re-applied after
-    /// it, so the stored heading can sit above 2π for a frame — harmless (cos/sin do not care)
+    /// it, so the stored heading can sit above 2π for a frame, harmless (cos/sin do not care)
     /// and reproduced rather than tidied.</summary>
     public void Step(float dt)
     {
@@ -88,7 +88,7 @@ public sealed class WorldWind
             _heading += Tau;
         }
 
-        // ⚠ No dt here — see the class remark. This is the traced arithmetic.
+        // ⚠ No dt here, see the class remark. This is the traced arithmetic.
         _magnitude += Symmetric() * _accelPerFrame;
         if (_magnitude < 0f)
         {
@@ -108,7 +108,7 @@ public sealed class WorldWind
 
     // The engine's own symmetric draw: `rand()·3.051851e-05 + rand()·3.051851e-05 −
     // 1.0` with one `rand()` result reused, i.e. `rand()/16384 − 1` over
-    // `rand()`'s 0…32767 — `[−1, +0.99994]`, not quite symmetric, and quantised to
+    // `rand()`'s 0…32767, `[−1, +0.99994]`, not quite symmetric, and quantised to
     // 1/16384. Reproduced at that quantisation because it is free to do so. ⚠ This idiom is the
     // engine's ±1 draw and is deliberately NOT what the spawn deviation uses.
     private float Symmetric() => (_rng.Next(32768) / 16384f) - 1f;
@@ -136,7 +136,7 @@ public sealed class EffectAmbience
 
     private EffectAmbience(bool frozen) => _frozen = frozen;
 
-    /// <summary>Still air — the shared, unwritable default. See the class remark.</summary>
+    /// <summary>Still air, the shared, unwritable default. See the class remark.</summary>
     public static EffectAmbience Still { get; } = new(frozen: true);
 
     /// <summary>The world's wind velocity this frame (m/s), <see cref="WorldWind.Velocity"/>.
@@ -144,7 +144,7 @@ public sealed class EffectAmbience
     public Vector3 Wind { get; private set; }
 
     /// <summary>Whether any camera pose has been published. False means "no camera known", and the
-    /// camera-distance fade is skipped entirely rather than measured against the origin — the right
+    /// camera-distance fade is skipped entirely rather than measured against the origin, the right
     /// answer for every caller that has no camera to give (the unit suites, the plane viewer, the
     /// damage lab), which would otherwise near-cull half their particles under the unauthored
     /// <c>NEAR_FADE</c> default's hard cull at depth 0.</summary>
@@ -153,11 +153,11 @@ public sealed class EffectAmbience
     /// <summary>This frame's camera poses, one per rendered pane (one in single player, freecam and
     /// every scripted shot). Position and world-space forward (<c>-Z</c>) both, because the
     /// original's fade distance is the VIEW-SPACE DEPTH along that axis and not the euclidean
-    /// range — see <see cref="Puffer.DistanceAlpha"/>, which evaluates the bands against each entry
+    /// range, see <see cref="Puffer.DistanceAlpha"/>, which evaluates the bands against each entry
     /// and keeps the most favourable answer.</summary>
     public IReadOnlyList<ViewerSet.ViewerPose> Viewers => _viewers;
 
-    /// <summary>Publishes this frame's wind. Throws on <see cref="Still"/> — see the class
+    /// <summary>Publishes this frame's wind. Throws on <see cref="Still"/>, see the class
     /// remark.</summary>
     public void SetWind(Vector3 wind)
     {

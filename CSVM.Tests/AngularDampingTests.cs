@@ -58,7 +58,7 @@ public class AngularDampingTests
     public void ADeliberatelyLargeTimestepStaysBoundedWhereExplicitEulerWouldFlipSignAndGrow()
     {
         // dt·damp = 5·1 = 5, past the linear form's stability edge at dt·damp = 2. Roll, stick
-        // centred, wings level, on-path: cmd is zero, so this is pure decay of a pre-existing rate —
+        // centred, wings level, on-path: cmd is zero, so this is pure decay of a pre-existing rate,
         // the case that actually separates the two forms.
         var stats = Stats();
         var m = new FlightModel(stats);
@@ -73,14 +73,14 @@ public class AngularDampingTests
         float expDecay = Mathf.Exp(-stats.AngMomentumDamp * largeDt);
         Assert.True(Mathf.IsEqualApprox(m.BodyRates.Z, expDecay, 1e-6f),
             $"roll rate {m.BodyRates.Z:0.000000} vs exp(-damp·dt) {expDecay:0.000000}");
-        // The point: bounded, positive, strictly decayed at any dt — never the sign flip
+        // The point: bounded, positive, strictly decayed at any dt, never the sign flip
         // and 4x growth the linear form would have produced here (linearFactor · 1 = -4).
         Assert.True(m.BodyRates.Z is > 0f and < 1f,
             $"roll rate {m.BodyRates.Z:0.000000} must stay in (0, 1) — positive and decayed, unlike "
             + $"the linear form's {linearFactor:0.000000}");
     }
 
-    // The Bloodhawk's real dynamics — see WeathervaneTests/BankCouplingTests for why the
+    // The Bloodhawk's real dynamics, see WeathervaneTests/BankCouplingTests for why the
     // placeholder `PlaneStats()` defaults would hide a wrong axis behind near-equal
     // components.
     private static PlaneStats Stats() => new()

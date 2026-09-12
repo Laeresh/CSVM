@@ -134,7 +134,9 @@ internal static class MenuLaunchReturnSuites
     private static void Switch(TestContext ctx, Run run, Godot.Environment env, Godot.Sky? sky)
     {
         var host = run.Host;
-        host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: null);
+        // Built-in is asked for by a saved request, since the shipped default is Original and the
+        // walk below switches from Built-in's Options row.
+        host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: PresentationId.BuiltIn.Value);
         WorldBackdrop.Black(env);
         run.Show(MenuReturnDestination.TopLevel);
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -148,9 +150,15 @@ internal static class MenuLaunchReturnSuites
         WalkTo(run, menu, LaunchMenu.OptionsRow);
         run.Press(Accept);
         run.Press(Down);
-        run.Press(Right);
+        // The row opens on the saved word, which with no options file is the shipped Original, so
+        // it is stepped until it reads Original rather than assumed to start one step short of it.
+        for (int i = 0; i < 2 && !menu.ShownRowText.EndsWith("Original", StringComparison.Ordinal); i++)
+        {
+            run.Press(Right);
+        }
+
         ctx.Check(menu.ShownRowText.EndsWith("Original", StringComparison.Ordinal),
-            $"Right on the presentation row asks for Original ({menu.ShownRowText})");
+            $"the presentation row is stepped to Original ({menu.ShownRowText})");
         WalkTo(run, menu, "Apply and restart the menu");
         run.Press(Accept);
         var applied = run.Expect<OptionsApplyExit>();

@@ -11,12 +11,12 @@ namespace CSVM.Testing;
 /// <summary>The `--screenshot=`/`--shots=`/`--frames=` capture state machine, plus F11/F12's
 /// placement print and ad-hoc save: constructed once in `_Ready` from the launch spec (a
 /// --screenshot burst is a process-scoped capture, never re-armed by a menu relaunch), then
-/// `Tick()`ed from the tail of `_Process`. Reads camera/orbit/rigs — passed in per call, no
+/// `Tick()`ed from the tail of `_Process`. Reads camera/orbit/rigs, passed in per call, no
 /// back-reference to the host node. The saved line reports the frame the shot landed on and which
 /// counter named it; `docs/tooling.md` holds the contract the golden harness reads it under.</summary>
 public sealed class CaptureDirector
 {
-    // The capture still owed, taken from the spec at launch and cleared once written — a --shots=
+    // The capture still owed, taken from the spec at launch and cleared once written, a --shots=
     // burst counts down through _shotIndex and this goes null when the last frame lands.
     private string? _pendingShot;
     private int _shotDelay;            // frames still to wait before the first capture
@@ -37,7 +37,7 @@ public sealed class CaptureDirector
         _shotDelay = spec.ScreenshotFrames;
     }
 
-    /// <summary>A capture is still owed — every other `--screenshot`-conditioned display choice
+    /// <summary>A capture is still owed, every other `--screenshot`-conditioned display choice
     /// (HUD/panel visibility, exit-on-build-failure) reads this instead of the raw field. Never
     /// re-derive it from the spec: a burst clears it mid-session.</summary>
     public bool Pending => _pendingShot != null;
@@ -48,7 +48,7 @@ public sealed class CaptureDirector
         string.Format(System.Globalization.CultureInfo.InvariantCulture,
             "{0:0.###},{1:0.###},{2:0.###}", v.X, v.Y, v.Z);
 
-    /// <summary>Same, for a direction — normalized, and finer, since a unit vector's components
+    /// <summary>Same, for a direction, normalized, and finer, since a unit vector's components
     /// are small enough that 3 decimals would quantise the aim to ~0.03°.</summary>
     public static string DirArg(Vector3 v) =>
         string.Format(System.Globalization.CultureInfo.InvariantCulture,
@@ -81,7 +81,7 @@ public sealed class CaptureDirector
     }
 
     /// <summary>The capture block at the tail of `_Process`. Nothing built yet: only shoot once a
-    /// session's plane exists — unless the launchscreen is up (--menu --screenshot captures the
+    /// session's plane exists, unless the launchscreen is up (--menu --screenshot captures the
     /// menu itself for layout verification).</summary>
     public void Tick(Viewport viewport, SceneTree tree, SessionSpec spec, GameClock? clock,
         OrbitCamera orbit, Camera3D camera, Node3D? plane, bool menuVisible)
@@ -131,7 +131,7 @@ public sealed class CaptureDirector
         }
         else
         {
-            // A missing parent directory fails SavePng silently — say so instead of "saved".
+            // A missing parent directory fails SavePng silently, say so instead of "saved".
             Log.Error("core", $"screenshot save FAILED ({saveErr}): {path} frame={frame} clock={counter} sim_frame={simFrame}");
         }
         // The golden-image tripwire's whole input: a hash of the RAW pixels (never the PNG, whose
@@ -152,7 +152,7 @@ public sealed class CaptureDirector
         }
     }
 
-    /// <summary>Print the mode's SUBJECT placement as ready-to-paste arguments (F11, any mode) —
+    /// <summary>Print the mode's SUBJECT placement as ready-to-paste arguments (F11, any mode),
     /// the same pair that placed it, so a pose found by hand reproduces in a deterministic
     /// --screenshot run. In flight that subject is the PLANE (player 1's position and nose), not
     /// the chase camera, because that is what --pos/--direction place there. The orbit view prints
@@ -188,7 +188,7 @@ public sealed class CaptureDirector
     // Rotate the burst camera a hair around the framed point each --shots frame so
     // coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
     // sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
-    // the pivot — depths change, but the camera keeps looking at the pivot so the subject
+    // the pivot, depths change, but the camera keeps looking at the pivot so the subject
     // stays centred. Static mode only: in --fly the FlightController owns the camera each
     // frame (and the plane's own motion already surfaces the fight).
     private void ApplyShotJitter(OrbitCamera orbit, Camera3D camera, SessionSpec spec)

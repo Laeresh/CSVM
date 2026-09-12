@@ -6,12 +6,12 @@ namespace CSVM.Tests;
 /// <summary>
 /// The Instant Action wizard's own pure static surface: the wave
 /// editor's Militia/Aircraft/Skill rosters and its own build step. LaunchMenu itself is
-/// engine-bound and untestable directly, so these are the facts standing behind its wave editor —
+/// engine-bound and untestable directly, so these are the facts standing behind its wave editor,
 /// the same role SessionSpecMenuTests plays for the Mode/Environment/MissionType screens.
 /// </summary>
 public class LaunchMenuWizardTests
 {
-    /// <summary>The thirteen militias, in the langui dropdown order (3670) — docs/formats/instant-action.md
+    /// <summary>The thirteen militias, in the langui dropdown order (3670), docs/formats/instant-action.md
     /// "The thirteen militias and their aircraft".</summary>
     [Fact]
     public void TheThirteenMilitiasExistInLanguiOrder()
@@ -27,7 +27,7 @@ public class LaunchMenuWizardTests
     }
 
     /// <summary>The `.BM` pattern-coverage reading (decision 7), not vehicle.json's narrower
-    /// paint_pattern one — Fortune Hunter covers all eleven airframes and Sacred Trust covers the
+    /// paint_pattern one, Fortune Hunter covers all eleven airframes and Sacred Trust covers the
     /// Warhawk, both of which the def-based reading would get wrong. Each roster is in the langui
     /// 3700 order, which is FUN_00410420's mask bit order: a militia never reorders the dropdown,
     /// it only filters it.</summary>
@@ -53,7 +53,7 @@ public class LaunchMenuWizardTests
             UI.LaunchMenu.PlaneNames());
 
     /// <summary>Fortune Hunter, the player's own militia, is legal as an enemy militia in the
-    /// original's list and is never filtered out here (trap c) — it covers all eleven airframes,
+    /// original's list and is never filtered out here (trap c), it covers all eleven airframes,
     /// the same roster the Plane screen itself offers.</summary>
     [Fact]
     public void FortuneHunterCoversAllElevenAirframes() =>
@@ -69,7 +69,7 @@ public class LaunchMenuWizardTests
 
     /// <summary>The wave editor's own build step: a configured slot (count > 0) becomes a real
     /// InstantActionWave off the militia/aircraft/skill cursors; an unconfigured one (count 0)
-    /// is <see cref="InstantAction.EmptyWave"/> regardless of what those cursors are sitting on —
+    /// is <see cref="InstantAction.EmptyWave"/> regardless of what those cursors are sitting on,
     /// they are not "configured" until a pilot actually raises the count.</summary>
     [Fact]
     public void WaveForBuildsAConfiguredSlot()

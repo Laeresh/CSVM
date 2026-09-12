@@ -28,13 +28,13 @@ internal sealed class MotionRuntime : IAnimMotion
     // ⚠ TUNE, not a decode. A launched piece starts inside the wreck it left, so it must clear
     // distance or time before the sweep arms, or it pops the bounce on frame 0.
     // ⚠ Do not drop either bound: see docs/org/objectMotion.md's ArmDistance/ArmSeconds row for
-    // why both are kept — ArmSeconds does the real work, ArmDistance stays an unfalsified guard.
+    // why both are kept, ArmSeconds does the real work, ArmDistance stays an unfalsified guard.
     private const float ArmDistance = 2f;
 
     private const float ArmSeconds = 0.1f;
 
     // How far down TryGroundColumn looks, chosen past any chapter's vertical extent rather than
-    // decoded — see docs/org/objectMotion.md's ColumnDepth row.
+    // decoded, see docs/org/objectMotion.md's ColumnDepth row.
     // ⚠ Do not shorten it; that stops a piece over a canyon from being tested at all.
     private const float ColumnDepth = 4096f;
 
@@ -80,7 +80,7 @@ internal sealed class MotionRuntime : IAnimMotion
     private bool _hasScale;
 
     // forward_rotation: a live rate about the launch's own perpendicular. angle(t) = rate·t +
-    // ½·accel·t², turned about `_tumbleAxis` — zero for a body whose launch direction is vertical
+    // ½·accel·t², turned about `_tumbleAxis`, zero for a body whose launch direction is vertical
     // or absent.
     private float _tumbleRate, _tumbleAccel;
 
@@ -107,7 +107,7 @@ internal sealed class MotionRuntime : IAnimMotion
     // Selected once at creation, from the gravity block alone; both tiers stay structurally off in
     // a session that wired no collision mask, which is the whole fallback.
     private MotionContactTier _contactTier;
-    private bool _complexGravity;   // widens the column's per-step admission — see TryGroundColumn
+    private bool _complexGravity;   // widens the column's per-step admission, see TryGroundColumn
     private uint _contactMask;
     private AnimData? _bounce;      // the BOUNCE_SEQUENCE block, chosen from AT CONTACT
     private Func<GodotObject?, bool>? _surfaceIsWater;
@@ -119,7 +119,7 @@ internal sealed class MotionRuntime : IAnimMotion
     // origin, the damped velocity the new v0, and this the new zero of its clock.
     private float _ballisticStart;
     private int _contacts;
-    private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
+    private Vector3 _landedOrigin;  // parent frame, the pose the body holds from contact onward
     private float _landedAt;        // the clock at contact; rotation and scale freeze there too
     // The body's own frame on the previous contact-tested step. The solve is in that frame, so the
     // speed the frame itself is travelling at appears nowhere in `_v0` or `_accel`, and the energy
@@ -152,7 +152,7 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <summary>The duration this body REPORTS: the authored <c>RUN_TIME</c>, or, for a launch
     /// that carries none, the time its own parabola takes to return to launch height.
     /// ⚠ This is the SEQUENCE's number, not the body's. What ends the body is
-    /// <see cref="Finished"/>'s own ceiling, which can outlast this — see docs/org/objectMotion.md
+    /// <see cref="Finished"/>'s own ceiling, which can outlast this, see docs/org/objectMotion.md
     /// on the termination model.</summary>
     public float RunTime => _runTime;
 
@@ -162,14 +162,14 @@ internal sealed class MotionRuntime : IAnimMotion
     /// hold, and this is what it reads. Decode: docs/org/objectMotion.md.</summary>
     public bool Ballistic => _hasBallistic && !_landed;
 
-    /// <summary>The ON_CALL sequence this body owes when it lands — <c>BOUNCE_SEQUENCE</c>'s
-    /// <c>default</c> branch — or null when nothing is owed. Armed only on a launch whose flight
+    /// <summary>The ON_CALL sequence this body owes when it lands, <c>BOUNCE_SEQUENCE</c>'s
+    /// <c>default</c> branch, or null when nothing is owed. Armed only on a launch whose flight
     /// time this class SOLVED and which names a bounce; a shape with a run time arms its bounce at
     /// <see cref="TryContact"/> instead, from the surface it strikes.</summary>
     public string? PendingBounce { get; private set; }
 
     // Whether this body turns at all: an authored rate AND an axis to turn it about. A vertical
-    // launch has the rate and no axis (see TumbleAxis) — arithmetic, not a guard against it.
+    // launch has the rate and no axis (see TumbleAxis), arithmetic, not a guard against it.
     private bool Tumbles => (_tumbleRate != 0f || _tumbleAccel != 0f) && _tumbleAxis != Vector3.Zero;
 
     public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
@@ -213,7 +213,7 @@ internal sealed class MotionRuntime : IAnimMotion
 
         // Tier order matches the original: !DO_INTERSECTIONS, then !NO_ALTITUDE, then the column
         // (docs/org/objectMotion.md, "Contact is the default, in two tiers"). No mask wired
-        // selects neither tier — the structural fallback, not a remembered case.
+        // selects neither tier, the structural fallback, not a remembered case.
         m._contactMask = rt.ContactMask;
         if (gravityBlock != null && rt.ContactMask != 0)
         {
@@ -284,7 +284,7 @@ internal sealed class MotionRuntime : IAnimMotion
             // direction at +0x70/0x74/0x78 here and the FORWARD_ROTATION branch reads it back.
             m._tumbleAxis = TumbleAxis(dir);
             m._v0 = (dir * speed) + InheritedLocal();
-            // `delta` folds in as a constant acceleration along the same direction — the same
+            // `delta` folds in as a constant acceleration along the same direction, the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
             m._accel = GravityAccel() + dir * speedRamp;
             m._hasBallistic = true;
@@ -298,7 +298,7 @@ internal sealed class MotionRuntime : IAnimMotion
         }
 
         // No RUN_TIME: "fly until something stops it" (docs/org/objectMotion.md).
-        // ⚠ Gate on the absent run time, not on what terminates the flight — a bounce-only gate
+        // ⚠ Gate on the absent run time, not on what terminates the flight, a bounce-only gate
         // hides the 167 vanish-shape events on the launch tick (`dblcannon_flying_parts`).
         bool untimed = m._hasBallistic && data.Num("run_time") is null;
         if (untimed)
@@ -399,7 +399,7 @@ internal sealed class MotionRuntime : IAnimMotion
             if (a.Z != 0f) basis = basis.Rotated(basis.Z.Normalized(), a.Z);
         }
 
-        // scale = 1 + initial + delta·u — an OFFSET from unit scale, not an absolute one; read as
+        // scale = 1 + initial + delta·u, an OFFSET from unit scale, not an absolute one; read as
         // absolute, the install's commonest value is a NEGATIVE scale.
         var scale = _hasScale ? Vector3.One + _scaleInit + _scaleDelta * u : _heldScale;
 
@@ -409,13 +409,13 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <summary>The launch direction one <c>translation_range</c> draw asks for, from its azimuth
     /// and elevation in degrees. The ONE expression of that decode: <c>ProjectilePool</c>'s
     /// gun-casing ejection reads the same <c>gunshell</c> event and must share this.
-    /// ⚠ Deliberately NOT unit length — see docs/org/objectMotion.md's linear-elevation decode.
+    /// ⚠ Deliberately NOT unit length, see docs/org/objectMotion.md's linear-elevation decode.
     /// Do not normalise it; that is the retired reading, and it launches 60–70° debris 20–25%
     /// too fast. Which world bearing azimuth 0 points along (+X) is a CHOICE, not a decode.</summary>
     internal static Vector3 RangeLaunchDirection(float azimuthDeg, float elevationDeg)
     {
         float az = Mathf.DegToRad(azimuthDeg);
-        // 1/90 as the original spells it — a multiply by the literal, not a divide.
+        // 1/90 as the original spells it, a multiply by the literal, not a divide.
         float dirY = elevationDeg * 0.011111111f;
         float horiz = dirY < 0f ? dirY + 1f : 1f - dirY;
         return new Vector3(Mathf.Cos(az) * horiz, dirY, Mathf.Sin(az) * horiz);
@@ -447,7 +447,7 @@ internal sealed class MotionRuntime : IAnimMotion
     // The default contact tier: reads the body's own column and ends the flight once the next step
     // would put it under whatever is there (docs/org/objectMotion.md, "Contact is the default").
     // ⚠ Departs from the decode on purpose: a pair of rays instead of a cell-record pick, and
-    // `intersect_surface` colliders without the original's `altitude_surface` filter — see that
+    // `intersect_surface` colliders without the original's `altitude_surface` filter, see that
     // page's divergence table for why. ⚠ No ArmDistance/ArmSeconds epsilon, unlike the sweep: a
     // launch climbs before it falls, so it cannot contact what it left on its first frame.
     private bool TryGroundColumn(float dt)
@@ -496,7 +496,7 @@ internal sealed class MotionRuntime : IAnimMotion
 
     // How fast the body is really arriving, squared: its own velocity taken into world, plus the
     // velocity its frame carries it at, read off that frame's step over the last tested frame.
-    // ⚠ Not the body's net world step — a body already being held on a surface has none, so that
+    // ⚠ Not the body's net world step, a body already being held on a surface has none, so that
     // reading calls a piece at rest the instant its frame stops lifting it clear.
     // Identical to the local speed under a parent standing still, which is every other body.
     private float ArrivalSpeedSquared(Transform3D parent, Vector3 localOrigin, float dt)
@@ -511,13 +511,13 @@ internal sealed class MotionRuntime : IAnimMotion
 
     // The do_intersections sweep: cast the step the body is about to take, last origin to next in
     // WORLD space, and stop at whatever it meets first. A segment, not a downward ray, because
-    // only a segment can rest a piece on a rooftop or stop it against a wall — the agyrobus lost
+    // only a segment can rest a piece on a rooftop or stop it against a wall, the agyrobus lost
     // between C5 buildings is the case that chose this.
     private bool TryContact(float dt)
     {
         if (_landed || !_hasBallistic)
             return false;
-        // Not armed yet — see ArmDistance. Judged at the START of the step, so a body arms at
+        // Not armed yet, see ArmDistance. Judged at the START of the step, so a body arms at
         // worst one frame late rather than testing a segment whose first half is still inside the
         // thing it launched from.
         if (_t < ArmSeconds && (BallisticOrigin(_t) - _heldOrigin).LengthSquared() < ArmDistance * ArmDistance)
@@ -529,7 +529,7 @@ internal sealed class MotionRuntime : IAnimMotion
             return false;
 
         // The solve is in the node's PARENT frame; the query is in world space. Convert both ends
-        // through the parent, and convert the hit back the same way — getting this backwards yields
+        // through the parent, and convert the hit back the same way, getting this backwards yields
         // contacts at plausible-looking but entirely wrong places.
         var parent = (Target.GetParent() as Node3D)?.GlobalTransform ?? Transform3D.Identity;
         float next = _runTime > 0f ? Mathf.Min(_t + dt, _runTime) : _t + dt;
@@ -552,7 +552,7 @@ internal sealed class MotionRuntime : IAnimMotion
             hit["collider"].As<GodotObject>(), byContact: true, arrivalSq, dt, to.Y - from.Y);
     }
 
-    // The original's watchdog, charged only by a contact query that ran and found nothing — a
+    // The original's watchdog, charged only by a contact query that ran and found nothing, a
     // body descending toward ground it can see never accumulates a tick, so this is not a flight
     // timer (docs/org/objectMotion.md, "The termination model"). Bounds only an untimed launch.
     private bool Watchdog(float dt, float next)
@@ -613,7 +613,7 @@ internal sealed class MotionRuntime : IAnimMotion
         return true;
     }
 
-    // World up, in the node's parent frame — the direction the pose correction lifts along.
+    // World up, in the node's parent frame, the direction the pose correction lifts along.
     private Vector3 ParentUp()
     {
         var parent = (Target.GetParent() as Node3D)?.GlobalTransform.Basis;

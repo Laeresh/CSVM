@@ -5,7 +5,7 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The plane-wobble oscillators (<c>shakes.json</c> via <see cref="ShakeDefs"/>): gunfire buzz,
-/// overspeed rattle, being-hit rocks and the nitro engage, summed into <see cref="Roll"/> — radians the flight
+/// overspeed rattle, being-hit rocks and the nitro engage, summed into <see cref="Roll"/>, radians the flight
 /// rig applies to a pivot node between the <see cref="FlightController"/> and its plane model.
 /// Decode: docs/org/shakes.md, which carries the random-walk law the FIRE source runs and what
 /// the other sources still do. Engine-free on purpose: the pivot write is the controller's one
@@ -18,7 +18,7 @@ public sealed class PlaneShake
 {
     /// <summary>Per-shot gun-buzz step scale. The decoded law is ±<c>7.54·(factor×caliber)</c>;
     /// scale 1 reproduces the original's faithful step (= ±2.11e-2 rad for wep40), lower tames it.
-    /// The one tune knob for the fidelity judgment — the mechanism (random walk) is what BL-266(a)
+    /// The one tune knob for the fidelity judgment, the mechanism (random walk) is what BL-266(a)
     /// is evaluating, this is how loud the wobble reads.</summary>
     public const float GunBuzzKickScale = 1f;
 
@@ -35,7 +35,7 @@ public sealed class PlaneShake
 
     // Block 5 (camera+0xf4) is the one oscillator no data authors: shakes.zrd names no `turbulence`
     // source, so the constructor's law stands and the collision path is the block's only kicker
-    // (docs/org/shakes.md). ⚠ Do not give it a def — these three constants ARE its law.
+    // (docs/org/shakes.md). ⚠ Do not give it a def, these three constants ARE its law.
     private readonly Osc _contact = new()
     {
         Src = new ShakeSource { Id = "contact", Frequency = 2f, Damp = 4.5f, Sawtooth = false },
@@ -131,7 +131,7 @@ public sealed class PlaneShake
     }
 
     /// <summary>Per-tick overspeed drive: <paramref name="speedRatio"/> is speed over the
-    /// plane's rated max, so the authored <c>min_speed</c> 1.0 gate reads "beyond rated max" —
+    /// plane's rated max, so the authored <c>min_speed</c> 1.0 gate reads "beyond rated max",
     /// the dive rattle. Magnitude is the EXCESS over the gate <c>(speedRatio − gate)/quotient</c>,
     /// not the whole ratio: zero at rated max, gentle ramp with overspeed, same order as the gun
     /// buzz in a dive (a whole-ratio reading snapped on at <c>1.0/70</c> = 5× the buzz). Quiet
@@ -145,7 +145,7 @@ public sealed class PlaneShake
     }
 
     /// <summary>Advances every oscillator by one sim tick and re-sums <see cref="Roll"/>.
-    /// Pure function of sim dt and the events since the last tick — deterministic under
+    /// Pure function of sim dt and the events since the last tick, deterministic under
     /// <c>--det</c>'s fixed clock.</summary>
     public void Advance(float dt)
     {
@@ -174,7 +174,7 @@ public sealed class PlaneShake
             }
             if (Walk != 0f)
             {
-                // Random-walk accumulator (fire source): no waveform — the accumulated roll is the
+                // Random-walk accumulator (fire source): no waveform, the accumulated roll is the
                 // wobble, decaying toward 0 between shots at the authored damp.
                 Walk *= MathF.Exp(-Src.Damp * dt);
                 if (MathF.Abs(Walk) < 1e-5f)

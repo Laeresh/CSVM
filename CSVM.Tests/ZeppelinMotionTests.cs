@@ -134,7 +134,7 @@ public class ZeppelinMotionTests
     public void TheSteerLawEasesQuadraticallyInsideTwentyFiveDegrees(float errorDeg, float rateDeg)
     {
         // The decoded rate command: the full max_rate at 25° of error and beyond, and
-        // max_rate·(error/25°)² inside it, sign kept — with the accel limit out of the way.
+        // max_rate·(error/25°)² inside it, sign kept, with the accel limit out of the way.
         float rate = ZeppelinMotion.Steer(0f, Mathf.DegToRad(errorDeg), Dt, Mathf.DegToRad(5f), 1e6f);
         Assert.Equal(rateDeg, Mathf.RadToDeg(rate), 3);
     }

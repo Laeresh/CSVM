@@ -14,7 +14,7 @@ namespace CSVM.Mech3.Anim;
 /// </summary>
 internal sealed class AnimLight
 {
-    public Node3D? Host;          // AT_NODE target — the light rides its world pose
+    public Node3D? Host;          // AT_NODE target, the light rides its world pose
 
     public string? HostName;      // the AT_NODE name Host was resolved from (see HandleLightState)
 

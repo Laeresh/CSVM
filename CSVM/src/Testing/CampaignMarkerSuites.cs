@@ -866,7 +866,7 @@ internal static class CampaignMarkerSuites
         ObjectiveGraph graph, MissionTargets targets)
     {
         var live = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, targets, live);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph, targets, live);
         int found = 0;
         foreach (var target in cycle)
         {

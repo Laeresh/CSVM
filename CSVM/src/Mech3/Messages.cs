@@ -9,8 +9,8 @@ namespace CSVM.Mech3;
 /// <summary>
 /// The game's localized string table (mech3ax extracts the message resource to a plain
 /// JSON object: <c>{ "language_id": 1033, "entries": [{ "key", "id", "value" }, …] }</c>).
-/// Reader files reference display text indirectly by <c>MSG_*</c> key — targets.json's
-/// objective descriptions, briefing lines, UI labels — and this resolves them.
+/// Reader files reference display text indirectly by <c>MSG_*</c> key, targets.json's
+/// objective descriptions, briefing lines, UI labels, and this resolves them.
 /// Unlike the zrdr archives this is a single top-level file (default
 /// <c>extracted/messages.json</c>), so it is not a <see cref="Zrdr"/> list.
 /// </summary>
@@ -21,19 +21,14 @@ public sealed class Messages
     public int Count => _byKey.Count;
 
     /// <summary>Loads the message table from a messages.json file. Missing file → an empty
-    /// table (every lookup then falls back to the raw key), never throws — display strings
+    /// table (every lookup then falls back to the raw key), never throws, display strings
     /// are cosmetic and a mission must still load without them.</summary>
     public static Messages Load(string path) =>
         File.Exists(path) ? Read(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
 
-    /// <summary>The same table out of JSON already in hand, for a caller with no file: the table's
-    /// own tests, and any consumer handed the document rather than the path.</summary>
-    public static Messages Parse(string json) => Read(JsonDocument.Parse(json));
-
-
     /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
     /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
-    /// that follows a placeholder — e.g. the <c>!d!</c> in <c>%2!d!</c> — is consumed (the arg is
+    /// that follows a placeholder, e.g. the <c>!d!</c> in <c>%2!d!</c>, is consumed (the arg is
     /// already a formatted string); and <c>%%</c> is a literal percent. The template is raw text, so
     /// resolve it through <see cref="Get"/> first (keeps an unresolved key visible on load rather than
     /// per draw).</summary>
@@ -83,9 +78,14 @@ public sealed class Messages
         : _byKey.TryGetValue(key, out var v) ? v
         : key;
 
-    /// <summary>Resolves <paramref name="key"/> and fills its placeholders in one call —
+    /// <summary>Resolves <paramref name="key"/> and fills its placeholders in one call,
     /// <c>Fill(Get(key), args)</c>.</summary>
     public string Format(string? key, params string?[] args) => Fill(Get(key), args);
+
+    /// <summary>The same table out of JSON already in hand, for a caller with no file to point at.
+    /// Internal rather than public because every shipped caller holds a path, and only the unit
+    /// project builds a table out of a literal.</summary>
+    internal static Messages Parse(string json) => Read(JsonDocument.Parse(json));
 
     // The one reader both entry points share. Takes the document over so a malformed file leaks
     // nothing on the way back out.

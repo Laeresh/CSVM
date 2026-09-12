@@ -2,7 +2,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The VELOCITY/ACCELERATION/GRAVITY integration every round in this game steps with —
+/// <summary>The VELOCITY/ACCELERATION/GRAVITY integration every round in this game steps with,
 /// shared by the live rounds (<see cref="ProjectilePool.SimStep"/>) and the reticle's projected
 /// impact point (<see cref="FlightController"/>), so the two cannot silently disagree. No Godot
 /// <c>Node</c> dependency: both callers keep their own loop shape (the raycast/fuse test, the
@@ -10,7 +10,7 @@ namespace CSVM.Flight;
 ///
 /// <para>The motor is the original's own arithmetic (<c>FUN_005afd50</c>, decoded in
 /// org/ordnanceTypes.md): speed rises by <c>ACCELERATION × dt</c> only while it is below the
-/// round's cap, and is clamped there. <b>Nothing here reduces a round's speed</b> — the original
+/// round's cap, and is clamped there. <b>Nothing here reduces a round's speed</b>, the original
 /// has no drag term, which is why its rounds carry so far, and the only decrease anywhere is the
 /// steering step's turn penalty.</para></summary>
 public static class Ballistics
@@ -43,7 +43,7 @@ public static class Ballistics
     /// <summary>Where a round of <paramref name="weapon"/> fired from <paramref name="origin"/>
     /// along <paramref name="forward"/> (carrying <paramref name="inheritVel"/>, the plane's
     /// velocity) sits after travelling <paramref name="maxDistance"/> m of path, integrated at
-    /// <paramref name="dt"/> — the reticle's capped walk. Capped at the weapon's <c>RANGE</c> (a
+    /// <paramref name="dt"/>, the reticle's capped walk. Capped at the weapon's <c>RANGE</c> (a
     /// round never converges past where it expires) and a hard iteration bound.</summary>
     public static Vector3 March(WeaponDef weapon, Vector3 origin, Vector3 forward,
         Vector3 inheritVel, float maxDistance, float dt)

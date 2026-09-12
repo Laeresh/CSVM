@@ -539,7 +539,7 @@ internal static class OrdnanceSuites
             live.Clear();
 
             // 5. The two fuse paths are separate. An aircraft 25 m off the flight line, closer to
-            // the round than its own target is, and still being closed on — so the sweep is holding
+            // the round than its own target is, and still being closed on, so the sweep is holding
             // fire (StillClosingFraction) while the per-round target fuse goes off anyway.
             var planePos = origin + new Vector3(25f, 0f, -300f);
             var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -1735,7 +1735,7 @@ internal static class OrdnanceSuites
     // record carries surface id 0; docs/org/ordnanceTypes.md "Which row a burst reads"): a flak
     // fused on a rig draws flak_effect, a beeper fused on the same rig draws its empty default
     // row's nothing, and so does a burst on a bare mark; and the seeker's ground impact hands
-    // ballflare.flt — a bound ON_CALL def anchored on a same-named gamez root — to the effects
+    // ballflare.flt, a bound ON_CALL def anchored on a same-named gamez root, to the effects
     // sink instead of standing a static instance of its template in for the authored white flare.
     [Suite("ordnance-impact-effects",
         "a fused burst reads the default IMPACT row (FUN_005ac3a0): a wep_07 fusing on its own target " +
@@ -1790,7 +1790,7 @@ internal static class OrdnanceSuites
             ctx.Host.AddChild(live);
 
             // Head-on at 410 m: a 1200 m/s beeper samples pre-move positions every 20 m, so one
-            // lands 10 m short of the rig's centre — inside the 15 m fuse, ahead of the hull, and
+            // lands 10 m short of the rig's centre, inside the 15 m fuse, ahead of the hull, and
             // while the sweep fuse still holds (closing): the OWN-target fuse is the arm under test.
             var origin = new Vector3(-6000f, 2500f, 0f);
             var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), origin);
@@ -1845,7 +1845,7 @@ internal static class OrdnanceSuites
                 $"a beeper fusing on its own target draws the empty DEFAULT row's nothing, not the player row's fireball (played={onPlane?.Name ?? "nothing"})");
 
             // CONTROL: the same fuse on a bare mark resolves no aircraft, so the beeper's
-            // named-and-empty default row plays exactly nothing — no invented fallback effect.
+            // named-and-empty default row plays exactly nothing, no invented fallback effect.
             // Flown on a parallel line 4 km abeam, out of the registered rig's sweep-fuse reach.
             var controlFrom = new Transform3D(muzzle.Basis, origin + new Vector3(4000f, 0f, 0f));
             mark = new Node3D { Name = "impact-fx-mark" };
@@ -2325,7 +2325,7 @@ internal static class OrdnanceSuites
                     // plays; the launch SEED is the only thing two plays owe each other.
                     readings.Add(DebrisPosesIn(slot0));
                     // Half a second on, the debris is well out and nowhere near down, so the next
-                    // play's wrap lands on a copy that is still live — the case under test.
+                    // play's wrap lands on a copy that is still live, the case under test.
                     for (int i = 0; i < gapFrames; i++)
                         runtime.Advance(1f / 60f);
                 }
@@ -2536,7 +2536,7 @@ internal static class OrdnanceSuites
         return null;
     }
 
-    // The `ring_down1` copy's ring mesh — the one flat annulus the burst leaves on the ground.
+    // The `ring_down1` copy's ring mesh, the one flat annulus the burst leaves on the ground.
     private static MeshInstance3D? GroundRingIn(Node3D slot)
     {
         if (slot.GetNodeOrNull<Node3D>("sonic_ring5") is not { } root)

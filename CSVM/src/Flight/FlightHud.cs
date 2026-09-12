@@ -16,7 +16,7 @@ public struct FlightHudState
     /// source through <c>Y</c>.</summary>
     public Vector3 Position;
 
-    /// <summary>Nose heading, 0 = north, 90 = east — the compass tape and both marker HUDs.</summary>
+    /// <summary>Nose heading, 0 = north, 90 = east, the compass tape and both marker HUDs.</summary>
     public float HeadingDeg;
 
     /// <summary>Airspeed in m/s; the speedometer and the text line convert to mph.</summary>
@@ -79,7 +79,7 @@ public struct FlightHudState
     public bool NitroBoosting;
     public float NitroChargeFrac;
 
-    /// <summary>The gun group the pipper marks, or null to hide it — the caller resolves this,
+    /// <summary>The gun group the pipper marks, or null to hide it, the caller resolves this,
     /// since reaching a muzzle's world pose costs engine interop no other rig should pay.</summary>
     public GunGroup? ReticleGun;
 
@@ -166,7 +166,7 @@ public sealed class FlightHud
     private float _textLeft = -1f;               // last applied reading-box left edge (0 at 16:9)
     private float _damageFlash;                  // s left on the impact line
     private string _damageFlashText = "";
-    private float _reticleDist = ReticleDefaultSpeed * ReticleFlightTime; // m — the pipper's smoothed range
+    private float _reticleDist = ReticleDefaultSpeed * ReticleFlightTime; // m, the pipper's smoothed range
     private float _reticleRate;                  // m/s the pipper's range is currently closing at
 
     // The gungauge / missilegauge state, pushed to GaugeCluster each frame. Persistent objects
@@ -266,7 +266,7 @@ public sealed class FlightHud
     /// <summary>The missile gauge's selected-slot readout: the SELECTED pylon's rounds are its OWN,
     /// per-pylon (the original's Warhawk gauge shows BOOM 3, not a 24-round sum across pylons).
     /// ⚠ <paramref name="slotsOut"/> is indexed by PYLON NUMBER, not position in the compacted
-    /// <paramref name="hardpoints"/> list — a partial stock fit leaves gaps at the unfitted
+    /// <paramref name="hardpoints"/> list, a partial stock fit leaves gaps at the unfitted
     /// physical positions. Static so CSVM.Tests can drive it off bare <see cref="Hardpoint"/>s.</summary>
     public static MissileGaugeReadout ComputeMissileGauge(IReadOnlyList<Hardpoint> hardpoints, int pylonSelect,
         List<float> slotsOut)
@@ -320,7 +320,7 @@ public sealed class FlightHud
             canvas.AddChild(FontTest); // --hud-font-test: the bitmap-font proof overlay
     }
 
-    /// <summary>Binds the two weapon gauges to their persistent state — only for a system this
+    /// <summary>Binds the two weapon gauges to their persistent state, only for a system this
     /// plane actually carries, which is what the two counts decide.</summary>
     public void BindWeaponGauges(int firableGunCount, int hardpointCount)
     {
@@ -364,7 +364,7 @@ public sealed class FlightHud
             Gauges.HeadingDeg = state.HeadingDeg;
             (Gauges.HorizonPitchRad, Gauges.HorizonRollRad) = GaugeCluster.HorizonAngles(state.Attitude);
         }
-        // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the
+        // Feeds the weapon gauges (if built) and the text readout (if built), both draw from the
         // live loadout, so this runs whenever there is one, independent of the dial cluster.
         UpdateWeaponGauges(in state);
         // Points the gun pipper at 0.5 s of the selected group's flight, on the nose axis.
@@ -530,7 +530,7 @@ public sealed class FlightHud
     }
 
     // Where a round of `weapon` fired from `origin` along `forward` (carrying `inheritVel`, the
-    // plane's velocity) sits after travelling `distance` m of path — Ballistics.March, the SAME
+    // plane's velocity) sits after travelling `distance` m of path, Ballistics.March, the SAME
     // integration ProjectilePool steps each round with, so the reticle and the rounds agree.
     private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
         Vector3 inheritVel, float distance)
@@ -538,7 +538,7 @@ public sealed class FlightHud
         // A fixed integration step rather than the sim's: no weapon a gun group can resolve carries
         // ACCELERATION or GRAVITY (the four accelerating defs of the 48 are rockets and a glide
         // bomb), so every marched round is a straight line, on which the step size cannot move the
-        // endpoint — and a fixed step keeps the reticle from twitching with the frame rate.
+        // endpoint, and a fixed step keeps the reticle from twitching with the frame rate.
         const float dt = 1f / 120f;
         return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
     }
@@ -591,7 +591,7 @@ public sealed class FlightHud
     // Points the gun pipper where the original points it: at the selected gun group's muzzle
     // midpoint, offset by ReticleFlightTime seconds of the round's flight, rate-smoothed. Decode:
     // docs/org/aim-assist.md "What the pipper follows".
-    // ⚠ It marks the plane's NOSE axis, never the aim assist's line — the assist stays invisible
+    // ⚠ It marks the plane's NOSE axis, never the aim assist's line, the assist stays invisible
     // by design; do not make the pipper follow the assisted line instead.
     private void UpdateReticle(in FlightHudState state)
     {
@@ -599,7 +599,7 @@ public sealed class FlightHud
         {
             return;
         }
-        // Hidden while crashed (the airframe is gone) — a stale pipper must not hang in the sky —
+        // Hidden while crashed (the airframe is gone), a stale pipper must not hang in the sky,
         // and when there is nothing to aim, both of which arrive as a null group.
         if (state.ReticleGun is not { } sel)
         {
@@ -664,7 +664,7 @@ public sealed class FlightHud
             _text.Position = new Vector2(left + (TextMargin.X * paneFactor), TextMargin.Y * paneFactor);
         }
         // A splitscreen pane is WIDER than tall, so a height-scaled line would run into the
-        // top-centre compass tape — ComposeTextLines' wide flag splits the throttle off.
+        // top-centre compass tape, ComposeTextLines' wide flag splits the throttle off.
         _text.Text = string.Join("\n", ComposeTextLines(in state, mph, ft, wide: paneFactor < 1f));
     }
 

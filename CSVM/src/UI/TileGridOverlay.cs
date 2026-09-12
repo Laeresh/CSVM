@@ -26,7 +26,7 @@ public sealed partial class TileGridOverlay : Node
     // inserts its own value in sorted position, so a CLI choice is never stranded off the cycle.
     private static readonly int[] BaseCycle = { 1, 2, 3, 4, 12 };
 
-    // Band-parity swatches. Named for what they ARE — alternating repetition bands — rather than
+    // Band-parity swatches. Named for what they ARE, alternating repetition bands, rather than
     // for the fold, because band parity is what they encode and "mirrored" would be a lie in the
     // default repeat mode.
     private static readonly string[] LegendLabels =
@@ -53,7 +53,7 @@ public sealed partial class TileGridOverlay : Node
     }
 
     /// <summary><c>--debug-tilegrid</c>: open the overlay on the first frame. The only way to open
-    /// it — no key is bound.</summary>
+    /// it, no key is bound.</summary>
     public bool DebugShow { get; init; }
 
     public override void _Process(double delta)
@@ -96,7 +96,7 @@ public sealed partial class TileGridOverlay : Node
     }
 
     /// <summary>F15: step the block depth to the next value in the cycle and rebuild the window.
-    /// A no-op while the overlay is hidden — the whole point of the key is to watch the bands
+    /// A no-op while the overlay is hidden, the whole point of the key is to watch the bands
     /// change, and silently rebuilding 121 cells for an invisible effect is a hitch for
     /// nothing.</summary>
     public void StepBlock()
@@ -143,7 +143,7 @@ public sealed partial class TileGridOverlay : Node
         return new List<int>(set);
     }
 
-    // One coloured word per parity, straight from the extender's own palette — a palette change is
+    // One coloured word per parity, straight from the extender's own palette, a palette change is
     // the only edit that can move this out of sync with what is on screen.
     private static string BuildLegendText()
     {
@@ -161,7 +161,7 @@ public sealed partial class TileGridOverlay : Node
     }
 
     // Shown in the HUD and echoed to the log, so a screenshot and a log line both say which
-    // configuration produced them — four captures of a coastline are otherwise indistinguishable
+    // configuration produced them, four captures of a coastline are otherwise indistinguishable
     // a week later.
     private string StatusText()
     {

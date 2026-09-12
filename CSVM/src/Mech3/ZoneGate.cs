@@ -28,7 +28,7 @@ public static class ZoneGate
     private const int LayerBit0 = 13;
 
     /// <summary>The shared visual layer carrying every mesh built for a node of
-    /// <paramref name="zoneId"/> — <b>0</b> for an id this gate never hides (−1, 0, or anything
+    /// <paramref name="zoneId"/>, <b>0</b> for an id this gate never hides (−1, 0, or anything
     /// past <see cref="MaxZoneId"/>), meaning "leave it on the default layer".</summary>
     public static uint LayerFor(int zoneId) =>
         zoneId >= 1 && zoneId <= MaxZoneId ? 1u << (LayerBit0 + zoneId - 1) : 0u;
@@ -39,12 +39,12 @@ public static class ZoneGate
         zoneId <= 0 || zoneId == cameraState;
 
     /// <summary>One camera's cull mask with the zone band narrowed to
-    /// <paramref name="cameraState"/> alone — every other bit is left exactly as it was, so this
+    /// <paramref name="cameraState"/> alone, every other bit is left exactly as it was, so this
     /// composes with the per-player band and with any mode-specific mask.</summary>
     public static uint CullMask(uint mask, int cameraState) =>
         (mask & ~LayerBand) | LayerFor(cameraState);
 
-    /// <summary>One camera's cull mask with the whole zone band restored — the ungated camera
+    /// <summary>One camera's cull mask with the whole zone band restored, the ungated camera
     /// (<c>--no-zone-cull</c>, and the reset a session-spanning camera needs before its first
     /// frame).</summary>
     public static uint OpenCullMask(uint mask) => mask | LayerBand;

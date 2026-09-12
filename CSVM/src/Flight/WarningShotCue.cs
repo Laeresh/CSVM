@@ -6,9 +6,9 @@ namespace CSVM.Flight;
 /// DISCARDED while the accumulator is armed, and answered with <c>bullet_warning_sg</c> instead of
 /// the ricochet; sustained fire fills it to <c>max</c>, which disarms it, and from then on the same
 /// rounds spend their damage and ring <c>bullet_hit_sg</c>. A quiet interval drains it and re-arms.
-/// <para>It counts TIME, not rounds: an interval that closed with at least one hit adds its own
-/// elapsed length, so the shipped <c>max</c> of 2 s is two intervals of fire. That same interval is
-/// what the canopy cue hangs off, which is why <see cref="Tick"/> answers with the hit count.</para>
+/// It counts TIME, not rounds: an interval that closed with at least one hit adds its own elapsed
+/// length, so the shipped <c>max</c> of 2 s is two intervals of fire. That same interval is what
+/// the canopy cue hangs off, which is why <see cref="Tick"/> answers with the hit count.
 /// Engine-free so the rule unit-tests without a live node, the same split
 /// <see cref="CanopyHoleCue"/> uses. Decode: <c>docs/org/weaponFire.md</c>.</summary>
 public sealed class WarningShotCue
@@ -35,7 +35,7 @@ public sealed class WarningShotCue
         _interval = interval;
     }
 
-    /// <summary>The live accumulator, 0..max — seconds of fire taken, less what quiet has drained.
+    /// <summary>The live accumulator, 0..max, seconds of fire taken, less what quiet has drained.
     /// Nothing in the original reads it beyond the saturation test; it is exposed for the log
     /// breadcrumb and the tests.</summary>
     public float Intensity => _intensity;

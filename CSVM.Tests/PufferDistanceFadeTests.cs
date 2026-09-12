@@ -95,7 +95,7 @@ public class PufferDistanceFadeTests
     {
         // The compiled surface spells NEAR_FADE `unk_range`: C1's
         // black_smoke_ball_01-large_black_smokeball.json carries {70, 20} there, and its reader
-        // block authors NEAR_FADE [70, 20] — which is how the field was identified.
+        // block authors NEAR_FADE [70, 20], which is how the field was identified.
         var d = new AnimData(new Dictionary<string, object?>
         {
             ["name"] = "large_black_smokeball",
@@ -116,7 +116,7 @@ public class PufferDistanceFadeTests
     public void CompiledEventWithNullFadeKeysKeepsTheEngineCtorDefaults()
     {
         // Both keys are present-and-null on the great majority of the install's 4,535 events; the
-        // parser must read that as unauthored, not as zero — a zero far band would discard every
+        // parser must read that as unauthored, not as zero, a zero far band would discard every
         // particle of every puffer that says nothing about distance.
         var d = new AnimData(new Dictionary<string, object?>
         {

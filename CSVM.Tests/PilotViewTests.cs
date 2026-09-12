@@ -5,7 +5,7 @@ namespace CSVM.Tests;
 
 /// <summary>The selected-view rules (A1): which mode the cycle key lands on, which modes are
 /// first person, and what a held numpad key does to the selection. Headless because
-/// <see cref="PilotView"/> owns no camera — <c>CameraController</c> holds the state and defers
+/// <see cref="PilotView"/> owns no camera, <c>CameraController</c> holds the state and defers
 /// every decision here.</summary>
 public sealed class PilotViewTests
 {

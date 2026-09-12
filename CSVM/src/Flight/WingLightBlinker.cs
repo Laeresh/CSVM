@@ -11,7 +11,7 @@ namespace CSVM.Flight;
 /// alongside them. PlaneBuilder builds the flare nodes hidden and hands them over; this
 /// owns the lamps it adds as their children and toggles both together. The source flash
 /// is a single frame; we widen it to a short visible window (TUNE) so the blink reads
-/// crisply — and is catchable in a screenshot — at any frame rate. Below the session's
+/// crisply, and is catchable in a screenshot, at any frame rate. Below the session's
 /// ANIMATION_LOD quality flag the flares/lights never come on, matching the def's
 /// authored low-detail branch. Cheaper than an AnimationPlayer: a flat list of nodes
 /// the flight loop advances (like <see cref="PropAnimator"/>).
@@ -20,7 +20,7 @@ public sealed class WingLightBlinker
 {
     // TUNE: the data turns the flares on for one frame; hold them on this long so the
     // blink is clearly visible without becoming a steady glow. Measured against the
-    // original's own footage at ~1 frame @ 30 fps (~0.033 s) — which is 2 ticks of the
+    // original's own footage at ~1 frame @ 30 fps (~0.033 s), which is 2 ticks of the
     // engine's fixed 60 Hz sim clock; nudged a hair past 2/60 s so a tick landing exactly
     // on the boundary isn't dropped to float round-off.
     private const double FlashDuration = (2.0 / 60.0) + 0.0001;
@@ -44,7 +44,7 @@ public sealed class WingLightBlinker
 
     /// <summary>Null if the plane has no flare nodes (so callers can skip creating one).
     /// <paramref name="animLod"/> is the session's ANIMATION_LOD quality flag
-    /// (<c>SessionSpec.AnimLod</c>) — below <see cref="AnimRuntime.HighLod"/> the flares
+    /// (<c>SessionSpec.AnimLod</c>), below <see cref="AnimRuntime.HighLod"/> the flares
     /// and their lights stay off for the life of this instance, the def's authored
     /// else-branch.</summary>
     public static WingLightBlinker? Build(IReadOnlyList<Node3D> flares, int animLod)
@@ -54,7 +54,7 @@ public sealed class WingLightBlinker
         var lamps = new List<(Node3D, OmniLight3D)>(flares.Count);
         foreach (var flare in flares)
         {
-            // AT_NODE offset is (0,0,0) in the def — the light sits exactly at the flare.
+            // AT_NODE offset is (0,0,0) in the def, the light sits exactly at the flare.
             var light = new OmniLight3D
             {
                 LightColor = WingLights.FlareColor,

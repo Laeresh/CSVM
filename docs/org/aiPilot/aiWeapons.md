@@ -266,7 +266,7 @@ every chapter's gamez), and take the branch below.
 
 ### A `mode ship` vehicle's mount
 
-`patrolboat` and `t_truck` carry the full chain in every chapter's gamez —
+`patrolboat` and `t_truck` carry the full chain in every chapter's gamez,
 `patrolboat > healthy > turret > gun > firepoint` and `t_truck > healthy > l1 > turret > gun >
 firepoint` — so `+0x34` and `+0x38` are both set and **the mount is the animated case**. Neither def
 authors `gun_pitch` or `gun_yaw`, which puts them on the one path where an unclamped mount is still
@@ -383,13 +383,13 @@ rarer still for the 89 mook blocks whose only authored skill is `dead_eye 1`.
 | `FUN_00460e30` | the constant-speed intercept, in the `u = 1/t` form ([`aim-assist.md`](../aim-assist.md)) |
 | `FUN_00462ce0` | the accelerating intercept a motor round is led with, fed `ACCELERATION`, `VELOCITY` and the launcher's velocity |
 | `FUN_004b7670` | the per-mount aim update: clamps to `gun_pitch`/`gun_yaw` and writes the aim quality `+0xa4` |
-| `FUN_004b7e70` | pins a direction's `y` to a bound and rescales `x`/`z` to unit — the hull mount's elevation guards |
+| `FUN_004b7e70` | pins a direction's `y` to a bound and rescales `x`/`z` to unit, the hull mount's elevation guards |
 | `FUN_00460840` | the mount's slew step: snap at `dt × rate ≥ 1`, else interpolate by that fraction |
 | `FUN_00538d70` | the interpolation itself: lerp inside `0.96`, slerp otherwise, swept half turn when opposed |
 | `FUN_004b7590` | writes the mount's aim back onto its `gun` and `turret` nodes |
 | `FUN_004761c0` | the recursive exact-name find from a vehicle root that locates `turret` and `gun` |
 | `FUN_004d8e40` | the same search by name PREFIX under one node, used for a `guns` entry's mount |
-| `FUN_004d1cc0` | reads a node's local position — the `firepoint` marker's, as the mount's muzzle offset |
+| `FUN_004d1cc0` | reads a node's local position, the `firepoint` marker's, as the mount's muzzle offset |
 | `FUN_00476250` | the spawn that copies the def's gun limits onto each mount |
 | `FUN_004897c0` | the world tick over the vehicle list that drives the mount update |
 | `FUN_004b2080` | weapon-slot lookup by numeric id |

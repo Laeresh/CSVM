@@ -11,7 +11,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class DestructibleRegistry
 {
-    // Keyed by (definition, anchor instance id) — the exact pair EvaluateCondition holds when it
+    // Keyed by (definition, anchor instance id), the exact pair EvaluateCondition holds when it
     // reaches an ANIM_HEALTH branch, so the live read is O(1) on the hot poll path. Godot object
     // identity is by native pointer, so key on the instance id, not the Node3D itself.
     private readonly Dictionary<(AnimDefinition Def, ulong Anchor), Instance> _byKey = new();
@@ -22,7 +22,7 @@ public sealed class DestructibleRegistry
     // The ONE authoritative instance per node a hit may resolve through. A node can carry several
     // instances (reader wildcard + compiled per-instance); the compiled def is the better data, so
     // it wins. Each instance claims its own damage node outright and its anchor only as a
-    // fallback, which is what tells two pools on one anchor apart — see Register.
+    // fallback, which is what tells two pools on one anchor apart, see Register.
     private readonly Dictionary<ulong, Instance> _authoritative = new();
 
     // The claims made on a node by an instance whose OWN damage node it is. A second def merely
@@ -38,17 +38,17 @@ public sealed class DestructibleRegistry
     public enum State
     {
         Healthy,   // at full HP, undamaged
-        Damaged,   // below max, above zero — a DAMAGE_SEQUENCE stage is showing
+        Damaged,   // below max, above zero, a DAMAGE_SEQUENCE stage is showing
         Destroyed, // HP reached zero, death sequence run
     }
 
-    /// <summary>Number of live destructible instances — one per <c>(def, anchor)</c> pair.
+    /// <summary>Number of live destructible instances, one per <c>(def, anchor)</c> pair.
     /// Exceeds <see cref="DistinctAnchors"/> when more than one def binds a node (the reader
     /// wildcard def and the compiler's per-instance defs both resolve to the same towers; each
     /// keeps its own HP pool, which is why keying is per pair, not per node).</summary>
     public int Count => _all.Count;
 
-    /// <summary>Number of distinct world node groups covered — the count of physical destructible
+    /// <summary>Number of distinct world node groups covered, the count of physical destructible
     /// objects, ignoring how many defs bind each.</summary>
     public int DistinctAnchors => _anchors.Count;
 
@@ -100,7 +100,7 @@ public sealed class DestructibleRegistry
     }
 
     /// <summary>The live instance for a <c>(def, anchor)</c> pair, or null when that pair is not
-    /// a registered destructible — the common case, since most conditions evaluated are not on
+    /// a registered destructible, the common case, since most conditions evaluated are not on
     /// destructibles at all. A null anchor is never a destructible.</summary>
     public Instance? Get(AnimDefinition def, Node3D? anchor)
     {
@@ -109,7 +109,7 @@ public sealed class DestructibleRegistry
         return _byKey.TryGetValue((def, anchor.GetInstanceId()), out var inst) ? inst : null;
     }
 
-    /// <summary>Every pool anchored on exactly this node — normally one, but a node carrying both
+    /// <summary>Every pool anchored on exactly this node, normally one, but a node carrying both
     /// the compiler's per-instance def and a reader wildcard's carries two independent pools with
     /// their own HP. Use it with <see cref="Resolve"/>, which names the one a weapon hit reaches;
     /// the others cannot be damaged through the hit path at all. Empty for an ordinary node.</summary>
@@ -238,13 +238,13 @@ public sealed class DestructibleRegistry
         /// candidate pass drops these; every other channel keeps them.</summary>
         public bool Gasbag { get; set; }
 
-        /// <summary>Out of play: the pool exists, but its object is not in the world yet — a
+        /// <summary>Out of play: the pool exists, but its object is not in the world yet, a
         /// mission's <c>deactivated</c> zeppelin before its script wakes it. Refused as a target
         /// and by <c>AnimRuntime.DamageAt</c> while set. ⚠ Not a death state: <see cref="Status"/>
         /// stays healthy and the HP stands.</summary>
         public bool Dormant { get; set; }
 
-        /// <summary>The name of the mission entity this pool is a PART of, where one owns it — a
+        /// <summary>The name of the mission entity this pool is a PART of, where one owns it, a
         /// zeppelin record's node name on each of its zones. Null for scenery, which belongs to
         /// nothing. A zone's own anchor is named `gasbag1`/`leng11`, so a `rating_biases` pattern
         /// naming the airship reaches it through this or through the world tree above it
@@ -252,14 +252,14 @@ public sealed class DestructibleRegistry
         public string? Owner { get; set; }
 
         /// <summary>How many of the DAMAGE_SEQUENCE's descending health thresholds this instance
-        /// has fallen past — the deepest progressive-damage stage it has escalated to. Only ever
+        /// has fallen past, the deepest progressive-damage stage it has escalated to. Only ever
         /// increases (damage escalates, never heals), so a stage effect fires exactly once; a
         /// reset puts it back to 0.</summary>
         public int DamageStage { get; set; }
 
         /// <summary>Set when the death CHAIN authors the healthy→destroyed swap in a
         /// <c>CALL_ANIMATION</c> target (gate2's <c>blockit2</c>) rather than in this def's own
-        /// sequences — so <c>ApplyDeathSwap</c>'s fallback yielded and the swap, wreck colliders,
+        /// sequences, so <c>ApplyDeathSwap</c>'s fallback yielded and the swap, wreck colliders,
         /// fireball and flying debris all arrive when the chained call fires. A reset must
         /// stop this def too (its own pending scheduled call, or its already-run motions) and
         /// restore the pose of whatever it moved.</summary>
@@ -271,7 +271,7 @@ public sealed class DestructibleRegistry
         /// motions can outlive the reset.</summary>
         public HashSet<(AnimDefinition Def, Node3D Anchor)> LocalCallTargets { get; } = new();
 
-        /// <summary>Re-seeds this pool from a mission record — the zeppelin case (M4 F18):
+        /// <summary>Re-seeds this pool from a mission record, the zeppelin case (M4 F18):
         /// <c>zeppelins.json</c> authors per-part hp (<c>gasbags</c> 80–400,
         /// <c>cannon_health</c> 200) that overrides the def's own <c>HEALTH</c> where present.
         /// Wire-up time only: refuses once the instance has been damaged, so a late re-seed

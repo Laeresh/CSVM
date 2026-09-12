@@ -37,7 +37,7 @@
       "name": "c2-city",
       "frame": 120,
       "hash": "17506a01a8986c59cab882be47dcf22c",
-      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, and the harbour wake spray the boat start anims emit, alpha sprites lit like the rest; near-static, 51 px at 120 vs 121.",
+      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, the harbour wake spray the boat start anims emit, alpha sprites lit like the rest, and two mesh point lights that author no fade band; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
@@ -114,14 +114,14 @@
       "name": "c1-stunt-marker",
       "frame": 90,
       "hash": "93e005bfcf9a3a46efb6fe569e9645ef",
-      "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen edge arrow and the category/name/clock label block in the non-destructive objective's blue, over the run HUD's clock, zone count and intro banner.",
+      "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen edge arrow and the category/name/clock label in the non-destructive objective's blue, over the run HUD's clock and zone count, the player's ground shadow.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
       "hash": "c9b370fabcf96b3e5cb18799a2fb440a",
-      "exercises": "Four humans launch a co-op campaign mission abreast on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light and the ground shadows in every pane; frame-sensitive 73.79%.",
+      "exercises": "Four humans launch a co-op campaign mission on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light, a point light on its fade band and ground shadows; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
     {

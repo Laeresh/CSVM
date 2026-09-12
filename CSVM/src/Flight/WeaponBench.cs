@@ -49,7 +49,7 @@ public static class WeaponBench
         int ok = 0, err = 0, skip = 0;
         foreach (var w in all)
         {
-            // A hardpoint weapon fires from a pylon, a gun from a gun group — and from NO other
+            // A hardpoint weapon fires from a pylon, a gun from a gun group, and from NO other
             // bank: a cross-bank fallback would turn "this plane has no mount for it" into a pass.
             var mounts = w.IsGun ? gunMounts : pylonMounts;
             string kind = w.IsRocket ? "rocket" : w.IsGun ? "gun" : "other";
@@ -110,7 +110,7 @@ public static class WeaponBench
     }
 
     /// <summary>The bench's verdict: the report text plus the counts a suite asserts on.
-    /// <see cref="Skipped"/> is called out because it is a success-looking outcome — a weapon with
+    /// <see cref="Skipped"/> is called out because it is a success-looking outcome, a weapon with
     /// no mount of its class on this plane never fires and nothing else would notice.</summary>
     public sealed class Result
     {
@@ -120,7 +120,7 @@ public static class WeaponBench
         public required int Errors { get; init; }
         public required int Skipped { get; init; }
 
-        /// <summary>How many mounts of each class the bench actually fired from — the coverage the
+        /// <summary>How many mounts of each class the bench actually fired from, the coverage the
         /// 48/48 line does NOT show, since one mount is enough to make every weapon pass.
         /// Suites pin this at <c>ForRig</c>'s 4, so shrunk coverage cannot hide behind an
         /// unchanged 48/48.</summary>

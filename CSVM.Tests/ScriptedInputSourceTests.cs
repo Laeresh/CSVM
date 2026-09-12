@@ -34,7 +34,7 @@ public class ScriptedInputSourceTests
         Assert.Equal(3f, source.Read(10f).Pitch);
     }
 
-    /// <summary>A duration of 0 (or less) on a non-last segment holds it forever too — the same
+    /// <summary>A duration of 0 (or less) on a non-last segment holds it forever too, the same
     /// rule the last segment gets implicitly, spelled out for an interior segment.</summary>
     [Fact]
     public void ANonPositiveDurationHoldsThatSegmentForever()

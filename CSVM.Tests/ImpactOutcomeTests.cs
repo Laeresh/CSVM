@@ -10,7 +10,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="ImpactOutcome.Resolve"/> — the decision "what should happen when this weapon hits
+/// <see cref="ImpactOutcome.Resolve"/>, the decision "what should happen when this weapon hits
 /// this surface id", taken apart from performing it. Nothing here builds a scene: the rule cases run
 /// on hand-built <see cref="WeaponDef"/>s, and the data cases read the shipped
 /// <c>weapons.zrd.json</c> so the table lookup is checked against the real <c>IMPACT</c> shapes
@@ -47,7 +47,7 @@ public class ImpactOutcomeTests
         Assert.Equal(ImpactStandIn.None, outcome.StandIn);
     }
 
-    /// <summary>Ground gets the single spark, gun or rocket alike, at every terrain id — it has no
+    /// <summary>Ground gets the single spark, gun or rocket alike, at every terrain id, it has no
     /// arm of its own since the chip burst was removed. The assertion that matters is that the
     /// answer is not <c>None</c>: <c>ProjectilePool</c> gates the world-effects sink (the
     /// <c>blacksmokepuffer</c>) on <c>StandIn != None</c>, so a terrain hit resolving to nothing
@@ -64,7 +64,7 @@ public class ImpactOutcomeTests
             ImpactOutcome.Resolve(Rocket(), surfaceId, false, hasEffectsRuntime: true).StandIn);
     }
 
-    /// <summary>A gun round off a building ricochets; a rocket on the same wall does not — the
+    /// <summary>A gun round off a building ricochets; a rocket on the same wall does not, the
     /// ricochet stands in for a gun-specific authored asset that is missing from the install.</summary>
     [Fact]
     public void OnlyAGunRicochetsOffABuilding()
@@ -88,7 +88,7 @@ public class ImpactOutcomeTests
     }
 
     /// <summary>With no world-effects runtime to build its real fireball, a hardpoint weapon shows
-    /// the explosion stand-in — and it outranks the surface's own look, so the blast is visible in a
+    /// the explosion stand-in, and it outranks the surface's own look, so the blast is visible in a
     /// scene-less pool whatever it hit. A gun never takes that branch.</summary>
     [Theory]
     [InlineData(SurfaceRegistry.Default)]
@@ -135,7 +135,7 @@ public class ImpactOutcomeTests
     // ---- the IMPACT table lookup, against the shipped data ------------------------------------
 
     /// <summary>The 30 cal slug's own table: <c>default</c>(0) and <c>water</c>(1) each bind a name
-    /// and a sound, and <c>buildings</c>(11) binds a name with no <c>SOUND</c> — a row is taken
+    /// and a sound, and <c>buildings</c>(11) binds a name with no <c>SOUND</c>, a row is taken
     /// whole, so the building hit is silent rather than borrowing the default's sound.</summary>
     [ExtractedDataFact]
     public void TheSlugsTableIsReadPerSurfaceIdAndNotMerged()
@@ -156,7 +156,7 @@ public class ImpactOutcomeTests
     }
 
     /// <summary>An id the weapon names no block for resolves the <c>default</c> row whole, effect
-    /// name and sound alike — <c>FUN_005ad630</c>'s miss arm copies row 0 over it at parse time
+    /// name and sound alike, <c>FUN_005ad630</c>'s miss arm copies row 0 over it at parse time
     /// (`0x005ae268`). <c>dirt</c>(13) is the case with consequences: no shipped weapon names it,
     /// and it is up to 10.2 % of a chapter's collidable ground, so without the copy the four ids
     /// below go silent on ground that visibly is not special.</summary>
@@ -179,7 +179,7 @@ public class ImpactOutcomeTests
 
     /// <summary>The rocket half of the same rule, which is what a player sees: the HE rocket names
     /// only <c>default</c>/<c>water</c>/<c>buildings</c>, so its ground burst is what fires on a
-    /// dirt tile and on a struck aircraft — reported at the controls as "rockets do not explode on
+    /// dirt tile and on a struck aircraft, reported at the controls as "rockets do not explode on
     /// dirt or on other planes", and the reason the copy is not a detail.</summary>
     [ExtractedDataFact]
     public void TheHeRocketsBurstReachesDirtAndAStruckAircraft()
@@ -218,8 +218,8 @@ public class ImpactOutcomeTests
         Assert.Equal("flak_effectplayer", ImpactOutcome.Resolve(flak, SurfaceRegistry.Player, false, true).EffectName);
     }
 
-    /// <summary>A row that binds only <c>SURFACE_ANIMATION</c> — the armour-piercing rocket's
-    /// ground effect — resolves through it, since <c>ANIMATION</c> is preferred but optional.</summary>
+    /// <summary>A row that binds only <c>SURFACE_ANIMATION</c>, the armour-piercing rocket's
+    /// ground effect, resolves through it, since <c>ANIMATION</c> is preferred but optional.</summary>
     [ExtractedDataFact]
     public void ASurfaceAnimationStandsInForAMissingAnimation()
     {
@@ -317,7 +317,7 @@ public class ImpactOutcomeTests
         foreach (var weapon in weapons.All)
         {
             // HasBlastDamage's rule, re-derived from the raw fields rather than read back off the
-            // outcome it is meant to check — a positive-damage weapon with an authored radius owes
+            // outcome it is meant to check, a positive-damage weapon with an authored radius owes
             // a blast; a zero-damage flash/flare special's radius is an effect radius only.
             var expectedBlast = weapon.HealthDamage is > 0f && weapon.ImpactProximity is > 0f;
 

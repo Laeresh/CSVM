@@ -24,7 +24,7 @@ public sealed class AiGunner
 
     /// <summary>The gun aim-quality gate: the clamped mount aim must sit within
     /// <c>acos(0.9848)</c>, 10°, of the lead direction. The original's own literal, per weapon
-    /// class — ordnance takes the tighter <see cref="AiRocketeer.AimQualityCos"/>.</summary>
+    /// class, ordnance takes the tighter <see cref="AiRocketeer.AimQualityCos"/>.</summary>
     public const float AimQualityCos = 0.9848f;
 
     /// <summary>The standing target of any class (a <see cref="FlightController"/>, a
@@ -36,30 +36,30 @@ public sealed class AiGunner
     public object? Target;
 
     /// <summary>Re-acquire through the D12 ranking when <see cref="Target"/> is null or dead.
-    /// Off, a cleared target simply holds fire — an explicitly ordered gunner.</summary>
+    /// Off, a cleared target simply holds fire, an explicitly ordered gunner.</summary>
     public bool AutoTarget = true;
 
-    /// <summary>The roster's assigned target (slot 6, <c>primary_target</c>), by node name —
+    /// <summary>The roster's assigned target (slot 6, <c>primary_target</c>), by node name,
     /// mutable, the mission-script seam. While it resolves to a live hostile inside the
     /// activation radius it is picked outright; ranking takes over when it dies or leaves
-    /// (the reading is assumed — see <c>FlightController.SelectRankedTarget</c>).
+    /// (the reading is assumed, see <c>FlightController.SelectRankedTarget</c>).
     /// <c>"player"</c> resolves to any human-piloted aircraft. Null/empty = none.</summary>
     public string? PrimaryTargetName;
 
     /// <summary>The roster's <c>rating_biases</c> (slot 33), mutable; null = none. Matched
     /// against candidate node names by <see cref="AiTargetRanking.ObjectiveBiasFor"/>. An
-    /// <c>--ai</c>/egen spawn carries no roster block and so no biases — the documented gap
+    /// <c>--ai</c>/egen spawn carries no roster block and so no biases, the documented gap
     /// until mission spawns attach roster identities.</summary>
     public System.Collections.Generic.IReadOnlyList<Mech3.AiRatingBias>? RatingBiases;
 
-    /// <summary>Dead-eye aim-error cone half-angle, degrees — <c>ai_skill_parameters</c>'s
+    /// <summary>Dead-eye aim-error cone half-angle, degrees, <c>ai_skill_parameters</c>'s
     /// <c>dead_eye_angle</c> at the pilot's rating (4.0° at 1, 1.45° at 9; the default is the
     /// worst rating, matching the 89 shipped mook blocks whose only authored skill is
     /// <c>dead_eye 1</c>).</summary>
     public float DeadEyeAngleDeg = 4f;
 
     /// <summary>Quick-draw shot-acceptance cone half-angle off the target's nose/tail axis,
-    /// degrees — <c>quick_draw_angle</c> at the pilot's rating (50° at 1, 89° at 9). The
+    /// degrees, <c>quick_draw_angle</c> at the pilot's rating (50° at 1, 89° at 9). The
     /// same-named <c>quick_draw_chance</c> is not a gun term at all: it is the per-launch
     /// ordnance roll (docs/org/aiPilot/aiWeapons.md), so nothing here consumes it. The cone's
     /// aircraft-against-aircraft scope is on <see cref="QuickDrawAccepts"/>.</summary>
@@ -91,7 +91,7 @@ public sealed class AiGunner
     /// and the airframe swap read.</summary>
     public FlightController? AircraftTarget => Target as FlightController;
 
-    /// <summary>True when this tick's geometry passed every fire gate — the AI's trigger.</summary>
+    /// <summary>True when this tick's geometry passed every fire gate, the AI's trigger.</summary>
     public bool WantsFire { get; private set; }
 
     /// <summary>The unperturbed world-space lead direction of the last <see cref="Solve"/> with
@@ -99,7 +99,7 @@ public sealed class AiGunner
     /// <see cref="ShotDirection"/>, never along this exactly.</summary>
     public Vector3 AimDirWorld { get; private set; }
 
-    /// <summary>The world-space intercept point of the last solution — where the lead says the
+    /// <summary>The world-space intercept point of the last solution, where the lead says the
     /// round meets the target. Each barrel converges on this point (<see cref="ShotDirection"/>),
     /// so wing-mounted guns do not fire parallel lines that straddle the fuselage.</summary>
     public Vector3 InterceptPoint { get; private set; }
@@ -114,13 +114,13 @@ public sealed class AiGunner
         var away = ownPos - targetPos;
         if (away.LengthSquared() < 1e-6f || targetForward.LengthSquared() < 1e-6f)
             return true;
-        // |cos| covers both cones at once — the fore and aft cones are mirror images and the
+        // |cos| covers both cones at once, the fore and aft cones are mirror images and the
         // shipped angles never exceed 89°.
         float cos = Mathf.Abs(away.Normalized().Dot(targetForward.Normalized()));
         return cos >= Mathf.Cos(Mathf.DegToRad(angleDeg));
     }
 
-    /// <summary>Clears the trigger — no target, no fire step this tick.</summary>
+    /// <summary>Clears the trigger, no target, no fire step this tick.</summary>
     public void HoldFire() => WantsFire = false;
 
     /// <summary>One tick's fire decision, in the original's gate order. All world-space;
@@ -135,7 +135,7 @@ public sealed class AiGunner
         if (!QuickDrawAccepts(muzzlePos, targetPos, targetForward))
             return; // too oblique an attack for this pilot's quick draw
         // The engine gates on the separation ITSELF against the slot's authored window, both
-        // ends squared at parse time — not on whether the round reaches the intercept.
+        // ends squared at parse time, not on whether the round reaches the intercept.
         float sep2 = muzzlePos.DistanceSquaredTo(targetPos);
         if (sep2 < MinRangeM * MinRangeM || sep2 > MaxRangeM * MaxRangeM)
             return;
@@ -168,7 +168,7 @@ public sealed class AiGunner
 
     /// <summary>One round's launch direction from one barrel: the line from THIS muzzle to the
     /// solved intercept point (wing guns converge rather than firing parallel), perturbed
-    /// inside the dead-eye cone — uniform in the polar angle, the engine's own scatter shape
+    /// inside the dead-eye cone, uniform in the polar angle, the engine's own scatter shape
     /// (<see cref="AimAssist.Scatter"/>), one rng draw pair per shot.</summary>
     public Vector3 ShotDirection(Vector3 muzzlePos)
     {

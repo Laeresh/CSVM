@@ -14,7 +14,7 @@ namespace CSVM.Tests;
 /// docs/org/flightModel.md, "Torques and the limiters". These tests fly every airframe in the
 /// manoeuvres that produce the most load factor and fail if either threshold comes into reach,
 /// which is when a stock envelope row would start moving with it.
-/// ⚠ The AOA half is NOT unreachable and is not asserted here — it is a continuous window rather
+/// ⚠ The AOA half is NOT unreachable and is not asserted here, it is a continuous window rather
 /// than a threshold, live at <c>FlightModel.AoaLimiterFactor</c> 1 and binding on every stock
 /// airframe. The α margins below are kept because they are the measurement behind that finding,
 /// not because a threshold is being watched.
@@ -23,10 +23,10 @@ public class ControlLimiterTests
 {
     private const float Dt = 1f / 60f;
 
-    // The executable's compiled fallback `highGs` — NOT what this install authors.
+    // The executable's compiled fallback `highGs`, NOT what this install authors.
     private const float FallbackHighGStart = 5f;
 
-    // The able-to-fail control's α fraction — NOT a measurement, just "a threshold the model can
+    // The able-to-fail control's α fraction, NOT a measurement, just "a threshold the model can
     // still cross". Was 0.5, which retiring wingVert put 0.4% out of reach (peak α 22.9° against
     // 23.0°); pulling harder does not help, since α is a lag bounded by the chase rate.
     private const float DisproofAoaFraction = 0.45f;
@@ -40,8 +40,8 @@ public class ControlLimiterTests
 
     // The manoeuvres that make G and α, at full throttle: the sustained max-performance
     // pull at cruise and again entered fast (G grows with speed), the same pull banked, a full
-    // forward push (the `lowGs` side), and full rudder. Ten seconds each — more than a full
-    // loop — so nothing transient is missed.
+    // forward push (the `lowGs` side), and full rudder. Ten seconds each, more than a full
+    // loop, so nothing transient is missed.
     private static readonly (string Name, float EntryFdFrac, FlightInput In)[] Manoeuvres =
     {
         ("pull @ fd", 1.0f, new FlightInput { Pitch = 1f, Throttle = 1f }),
@@ -55,7 +55,7 @@ public class ControlLimiterTests
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
     /// <summary>The G limiter's ramp begins at the authored <c>highGs[0]</c>, so it has no effect at
-    /// all below that. No airframe's hardest manoeuvre demands that much — and the demand read here
+    /// all below that. No airframe's hardest manoeuvre demands that much, and the demand read here
     /// is before both lift clamps, so the delivered load factor is lower still.</summary>
     [ExtractedDataFact]
     public void TheGLimiterCannotEngageOnAnyAirframe()
@@ -74,7 +74,7 @@ public class ControlLimiterTests
     /// <summary>The <c>lowGs</c> side, measured rather than argued: the limiter reads the DELIVERED
     /// lift's signed body-up component, which does go negative in an outside push, so the earlier
     /// "the demand is a length" reading measured the wrong quantity (METHOD-23). This side is not
-    /// out of reach — a sustained forward push at 1.5 × <c>fd_speed</c> carries two airframes just
+    /// out of reach, a sustained forward push at 1.5 × <c>fd_speed</c> carries two airframes just
     /// past the authored −6 G. What is pinned is that the engagement stays a graze; a term running
     /// deep into the ramp would take most of a separating command and show in the envelope.</summary>
     [ExtractedDataFact]

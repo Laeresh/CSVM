@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>The combat-voice trigger dispatch: events in, (speaker, clip, outcome) decisions out.
-/// Decode: <c>docs/formats/combat-voice.md</c> — the talker roll, the cooldown, the DI damage
+/// Decode: <c>docs/formats/combat-voice.md</c>, the talker roll, the cooldown, the DI damage
 /// tiers and the broadcast election. Engine-free in the <see cref="AiModeMachine"/> sense: no
 /// nodes, no clocks, all randomness from the injected seeded stream, playback delegated to the
 /// resolver the caller supplies.
@@ -13,7 +13,7 @@ namespace CSVM.Flight;
 /// wrapping, never N independent rolls.
 /// Invented, named as such: the <c>Bail</c>/<c>NoBail</c> pick below the death-cry family root is
 /// a constitution roll (unconfirmed), and the bearing quantisation constants
-/// (<see cref="LevelBandM"/>; the 12/3/6/9 quadrants split at ±45°) — only the index formula is
+/// (<see cref="LevelBandM"/>; the 12/3/6/9 quadrants split at ±45°), only the index formula is
 /// decoded.</summary>
 public sealed class AiVoiceDispatcher
 {
@@ -60,7 +60,7 @@ public sealed class AiVoiceDispatcher
     private readonly List<Speaker> _order = new();
 
     /// <summary><paramref name="resolve"/> answers (pilot VO id, family root) with the one
-    /// playable name, or null when the pilot owns no playable clip for it — availability, not
+    /// playable name, or null when the pilot owns no playable clip for it, availability, not
     /// just def presence.</summary>
     public AiVoiceDispatcher(Random rng, Func<int, string, string?> resolve)
     {
@@ -72,7 +72,7 @@ public sealed class AiVoiceDispatcher
     /// talking"). Null = never; the remake's one-shots carry no per-speaker playing state yet.</summary>
     public Func<int, bool>? IsTalking { get; set; }
 
-    /// <summary>Registered speakers, in registration order — the broadcast election's list.</summary>
+    /// <summary>Registered speakers, in registration order, the broadcast election's list.</summary>
     public IReadOnlyList<Speaker> Speakers => _order;
 
     /// <summary>The bearing trigger id: <c>1 + 3·bearingIndex + altitudeBand</c> (decoded),
@@ -82,7 +82,7 @@ public sealed class AiVoiceDispatcher
 
     /// <summary>Quantises an enemy's position in the warned aircraft's frame into the bearing
     /// trigger id: nearest of the four clock quadrants about world up (12 ahead, 3 right, 6
-    /// behind, 9 left — the ±45° split is the natural quantisation, not a decoded constant) and
+    /// behind, 9 left, the ±45° split is the natural quantisation, not a decoded constant) and
     /// the low/level/high band per <see cref="LevelBandM"/>.</summary>
     public static int BearingTriggerFor(Vector3 ownPos, Vector3 ownForward, Vector3 enemyPos)
     {
@@ -125,7 +125,7 @@ public sealed class AiVoiceDispatcher
     /// <summary>The registered speaker, or null.</summary>
     public Speaker? Find(int id) => _speakers.TryGetValue(id, out var s) ? s : null;
 
-    /// <summary>An addressed trigger on one speaker: the gate, in the decoded order — mute
+    /// <summary>An addressed trigger on one speaker: the gate, in the decoded order, mute
     /// window, aliveness (force bypasses ONLY this), already-talking, the null-slot test (before
     /// anything rolls), the cooldown, then the talker roll arming the cooldown either way.</summary>
     public Decision Dispatch(int speakerId, int triggerId, float now, bool force = false)
@@ -153,7 +153,7 @@ public sealed class AiVoiceDispatcher
 
     /// <summary>The dying pilot's own death cry, id 20 (<c>DA</c>) on the player's team, id 21
     /// (<c>DE</c>) otherwise, dispatched with force because the speaker is already dead. The
-    /// <c>Bail</c>/<c>NoBail</c> pick below the family root is a constitution roll — the format
+    /// <c>Bail</c>/<c>NoBail</c> pick below the family root is a constitution roll, the format
     /// page's unconfirmed natural-candidate reading, invented here and named as such.</summary>
     public Decision DeathCry(int speakerId, bool onPlayersTeam, float now)
     {
@@ -237,7 +237,7 @@ public sealed class AiVoiceDispatcher
         bool passed = _rng.NextDouble() < chance;
         if (triggerId >= 0 && triggerId < TriggerCount)
         {
-            // ⚠ Both outcomes arm the cooldown — a failed roll silences the slot for 15 s.
+            // ⚠ Both outcomes arm the cooldown, a failed roll silences the slot for 15 s.
             speaker.NextAllowed[triggerId] = now + SlotCooldownS;
         }
         return passed
@@ -274,13 +274,13 @@ public sealed class AiVoiceDispatcher
         /// <summary>The pilot's <c>talker_chance</c> (0.25 → 0.95 over the shipped pair).</summary>
         public float TalkerChance;
 
-        /// <summary>The pilot's <c>constitution_chance</c> (0.35 → 0.95) — the invented
+        /// <summary>The pilot's <c>constitution_chance</c> (0.35 → 0.95), the invented
         /// Bail/NoBail pick's probability.</summary>
         public float ConstitutionChance;
 
         internal float[] NextAllowed { get; } = new float[TriggerCount];
 
-        /// <summary>The slot's next-allowed time — test visibility into the cooldown stamps.</summary>
+        /// <summary>The slot's next-allowed time, test visibility into the cooldown stamps.</summary>
         public float NextAllowedAt(int triggerId) => NextAllowed[triggerId];
     }
 }

@@ -5,7 +5,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Clamped linear ramp between two (x, y) control points — the shape of
+/// <summary>Clamped linear ramp between two (x, y) control points, the shape of
 /// every throttle/speed→volume/pitch sound curve in player.json.</summary>
 public readonly struct SoundCurve
 {
@@ -30,13 +30,13 @@ public readonly struct SoundCurve
 }
 
 /// <summary>One entry of a vehicle def's 'destroyable_parts' block:
-/// a damageable airframe section — nose / tail / leftwing / rightwing for the
-/// player planes — with its hit points, its armor pool, and state-change anims.
-/// The pair is (hit points, armor) — armor is spent first
+/// a damageable airframe section, nose / tail / leftwing / rightwing for the
+/// player planes, with its hit points, its armor pool, and state-change anims.
+/// The pair is (hit points, armor), armor is spent first
 /// (docs/formats/vehicle.md "The hp pair: armor + hit points"); a def with only one
 /// float carries no armor (`MaxArmor` stays 0), it is not duplicated from MaxHp.
 /// 'critical' means the plane is destroyed when this part's HP reaches 0; the tail
-/// additionally carries 'engine' (power loss on destruction — flight-handling
+/// additionally carries 'engine' (power loss on destruction, flight-handling
 /// penalties are not modeled yet, recorded only). InjureAnims maps descending
 /// HP fractions to anim names: the *_damage_green/yellow/red cockpit-indicator
 /// cycle plus the pdpanelN torn-skin panel flips (DamageVisuals wires the panels).</summary>
@@ -70,8 +70,8 @@ public sealed class AiWeaponSlot
 
 /// <summary>One entry of a vehicle def's <c>turrets</c> block: which <c>ai.zrd</c> gunner row
 /// (<see cref="Title"/>, a <c>MSG_TUR_*</c> key) drives which turret-rig subtree
-/// (<see cref="Node"/>, e.g. <c>kestrel_turret1</c>). The block is keyed by VIEWPOINT —
-/// <c>firstp</c> is the cockpit-view rig (player defs only), <c>thirdp</c> the external one —
+/// (<see cref="Node"/>, e.g. <c>kestrel_turret1</c>). The block is keyed by VIEWPOINT,
+/// <c>firstp</c> is the cockpit-view rig (player defs only), <c>thirdp</c> the external one,
 /// which is what the titles' <c>_G1</c>/<c>_G3</c> suffixes select (docs/formats/turrets.md).</summary>
 public sealed class TurretMount
 {
@@ -138,7 +138,7 @@ public sealed class PlaneStats
     /// readout prints; unresolved it is a key, not a name.</summary>
     public string? AiTitleKey;
 
-    /// <summary>That title resolved ("Medusa Kestrel"), or null where nobody has resolved it — a
+    /// <summary>That title resolved ("Medusa Kestrel"), or null where nobody has resolved it, a
     /// suite rig with no string table, or a player load. <c>PlaneRoster.PlaneDisplayName</c> prefers
     /// it over the def-name derivation, which is how a marker reads the militia's name.</summary>
     public string? AiTitle;
@@ -182,7 +182,7 @@ public sealed class PlaneStats
     public float AiInputLimitYaw = 1f;
 
     // rudder_tol: how much horizontal aim error justifies banking rather than ruddering
-    // (docs/org/aiControlLaw.md). ⚠ A HIGHER value means MORE rudder, not less — clearing the
+    // (docs/org/aiControlLaw.md). ⚠ A HIGHER value means MORE rudder, not less, clearing the
     // threshold is what selects the bank branch. At the 0.2 default any target ahead is banked
     // toward and the rudder is reserved for targets nearly dead astern; `autogyro` and `balmoral`
     // author 1.0, the ceiling the compared quantity can never exceed, which puts a lateral-dominant
@@ -190,26 +190,26 @@ public sealed class PlaneStats
     public float RudderTol = 0.2f;
 
     // player.json globals
-    public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
+    public float Gravity = PhysicsConstants.NomGravity; // nom_gravity, the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
     // player.json flight globals, plumbed here instead of hardcoded (docs/org/flightModel.md).
     // Converted exactly as the original does: speeds × 0.44704, angles cosined where the original
     // cosines them, raw G otherwise. Fallbacks are the executable's compiled defaults; this
-    // install's authored values differ — see the corrections table there.
+    // install's authored values differ, see the corrections table there.
     // ⚠ Every one of these now reaches the plant, so do not read an authored value as proof that a
     // term is inert; the reachability measurements are in that dossier's limiter sections.
-    public float LiftAccelRate = 1.2f;      // lift_accel_rate, 1/s — NOT converted (a rate, not a speed)
-    public float LiftAoaCosLo = 0.98f;      // cos(liftAOAs[0]) — liftAOAs is degrees, cosined at load
+    public float LiftAccelRate = 1.2f;      // lift_accel_rate, 1/s, NOT converted (a rate, not a speed)
+    public float LiftAoaCosLo = 0.98f;      // cos(liftAOAs[0]), liftAOAs is degrees, cosined at load
     public float LiftAoaCosHi = 0.96f;      // cos(liftAOAs[1])
-    public float MaxAoaCos = 0.85f;         // cos(maxAOA) — maxAOA is degrees, cosined at load
-    public float HighGStart = 5f;           // highGs[0], plain G — NOT converted
+    public float MaxAoaCos = 0.85f;         // cos(maxAOA), maxAOA is degrees, cosined at load
+    public float HighGStart = 5f;           // highGs[0], plain G, NOT converted
     public float HighGMax = 9f;             // highGs[1], plain G
     public float LowGStart = -5f;           // lowGs[0], plain G
     public float LowGMax = -9f;             // lowGs[1], plain G
     public float TurnFadeIn = 10f * PhysicsConstants.MphToMs;   // turn_fade_in, m/s
     public float TurnFadeOut = 40f * PhysicsConstants.MphToMs;  // turn_fade_out, m/s
-    public float YawLowSpeed = 0.05f;       // yaw_low_speed, dimensionless authority — NOT converted
+    public float YawLowSpeed = 0.05f;       // yaw_low_speed, dimensionless authority, NOT converted
     public float YawHighSpeed = 0.1f;       // yaw_high_speed, dimensionless authority
     public float YawFadeIn = 10f * PhysicsConstants.MphToMs;    // yaw_fade_in, m/s
     public float YawMax = 22.5f * PhysicsConstants.MphToMs;     // yaw_max, m/s
@@ -218,17 +218,17 @@ public sealed class PlaneStats
     public float HighSpeedPitchFadeHi = 600f * PhysicsConstants.MphToMs; // high_speed_pitch_fade[1], m/s
     // drag_fade_speed's own compiled fallback is undocumented in docs/org/flightModel.md (the decode
     // covers control authority's turn_*/yaw_* fades but not this key's mechanism); 40 mph mirrors the
-    // unchanged turn_fade_out/yaw_fade_in pattern, not a read fallback — flag if this proves wrong.
+    // unchanged turn_fade_out/yaw_fade_in pattern, not a read fallback, flag if this proves wrong.
     public float DragFadeSpeed = 40f * PhysicsConstants.MphToMs; // drag_fade_speed, m/s
 
     // Ground blow (docs/org/flightModel.md, "Ground blow"): the nose-forward probe that biases the
-    // player's control response away from what it hits. Both are RAW SCALARS — groundblow_elev is a
+    // player's control response away from what it hits. Both are RAW SCALARS, groundblow_elev is a
     // length in METRES and needs no conversion, and it is the ray's length AND the falloff's
     // denominator, so it is not a trigger range. Fallbacks are the executable's compiled defaults;
     // this install authors 400 and 10.
-    public float GroundBlowElev = 100f;     // groundblow_elev, m — ray length and falloff denominator
+    public float GroundBlowElev = 100f;     // groundblow_elev, m, ray length and falloff denominator
     public float GroundBlowMag = 1.5f;      // groundblow_mag, dimensionless
-    // ⚠ C23: the AI path is a DIFFERENT law from the player term, not that term scaled by this —
+    // ⚠ C23: the AI path is a DIFFERENT law from the player term, not that term scaled by this,
     // a fixed push, linear in proximity, not dt-scaled (docs/org/flightModel.md "Ground blow").
     // FlightModel.GroundBlowTerm reads AiGroundBlow · GroundBlowMag as that factor (5.0 authored).
     // Carrier drops suppress it for 1.5 s, then cut it ×0.15 for 1 s; stunned AI skips it too.
@@ -236,7 +236,7 @@ public sealed class PlaneStats
 
     // The collision restitution ceiling (player.json's `crash` block, docs/org/flightModel.md's
     // "Collision response and bounce_factor"): a RAW SCALAR, and the ceiling on effective normal
-    // restitution rather than the restitution itself — what a contact actually rebounds at is
+    // restitution rather than the restitution itself, what a contact actually rebounds at is
     // f_lin · this, with f_lin the lever arm's rebound/spin partition (FlightModel's
     // BounceNormalSpeed). The fallback is the executable's compiled default, pre-set before the
     // block is looked up, so an absent `crash` block leaves it standing; this install authors 0.6.
@@ -266,10 +266,10 @@ public sealed class PlaneStats
     // value, since the original leaves the slot null with the key absent and then plays nothing.
     public string BulletHitSound = "bullet_hit_sg";
 
-    // The gun aim assist (sticky_bullet_*, docs/org/aim-assist.md) — CatchupRate/ForgetInterval
+    // The gun aim assist (sticky_bullet_*, docs/org/aim-assist.md), CatchupRate/ForgetInterval
     // feed B2's per-frame slot update, DistFactor B4's candidate scoring, Inaccuracy B5's launch
     // scatter. Fallbacks are the executable's own compiled defaults, not the shipped player.json
-    // values — DistFactor's shipped 0.0 deletes the scan's distance term outright, where the
+    // values, DistFactor's shipped 0.0 deletes the scan's distance term outright, where the
     // compiled fallback below does not.
     public float StickyBulletCatchupRate = 1f;      // sticky_bullet_catchup_rate, 1/s
     public float StickyBulletForgetInterval = 0.5f; // sticky_bullet_forget_interval, s
@@ -280,11 +280,11 @@ public sealed class PlaneStats
 
     // C22's autohead velocity-follow (docs/formats/vehicle/player-globals.md): the idle-frame
     // lean into the plane's own velocity that HeadLook.IdleAim drives in Cockpit only. All three
-    // fallbacks are the executable's own compiled defaults, not this install's authored values —
+    // fallbacks are the executable's own compiled defaults, not this install's authored values,
     // ⚠ turn_max's asymmetry is the trap: the AUTHORED path converts degrees to radians and then
     // DOUBLES the result (the loader's own arithmetic), where the compiled DEFAULT is already the
     // doubled radian value stored directly, with no further doubling applied to it.
-    public float AutoheadTurnTime = 0.75f;          // autohead_turn_time, s — no conversion
+    public float AutoheadTurnTime = 0.75f;          // autohead_turn_time, s, no conversion
     public float AutoheadTurnMax = 0.1f;            // autohead_turn_max fallback, RADIANS already
     public float AutoheadTurnMinPitch = -0.05235988f; // autohead_turn_min_pitch fallback, RADIANS already
 
@@ -296,8 +296,8 @@ public sealed class PlaneStats
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
 
     /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto
-    /// the engine slot while the pilot's SELECTED view is the full Cockpit (mode 6) — not the Nose
-    /// view, confirmed at the controls of the original — and back on leaving it. Selected by
+    /// the engine slot while the pilot's SELECTED view is the full Cockpit (mode 6), not the Nose
+    /// view, confirmed at the controls of the original, and back on leaving it. Selected by
     /// <see cref="EngineAudioCurves.EngineDefFor"/> and driven by <c>FlightAudio</c>
     /// (<c>BL-161</c>, closed by D31); a held numpad key or look-behind is a per-frame pose and does
     /// not retrigger the swap, only a change of selection does.</summary>
@@ -313,7 +313,7 @@ public sealed class PlaneStats
     public string RattleSound = "snd_planeshake";
     public SoundCurve RattleVolume = new(1f, 0f, 1.2f, 1f);
 
-    /// <summary>vehicle.json <c>damaged_engine_sound</c> — the looped def swapped ONTO the engine
+    /// <summary>vehicle.json <c>damaged_engine_sound</c>, the looped def swapped ONTO the engine
     /// slot while the airframe is damaged, not a second loop blended over it. One entry install-wide
     /// (<c>snd_damagedengine</c>), inherited from basic_airplane by every plane.</summary>
     public string? DamagedEngineSound;
@@ -338,7 +338,7 @@ public sealed class PlaneStats
     public List<DestroyablePart> DestroyableParts = new();
 
     /// <summary>The def-authored whole-vehicle pair ('armor'/'health', nearest def in the
-    /// damage chain) — the AI base defs carry one (docs/formats/vehicle.md, fighters
+    /// damage chain), the AI base defs carry one (docs/formats/vehicle.md, fighters
     /// 64/64…100/100) and an AI load resolves it alongside an empty
     /// <see cref="DestroyableParts"/>, so the pair IS the whole model. No player def resolves
     /// either, so both stay null on a player load and <see cref="PlaneDamage"/> seeds the whole
@@ -350,7 +350,7 @@ public sealed class PlaneStats
     /// <summary>The def-level 'injure_anims': descending HP-fraction thresholds → whole-plane
     /// effect anims (docs/formats/vehicle.md). An AI load resolves the AI def's own ladder
     /// instead of the player's two-entry one below.
-    /// ⚠ Read as "any part's fraction crosses the threshold" — the exact original trigger is
+    /// ⚠ Read as "any part's fraction crosses the threshold", the exact original trigger is
     /// undecoded.</summary>
     public List<(float Frac, string Anim)> VehicleInjureAnims = new();
 
@@ -361,7 +361,7 @@ public sealed class PlaneStats
     /// wings never touch anything.</summary>
     public List<Vector3> CollisionProbes = new();
 
-    /// <summary>The def's <c>turrets</c> block — the host→gunner link the carried half of
+    /// <summary>The def's <c>turrets</c> block, the host→gunner link the carried half of
     /// <c>ai.zrd</c> is looked up through (empty on the six non-turret airframes). Both viewpoint
     /// rigs are parsed; carried AI gunner construction consumes only the <c>thirdp</c> entries.</summary>
     public List<TurretMount> TurretMounts = new();
@@ -383,7 +383,7 @@ public sealed class PlaneStats
     /// <summary>The original's per-spawn dynamics jitter (docs/org/flightModel.md "The per-spawn
     /// jitter"), applied only to the two vehicle classes it reaches. Always returns a COPY: the
     /// caller's object is the shared per-airframe cache and callers mutate what they get back.
-    /// ⚠ Only the whole-vehicle pair scales, never per-part pools — <see cref="LoadForAi"/>'s
+    /// ⚠ Only the whole-vehicle pair scales, never per-part pools, <see cref="LoadForAi"/>'s
     /// zone-less pair takes the full effect; a player airframe's resolved sum is written out
     /// explicitly so <see cref="PlaneDamage"/> sees the scaled hull.</summary>
     public PlaneStats WithAiSpawnJitter(Random rng)
@@ -500,7 +500,7 @@ public sealed class PlaneStats
             return false;
         }
 
-        // Requiring player_airplane in the chain is what makes the nodename match unique — the
+        // Requiring player_airplane in the chain is what makes the nodename match unique, the
         // AI and wingman variants share it. Runs for both flavours.
         string? found = null;
         List<ZrdrDict>? chain = null;
@@ -607,7 +607,7 @@ public sealed class PlaneStats
             FlightCeiling = Prop("flight_ceiling", 2500f),
             AiAttackRange = Prop("attack", 2000f),
             AiReturnRange = Prop("return_range", 1200f),
-            // Fallbacks are the def initialiser's compiled defaults, not guesses — see the fields.
+            // Fallbacks are the def initialiser's compiled defaults, not guesses, see the fields.
             AiInputScaleRoll = Prop("ai_input_scale_roll", 3.5f),
             AiInputScalePitch = Prop("ai_input_scale_pitch", 3.5f),
             AiInputScaleYaw = Prop("ai_input_scale_yaw", 3.5f),
@@ -619,7 +619,7 @@ public sealed class PlaneStats
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
         stats.CockpitEngineSound = PropStrOpt("cockpit_engine_sound");
-        // Absent from every shipped def, which is the finding, not a parse gap — see WhineSound.
+        // Absent from every shipped def, which is the finding, not a parse gap, see WhineSound.
         stats.WhineSound = PropStrOpt("prop_sound");
 
         // The whole-vehicle pair, only when the chain actually authors it (AI defs do; player
@@ -764,7 +764,7 @@ public sealed class PlaneStats
             break;
         }
 
-        // destroyable_parts schema: docs/formats/vehicle.md. An AI load resolves none — no
+        // destroyable_parts schema: docs/formats/vehicle.md. An AI load resolves none, no
         // roster-named chain authors the block, so an AI aircraft is zone-less.
         foreach (var d in damageChain)
         {
@@ -836,7 +836,7 @@ public sealed class PlaneStats
             stats.StickyBulletCatchupRate = player.Float("sticky_bullet_catchup_rate", stats.StickyBulletCatchupRate);
             stats.StickyBulletForgetInterval = player.Float("sticky_bullet_forget_interval", stats.StickyBulletForgetInterval);
             stats.StickyBulletDistFactor = player.Float("sticky_bullet_dist_factor", stats.StickyBulletDistFactor);
-            // Degrees in the file, radians in the field — the original's own parse-time conversion.
+            // Degrees in the file, radians in the field, the original's own parse-time conversion.
             // ⚠ Do NOT reproduce the executable's missing-key bug here (its absent-inaccuracy branch
             // writes catchup_rate's global); the shipped player.json always carries the key.
             stats.StickyBulletInaccuracy = Mathf.DegToRad(
@@ -852,7 +852,7 @@ public sealed class PlaneStats
                 ? Mathf.DegToRad(minPitchDeg)
                 : stats.AutoheadTurnMinPitch;
 
-            // Flight globals for the decoded model — see the field comments above for units and
+            // Flight globals for the decoded model, see the field comments above for units and
             // fallback provenance. Not yet read by FlightModel.cs.
             const float mph = PhysicsConstants.MphToMs;
             stats.LiftAccelRate = player.Float("lift_accel_rate", stats.LiftAccelRate);
@@ -876,7 +876,7 @@ public sealed class PlaneStats
             stats.HighSpeedPitchFadeLo = player.Float("high_speed_pitch_fade", stats.HighSpeedPitchFadeLo / mph, 0) * mph;
             stats.HighSpeedPitchFadeHi = player.Float("high_speed_pitch_fade", stats.HighSpeedPitchFadeHi / mph, 1) * mph;
             stats.DragFadeSpeed = player.Float("drag_fade_speed", stats.DragFadeSpeed / mph) * mph;
-            // Raw scalars, metres already — no MPH conversion on any of the three.
+            // Raw scalars, metres already, no MPH conversion on any of the three.
             stats.GroundBlowElev = player.Float("groundblow_elev", stats.GroundBlowElev);
             stats.GroundBlowMag = player.Float("groundblow_mag", stats.GroundBlowMag);
             stats.AiGroundBlow = player.Float("ai_groundblow", stats.AiGroundBlow);

@@ -336,7 +336,7 @@ public class AiNetFollowerTests
         Assert.True(f.Holding);
         Assert.Equal(2, f.CurrentIndex);
         Assert.False(f.Update(f.CurrentTarget));
-        Assert.Equal(2, f.CurrentIndex); // still — no shuttle back toward node 0
+        Assert.Equal(2, f.CurrentIndex); // still, no shuttle back toward node 0
     }
 
     [Fact]
@@ -504,7 +504,7 @@ public class AiNetFollowerTests
     };
 
     // An open 3-node path whose middle node is stop point 1 (armed) and whose far end is armed
-    // under the unaddressable id 0 — C3/M01's M1PirateZep in miniature.
+    // under the unaddressable id 0, C3/M01's M1PirateZep in miniature.
     private static AiNet StopPath() => new()
     {
         Id = 11,

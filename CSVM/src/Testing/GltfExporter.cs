@@ -160,12 +160,12 @@ public sealed class GltfExporter
         if (node is Node3D { Visible: false })
         {
             toFree.Add(node);
-            return; // its subtree goes with it — don't recurse into a pruned branch
+            return; // its subtree goes with it, don't recurse into a pruned branch
         }
         if (node is MeshInstance3D mesh)
         {
             // Drop the point-sprite lights and any surface-less mesh (the viewer's hidden mesh-lab
-            // overlays are visible MeshInstance3Ds with an empty mesh — glTF errors on those).
+            // overlays are visible MeshInstance3Ds with an empty mesh, glTF errors on those).
             if (mesh.Name.ToString() == "lights" || mesh.Mesh == null || mesh.Mesh.GetSurfaceCount() == 0)
             {
                 toFree.Add(mesh);

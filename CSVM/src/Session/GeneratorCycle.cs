@@ -25,7 +25,7 @@ public sealed class GeneratorCycle
 
     /// <summary>Seconds a launch bay stays open after its host's kill: the decoded wreck timer
     /// (the kill stamps the zeppelin's sink for 3 s later). A launch already waiting out its door
-    /// lead completes past it. ⚠ A deliberate deviation: the original disables the generator on
+    /// lead completes past it. ⚠ A remake-only rule: the original disables the generator on
     /// the kill tick, and C5/M04 loses on it when the fourth gasbag dies inside OBJECTIVE10's
     /// 0.5 s nap before OBJECTIVE11 credits Miles's launch
     /// (docs/formats/mission-entities/enemy-generators.md, "The host's death").</summary>
@@ -123,8 +123,9 @@ public sealed class GeneratorCycle
         if (_sinceHostDeath is float since)
         {
             _sinceHostDeath = since + dt;
-            // A launch waiting out its door lead outlives the grace, or the deviation buys C5/M04
-            // nothing: the credit lands 0.5 s after the kill and the lead runs past 3 s.
+            // A launch waiting out its door lead outlives the grace, or the remake-only rule
+            // buys C5/M04 nothing: the credit lands 0.5 s after the kill and the lead runs
+            // past 3 s.
             if (since >= HostDeathGraceSeconds && !_launchHeldForDoor)
             {
                 Disabled = true;
@@ -135,7 +136,7 @@ public sealed class GeneratorCycle
         if (Blocked(hostAltitude))
         {
             // Hold, not cancel: the timer and the wave counter keep running untouched and
-            // ONLY the door closes (once it has been open its minimum) — the decoded
+            // ONLY the door closes (once it has been open its minimum), the decoded
             // blocked branch. The door does not reopen while blocked.
             if (DoorOpen && _timer >= DoorMinOpenSeconds)
             {

@@ -18,7 +18,7 @@ namespace CSVM.Testing;
 /// (docs/architecture.md, <c>src/UI/SplitScreen.cs</c>).</summary>
 internal static class CoopCutsceneSuites
 {
-    // One of CutsceneController.IntroAnims, so the host answers for it with nothing registered —
+    // One of CutsceneController.IntroAnims, so the host answers for it with nothing registered,
     // and an intro is the episode a campaign session actually collapses the window for.
     private const string Anim = "generic_intro";
 
@@ -122,7 +122,7 @@ internal static class CoopCutsceneSuites
         var runtime = new AnimRuntime();
         ctx.Host.AddChild(runtime);
         // An empty program, bound: the host asks the runtime whether its definition is still
-        // running, and a program carrying none answers "ended" — which is the exit under test.
+        // running, and a program carrying none answers "ended", which is the exit under test.
         runtime.Bind(world, new AnimProgram());
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);
@@ -150,7 +150,7 @@ internal static class CoopCutsceneSuites
                 $"…leaving EXACTLY ONE listener-enabled viewport, never none: {filled.Line}");
 
             // Nothing is playing in this runtime's program, so the tick that asks finds the
-            // definition ended — the ordinary exit, driven through the ordinary path.
+            // definition ended, the ordinary exit, driven through the ordinary path.
             cutscene.Tick();
             var ended = Read(split);
             report.AppendLine($"{players}P after the definition ended: {ended.Line}");
@@ -190,7 +190,7 @@ internal static class CoopCutsceneSuites
         var runtime = new AnimRuntime();
         ctx.Host.AddChild(runtime);
         // An empty program, bound: the host asks the runtime whether its definition is still
-        // running, and a program carrying none answers "ended" — which is the exit under test.
+        // running, and a program carrying none answers "ended", which is the exit under test.
         runtime.Bind(world, new AnimProgram());
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);

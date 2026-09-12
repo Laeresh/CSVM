@@ -120,7 +120,7 @@ public sealed class RosterSpawnPlan
 
     /// <summary>The block's own <c>helpLabel</c> (slot 39) raw: the MSG_OBJ_* key its marker
     /// carries when <see cref="ObjectiveTarget"/> is set, or designer text otherwise (C4/M05's
-    /// <c>blakepeace_3_1</c>/<c>_2</c> author <c>"Blake Aviation"</c> with the flag unset) — gate
+    /// <c>blakepeace_3_1</c>/<c>_2</c> author <c>"Blake Aviation"</c> with the flag unset), gate
     /// on <see cref="ObjectiveTarget"/> before treating this as a message key.</summary>
     public string? HelpLabel { get; init; }
 

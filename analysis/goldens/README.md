@@ -1,9 +1,10 @@
 # The golden-image tripwire
 
-Twenty-one pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
-a mismatch names the shot and leaves the actual PNG in `.scratch/goldens/` next to that run's engine
-log. Nothing here is a picture — `manifest.json` holds command lines and hashes only, which is what
-keeps it inside the repo's no-game-assets rule.
+Pinned `--det` captures, each reduced to one md5; `manifest.json` lists them and is where the
+count is read. `RunTests.ps1` re-renders them and compares; a mismatch names the shot and leaves
+the actual PNG in `.scratch/goldens/` next to that run's engine log. Nothing here is a picture.
+`manifest.json` holds command lines and hashes only, which is what keeps it inside the repo's
+no-game-assets rule.
 
 A shot's `frame` is checked before its hash, off the `frame=N clock=<sim|render>` field the capture
 prints: photographing a different moment is a clock regression rather than a pixel one. The capture

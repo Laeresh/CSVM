@@ -51,8 +51,8 @@ public class StaticCamerasTests
         Assert.Equal(0f, StaticCameras.DeathLocalOffset(Params(), 0f, 0f).Z, Tol);
     }
 
-    /// <summary>The flyby's angle never lands inside either 15° wedge — one about the aircraft's
-    /// local up and one about its local down — so a re-site is always out on a flank.</summary>
+    /// <summary>The flyby's angle never lands inside either 15° wedge, one about the aircraft's
+    /// local up and one about its local down, so a re-site is always out on a flank.</summary>
     [Fact]
     public void TheFlybyAngleStaysOutOfBothWedges()
     {

@@ -24,8 +24,8 @@ public static class MissionCutscenes
     private const string FileKey = "ANIMATION_DEFINITION_FILE";
 
     /// <summary>Every <c>ANIMATION_NAME</c> the mission's cutscene reader files define, in load
-    /// order, de-duplicated. A mission with no <c>cutscenes\</c> entry — and one whose
-    /// <c>mis_anim.zrd</c> is missing or unreadable — resolves to nothing, so a caller can treat
+    /// order, de-duplicated. A mission with no <c>cutscenes\</c> entry, and one whose
+    /// <c>mis_anim.zrd</c> is missing or unreadable, resolves to nothing, so a caller can treat
     /// "this mission hosts no cutscene of its own" and "this is not a story mission" alike.</summary>
     public static List<string> AnimNames(string missionZrdrPath)
     {

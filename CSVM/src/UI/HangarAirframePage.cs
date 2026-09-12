@@ -113,7 +113,7 @@ public sealed class HangarAirframePage : HangarPage
         return bill;
     }
 
-    // One airframe's blueprint, decoded once and kept — including a miss, so an absent
+    // One airframe's blueprint, decoded once and kept, including a miss, so an absent
     // extraction is probed once per airframe, not once per frame.
     private HangarArt? BlueprintFor(int airframe)
     {

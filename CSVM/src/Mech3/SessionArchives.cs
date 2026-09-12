@@ -5,28 +5,28 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>Why the archives are being opened — fixes the <see cref="WorldSession.Options"/>
+/// <summary>Why the archives are being opened, fixes the <see cref="WorldSession.Options"/>
 /// lifetime flags that come back with them, so a caller cannot forget one (forgetting
 /// <c>TexturesOutliveBuild</c> is exactly the shipped-bug shape this guards against).</summary>
 public enum ArchiveIntent
 {
     /// <summary>A game/viewer/flight session: the texture archive belongs to the session (freed on
     /// return-to-menu), so the world runtime keeps baking `PUFFER_STATE` atlases at RUNTIME
-    /// — <c>TexturesOutliveBuild = true</c>. The sound archive stays a `using` local of
-    /// the build (the prewarm is what makes that survivable) — <c>SoundsOutliveBuild = false</c>.</summary>
+    ///, <c>TexturesOutliveBuild = true</c>. The sound archive stays a `using` local of
+    /// the build (the prewarm is what makes that survivable), <c>SoundsOutliveBuild = false</c>.</summary>
     Session,
 
-    /// <summary>The animation lab: both archives outlive the build — the lab node owns their
+    /// <summary>The animation lab: both archives outlive the build, the lab node owns their
     /// disposal so effects can build at any playhead time.</summary>
     Lab,
 
     /// <summary>A test-harness suite: both archives are `using` locals of the build, scoped
-    /// entirely to it — neither flag is set.</summary>
+    /// entirely to it, neither flag is set.</summary>
     Suite,
 }
 
 /// <summary>The five archives one chapter world needs, opened together because every caller
-/// (`GameSession`, the anim lab, the test harness) opens the same five — plus the
+/// (`GameSession`, the anim lab, the test harness) opens the same five, plus the
 /// <see cref="WorldSession.Options"/> lifetime flags <see cref="ArchiveIntent"/> implies, so a
 /// caller sets them by naming its intent, not by hand.
 /// ⚠ <see cref="OpenFor"/> only opens the archives and states the two flags; it does not dispose

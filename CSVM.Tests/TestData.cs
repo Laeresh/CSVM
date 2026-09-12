@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The two input sources these tests use. Fixtures are hand-authored bytes and JSON under
-/// <c>fixtures/</c>, written from <c>docs/formats/</c>, never copied from an extraction — a
+/// <c>fixtures/</c>, written from <c>docs/formats/</c>, never copied from an extraction, a
 /// trimmed piece of real game data is still game data.
 /// Extracted data is the player's own install, git-ignored and absent from a fresh checkout.
 /// <see cref="ExtractedRoot"/> is null when it cannot be found, and tests that need it carry
@@ -59,7 +59,7 @@ public static class TestData
     /// when no install is reachable.</summary>
     public static string? ExtractedRoot { get; }
 
-    /// <summary>The folder <c>extracted/</c> sits in — the "data root" the engine's
+    /// <summary>The folder <c>extracted/</c> sits in, the "data root" the engine's
     /// <see cref="CSVM.SessionPaths"/> takes. Null when <see cref="ExtractedRoot"/> is.</summary>
     public static string? DataRoot { get; }
 
@@ -217,7 +217,7 @@ public static class TestData
     }
 
     // The shared zrdr scope is present in every extraction, zipped or unpacked, and in no other
-    // folder this walk can reach — so it is the cheapest unambiguous marker.
+    // folder this walk can reach, so it is the cheapest unambiguous marker.
     private static bool IsExtraction(string dir) =>
         Directory.Exists(dir)
         && (File.Exists(Path.Combine(dir, "zrdr.zip")) || Directory.Exists(Path.Combine(dir, "zrdr")));

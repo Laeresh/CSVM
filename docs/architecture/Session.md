@@ -145,9 +145,9 @@ directives and `SET_HELP_LABEL` read `ObjectiveTarget`s, where a nested list is 
 
 ## src/Session/ObjectiveSites.cs
 The flown mission's flagged target sites, offered to each player's `TargetPool` carrying the flag
-their own record authors: `CollectTargets` is `targets.zrd`'s `objective` half (the Enemy cycle) and
-`CollectOtherTargets` its `other_target` half (the Non-Aircraft cycle), the curated list admitting a
-mission's chosen structures and no other destructible. A campaign director's script edits both with
+their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `targets.zrd`'s
+`objective` half (the Enemy cycle) and then its `other_target` half (the Non-Aircraft cycle), the
+curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
 take, their table unedited. World SITES only, keyed by `ObjectiveTarget.Key`, re-read every frame so
 a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state; a roster block
@@ -217,9 +217,9 @@ Which film plays before a campaign chapter, and the one handoff to the passenger
 follows it. The chapter is `seq / 5 + 1` over the profile's own position, so no screen passes a
 chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCount` reads the same
 story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
-folder. Playing is a delegate the caller supplies, `Session/Launcher.cs`'s `PlayCinema` being its
-shape, which leaves the film to `UI/CinemaScreen.cs` and keeps every decision here testable with no
-engine present. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaign.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
+folder. Playing is a `UI/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
+being what it is handed, which leaves the film to `UI/CinemaScreen.cs` and keeps every decision here
+testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaign.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/ClosingCinema.cs
 Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
@@ -227,9 +227,9 @@ handoff to that book. The gate is `CampaignProgression.Complete` over the seated
 unfinished campaign reaches the book with no film, which is what the original's own script does when
 its completion callback answers false. The film is the `FinalCinema` screen's layout row's name, and
 the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on purpose.
-Playing is a delegate the caller supplies, `Session/Launcher.cs`'s `PlayCinema` being its shape;
-`Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how
-both presentations' mission-end doors reach it. Films: [../formats/cinemas.md](../formats/cinemas.md).
+Playing is a `UI/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`), and the book opens through
+that file's `Once`. `Launcher` holds the process's one instance and hands it to
+`Menu/CampaignFeature.cs`, so both presentations' mission-end doors reach it. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions

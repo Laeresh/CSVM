@@ -3,11 +3,11 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// One centred list row with a ▶ cursor — the shared row of every menu that has one: the
+/// One centred list row with a ▶ cursor, the shared row of every menu that has one: the
 /// launchscreen's screens, its per-player aircraft panes, and every board menu.
 /// ⚠ The marker is a cell of its own, NOT a prefix on the row's text. A centred label whose text
 /// gains "▶  " when selected and "     " when not is centred on the PADDING as well, and since the
-/// two are not the same width every unselected row drifts sideways — which is what made these
+/// two are not the same width every unselected row drifts sideways, which is what made these
 /// menus read as uncentred. The same cell width is reserved on the right, so the label sits on the
 /// panel's centre line in both states.
 /// </summary>
@@ -15,7 +15,7 @@ public sealed partial class CursorRow : CenterContainer
 {
     private const string Marker = "▶";
 
-    // The marker cell's width as a multiple of the row's font size — room for the marker and its
+    // The marker cell's width as a multiple of the row's font size, room for the marker and its
     // gap at any scale, since callers pass a font size already scaled by the board's own factor.
     private const float MarkerCellEms = 1.6f;
 

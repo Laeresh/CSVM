@@ -7,7 +7,7 @@ namespace CSVM.Mech3;
 /// <summary>One step of a maneuver program: a target attitude in degrees held for a duration.
 /// The shipped shape is <c>[duration_s, pitch, yaw, roll]</c>; two entries (barrel_roll,
 /// spiral_dive's second step) append three more numbers, kept verbatim in <see cref="Extra"/>
-/// (undecoded — never interpreted here). A zero duration reads as "advance as soon as the
+/// (undecoded, never interpreted here). A zero duration reads as "advance as soon as the
 /// attitude is reached", not "hold for zero seconds"; see docs/formats/ai-rosters.md.</summary>
 public readonly record struct ManeuverStep(
     float DurationS, float PitchDeg, float YawDeg, float RollDeg, IReadOnlyList<float> Extra);
@@ -18,7 +18,7 @@ public readonly record struct ManeuverStep(
 /// </summary>
 public static class Maneuvers
 {
-    /// <summary>The exe's internal maneuver table order — the bit order of the roster's
+    /// <summary>The exe's internal maneuver table order, the bit order of the roster's
     /// <c>signature_maneuvers</c> mask. ⚠ NOT the order the JSON file lists the maneuvers in;
     /// read from the binary (docs/formats/ai-rosters.md, "signature_maneuvers is a bitmask").</summary>
     public static readonly IReadOnlyList<string> ExeTableOrder = new[]
@@ -100,7 +100,7 @@ public static class Maneuvers
 /// <summary>
 /// One entry of the shared maneuver library (<c>zrdr/maneuvers.zrd</c>): a
 /// <c>natural_touch</c> difficulty gate plus a timed attitude-step program. The library is
-/// data, not code — 17 shipped entries, of which <c>high_yo_yo</c> is a stub (difficulty 99,
+/// data, not code, 17 shipped entries, of which <c>high_yo_yo</c> is a stub (difficulty 99,
 /// no steps; it must parse but never fly). Format page: docs/formats/ai-rosters.md.
 /// </summary>
 public sealed class Maneuver
@@ -108,7 +108,7 @@ public sealed class Maneuver
     public required string Name { get; init; }
 
     /// <summary>The <c>natural_touch</c> difficulty, compared directly against the pilot's
-    /// 1–9 <c>natural_touch</c> stat (no <c>ai_skill_parameters</c> interpolation — both sides
+    /// 1–9 <c>natural_touch</c> stat (no <c>ai_skill_parameters</c> interpolation, both sides
     /// are already on the same scale). Shipped range 0 (nitro_evade, always available) to 99
     /// (the high_yo_yo stub, unreachable by design).</summary>
     public required int Difficulty { get; init; }
@@ -132,7 +132,7 @@ public sealed class Maneuver
     public bool IsStub => Steps.Count == 0;
 
     /// <summary>The selection cull: a pilot may fly this maneuver when its difficulty does not
-    /// exceed the pilot's <c>natural_touch</c> stat — and a stub is never eligible, whatever
+    /// exceed the pilot's <c>natural_touch</c> stat, and a stub is never eligible, whatever
     /// the numbers say.</summary>
     public bool EligibleFor(int naturalTouch) => !IsStub && Difficulty <= naturalTouch;
 }

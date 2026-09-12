@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using CSVM.Mech3;
@@ -113,7 +114,12 @@ internal static class DanteEngineFireSuites
                                                                 && e.LastPos.DistanceTo(want) < 1f);
                             if (mine != null)
                                 claimed.Add(mine);
-                            report.AppendLine($"{name}: want {want} got {(mine != null ? mine.LastPos.ToString() : "NOTHING")}");
+                            var got = mine != null
+                                ? string.Format(CultureInfo.InvariantCulture, "({0:0.#}, {1:0.#}, {2:0.#})",
+                                    mine.LastPos.X, mine.LastPos.Y, mine.LastPos.Z)
+                                : "NOTHING";
+                            report.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                                "{0}: want ({1:0.#}, {2:0.#}, {3:0.#}) got {4}", name, want.X, want.Y, want.Z, got));
                             ctx.Check(mine != null,
                                 $"{name} keeps its own fire at its own supports node (wanted {want.X:0.#},{want.Y:0.#},{want.Z:0.#})");
                         }

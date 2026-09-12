@@ -4,7 +4,10 @@ namespace CSVM.UI;
 
 /// <summary>What a press is, as a skip set reads it. A screen reads the device event it was handed
 /// into one of these and asks <see cref="CinemaSkips"/>, so the films and the boot stills answer
-/// one rule instead of a predicate each.</summary>
+/// one rule instead of a predicate each. ⚠ Do not fold this into <see cref="CinemaSkip"/>; the two
+/// are not one list. A press is the single thing that arrived where a set is any number of flags,
+/// <see cref="OtherKey"/> is a press no set names on its own, and <see cref="CinemaSkip.AnyPress"/>
+/// is a set no press answers to.</summary>
 public enum CinemaPress
 {
     /// <summary>Nothing any set takes: a release, a key repeat, a stick, a pad that does not
@@ -37,17 +40,11 @@ public static class CinemaSkips
 {
     /// <summary>Whether <paramref name="press"/> ends a cinema whose set is <paramref name="skip"/>.
     /// <see cref="CinemaSkip.AnyPress"/> takes every press there is, a pad button included, because
-    /// the screens carrying it have taught the player no key yet.</summary>
-    public static bool Skips(this CinemaSkip skip, CinemaPress press) => press switch
-    {
-        CinemaPress.Escape => skip.HasFlag(CinemaSkip.Escape) || skip.HasFlag(CinemaSkip.AnyPress),
-        CinemaPress.Space => skip.HasFlag(CinemaSkip.Space) || skip.HasFlag(CinemaSkip.AnyPress),
-        CinemaPress.Return => skip.HasFlag(CinemaSkip.Return) || skip.HasFlag(CinemaSkip.AnyPress),
-        CinemaPress.LeftMouse => skip.HasFlag(CinemaSkip.LeftMouse) || skip.HasFlag(CinemaSkip.AnyPress),
-        CinemaPress.PadButton => skip.HasFlag(CinemaSkip.PadButton) || skip.HasFlag(CinemaSkip.AnyPress),
-        CinemaPress.OtherKey => skip.HasFlag(CinemaSkip.AnyPress),
-        _ => false,
-    };
+    /// the screens carrying it have taught the player no key yet. Even that set ends nothing on
+    /// <see cref="CinemaPress.None"/>, which is what a device event no set reads answers.</summary>
+    public static bool Skips(this CinemaSkip skip, CinemaPress press) =>
+        press != CinemaPress.None
+        && (skip.HasFlag(CinemaSkip.AnyPress) || (skip & NamedFlag(press)) != CinemaSkip.None);
 
     /// <summary>What a device event is to a skip set. <paramref name="padsLive"/> is whether pad
     /// input counts at all: a button arriving while it does not is no press, since a pad reports
@@ -65,5 +62,18 @@ public static class CinemaSkips
             _ => CinemaPress.OtherKey,
         },
         _ => CinemaPress.None,
+    };
+
+    // The flag a set names this press by, and CinemaSkip.None for a press no set names on its own.
+    // ⚠ Test the answer with a bit test, never HasFlag: HasFlag(None) is true for every set, so an
+    // unnamed press would end every cinema.
+    private static CinemaSkip NamedFlag(CinemaPress press) => press switch
+    {
+        CinemaPress.Escape => CinemaSkip.Escape,
+        CinemaPress.Space => CinemaSkip.Space,
+        CinemaPress.Return => CinemaSkip.Return,
+        CinemaPress.LeftMouse => CinemaSkip.LeftMouse,
+        CinemaPress.PadButton => CinemaSkip.PadButton,
+        _ => CinemaSkip.None,
     };
 }

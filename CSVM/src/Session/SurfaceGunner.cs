@@ -20,15 +20,15 @@ namespace CSVM.Session;
 /// </summary>
 internal sealed class SurfaceGunner
 {
-    /// <summary>How long a picked target is held before the sweep may replace it, seconds — the
+    /// <summary>How long a picked target is held before the sweep may replace it, seconds, the
     /// hardcoded value at <c>FUN_004b0f20</c>. ⚠ This, not the def's dwell fields, is what paces a
     /// hull's target churn.</summary>
     public const float TargetHoldSeconds = 20f;
 
     /// <summary>The aim-error cone half-angle, degrees. A surface block authors <c>-1</c> in all
     /// nine skill slots (<c>dead_eye</c> included), so this is CSVM's standing unauthored-rating
-    /// convention — the worst rating, the same default <see cref="AiGunner.DeadEyeAngleDeg"/>
-    /// carries — and NOT a decoded boat-specific value. What the engine does with a <c>-1</c>
+    /// convention, the worst rating, the same default <see cref="AiGunner.DeadEyeAngleDeg"/>
+    /// carries, and NOT a decoded boat-specific value. What the engine does with a <c>-1</c>
     /// rating is unread.</summary>
     public const float DeadEyeAngleDeg = 4f;
 
@@ -91,7 +91,7 @@ internal sealed class SurfaceGunner
 
     public int ShotsFired { get; private set; }
 
-    /// <summary>What the acquisition last picked, or null while nothing ranks — the identity the
+    /// <summary>What the acquisition last picked, or null while nothing ranks, the identity the
     /// suite reads rather than inferring the pick from where the barrel points.</summary>
     public object? Target => _target;
 

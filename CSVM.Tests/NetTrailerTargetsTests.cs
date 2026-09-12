@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The session half: turning a net's trailer NAME into a live position supplier.
-/// Engine-free — the world-node arm needs a scene tree and is exercised by the
+/// Engine-free, the world-node arm needs a scene tree and is exercised by the
 /// <c>ai-net-trailer</c> engine suite; what is checked here is which nets get a supplier at all,
 /// which is the decision that decides whether a net rides or stays put.
 /// </summary>

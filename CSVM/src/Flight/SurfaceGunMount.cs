@@ -19,7 +19,7 @@ public static class SurfaceGunMount
 
     /// <summary>Depression floor as the guarded direction's <c>y</c> in the hull frame: the literal
     /// <c>-0.2588</c>, so 15° down. ⚠ The band is ASYMMETRIC and the engine's own two literals are
-    /// unrelated numbers, not a ± pair — mirroring either one is a silent aiming bug.</summary>
+    /// unrelated numbers, not a ± pair, mirroring either one is a silent aiming bug.</summary>
     public const float MinElevationY = -0.2588f;
 
     /// <summary>How fast the mount closes on the guarded direction, per second
@@ -36,7 +36,7 @@ public static class SurfaceGunMount
 
     /// <summary>The elevation guards, in the hull frame: pins <paramref name="desiredLocal"/>'s
     /// <c>y</c> into the band and rescales the horizontal part so the result stays unit length,
-    /// which preserves the azimuth exactly (<c>FUN_004b7e70</c>). Yaw is never guarded — a hull
+    /// which preserves the azimuth exactly (<c>FUN_004b7e70</c>). Yaw is never guarded, a hull
     /// traverses the full circle. A direction already inside the band comes back unchanged.</summary>
     public static Vector3 Guard(Vector3 desiredLocal)
     {
@@ -93,7 +93,7 @@ public static class SurfaceGunMount
     /// <summary>The mount's aim quality: the cosine between where the barrel actually points and
     /// the lead the solver asked for. ⚠ Measured against the RAW desired direction, never the
     /// guarded one (<c>0x004b78c9</c>), so a target outside the elevation band costs the shot the
-    /// angle the guard gave away — the same way an aeroplane pays for its traverse clamp. Feeding
+    /// angle the guard gave away, the same way an aeroplane pays for its traverse clamp. Feeding
     /// the guarded direction here would let a hull shoot at anything overhead.</summary>
     public static float AimQuality(Vector3 actualLocal, Vector3 rawDesiredLocal) =>
         actualLocal.Dot(rawDesiredLocal);

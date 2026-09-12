@@ -105,7 +105,7 @@ public sealed partial class AnimTimeline : Control
 
     /// <summary>Stamps a fired tick on the primary def's matching lane. A dispatch whose sequence
     /// is not among the authored lanes (a CALL_SEQUENCE'd on-call sequence) gets a bare lane
-    /// appended so its firings are still visible — without authored blocks, since its start time
+    /// appended so its firings are still visible, without authored blocks, since its start time
     /// is dynamic.</summary>
     public void AddPrimaryMark(string seq, int eventIndex, float time)
     {
@@ -429,7 +429,7 @@ public sealed partial class AnimTimeline : Control
     private readonly record struct Block(int EventIndex, float Time, float Duration, bool Control);
 
     // One sequence's lane: its authored blocks (empty for a lane discovered only from a fired
-    // mark — a CALL_SEQUENCE'd on-call sequence) and the actual dispatch times stamped onto it.
+    // mark, a CALL_SEQUENCE'd on-call sequence) and the actual dispatch times stamped onto it.
     private sealed class Lane
     {
         public readonly List<Block> Blocks = new();

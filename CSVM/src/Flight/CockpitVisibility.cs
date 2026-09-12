@@ -38,7 +38,7 @@ public sealed class CockpitVisibility
             : new Shown(Interior: true, Body: false, Markers: true, Dontmove: true);
 
     /// <summary>Finds the four groups in one built plane model, or null when the model carries no
-    /// interior at all — an AI plane, or any build that did not ask <see cref="PlaneBuilder"/> for
+    /// interior at all, an AI plane, or any build that did not ask <see cref="PlaneBuilder"/> for
     /// one, which is every build outside a human rig.</summary>
     public static CockpitVisibility? Bind(Node3D? planeModel, Node3D? interior)
     {

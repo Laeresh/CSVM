@@ -25,7 +25,7 @@ public class AiVoiceDispatcherTests
         var s = d.Register(1, 2, AimAssist.NeutralTeam, isPlayer: false,
             talkerChance: 0.5f, constitutionChance: 1f);
 
-        // Draw 0.99 vs chance 0.5: the roll FAILS — and the slot is silenced for 15 s anyway.
+        // Draw 0.99 vs chance 0.5: the roll FAILS, and the slot is silenced for 15 s anyway.
         var failed = d.Dispatch(1, AiVoiceDispatcher.DiLowDmg, now: 10f);
         Assert.Null(failed.Clip);
         Assert.True(failed.Rolled);
@@ -39,7 +39,7 @@ public class AiVoiceDispatcherTests
         Assert.False(cooling.Rolled);
         Assert.Equal("slot cooling", cooling.Outcome);
 
-        // Past it, the line plays — and the SUCCESS stamps the same 15 s.
+        // Past it, the line plays, and the SUCCESS stamps the same 15 s.
         var played = d.Dispatch(1, AiVoiceDispatcher.DiLowDmg, now: 25.5f);
         Assert.NotNull(played.Clip);
         Assert.Contains("Talker test passed", played.Outcome);
@@ -79,7 +79,7 @@ public class AiVoiceDispatcherTests
         Assert.Equal("snd_id11_WA-HighDmg-A", decision.Clip);
 
         // One event, one line: C's failed roll armed C's cooldown, the played line armed A's,
-        // and B — never reached — is untouched.
+        // and B, never reached, is untouched.
         Assert.Equal(25f, c.NextAllowedAt(AiVoiceDispatcher.WaHighDmg));
         Assert.Equal(25f, a.NextAllowedAt(AiVoiceDispatcher.WaHighDmg));
         Assert.Equal(0f, b.NextAllowedAt(AiVoiceDispatcher.WaHighDmg));
@@ -154,7 +154,7 @@ public class AiVoiceDispatcherTests
         Assert.Equal("above every DI threshold", d.NotifyDamage(1, 0.75f, 10f).Outcome);
         Assert.Equal(AiVoiceDispatcher.DiLowDmg, d.NotifyDamage(1, 0.65f, 10f).TriggerId);
         Assert.Equal(AiVoiceDispatcher.DiMedDmg, d.NotifyDamage(1, 0.45f, 10f).TriggerId);
-        // Below 30 % the MOST severe fires — never the lower tiers it also sits under.
+        // Below 30 % the MOST severe fires, never the lower tiers it also sits under.
         var high = d.NotifyDamage(1, 0.25f, 10f);
         Assert.Equal(AiVoiceDispatcher.DiHighDmg, high.TriggerId);
         Assert.Equal("snd_id2_DI-HighDmg-A", high.Clip);
@@ -252,7 +252,7 @@ public class AiVoiceDispatcherTests
         (voId, family) => $"snd_id{voId}_{family}-A";
 
     // A Random whose NextDouble()s replay a script (repeating the last entry) and whose
-    // Next(max) draws pop Ints (falling back to 0) — the election/roll order is
+    // Next(max) draws pop Ints (falling back to 0), the election/roll order is
     // the thing under test, so the draws must be exact.
     private sealed class ScriptedRandom : Random
     {

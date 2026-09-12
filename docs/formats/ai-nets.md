@@ -1,4 +1,4 @@
-# AI patrol nets — `ne0NNNNN.zrd` + `neindex.zrd`
+# AI patrol nets, `ne0NNNNN.zrd` + `neindex.zrd`
 
 Part of the [format documentation](README.md). The chapter-scoped patrol graphs the
 original's AI flies: waypoint sets with an **explicit edge list**, referenced by every
@@ -14,10 +14,10 @@ the named `dzpathN` ribbon on rails (`Flight/DangerZoneRibbon.cs`,
 
 Each chapter's zrdr scope (`<Cx>/zrdr.zbd`) carries:
 
-- **`ne0NNNNN.zrd`** — one file per net; the filename encodes the net id
+- **`ne0NNNNN.zrd`**, one file per net; the filename encodes the net id
   (`ne000010` → id 10). **222 files across the 8 chapters**
   (C1 29, C1B 22, C1C 20, C2 34, C2B 18, C3 30, C4 29, C5 40).
-- **`neindex.zrd`** — the chapter's id → name table. 222 names install-wide, a perfect
+- **`neindex.zrd`**, the chapter's id → name table. 222 names install-wide, a perfect
   1:1 with the files, both directions, per chapter.
 
 ## Net name table
@@ -27,7 +27,7 @@ Each chapter's zrdr scope (`<Cx>/zrdr.zbd`) carries:
 ```
 
 One flat list: alternating id/name pairs after a leading number. ⚠ **The first element is
-NOT the pair count** — it is an allocation figure ≥ the count (C1 opens with 46 over 29
+NOT the pair count**, it is an allocation figure ≥ the count (C1 opens with 46 over 29
 pairs; C2 with 35 over 34). Reading it as a count truncates or over-reads the list; parse
 pairs to the end of the list instead.
 
@@ -118,9 +118,9 @@ there while zeroing every neighbouring field. Whether element 1 is that field or
 simply never deserialised does not change the value in play: **the floor is 10 m on all 222
 shipped nets**, which is what a port needs.
 
-### NODES — `[x, y, z]` (+ four optional fields)
+### NODES, `[x, y, z]` (+ four optional fields)
 
-World-space positions in the standard frame (right-handed Y-up, metres —
+World-space positions in the standard frame (right-handed Y-up, metres,
 [gotchas.md](gotchas.md)). **2,268 nodes** install-wide; 2–44 per net, median 8.
 
 A node list may carry up to four more numbers past `z`: **81 nodes carry two and 12 carry four**.
@@ -132,8 +132,8 @@ record):
 | Element | Node record | Meaning |
 |---|---|---|
 | 3 | `+0x0c` int, default 0 | **stop-point id**; 0 means "no stop point" |
-| 4 | `+0x10` bool, default false | **halt flag** — a zeppelin arriving here stops |
-| 5 | `+0x11` bool, default false | **danger-zone flag** — reaching here starts a `dzpath` run |
+| 4 | `+0x10` bool, default false | **halt flag**, a zeppelin arriving here stops |
+| 5 | `+0x11` bool, default false | **danger-zone flag**, reaching here starts a `dzpath` run |
 | 6 | `+0x14` int, default −1 | the N of the `dzpathN` that run flies; negative takes the nearest end of any active zone |
 
 The two widths shipped are therefore fields 3–4 (a zeppelin stop point) and fields 3–6 with 3–4
@@ -144,8 +144,8 @@ zeroed (a danger-zone entry). Nothing ships a node authoring both.
 `COMPLETED_STOPPOINT` is **not a condition** and a mission never waits on one. It is an action a
 mission runs when an objective **completes**, in the same block as `SET_AI_NET` and
 `COMPLETED_ZEPCANNONS` (`FUN_0046a490`, the objective-completion pass). Its clause is
-`[netName, id, flag]` — the loader stores three words per clause, a `strdup`'d name, an **int** and
-a **bool** (`FUN_00466b70`) — and the handler (`FUN_0046a0d0`) resolves the net by name, requires
+`[netName, id, flag]`, the loader stores three words per clause, a `strdup`'d name, an **int** and
+a **bool** (`FUN_00466b70`), and the handler (`FUN_0046a0d0`) resolves the net by name, requires
 `id > 0`, finds the node by id (`FUN_004319a0`) and writes the flag onto that node's `+0x10`
 (`FUN_004319d0`). So the file's flag is only the net's **initial** state; the script owns it
 afterwards.
@@ -171,13 +171,13 @@ pursuit alone, so a tagged net decides which zones its fliers take and which the
 ["PirateZep1", 5, 1]` arms the head of that run.
 
 Census against the shipped scripts: **23 `COMPLETED_STOPPOINT` clauses across 11 missions, naming
-14 nets. Every one resolves to a node by id — none is dangling — and 20 of the 23 change the flag
+14 nets. Every one resolves to a node by id, none is dangling, and 20 of the 23 change the flag
 the file authored**; the three that restate it (`C1B/M03`'s `Vostok1` id 1 and `Klondike1` id 6,
 `C5/M03`'s `M3Cargo3` id 5) all write 0 over a 0. The scripts write `flag = 0` 19 times and
 `flag = 1` 4 times, so releasing a docked airship is the common case and arming a fresh stop
 mid-route is the rare one.
 
-The tagged population: **40 nets of 222 carry tagged nodes** — 36 with stop points and 4 with
+The tagged population: **40 nets of 222 carry tagged nodes**, 36 with stop points and 4 with
 danger-zone entries, on disjoint nets. All 36 stop-point nets are zeppelin routes by name; 31 are
 directly referenced by a `zeppelins.json` `net`, and the remaining five are unreferenced alternates
 beside referenced twins (`M1Cargo` beside `M1CargoAlt`, `SwanZep2` beside `SwanZep1`, plus
@@ -194,7 +194,7 @@ out of the mission's thirteen zones) and `M1FilmShot` #31 (C2/M02's `secfury_5/6
 meaningful only together with the net name the clause carries. C5's three cargo routes show the
 counter plainly: `M3Cargo1` uses 1 and 2, `M3Cargo2` 3 and 4, `M3Cargo3` 5 and 6.
 
-Worked route — `C3/M01`, the mission this was decoded for. `piratezep` spawns at
+Worked route, `C3/M01`, the mission this was decoded for. `piratezep` spawns at
 `(-1401, 500, -1413)`, which is `M1PirateZep`'s node 0, and the net is an open 8-node path:
 
 ```
@@ -211,18 +211,18 @@ armed, so that PANDORA starts docked and the script launches it.
 zeppelin that reaches one stays there for the rest of the mission. That is what ends an open path,
 which is why the shipped routes do not need to be loops.
 
-Two neighbouring script ops retarget net-followers at runtime — **`SET_AI_NET`** (accepts a vehicle
-*or* a zeppelin) and **`SET_AI_TEAM`** — which is the design's "retreat is expressed as a net
+Two neighbouring script ops retarget net-followers at runtime, **`SET_AI_NET`** (accepts a vehicle
+*or* a zeppelin) and **`SET_AI_TEAM`**, which is the design's "retreat is expressed as a net
 change, not a special mode", confirmed.
 
-### EDGES — `[i, j]` node-index pairs
+### EDGES, `[i, j]` node-index pairs
 
-**2,149 edges** install-wide; 1–43 per net. **This list is the connectivity** — the graph
+**2,149 edges** install-wide; 1–43 per net. **This list is the connectivity**, the graph
 branches (a node with two successors is normal) and is *not* necessarily a closed loop or
 a sequential path. Never connect nodes in list order; only the edge list is the route
 structure. All indices are in range on every shipped net (asserted by the golden test).
 
-### TRAILER — the attach/follow target
+### TRAILER, the attach/follow target
 
 Five shipped shapes:
 
@@ -232,7 +232,7 @@ Five shipped shapes:
 | `[-1, "name"]` | 4 | a named target with **no** attach node (C2 net 21, C4 nets 6/24, C5 net 25) |
 | `[nodeIndex]` | 1 | attach node, no name (C2 net 33: `[3]`) |
 | `[-1]` | 133 | no target |
-| *(absent — 13-element record)* | 8 | no target |
+| *(absent, 13-element record)* | 8 | no target |
 
 The observed shapes include `[-1]`, `[nodeIndex, "name"]`, and the middle two rows
 are the shapes it missed. Target names seen: `player`, zeppelin node names
@@ -252,9 +252,9 @@ lobe and about a kilometre away through the other.
 
 ## Scope limit
 
-- **`<Cx>/<mission>/zrdr/net.zrd` is a different, unnamed, edgeless file** — node counts
+- **`<Cx>/<mission>/zrdr/net.zrd` is a different, unnamed, edgeless file**, node counts
   quantised by mission type (8/48/80), payloads shared across missions, coordinates
-  sometimes outside the mission world. Shape says *spawn table*, not route. Undecoded —
+  sometimes outside the mission world. Shape says *spawn table*, not route. Undecoded,
   do not build patrol behaviour on it.
 - The danger-zone route ribbons (`dzpathN` gamez meshes, [missions.md](missions.md)) are not
   nets: a net node's tag hands the flier to one, which it then flies as a spline on rails

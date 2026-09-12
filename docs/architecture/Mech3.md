@@ -297,7 +297,8 @@ per-chapter values and the decoded/inferred split: [../formats/fogvol.md](../for
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
 (NOT a zrdr reader), a case-insensitive key→value map resolving the `MSG_*` keys missions reference.
 `Fill`/`Format` substitute a template's `%1`…`%9` placeholders (the HUD strings' format). `Parse`
-takes the JSON itself, so a caller with no file on disk (the table's own tests) reads the same rows.
+takes the JSON itself, so a unit with no file on disk reads the same rows; it is internal, since
+every shipped caller holds a path.
 
 ## src/Mech3/UiStrings.cs
 The original's UI string table by id, read from `extracted/rof/ui_strings.json`. Only the `langui`

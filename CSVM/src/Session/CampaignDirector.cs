@@ -255,7 +255,7 @@ public sealed class CampaignDirector
             return spec;
         }
 
-        GD.Print($"campaign: seq {seq} '{mission.Desc}' -> {mission.ChapterFolder}/{mission.MissionFolder}");
+        Log.Info("core", $"campaign: seq {seq} '{mission.Desc}' -> {mission.ChapterFolder}/{mission.MissionFolder}");
         return spec.WithCampaignMission(
             mission.ChapterFolder.ToUpperInvariant(), mission.MissionFolder.ToUpperInvariant());
     }
@@ -296,7 +296,7 @@ public sealed class CampaignDirector
         // a reward aircraft with no file in the build store falls back to its own award template.
         var custom = CustomPlaneStore.UserPlanes().Load(plane.Name)
                      ?? CampaignProgression.BuildForOwned(plane);
-        GD.Print($"campaign: '{profile.Name}' seated in \"{plane.Name}\" as {node}");
+        Log.Info("core", $"campaign: '{profile.Name}' seated in \"{plane.Name}\" as {node}");
         return spec.WithSeatedAircraft(node, custom, CampaignLoadout.For(plane, StockLoadouts.Load()));
     }
 
@@ -324,8 +324,7 @@ public sealed class CampaignDirector
         }
 
         var script = ObjectiveScript.Load(missionZrdrPath);
-        GD.Print($"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, " +
-                 $"{script.Objectives.Count} objective(s)");
+        Log.Info("core", $"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, {script.Objectives.Count} objective(s)");
         var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath,
             CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdrPath), seq)?.Seq);
         director.BindWingman();
@@ -367,7 +366,7 @@ public sealed class CampaignDirector
             {
                 if (reported.Add(name))
                 {
-                    GD.Print($"campaign: '{name}' lost its leader '{leader.Name}', which flies no net: it holds its course");
+                    Log.Info("core", $"campaign: '{name}' lost its leader '{leader.Name}', which flies no net: it holds its course");
                 }
 
                 continue;
@@ -375,7 +374,7 @@ public sealed class CampaignDirector
 
             SeatOnNet(rig, pilot, net, trailers, minAiActiveDist);
             moved++;
-            GD.Print($"campaign: '{name}' lost its leader '{leader.Name}' and takes its net '{net.Name}#{net.Id}'");
+            Log.Info("core", $"campaign: '{name}' lost its leader '{leader.Name}' and takes its net '{net.Name}#{net.Id}'");
         }
 
         return moved;
@@ -438,7 +437,7 @@ public sealed class CampaignDirector
         {
             if (!name.Equals(CampaignRosterPlan.PlayerBlock, StringComparison.OrdinalIgnoreCase))
             {
-                GD.Print($"campaign: roster '{name}' not spawned: {why}");
+                Log.Info("core", $"campaign: roster '{name}' not spawned: {why}");
             }
         }
 
@@ -499,7 +498,7 @@ public sealed class CampaignDirector
                 placed = PlaceOnPath(rig, spawn.Name, taxi);
                 if (!placed)
                 {
-                    GD.Print($"campaign: roster '{spawn.Name}' authors taxi path '{taxi}', which this world does not carry: it flies");
+                    Log.Info("core", $"campaign: roster '{spawn.Name}' authors taxi path '{taxi}', which this world does not carry: it flies");
                 }
             }
 
@@ -511,16 +510,7 @@ public sealed class CampaignDirector
                 ? $" terrain={groundHit.Position.Y:0} ({pos.Y - groundHit.Position.Y:+0;-0} above it)"
                 : " terrain=(no hit)";
 
-            GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def} as {spawn.PlaneNode}, {spawn.Mode}) " +
-                     $"team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} " +
-                     (spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'"
-                         : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter"
-                         : spawn.Escorts ? $"escorts '{spawn.LeaderName ?? "(no leader)"}'"
-                         : "no net") +
-                     (spawn.Inert ? " DEACTIVATED" : "") +
-                     (placed ? $" on path '{spawn.TaxiPath}'" : "") +
-                     (spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : "") +
-                     $" spawn=({pos.X:0},{pos.Y:0},{pos.Z:0}){groundNote}");
+            Log.Info("core", $"campaign: roster '{spawn.Name}' ({spawn.Def} as {spawn.PlaneNode}, {spawn.Mode}) team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} {(spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'" : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter" : spawn.Escorts ? $"escorts '{spawn.LeaderName ?? "(no leader)"}'" : "no net")}{(spawn.Inert ? " DEACTIVATED" : "")}{(placed ? $" on path '{spawn.TaxiPath}'" : "")}{(spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : "")} spawn=({pos.X:0},{pos.Y:0},{pos.Z:0}){groundNote}");
         }
 
         // The leader pass, once every rig exists: primary_target names a block that may be
@@ -535,7 +525,7 @@ public sealed class CampaignDirector
             var leader = CampaignRosterPlan.ResolveLeader(spawn.LeaderName, _roster, inputs.Player());
             if (leader == null)
             {
-                GD.Print($"campaign: roster '{name}' escorts '{spawn.LeaderName ?? ""}', which is not spawned: it holds its course");
+                Log.Info("core", $"campaign: roster '{name}' escorts '{spawn.LeaderName ?? ""}', which is not spawned: it holds its course");
                 continue;
             }
             pilot.Escort = new AiEscort { Leader = leader };
@@ -551,9 +541,7 @@ public sealed class CampaignDirector
         {
             inert += spawn.Inert ? 1 : 0;
         }
-        GD.Print($"campaign: roster spawned {_roster.Count + _vessels.Count} of {blocks.Count} block(s): " +
-                 $"{escorts} escort(s), {inert} deactivated, {_paths?.Count ?? 0} on a path, " +
-                 $"{_vessels.Count} surface vehicle(s)");
+        Log.Info("core", $"campaign: roster spawned {_roster.Count + _vessels.Count} of {blocks.Count} block(s): {escorts} escort(s), {inert} deactivated, {_paths?.Count ?? 0} on a path, {_vessels.Count} surface vehicle(s)");
         return $" + {_roster.Count} roster aircraft" + (_vessels.Count > 0 ? $" + {_vessels.Count} surface vehicle(s)" : "");
     }
 
@@ -589,9 +577,7 @@ public sealed class CampaignDirector
         int applied = inputs.Runtime != null
             ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter, _carryThroughSeq)
             : 0;
-        GD.Print($"campaign: {Graph.Count} objective(s) armed, {Graph.Rows.Count} display row(s), " +
-                 $"{applied} object(s) restored from the chapter {chapter} persist log" +
-                 (_dangerZones is { } dz ? $", {dz.Count} danger zone(s) armed" : ""));
+        Log.Info("core", $"campaign: {Graph.Count} objective(s) armed, {Graph.Rows.Count} display row(s), {applied} object(s) restored from the chapter {chapter} persist log{(_dangerZones is { } dz ? $", {dz.Count} danger zone(s) armed" : "")}");
     }
 
     /// <summary>Takes the anim runtime's <c>CALLBACK</c> host slot, chaining to whatever held it.
@@ -690,8 +676,7 @@ public sealed class CampaignDirector
             return;
         }
         RegisterObjectiveMarker(launchName, template);
-        GD.Print($"campaign: launch '{launchName}' ({template.Name}) booked into the roster " +
-                 $"team={template.Team?.ToString() ?? "-"} group={template.Group}");
+        Log.Info("core", $"campaign: launch '{launchName}' ({template.Name}) booked into the roster team={template.Team?.ToString() ?? "-"} group={template.Group}");
     }
 
     private static CampaignMission? MissionFor(string zrdrPath, int seq)
@@ -782,8 +767,7 @@ public sealed class CampaignDirector
         if (_seatsDown.Count < seats)
         {
             _beginSpectate?.Invoke(human);
-            GD.Print($"campaign: seat {seat + 1} of {seats} is lost — spectating; " +
-                     $"{seats - _seatsDown.Count} human(s) still flying");
+            Log.Info("core", $"campaign: seat {seat + 1} of {seats} is lost — spectating; {seats - _seatsDown.Count} human(s) still flying");
             return;
         }
 
@@ -793,8 +777,7 @@ public sealed class CampaignDirector
         }
 
         _playerLost = true;
-        GD.Print($"campaign: the last of {seats} human aircraft is lost — the objectives stop, " +
-                 "and the mission ends where the wreck does");
+        Log.Info("core", $"campaign: the last of {seats} human aircraft is lost — the objectives stop, and the mission ends where the wreck does");
     }
 
     // The second stage: a hull that is still falling has not landed yet, which is the whole of the
@@ -851,7 +834,7 @@ public sealed class CampaignDirector
     {
         if (inputs.SpawnSurface is not { } spawnSurface)
         {
-            GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def}, {spawn.Mode}) not spawned: no surface-vehicle runtime on this stage");
+            Log.Info("core", $"campaign: roster '{spawn.Name}' ({spawn.Def}, {spawn.Mode}) not spawned: no surface-vehicle runtime on this stage");
             return;
         }
         if (spawnSurface(spawn, pos, fwd) is not { } vessel)
@@ -865,13 +848,7 @@ public sealed class CampaignDirector
         {
             vessel.Patrol(net);
         }
-        GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def} hull, {spawn.Mode}) " +
-                 $"team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} " +
-                 (spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'"
-                     : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter"
-                     : "no net") +
-                 (spawn.Inert ? " DEACTIVATED" : "") +
-                 $" spawn=({vessel.Position.X:0},{vessel.Position.Y:0.##},{vessel.Position.Z:0})");
+        Log.Info("core", $"campaign: roster '{spawn.Name}' ({spawn.Def} hull, {spawn.Mode}) team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} {(spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'" : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter" : "no net")}{(spawn.Inert ? " DEACTIVATED" : "")} spawn=({vessel.Position.X:0},{vessel.Position.Y:0.##},{vessel.Position.Z:0})");
     }
 
     // Books a spawned block's own objective-target flag and label under its roster name, the way
@@ -943,7 +920,7 @@ public sealed class CampaignDirector
         var plane = _profile.Planes[at];
         WingmanNode = UI.PlanePickerRoster.AirframeNode(plane.Airframe);
         WingmanFit = CampaignLoadout.For(plane, StockLoadouts.Load());
-        GD.Print($"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
+        Log.Info("core", $"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
     }
 
     // The music channel's battle detector: the decoded five-second proximity scan, which runs only
@@ -1089,12 +1066,7 @@ public sealed class CampaignDirector
         Result = new CampaignMissionResult(
             outcome, attempt, recorded, _mission.Campaign, skipCapture);
         _leaving = LeavingHoldS;
-        GD.Print($"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, " +
-                 $"{attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, " +
-                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s), " +
-                 $"attempt {CampaignProgression.ResultOf(_profile, _mission.Seq)?.Attempts ?? 0} " +
-                 $"(skip offered={recorded.SkipOffered}); " +
-                 $"holding the world {LeavingHoldS:0.#}s before leaving it");
+        Log.Info("core", $"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, {attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s), attempt {CampaignProgression.ResultOf(_profile, _mission.Seq)?.Attempts ?? 0} (skip offered={recorded.SkipOffered}); holding the world {LeavingHoldS:0.#}s before leaving it");
     }
 
     // The far end of the leaving hold: the world has stood still for its length and the session may
@@ -1126,7 +1098,7 @@ public sealed class CampaignDirector
         {
             // A granted aircraft is the campaign's, so it waits for EXPORT like a campaign-built one.
             build.AwaitingExport = true;
-            GD.Print($"campaign: award '{build.Name}' saved to {planes.Save(build)}");
+            Log.Info("core", $"campaign: award '{build.Name}' saved to {planes.Save(build)}");
         }
     }
 
@@ -1148,11 +1120,11 @@ public sealed class CampaignDirector
 
         if (FirstDormantOf(family) is { } launched && ActivateDormantRoster(launched))
         {
-            GD.Print($"campaign: CALLBACK {code} launched '{launched}' off the hook");
+            Log.Info("core", $"campaign: CALLBACK {code} launched '{launched}' off the hook");
         }
         else
         {
-            GD.Print($"campaign: CALLBACK {code} has no deactivated '{family}_n' left to launch");
+            Log.Info("core", $"campaign: CALLBACK {code} has no deactivated '{family}_n' left to launch");
         }
 
         return true;
@@ -1165,12 +1137,12 @@ public sealed class CampaignDirector
     {
         if (Commanded(RemovedWingman) is not { InPlay: true } rig)
         {
-            GD.Print($"campaign: CALLBACK {CodeRemoveWingman} leaves '{RemovedWingman}' alone: not in play");
+            Log.Info("core", $"campaign: CALLBACK {CodeRemoveWingman} leaves '{RemovedWingman}' alone: not in play");
             return;
         }
 
         rig.Inert = true;
-        GD.Print($"campaign: CALLBACK {CodeRemoveWingman} took '{RemovedWingman}' out of the world");
+        Log.Info("core", $"campaign: CALLBACK {CodeRemoveWingman} took '{RemovedWingman}' out of the world");
     }
 
     // The lowest-numbered member of the family still deactivated, so a hook called six times
@@ -1224,7 +1196,7 @@ public sealed class CampaignDirector
     {
         if (_gapsLogged.Add(directive))
         {
-            GD.Print($"campaign: {directive} has no consumer in this session yet ({detail})");
+            Log.Info("core", $"campaign: {directive} has no consumer in this session yet ({detail})");
         }
     }
 
@@ -1525,8 +1497,7 @@ public sealed class CampaignDirector
             }
             if (aircraft + zeppelins + vessels > 0)
             {
-                GD.Print($"campaign: WAKEUP_ENEMIES activated {aircraft} of {names.Count} named " +
-                         $"aircraft, {vessels} surface vehicle(s), and woke {zeppelins} zeppelin(s)");
+                Log.Info("core", $"campaign: WAKEUP_ENEMIES activated {aircraft} of {names.Count} named aircraft, {vessels} surface vehicle(s), and woke {zeppelins} zeppelin(s)");
             }
             else if (names.Count > 0)
             {
@@ -1560,7 +1531,7 @@ public sealed class CampaignDirector
         public void WakeupGenerator(string name, int count)
         {
             int granted = _in.Generators?.GrantWaveCapacity(name, count) ?? 0;
-            GD.Print($"campaign: WAKEUP_GENERATOR '{name}' +{count} (granted {granted})");
+            Log.Info("core", $"campaign: WAKEUP_GENERATOR '{name}' +{count} (granted {granted})");
         }
 
         public void WakeAnim(string anim, string? node)
@@ -1570,7 +1541,7 @@ public sealed class CampaignDirector
             // library root, which only a trigger call is allowed to build (CM11's activate_pickup
             // parents the dock's approach cone under the trailer's sensor this way).
             int started = _in.Runtime?.PlayMissionTrigger(anim, anchor).Count ?? 0;
-            GD.Print($"campaign: WAKE_ANIM '{anim}' started {started} definition(s)");
+            Log.Info("core", $"campaign: WAKE_ANIM '{anim}' started {started} definition(s)");
         }
 
         /// <summary>The SCRIPTED PLAYER: the one aeroplane an authored <c>player</c> token means,
@@ -1713,7 +1684,7 @@ public sealed class CampaignDirector
                 && _owner._paths != null && _owner.PlaceOnPath(rig, vehicle, path))
             {
                 _owner._paths.Release(vehicle);
-                GD.Print($"campaign: WARP_VEHICLE put '{vehicle}' on path '{path}', moving");
+                Log.Info("core", $"campaign: WARP_VEHICLE put '{vehicle}' on path '{path}', moving");
                 return;
             }
 
@@ -1726,9 +1697,7 @@ public sealed class CampaignDirector
             // min(plane_speed_max, fd_speed). CSVM models no plane_speed_max
             // (docs/org/flightModel.md, "What this changes" #13), so fd_speed stands in alone.
             rig.WarpTo(at, heading, rig.Stats?.FdSpeed ?? 0f);
-            GD.Print($"campaign: WARP_VEHICLE moved '{vehicle}' to " +
-                     $"({at.X:0},{at.Y:0},{at.Z:0}) heading {heading:0} deg, " +
-                     $"1 of {points.Count} waypoint(s)");
+            Log.Info("core", $"campaign: WARP_VEHICLE moved '{vehicle}' to ({at.X:0},{at.Y:0},{at.Z:0}) heading {heading:0} deg, 1 of {points.Count} waypoint(s)");
         }
 
         /// <summary>The vehicle arm of <c>SET_AI_TEAM</c> (<c>FUN_00469e20</c>): the script's raw
@@ -1788,7 +1757,7 @@ public sealed class CampaignDirector
                     {
                         vessel.Patrol(water);
                         moved++;
-                        GD.Print($"campaign: SET_AI_NET '{name}' (hull) onto '{water.Name}#{water.Id}'");
+                        Log.Info("core", $"campaign: SET_AI_NET '{name}' (hull) onto '{water.Name}#{water.Id}'");
                         continue;
                     }
                     // An airship re-seats on its own arm: no heading is offered to the seat, since
@@ -1798,14 +1767,19 @@ public sealed class CampaignDirector
                         moved++;
                         continue;
                     }
+                    // The runtime knows this airship and has warned that the chapter carries no
+                    // such net: no move, but not a name this session failed to build either.
+                    if (_in.Zeppelins?.MotionFor(name) != null)
+                    {
+                        continue;
+                    }
                     unmatched.Add(name);
                     continue;
                 }
 
                 if (AiNets.ByName(_owner._chapterNets, netName) is not { } net)
                 {
-                    GD.Print($"campaign: SET_AI_NET '{netName}' is not a net this chapter carries: " +
-                             $"'{name}' keeps the route it is on");
+                    Log.Info("core", $"campaign: SET_AI_NET '{netName}' is not a net this chapter carries: '{name}' keeps the route it is on");
                     continue;
                 }
 
@@ -1814,7 +1788,7 @@ public sealed class CampaignDirector
                 // afterwards, so here the net wins outright.
                 SeatOnNet(rig, pilot, net, _owner._netTrailers, _owner._minAiActiveDist);
                 moved++;
-                GD.Print($"campaign: SET_AI_NET '{name}' onto '{net.Name}#{net.Id}'");
+                Log.Info("core", $"campaign: SET_AI_NET '{name}' onto '{net.Name}#{net.Id}'");
             }
             Report("SET_AI_NET", moved, entries.Count, unmatched);
         }
@@ -1897,7 +1871,7 @@ public sealed class CampaignDirector
 
             if (released > 0)
             {
-                GD.Print($"campaign: START_TAXI released {released} vehicle(s) onto their paths");
+                Log.Info("core", $"campaign: START_TAXI released {released} vehicle(s) onto their paths");
             }
             else if (names.Count > 0)
             {
@@ -1912,7 +1886,7 @@ public sealed class CampaignDirector
         {
             if (applied > 0)
             {
-                GD.Print($"campaign: {directive} applied to {applied} of {total} named vehicle(s)");
+                Log.Info("core", $"campaign: {directive} applied to {applied} of {total} named vehicle(s)");
             }
 
             if (unmatched.Count > 0)

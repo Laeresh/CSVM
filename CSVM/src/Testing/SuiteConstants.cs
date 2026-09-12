@@ -38,18 +38,18 @@ internal static class SuiteConstants
     // than this bar two, and those two are carried by the rows behind them.
     internal const float BurstSlack = 6f * BurstDt;
 
-    // How long each burst is driven for — past the last authored event of its longest
+    // How long each burst is driven for, past the last authored event of its longest
     // lane, with room for the lag above. Sonic is the long one: its `sonic_growlight` ends at
     // an authored 3.2 s.
     internal const float BurstSeconds = 3.5f;
 
-    // The burst suite's instance TTL — an order of magnitude past the longest burst, so
+    // The burst suite's instance TTL, an order of magnitude past the longest burst, so
     // the bound never truncates a timeline. Explicitly NOT `--effects-test`'s 0.3 s, which
     // exists for the gun path and would cut the 1.2 s wash off at 0.3 s while every remaining
     // assertion still passed.
     internal const float BurstTtl = 32f;
 
-    // Gun-group slots Loadout.ForRig seats on any airframe — the
+    // Gun-group slots Loadout.ForRig seats on any airframe, the
     // weapon bench fires every gun from all of them, so a drop here would quietly shrink its
     // coverage without changing the 48/48 line.
     internal const int RigGunGroups = 4;

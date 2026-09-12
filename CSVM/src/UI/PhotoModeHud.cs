@@ -25,7 +25,7 @@ public sealed partial class PhotoModeHud : CanvasLayer
     /// <summary>Escape (or pad B) was pressed: leave photo mode and bring the board back.</summary>
     public event Action? Exit;
 
-    /// <summary>Builds the hint over <paramref name="padDevices"/>/<paramref name="useKeyboard"/> —
+    /// <summary>Builds the hint over <paramref name="padDevices"/>/<paramref name="useKeyboard"/>,
     /// the same per-seat filter the pane's camera reads, so in splitscreen only the player who
     /// opened photo mode can close it.</summary>
     public static PhotoModeHud Build(int[]? padDevices, bool useKeyboard)
@@ -84,7 +84,7 @@ public sealed partial class PhotoModeHud : CanvasLayer
     private void Leave()
     {
         // Marked handled so the same press cannot also reach whatever the session put behind this
-        // — the board is suspended rather than gone, and it reads Escape too.
+        //, the board is suspended rather than gone, and it reads Escape too.
         GetViewport().SetInputAsHandled();
         Exit?.Invoke();
     }

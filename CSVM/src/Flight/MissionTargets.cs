@@ -19,13 +19,13 @@ public readonly record struct MissionTarget(string? Description, string? Categor
     string? HelpLabel, bool Objective = false, bool OtherTarget = false);
 
 /// <summary>
-/// Loads a mission's <c>targets.json</c> — the map from a target KEY to its objective display
+/// Loads a mission's <c>targets.json</c>, the map from a target KEY to its objective display
 /// strings. The file is a list of target entries, each a list of <c>[key, value]</c> pairs (NOT
 /// the flat-alternating reader form): <c>description</c>, a <c>nodes</c> list of the target(s)
 /// the entry labels, an optional <c>category_label</c>, and a <c>help_label</c>. A target is a
 /// bare node name or a nested <c>[parent, child, ...]</c> path, keyed <c>parent/child</c> the
 /// way <c>objectives.zrd</c>'s target directives are, so the two tables meet on one key.
-/// Generic across mission types — the stunt mode reads the <c>dzN</c> entries, but
+/// Generic across mission types, the stunt mode reads the <c>dzN</c> entries, but
 /// dogfight/zeppelin targets parse identically.
 /// </summary>
 public sealed class MissionTargets
@@ -34,7 +34,7 @@ public sealed class MissionTargets
 
     public int Count => _byNode.Count;
 
-    /// <summary>Every entry, target key to its display keys — what a marker HUD walks to find the
+    /// <summary>Every entry, target key to its display keys, what a marker HUD walks to find the
     /// targets the mission flags <c>objective</c> before its script has edited anything.</summary>
     public IReadOnlyDictionary<string, MissionTarget> ByNode => _byNode;
 

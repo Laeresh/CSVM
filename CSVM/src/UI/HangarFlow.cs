@@ -63,7 +63,7 @@ public interface IHangarPage
     /// through without rewriting anything (E49's double-enter idiom).</summary>
     int OpeningRow { get; }
 
-    /// <summary>The picture the shell should draw beside the list right now, or null for none —
+    /// <summary>The picture the shell should draw beside the list right now, or null for none,
     /// which every screen without art, and any screen missing its extraction, simply is.</summary>
     HangarArt? Art { get; }
 

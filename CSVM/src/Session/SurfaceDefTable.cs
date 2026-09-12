@@ -5,8 +5,8 @@ using CSVM.Mech3;
 namespace CSVM.Session;
 
 /// <summary>
-/// One of the original's per-surface anim-def vectors — <c>"player_crash_" + name</c> or
-/// <c>"touchdown_" + name</c> over every <see cref="SurfaceRegistry.Names"/> slot — plus the
+/// One of the original's per-surface anim-def vectors, <c>"player_crash_" + name</c> or
+/// <c>"touchdown_" + name</c> over every <see cref="SurfaceRegistry.Names"/> slot, plus the
 /// cascade that indexes it with a struck material's numeric surface id
 /// (<see cref="SceneBuilder.SurfaceIdMeta"/>, ultimately <see cref="GameZMaterial.SoilId"/>).
 /// Faithful to <c>FUN_0048b920</c>; the touchdown family's one difference (its empty last-resort
@@ -41,14 +41,14 @@ public sealed class SurfaceDefTable
         PlayableDefs = playable;
     }
 
-    /// <summary>Every def this vector can reach, in slot order — what a runtime binding this
+    /// <summary>Every def this vector can reach, in slot order, what a runtime binding this
     /// family has to bind, since the struck surface is only known at the moment of impact.
     /// The registry names are pairwise distinct, so no def appears twice.</summary>
     public IReadOnlyList<string> PlayableDefs { get; }
 
     /// <summary>The def for a struck surface id, or the bare last-resort anim name. Null when this
     /// family has no last resort and the original plays nothing.
-    /// <paramref name="surfaceId"/> is null for "no struck material" — the original's null-material
+    /// <paramref name="surfaceId"/> is null for "no struck material", the original's null-material
     /// arm, which the headless <c>--crash</c> force takes.</summary>
     public string? DefForSurfaceId(int? surfaceId)
     {
@@ -56,7 +56,7 @@ public sealed class SurfaceDefTable
         // names a def that exists.
         if (surfaceId is { } id && id >= 0 && (uint)id < (uint)_slots.Length && _slots[id] is { } named)
             return named;
-        // Otherwise slot 0 — unless the vector itself cannot answer, which is the bare anim name.
+        // Otherwise slot 0, unless the vector itself cannot answer, which is the bare anim name.
         return _slots.Length > 0 && _slots[0] is { } fallback ? fallback : _lastResort;
     }
 }

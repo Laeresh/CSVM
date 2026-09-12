@@ -490,27 +490,34 @@ internal static class MenuOriginalSuites
         var sizes = ResolutionSetting.ScreenSizes();
         Press(host, seat, Down);
         string opened = menu.ShownRowText;
-        ctx.Check(opened == $"Resolution: {sizes[DisplaySettingRows.ResolutionIndex(sizes, null)]}",
-            $"the fifth row is the resolution, an unsaved size showing the project default ({opened})");
+        ctx.Check(opened == $"Resolution: {sizes.Words[DisplaySettingRows.ResolutionIndex(sizes, null)]}",
+            $"the fifth row is the resolution, an unsaved size showing the screen's own size ({opened})");
         Press(host, seat, Right);
         string size = menu.ShownRowText["Resolution: ".Length..];
-        ctx.Check(menu.ShownRowText != opened && Offers(sizes, size),
+        ctx.Check(menu.ShownRowText != opened && Offers(sizes.Words, size),
             $"Right steps it to another size the standing screen can hold ({opened} -> {menu.ShownRowText})");
 
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == "Display mode: Windowed",
-            $"the sixth row is the display mode, unsaved showing the windowed default ({menu.ShownRowText})");
-        Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Display mode: Borderless",
+            $"the sixth row is the display mode, unsaved showing the shipped borderless default ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Display mode: Fullscreen",
             $"Right steps it one word along the vocabulary ({menu.ShownRowText})");
 
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == "V-Sync: On", $"the seventh row is V-Sync, unsaved showing On ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the seventh row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "V-Sync: 60 FPS",
+            $"Right steps it onto the first cap ({menu.ShownRowText})");
+        Press(host, seat, Left);
+        Press(host, seat, Left);
+        ctx.Check(menu.ShownRowText == "V-Sync: On",
+            $"and two Lefts step back past Off onto On without wrapping ({menu.ShownRowText})");
         Press(host, seat, Left);
         ctx.Check(menu.ShownRowText == "V-Sync: 144 FPS",
-            $"and Left wraps it onto the last cap rather than stopping ({menu.ShownRowText})");
+            $"and one more Left wraps onto the last cap rather than stopping ({menu.ShownRowText})");
 
-        return (MonitorSetting.Word(stepped), size, DisplayWords.Borderless, "144");
+        return (MonitorSetting.Word(stepped), size, DisplayWords.Fullscreen, "144");
     }
 
     private static bool Offers(IReadOnlyList<string> sizes, string word)
@@ -641,8 +648,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Right);
         // The row's own words are this machine's screen sizes, so what it steps to is read back off
         // the shell rather than named: the claim is that the step lands on a size the screen offers
-        // and not on the project default it opened at.
-        ctx.Check(shell.ResolutionChoice != null && shell.ResolutionChoice != ResolutionSetting.Default
+        // and not on the screen's own size it opened at.
+        ctx.Check(shell.ResolutionChoice != null && shell.ResolutionChoice != ResolutionSetting.ScreenSizes().Fallback
             && shell.ResolutionWords.Contains(shell.ResolutionChoice),
             $"a sideways step on the focused row takes the next size this screen offers ({shell.ResolutionChoice ?? "unset"} of {shell.ResolutionWords.Count})");
         WalkTo(host, seat, shell, OriginalShell.DisplayModeKey);
@@ -655,8 +662,8 @@ internal static class MenuOriginalSuites
             $"the Display Mode list fits its authored window and draws no bar ({shell.Rows.Count} rows)");
         Press(host, seat, Back);
         Press(host, seat, Right);
-        ctx.Check(shell.DisplayModeChoice == DisplayWords.Borderless,
-            $"a sideways step on the focused row takes the next display mode ({shell.DisplayModeChoice ?? "unset"})");
+        ctx.Check(shell.DisplayModeChoice == DisplayWords.Fullscreen,
+            $"a sideways step on the focused row takes the display mode after the borderless default ({shell.DisplayModeChoice ?? "unset"})");
         WalkTo(host, seat, shell, OriginalShell.VSyncKey);
         Press(host, seat, Accept);
         OpenVideoListWindow(ctx, host, seat, shell);
@@ -665,8 +672,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Down);
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.VSyncChoice == "60" && shell.FocusedKey == OriginalShell.VSyncKey,
-            $"and picking the third closes it on the 60 fps cap ({shell.VSyncChoice ?? "unset"}, {shell.FocusedKey})");
+        ctx.Check(shell.VSyncChoice == "120" && shell.FocusedKey == OriginalShell.VSyncKey,
+            $"and picking two below the off default closes it on the 120 fps cap ({shell.VSyncChoice ?? "unset"}, {shell.FocusedKey})");
         WalkTo(host, seat, shell, OriginalShell.GraphicsKey);
         Press(host, seat, Accept);
         ctx.Check(shell.GraphicsChoice == GraphicsMode.EnhancedWord,
@@ -690,8 +697,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
         {
-            Graphics: GraphicsMode.EnhancedWord, VSync: DisplayWords.VSyncOff,
-            DisplayMode: DisplayWords.Borderless,
+            Graphics: GraphicsMode.EnhancedWord, VSync: "60",
+            DisplayMode: DisplayWords.Fullscreen,
         },
             $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all three words ({exits.Count - before}, {exits[^1].GetType().Name})");
         ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");

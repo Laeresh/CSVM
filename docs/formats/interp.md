@@ -1,8 +1,8 @@
-# `interp.zbd` — the engine boot scripts (`.gw`)
+# `interp.zbd`, the engine boot scripts (`.gw`)
 
 `interp.zbd` (extracted by `unzbd cs interp` to a single `interp.json`) holds the game's
 **engine boot scripts**: 98 named command lists, one per `support\…\*.gw` file of the
-original build tree. They are what the engine runs to *assemble* a world — set search paths,
+original build tree. They are what the engine runs to *assemble* a world, set search paths,
 load models, register clutter templates, define the partition grid, and then, per mission,
 switch off everything that mission does not show.
 
@@ -30,40 +30,40 @@ no quoting or escaping anywhere in this install.
 | `support\*.gw` | 11 | Engine-global setup (display, cockpit, gamez/planes loading, texture effects) |
 | `support\<chapter>\init.gw` | 8 | Per-chapter search paths + soils |
 | `support\<chapter>\load.gw` | 8 | Builds the chapter world: `LoadGameGen` model loads, `AddChild` into `world1`, partition grid, fog, the sun light |
-| `support\<chapter>\adjust.gw` | 8 | `AddClutterTemplates` — the clutter registry ([clutter.md](clutter.md)) |
-| `support\<chapter>\tex_fx.gw` | 8 | `CycleTextureSet*` — material flipbook setup |
-| `support\<chapter>\<mission>.gw` | **53** | **Per-mission world setup — see below** |
+| `support\<chapter>\adjust.gw` | 8 | `AddClutterTemplates`, the clutter registry ([clutter.md](clutter.md)) |
+| `support\<chapter>\tex_fx.gw` | 8 | `CycleTextureSet*`, material flipbook setup |
+| `support\<chapter>\<mission>.gw` | **53** | **Per-mission world setup, see below** |
 | `support\util\*.gw` | 2 | Offline authoring utilities, not runtime |
 
 Chapters are lower-cased (`c1`, `c1b`, `c2b`, …) and missions match the mission folder
 names (`ia1`, `m02`, `mp3`), so the script for a mission is exactly
 `support\<chapter>\<mission>.gw`.
 
-### Build vs. run — the `USEZBD` split
+### Build vs. run, the `USEZBD` split
 
 The same script tree is both the engine's asset **compiler** and its **loader**, switched
 by preprocessor defines in `support\main.gw`. Without `USEZBD`, the `load.gw` scripts
 `LoadGameGen` the raw `..\data\**\*.flt` art tree into a scene DB and `GameZWriteZBDFile`
-writes the chapter's `gamez.zbd` — that path owns `mkdir`, `PrintUsedTextures` and the
+writes the chapter's `gamez.zbd`, that path owns `mkdir`, `PrintUsedTextures` and the
 `COMPILE` define, and it is dead in a retail install, which ships no `..\data\` tree.
 `support\planes.gw` builds `planes.zbd` the same way, running `util\planesurgery.gw` once
 per aircraft to split `cockpit1` out of the model into a `player_*` root with `geometry` +
-`cockpit1` children — the shape the readers see. With `USEZBD` (retail runtime), the engine
+`cockpit1` children, the shape the readers see. With `USEZBD` (retail runtime), the engine
 reads `gamez.zbd` + `planes.zbd` instead. `adjust.gw` (the clutter registry) and the
-per-mission `<mission>.gw` run **in both paths** — they are the only genuinely runtime
+per-mission `<mission>.gw` run **in both paths**, they are the only genuinely runtime
 scripts, and exactly the subset this project consumes.
 
-## The per-mission scripts — which entities a mission shows
+## The per-mission scripts, which entities a mission shows
 
 **This is the mechanism that decides world entity presence, and it settles a question the
 readers cannot answer.** A chapter's `gamez.zbd` contains *every* one of its missions'
-content — all the zeppelins, the CTF props, the boats, the AA guns. The engine loads all of
+content, all the zeppelins, the CTF props, the boats, the AA guns. The engine loads all of
 it, then runs the mission's `.gw`, which switches off what this mission does not want.
 
 C1/IA1's script deactivates 29 nodes, among them `hk_zep` (the Hollywood Knights zeppelin
 moored at the tether tower), `multiplayer1zep`/`multiplayer2zep`, `piratezep`,
 `workersvoyagezep`, `redcross`, the nine `lifesaver*` props, five AA guns, the rearm bay
-and all four CTF props. C1/M04's script does **not** name `hk_zep` — which is exactly why
+and all four CTF props. C1/M04's script does **not** name `hk_zep`, which is exactly why
 that zeppelin is on the field in M04 and nowhere else.
 
 Polygons omitted from each chapter's Instant Action by its own script:
@@ -80,30 +80,30 @@ Polygons omitted from each chapter's Instant Action by its own script:
 | C5 | 15 | 15,185 | six named zeppelins + both MP zeppelins |
 
 Every chapter parks `multiplayer1zep` **and** `multiplayer2zep` in its world and switches
-both off outside multiplayer — so ignoring these scripts leaves two phantom zeppelins in
+both off outside multiplayer, so ignoring these scripts leaves two phantom zeppelins in
 every single Instant Action map.
 
-### Vehicles load unplaced — the origin is the map corner
+### Vehicles load unplaced, the origin is the map corner
 
 Every chapter's `support\<chapter>\load.gw` loads its vehicles with a bare `LoadGameGen` +
 `AddChild %worldName%` and **no placement**, so every zeppelin, car, boat, train car and
 aeroplane in the install ships with gamez `transform: "Initial"` and sits at the world
 origin. Every chapter's world `area` is x,z ∈ [−N, 0], so the origin is the map's
 **corner**. Each mission then either switches the vehicle off in its own `.gw` setup script
-or places it from the animation layer — an `ON_STARTUP` `OBJECT_TRANSLATE_STATE` (C3/IA1's
+or places it from the animation layer, an `ON_STARTUP` `OBJECT_TRANSLATE_STATE` (C3/IA1's
 `cgzepstate` puts `cargozep1` at (−12412.9, 134.0, −10424.8)) or an `OBJECT_MOTION_FROM_TO`.
 
 Retail data misses some: **C5/IA1 leaves `piratezep` and `sprucegoose` on**, and
-**C1C/IA1** — whose `ia1.gw` is four lines naming only the two MP zeppelins — leaves
+**C1C/IA1**, whose `ia1.gw` is four lines naming only the two MP zeppelins, leaves
 `piratezep`, `blackswanzep` and `workersvoyagezep` parked at the corner. (Measured across
 all 8 chapters, the transformless walk roots whose built world AABB straddles the origin in
-x and z are 122 nodes — all vehicles, zero terrain.)
+x and z are 122 nodes, all vehicles, zero terrain.)
 
 ### Capture the Flag
 
 `ctf_1`/`ctf_2` (gate posts) and `cs_flag_1`/`cs_flag_2` (the flags) exist in the five
 chapters that ship an MP2 mission (C1, C2, C3, C4, C5) and are switched **off by every
-mission script except `mp2.gw`**. That is the whole CTF gate — no roster file is involved.
+mission script except `mp2.gw`**. That is the whole CTF gate, no roster file is involved.
 `targets.zrd.json` in `MP2/zrdr/` references the same names, but it is the objective list,
 not the spawn signal.
 
@@ -117,10 +117,10 @@ that selection.
 |---|---:|---|
 | `FindNode <name>` | 1215 | Select a node by gamez name (the `.flt` suffix is used interchangeably) |
 | `NodeSetActive on\|off` | 1125 | Activate / deactivate the selection's subtree |
-| `Object3DSetScroll on\|off <u> <v>` | 68 | **Set a texture scroll rate** on the selection's model — see below |
-| `WorldPartitionSetActive on\|off <x1> <z1> <x2> <z2>` | 25 | **`NodeSetActive` applied by area**, not to the selection — see below (C3 only) |
+| `Object3DSetScroll on\|off <u> <v>` | 68 | **Set a texture scroll rate** on the selection's model, see below |
+| `WorldPartitionSetActive on\|off <x1> <z1> <x2> <z2>` | 25 | **`NodeSetActive` applied by area**, not to the selection, see below (C3 only) |
 | `Object3DTranslate <x> <y> <z>` | 14 | Reposition the selection |
-| `Quit` | 13 | End of script — always the last line (C4/C5 scripts only) |
+| `Quit` | 13 | End of script, always the last line (C4/C5 scripts only) |
 | `DeleteTree <name>` | 12 | Remove a subtree outright (C3 only) |
 | `Object3DRotate <x> <y> <z>` | 11 | Re-orient the selection |
 | `FindSubNode <name>` | 8 | Narrow the selection to a descendant |
@@ -135,9 +135,9 @@ Semantics worth knowing:
   Never treat an unresolved name as an error.
 - **`DeleteTree` names its own target** rather than acting on the current selection, and no
   script re-activates a name it deleted (checked over all 53).
-- **`WorldPartitionSetActive` ignores the selection too** — it takes a rectangle in world XZ
+- **`WorldPartitionSetActive` ignores the selection too**, it takes a rectangle in world XZ
   and toggles every node the partition grid indexes inside it. It is the *same* toggle
-  `NodeSetActive` performs, reached by area instead of by name — see below.
+  `NodeSetActive` performs, reached by area instead of by name, see below.
 - **`Object3DTranslate`/`Object3DRotate` place the selection** (`MissionSetup`, BL-249, consumed
   translate is a plain absolute position, applied through the same
   parent-frame convention `OBJECT_TRANSLATE_STATE` uses. **`Object3DRotate`'s angle unit is
@@ -146,14 +146,14 @@ Semantics worth knowing:
   whole script's `Object3DRotate` statements as degrees, otherwise they are radians. C1/M05's
   nine uses are small integers that only make sense as degrees (`0 45 0`, `0 172 0`); C3/MP1
   and MP2's two uses are high-precision values paired with a high-precision translate
-  (`-0.000010 -3.144009 -0.000000`, i.e. π on Y) that only make sense as radians — the two
+  (`-0.000010 -3.144009 -0.000000`, i.e. π on Y) that only make sense as radians, the two
   families are cleanly separable by the 2π threshold, so a per-script decision costs nothing a
   global guess would have gotten right and fixes the one case (mixed units across scripts) a
   global guess cannot. No mission this project defaults to (an IA1) uses either verb, so the
-  goldens cannot catch a wrong guess here — verified instead by targeted `--freecam` captures at
+  goldens cannot catch a wrong guess here, verified instead by targeted `--freecam` captures at
   C1/M05 (boats/`redcross`/`workersvoyagezep` at their authored positions and headings) and
   C3/MP1 (`cargozep1` at ≈π).
-## `Object3DSetScroll` — the second source of texture scrolling
+## `Object3DSetScroll`, the second source of texture scrolling
 
 The gamez *model* carries a `texture_scroll` field ([gamez.md](gamez.md)), and the boot
 scripts also set scroll rates at load time. C1's own `ia1.gw` ends with:
@@ -165,7 +165,7 @@ FindNode wf01_edge
 Object3DSetScroll on 0.0 -0.4
 ```
 
-— so the C1 waterfall scrolls its texture at −0.4 v/second even though its gamez
+so the C1 waterfall scrolls its texture at −0.4 v/second even though its gamez
 `texture_scroll` is `{0,0}`. All 75 uses (68 in mission scripts, 7 in the chapter
 `tex_fx.gw` scripts) are the `on` form; no script ever turns a scroll off.
 
@@ -174,33 +174,33 @@ forces, and it explains why the two sources disagree only where they must:
 
 | Where the statement lives | In the shipped gamez? |
 |---|---|
-| chapter `tex_fx.gw` (7 uses) | **Yes — identical values.** C1's `h_zone1scroll` is 0.07 in both; C1B's `con_scroll` −1.0, `eb_wakefront` 1.0, `wakefront_left`/`_right` 0.7. |
-| per-mission `<mission>.gw` (68 uses) | **No** — the six C1/C4 waterfall leaves are `{0,0}` in the gamez. |
+| chapter `tex_fx.gw` (7 uses) | **Yes, identical values.** C1's `h_zone1scroll` is 0.07 in both; C1B's `con_scroll` −1.0, `eb_wakefront` 1.0, `wakefront_left`/`_right` 0.7. |
+| per-mission `<mission>.gw` (68 uses) | **No**, the six C1/C4 waterfall leaves are `{0,0}` in the gamez. |
 
 A chapter-level script runs once per chapter, so its writes could be (and were) baked into
 the chapter's saved gamez; a per-mission script cannot be, because one gamez serves every
 mission. Only the mission-level statements therefore have to be applied at load, and the
-chapter-level ones are pure redundancy in this install — the single statement that is *not*
+chapter-level ones are pure redundancy in this install, the single statement that is *not*
 redundant, C4/`tex_fx.gw`'s `waterfall01 0.0 -0.5`, names a group node with no model of its
 own, and every C4 mission script then sets that waterfall's two leaves to −0.4 directly. So
 it is unobservable whether the verb also recurses into a subtree.
 
 `MissionSetup.ScrollByModel` resolves each statement to a gamez
 model index and hands the table to the world build, because the rate has to be known while
-the material is created (a scrolling model can share its material with static geometry — see
+the material is created (a scrolling model can share its material with static geometry, see
 `SceneBuilder`'s cache key in `docs/architecture.md`). Every scroll target in this install is
 a model used by exactly one node, so per-model and per-node granularity cannot disagree here.
 
-## `WorldPartitionSetActive` — `NodeSetActive`, selected by area
+## `WorldPartitionSetActive`, `NodeSetActive`, selected by area
 
 The `crimson.exe` control flow establishes this behavior. Reproducible at the addresses
-named: verb dispatch `FUN_005b80a0` (the interpreter — all ten verbs are matched there by
+named: verb dispatch `FUN_005b80a0` (the interpreter, all ten verbs are matched there by
 `strncmp`), rectangle walk `FUN_004db790`, and the shared toggle `FUN_004cca30`.
 
 **The verb is a bulk `NodeSetActive`.** `FUN_004db790(world, on_off, x1, z1, x2, z2)` converts
 the rectangle to partition-grid cell indices, then calls `FUN_004cca30(node, on_off)` for every
 node every covered cell indexes. `NodeSetActive` calls **the same function**, with the same two
-arguments — Ghidra recovers its authored name from an assertion inside it, `gwNodeSetActive`,
+arguments, Ghidra recovers its authored name from an assertion inside it, `gwNodeSetActive`,
 at `D:\zipper\gamez\zclass\Class.c:1315`. There is no second visibility system here: both verbs
 write bit 2 (`0x4`) of the node's flag word at `+0x24`, set on `on` and cleared on `off`. Node
 kinds 1/2/5/6 get only that; kind 9 additionally tests `*(node+0x38)+0xe0 & 0x200` and calls
@@ -225,7 +225,7 @@ Three traps for anyone reimplementing it:
   then explicitly swaps min/max on both axes. C3 authors the second corner below-left of the
   first (`WorldPartitionSetActive on -10240 -2048 -2048 -6144`) and the engine normalises it.
 - **The rectangle is half-open in cell space.** Both loops are strict `<` against the max cell
-  index, so the last row and column are excluded — and **a rectangle that lands inside a single
+  index, so the last row and column are excluded, and **a rectangle that lands inside a single
   cell toggles nothing at all**. An inclusive `<=` over-selects by one row and one column.
 - ⚠ **The two axes index in opposite directions.** The x origin is the grid's LOW edge and its
   cell size is positive; the z origin is the grid's HIGH edge and its authored cell size is
@@ -246,7 +246,7 @@ scenery, so a story mission really swaps its map. Regression: the `partition-are
 All 25 uses are `support\c3\*.gw`, and they resolve to just three distinct rectangles:
 `(-10240,-2048)→(-2048,-6144)`, `(-8192,-6144)→(-2048,-8192)` and
 `(-15360,-7168)→(-8192,-14336)`. Every `off` sits in a story mission, so IA1 is unaffected in
-all eight chapters — which is why the remake has been able to skip the verb so far.
+all eight chapters, which is why the remake has been able to skip the verb so far.
 
 Three sibling verbs exist in the same dispatch and appear in no shipped script: `WorldPartition`
 (`FUN_004daa20`, sets the grid up), `WorldPartitionInclusionTolerance` and
@@ -259,7 +259,7 @@ from `area` and never sees the z inversion. Do not merge the two.
 ## Relationship to the animation definitions
 
 The `.gw` scripts and the `zepstate` animation definitions ([anim-definitions.md](anim-definitions.md))
-do the same *kind* of thing — switch world objects off per mission — through two different
+do the same *kind* of thing, switch world objects off per mission, through two different
 systems, and both are needed:
 
 - `.gw` runs at world load, names nodes directly, and covers the entity families
@@ -276,7 +276,7 @@ rosters. Both are wrong: `aiv.zrd.json` is the AI vehicle table (its only mentio
 `hk_zep` anywhere is inside a wingman's target-priority list in C1/M02), and
 `zeppelins.zrd.json` is the flyable-zeppelin gameplay config, which never names `hk_zep` in
 the one mission that shows it. Entities are present by default and switched off by the boot
-script — the same polarity as `zepstate`, not the mirror image of it.
+script, the same polarity as `zepstate`, not the mirror image of it.
 
 ## Evidence & limits
 

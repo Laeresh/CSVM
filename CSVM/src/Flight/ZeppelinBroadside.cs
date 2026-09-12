@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>Which broadside a cannon belongs to (the record's <c>left_cannons</c> /
-/// <c>right_cannons</c> lists), or none — the "no side bears" answer of
+/// <c>right_cannons</c> lists), or none, the "no side bears" answer of
 /// <see cref="ZeppelinBroadside.TargetSide"/>.</summary>
 public enum BroadsideSide
 {
@@ -36,7 +36,7 @@ public enum ZeppelinCannonState
 /// named as such; no shipped record reaches them.</summary>
 public sealed class ZeppelinBroadside
 {
-    /// <summary>The decoded arc gate: <c>dot(toTarget, sideNormal) &gt; 0.707</c> — a 45°
+    /// <summary>The decoded arc gate: <c>dot(toTarget, sideNormal) &gt; 0.707</c>, a 45°
     /// half-angle on the firing side's perpendicular.</summary>
     public const float ArcCos = 0.707f;
 
@@ -86,7 +86,7 @@ public sealed class ZeppelinBroadside
 
     public ZeppelinDef Def { get; }
 
-    /// <summary>The record's <c>cannon_fire_delay</c> — per CANNON, not per zeppelin
+    /// <summary>The record's <c>cannon_fire_delay</c>, per CANNON, not per zeppelin
     /// (decoded: each cannon sets its own next-fire time to now + delay).</summary>
     public float FireDelaySeconds { get; }
 
@@ -106,7 +106,7 @@ public sealed class ZeppelinBroadside
 
     /// <summary>The firing side's perpendicular in world space: a ±1 unit vector along the
     /// hull's lateral axis by the cannon's side flag, rotated into world by the MOVING hull's
-    /// yaw/pitch (zeppelins never bank) — the decoded construction.</summary>
+    /// yaw/pitch (zeppelins never bank), the decoded construction.</summary>
     public static Vector3 SideNormal(float yawRad, float pitchRad, BroadsideSide side,
         float rightSign = 1f)
     {
@@ -145,7 +145,7 @@ public sealed class ZeppelinBroadside
     /// <summary>The decoded ballistic solve: a constant-velocity intercept
     /// (<see cref="AimAssist.TryIntercept"/>, consumed never re-derived) from the cannon's
     /// muzzle at the round's speed, against the target's velocity relative to the hull. False =
-    /// no solution = the target is SKIPPED — the shipped engine never falls back to a straight
+    /// no solution = the target is SKIPPED, the shipped engine never falls back to a straight
     /// shot and never rolls a hit chance.</summary>
     public static bool TryAim(Vector3 muzzlePos, float roundSpeed, Vector3 targetPos,
         Vector3 targetVel, Vector3 platformVel, out Vector3 aimDir) =>
@@ -278,7 +278,7 @@ public sealed class ZeppelinBroadside
 
         public BroadsideSide Side { get; }
 
-        /// <summary>How long the deploy anim runs — the authored def's own duration where it
+        /// <summary>How long the deploy anim runs, the authored def's own duration where it
         /// resolves, <see cref="FallbackDeploySeconds"/> where not.</summary>
         public float DeploySeconds { get; }
 
@@ -293,7 +293,7 @@ public sealed class ZeppelinBroadside
         /// re-fire timer).</summary>
         public float RefireIn { get; internal set; }
 
-        /// <summary>Seconds spent ready with no target bearing on this side — the invented
+        /// <summary>Seconds spent ready with no target bearing on this side, the invented
         /// stow countdown's input.</summary>
         public float IdleFor { get; internal set; }
     }

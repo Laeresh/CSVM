@@ -40,7 +40,7 @@ public class FlightConstantInventoryTests
     };
 
     // The inventory itself: every const the plant carries, its value, its class and where the value
-    // comes from. The Source column is what the parity ledger publishes and is deliberately short —
+    // comes from. The Source column is what the parity ledger publishes and is deliberately short,
     // an address, a global or a data key. The prose behind it is docs/org/flightModel.md's own
     // evidence column, so a row here is a claim that the doc row still applies.
     internal static readonly (string Type, string Name, double Value, string Class, string Source)[]
@@ -351,7 +351,7 @@ public class FlightConstantInventoryTests
     // Peak speed as a fraction of fd_speed over the manoeuvres that make the most of it: a vertical
     // and a shallow dive, and a held loop, which is the energy pump the cap exists for. Each is
     // entered at fd_speed, so the peak is the model's own terminal rather than the entry the
-    // instrument chose (METHOD-21) — a dive entered above terminal only ever decelerates.
+    // instrument chose (METHOD-21), a dive entered above terminal only ever decelerates.
     private static (float Peak, string Where) FastestFlight(PlaneStats stats)
     {
         (string Name, float PitchDeg, float EntryFrac, float Stick, float StartM)[] runs =
@@ -383,7 +383,7 @@ public class FlightConstantInventoryTests
     }
 
     // A held-attitude climb from below the band edge, reporting the apex it reaches and the vertical
-    // speed it crossed the edge with — the two quantities a ballistic coast relates.
+    // speed it crossed the edge with, the two quantities a ballistic coast relates.
     private static FlightModel Climb(PlaneStats stats, float startM, float pitchDeg, float seconds,
         out float apexM, out float crossingVyMps)
     {

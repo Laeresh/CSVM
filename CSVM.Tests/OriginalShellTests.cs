@@ -587,8 +587,9 @@ public class OriginalShellTests
     {
         var shell = Shell(out _);
         shell.OpenVideoOn(OriginalShell.DisplayModeKey);
-        Assert.Equal("Windowed", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
+        Assert.Equal("Borderless", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
 
+        // The list opens focused on the row's own word, the borderless default here, not on its first.
         shell.Step(Accept);
         Assert.Equal(OriginalShell.DisplayModeKey, shell.OpenVideoOption);
         Assert.Equal(DisplayWords.DisplayModes.Count, shell.Rows.Count);
@@ -596,24 +597,24 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Null(shell.OpenVideoOption);
-        Assert.Equal(DisplayWords.Borderless, shell.DisplayModeChoice);
-        Assert.Equal("Borderless", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
+        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
+        Assert.Equal("Fullscreen", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
 
         // A sideways step wraps past the last word back to the first, as every word row does.
         shell.Step(Right);
-        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
-        shell.Step(Right);
         Assert.Equal(DisplayWords.Windowed, shell.DisplayModeChoice);
+        shell.Step(Right);
+        Assert.Equal(DisplayWords.Borderless, shell.DisplayModeChoice);
 
         shell.Step(Left);
-        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
+        Assert.Equal(DisplayWords.Windowed, shell.DisplayModeChoice);
 
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
         Assert.Equal(OriginalShell.VideoAcceptKey, shell.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(shell.Step(Accept).Exit);
-        Assert.Equal(DisplayWords.Fullscreen, exit.DisplayMode);
+        Assert.Equal(DisplayWords.Windowed, exit.DisplayMode);
     }
 
     /// <summary>The V-Sync row's dropdown: Accept opens the list over every choice at the row's own
@@ -624,8 +625,10 @@ public class OriginalShellTests
     {
         var shell = Shell(out _);
         shell.OpenVideoOn(OriginalShell.VSyncKey);
-        Assert.Equal("On", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
+        Assert.Equal("Off", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
 
+        // The list opens focused on the row's own word, the off default here, so two steps down
+        // land on the third choice after it.
         shell.Step(Accept);
         Assert.Equal(OriginalShell.VSyncKey, shell.OpenVideoOption);
         // Five words in the row's authored four-row window, so the list carries its two arrows
@@ -636,8 +639,8 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Null(shell.OpenVideoOption);
-        Assert.Equal("60", shell.VSyncChoice);
-        Assert.Equal("60 FPS", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
+        Assert.Equal("120", shell.VSyncChoice);
+        Assert.Equal("120 FPS", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
 
         // Back on the open list closes it; the next Back is CANCEL CHANGES.
         shell.Step(Accept);
@@ -733,10 +736,10 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Right);
-        Assert.Equal(DisplayWords.Borderless, shell.DisplayModeChoice);
+        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
         shell.Step(Down);
         shell.Step(Right);
-        Assert.Equal(DisplayWords.VSyncOff, shell.VSyncChoice);
+        Assert.Equal("60", shell.VSyncChoice);
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
@@ -826,9 +829,9 @@ public class OriginalShellTests
         Assert.Equal("0", shell.MonitorChoice);
         Assert.Equal("Screen 0", shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey).Label);
 
-        // A file that never set the fields opens the rows on the shipped defaults: the project's own
-        // size rather than the smallest a screen holds, and the standing screen rather than an index
-        // no screen answers to, each row agreeing with the fallback rule its own setting applies.
+        // A file that never set the fields opens the rows on the shipped defaults, each row agreeing
+        // with its own setting's fallback rule: off and borderless rather than either vocabulary's
+        // first word, the size list's fallback (the project size, with no screen to ask), the standing screen.
         saved.GraphicsMode = null;
         saved.MenuPresentation = null;
         saved.Difficulty = null;
@@ -842,11 +845,11 @@ public class OriginalShellTests
         Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
         shell.OpenVideo();
         Assert.Null(shell.VSyncChoice);
-        Assert.Equal("On", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
+        Assert.Equal("Off", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
         Assert.Null(shell.DisplayModeChoice);
-        Assert.Equal("Windowed", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
+        Assert.Equal("Borderless", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
         Assert.Null(shell.ResolutionChoice);
-        Assert.Equal(ResolutionSetting.Default, shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey).Label);
+        Assert.Equal(ResolutionSetting.ProjectSize, shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey).Label);
         Assert.Equal("9", shell.MonitorChoice);
         Assert.Equal("Screen 0", shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey).Label);
     }

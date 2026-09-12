@@ -21,7 +21,7 @@ public class ZrdrTests
     [Fact]
     public void EveryNumberArrivesAsFloat()
     {
-        // "PARTICLES 100" parses as 100.0 — mech3ax emits every scalar through one
+        // "PARTICLES 100" parses as 100.0, mech3ax emits every scalar through one
         // single-precision path, so a reader must never expect an int.
         var probe = ProbeBlock();
         Assert.IsType<float>(Assert.IsType<List<object?>>(probe.List("PAIR"))[0]);

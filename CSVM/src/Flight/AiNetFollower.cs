@@ -148,7 +148,7 @@ public sealed class AiNetFollower
         : null;
 
     /// <summary>The radius, metres, at which a leg from <paramref name="legStart"/> to
-    /// <paramref name="node"/> counts as reached — a tenth of its horizontal length, floored at
+    /// <paramref name="node"/> counts as reached, a tenth of its horizontal length, floored at
     /// <see cref="MinArrivalRadiusM"/>. The engine keeps the square in <c>edge+0x1c</c>.</summary>
     public static float ArrivalRadius(Vector3 legStart, Vector3 node, float floorM = MinArrivalRadiusM)
     {

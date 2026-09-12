@@ -38,7 +38,7 @@ public enum SessionProbe
 
 /// <summary>The launchscreen's Mode screen, in the order its rows are drawn. Carried in the
 /// typed <c>LaunchExit</c> into <see cref="SessionSpec.FromMenu"/>, which turns the pick into
-/// <see cref="SessionSpec.Stunt"/>/<see cref="SessionSpec.Versus"/> — kept here rather than on
+/// <see cref="SessionSpec.Stunt"/>/<see cref="SessionSpec.Versus"/>, kept here rather than on
 /// <c>LaunchMenu</c> so the menu's own tests stay engine-free.</summary>
 public enum MenuMode
 {
@@ -70,13 +70,13 @@ public readonly record struct ZepStageSpec(string Chapter, string Mission, strin
 /// One immutable value for everything the command line settles about a session: parsed once,
 /// then resolved once, so a consumer reads an answer instead of re-deriving one.
 /// <see cref="Parse"/> returns a RESOLVED spec; the mode flags arrive as private fields and
-/// arbitration turns them into <see cref="Mode"/> — see <see cref="Resolve"/> for the step order.
-/// ⚠ Pure — no engine state, no globals, no logging, no clock. Complaints go to
+/// arbitration turns them into <see cref="Mode"/>, see <see cref="Resolve"/> for the step order.
+/// ⚠ Pure, no engine state, no globals, no logging, no clock. Complaints go to
 /// <see cref="Warnings"/>, never a print.
 /// </summary>
 public sealed record SessionSpec
 {
-    // The sim frame a bare `--crash` (no `=frame`) fires at — early enough that
+    // The sim frame a bare `--crash` (no `=frame`) fires at, early enough that
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
 
@@ -103,7 +103,7 @@ public sealed record SessionSpec
     /// <summary>The user args this spec was parsed from, verbatim and in order.</summary>
     public IReadOnlyList<string> Args { get; private set; } = Array.Empty<string>();
 
-    /// <summary>Every complaint parse and resolution raised, in order. Nothing is logged here — the
+    /// <summary>Every complaint parse and resolution raised, in order. Nothing is logged here, the
     /// caller emits these, which is what keeps the type engine-free.</summary>
     public IReadOnlyList<Note> Warnings => _notes;
 
@@ -120,13 +120,13 @@ public sealed record SessionSpec
     public bool Viewer => Mode == SessionMode.Viewer;
     public bool Freecam => Mode == SessionMode.Freecam;
     public bool AnimLab => Mode == SessionMode.AnimLab;
-    /// <summary><b>Resolved.</b> Flight plus the mission's danger zones — a modifier on
+    /// <summary><b>Resolved.</b> Flight plus the mission's danger zones, a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight.</summary>
     public bool Stunt { get; private set; }
-    /// <summary><b>Resolved.</b> Splitscreen free-for-all deathmatch ("Dogfight") — a modifier on
+    /// <summary><b>Resolved.</b> Splitscreen free-for-all deathmatch ("Dogfight"), a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight, same as
     /// <see cref="Stunt"/>. <c>--vs</c> beats <c>--stunt</c> by fixed precedence when both are
-    /// given, with a warning — the two are not composable. The menu enforces
+    /// given, with a warning, the two are not composable. The menu enforces
     /// <see cref="Players"/> &gt;= 2 before it will start a match; the CLI only warns.</summary>
     public bool Versus { get; private set; }
     /// <summary><c>--coop</c>: plain splitscreen free flight (no <see cref="Versus"/>, no Instant
@@ -142,7 +142,7 @@ public sealed record SessionSpec
     /// <summary><c>--vs-time=minutes</c>: the match time limit, in MINUTES. Default 5; 0 disables
     /// the time limit (the match then runs to the kill target alone).</summary>
     public int VsTimeMinutes { get; private set; } = 5;
-    /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch — a modifier on
+    /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
     /// built; this only decides whether it starts open or waits behind F5.</summary>
@@ -176,7 +176,7 @@ public sealed record SessionSpec
 
     /// <summary>Whether <c>_Ready</c> shows the launchscreen before building anything. Independent
     /// of <see cref="Mode"/>: <c>--menu --chapter=C4</c> resolves to flight AND shows the menu.
-    /// ⚠ True under <c>--run-tests</c> too — the harness is saved only by returning before the menu
+    /// ⚠ True under <c>--run-tests</c> too, the harness is saved only by returning before the menu
     /// branch. Reproduced deliberately; the equivalence gate compares against it.</summary>
     public bool ShowsMenu => ForceMenu || !HasContentArg;
 
@@ -214,7 +214,7 @@ public sealed record SessionSpec
 
     /// <summary>Whether a flag will drive and end this session by itself, so nobody is at the
     /// controls: the window hides instead of asking for focus. ⚠ <c>--dump-flight</c>'s absence is
-    /// a drift, not a decision — the same omission as <see cref="ModeName"/>'s, and it means a
+    /// a drift, not a decision, the same omission as <see cref="ModeName"/>'s, and it means a
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
@@ -227,7 +227,7 @@ public sealed record SessionSpec
     /// over a collidable ground plane.</summary>
     public bool EmptyStage { get; private set; }
 
-    /// <summary>Whether this session builds the world's colliders — the one definition every
+    /// <summary>Whether this session builds the world's colliders, the one definition every
     /// consumer reads. Flight needs them to fly into things; the headless damage sweep and the
     /// world damage lab need them because a kill's collider count would otherwise read zero and
     /// lie; <c>--collision</c> is the interactive request for them in a mode that builds none.</summary>
@@ -236,7 +236,7 @@ public sealed record SessionSpec
     // ---- The world ----------------------------------------------------------------------------
 
     public string Chapter { get; private set; } = "C1";
-    /// <summary><b>Resolved.</b> A chapter world was asked for — by <c>--chapter</c>/<c>--chapter=</c>,
+    /// <summary><b>Resolved.</b> A chapter world was asked for, by <c>--chapter</c>/<c>--chapter=</c>,
     /// or by <c>--node=</c>, whose subtree comes out of the chapter's gamez.</summary>
     public bool ChapterGiven { get; private set; }
     public string Mission { get; private set; } = "IA1";
@@ -247,7 +247,7 @@ public sealed record SessionSpec
     public bool ScenarioExplicit { get; private set; }
     /// <summary><c>--ia=&lt;path&gt;</c>: fly a mission described by a hand-authored
     /// <c>InstantActionDef</c> JSON file (<c>Mech3.InstantAction.LoadFromJson</c>) instead of the
-    /// chapter's own shipped <c>ia.zrd.json</c>. Null when the flag was absent — the value is only
+    /// chapter's own shipped <c>ia.zrd.json</c>. Null when the flag was absent, the value is only
     /// the path; loading it is the runtime's job, which keeps this
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
@@ -268,10 +268,10 @@ public sealed record SessionSpec
     public bool NoCrashLoss { get; private set; }
     /// <summary>Set only by <see cref="FromMenu"/>: the launchscreen wizard's own built
     /// <c>InstantActionDef</c>, null on every CLI launch since <c>--ia=</c> carries a path
-    /// instead. Only ever carried onto the record here, never loaded or built — the same
+    /// instead. Only ever carried onto the record here, never loaded or built, the same
     /// purity contract <see cref="IaPath"/> (a path, not a load) already keeps.</summary>
     public InstantActionDef? IaDef { get; private set; }
-    /// <summary>The <c>--stage=</c> value as given, unvalidated — only "empty" names a stage.
+    /// <summary>The <c>--stage=</c> value as given, unvalidated, only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
     public string? Stage { get; private set; }
     public string? NodeName { get; private set; }
@@ -286,7 +286,7 @@ public sealed record SessionSpec
     public bool CockpitPass { get; private set; } = true;
 
     /// <summary><c>--no-clutter</c>: skip the chapter's ground-clutter build entirely
-    /// (<see cref="Mech3.ClutterBuilder"/> — the scattered tree/bush cards and the C2/C5 3D
+    /// (<see cref="Mech3.ClutterBuilder"/>, the scattered tree/bush cards and the C2/C5 3D
     /// city-block decorations), so the painted ground they stand on is visible. Does not touch the
     /// ambient cloud field (<c>Effects.FogVolumeClutter</c>), which is a different population that
     /// happens to share the word.</summary>
@@ -294,27 +294,27 @@ public sealed record SessionSpec
 
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
-    /// — flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
+    ///, flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
     /// toggle. See <c>docs/cli.md</c>.</summary>
     public bool DebugClutterFlag { get; private set; }
 
     /// <summary><c>--clutter-templates=a,b,c</c>: build these clutter templates instead of the
     /// chapter's own <c>AddClutterTemplates</c> list, so one district at a time can be A/B'd
     /// against the original. Names are matched case-insensitively against the gamez's template
-    /// roots. The per-polygon <c>no_clutter</c> gate still applies — this replaces the template
+    /// roots. The per-polygon <c>no_clutter</c> gate still applies, this replaces the template
     /// SET, not the placement rule. Null → the chapter's own list;
     /// <see cref="NoClutter"/> wins if both are given. See <c>docs/cli.md</c>.</summary>
     public IReadOnlyList<string>? ClutterTemplates { get; private set; }
 
     /// <summary><c>--no-zone-cull</c>: switch off the gamez <c>zone_id</c> visibility gate
-    /// (<see cref="Mech3.ZoneGate"/>) — every zone draws at every camera state. The one switch that
+    /// (<see cref="Mech3.ZoneGate"/>), every zone draws at every camera state. The one switch that
     /// isolates a regression anywhere in the world's content at the controls: the gate hides a lot
     /// on purpose (in C1 the whole ground world above the deck, the deck and
     /// the cloud populations below it), so "did the gate eat it?" has to be answerable in one
-    /// flag. Not a fidelity switch — the default IS the original's behaviour.</summary>
+    /// flag. Not a fidelity switch, the default IS the original's behaviour.</summary>
     public bool NoZoneCull { get; private set; }
 
-    /// <summary><c>--no-flare</c>: suppress the sun's lens flare. Not a fidelity switch —
+    /// <summary><c>--no-flare</c>: suppress the sun's lens flare. Not a fidelity switch,
     /// a verification one. The flare's full-screen wash reaches α ≈ 0.66 and survives terrain
     /// occlusion, so in C2/C3 any capture with the sun near screen centre is contaminated for every
     /// *other* comparison (terrain colour, fog gradient, deck brightness, clutter density). Same
@@ -327,7 +327,7 @@ public sealed record SessionSpec
     public int AnimLod { get; private set; } = AnimRuntime.HighLod;
     public string? DestroyName { get; private set; }
     /// <summary><c>--crash[=frame]</c>: the fixed sim frame (<see cref="Utils.GameClock.Frame"/>)
-    /// at which every player's <see cref="Flight.FlightController.DebugForceCrash"/> fires — the
+    /// at which every player's <see cref="Flight.FlightController.DebugForceCrash"/> fires, the
     /// only headless trigger for the per-player crash rig (no live collision analog exists).
     /// Null when the flag was absent.</summary>
     public int? CrashFrame { get; private set; }
@@ -339,7 +339,7 @@ public sealed record SessionSpec
     public IReadOnlyList<string> PlaneNames { get; private set; } = Array.Empty<string>();
     /// <summary><b>Resolved.</b> Splitscreen panes. A <c>--plane=</c> list of several states the
     /// count on its own; an explicit <c>--players=</c> still wins. Clamped to the rig's capacity,
-    /// and back to 1 for any static view — splitscreen is a flight mode, it needs planes to fly.</summary>
+    /// and back to 1 for any static view, splitscreen is a flight mode, it needs planes to fly.</summary>
     public int Players { get; private set; } = 1;
     public bool PlayersExplicit { get; private set; }
     public string? LoadoutOverride { get; private set; }
@@ -368,13 +368,13 @@ public sealed record SessionSpec
     public string? TargetSelect { get; private set; }
     public bool InfiniteAmmo { get; private set; }
     /// <summary>The <c>--ammo=</c> low-ammo start knob: caps both gun groups and pylons to this many
-    /// rounds at rig build, bypassing config.json — which <c>--det</c> drops, so the cap survives it.
-    /// Null when the flag was absent. Mutually exclusive with <see cref="InfiniteAmmo"/> — whichever
+    /// rounds at rig build, bypassing config.json, which <c>--det</c> drops, so the cap survives it.
+    /// Null when the flag was absent. Mutually exclusive with <see cref="InfiniteAmmo"/>, whichever
     /// flag comes last in the arg list wins; the loser is logged in <see cref="Warnings"/>.</summary>
     public int? AmmoCap { get; private set; }
     public bool AutoFire { get; private set; }
     public bool AutoFireRockets { get; private set; }
-    /// <summary><c>--incoming[=metres[,wep_id]]</c>: the incoming-fire test rig — a phantom shooter
+    /// <summary><c>--incoming[=metres[,wep_id]]</c>: the incoming-fire test rig, a phantom shooter
     /// on each player's six walking a burst into the airframe, so both cues and the shield behind
     /// them are reachable without an AI gunner. The metres offset the burst sideways (default none,
     /// on the airframe); a wide one is the rig's own able-to-fail control. Null when the flag was
@@ -422,7 +422,7 @@ public sealed record SessionSpec
     /// counts as absent, so the saved tier still applies under a typo.</summary>
     public bool DifficultyExplicit { get; private set; }
 
-    /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist — every spawned AI mode
+    /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist, every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
     public bool NoAssist { get; private set; }
@@ -434,7 +434,7 @@ public sealed record SessionSpec
     public bool Generators { get; private set; }
     /// <summary>Which plane <c>--generators</c> spawns; the default is the default flight plane.</summary>
     public string GeneratorsPlane { get; private set; } = "player_bhawk";
-    /// <summary><c>--zeppelins</c>: place and fly the mission's zeppelins (M4 F17) — each
+    /// <summary><c>--zeppelins</c>: place and fly the mission's zeppelins (M4 F17), each
     /// <c>zeppelins.zrd.json</c> record whose world node and net resolve is set to its authored
     /// position/yaw/pitch and moved along its net under the record's speed/accel/pitch/rate
     /// limits (a kinematic node follow, no flight model).</summary>
@@ -442,7 +442,7 @@ public sealed record SessionSpec
     /// <summary><c>--wake-turrets</c>: wake every dormant world AA emplacement at build (M4
     /// C9b). The emplacements themselves always build with a chapter flight; 22 of the 26
     /// standalone <c>ai.zrd</c> entries ship <c>ACTIVATED 0</c> and the real wake mechanism is
-    /// the mission script's <c>WAKEUP_TURRETS</c>, which M4 does not implement — this flag is
+    /// the mission script's <c>WAKEUP_TURRETS</c>, which M4 does not implement, this flag is
     /// the documented, logged stand-in, never a silent default.</summary>
     public bool WakeTurrets { get; private set; }
     /// <summary><c>--wake-generators</c>: grant every generator a campaign mission's script gates
@@ -489,7 +489,7 @@ public sealed record SessionSpec
     public bool DetExplicit => _detArg;
     /// <summary><b>Resolved.</b> The deterministic bundle is on: fixed-dt clock, pinned master
     /// seed, spawn 0, pinned liveries, no pads, no jitter. <c>--no-det</c> beats both the
-    /// implication and an explicit <c>--det</c> — there is one way to ask for wall-clock
+    /// implication and an explicit <c>--det</c>, there is one way to ask for wall-clock
     /// behaviour, whatever else is on the command line.</summary>
     public bool Det => !NoDet && (DetExplicit || ScriptedBy.Length > 0);
     public bool NoDet { get; private set; }
@@ -498,18 +498,18 @@ public sealed record SessionSpec
     /// <summary><c>--seed=N</c>, null when unset.</summary>
     public ulong? Seed { get; private set; }
     /// <summary>Whether the master seed is pinned rather than drawn from the clock. The anim lab
-    /// pins it by nature — its whole point is an identical replay.</summary>
+    /// pins it by nature, its whole point is an identical replay.</summary>
     public bool SeedPinned => Seed != null || Det || Mode == SessionMode.AnimLab;
-    /// <summary>The master seed when it is pinned, else null — the clock draw stays outside, or
+    /// <summary>The master seed when it is pinned, else null, the clock draw stays outside, or
     /// this type would not be a function of its args (and a baseline would differ from itself).</summary>
     public ulong? PinnedSeed => SeedPinned ? Seed ?? Rng.DefaultSeed : null;
     /// <summary><b>Resolved.</b> <c>--spawn=N</c>; &lt; 0 means "random pick". <c>--det</c> pins it
-    /// to 0 — a pinned CHOICE beats a pinned dice roll, since a seeded pick still moves when the
+    /// to 0, a pinned CHOICE beats a pinned dice roll, since a seeded pick still moves when the
     /// mission's spawn list grows. An explicit <c>--spawn=N</c> still wins.</summary>
     public int SpawnIndex { get; private set; } = -1;
     /// <summary><c>--no-pads</c> was passed. Nothing here touches <c>Pads.Disabled</c>.</summary>
     public bool NoPads { get; private set; }
-    /// <summary>Whether every gamepad is ignored: asked for, or implied by the bundle — a stick
+    /// <summary>Whether every gamepad is ignored: asked for, or implied by the bundle, a stick
     /// with drift steers the free camera and nudges the flight model.</summary>
     public bool PadsDisabled => NoPads || Det;
     /// <summary><b>Resolved.</b> Burst camera dither in degrees. Bursts default it on so
@@ -520,7 +520,7 @@ public sealed record SessionSpec
     // ---- Placement, as written on the command line --------------------------------------------
 
     public Vector3? Pos { get; private set; }
-    /// <summary><b>Resolved.</b> Normalised, and derived from <see cref="LookAt"/> in flight — a
+    /// <summary><b>Resolved.</b> Normalised, and derived from <see cref="LookAt"/> in flight, a
     /// point converted against the eye. Null once a degenerate vector is dropped.</summary>
     public Vector3? Direction { get; private set; }
     /// <summary>A POINT, not a vector: the orbit view's pivot, and the freecam's aim when no
@@ -529,7 +529,7 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Where the plane spawns: <c>--pos</c> routed here in flight, or the
     /// deprecated <c>--spawn-at=</c>, or the empty stage's default.</summary>
     public Vector3? SpawnAt { get; private set; }
-    /// <summary><b>Resolved.</b> The nose direction there — <c>--direction</c> routed in flight, or
+    /// <summary><b>Resolved.</b> The nose direction there, <c>--direction</c> routed in flight, or
     /// the deprecated <c>--spawn-dir=</c>.</summary>
     public Vector3? SpawnDir { get; private set; }
     /// <summary><b>Resolved.</b> The camera eye: <c>--pos</c> routed here outside flight, or the
@@ -544,7 +544,7 @@ public sealed record SessionSpec
     /// <see cref="Flight.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
     /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
     public int View { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>--view=</c> SELECTED view mode — <c>chase</c> (the default),
+    /// <summary><b>Resolved.</b> The <c>--view=</c> SELECTED view mode, <c>chase</c> (the default),
     /// <c>cockpit</c> or <c>nose</c>. Held apart from <see cref="View"/> because the two are
     /// different things: a numpad digit is a momentary pose held for the run, this is the view the
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
@@ -584,7 +584,7 @@ public sealed record SessionSpec
     public string DumpMipsFilter { get; private set; } = "";
 
     /// <summary><c>--dump-ai</c>: a pure-data report over the five AI data families (patrol
-    /// nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators) — no world, no
+    /// nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators), no world, no
     /// scene. Scans every chapter/mission dir under the data root so its totals are the
     /// install-wide counts; an optional value restricts the nets/aiv/zeppelins/egen half to one
     /// chapter (turrets are one shared file and are always reported in full).</summary>
@@ -593,8 +593,8 @@ public sealed record SessionSpec
 
     /// <summary><c>--dump-tilegrid</c>: build the chapter world, write the map-edge tile census
     /// and quit. The written twin of <c>--debug-tilegrid</c>, and strictly more: the
-    /// overlay can only paint the tiles the extender ACCEPTED, so a rejected border tile — the
-    /// thing that leaves a void strip through the continuation — is visible on screen solely as
+    /// overlay can only paint the tiles the extender ACCEPTED, so a rejected border tile, the
+    /// thing that leaves a void strip through the continuation, is visible on screen solely as
     /// the hole it causes, and here as a row saying which node and why.</summary>
     public bool DumpTileGrid { get; private set; }
 
@@ -622,7 +622,7 @@ public sealed record SessionSpec
     /// build.</summary>
     public string? DebugAiNets { get; private set; }
 
-    /// <summary><c>--debug-targets</c>: open the targeting overlay (F14) at launch — a line from
+    /// <summary><c>--debug-targets</c>: open the targeting overlay (F14) at launch, a line from
     /// every turret gunner and AI gunner to the target it has acquired, coloured by the gate that
     /// is holding its trigger.</summary>
     public bool DebugTargets { get; private set; }
@@ -705,11 +705,11 @@ public sealed record SessionSpec
     public string? WeaponMount { get; private set; }
     public bool WeaponFire { get; private set; }
     /// <summary><c>--weapon-cycle[=frames]</c>: in a weapon-lab session, step the current bank's
-    /// weapon list one entry every N physics frames — the scripted twin of the panel's weapon
+    /// weapon list one entry every N physics frames, the scripted twin of the panel's weapon
     /// stepper, so the arm/ordnance-rebuild path can be walked with nobody at the controls. 0 = off.</summary>
     public int WeaponCycle { get; private set; }
     /// <summary><c>--weapon-click[=x,y]</c>: replay one weapon-lab click at that viewport pixel on
-    /// the first physics frame — the scripted twin of click-to-place. Set with no value to click
+    /// the first physics frame, the scripted twin of click-to-place. Set with no value to click
     /// the viewport centre, which is why the flag and its coordinates are separate fields.</summary>
     public bool WeaponClick { get; private set; }
     /// <summary><b>Resolved.</b> The pixel <see cref="WeaponClick"/> names, or null for the
@@ -721,7 +721,7 @@ public sealed record SessionSpec
     /// <summary><c>--weapon-target=x,y,z</c>: park the lab's aircraft facing that world point.</summary>
     public Vector3? WeaponTarget { get; private set; }
     /// <summary><c>--weapon-surface=&lt;registry name&gt;</c>: park facing the nearest collider
-    /// carrying that surface id. <b>Resolved</b> — a name outside the registry is warned about and
+    /// carrying that surface id. <b>Resolved</b>, a name outside the registry is warned about and
     /// dropped.</summary>
     public string? WeaponSurface { get; private set; }
     /// <summary><c>--weapon-standoff=&lt;m&gt;</c>: the lab's parking distance, 0 for the 90 m
@@ -731,7 +731,7 @@ public sealed record SessionSpec
     /// camera rather than the orbit.</summary>
     public bool WeaponFreeCamera { get; private set; }
     /// <summary><c>--weapon-camera=&lt;N&gt;</c>: hand the view over and back every N physics
-    /// frames — the scripted twin of tapping V. 0 = off.</summary>
+    /// frames, the scripted twin of tapping V. 0 = off.</summary>
     public int WeaponCameraToggle { get; private set; }
 
     // ---- Collision ----------------------------------------------------------------------------
@@ -777,7 +777,7 @@ public sealed record SessionSpec
     public string TexCensusFilter { get; private set; } = "";
 
     /// <summary><c>--graphics=original|enhanced</c>. Null when not given, which lets the
-    /// <c>graphics.mode</c> config key supply the value instead — an explicit flag always beats
+    /// <c>graphics.mode</c> config key supply the value instead, an explicit flag always beats
     /// the config file, including under <c>--det</c>, so a golden or a deterministic capture can
     /// still ask for the enhanced path on purpose. An unrecognised word is null with a warning
     /// (kept, not treated as given), the same rule <c>--collision=</c> uses for a bad value.</summary>
@@ -789,7 +789,7 @@ public sealed record SessionSpec
 
     /// <summary>Master output gain, linear, 0 (silent) to 1 (unattenuated). Null when
     /// <c>--volume=</c> was not given, which is what lets the <c>audio.volume</c> config key
-    /// supply the value instead — an explicit flag always beats the tuning file.
+    /// supply the value instead, an explicit flag always beats the tuning file.
     ///
     /// <para>Unrelated to <see cref="Mute"/>, which skips loading the audio subsystem entirely.
     /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
@@ -809,15 +809,15 @@ public sealed record SessionSpec
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
     public float? HitchInjectMs { get; private set; }
     /// <summary>Whether the stall burns its time allocating and discarding 4 KB buffers (moves the
-    /// GC/allocated-bytes columns) rather than spinning the CPU (proves only the timing path) — the
+    /// GC/allocated-bytes columns) rather than spinning the CPU (proves only the timing path), the
     /// <c>alloc:</c> value prefix. Meaningless when <see cref="HitchInjectMs"/> is null.</summary>
     public bool HitchInjectAlloc { get; private set; }
     /// <summary>The <see cref="Utils.HitchMonitor.FrameCount"/>-space frame ordinal the stall fires
-    /// on — never the sim frame, since the injector has to work with no session built at all (the
+    /// on, never the sim frame, since the injector has to work with no session built at all (the
     /// launchscreen, <c>--viewer</c>). Meaningless when <see cref="HitchInjectMs"/> is null.</summary>
     public int HitchInjectFrame { get; private set; } = DefaultHitchInjectFrame;
     /// <summary>The <c>--log=</c> specs in command-line order. <c>--debug-anim</c>'s implied
-    /// "anim:debug,sound:debug" is not one of them — that is resolution.</summary>
+    /// "anim:debug,sound:debug" is not one of them, that is resolution.</summary>
     public IReadOnlyList<string> LogSpecs { get; private set; } = Array.Empty<string>();
 
     /// <summary>Parses the user args and resolves them: the returned spec is the finished answer.
@@ -1312,10 +1312,10 @@ public sealed record SessionSpec
     }
 
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from
-    /// <paramref name="cli"/> — the pristine command line — never the last session's spec.
+    /// <paramref name="cli"/>, the pristine command line, never the last session's spec.
     /// ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
     /// base re-opens the carry-over bug. <paramref name="mode"/> is Free/Stunt/Versus, not a bool
-    /// — the &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref
+    ///, the &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref
     /// name="iaDef"/>, when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
@@ -1390,7 +1390,7 @@ public sealed record SessionSpec
         return this with { Difficulty = saved };
     }
 
-    /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list — one plane per
+    /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list, one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>
     public static IReadOnlyList<string> ParsePlanes(string value)
     {
@@ -1437,7 +1437,7 @@ public sealed record SessionSpec
     /// <summary>The numpad view digit for <c>--view=</c>, the look-behind
     /// (<c>--view=back</c>) or the flyby (<c>--view=flyby</c>), the last two as sentinels above the
     /// digit range. 5 has no perspective of its own (the middle of the pad is the chase camera),
-    /// and anything else is a typo — both give 0, the chase camera, which the caller reports.</summary>
+    /// and anything else is a typo, both give 0, the chase camera, which the caller reports.</summary>
     public static int ParseView(string s)
     {
         if (string.Equals(s, "back", StringComparison.OrdinalIgnoreCase))
@@ -1530,7 +1530,7 @@ public sealed record SessionSpec
         return outd;
     }
 
-    /// <summary>Parse <c>--damage=</c> presets: "nose:0.25,leftwing:40" — part:fraction pairs,
+    /// <summary>Parse <c>--damage=</c> presets: "nose:0.25,leftwing:40", part:fraction pairs,
     /// values &gt; 1 read as percent. Malformed pairs are skipped, and appended to
     /// <paramref name="rejected"/> when one is supplied, so the caller can report them.</summary>
     public static List<(string Part, float Fraction)> ParseDamagePreset(string s, List<string>? rejected = null)
@@ -1624,7 +1624,7 @@ public sealed record SessionSpec
         bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
-        // --vs and --stunt are both flight modifiers, but not composable — one match mode has to
+        // --vs and --stunt are both flight modifiers, but not composable, one match mode has to
         // be chosen ahead of time rather than by argument order, so --vs beats --stunt by FIXED
         // precedence (unlike the rest of this file's last-flag-wins parsing).
         if (vs && stunt)
@@ -1645,7 +1645,7 @@ public sealed record SessionSpec
             Scenario = "dogfight_ace";
         }
         // --anim-lab is the animation debugger's stage: the chapter world under the lab's own
-        // clock, with no flight controller. The most specific mode of all, so it wins outright —
+        // clock, with no flight controller. The most specific mode of all, so it wins outright,
         // combining it with a flight/viewer/spectator mode is a contradiction.
         if (animLab && (fly || viewer || freecam))
         {
@@ -1659,7 +1659,7 @@ public sealed record SessionSpec
             Print("--freecam is a world view with no aircraft; ignoring --fly/--stunt/--vs/--viewer/--damage");
             fly = stunt = vs = viewer = damageLab = false;
         }
-        // The damage lab has two hosts now — the parked plane and the flown one — so --damage
+        // The damage lab has two hosts now, the parked plane and the flown one, so --damage
         // asks for a lab, not for a mode. It only picks the parked viewer when nothing else
         // claimed the session, which keeps a bare --damage= meaning what it always did.
         if (damageLab && !fly && !freecam && !animLab)
@@ -1705,7 +1705,7 @@ public sealed record SessionSpec
         }
 
         // A campaign sortie is co-op by construction: the authored AI teams assume one player side.
-        // Silent, not warned — --coop asks for exactly this. !Versus so the rule above still holds.
+        // Silent, not warned, --coop asks for exactly this. !Versus so the rule above still holds.
         if (CampaignProfile != null && !Versus)
         {
             Coop = true;
@@ -1833,7 +1833,7 @@ public sealed record SessionSpec
         }
 
         // --mute never builds the audio subsystem, so there is no bus carrying anything for a gain
-        // to attenuate. Neither flag is cleared — the result is silence either way — but a run
+        // to attenuate. Neither flag is cleared, the result is silence either way, but a run
         // asking for both wanted the sounds to still play, and would not get them.
         if (Mute && Volume != null)
         {
@@ -1896,7 +1896,7 @@ public sealed record SessionSpec
             Warn("core", "--direction ignored: flight steers the nose from the spawn override, which needs --pos");
         }
         // The empty stage has no mission spawn list to draw from, so the subject starts over the
-        // grid origin — through the same fields --pos resolves into, so an explicit placement wins.
+        // grid origin, through the same fields --pos resolves into, so an explicit placement wins.
         if (EmptyStage)
         {
             if (Fly)
@@ -1928,7 +1928,7 @@ public sealed record SessionSpec
     }
 
     // Reads `--mips=`. An unreadable value keeps the current policy rather than
-    // quietly falling back to one of them — a run whose mip source is not what was asked for is a
+    // quietly falling back to one of them, a run whose mip source is not what was asked for is a
     // run whose pixel evidence means nothing.
     private void SetMips(string value)
     {

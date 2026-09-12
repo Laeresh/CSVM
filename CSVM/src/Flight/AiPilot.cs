@@ -17,11 +17,11 @@ public sealed class AiPilot
     /// second (the decoded constant is the speed factor, not a lever rate).</summary>
     public const float LayOffThrottleRatePerS = 0.4f;
 
-    /// <summary>Invented: the throttle floor while laying off — the pilot slows down, it does
+    /// <summary>Invented: the throttle floor while laying off, the pilot slows down, it does
     /// not park in mid-air.</summary>
     public const float LayOffMinThrottle = 0.3f;
 
-    /// <summary>Ordered heading, degrees — the mission-data convention
+    /// <summary>Ordered heading, degrees, the mission-data convention
     /// (<c>SpawnPoint.HeadingDeg</c>): the nose (−Z) yawed about world up by this angle.</summary>
     public float TargetHeadingDeg;
 
@@ -70,7 +70,7 @@ public sealed class AiPilot
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
-    /// <summary>The commanded throttle lever, 0–1 — the lever's CURRENT state, walked toward
+    /// <summary>The commanded throttle lever, 0–1, the lever's CURRENT state, walked toward
     /// <see cref="AiControlLaw"/>'s own desired speed each step, not a standing order the pilot
     /// holds (the original's lever, <c>obj+0x124</c>, works the same way). ⚠ Do not reintroduce an
     /// altitude-leash throttle rule here: the real law's wings-level rule and elevator deadband
@@ -152,7 +152,7 @@ public sealed class AiPilot
         Machine is { } machine ? machine.StunRemainingS : Mathf.Max(0f, _bareStunRemainingS);
 
     /// <summary>Aims the standing orders at holding the given spawn pose: heading from the
-    /// pos→look-at pair, altitude from the position — what a freshly spawned patrol-less AI
+    /// pos→look-at pair, altitude from the position, what a freshly spawned patrol-less AI
     /// flies until something retargets it.</summary>
     public static AiPilot HoldingCourse(Vector3 pos, Vector3 lookAt)
     {
@@ -224,7 +224,7 @@ public sealed class AiPilot
     }
 
     /// <summary>The decoded merge test (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>): the victim is
-    /// inside <see cref="MergeRangeM"/> and the two are flying AT each other — each party's own
+    /// inside <see cref="MergeRangeM"/> and the two are flying AT each other, each party's own
     /// velocity lies within <see cref="MergeClosureFraction"/> of its speed along the line of
     /// sight, which is about 37° of it. The original also tests that the victim is a
     /// <c>jet</c>/<c>wingman</c> and never arms this against a ground target;
@@ -461,7 +461,7 @@ public sealed class AiPilot
     // Lay off (the rubber-band assist): steers the course captured at mode entry on the cruise
     // table, then OVERRIDES the law's lever with a walk toward SixthSenseFactor × the pursuer's
     // speed. ⚠ That override is a remake-only assist, not the original's lay-off, which flies the
-    // same table with a flat 0.8 lever floor and no speed match — keep it, landed and playtested.
+    // same table with a flat 0.8 lever floor and no speed match, keep it, landed and playtested.
     private FlightInput FlyLayOff(FlightModel model, float dt, AiModeMachine machine,
         in PursuitQuarry pursuer)
     {
@@ -478,7 +478,7 @@ public sealed class AiPilot
     }
 
     // Patrol: the node is a point with no velocity, which is the shape the law wants, but it is
-    // NOT the aim point — PatrolAim displaces it off the aeroplane's own cross-track error, and
+    // NOT the aim point, PatrolAim displaces it off the aeroplane's own cross-track error, and
     // flying at the node itself is what BL-387 was. The nose seats the walk on a real edge from
     // the first step, so there is a leg to be off straight away. Without a net the standing
     // heading/altitude orders are projected into a point. All of it on the original's cruise table.

@@ -10,11 +10,11 @@ namespace CSVM.Tests;
 /// The VELOCITY/ACCELERATION/GRAVITY integration (<see cref="Ballistics"/>) the live rounds and the
 /// gun reticle share. Every expectation here is computed by hand from the scheme
 /// (semi-implicit Euler: accelerate, then advance by the new velocity), never captured from the
-/// implementation — a test that records what the code does cannot catch the code being wrong.
+/// implementation, a test that records what the code does cannot catch the code being wrong.
 ///
 /// <para>The last two are the census behind the reticle's fixed step: no weapon a gun group can
 /// resolve carries a non-zero ACCELERATION or GRAVITY, so the fixed <c>1/120 s</c> march and the
-/// rounds' sim step produce the same straight line. They are tripwires — a data or loadout change
+/// rounds' sim step produce the same straight line. They are tripwires, a data or loadout change
 /// that makes an accelerating weapon gun-reachable fails them.</para>
 /// </summary>
 [Trait("Tier", "Quick")]
@@ -24,7 +24,7 @@ public class BallisticsTests
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
     /// <summary>With no ACCELERATION and no GRAVITY the march is a straight line of exactly the
-    /// asked-for path length — and the step size cannot move it, which is the whole reason the
+    /// asked-for path length, and the step size cannot move it, which is the whole reason the
     /// reticle may integrate at a different <c>dt</c> from the rounds.</summary>
     [Fact]
     public void AStraightLineMarchLandsAtTheAskedForDistanceWhateverTheStep()
@@ -55,7 +55,7 @@ public class BallisticsTests
     }
 
     /// <summary>100 steps of 0.01 s at 20 m/s² gravity. The scheme adds gravity to the velocity
-    /// before advancing, so the drop is <c>g·dt²·Σn = 20 · 0.0001 · 5050 = 10.1 m</c> — one
+    /// before advancing, so the drop is <c>g·dt²·Σn = 20 · 0.0001 · 5050 = 10.1 m</c>, one
     /// <c>g·dt²</c> more than the continuous <c>½gt² = 10.0 m</c>, which is what makes this an
     /// assertion about the integrator rather than about physics.</summary>
     [Fact]
@@ -151,7 +151,7 @@ public class BallisticsTests
         Assert.Equal(570f, motor.Cap, 3);
     }
 
-    /// <summary>The march stops at the weapon's RANGE, not at the distance the caller asked for —
+    /// <summary>The march stops at the weapon's RANGE, not at the distance the caller asked for,
     /// a round never converges past where it expires.</summary>
     [Fact]
     public void TheMarchStopsAtRangeWhenRangeIsShorterThanTheAskedForDistance()

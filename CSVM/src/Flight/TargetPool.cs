@@ -117,7 +117,7 @@ public sealed class TargetPool
     }
 
     /// <summary>The IDENTITY name for a source: the plain node/label name. What <c>--target=</c>
-    /// matches and what the breadcrumbs print — see <see cref="TargetRef.DisplayName"/> for what the
+    /// matches and what the breadcrumbs print, see <see cref="TargetRef.DisplayName"/> for what the
     /// marker prints instead. Internal rather than private: <c>FlightController.SelectRankedTarget</c>
     /// (D12/D36) reuses this same identity for every candidate's <c>rating_biases</c> name match,
     /// hull and turret and structure alike, rather than growing a second name-of-source switch.</summary>
@@ -188,7 +188,7 @@ public sealed class TargetPool
                 // ⚠ The hull's own block slot 20 alone, and an EMPTY one draws no name line: most
                 // ship blocks author none and the original then labels nothing there (docs/org/
                 // targeting.md). Never the airframe-style fallback the aeroplane arm takes below.
-                return TargetRef.ForAircraft(c, cls, name, hull.MarkerName, objective: objective);
+                return TargetRef.ForHull(c, cls, name, hull.MarkerName, objective: objective);
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;

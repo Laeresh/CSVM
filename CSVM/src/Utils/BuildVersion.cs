@@ -8,7 +8,7 @@ namespace CSVM.Utils;
 /// names a build without being asked how it was obtained: the log's first line, the launchscreen's
 /// bottom corner, and the exe's Windows file properties (stamped by the export preset, not from
 /// here). <c>ExportRelease.ps1</c> reads the same key to name the zip.
-/// ⚠ Reads <see cref="ProjectSettings"/>, so it resolves only inside a running engine — which is
+/// ⚠ Reads <see cref="ProjectSettings"/>, so it resolves only inside a running engine, which is
 /// why <see cref="Log.Open"/> takes the version as an argument rather than reading it itself.
 /// </summary>
 public static class BuildVersion

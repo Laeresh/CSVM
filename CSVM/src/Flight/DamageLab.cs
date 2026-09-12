@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// What the lab's sliders actually drive. The parked viewer has no HP model — its sliders
+/// What the lab's sliders actually drive. The parked viewer has no HP model, its sliders
 /// ARE the damage state, feeding <see cref="DamageVisuals"/> directly. In flight the aircraft's
 /// own <see cref="PlaneDamage"/> is the state, so the sliders write it and read back from it.
 /// </summary>
@@ -17,7 +17,7 @@ public interface IDamageLabTarget
     /// is only one thing it could mean.</summary>
     string? Subtitle { get; }
 
-    /// <summary>The model's own pools for a part, which the sliders mirror — null from a
+    /// <summary>The model's own pools for a part, which the sliders mirror, null from a
     /// target that holds no state of its own (then the sliders are the only truth).</summary>
     PartFrac? Fraction(string part);
 
@@ -31,14 +31,14 @@ public interface IDamageLabTarget
 
 /// <summary>One part's dialled-in state: the two pools' own fractions (armor 1f for a part the
 /// data gives no armor pool) plus the combined armor+HP fraction the injure_anims thresholds and
-/// the gauge dial key off — <see cref="DamageLab"/> derives <see cref="Combined"/> from the part's
+/// the gauge dial key off, <see cref="DamageLab"/> derives <see cref="Combined"/> from the part's
 /// (MaxHp, MaxArmor) once per read, so every consumer of "how hurt is this zone as one number"
 /// agrees.</summary>
 public readonly record struct PartFrac(float Health, float Armor, float Combined);
 
 /// <summary>The parked plane (--viewer): the sliders are the state and the visuals are the whole
 /// effect. The trails burn in place at a virtual speed because a parked plane travels no distance
-/// (see DamageVisuals.UpdateStatic), on sim time — so a halted clock freezes them for a still capture.
+/// (see DamageVisuals.UpdateStatic), on sim time, so a halted clock freezes them for a still capture.
 /// </summary>
 public sealed class ViewerDamageTarget : IDamageLabTarget
 {
@@ -73,11 +73,11 @@ public sealed class ViewerDamageTarget : IDamageLabTarget
 }
 
 /// <summary>The flown aircraft (--fly/--stunt): the sliders write the real per-part armor and HP,
-/// so the HUD's DMG line, the damaged-engine mix and the gauge dial all follow — and a critical
+/// so the HUD's DMG line, the damaged-engine mix and the gauge dial all follow, and a critical
 /// part's HP at 0 leaves the plane one hit from down, exactly as a graze would. Each pool is set
 /// through a dedicated single-pool <see cref="PlaneDamage.Apply(string,float,float)"/> call
 /// (armor's with healthDamage=0, health's with armorDamage=0) after a
-/// <see cref="PlaneDamage.Reset"/>, using fractions the lab already floored — armor can be
+/// <see cref="PlaneDamage.Reset"/>, using fractions the lab already floored, armor can be
 /// driven to 0 with health untouched, but not the reverse.
 /// Nothing to tick: FlightController drives the visuals with the plane's live pose every frame,
 /// and UpdateStatic would fight it.</summary>
@@ -148,7 +148,7 @@ public sealed partial class DamageLab : Node
     private CanvasLayer? _gaugeLayer;
     private HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
     private bool _gaugesWanted = true; // the panel's HUD-gauges checkbox, remembered across F5
-    private int _dragging; // sliders under the mouse right now — the read-back leaves those alone
+    private int _dragging; // sliders under the mouse right now, the read-back leaves those alone
 
     public DamageLab(PlaneStats stats, IDamageLabTarget target,
         IReadOnlyList<(string Part, float Frac)>? preset = null, GaugeCluster? gauges = null)
@@ -166,14 +166,14 @@ public sealed partial class DamageLab : Node
     public bool StartHidden { get; init; }
 
     /// <summary>Hang the panel off the right edge instead of the left. Set in flight, where the
-    /// top-left corner is the HUD's own text block — SPD/ALT/THR plus the stall, impact, DMG,
+    /// top-left corner is the HUD's own text block, SPD/ALT/THR plus the stall, impact, DMG,
     /// paused and crashed lines, which grow to about six and would print straight through the
     /// sliders. The right edge is clear above the dials.</summary>
     public bool RightAligned { get; init; }
 
     public override void _Ready()
     {
-        // The HUD gauge cluster (user request): the damage dial mirrors the sliders —
+        // The HUD gauge cluster (user request): the damage dial mirrors the sliders,
         // colors from the fractions, the 5 s post-hit blink from slider decreases.
         // Altimeter/speedometer draw at rest (no flight data). Toggled from the panel.
         if (_gauges != null)
@@ -195,7 +195,7 @@ public sealed partial class DamageLab : Node
             if (_armorSliders.TryGetValue(part, out var armor))
                 armor.Value = frac * 100.0;
         }
-        // presets are an initial state, not fresh hits — cancel the blink their
+        // presets are an initial state, not fresh hits, cancel the blink their
         // slider moves triggered so --screenshot damage shots stay deterministic
         _gauges?.Reset();
         Reapply(); // sync the readouts even when no preset moved a slider
@@ -203,7 +203,7 @@ public sealed partial class DamageLab : Node
             SetLabVisible(false);
     }
 
-    /// <summary>Mirrors whatever the target's own model says before letting it tick, on sim time —
+    /// <summary>Mirrors whatever the target's own model says before letting it tick, on sim time,
     /// so a halted clock freezes the parked plane's fires for a still capture.</summary>
     public override void _Process(double delta)
     {
@@ -238,17 +238,17 @@ public sealed partial class DamageLab : Node
     }
 
     // Moves one slider to match the model's own value, no-op (and reports no movement)
-    // when it is already there — the tolerance keeps a settled read-back from chattering.
+    // when it is already there, the tolerance keeps a settled read-back from chattering.
     private static bool SyncSlider(HSlider slider, float frac)
     {
         double want = Math.Round(frac * 100.0);
         if (Math.Abs(slider.Value - want) < 0.5)
             return false;
-        slider.SetValueNoSignal(want); // no Reapply — this IS the model's state
+        slider.SetValueNoSignal(want); // no Reapply, this IS the model's state
         return true;
     }
 
-    // Pulls the target's own damage state back into the sliders — in flight that is
+    // Pulls the target's own damage state back into the sliders, in flight that is
     // every hit taken while the panel is up, and the respawn that repairs them. Sliders under
     // the mouse are left alone: a drag that fights the read-back is unusable. The visuals are
     // NOT re-derived here; whoever moved the model (FlightController's hit path) already did.
@@ -274,7 +274,7 @@ public sealed partial class DamageLab : Node
         _applied = TargetAnims(fractions);
     }
 
-    // Shows or hides the whole lab — slider panel and HUD gauges together. H is
+    // Shows or hides the whole lab, slider panel and HUD gauges together. H is
     // "is the damage lab here", not "is one of its two layers here"; the panel's own
     // checkbox still controls the gauges independently while the lab is up, and its state
     // is remembered across a hide/show.
@@ -359,7 +359,7 @@ public sealed partial class DamageLab : Node
         _ui.AddChild(panel);
         AddChild(_ui);
         // This lab has a flight host (F5 while flying), where Space is the trigger and a focused
-        // "repair all" would swallow it — the same defect the weapon lab's panel had.
+        // "repair all" would swallow it, the same defect the weapon lab's panel had.
         UI.PanelFocus.Strip(_ui, "damage lab: panel built");
     }
 
@@ -384,7 +384,7 @@ public sealed partial class DamageLab : Node
     }
 
     // The combined armor+HP fraction the gauge dial key off (used before the panel
-    // exists, e.g. GaugeCluster's own PartFraction callback assigned in _Ready — safe because
+    // exists, e.g. GaugeCluster's own PartFraction callback assigned in _Ready, safe because
     // it only ever runs once BuildUi has populated the sliders).
     private float CombinedFractionOf(string partName) =>
         _healthSliders.ContainsKey(partName) ? ReadSliders()[partName].Combined : 1f;
@@ -424,12 +424,12 @@ public sealed partial class DamageLab : Node
 
     // Writes the sliders through to the target. The visual rebuild (Reset +
     // re-crossing every threshold) only runs when the set of crossed anims actually
-    // changed — mid-band drags just move a pool and update the readouts.
+    // changed, mid-band drags just move a pool and update the readouts.
     private void Reapply()
     {
         var fractions = ReadSliders();
 
-        // a part's combined fraction going DOWN = it "took damage" — start its gauge blink,
+        // a part's combined fraction going DOWN = it "took damage", start its gauge blink,
         // exactly like a flight hit (repairs don't blink)
         foreach (var (name, f) in fractions)
         {
@@ -438,7 +438,7 @@ public sealed partial class DamageLab : Node
             _lastFractions[name] = f.Combined;
         }
 
-        // ReadSliders floors armor at 0 whenever health reads below full — pull the armor
+        // ReadSliders floors armor at 0 whenever health reads below full, pull the armor
         // widget's own position down to match, so a slider raised while health is damaged
         // snaps back instead of showing a value the fractions dict no longer honours.
         foreach (var (name, f) in fractions)
@@ -455,7 +455,7 @@ public sealed partial class DamageLab : Node
 
     // The anim set the current fractions demand, used only to decide whether a drag needs a
     // visual rebuild: an entry applies when the COMBINED fraction ≤ its threshold (the lab's own
-    // one-number approximation), where DamageVisuals itself crosses on health alone — a
+    // one-number approximation), where DamageVisuals itself crosses on health alone, a
     // combined-only change can flag a rebuild the health-gated apply then no-ops.
     private HashSet<string> TargetAnims(Dictionary<string, PartFrac> fractions)
     {

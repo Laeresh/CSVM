@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The per-plane camera reader (<see cref="CamParams"/>), against
-/// <c>fixtures/zrdr/camparam.json</c> — hand-authored from
+/// <c>fixtures/zrdr/camparam.json</c>, hand-authored from
 /// <c>docs/formats/camparam.md</c>, so its numbers are deliberately NOT the shipped ones. The
 /// real values are asserted separately, against a live extraction, in
 /// <see cref="ExtractedGoldenTests"/>.
@@ -81,7 +81,7 @@ public class CamParamsTests
     [Fact]
     public void TheShippedDefaultBlockHasAMinimumLargerThanItsBase()
     {
-        // Not a fixture property — a claim about the real file, pinned here so the anomaly that
+        // Not a fixture property, a claim about the real file, pinned here so the anomaly that
         // blocks the dynamic-distance decode cannot be quietly "fixed" by a future reader. The
         // hard-coded fallbacks carry the shipped default block verbatim.
         var cam = CamParams.Load(TestData.TempDir(), "player_bhawk");

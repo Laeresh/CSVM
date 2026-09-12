@@ -12,7 +12,7 @@ public static class CollisionDamage
 {
     /// <summary>The entity-versus-entity cut (<c>0x0048d51a</c>): a NON-PLAYER striker that
     /// resolved an aeroplane deals a fifth. The player skips the detection that sets it, so a
-    /// player ram is never cut — <see cref="FlightController"/> owns that asymmetry.</summary>
+    /// player ram is never cut, <see cref="FlightController"/> owns that asymmetry.</summary>
     public const float EntityCut = 0.2f;
 
     /// <summary>Collision grace written to BOTH parties after an entity-versus-entity impact

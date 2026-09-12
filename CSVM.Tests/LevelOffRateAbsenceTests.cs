@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 /// The <c>level_off_rate</c> auto-level torque is decoded and unreachable: the vehicle parser's
 /// token table accepts the key, the torque reads it out of the def, and no shipped def authors it,
 /// so the term is zero on every airframe (docs/org/flightModel.md, "The `level_off_rate`
-/// auto-level"). These pins are what that class rests on — the data census, and the behaviour a
+/// auto-level"). These pins are what that class rests on, the data census, and the behaviour a
 /// non-zero term would show. A def that started authoring the key, or an auto-level term invented
 /// in the plant, fails here.
 /// </summary>
@@ -25,7 +25,7 @@ public class LevelOffRateAbsenceTests
 
     /// <summary>The census: every <c>dynamics</c> block in the shipped data, the ten keys each one
     /// authors, and the eleventh the parser accepts that none of them does. <c>return_rate</c> is
-    /// the able-to-fail control — a reader that stopped seeing the blocks at all would report zero
+    /// the able-to-fail control, a reader that stopped seeing the blocks at all would report zero
     /// of both, and it is the sibling centring rate, so it is the key an auto-level would sit
     /// beside.</summary>
     [ExtractedDataFact]

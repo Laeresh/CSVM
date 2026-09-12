@@ -7,15 +7,15 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// Which weather/sky zone a chapter renders — the rule (<see
+/// Which weather/sky zone a chapter renders, the rule (<see
 /// cref="WeatherState.PreferPopulatedHorizonZone"/>) and the census it reads (<see
 /// cref="WorldBuilder.HorizonZonesOf"/>).
 ///
-/// <para>Nothing on disk names the zone a mission flies (searched exhaustively —
+/// <para>Nothing on disk names the zone a mission flies (searched exhaustively,
 /// docs/formats/weather.md), so the <c>zone2</c> request is a default, not a datum. What IS on
 /// disk is whether a zone has a dome to build, and three chapters ship a <c>zone2</c> that has
 /// none. These tests pin both halves: the rule's shape on hand-built censuses, and the real
-/// census + resolved zone for all eight chapters — including the five the rule must leave
+/// census + resolved zone for all eight chapters, including the five the rule must leave
 /// alone.</para>
 /// </summary>
 public class SkyZoneTests

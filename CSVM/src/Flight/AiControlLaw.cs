@@ -240,7 +240,7 @@ public static class AiControlLaw
         }
 
         // Steeply nose-UP and slow: push the nose down and firewall the lever, either way up. A
-        // stall recovery, which is what makes the sign of noseY legible — see aiControlLaw.md.
+        // stall recovery, which is what makes the sign of noseY legible, see aiControlLaw.md.
         if (noseY < RecoveryNoseY && model.Speed < RecoverySpeed)
         {
             pitch = att.Y.Y >= 0f ? -1f : 1f;

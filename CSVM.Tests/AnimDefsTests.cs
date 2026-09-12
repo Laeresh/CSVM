@@ -46,7 +46,7 @@ public class AnimDefsTests
     [Fact]
     public void AnimNameDefaultsToNameSoAReaderDefDedupesAgainstItsCompiledTwin()
     {
-        // Without the mirror the two copies run side by side — the bug that killed the C1
+        // Without the mirror the two copies run side by side, the bug that killed the C1
         // waterfall's puffers.
         Assert.Equal("probe_tower", Def("probe_tower").AnimName);
         Assert.Equal("probe_sign_flicker", Def("probe_sign").AnimName); // explicit wins

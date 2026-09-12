@@ -71,7 +71,7 @@ public class SessionPathsTests
         try
         {
             // Asking for the export's asset shape must not refuse to start a tree that only ever
-            // had the folder — the flag narrows the choice, it does not add a requirement.
+            // had the folder, the flag narrows the choice, it does not add a requirement.
             SessionPaths.ForceZipped = true;
             Assert.Equal(Path.Combine(chapter, "gamez"), SessionPaths.ChapterGamez(root, "C4"));
         }

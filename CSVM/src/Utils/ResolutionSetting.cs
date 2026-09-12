@@ -7,27 +7,33 @@ namespace CSVM.Utils;
 /// named so a log line can say which layer the run is obeying.</summary>
 public readonly record struct ResolutionPlan(int Width, int Height, string Word, string Source);
 
+/// <summary>The sizes a resolution picker can offer for one screen, ascending, and the word a
+/// saved size the list does not hold falls back to: the screen's own size, which the list always
+/// holds.</summary>
+public readonly record struct SizeList(IReadOnlyList<string> Words, string Fallback);
+
 /// <summary>
 /// The window's size. The words are sizes in <see cref="OptionsStore.FormatResolution"/>'s spelling
 /// rather than a vocabulary, and the list a picker offers is built per screen by
 /// <see cref="Sizes"/>, so the row cannot offer a size the monitor cannot hold. The sources layer
-/// as <see cref="DisplayModeSetting"/>'s do: the saved size, then the size <c>project.godot</c>
-/// ships. <see cref="Apply"/> is the only place <see cref="DisplayServer.WindowSetSize"/> is called.
+/// as <see cref="MonitorSetting"/>'s do: the saved size, then the screen's own size, which is what
+/// the borderless default fills anyway. <see cref="Apply"/> is the only place
+/// <see cref="DisplayServer.WindowSetSize"/> is called.
 /// ⚠ Godot exposes no video-mode list, only the screen's own size
 /// (<see cref="DisplayServer.ScreenGetSize"/>), so "what the monitor offers" is that size and the
 /// standard sizes that fit inside it, not a list the driver handed us.
 /// </summary>
 public static class ResolutionSetting
 {
-    /// <summary>The width a launch with no saved size runs at, <c>project.godot</c>'s own.</summary>
-    public const int DefaultWidth = 1280;
+    /// <summary>The width <c>project.godot</c> ships, the window a run that applies no size keeps.</summary>
+    public const int ProjectWidth = 1280;
 
-    /// <summary>The height a launch with no saved size runs at, <c>project.godot</c>'s own.</summary>
-    public const int DefaultHeight = 720;
+    /// <summary>The height <c>project.godot</c> ships, the window a run that applies no size keeps.</summary>
+    public const int ProjectHeight = 720;
 
-    /// <summary>The size a launch with no usable saved one runs at, and the size an unsupported
-    /// saved one falls back to. Every list <see cref="Sizes"/> builds holds it.</summary>
-    public static readonly string Default = OptionsStore.FormatResolution(DefaultWidth, DefaultHeight);
+    /// <summary>The size <c>project.godot</c> ships as a word, and the fallback of a list built with
+    /// no screen to ask (<see cref="Unknown"/>).</summary>
+    public static readonly string ProjectSize = OptionsStore.FormatResolution(ProjectWidth, ProjectHeight);
 
     // The sizes a picker offers where the screen holds them, ascending, one entry per shape a
     // desktop monitor is actually sold in: 4:3, 16:9, 16:10, 21:9 and 32:9. A ceiling filter over
@@ -38,17 +44,19 @@ public static class ResolutionSetting
         (2560, 1080), (2560, 1440), (3440, 1440), (3840, 2160), (5120, 1440),
     };
 
-    private static readonly IReadOnlyList<string> UnfilteredWords = Format(Standard);
+    // Initialised after Standard, which it is built from; static fields initialise in textual order.
+    private static readonly SizeList UnfilteredList = new(Format(Standard), ProjectSize);
 
-    /// <summary>Every candidate size unfiltered, what a caller with no screen to ask can offer.
-    /// A shell composed without an engine (an engine-free test) is the only such caller; a run at
-    /// the controls goes through <see cref="Sizes"/> and gets the screen's own list.</summary>
-    public static IReadOnlyList<string> AllSizes => UnfilteredWords;
+    /// <summary>Every candidate size unfiltered with the project size as the fallback, what a caller
+    /// with no screen to ask can offer. A shell composed without an engine (an engine-free test) is
+    /// the only such caller; a run at the controls goes through <see cref="Sizes"/> and gets the
+    /// screen's own list.</summary>
+    public static SizeList Unknown => UnfilteredList;
 
     /// <summary>The sizes <paramref name="screen"/> can hold, ascending: the standard ones that fit
-    /// inside it, plus the screen's own size and <see cref="Default"/>, both always offerable. A
-    /// screen the engine reports no size for falls back to the unfiltered list.</summary>
-    public static IReadOnlyList<string> Sizes(int screen)
+    /// inside it plus the screen's own size, which is the fallback. A screen the engine reports no
+    /// size for falls back to <see cref="Unknown"/>.</summary>
+    public static SizeList Sizes(int screen)
     {
         var size = DisplayServer.ScreenGetSize(screen);
         return SizesUnder(size.X, size.Y);
@@ -56,16 +64,16 @@ public static class ResolutionSetting
 
     /// <summary>The sizes the window's own screen can hold, which is the screen a monitor setting
     /// has already moved it to.</summary>
-    public static IReadOnlyList<string> ScreenSizes() => Sizes(DisplayServer.WindowGetCurrentScreen());
+    public static SizeList ScreenSizes() => Sizes(DisplayServer.WindowGetCurrentScreen());
 
     /// <summary>The sizes a screen <paramref name="screenWidth"/> by <paramref name="screenHeight"/>
-    /// can hold, ascending. The engine-free half of <see cref="Sizes"/>, so the filter and the
-    /// always-offerable pair are testable without a screen.</summary>
-    public static IReadOnlyList<string> SizesUnder(int screenWidth, int screenHeight)
+    /// can hold, ascending, with that screen's own size as the fallback. The engine-free half of
+    /// <see cref="Sizes"/>, so the filter and the fallback are testable without a screen.</summary>
+    public static SizeList SizesUnder(int screenWidth, int screenHeight)
     {
         if (screenWidth < 1 || screenHeight < 1)
         {
-            return AllSizes;
+            return Unknown;
         }
 
         var fits = new List<(int Width, int Height)>();
@@ -77,27 +85,32 @@ public static class ResolutionSetting
             }
         }
 
-        Include(fits, (screenWidth, screenHeight));
-        Include(fits, (DefaultWidth, DefaultHeight));
+        if (!fits.Contains((screenWidth, screenHeight)))
+        {
+            fits.Add((screenWidth, screenHeight));
+        }
+
         fits.Sort(static (a, b) => a.Width != b.Width ? a.Width.CompareTo(b.Width) : a.Height.CompareTo(b.Height));
-        return Format(fits);
+        return new SizeList(Format(fits), OptionsStore.FormatResolution(screenWidth, screenHeight));
     }
 
     /// <summary>The size the two sources resolve to: <paramref name="savedWord"/> where
-    /// <paramref name="offered"/> holds it, else <see cref="Default"/>.
-    /// ⚠ A saved size the screen does not offer falls back to the project default, never to the
+    /// <paramref name="offered"/> holds it, else that list's fallback, the screen's own size.
+    /// ⚠ A saved size the screen does not offer falls back to the screen's size, never to the
     /// nearest offered one. Every other option here falls through to its own default when the saved
     /// value is one the reader does not know, and a nearest match needs a distance over sizes with
     /// no right answer. docs/architecture/Utils.md has the rest of the reasoning.</summary>
-    public static ResolutionPlan Resolve(string? savedWord, IReadOnlyList<string> offered)
+    public static ResolutionPlan Resolve(string? savedWord, SizeList offered)
     {
-        if (savedWord != null && Offers(offered, savedWord)
+        if (savedWord != null && Offers(offered.Words, savedWord)
             && OptionsStore.TryParseResolution(savedWord, out int width, out int height))
         {
             return new ResolutionPlan(width, height, savedWord, "options.json");
         }
 
-        return new ResolutionPlan(DefaultWidth, DefaultHeight, Default, "default");
+        return OptionsStore.TryParseResolution(offered.Fallback, out int fallbackWidth, out int fallbackHeight)
+            ? new ResolutionPlan(fallbackWidth, fallbackHeight, offered.Fallback, "default")
+            : new ResolutionPlan(ProjectWidth, ProjectHeight, ProjectSize, "default");
     }
 
     /// <summary>The saved size a launch reads, or null under <paramref name="det"/>.
@@ -133,14 +146,6 @@ public static class ResolutionSetting
     {
         var usable = DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
         DisplayServer.WindowSetPosition(usable.Position + ((usable.Size - DisplayServer.WindowGetSize()) / 2));
-    }
-
-    private static void Include(List<(int Width, int Height)> sizes, (int Width, int Height) size)
-    {
-        if (!sizes.Contains(size))
-        {
-            sizes.Add(size);
-        }
     }
 
     private static bool Offers(IReadOnlyList<string> offered, string word)

@@ -30,14 +30,14 @@ public sealed partial class SelectionService : Node
     /// <summary>Node metadata marking a subtree as another tool's DRAWING rather than world content:
     /// collider wireframes, normal lines, highlight boxes. Anything carrying it is skipped by the
     /// pick and by the box measurement, so a debug overlay can be parented onto the object it
-    /// annotates without becoming selectable — or growing the next box measured over it.</summary>
+    /// annotates without becoming selectable, or growing the next box measured over it.</summary>
     public const string OverlayMeta = "csvm_overlay";
 
     // Smallest edge the highlight box is drawn at, so a meshless pivot rung is still visible. The
-    // MEASURED box is what CurrentBox and the log report — only the drawing is grown.
+    // MEASURED box is what CurrentBox and the log report, only the drawing is grown.
     private const float MinHighlightEdge = 2f;
 
-    // How many rungs the breadcrumb prints before it elides the middle. The LOG is never elided —
+    // How many rungs the breadcrumb prints before it elides the middle. The LOG is never elided,
     // a truncated list that drops the rung under test is worse than a long one.
     private const int MaxCrumbs = 9;
 
@@ -49,15 +49,9 @@ public sealed partial class SelectionService : Node
     // because this is the same question ("what is that thing called").
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
 
-    // The export set's outline: distinct from the amber selection box, since a set member is
-    // usually also the current selection.
-    private static readonly Color SetCyan = new(0.35f, 0.85f, 1f);
-
     private readonly Node3D _world;
     private readonly Camera3D _camera;
     private readonly List<Node3D> _ladder = new();
-    private readonly List<Node3D> _set = new();
-    private readonly List<MeshInstance3D> _setBoxes = new();
 
     private CanvasLayer? _hudLayer;
     private Label? _hud;
@@ -73,27 +67,37 @@ public sealed partial class SelectionService : Node
 
     /// <summary>Fires whenever the selection changes. The flag is true for a fresh pick and false
     /// for a ladder walk, which is the difference between "show me this" and "same object, wider
-    /// scope" — the anim lab re-frames the camera on the first and only re-follows on the
+    /// scope", the anim lab re-frames the camera on the first and only re-follows on the
     /// second.</summary>
     public event Action<SelectionService, bool>? Changed;
 
+    /// <summary>Fires when a pick lands with Ctrl held, carrying the node it selected. Ctrl is
+    /// otherwise only the camera's slow modifier, so it is free for a tool to claim a second
+    /// meaning on a click; the node lab's export set is the tool that does.</summary>
+    public event Action<Node3D>? CtrlPicked;
+
     /// <summary><c>--debug-select=x,y[,up]</c>: a synthetic click at a screen position on the first
-    /// frame, optionally followed by that many <see cref="StepUp"/>s — the scripted stand-in for
+    /// frame, optionally followed by that many <see cref="StepUp"/>s, the scripted stand-in for
     /// the click and the PgUp presses, which are not scriptable here. Null screen position means
     /// the middle of the viewport.</summary>
     public (Vector2? Screen, int Up)? DebugPick { get; init; }
 
-    /// <summary>Extra pickable subtrees walked in addition to the world content root — props parked
+    /// <summary>Extra pickable subtrees walked in addition to the world content root, props parked
     /// beside it rather than under it (the anim lab's <c>--plane=</c> stage prop). Read live at pick
     /// time, so the owner may populate it after construction. Each also caps its own ancestor ladder,
     /// so a pick inside it walks up to that root and no further.</summary>
     public IReadOnlyList<Node3D> ExtraRoots { get; init; } = Array.Empty<Node3D>();
 
+    /// <summary>Extra text a tool appends to the breadcrumb block, read on every HUD update so the
+    /// supplier may attach after this service is built (the node lab's export set is the one that
+    /// does). Empty string for nothing to add; <see cref="RefreshHud"/> re-renders it.</summary>
+    public Func<string>? HudLine { get; set; }
+
     /// <summary>The ladder, leaf first: the struck mesh's <c>cs_name</c>-bearing ancestors up to
     /// (not including) the world content root. Empty when nothing is selected.</summary>
     public IReadOnlyList<Node3D> Ladder => _ladder;
 
-    /// <summary>Which rung is current — 0 is the struck leaf, <c>Ladder.Count - 1</c> the outermost
+    /// <summary>Which rung is current, 0 is the struck leaf, <c>Ladder.Count - 1</c> the outermost
     /// placed object. PgUp walks toward the root, PgDn back toward the leaf, Home/End jump to the
     /// ends.</summary>
     public int Level { get; private set; }
@@ -106,12 +110,7 @@ public sealed partial class SelectionService : Node
     /// no drawing descendants.</summary>
     public Aabb CurrentBox { get; private set; }
 
-    /// <summary>The export set: nodes gathered with Ctrl+click or the node lab's ± set, for one
-    /// combined export. Separate from the single selection every other tool reads; each member is
-    /// outlined in cyan while it stays in the set.</summary>
-    public IReadOnlyList<Node3D> ExportSet => _set;
-
-    /// <summary>The game-file name of a built node — the <c>cs_name</c> meta, never
+    /// <summary>The game-file name of a built node, the <c>cs_name</c> meta, never
     /// <c>Node.Name</c>, which Godot sanitises and auto-renames.</summary>
     public static string NameOf(Node3D n) =>
         n.HasMeta(AnimRuntime.NameMeta) ? n.GetMeta(AnimRuntime.NameMeta).AsString() : n.Name.ToString();
@@ -194,8 +193,7 @@ public sealed partial class SelectionService : Node
             GetViewport().GuiReleaseFocus();
             if (PickAt(mb.Position) && mb.CtrlPressed && Current is { } picked)
             {
-                // Ctrl is otherwise only the camera's slow modifier, so it is free for the set.
-                ToggleInSet(picked);
+                CtrlPicked?.Invoke(picked);
             }
             GetViewport().SetInputAsHandled();
             return;
@@ -212,8 +210,8 @@ public sealed partial class SelectionService : Node
             case Key.Pagedown:
                 StepUp(-1);
                 break;
-            // A real ladder is deeper than the two presses the complaint imagined — C1's moored
-            // zeppelin is nine rungs from a motor's mesh to hk_zep — so both ends are one key away.
+            // A real ladder is deeper than the two presses the complaint imagined, C1's moored
+            // zeppelin is nine rungs from a motor's mesh to hk_zep, so both ends are one key away.
             case Key.Home:
                 StepUp(_ladder.Count);
                 break;
@@ -235,18 +233,6 @@ public sealed partial class SelectionService : Node
             _debugDone = true;
             RunDebugPick();
         }
-        for (int i = _set.Count - 1; i >= 0; i--)
-        {
-            if (IsInstanceValid(_set[i]))
-            {
-                _setBoxes[i].GlobalTransform = _set[i].GlobalTransform;
-            }
-            else
-            {
-                // A member freed under us (a destructible swapping to its wreck) leaves the set.
-                RemoveFromSetAt(i);
-            }
-        }
         if (_highlight == null)
         {
             return;
@@ -267,7 +253,7 @@ public sealed partial class SelectionService : Node
     // ---- picking ------------------------------------------------------------------------------
 
     /// <summary>Casts a ray from the camera through a screen position and selects the nearest mesh
-    /// it hits. Returns false — and says why — when nothing pickable is under the cursor.</summary>
+    /// it hits. Returns false, and says why, when nothing pickable is under the cursor.</summary>
     public bool PickAt(Vector2 screenPos)
     {
         var from = _camera.ProjectRayOrigin(screenPos);
@@ -417,37 +403,85 @@ public sealed partial class SelectionService : Node
         Changed?.Invoke(this, false);
     }
 
-    /// <summary>Adds a node to the export set, or removes it if it is already there. Returns true
-    /// when the node is in the set afterwards.</summary>
-    public bool ToggleInSet(Node3D node)
+    /// <summary>Re-renders the breadcrumb HUD, for a tool whose own state feeds
+    /// <see cref="HudLine"/> and has just changed.</summary>
+    public void RefreshHud() => UpdateHud();
+
+    /// <summary>A wireframe box instance for an inspect overlay to draw into: unshaded, unfogged,
+    /// depth-test off and hidden until something draws it. Shared rather than per-tool so every
+    /// outline in these modes reads as the same instrument at a different colour.</summary>
+    internal static MeshInstance3D NewBoxInstance(string name, Color color, int priority)
     {
-        int at = _set.IndexOf(node);
-        if (at >= 0)
+        var material = new StandardMaterial3D
         {
-            RemoveFromSetAt(at);
-        }
-        else
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoColor = color,
+            VertexColorUseAsAlbedo = false,
+            // Drawn through geometry: half the job is outlining an object you picked from the
+            // far side of a hull, and the world's fog would otherwise fade the box out at range.
+            NoDepthTest = true,
+            DisableFog = true,
+            RenderPriority = priority,
+        };
+        return new MeshInstance3D
         {
-            var box = NewBoxInstance("set_box", SetCyan, 19);
-            AddChild(box);
-            DrawBox(box, node, SubtreeWorldAabb(node));
-            _set.Add(node);
-            _setBoxes.Add(box);
-        }
-        Log.Info("ui", $"select set {(at >= 0 ? "remove" : "add")} cs_name={NameOf(node)} count={_set.Count}");
-        UpdateHud();
-        return at < 0;
+            Name = name,
+            Mesh = new ImmediateMesh(),
+            MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+        };
     }
 
-    /// <summary>Empties the export set and removes its outlines.</summary>
-    public void ClearSet()
+    /// <summary>Draws a world-space box into an instance in the node's own frame, so the drawing
+    /// then rides that node's transform. A degenerate box is grown to a visible edge; the caller's
+    /// measured box is untouched.</summary>
+    internal static void DrawBox(MeshInstance3D target, Node3D node, Aabb box)
     {
-        for (int i = _set.Count - 1; i >= 0; i--)
+        if (target.Mesh is not ImmediateMesh mesh)
         {
-            RemoveFromSetAt(i);
+            return;
         }
-        Log.Info("ui", $"select set cleared");
-        UpdateHud();
+        // Grow a degenerate box (a meshless pivot rung, a flat surface) to something visible. The
+        // measured box is what CurrentBox and the log carry; only the drawing is padded.
+        var size = box.Size;
+        var center = box.GetCenter();
+        for (int a = 0; a < 3; a++)
+        {
+            if (size[a] < MinHighlightEdge)
+            {
+                size[a] = MinHighlightEdge;
+            }
+        }
+        var padded = new Aabb(center - size * 0.5f, size);
+        // The corners are taken into the node's own frame, so the drawn box is exactly the world
+        // box at selection time and then rides the node's transform.
+        var inv = node.GlobalTransform.AffineInverse();
+        var corners = new Vector3[8];
+        for (int i = 0; i < 8; i++)
+        {
+            corners[i] = inv * (padded.Position + new Vector3(
+                (i & 1) != 0 ? padded.Size.X : 0f,
+                (i & 2) != 0 ? padded.Size.Y : 0f,
+                (i & 4) != 0 ? padded.Size.Z : 0f));
+        }
+        mesh.ClearSurfaces();
+        mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+        for (int i = 0; i < 8; i++)
+        {
+            for (int bit = 1; bit <= 4; bit <<= 1)
+            {
+                if ((i & bit) != 0)
+                {
+                    continue;
+                }
+                mesh.SurfaceAddVertex(corners[i]);
+                mesh.SurfaceAddVertex(corners[i | bit]);
+            }
+        }
+        mesh.SurfaceEnd();
+        target.GlobalTransform = node.GlobalTransform;
+        target.Visible = true;
     }
 
     // Slab test. Returns the near intersection parameter (>= 0) of the ray o + t·d with the box.
@@ -542,84 +576,6 @@ public sealed partial class SelectionService : Node
         return t >= 0f;
     }
 
-    private static MeshInstance3D NewBoxInstance(string name, Color color, int priority)
-    {
-        var material = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            AlbedoColor = color,
-            VertexColorUseAsAlbedo = false,
-            // Drawn through geometry: half the job is outlining an object you picked from the
-            // far side of a hull, and the world's fog would otherwise fade the box out at range.
-            NoDepthTest = true,
-            DisableFog = true,
-            RenderPriority = priority,
-        };
-        return new MeshInstance3D
-        {
-            Name = name,
-            Mesh = new ImmediateMesh(),
-            MaterialOverride = material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            Visible = false,
-        };
-    }
-
-    private static void DrawBox(MeshInstance3D target, Node3D node, Aabb box)
-    {
-        if (target.Mesh is not ImmediateMesh mesh)
-        {
-            return;
-        }
-        // Grow a degenerate box (a meshless pivot rung, a flat surface) to something visible. The
-        // measured box is what CurrentBox and the log carry; only the drawing is padded.
-        var size = box.Size;
-        var center = box.GetCenter();
-        for (int a = 0; a < 3; a++)
-        {
-            if (size[a] < MinHighlightEdge)
-            {
-                size[a] = MinHighlightEdge;
-            }
-        }
-        var padded = new Aabb(center - size * 0.5f, size);
-        // The corners are taken into the node's own frame, so the drawn box is exactly the world
-        // box at selection time and then rides the node's transform.
-        var inv = node.GlobalTransform.AffineInverse();
-        var corners = new Vector3[8];
-        for (int i = 0; i < 8; i++)
-        {
-            corners[i] = inv * (padded.Position + new Vector3(
-                (i & 1) != 0 ? padded.Size.X : 0f,
-                (i & 2) != 0 ? padded.Size.Y : 0f,
-                (i & 4) != 0 ? padded.Size.Z : 0f));
-        }
-        mesh.ClearSurfaces();
-        mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
-        for (int i = 0; i < 8; i++)
-        {
-            for (int bit = 1; bit <= 4; bit <<= 1)
-            {
-                if ((i & bit) != 0)
-                {
-                    continue;
-                }
-                mesh.SurfaceAddVertex(corners[i]);
-                mesh.SurfaceAddVertex(corners[i | bit]);
-            }
-        }
-        mesh.SurfaceEnd();
-        target.GlobalTransform = node.GlobalTransform;
-        target.Visible = true;
-    }
-
-    private void RemoveFromSetAt(int i)
-    {
-        _setBoxes[i].QueueFree();
-        _setBoxes.RemoveAt(i);
-        _set.RemoveAt(i);
-    }
-
     private bool IsExtraRoot(Node n)
     {
         foreach (var root in ExtraRoots)
@@ -652,7 +608,7 @@ public sealed partial class SelectionService : Node
         if (_highlight == null)
         {
             _highlight = NewBoxInstance("selection_box", Amber, 20);
-            // Parented to this service, NOT into the selected subtree — a highlight living inside
+            // Parented to this service, NOT into the selected subtree, a highlight living inside
             // the thing it measures would grow the next box it measures.
             AddChild(_highlight);
         }
@@ -687,9 +643,9 @@ public sealed partial class SelectionService : Node
         string extent = s.LengthSquared() < 1e-6f
             ? "no mesh of its own"
             : Log.Format($"centre ({c.X:0}, {c.Y:0}, {c.Z:0})  size {s.X:0.#} × {s.Y:0.#} × {s.Z:0.#} m");
-        string set = _set.Count == 0 ? "" : Log.Format($"\nexport set {_set.Count} node(s) — N opens the node lab's Export set");
+        string extra = HudLine?.Invoke() ?? "";
         _hud.Text = Log.Format($"selection [click to pick · Ctrl+click add to set · PgUp/PgDn walk · Home/End jump]  rung {Level + 1}/{_ladder.Count}\n")
-                    + Crumbs() + "\n" + extent + set;
+                    + Crumbs() + "\n" + extent + extra;
     }
 
     private string Crumbs()
@@ -698,7 +654,7 @@ public sealed partial class SelectionService : Node
         bool elided = false;
         for (int i = 0; i < _ladder.Count; i++)
         {
-            // Elide the middle — never the leaf, the current rung or the two outermost.
+            // Elide the middle, never the leaf, the current rung or the two outermost.
             bool keep = i == Level || i == 0 || i >= _ladder.Count - 2 || i < MaxCrumbs - 3;
             if (_ladder.Count > MaxCrumbs && !keep)
             {
@@ -716,7 +672,7 @@ public sealed partial class SelectionService : Node
         return string.Join(" < ", parts);
     }
 
-    // The whole ladder, one line per rung with its world-frame box — the scripted instrument. Every
+    // The whole ladder, one line per rung with its world-frame box, the scripted instrument. Every
     // rung is printed on a fresh pick so one run answers "what did that click actually select"; a
     // ladder walk prints only the rung it moved to.
     private void LogLevel(bool fresh)

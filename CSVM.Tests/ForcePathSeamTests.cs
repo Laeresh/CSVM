@@ -16,7 +16,7 @@ public class ForcePathSeamTests
     private const float Dt = 1f / 60f;
 
     /// <summary>The default is the PLAYER path, and it is the trap the constructor's own ⚠ names: the
-    /// ~18 test sites want a plant with no session around them, so the argument is optional — and a
+    /// ~18 test sites want a plant with no session around them, so the argument is optional, and a
     /// production site added later therefore gets the player plant in silence.</summary>
     [Fact]
     public void TheDefaultIsThePlayerPath()
@@ -25,7 +25,7 @@ public class ForcePathSeamTests
         Assert.False(new FlightModel(Bhawk(), aiForcePath: false).UsesAiForcePath);
     }
 
-    /// <summary>The AI path is carried through construction — the able-to-fail form of "the argument
+    /// <summary>The AI path is carried through construction, the able-to-fail form of "the argument
     /// reaches the field", which a backwards or dropped assignment breaks.</summary>
     [Fact]
     public void TheAiPathIsCarried()
@@ -45,7 +45,7 @@ public class ForcePathSeamTests
 
     /// <summary>C21's probe, with its assertion turned around by C22: the same second of sim with a
     /// deflected stick and part throttle, so rotation (the stick, the bank coupling, the
-    /// weathervane) and translation (thrust, drag, gravity, lift, the nose-chase) all run — and the
+    /// weathervane) and translation (thrust, drag, gravity, lift, the nose-chase) all run, and the
     /// two paths now separate. Kept as the aggregate that would catch the flag being dropped
     /// wholesale; the three tests below are what say WHICH divergence is present.</summary>
     [Fact]
@@ -63,7 +63,7 @@ public class ForcePathSeamTests
             ai.Step(input, Dt);
         }
 
-        // Proof the probe is loaded rather than sitting at the trim it started from — a divergence
+        // Proof the probe is loaded rather than sitting at the trim it started from, a divergence
         // read off two aircraft that never flew would say nothing about the force paths.
         Assert.True(player.Position.Length() > 100f);
         Assert.True(player.BodyRates.Length() > 0.1f);
@@ -134,7 +134,7 @@ public class ForcePathSeamTests
     /// <summary>Divergence 2, the weathervane. Isolated on rotation alone: hands-off with the flight
     /// path off the nose, the player picks up a restoring body rate and the AI picks up exactly
     /// none. <see cref="FlightModel.WeathervaneTorque"/> itself is asserted UNGATED and equal on
-    /// both, which is what separates "Step does not sum it in" from "the law was deleted for AI" —
+    /// both, which is what separates "Step does not sum it in" from "the law was deleted for AI",
     /// the original skips the block, it does not zero <c>return_rate</c>.</summary>
     [Fact]
     public void AiSkipsTheWeathervane()
@@ -159,7 +159,7 @@ public class ForcePathSeamTests
         Assert.Equal(0f, ai.BodyRates.Length(), 7);
     }
 
-    /// <summary>Divergence 3, the 10 mph nose-axis floor — and the trap in it. The probe is a plane
+    /// <summary>Divergence 3, the 10 mph nose-axis floor, and the trap in it. The probe is a plane
     /// with its nose on the horizon falling straight down at 20 m/s: its SPEED is 20 m/s, four times
     /// the floor, so a floor written on <c>Speed</c> would be a no-op here. The floor is on the
     /// velocity's nose component, which is zero, so the AI is pushed forward and the player is
@@ -194,7 +194,7 @@ public class ForcePathSeamTests
     }
 
     /// <summary>The floor only ever raises. In level cruise well above 10 mph it is not reachable,
-    /// so the AI path must leave the trajectory alone — the able-to-fail form of "one-sided",
+    /// so the AI path must leave the trajectory alone, the able-to-fail form of "one-sided",
     /// which a clamp written as an assignment rather than a minimum would break.</summary>
     [Fact]
     public void TheNoseAxisFloorNeverSlowsAnAiAircraft()

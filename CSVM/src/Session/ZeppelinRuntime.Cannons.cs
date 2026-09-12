@@ -16,7 +16,7 @@ namespace CSVM.Session;
 /// </summary>
 public sealed partial class ZeppelinRuntime
 {
-    /// <summary>The broadside ammunition id, hardcoded in the original's fire routine — looked
+    /// <summary>The broadside ammunition id, hardcoded in the original's fire routine, looked
     /// up by name, never a record key (docs/formats/mission-entities.md "Broadside firing").</summary>
     public const string BroadsideWeaponId = "wep_28";
 
@@ -33,7 +33,7 @@ public sealed partial class ZeppelinRuntime
     public ZeppelinBroadside? BroadsideOf(string node) => Find(node)?.Broadside;
 
     /// <summary>The scattered world directions of the most recent volley (cleared when the
-    /// next volley starts) — how a suite observes the scatter without hooking the pool.</summary>
+    /// next volley starts), how a suite observes the scatter without hooking the pool.</summary>
     public IReadOnlyList<Vector3> LastVolleyOf(string node) =>
         Find(node)?.LastVolleyDirs ?? (IReadOnlyList<Vector3>)Array.Empty<Vector3>();
 
@@ -58,7 +58,7 @@ public sealed partial class ZeppelinRuntime
 
     /// <summary>Builds every cannon-bearing zeppelin's broadside machine. Idempotent. Resolves
     /// the hardcoded <c>wep_28</c> once; without it (degraded extraction) the broadside is
-    /// disabled and says so. Call after <see cref="WireDamage"/> so F18's cannon pools exist —
+    /// disabled and says so. Call after <see cref="WireDamage"/> so F18's cannon pools exist,
     /// without a pool a cannon zone never dies and never thins the volley.</summary>
     public void WireCannons(ProjectilePool pool, WeaponDefs weapons)
     {
@@ -82,7 +82,7 @@ public sealed partial class ZeppelinRuntime
     }
 
     // cs-name lookup under a subtree without the world index: matches the gamez name meta
-    // (trimmed — turrets.md's trailing-space caveat) or the Godot node name.
+    // (trimmed, turrets.md's trailing-space caveat) or the Godot node name.
     private static Node3D? FindUnder(Node3D root, string name)
     {
         Node3D? found = null;
@@ -122,7 +122,7 @@ public sealed partial class ZeppelinRuntime
     }
 
     // The authored anim's own duration: the max event end (start + run_time) across the def's
-    // sequences. Null when no def resolves — the caller falls back to the invented constant.
+    // sequences. Null when no def resolves, the caller falls back to the invented constant.
     private float? DurationOf(string animName)
     {
         if (_runtime == null)
@@ -167,7 +167,7 @@ public sealed partial class ZeppelinRuntime
         var broadside = new ZeppelinBroadside(def, Deploy, Retract);
 
         // Resolve each cannon's world node (the muzzle) and its F18 zone pool (record-seeded
-        // cannon_health pool or the compiled def's own — whichever the registry holds).
+        // cannon_health pool or the compiled def's own, whichever the registry holds).
         var hullInverse = zep.Host.GlobalTransform.AffineInverse();
         float rightX = 0f;
         int rightSeen = 0;
@@ -272,14 +272,14 @@ public sealed partial class ZeppelinRuntime
                 if (pick < 0)
                 {
                     skipped++;
-                    continue;   // no in-arc gasbag left to aim at — nothing decoded says fall back
+                    continue;   // no in-arc gasbag left to aim at, nothing decoded says fall back
                 }
                 aimPos = bags[pick].GlobalPosition;
             }
             if (!ZeppelinBroadside.TryAim(muzzle.GlobalPosition, speed, aimPos, aimVel, hullVel,
                     out var aim))
             {
-                skipped++;   // decoded: no intercept solution — the target is skipped
+                skipped++;   // decoded: no intercept solution, the target is skipped
                 continue;    // the re-fire timer is NOT armed; the cannon retries next step
             }
             var dir = AimAssist.Scatter(aim,
@@ -305,7 +305,7 @@ public sealed partial class ZeppelinRuntime
         }
     }
 
-    // The record's authored targets, first live one wins (authored order — only C5/M04's
+    // The record's authored targets, first live one wins (authored order, only C5/M04's
     // dantezep authors two, and the decoded routine's ordering across several is not pinned).
     // 'player' resolves to the human aircraft as the original's node lookup would; what keeps
     // every shipped campaign broadside off the player is the engage flag, never a filter here.
@@ -388,7 +388,7 @@ public sealed partial class ZeppelinRuntime
     }
 
     // The target zeppelin's live gasbag nodes inside the firing side's arc, in healthy-list
-    // order (distinct nodes — C5/M01's duplicate entry is one node, one aim point).
+    // order (distinct nodes, C5/M01's duplicate entry is one node, one aim point).
     private List<Node3D> InArcGasbags(LiveZeppelin shooter, LiveZeppelin target, Vector3 hullPos,
         Vector3 sideNormal)
     {

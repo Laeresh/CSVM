@@ -14,21 +14,21 @@ public enum AnchorPlacement
     /// leaves every def anchored on it unanchored, so it plays nothing at all.</summary>
     Stage,
 
-    /// <summary>Already inside the bind's own scope — a child of a root it stages anyway
+    /// <summary>Already inside the bind's own scope, a child of a root it stages anyway
     /// (<c>ap_cracks</c> under <c>ap_effect</c>), the crash scaffold's <c>player</c>/<c>healthy</c>/
     /// <c>destroyed</c>/pieces, the plane's own parts. Satisfied; nothing to build.</summary>
     InScope,
 
-    /// <summary>Resolves nowhere. The def would anchor on nothing and play silently — the failure
+    /// <summary>Resolves nowhere. The def would anchor on nothing and play silently, the failure
     /// this derivation exists to make loud.</summary>
     Missing,
 }
 
 /// <summary>The record of which authored anims are playable effects, and what their defs need
-/// staged. Owns the name tables every effect producer must stay inside — <see cref="WorldEffectsFactory"/>
+/// staged. Owns the name tables every effect producer must stay inside, <see cref="WorldEffectsFactory"/>
 /// consumes these names to build and stage the runtime; the naming lives here, never there.
 /// ⚠ Names cross every play seam (<c>GrazeEffectSink</c>, <c>ExternalEffect</c>,
-/// <c>ProjectilePool.EffectSink</c>) as bare strings, never a typed entry — a typed entry would
+/// <c>ProjectilePool.EffectSink</c>) as bare strings, never a typed entry, a typed entry would
 /// thread this module's types through the deliberately engine-free <c>ImpactOutcome</c>. The
 /// producer-range tripwires in <c>CSVM.Tests</c> close the drift a typo would otherwise open.</summary>
 public static class EffectCatalogue
@@ -36,18 +36,18 @@ public static class EffectCatalogue
     // The crash def vector's prefix: slot i is "player_crash_" + SurfaceRegistry.Names[i], the
     // vector the original concatenates in FUN_00476250 and indexes with the struck material's
     // surface id. Only default/dirt/water ship a def, so the other eleven slots fall back to slot 0
-    // — asked of the bound program by SurfaceDefTable rather than listed here, because "this slot
+    //, asked of the bound program by SurfaceDefTable rather than listed here, because "this slot
     // names no def" IS the original's mechanism.
     public const string CrashDefPrefix = "player_crash_";
 
     // The bare anim name the selection cascade falls to when the vector cannot answer at all (empty
-    // vector, or a slot 0 naming no def) — the crash defs' own anim root. Unreachable in this
+    // vector, or a slot 0 naming no def), the crash defs' own anim root. Unreachable in this
     // install: all eight chapters' cam_anim carry player_crash_default, so slot 0 always resolves.
     public const string CrashAnimRoot = "player";
 
     // The AI aircraft family's vector prefix: slot i is "ai_crash_" + SurfaceRegistry.Names[i].
     // Same cascade as the player family (decode: analysis/surface-classification/FINDINGS.md),
-    // swapped for player_crash_* only on the vehicle named "player" — every AI aircraft
+    // swapped for player_crash_* only on the vehicle named "player", every AI aircraft
     // crashes through this one shared cascade.
     public const string AiCrashDefPrefix = "ai_crash_";
 
@@ -73,7 +73,7 @@ public static class EffectCatalogue
     // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i].
     // ⚠ Unlike the crash family it has no bare last-resort anim: an unanswerable slot plays
     // nothing, so TouchdownDefTable passes a null lastResort. Built once per level (a global),
-    // where the crash vector is per-plane — mirrored here against the world program.
+    // where the crash vector is per-plane, mirrored here against the world program.
     public const string TouchdownDefPrefix = "touchdown_";
 
     // The impact/destruction/graze effect animation names the world-effects runtime binds; the
@@ -88,7 +88,7 @@ public static class EffectCatalogue
         // The seeker's default IMPACT row: an ON_CALL def anchored on a same-named gamez root.
         // Already in the torpedo effects' CALL closure; named here because a weapon row indexes it.
         "ballflare.flt",
-        // gun IMPACT family — caliber (3040/5060/70) × ammo (slug/dum/ap/mag); see EffectSink
+        // gun IMPACT family, caliber (3040/5060/70) × ammo (slug/dum/ap/mag); see EffectSink
         "3040slug_gunhit", "3040ap_gunhit", "3040dum_gunhit", "3040mag_gunhit",
         "5060slug_gunhit", "5060ap_gunhit", "5060dum_gunhit", "5060mag_gunhit",
         "70slug_gunhit", "70ap_gunhit", "70dum_gunhit", "70mag_gunhit",
@@ -111,16 +111,16 @@ public static class EffectCatalogue
     public static readonly string[] BailoutAnimNames = { "chuteman" };
 
     // The crash def's sub-effects meant to lie flat on the struck surface rather than co-rotate
-    // with the plane's impact attitude — the only crash-rig templates
+    // with the plane's impact attitude, the only crash-rig templates
     // `AnimRuntime.LevelPlacedTemplateNames` levels to world axes.
-    // ⚠ The fireball/smoke/debris family and `large_steam_spray` are deliberately excluded — see
+    // ⚠ The fireball/smoke/debris family and `large_steam_spray` are deliberately excluded, see
     // `AnimRuntime.LevelPlacedTemplateNames`'s own ⚠ for why those keep the crash attitude.
     public static readonly string[] CrashSurfaceLevelAnimNames =
         { "plane_big_splash", "plane_big_ripple", "hg_splasher", "flydirt_plane" };
 
     // The per-player rig's non-crash defs: the four `<part>_damage_effects` shims the
     // Devastator's 0.99 injure_anims entry names. Bound alongside the crash def because they need
-    // exactly what the crash rig already has — the `player` anim root, the plane's own `pdpN`
+    // exactly what the crash rig already has, the `player` anim root, the plane's own `pdpN`
     // panels as INPUT_NODEs, and a live puffer factory. Each is a one-event shim calling
     // `random_gun_impact`, which the closure pulls in with `yellow_sparks_follow` under it.
     public static readonly string[] PlaneDamageEffectAnims =
@@ -140,8 +140,8 @@ public static class EffectCatalogue
 
     // The authored player damage-stage menu: the per-panel burn, the fuel-vapor leak, and the
     // heavy prop1 trail. DamageVisuals plays these as the vehicle.zrd.json injure_anims thresholds
-    // cross — the tier table is authored, nothing here invents one.
-    // `player_damage_trail` maps to the data's 0.10 `player_smoketrail` entry — see
+    // cross, the tier table is authored, nothing here invents one.
+    // `player_damage_trail` maps to the data's 0.10 `player_smoketrail` entry, see
     // DamageVisuals.RigAnimFor.
     public static readonly string[] PlayerDamageStageAnims =
     {
@@ -220,7 +220,7 @@ public static class EffectCatalogue
     public static readonly string[] CrashActivatedRoots = { "cpilot" };
 
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
-    /// with <see cref="CrashDefPrefix"/> — what <c>BuildFlightCrashRuntime</c> binds and what
+    /// with <see cref="CrashDefPrefix"/>, what <c>BuildFlightCrashRuntime</c> binds and what
     /// <c>FlightController.Crash</c> indexes with the struck material's surface id. A slot whose
     /// def this install does not ship is empty and falls back to slot 0, which is the original's
     /// own mechanism rather than a list of exceptions (see <see cref="SurfaceDefTable"/>).</summary>
@@ -230,13 +230,13 @@ public static class EffectCatalogue
     /// <summary>The AI aircraft counterpart of <see cref="CrashDefTable"/>: the
     /// <c>ai_crash_*</c> vector, selected by the same cascade as the player family (decode:
     /// analysis/surface-classification/FINDINGS.md). Same fallback arms, including the bare last
-    /// resort, which the original sets to the vehicle's own name — so the caller passes the
+    /// resort, which the original sets to the vehicle's own name, so the caller passes the
     /// plane's own name. Unreachable in this install: all eight chapters ship
     /// <c>ai_crash_default</c>, so slot 0 always resolves.</summary>
     public static SurfaceDefTable AiCrashDefTable(AnimProgram program, string planeName) =>
         new(AiCrashDefPrefix, planeName, DefExistsIn(program));
 
-    /// <summary>The family a controller's crash indexes: the original keys it on the vehicle —
+    /// <summary>The family a controller's crash indexes: the original keys it on the vehicle,
     /// <c>FUN_00476250</c> swaps in <c>player_crash_*</c> only on the vehicle named
     /// <c>player</c>; every other vehicle keeps the <c>ai_crash_*</c> vector its params carried.
     /// Ours keys the same split on who is at the controls.</summary>
@@ -252,7 +252,7 @@ public static class EffectCatalogue
         humanPiloted ? PlayerDestroyAnim
             : AirframeDestroyAnims.TryGetValue(planeNodeName, out var name) ? name : null;
 
-    /// <summary>Whether <paramref name="destroyAnim"/> flies the hull itself — it authors an
+    /// <summary>Whether <paramref name="destroyAnim"/> flies the hull itself, it authors an
     /// <c>ObjectMotion</c> on the <c>MAIN_ROOT_NODE</c> sentinel, which takes the wreck over and
     /// carries its own <c>bounce_sequence</c> landing. The eleven airframe defs do; <c>player</c>
     /// does not, and its hull falls under the flight model to a <c>player_crash_*</c> instead.
@@ -271,10 +271,10 @@ public static class EffectCatalogue
         return false;
     }
 
-    /// <summary>Everything the per-player crash rig binds — every playable crash-vector slot (the
+    /// <summary>Everything the per-player crash rig binds, every playable crash-vector slot (the
     /// struck surface is only known at impact, so the whole vector is bound), the four damage
     /// shims, the prop choreography, both authored damage-stage menus and this rig's destroy def,
-    /// i.e. every def that plays ON one aircraft — and therefore the name set whose anchor-root
+    /// i.e. every def that plays ON one aircraft, and therefore the name set whose anchor-root
     /// closure that rig's own template stage must satisfy (<see cref="CrashStageRoots"/>). Both
     /// menus regardless of who is at the controls: the rig is built before its ladder is read.</summary>
     public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs,
@@ -340,7 +340,7 @@ public static class EffectCatalogue
 
     /// <summary>What the world-effects bind stages: the anchor-root closure of
     /// <see cref="WorldEffectAnimNames"/> against the bound world program. This IS the stage's
-    /// source — <c>WorldEffectsFactory</c> builds a copy of every name it returns, per pool slot.</summary>
+    /// source, <c>WorldEffectsFactory</c> builds a copy of every name it returns, per pool slot.</summary>
     public static IReadOnlyList<string> WorldStageRoots(AnimProgram program,
         Func<string, AnchorPlacement> resolveRoot) =>
         StageRootsFor(program, WorldEffectAnimNames(program), resolveRoot);
@@ -371,7 +371,7 @@ public static class EffectCatalogue
 
     /// <summary>The anchor-root closure of <paramref name="names"/>: walks the transitive
     /// CALL_ANIMATION closure, takes each definition's NAME, and asks
-    /// <paramref name="resolveRoot"/> where it lives — shared by the world-effects and crash
+    /// <paramref name="resolveRoot"/> where it lives, shared by the world-effects and crash
     /// binds with different scopes. Anchors in <see cref="CallSuppliedAnchors"/>/
     /// <see cref="AirframeScopedAnchors"/> are dropped first. Sorted, so staging order is stable.</summary>
     /// <exception cref="EffectAnchorException">an anchor resolves nowhere.</exception>
@@ -428,7 +428,7 @@ public static class EffectCatalogue
                 yield return candidate;
     }
 
-    // "This program defines that anim" — the one existence test all three surface vectors are built
+    // "This program defines that anim", the one existence test all three surface vectors are built
     // on, so a def the runtime could not play can never count as a filled slot in one of them and
     // not the others.
     private static Func<string, bool> DefExistsIn(AnimProgram program) =>

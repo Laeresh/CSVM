@@ -17,7 +17,7 @@ namespace CSVM.Session;
 /// (one per player, built once its controller joins the tree). Constructed once per session
 /// (<c>_worldEffectsFactory</c> in <c>GameSession.StartSession</c>, same lifetime as
 /// <see cref="LiveryResolver"/>/<see cref="SpawnPicker"/>); holds the lazily-built world-effects
-/// runtime itself — <c>GameSession</c> keeps its own reference only for teardown
+/// runtime itself, <c>GameSession</c> keeps its own reference only for teardown
 /// (<c>ReturnToMenu</c> nulls both).</summary>
 public sealed class WorldEffectsFactory
 {
@@ -26,7 +26,7 @@ public sealed class WorldEffectsFactory
     // fire, so it completes), then tears its puffers down.
     private const float EffectRuntimeTtl = 32f;
 
-    // ⚠ TUNE, not decoded — the original copies templates per call and has no such number.
+    // ⚠ TUNE, not decoded, the original copies templates per call and has no such number.
     // Sizes live in `CSVM/data/effect_pools.json` (EffectPools), not here: per root, scaled by
     // player count. AnimRuntime.PoolRecycles counts wraps onto a live slot.
 
@@ -45,7 +45,7 @@ public sealed class WorldEffectsFactory
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
-    // Every human's position — the world-effects runtime's own PLAYER_RANGE
+    // Every human's position, the world-effects runtime's own PLAYER_RANGE
     // gates (the ordnance washes' `If PlayerRange`) answer to the nearest of these, not the
     // single _playerPosition above. Null (a caller with no seam, e.g. AiCrashDefs' test rig)
     // leaves the runtime on _playerPosition alone, same as before C21.
@@ -81,13 +81,13 @@ public sealed class WorldEffectsFactory
     }
 
     /// <summary>The session's <see cref="UI.ScreenFlash"/> sink, handed to every runtime this
-    /// factory builds — the three defs carrying an <c>FBFX_COLOR_FROM_TO</c> wash play here. Set
+    /// factory builds, the three defs carrying an <c>FBFX_COLOR_FROM_TO</c> wash play here. Set
     /// once, before the first build; null leaves the event undrawn. Signature matches
     /// <see cref="Mech3.AnimRuntime.ScreenFlash"/>: the ramp, the burst's world point, and the
     /// def's own gate-radius squared.</summary>
     public Action<Color, Color, float, Vector3, float>? ScreenFlash { get; set; }
 
-    /// <summary>The world-effects template stage — <see cref="EffectCatalogue.WorldStageRoots"/>'
+    /// <summary>The world-effects template stage, <see cref="EffectCatalogue.WorldStageRoots"/>'
     /// roots, one <c>pool&lt;N&gt;</c> container per slot. Null until
     /// <see cref="EnsureWorldEffects"/> has built the runtime. Exposed so <c>--effects-test</c> can
     /// report the mesh half: a puffer count says nothing about whether a template's meshes are
@@ -101,7 +101,7 @@ public sealed class WorldEffectsFactory
     /// controller, so all rigs index the ONE vector rather than each building its own.</summary>
     public SurfaceDefTable? TouchdownDefs { get; private set; }
 
-    /// <summary>The effect-template ROOT names the world-effects stage builds — the set
+    /// <summary>The effect-template ROOT names the world-effects stage builds, the set
     /// <see cref="EffectPools"/> sizes, exposed so the committed pool config can be checked
     /// against what a bound chapter actually stages (a root renamed on one side and not the other
     /// would otherwise size nothing, silently). Forwards to
@@ -167,7 +167,7 @@ public sealed class WorldEffectsFactory
         };
     }
 
-    /// <summary>What the per-player crash rig stages, for a scope it has not built yet — the same
+    /// <summary>What the per-player crash rig stages, for a scope it has not built yet, the same
     /// call <see cref="BuildFlightCrashRuntime"/> makes, exposed so the <c>effects-census</c> suite
     /// can ask it on a replica rig (the wreck and part names vary by airframe, so the answer is
     /// per-plane).</summary>
@@ -201,7 +201,7 @@ public sealed class WorldEffectsFactory
         return (effectRoots, slot0Roots);
     }
 
-    /// <summary>One pool slot of the stage above, appended in ascending slot order — the unit a
+    /// <summary>One pool slot of the stage above, appended in ascending slot order, the unit a
     /// frame-budgeted caller stages at a time. Returns the copies this slot took.</summary>
     public static int StageCrashSlot(GameZ gamez, SceneBuilder worldScene, Node3D crashRoot,
         IReadOnlyList<string> rootNames, Utils.EffectPools pools, int slot,
@@ -222,7 +222,7 @@ public sealed class WorldEffectsFactory
         return built;
     }
 
-    /// <summary>The crash rig's sealed template stage — pooled, relocating called templates,
+    /// <summary>The crash rig's sealed template stage, pooled, relocating called templates,
     /// staged hidden, and place-exempt for the airframe-scoped anchor names
     /// (<see cref="EffectCatalogue.AirframeScopedAnchors"/>).
     /// ⚠ Those names are authored against the aircraft's own model root on some airframes (the
@@ -234,7 +234,7 @@ public sealed class WorldEffectsFactory
             placeExempt: EffectCatalogue.AirframeScopedAnchors
                 .Concat(EffectCatalogue.CrashScaffoldAnchors));
 
-    /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
+    /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root, the crash
     /// def's local anchor set (see the field remark).</summary>
     public static Node3D BuildCrashAnchorSet()
     {
@@ -249,7 +249,7 @@ public sealed class WorldEffectsFactory
         return set;
     }
 
-    /// <summary>The session's one world-effects runtime — the only way to reach
+    /// <summary>The session's one world-effects runtime, the only way to reach
     /// <see cref="BuildWorldEffectsRuntime"/>; a second entry point recreates the two-runtimes bug.
     /// Wired into <see cref="AnimRuntime.ExternalEffect"/> and (when <paramref name="projectiles"/>
     /// is given) the pool's <c>EffectSink</c>, both gated on unset. Returns null on a failed build.
@@ -351,14 +351,14 @@ public sealed class WorldEffectsFactory
         // add a future contested case here by name, not as a generic scan.
         visuals.DamageEffectSink = anim =>
         {
-            // applyReset:false as the crash trigger does — a reset would re-pose nodes
+            // applyReset:false as the crash trigger does, a reset would re-pose nodes
             // the damage state owns, not just the effect's.
             int started = rigRuntime.Play(anim, planeModel, applyReset: false).Count;
-            // ⚠ started is instances, not emitters — PufferState events dispatch on the
+            // ⚠ started is instances, not emitters, PufferState events dispatch on the
             // runtime's next tick, so sample the puffer count later, not off this delta.
             Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
             // player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
-            // the leak (the def never re-activates it) — hand that lamp to the leak so
+            // the leak (the def never re-activates it), hand that lamp to the leak so
             // WingLightBlinker's 1.5 s cycle stops re-asserting the blink over it.
             if (anim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
                 controller.WingLights?.Suspend("wing_flare2");
@@ -390,7 +390,7 @@ public sealed class WorldEffectsFactory
     }
 
     // A gamez's parentless node names (the template roots), with every node name it carries at all
-    // as the out param — the two halves StageRootResolver decides on.
+    // as the out param, the two halves StageRootResolver decides on.
     private static HashSet<string> RootNames(GameZ gamez, out HashSet<string> known)
     {
         var parented = new HashSet<int>();
@@ -408,7 +408,7 @@ public sealed class WorldEffectsFactory
         return roots;
     }
 
-    // Every name a bind's own scope answers — the Godot node name and the gamez
+    // Every name a bind's own scope answers, the Godot node name and the gamez
     // AnimRuntime.NameMeta both, since name resolution reads the meta.
     private static HashSet<string> NamesUnder(Node root)
     {
@@ -456,7 +456,7 @@ public sealed class WorldEffectsFactory
     // under a dedicated subtree, keeps a live `IEmitterFactory`, and binds
     // EffectCatalogue.EffectAnimNames so AnimRuntime.PlayEffectAt can stage any of them at a hit
     // or death point. Puffers parent at world level so the stage does not suppress them.
-    // ⚠ Private — EnsureWorldEffects is the only way in. A second entry point recreates the
+    // ⚠ Private, EnsureWorldEffects is the only way in. A second entry point recreates the
     // two-runtimes bug.
     private AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
         TextureArchive textures, AnimProgram worldProgram)
@@ -484,7 +484,7 @@ public sealed class WorldEffectsFactory
                     root.Visible = false;
         }
         // This runtime only renders the puffers; the impact/death sound already plays elsewhere.
-        // ⚠ Do not write stage options onto the returned runtime — that only works when the
+        // ⚠ Do not write stage options onto the returned runtime, that only works when the
         // option happens to be read after Bind, and is a sealing leak.
         var effects = AnimRuntime.ForEffects(
             AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true,
@@ -495,8 +495,8 @@ public sealed class WorldEffectsFactory
         effects.PlayerPositions = _playerPositions;
         effects.FirstPersonView = _firstPersonView;
         effects.ScreenFlash = ScreenFlash;
-        // Bind name resolution to the template stage — so the effect names resolve to these
-        // templates and not to the world's or the crash roots' same-named nodes — but parent the
+        // Bind name resolution to the template stage, so the effect names resolve to these
+        // templates and not to the world's or the crash roots' same-named nodes, but parent the
         // runtime node itself under the visible world root, a plain logic node that self-ticks.
         var bound = EffectCatalogue.WorldEffectAnimNames(worldProgram);
         effects.Bind(stage, worldProgram.Subset(bound));
@@ -669,7 +669,7 @@ public sealed class WorldEffectsFactory
             _crashRoot = crashRoot;
 
             // The family this plane's crash indexes: player_crash_* for a human rig, ai_crash_* for
-            // an AI plane — the original's own vehicle split (EffectCatalogue.CrashDefTableFor).
+            // an AI plane, the original's own vehicle split (EffectCatalogue.CrashDefTableFor).
             // Built before the stage derivation, because the root closure is over THIS family's defs.
             _crashDefs = EffectCatalogue.CrashDefTableFor(_crashProgram, _controller.IsHumanPiloted,
                 _planeName);
@@ -735,7 +735,7 @@ public sealed class WorldEffectsFactory
         {
             // Scoped crash runtime: no ambient start, puffers via the session textures, non-portable
             // crash-def node ptrs resolved by name.
-            // ⚠ The emitter factory parents at the world root, not the crash root — see its own doc.
+            // ⚠ The emitter factory parents at the world root, not the crash root, see its own doc.
             var crashRuntime = AnimRuntime.ForCrashRig(
                 NewCrashTemplateStage(_factory._spec.DebugAnim),
                 _crashSeed,
@@ -763,7 +763,7 @@ public sealed class WorldEffectsFactory
             crashRuntime.AnchorWarnLabel = _planeName;
             // Wreck pieces with `do_intersections: true` stay in the world; handing the mask over arms
             // their collider sweep. Only Fly-mode goldens exercise it, and none captures a completed
-            // landing — analysis/object-motion-goldens/FINDINGS.md.
+            // landing, analysis/object-motion-goldens/FINDINGS.md.
             if (_factory._spec.BuildsCollision)
             {
                 crashRuntime.ContactMask = CollisionLayers.World;
@@ -772,7 +772,7 @@ public sealed class WorldEffectsFactory
                 crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
             }
             // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
-            // full ~800-def world program — its ~150 generic-named defs would mis-anchor onto this
+            // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
             crashRuntime.Bind(_controller,
                 _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim)));

@@ -5,7 +5,7 @@ namespace CSVM.Flight;
 
 /// <summary>One player's ranked line in <see cref="VersusMatch.Standings"/>: kills, deaths, and a
 /// competition rank (tied kill counts share a rank; the next distinct count skips ahead by the
-/// number of players it passed) — enough for a results board to pick out the winner (rank 1, no
+/// number of players it passed), enough for a results board to pick out the winner (rank 1, no
 /// tie) or draw (rank 1, tied) and render kills + deaths per row.</summary>
 public readonly record struct VersusStanding(int PlayerIndex, int Kills, int Deaths, int Rank);
 
@@ -16,8 +16,8 @@ public readonly record struct VersusStanding(int PlayerIndex, int Kills, int Dea
 /// turns them into standings and one completion event. The match completes once, on whichever
 /// comes first: a player reaching <see cref="KillTarget"/>, or the clock reaching
 /// <see cref="TimeLimit"/>; with both disabled (0) it never completes on its own. Deliberately
-/// not a Node — freed with the session, host-fed exactly like <see cref="StuntRace"/>'s timekeeping.
-/// ⚠ Zero engine dependency of any kind, not even <c>Log</c> — a <c>GD.Print</c> in this family
+/// not a Node, freed with the session, host-fed exactly like <see cref="StuntRace"/>'s timekeeping.
+/// ⚠ Zero engine dependency of any kind, not even <c>Log</c>, a <c>GD.Print</c> in this family
 /// once crashed the xUnit host. Keep it engine-free by construction.</summary>
 public sealed class VersusMatch
 {
@@ -33,7 +33,7 @@ public sealed class VersusMatch
             _scores[i] = new Score();
     }
 
-    /// <summary>Fired exactly once, the moment the match completes — the results board's cue.</summary>
+    /// <summary>Fired exactly once, the moment the match completes, the results board's cue.</summary>
     public event Action? MatchCompleted;
 
     /// <summary>How many players are being scored.</summary>
@@ -46,14 +46,14 @@ public sealed class VersusMatch
     public float TimeLimit { get; }
 
     /// <summary>Seconds of match clock consumed so far via <see cref="Advance"/>. Stops moving once
-    /// <see cref="Completed"/> — a completed match's clock is frozen for display.</summary>
+    /// <see cref="Completed"/>, a completed match's clock is frozen for display.</summary>
     public float Elapsed { get; private set; }
 
     /// <summary>Seconds left before a time-limited match times out, 0 once reached or when
     /// <see cref="TimeLimit"/> is disabled.</summary>
     public float TimeRemaining => TimeLimit > 0f ? Math.Max(0f, TimeLimit - Elapsed) : 0f;
 
-    /// <summary>True once the match has ended (threshold or time-out) — every further
+    /// <summary>True once the match has ended (threshold or time-out), every further
     /// <see cref="RegisterKill"/>/<see cref="RegisterDeath"/>/<see cref="Advance"/> call is a no-op.</summary>
     public bool Completed { get; private set; }
 
@@ -82,7 +82,7 @@ public sealed class VersusMatch
             Complete();
     }
 
-    /// <summary>A death with no killer — terrain or mid-air: +1 death only, no score change, never
+    /// <summary>A death with no killer, terrain or mid-air: +1 death only, no score change, never
     /// completes the match by itself. No-op once <see cref="Completed"/>.</summary>
     public void RegisterDeath(int victim)
     {
@@ -117,7 +117,7 @@ public sealed class VersusMatch
         Completed = false;
     }
 
-    /// <summary>Every player ranked by kills descending, ties sharing a rank — rank 1 alone is the
+    /// <summary>Every player ranked by kills descending, ties sharing a rank, rank 1 alone is the
     /// winner, rank 1 shared is a draw. Deaths ride along for the results board / HUD to render.</summary>
     public IEnumerable<VersusStanding> Standings()
     {

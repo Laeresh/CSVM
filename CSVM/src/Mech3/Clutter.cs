@@ -23,7 +23,7 @@ public sealed class ClutterBuilder
 {
     /// <summary>Node metadata key under which a clutter root (or a map-edge extension cell)
     /// holds the shared <see cref="ConcavePolygonShape3D"/>s its bodies reference by RID.
-    /// The physics server holds RIDs, not Refs — without this anchor the shapes would be
+    /// The physics server holds RIDs, not Refs, without this anchor the shapes would be
     /// collected while bodies still point at them.</summary>
     public const string SharedShapeMeta = "csvm_clutter_shapes";
 
@@ -34,9 +34,9 @@ public sealed class ClutterBuilder
         + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
 
     // The seed of the substitute/scale stream: the constant the original seeds its own world
-    // build with, borrowed as a label rather than as a claim — our PRNG, traversal and draw count
+    // build with, borrowed as a label rather than as a claim, our PRNG, traversal and draw count
     // all differ, so the sequences cannot and do not agree. What IS reproduced is the property
-    // that matters — the placement is a function of the data alone, identical on every launch,
+    // that matters, the placement is a function of the data alone, identical on every launch,
     // pinned session or not. See the note at the draw site.
     private const int PlacementSeed = unchecked((int)0x8EA91836);
 
@@ -57,12 +57,12 @@ public sealed class ClutterBuilder
     private readonly SceneBuilder? _scene;
 
     // The chapter's templates.zrd, or null when it has none (C1C/C2B ship an empty one, which is
-    // a spec with no blocks — a different thing, and the reader keeps them apart). A decoration
+    // a spec with no blocks, a different thing, and the reader keeps them apart). A decoration
     // with no block here is retail-data-normal and means every default: no substitution, scale 1.
     private readonly ClutterTemplateSpec? _props;
 
     // Every kind this Build will export, INCLUDING the substitution-only kinds minted in
-    // ResolveProperties — models no template scatters directly, which exist solely as the target
+    // ResolveProperties, models no template scatters directly, which exist solely as the target
     // of somebody else's roll (43 of C5's 78 blocks). They carry no CellPlacements, so they are
     // deliberately absent from Template.Kinds: the lattice walk must never treat one as a source.
     private readonly List<Kind> _allKinds = new();
@@ -100,7 +100,7 @@ public sealed class ClutterBuilder
     /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
     /// independent: a fan or strip artifact of an n-gon with repeated or collinear corners has
     /// zero WORLD area and a perfectly ordinary UV area, so a UV-area guard alone lets it through
-    /// and its meaningless affine map — both axes collapsed onto a line — plants a row of trees
+    /// and its meaningless affine map, both axes collapsed onto a line, plants a row of trees
     /// along that line. There are 1,655 of them on C1's <c>terpat02</c> alone.</summary>
     public enum UvTriangleFault
     {
@@ -120,7 +120,7 @@ public sealed class ClutterBuilder
 
     /// <summary>Collision triangles built for the 3D decorations by the last Build (0 when the
     /// build was not collidable). Since the shapes are shared this counts the DISTINCT
-    /// triangles — ~2.3k in C5, not the 2.55M a per-placement expansion would produce.</summary>
+    /// triangles, ~2.3k in C5, not the 2.55M a per-placement expansion would produce.</summary>
     public int SolidCollisionTriangles { get; private set; }
 
     /// <summary>Per-kind counts of the last Build, e.g. "firtree1.tif ×4980".</summary>
@@ -137,7 +137,7 @@ public sealed class ClutterBuilder
     /// <summary>Distinct collision shapes built by the last Build (one per decoration mesh).</summary>
     public int SolidCollisionShapes { get; private set; }
 
-    /// <summary>Shape attachments made by the last Build — one per collidable 3D decoration.</summary>
+    /// <summary>Shape attachments made by the last Build, one per collidable 3D decoration.</summary>
     public int SolidCollisionInstances { get; private set; }
 
 
@@ -208,7 +208,7 @@ public sealed class ClutterBuilder
         return null;
     }
 
-    /// <summary>The first node at or under <paramref name="node"/> carrying a non-empty mesh —
+    /// <summary>The first node at or under <paramref name="node"/> carrying a non-empty mesh,
     /// a template root's ground quad, or a decoration node's card/building. Public and static
     /// because it is the other half of resolving a template (with
     /// <see cref="FindTemplateRoot(GameZ, string)"/>), and the UV a decoration is stored at is
@@ -333,7 +333,7 @@ public sealed class ClutterBuilder
         InstanceCount = SolidCount = SolidCollisionTriangles = 0;
         SolidCollisionShapes = SolidCollisionInstances = SolidCollisionOneSidedTriangles = 0;
         _solidShapes = null;
-        // _allKinds, not templates.Values — a substitution-only kind has instances to export and
+        // _allKinds, not templates.Values, a substitution-only kind has instances to export and
         // no template to be found under.
         foreach (var kind in _allKinds)
         {
@@ -509,7 +509,7 @@ public sealed class ClutterBuilder
     // table. The engine subtracts each normalised share from the draw and takes the first entry
     // that sends it negative, which is the same selection as this comparison against the running
     // sum. A kind with no table always stamps itself, and a draw that falls past the last entry
-    // (float error only, since the shares sum to 1) does too — the engine's own fallback, which
+    // (float error only, since the shares sum to 1) does too, the engine's own fallback, which
     // leaves the model pointer at the entry's own node.
     private static Kind? Roll(Kind kind, Random rng, LatticeStats stats)
     {
@@ -529,7 +529,7 @@ public sealed class ClutterBuilder
         return kind;
     }
 
-    // Barycentric containment in the triangle's OWN plane (not an XZ projection — a hillside
+    // Barycentric containment in the triangle's OWN plane (not an XZ projection, a hillside
     // triangle's XZ shadow is a different shape). The slack absorbs the single rounding the
     // affine map ends on; a genuinely misplaced instance misses by metres, not by 1e-3.
     private static bool InSourceTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 p)
@@ -596,7 +596,7 @@ public sealed class ClutterBuilder
         return null;
     }
 
-    // Distinct example names for a one-line skip summary (many decorations share a name —
+    // Distinct example names for a one-line skip summary (many decorations share a name,
     // repeats would read like a bug); the caller keeps the true count beside it.
     private static string SkipExamples(List<string> names)
     {
@@ -765,7 +765,7 @@ public sealed class ClutterBuilder
 
     // One decoration kind from the node carrying its mesh. Shared by the template walk and by the
     // substitution-target minting below, so a model reached either way is classified, labelled and
-    // rendered identically — a `firtree2` stamped because `firtree1` rolled it must be the same
+    // rendered identically, a `firtree2` stamped because `firtree1` rolled it must be the same
     // kind of thing as a `firtree2` the template placed itself. Null when the mesh is neither a
     // sprite card nor a solid decoration (no texture, or no SceneBuilder for the solid path).
     private Kind? MakeKind(GameZNode meshNode, string model)
@@ -802,7 +802,7 @@ public sealed class ClutterBuilder
     // target resolved to the kind its stamps will land in. Runs ONCE, after every template is
     // parsed and before a single lattice cell is walked, for two reasons: a target may be another
     // template's decoration (so all templates must exist first), and a target may be no template's
-    // decoration at all (so a kind has to be minted — which cannot happen mid-walk, where
+    // decoration at all (so a kind has to be minted, which cannot happen mid-walk, where
     // PlaceOnTriangle is iterating Template.Kinds by index).
     private void ResolveProperties(Dictionary<string, Template> templates)
     {
@@ -886,7 +886,7 @@ public sealed class ClutterBuilder
 
     // A 3D decoration: anything with real geometry that is NOT a billboard card. C2's
     // filmblock/resblock buildings and parklot Studebakers, C5's cblock city blocks (2-27
-    // polygons, up to 108 m tall). Requires a SceneBuilder to render through — without one
+    // polygons, up to 108 m tall). Requires a SceneBuilder to render through, without one
     // these fall back to the skip list.
     private bool IsSolidDecoration(int meshIndex)
     {
@@ -895,7 +895,7 @@ public sealed class ClutterBuilder
         var mesh = _gamez.Meshes[meshIndex];
         if (mesh.Polygons.Count == 0 || mesh.Vertices.Count == 0)
             return false;
-        // Not a card by the shared rule (nulls — a legacy extraction — fall through to the
+        // Not a card by the shared rule (nulls, a legacy extraction, fall through to the
         // shape heuristic in IsSpriteCard, which SpriteInfo already applied and rejected).
         return !IsSpriteCard(mesh);
     }
@@ -1028,7 +1028,7 @@ public sealed class ClutterBuilder
     private MultiMeshInstance3D BuildKindInstance(Kind kind)
     {
         var tex = _textures.Find(kind.Label);
-        // Clamp when the card's UVs never leave the unit square — the same data-driven rule as
+        // Clamp when the card's UVs never leave the unit square, the same data-driven rule as
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
@@ -1049,7 +1049,7 @@ public sealed class ClutterBuilder
     }
 
     // The billboard shader swings verts outside the MultiMesh's static AABB, so the card's own
-    // width is the margin — ⚠ GROWN BY THE LARGEST SCALE any of its instances actually got.
+    // width is the margin, ⚠ GROWN BY THE LARGEST SCALE any of its instances actually got.
     // C2's spruce reaches 3.0×, and a margin left at 1× would pop a third of
     // that card off the screen edge. Measured from the placements rather than from the kind's own
     // scale_range, because a kind reached by substitution is scaled by its sources' ranges.
@@ -1108,7 +1108,7 @@ public sealed class ClutterBuilder
 
         // The shapes are referenced by the physics server through their RIDs only, which does
         // not keep the Godot Ref alive. Anchor them on the clutter root so their lifetime is
-        // the scene tree's — without this the GC can free a shape out from under live bodies.
+        // the scene tree's, without this the GC can free a shape out from under live bodies.
         var anchor = new Godot.Collections.Array();
         foreach (var s in shapes.Values)
             anchor.Add(s);
@@ -1137,7 +1137,7 @@ public sealed class ClutterBuilder
     }
 
     // The sprite's own source geometry (verts + UVs, fan-triangulated) in local space:
-    // x spans ± half the width around the planted point, y up from 0 — the billboard
+    // x spans ± half the width around the planted point, y up from 0, the billboard
     // shader spins it about that local origin.
     private ArrayMesh BuildSpriteMesh(int meshIndex)
     {
@@ -1256,7 +1256,7 @@ public sealed class ClutterBuilder
         public Vector3 AxisV => new((float)_bX, (float)_bY, (float)_bZ);
 
         /// <summary>Null when the triangle is degenerate in either space, with
-        /// <paramref name="fault"/> saying which — the caller counts both, because they are
+        /// <paramref name="fault"/> saying which, the caller counts both, because they are
         /// different defects in the source mesh and netting them hides one.</summary>
         public static UvTriangle? Build(Vector3 a, Vector3 b, Vector3 c,
             Vector2 uva, Vector2 uvb, Vector2 uvc, out UvTriangleFault fault)
@@ -1321,7 +1321,7 @@ public sealed class ClutterBuilder
 
     /// <summary>A template's ground quad, reduced to what placement needs: which terrain
     /// texture it decorates, its per-axis local extent, and the affine map from a local
-    /// position on its plane to the polygon's own interpolated texture UV — which is the
+    /// position on its plane to the polygon's own interpolated texture UV, which is the
     /// coordinate every decoration is stored in.</summary>
     public sealed class GroundQuad
     {
@@ -1330,11 +1330,11 @@ public sealed class ClutterBuilder
 
         public string Texture = "";
         // The quad's own local X/Z extents. ⚠ Descriptive only: NOTHING in placement reads them,
-        // and nothing should — the lattice spacing comes from the WORLD polygon's UVs, not from
+        // and nothing should, the lattice spacing comes from the WORLD polygon's UVs, not from
         // the template's size.
         public float ExtentX, ExtentZ;
 
-        // The plane and the UV map, in DOUBLE — see the note in GroundInfo for why the single
+        // The plane and the UV map, in DOUBLE, see the note in GroundInfo for why the single
         // rounding at the end of TryUv is load-bearing rather than pedantry.
         public double NormalX, NormalY, NormalZ;         // unit plane normal
         public double AnchorX, AnchorY, AnchorZ;         // a point on the plane…
@@ -1344,8 +1344,8 @@ public sealed class ClutterBuilder
 
         // The original's fmod wrap, both branches. A negative coordinate maps to 1 − frac, and
         // an exact 1.0 (a frac that rounded away) collapses back to 0. No retail decoration
-        // takes the negative branch — all 32 resolving quads span exactly 0..1, so the wrap
-        // folds nothing — but the original takes it, so this does.
+        // takes the negative branch, all 32 resolving quads span exactly 0..1, so the wrap
+        // folds nothing, but the original takes it, so this does.
         public static float Wrap(float value)
         {
             float f = value % 1f;
@@ -1359,7 +1359,7 @@ public sealed class ClutterBuilder
         }
 
         /// <summary>The quad's interpolated texture UV under <paramref name="local"/>, projected
-        /// along the quad normal. False when the decoration does not project onto the polygon —
+        /// along the quad normal. False when the decoration does not project onto the polygon,
         /// the original logs and skips that case, and so does the caller.</summary>
         public bool TryUv(Vector3 local, out Vector2 uv)
         {
@@ -1408,10 +1408,10 @@ public sealed class ClutterBuilder
     private sealed class Kind
     {
         // Where each decoration of this kind sits on the template's ground quad, as the quad's
-        // own TEXTURE UV: Origin.X is u and Origin.Z is v, both in [0, 1) — not metres, and not
+        // own TEXTURE UV: Origin.X is u and Origin.Z is v, both in [0, 1), not metres, and not
         // relative to a corner (the winding differs between templates). Origin Y and the basis
         // are the decoration node's own, and are used by the solid path only (a sprite is
-        // planted flat on the surface and re-faced by its shader — see PlaceOnTriangle).
+        // planted flat on the surface and re-faced by its shader, see PlaceOnTriangle).
         public readonly List<Transform3D> CellPlacements = new();
         public readonly List<Transform3D> Instances = new(); // world placements
 
@@ -1427,7 +1427,7 @@ public sealed class ClutterBuilder
         public float Width, Height;              // sprite quad extents (sprites only)
 
         // templates.zrd's `scale_range` for THIS kind's model, (1,1) when it authors none or no
-        // spec was supplied. ⚠ It is the SOURCE kind's range that scales a substituted stamp —
+        // spec was supplied. ⚠ It is the SOURCE kind's range that scales a substituted stamp,
         // see the roll in PlaceOnTriangle.
         public Vector2 ScaleRange = Vector2.One;
 
@@ -1438,7 +1438,7 @@ public sealed class ClutterBuilder
 
         // `substitute` as a CUMULATIVE table: the running sum of the engine's own normalised
         // shares, paired with the kind each share lands in. A null target is a model the gamez
-        // does not carry — it keeps its share and places nothing, as the original does. Empty
+        // does not carry, it keeps its share and places nothing, as the original does. Empty
         // when the kind authors no substitution, which is every stamp landing in its own kind.
         public IReadOnlyList<(float Cumulative, Kind? Target)> Substitutes =
             Array.Empty<(float, Kind?)>();
@@ -1447,7 +1447,7 @@ public sealed class ClutterBuilder
         // margin can grow with it. ⚠ Measured rather than derived from ScaleRange: a kind reached
         // by substitution is scaled by its SOURCES' ranges, not by its own.
         public float MaxScale = 1f;
-        // The decoration model's own render flags (sprites only — a solid decoration draws
+        // The decoration model's own render flags (sprites only, a solid decoration draws
         // through SceneBuilder's materials, which read them themselves).
         public bool Lit = true;
         public bool Fogged = true;
@@ -1471,7 +1471,7 @@ public sealed class ClutterBuilder
         public int ZeroWorldArea;      // fan/strip artifacts of n-gons with repeated corners
         public int ZeroUvArea;         // no invertible affine map to recover a position through
         public int NoUvArray;          // the engine's null-UV gate
-        public int NoClutterFlagged;   // the engine's 0x800 gate — the OTHER layer decorates here
+        public int NoClutterFlagged;   // the engine's 0x800 gate, the OTHER layer decorates here
         public int OverLargeLattice;   // refused by MaxLatticeCells
         public long WorstLatticeCells; // the largest lattice seen among those refused
         public int Placed;             // instances the lattice produced (after the seen dedup)

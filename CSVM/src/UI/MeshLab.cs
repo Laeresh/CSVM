@@ -8,7 +8,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The mesh lab (key M): geometry and shading diagnostics for one subtree — normal vectors,
+/// The mesh lab (key M): geometry and shading diagnostics for one subtree, normal vectors,
 /// wireframe with smoothing seams, collision zone boxes, steerable lighting, and live overrides
 /// of the two render decisions shading artifacts usually trace back to, so each candidate cause
 /// can be toggled and watched alone. In <c>--viewer</c> it owns the parked aircraft; in
@@ -106,7 +106,7 @@ public sealed partial class MeshLab : Node
     private Node3D? _overlayRoot;
 
     // --debug-mesh=force: build the override materials even when both cyclers sit on AsData. The
-    // lab's able-to-fail control — an override that only ever differs in the thing under test must
+    // lab's able-to-fail control, an override that only ever differs in the thing under test must
     // render the shipped picture when asked for the shipped settings, and this is what measures it.
     private bool _forceOverride;
 
@@ -114,7 +114,7 @@ public sealed partial class MeshLab : Node
     private float _sunEnergy = 1.6f, _ambientEnergy = 0.9f;
     private bool _ambientOn = true;
     // The scoped lab's own light. The session's sun and environment belong to the world, and a
-    // diagnostic that re-aims them changes the thing it is measuring everywhere else on screen —
+    // diagnostic that re-aims them changes the thing it is measuring everywhere else on screen,
     // so in that mode the sliders drive this instead, created dark and only on first use.
     private DirectionalLight3D? _labLight;
 
@@ -164,7 +164,7 @@ public sealed partial class MeshLab : Node
     public enum WireMode { Off, Edges, EdgesAndSeams, SeamsOnly }
 
     /// <summary>Culling override. AsData honours the per-polygon SHOW_BACKFACE flag the
-    /// builder read (unk2); Inverted is cull_back — i.e. the opposite of this project's
+    /// builder read (unk2); Inverted is cull_back, i.e. the opposite of this project's
     /// "the visible side is the CCW loop" reading, so it tests that convention directly.</summary>
     public enum CullOverride { AsData, AllDoubleSided, AllSingleSided, Inverted }
 
@@ -221,7 +221,7 @@ public sealed partial class MeshLab : Node
         }
         // Lighting is only written when the flag asked for it. Merely constructing the lab
         // must not re-aim the sun: it did in the first cut (a hardcoded default direction),
-        // and the untouched --viewer screenshot stopped being byte-identical — caught by md5.
+        // and the untouched --viewer screenshot stopped being byte-identical, caught by md5.
         RefreshAll(applyLighting: DebugSpec != null);
 
         for (int i = 0; i < _debugCycles; i++)
@@ -337,7 +337,7 @@ public sealed partial class MeshLab : Node
     }
 
     // True when this triangle's three corner normals are equal to each other and to
-    // its winding normal — the exact signature of SceneBuilder's flat fallback. See the class
+    // its winding normal, the exact signature of SceneBuilder's flat fallback. See the class
     // doc for the false-positive case.
     private static bool IsFlatFallback(Surf s, int t)
     {
@@ -393,7 +393,7 @@ public sealed partial class MeshLab : Node
     }
 
     // An edge is a hard smoothing seam when the triangles meeting on it disagree
-    // about the normal at a shared position — i.e. the shading breaks across this edge.
+    // about the normal at a shared position, i.e. the shading breaks across this edge.
     // These outline the flat/smooth patch boundaries directly.
     private static bool IsSeam(Surf s, List<(int Tri, int A, int B)> list)
     {
@@ -512,7 +512,7 @@ public sealed partial class MeshLab : Node
     // Sets (or clears) this surface's override material.
     // ⚠ Do not check the mesh's own surface count here; it errors per call. Godot sizes
     // `surface_override_materials` off the mesh at assignment time, so a mesh whose surfaces were
-    // committed afterward (SceneBuilder's pattern) can leave that array short — re-assign the
+    // committed afterward (SceneBuilder's pattern) can leave that array short, re-assign the
     // mesh to force a resize. Clearing on a missing slot is a genuine no-op and returns early,
     // since a silently un-overridden surface would wrongly pass this diagnostic's A/B.
     private static void SetOverride(Surf s, Material? mat)
@@ -581,7 +581,7 @@ public sealed partial class MeshLab : Node
         var pick = _selection?.Current;
         if (pick == null)
         {
-            // Absence of a subject is not "the subtree is clean" — say which it is.
+            // Absence of a subject is not "the subtree is clean", say which it is.
             Log.Info("ui", $"mesh lab: nothing is selected — click an object first (PgUp/PgDn pick the rung)");
             _ui.Visible = ShowPanel;
             _scopedNote = "NOTHING SELECTED — click an object, then M";
@@ -647,7 +647,7 @@ public sealed partial class MeshLab : Node
 
     // Reads every built surface back out of its ArrayMesh into the target's local space.
     // Done once per target: the parked aircraft never moves, and re-reading per toggle would make
-    // the cyclers feel sticky on the bigger models. The target must already be in the tree —
+    // the cyclers feel sticky on the bigger models. The target must already be in the tree,
     // GlobalTransform on a detached node reads identity and logs an error.
     private void CollectGeometry()
     {
@@ -694,11 +694,11 @@ public sealed partial class MeshLab : Node
                     Normals = norms.Select(n => (nrm * n).Normalized()).ToArray(),
                     Tris = tris,
                     // Sidedness is not exposed on the material, but SceneBuilder bakes it into
-                    // the generated shader's render_mode — so read it back from the code. Hacky
+                    // the generated shader's render_mode, so read it back from the code. Hacky
                     // but honest, and it avoids widening SceneBuilder's API for a debug view.
                     DoubleSided = mat is ShaderMaterial sm && sm.Shader != null
                                   && sm.Shader.Code.Contains("cull_disabled"),
-                    // The world's variants render unshaded, so no light of ours reaches them —
+                    // The world's variants render unshaded, so no light of ours reaches them,
                     // the lighting section says so instead of pretending to steer them.
                     Fullbright = mat is ShaderMaterial fb && fb.Shader != null
                                  && fb.Shader.Code.Contains("unshaded"),
@@ -824,7 +824,7 @@ public sealed partial class MeshLab : Node
         im.SurfaceAddVertex(at + n * len);
     }
 
-    // Half the diagonal of the collected geometry's own bounding box — the subject's SIZE,
+    // Half the diagonal of the collected geometry's own bounding box, the subject's SIZE,
     // measured about its own centre rather than about the frame's origin. World subtrees are built
     // with their vertices in absolute coordinates under an identity node transform, so a
     // distance-from-origin radius reads as the object's distance from the map corner: the C1 water
@@ -900,7 +900,7 @@ public sealed partial class MeshLab : Node
                 if (_wire == WireMode.SeamsOnly && !isSeam)
                     continue;
                 if (_wire == WireMode.Edges && isSeam)
-                    col = ordinary; // plain edges only — no seam highlighting
+                    col = ordinary; // plain edges only, no seam highlighting
                 im.SurfaceSetColor(col);
                 im.SurfaceAddVertex(s.Verts[ia]);
                 im.SurfaceAddVertex(s.Verts[ib]);
@@ -966,7 +966,7 @@ public sealed partial class MeshLab : Node
 
     // The override material for one surface: the surface's OWN shader with the cull token
     // swapped and a normal rewrite injected, plus every parameter copied across. Deriving beats
-    // re-implementing — the world's fullbright variants carry fog, the sRGB vertex modulate, the
+    // re-implementing, the world's fullbright variants carry fog, the sRGB vertex modulate, the
     // LIGHT_STATE spill and UV scroll, and a stand-in shader that dropped any of those would
     // change what you are inspecting instead of only what you asked to test.
     private ShaderMaterial OverrideMaterial(Surf s)
@@ -995,7 +995,7 @@ public sealed partial class MeshLab : Node
                 fallback.SetShaderParameter("albedo_tex", plain.GetShaderParameter("albedo_tex"));
             else
                 fallback.SetShaderParameter("albedo_color", plain.GetShaderParameter("albedo_color"));
-            // Carry the depth bias so overridden surfaces keep their coplanar layering — an
+            // Carry the depth bias so overridden surfaces keep their coplanar layering, an
             // override must differ in the thing under test and nothing else.
             fallback.SetShaderParameter("depth_bias", plain.GetShaderParameter("depth_bias"));
         }
@@ -1005,8 +1005,8 @@ public sealed partial class MeshLab : Node
 
     // Rewrites a built shader into the lab's A/B twin: the cull token in its
     // `render_mode` becomes `cull`, and `fragment()` opens with the
-    // normal-source rewrite. Everything else — vertex stage, fog, lights, alpha, the instance
-    // uniform block and its declaration order — is the original text. Null when the code does not
+    // normal-source rewrite. Everything else, vertex stage, fog, lights, alpha, the instance
+    // uniform block and its declaration order, is the original text. Null when the code does not
     // have the two anchors, which is the caller's cue to fall back rather than guess.
     private Shader? DerivedShader(Shader source, BaseMaterial3D.CullModeEnum cull)
     {
@@ -1085,7 +1085,7 @@ void fragment() {{
     // ---- smooth-normal rebuild -------------------------------------------------------------
 
     // Swaps in a copy of this surface's mesh with area-weighted vertex normals,
-    // welded by position — the "what if every polygon were smooth-shaded" comparison. Cached,
+    // welded by position, the "what if every polygon were smooth-shaded" comparison. Cached,
     // so cycling back to it is instant.
     private void SmoothMesh(Surf s)
     {
@@ -1197,7 +1197,7 @@ void fragment() {{
             return;
         }
         dir = dir.Normalized();
-        // LookAt degenerates when the direction is parallel to the up hint — pick another.
+        // LookAt degenerates when the direction is parallel to the up hint, pick another.
         var up = Mathf.Abs(dir.Dot(Vector3.Up)) > 0.999f ? Vector3.Forward : Vector3.Up;
         light.LookAtFromPosition(light.GlobalPosition, light.GlobalPosition + dir, up);
     }
@@ -1242,7 +1242,7 @@ void fragment() {{
                 case "restore":
                     // Scoped runs only: attach with everything the spec asked for, then detach
                     // again on the same frame. The scripted twin of M-on-M-off, and the only way
-                    // to prove the restore is exact — the capture must match a run with no lab.
+                    // to prove the restore is exact, the capture must match a run with no lab.
                     _debugRestore = true;
                     break;
                 case "headlight": _headlight = true; break;
@@ -1265,14 +1265,14 @@ void fragment() {{
                     }; break;
                 case "ambient": _ambientOn = value != "off"; break;
                 case "cycle":
-                    // cycle=N — step the normal-source cycler N times at launch (the headless
+                    // cycle=N, step the normal-source cycler N times at launch (the headless
                     // equivalent of clicking it), reaching a second ApplyOverrides after a mesh
                     // swap that a one-shot spec would otherwise never exercise.
                     if (int.TryParse(value, out int n))
                         _debugCycles = n;
                     break;
                 case "dir":
-                    // dir=x/y/z — the direction the light TRAVELS, so dir=0/-1/0 is straight
+                    // dir=x/y/z, the direction the light TRAVELS, so dir=0/-1/0 is straight
                     // down. Slashes, because commas already separate spec tokens.
                     var parts = value.Split('/');
                     if (parts.Length == 3
@@ -1335,7 +1335,7 @@ void fragment() {{
         if (!Scoped)
         {
             // Zone boxes are the aircraft's damage-collision boxes, and the engine wireframe is
-            // viewport-wide — neither is a property of a selected world subtree.
+            // viewport-wide, neither is a property of a selected world subtree.
             _boxBtn = CheckRow(box, "zone boxes  [B]", v => { _boxes = v; RebuildBoxes(); });
             _engineWireBtn = CheckRow(box, "engine wireframe", v => { _engineWireframe = v; ApplyOverrides(); });
         }

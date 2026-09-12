@@ -32,7 +32,7 @@ public readonly struct AiSkillVector
 /// node-name pattern with <c>*</c> wildcards and the bias it applies to target ranking. This
 /// install authors <c>[pattern, bias]</c> pairs only (measured: 0 triples across all 53 files);
 /// the exe's editor comment names a third element, so one is accepted defensively and preserved
-/// raw (<see cref="Third"/> — parse it, act on nothing).</summary>
+/// raw (<see cref="Third"/>, parse it, act on nothing).</summary>
 public sealed class AiRatingBias
 {
     public AiRatingBias(string pattern, float bias, object? third)
@@ -54,7 +54,7 @@ public sealed class AiRatingBias
 
     /// <summary>Case-insensitive wildcard match of <paramref name="name"/> against
     /// <see cref="Pattern"/>. Only <c>*</c> is special (any run, so <c>**</c> collapses to
-    /// <c>*</c>) — the shipped data authors nothing else.</summary>
+    /// <c>*</c>), the shipped data authors nothing else.</summary>
     public bool Matches(string name)
     {
         string p = Pattern;
@@ -90,7 +90,7 @@ public sealed class AiRatingBias
 /// <summary>
 /// The AI pilot-skill constants (docs/formats/ai-rosters.md): the shared
 /// <c>player.json</c>'s <c>ai_skill_parameters</c> block, one <c>[value@1, value@9]</c> endpoint
-/// pair per stat, indexed by the roster's 1–9 skill ratings — plus the accessor that reads a
+/// pair per stat, indexed by the roster's 1–9 skill ratings, plus the accessor that reads a
 /// roster block's nine-slot skill vector (slots 22–30) by stat name.
 /// ⚠ Interpolate linearly from rating 0, not rating 1; see <c>docs/org/aiControlLaw.md</c>
 /// "The skill scalar" for the formula. <c>natural_touch</c> has no entry by design: it compares
@@ -140,7 +140,7 @@ public sealed class AiSkills
     // Roster slot 39: helpLabel, the MSG_OBJ_* key an objective-flagged block's own marker carries.
     private const int HelpLabelSlot = 39;
 
-    // Roster slot 67: ace, read twice — the spawn exempts the block's skill ratings from the
+    // Roster slot 67: ace, read twice, the spawn exempts the block's skill ratings from the
     // difficulty offset, and the debrief credits its kill to the starred tally.
     private const int AceSlot = 67;
 
@@ -155,13 +155,13 @@ public sealed class AiSkills
     /// (<c>dead_eye_angle</c>, <c>quick_draw_angle</c>, …).</summary>
     public IReadOnlyDictionary<string, (float At1, float At9)> Parameters => _params;
 
-    /// <summary>player.json's <c>min_ai_active_dist</c> (2000 m shipped) — the AI activation
+    /// <summary>player.json's <c>min_ai_active_dist</c> (2000 m shipped), the AI activation
     /// radius, and the fallback for every roster whose own volume slots are unauthored (all of
     /// them; docs/formats/ai-rosters.md "The three unnamed slots").</summary>
     public float MinAiActiveDist { get; private set; } = 2000f;
 
     /// <summary>Loads the <c>ai_skill_parameters</c> block from the shared zrdr scope's
-    /// <c>player.json</c>. Throws when the block is absent — the shipped install always
+    /// <c>player.json</c>. Throws when the block is absent, the shipped install always
     /// carries it, so a miss is a wrong path, not a default to paper over.</summary>
     public static AiSkills Load(string zrdrPath)
     {
@@ -184,7 +184,7 @@ public sealed class AiSkills
 
     /// <summary>Reads a roster block's skill vector: slots 22–30 in the exe's stat order. A slot
     /// authored <c>-1</c>, missing (blocks are not fixed-width) or non-numeric reads null =
-    /// UNSET — the engine then falls back to the airframe def's own stat keys
+    /// UNSET, the engine then falls back to the airframe def's own stat keys
     /// (docs/formats/vehicle.md "AI-combatant tuning"), so null must stay null here rather than
     /// become an invented default. ⚠ <c>0</c> is an authored rating and not unset: the engine's
     /// own test is <c>CMP EAX,-0x1</c>.</summary>
@@ -409,7 +409,7 @@ public sealed class AiSkills
     }
 
     /// <summary>The stat parameter at a 0–9 rating: the engine's own formula, <c>lo + (hi-lo) ·
-    /// rating/9</c> — the pair's endpoints sit at rating 0 and 9, not 1 and 9, so a rating of 1
+    /// rating/9</c>, the pair's endpoints sit at rating 0 and 9, not 1 and 9, so a rating of 1
     /// reads <c>lo + (hi-lo)/9</c> rather than <c>lo</c> outright. ⚠ The floor is 0, not 1: the
     /// difficulty offset reaches rating 0 (<see cref="Flight.Difficulty.SkillRatingForSpawn"/>)
     /// and the engine clamps there too.</summary>
@@ -421,12 +421,12 @@ public sealed class AiSkills
         return pair.At1 + (pair.At9 - pair.At1) * t;
     }
 
-    /// <summary>The dead-eye aim-error cone half-angle, degrees (4.0° at 1 → 1.45° at 9 —
+    /// <summary>The dead-eye aim-error cone half-angle, degrees (4.0° at 1 → 1.45° at 9,
     /// tighter is the better pilot).</summary>
     public float DeadEyeAngleDeg(float rating) => At("dead_eye_angle", rating);
 
     /// <summary>The quick-draw shot-acceptance cone half-angle off the target's nose/tail,
-    /// degrees (50° at 1 → 89° at 9 — a better pilot takes more oblique shots).</summary>
+    /// degrees (50° at 1 → 89° at 9, a better pilot takes more oblique shots).</summary>
     public float QuickDrawAngleDeg(float rating) => At("quick_draw_angle", rating);
 
     /// <summary>The per-launch ordnance dice, 0–1 (0.05 at 1 → 0.44 at 9). Despite the shared

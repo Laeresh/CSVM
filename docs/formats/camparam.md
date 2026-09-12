@@ -16,7 +16,7 @@ geometry.
 - [Engine-read fields](#engine-read-fields)
 ## Shape
 
-The root is a plain alternating `name, properties` list — the same layout `vehicle.json` uses for
+The root is a plain alternating `name, properties` list, the same layout `vehicle.json` uses for
 its defs, with no wrapping list. Every value is a one-element list of a float:
 
 ```
@@ -26,10 +26,10 @@ its defs, with no wrapping list. Every value is a one-element list of a float:
 ```
 
 `default` comes first and carries every key. Each later block is one aircraft and carries **only
-the keys it overrides** — three keys for most, five for the Balmoral. Resolution is therefore
+the keys it overrides**, three keys for most, five for the Balmoral. Resolution is therefore
 `default` first, then the plane's own block layered on top.
 
-⚠ **The blocks are keyed by the aircraft's DISPLAY name** — `"Bloodhawk"`, `"Firebrand"` — not by
+⚠ **The blocks are keyed by the aircraft's DISPLAY name**, `"Bloodhawk"`, `"Firebrand"`, not by
 the model node (`player_bhawk`) and not by the vehicle def (`pbloodhawk`). The node→display map is
 in [markers.md](markers.md); in the engine it is `MarkerRig.PlayerAirframes`. Do not substitute
 `PlaneRoster.PlaneDisplayName`: it strips a leading `p` and title-cases, which yields `"Fbrand"` for
@@ -37,8 +37,8 @@ in [markers.md](markers.md); in the engine it is `MarkerRig.PlayerAirframes`. Do
 
 ## Per-plane overrides
 
-Seven of the eleven player airframes carry a block. The other four — Devastator, Hoplite,
-Hellhound and Brigand — have none and take `default`'s 13.0.
+Seven of the eleven player airframes carry a block. The other four, Devastator, Hoplite,
+Hellhound and Brigand, have none and take `default`'s 13.0.
 
 | Aircraft | `dist` | `dist_min` | `dist_max` | also |
 |---|---|---|---|---|
@@ -50,15 +50,15 @@ Hellhound and Brigand — have none and take `default`'s 13.0.
 | Warhawk | 20.0 | 20.0 | 35.0 | |
 | Balmoral | 25.0 | 25.0 | 30.0 | `thirdp_height` 0.2, `thirdp_pitch` 0.2 |
 
-The distance tracks airframe size: the Kestrel is the smallest number and the Balmoral — a heavy
-two-turret aircraft — the largest.
+The distance tracks airframe size: the Kestrel is the smallest number and the Balmoral, a heavy
+two-turret aircraft, the largest.
 
 ## Default block
 
 | Key | Value | Reading |
 |---|---|---|
 | `dist` | 13.0 | Base chase distance, metres. |
-| `dist_factor` | 0.01 | Metres of extra chase distance per m/s of airspeed: `d = dist + dist_factor·V`, V in metres per **sim** second. CAP-21's Bloodhawk staircase clips show: the measured slope 5.65e-4·d(0) per m/s implies 0.0105 against the shipped 0.01 — 5% agreement. |
+| `dist_factor` | 0.01 | Metres of extra chase distance per m/s of airspeed: `d = dist + dist_factor·V`, V in metres per **sim** second. CAP-21's Bloodhawk staircase clips show: the measured slope 5.65e-4·d(0) per m/s implies 0.0105 against the shipped 0.01, 5% agreement. |
 | `dist_vary` | 0.1 | The throttle transient's gain: metres of extra distance per unit of the gap between speed and its own lagged copy. See "The distance law". |
 | `dist_min` / `dist_max` | 15.7 / 25.0 | The bounds the speed-driven distance is held inside for a forward-facing camera, so `dist_min` is also the pose the view rests at. See "The distance law". |
 | `dist_catch_up` | 1.0 | The rate, per frame-second, at which the lagged speed copy `dist_vary` works against eases toward the real one, so also the throttle transient's relaxation rate. |
@@ -66,7 +66,7 @@ two-turret aircraft — the largest.
 | `look_catch_up` | 3.0 | Rate at which the aim eases, likewise. |
 | `thirdp_height` | 0.138 | Third-person eye height. Units unknown (not metres at this magnitude). |
 | `thirdp_pitch` | 0.29 | Third-person pitch, in **degrees**: the reader multiplies it by π/180 on the way into the block, and the placement adds the result to the camera's smoothed elevation. 0.29° is a hair of tilt, not the 16.6° that reading the file's number as radians would suggest. |
-| `back_dist_min` / `_max` | 15.5 / 55.0 | The look-behind view's distance bounds. Ships with no base-distance sibling, so the engine reads it as bounds on the shared chase radius: the min bites for the smallest airframes (a Kestrel's 15.0 m dynamic radius is lifted to 15.5), the max never in practice. A reading from the data's shape, not a capture-verified decode — no look-behind footage exists. |
+| `back_dist_min` / `_max` | 15.5 / 55.0 | The look-behind view's distance bounds. Ships with no base-distance sibling, so the engine reads it as bounds on the shared chase radius: the min bites for the smallest airframes (a Kestrel's 15.0 m dynamic radius is lifted to 15.5), the max never in practice. A reading from the data's shape, not a capture-verified decode, no look-behind footage exists. |
 | `death_interval` | 2.0 | Seconds of velocity projection in the death-camera placement: `speed · death_interval` becomes the third local offset component. It is not a re-frame timer. |
 | `death_z` / `death_x` | 0 / 80 | Longitudinal addition / radius of the random local-plane offset used for the death camera. |
 | `death_alt` / `death_min_alt` | 5 / 15.1 | World-Y addition / absolute world-Y floor applied after the local death-camera offset is transformed through the aircraft basis. |
@@ -175,7 +175,7 @@ bounds pair, then the pilot's zoom added outward on top. What that settles about
   term is `dist_vary·(V − V̄)`, with `V̄` a lagged copy of speed eased at `dist_catch_up` on the
   engine's per-frame dt, which is wall time (`0059c0c0`, a `GetTickCount()` delta). Under steady
   acceleration that settles at `dist_vary/dist_catch_up`
-  metres of excess per m/s², i.e. the shipped 0.1, against CAP-21's measured **0.105** — 5%
+  metres of excess per m/s², i.e. the shipped 0.1, against CAP-21's measured **0.105**, 5%
   agreement. The clip's raw relaxation figure, **0.90 per wall-second**, is within 10% of the
   shipped `dist_catch_up` 1.0 in the same clock.
 - **`pos_catch_up` 2.0 and `look_catch_up` 3.0** are the position and aim easing rates in the same
@@ -203,14 +203,14 @@ clips (`CAP-21`) are corroboration, not the source, and they agree to 5% and 10%
 |---|---|---|
 | Relaxation rate | `dist_catch_up` = **1.0 /s** (τ = 1.0 s) | **0.90 /wall-s** (τ = 1.11 wall-s) |
 | Steady-state excess | `dist_vary`/`dist_catch_up` = **0.1 m per m/s²** | **0.105 m per m/s²**, residual-vs-`dV/dt` correlation **−0.79 to −0.85** in all four takes |
-| Peak excursion | — | **≈ +15 % of the radius** on a full-throttle slam, **≈ −7 %** on a full cut, which is the part the eye actually sees |
+| Peak excursion | - | **≈ +15 % of the radius** on a full-throttle slam, **≈ −7 %** on a full cut, which is the part the eye actually sees |
 
 ⚠ **`dist_catch_up` is a REAL-second rate, and `k = 1.390` does not belong on it.** The engine eases
 the lagged speed on `DAT_009ad744`, which `0059c0c0` builds from a `GetTickCount()` delta in
 seconds, so the rate is per wall second and the clips' raw 0.90 is directly comparable to it. The
-sim-converted 0.65 the engine used to carry compared the wrong pair of numbers; verification
-`DET-11`'s conversion applies to a duration read off a world that runs fast, not to an easing rate
-the engine itself denominates in wall time. CSVM's own sim clock advances by the wall frame delta
+sim-converted 0.65 that `k` produces compares the wrong pair of numbers: verification `DET-11`'s
+conversion applies to a duration read off a world that runs fast, not to an easing rate the engine
+itself denominates in wall time. CSVM's own sim clock advances by the wall frame delta
 in realtime mode and replays that same axis under `--det`, so the authored 1.0 goes in unconverted.
 
 The radius still advances once per SIM step and never per render frame, so the lag sees one cadence
@@ -225,20 +225,20 @@ direction factor, which the look-behind arm hard-codes to `−1`, so a slam push
 `CSVM/src/Flight/CamParams.cs` parses the whole file and exposes every field;
 `CSVM/src/Flight/CameraController.cs` applies:
 
-- `dist` + `dist_factor` — the dynamic chase radius (shared by the numpad fixed views, so both
+- `dist` + `dist_factor`, the dynamic chase radius (shared by the numpad fixed views, so both
   cameras move together, dynamics included).
-- `dist_vary` + `dist_catch_up` — the throttle transient on top of that radius (`DistTransient`),
+- `dist_vary` + `dist_catch_up`, the throttle transient on top of that radius (`DistTransient`),
   both per real second.
-- `dist_min` / `dist_max` — the bounds that radius is held inside for every forward-facing pose,
+- `dist_min` / `dist_max`, the bounds that radius is held inside for every forward-facing pose,
   and so the pose the view rests at (`ExternalRadius`).
-- `crash_horiz` / `crash_y` — the crash camera's hard-cut pose (`CrashView`).
-- `back_dist_min` / `back_dist_max` — the look-behind view's distance bounds (`BackView`,
+- `crash_horiz` / `crash_y`, the crash camera's hard-cut pose (`CrashView`).
+- `back_dist_min` / `back_dist_max`, the look-behind view's distance bounds (`BackView`,
   numpad 0 / `--view=back`), which take no zoom.
-- `crash_chord_y` / `crash_elev` — the shared terrain clearance
+- `crash_chord_y` / `crash_elev`, the shared terrain clearance
   (`StaticCameras.LiftClearOfWorld`), taken by the crash cut, the death camera and the flyby.
-- every `death_*` field — the death camera (`StaticCameras.StepDeath`), entered when the player's
+- every `death_*` field, the death camera (`StaticCameras.StepDeath`), entered when the player's
   own aircraft is destroyed and held while the wreck falls.
-- every `flyby_*` field — the flyby (`StaticCameras.StepFlyby`), entered on F7 or `--view=flyby`.
+- every `flyby_*` field, the flyby (`StaticCameras.StepFlyby`), entered on F7 or `--view=flyby`.
 
 The engine suites `death-camera` and `flyby-camera` fly both on the empty stage and read the spot
 each one chose. What no instrument settles is PRESENTATION: whether the original's own death shot

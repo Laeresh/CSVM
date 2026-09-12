@@ -143,7 +143,7 @@ public class ZzCadenceSweep
 
     // Least-squares fit of cubic + A·sin(2πf·t) + B·cos(2πf·t) over the whole window, all
     // six coefficients solved together; returns sqrt(A² + B²). Fitting the trend and the sinusoid
-    // simultaneously is the point — removing the trend first has real gain at f and biases the
+    // simultaneously is the point, removing the trend first has real gain at f and biases the
     // amplitude, which is the error that produces a wrong figure.
     private static double FitSinusoid(IReadOnlyList<double> t, IReadOnlyList<double> y, double f)
     {

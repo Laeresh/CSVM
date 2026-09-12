@@ -23,7 +23,7 @@ The 42 entries divide 16 / 26, and the discriminator is `CREATE_STANDALONE`:
 
 ⚠ **The split is also exactly the awake/dormant split.** Every carried turret ships awake and every
 dormant turret is a world emplacement. Aircraft and zeppelin turrets therefore need no
-`WAKEUP_TURRETS` and no activation path at all — they come up with their host. Only the world AA
+`WAKEUP_TURRETS` and no activation path at all, they come up with their host. Only the world AA
 depends on mission scripting.
 
 The world pass walks every `TURRET` entry and **skips those whose `CREATE_STANDALONE` is present
@@ -38,24 +38,24 @@ sets and nothing is in neither.
 
 ⚠ **An entry with no `TITLE` at all matches the by-`TITLE` lookup unconditionally.** The name
 comparison is only reached when the key is present; an entry without one short-circuits into "build
-this". No shipped entry omits `TITLE`, so this never fires in retail — but a reader that reorders or
+this". No shipped entry omits `TITLE`, so this never fires in retail, but a reader that reorders or
 filters entries must not rely on the lookup being total.
 
 ### The 16 carried entries, and the `_G1`/`_G3` suffix
 
 The carried titles run `MSG_TUR_{AC,BRIGAND,FRONT,REAR}_{G1,G3}` and a `P`-prefixed mirror
-(`MSG_TUR_{PAC,PBRIGAND,PFRONT,PREAR}_{G1,G3}`) — 4 mount positions × 2 suffixes × 2 sets. The
+(`MSG_TUR_{PAC,PBRIGAND,PFRONT,PREAR}_{G1,G3}`), 4 mount positions × 2 suffixes × 2 sets. The
 `P`-prefixed eight are the **player airframes** (`pavenger`, `pbalmoral`, `pbrigand`, `pfirebrand`,
-`pkestrel` — [loadouts.md](loadouts.md)); the unprefixed eight are their AI counterparts. So the
+`pkestrel`, [loadouts.md](loadouts.md)); the unprefixed eight are their AI counterparts. So the
 player's own turret and an enemy's are the same system with different tuning rows.
 
 ⚠ **`_G1` and `_G3` are per-viewpoint rig selectors, not difficulty tiers.** Measured across all
-eight pairs, a `_G1` entry and its `_G3` twin differ in **exactly two keys — `HEALTHY_NODE` and
-`PARTS`** — and in nothing else. Every behavioural field (`INACCURACY`, `FIRE_RATE`,
+eight pairs, a `_G1` entry and its `_G3` twin differ in **exactly two keys, `HEALTHY_NODE` and
+`PARTS`**, and in nothing else. Every behavioural field (`INACCURACY`, `FIRE_RATE`,
 `DETECTION_RANGE`, the arcs, the intervals, the weapon) is identical. What the suffix selects is
 named by the host data itself: a vehicle def's `turrets` block ([vehicle.md](vehicle.md)) keys its
 mounts **`firstp`** / **`thirdp`**, and the `firstp` entries name the `_G1` titles while the
-`thirdp` entries name the `_G3` ones — the airframe models carry two turret rigs (e.g.
+`thirdp` entries name the `_G3` ones, the airframe models carry two turret rigs (e.g.
 `kestrel_turret2` with `hturret2`/`hgun2`/`hfirepoint2` beside `kestrel_turret1` with
 `hturret`/`hgun`/`hfirepoint`), one drawn in the cockpit view and one externally. The AI and
 remote-player models carry only the `thirdp` rig, which is why only the player defs reference a
@@ -72,18 +72,18 @@ The by-`TITLE` lookup's caller is the vehicle def's `turrets` block:
 ```
 
 `title` is the `ai.zrd` row; `node` is the turret-rig subtree on the airframe model the row's
-`PARTS` names resolve **inside** — the same part names (`hturret`, `hgun`, …) repeat on the other
+`PARTS` names resolve **inside**, the same part names (`hturret`, `hgun`, …) repeat on the other
 viewpoint's rig and on every other plane of the type, so the lookup must be scoped to the mount's
 subtree, never global. 16 defs carry the block: the five player turret airframes (both rigs), their
 six AI variants and five `r*` remote-player variants (`thirdp` only).
 
-⚠ **One shipped model node name carries a trailing space** — the Brigand's first-person yaw ring is
+⚠ **One shipped model node name carries a trailing space**, the Brigand's first-person yaw ring is
 literally `"brigturret2 "` in `planes.zbd`, where `ai.zrd` names `brigturret2`. A reader that
 matches names exactly silently loses that rig; trim before comparing.
 
 `NODES` entries are **name patterns, not single names** (`["aagun**"]`, `["thug*"]`), resolved
 against the scene graph by the shared wildcard rule ([README.md](README.md#shared-conventions-zrdr-readers)).
-One entry therefore instantiates **as many turrets as there are matching nodes** — the count of
+One entry therefore instantiates **as many turrets as there are matching nodes**, the count of
 emplacements in a mission is a property of the world model, not of `ai.zrd`.
 
 ## Field table
@@ -93,14 +93,14 @@ times are seconds; distances metres.
 
 | Key | Shipped | Meaning |
 |---|---|---|
-| `TITLE` | 42 | `MSG_TUR_*` string key — also the lookup name for carried turrets |
+| `TITLE` | 42 | `MSG_TUR_*` string key, also the lookup name for carried turrets |
 | `ACTIVATED` | 42 | initial awake state; **22 entries ship `0`** (see below) |
 | `PARTS` | 42 | `[yawNode, pitchNode, firepoint(s)]` or `[pitchNode, firepoint(s)]` |
 | `WEAPON` | 42 | sub-block: `NAME`, `AMMO`, `DETECTION_RANGE`, `FIRE_RATE`, `FIRE_LIMITS` |
 | `INACCURACY` | 42 | half-angle of the shot-scatter cone, degrees |
-| `ATTACK_INTERVAL` | 42 | scalar or `[min,max]` — how long a firing spell lasts |
-| `BORED_INTERVAL` | 42 | scalar or `[min,max]` — how long the pause between spells lasts |
-| `PITCH` | 37 (+1 stray) | `[min,max]` elevation arc — see the mis-nesting note below |
+| `ATTACK_INTERVAL` | 42 | scalar or `[min,max]`, how long a firing spell lasts |
+| `BORED_INTERVAL` | 42 | scalar or `[min,max]`, how long the pause between spells lasts |
+| `PITCH` | 37 (+1 stray) | `[min,max]` elevation arc, see the mis-nesting note below |
 | `SOUNDS` | 37 | sub-block: `ON`, `START`, `STOP`, `CANNON`; the cannon sound has a refreshed 0.5 s playback lease |
 | `YAW` | 36 | `[min,max]` traverse arc |
 | `NODES` | 26 | standalone placement patterns |
@@ -109,7 +109,7 @@ times are seconds; distances metres.
 | `CREATE_STANDALONE` | 16 | always `0`; see above |
 | `HEALTHY_NODE` | 16 | the host node whose destruction kills the turret; defaults to `healthy` |
 | `DEACTIVATE` | **0** | a second node whose destruction *disables* the turret |
-| `EFFECT` | **0** | `[node, duration]` — an effect node shown while firing |
+| `EFFECT` | **0** | `[node, duration]`, an effect node shown while firing |
 | `FIRE_LIMITS` | **0** | `[burst, cooldown]` duty cycle on the gun itself |
 | `STICKINESS` | **0** | an angle, degrees: this turret's own gun-aim-assist cone, overriding the firing weapon's. See [`org/aim-assist.md`](../org/aim-assist.md); a value not greater than 0 is stored as "no override" |
 | `SHOOT_UP_ONLY` | **0** | reject targets below the turret's own altitude |
@@ -117,7 +117,7 @@ times are seconds; distances metres.
 | `HELP_LABEL` | **0** | a string-table id, localised at load |
 
 **Eight of the 22 keys are accepted but never authored.** They are listed because the engine
-parses them and a faithful reader should not reject them — not because anything reads them in
+parses them and a faithful reader should not reject them, not because anything reads them in
 retail. A remake needs the fourteen that ship.
 
 ### Teams
@@ -125,19 +125,19 @@ retail. A remake needs the fourteen that ship.
 The turret's team feeds the shared target-picker's gate. The engine's team space (the zeppelin
 loader's own name mapping) is **0 = neutral, 1 = ally (the player's side), 2 and up = enemy
 teams**, and the turret loader's default for an **absent `TEAM` key is the first enemy team,
-id 2** — which is why the 22 no-TEAM world emplacements all engage the player. Every authored
+id 2**, which is why the 22 no-TEAM world emplacements all engage the player. Every authored
 value install-wide is `1`: the 16 carried entries (whose team the host overrides anyway) and the
-four `piratezep` entries — the player's own zeppelin's defensive rings are allied on purpose,
+four `piratezep` entries, the player's own zeppelin's defensive rings are allied on purpose,
 three of them also the only standalone entries shipped awake. The retail data establishes
 loader's TEAM arm (an absent key takes the enemy-from-index constructor at index 0; a present
 integer is stored raw) and the zeppelin parser's `enemy`/`ally`/`neutral` string mapping.
 
 ### `HEALTH` is authored but unread
 
-⚠ **Neither turret loader reads the `HEALTH` key** — the world placement pass and the by-`TITLE`
+⚠ **Neither turret loader reads the `HEALTH` key**, the world placement pass and the by-`TITLE`
 carried pass parse the same 20-key entry routine, and `HEALTH` is not among its lookups
 (no `HEALTH` string exists in the turret module's key cluster). A
-standalone emplacement's real hit points are its **own node's gamez destroy definition** —
+standalone emplacement's real hit points are its **own node's gamez destroy definition**,
 `aagun32` authors `HEALTH 8.0` in `ai.zrd` while its `destroy_aagun32` anim def carries
 `health: 30`, and the 30 is what kills it. The turret dies through gate 1 above: the destroy
 sequence's healthy→destroyed swap deactivates the `HEALTHY_NODE` (default `healthy`), and the
@@ -176,7 +176,7 @@ same model and answer to different routines, so neither reading tells you anythi
 
 ⚠ **`PITCH` is authored at top level on 37 entries, not the raw count of 38**: the train turret
 (`MSG_TUR_TRAIN`) nests its one `PITCH [20,80]` **inside its `WEAPON` block**, where the turret
-parser does not read it — that turret ships with no elevation arc at all. A census that greps the
+parser does not read it, that turret ships with no elevation arc at all. A census that greps the
 key counts 38 and hides the stray.
 
 ### `PARTS` is a kinematic chain, not a name list
@@ -190,26 +190,26 @@ The list length decides the rig:
 
 The last element is either a single firepoint name or a **list** of them
 (`["brigturret", "hgun", ["hfirepoint", "hfirepoint1"]]`, 4 of 42 entries). Multiple firepoints are
-cycled **round-robin, one per shot** — the muzzle advances by one index each time the turret fires
+cycled **round-robin, one per shot**, the muzzle advances by one index each time the turret fires
 and wraps at the end. They are not fired together.
 
 ### The arcs, and why `[0,0]` means *free*
 
 `PITCH` and `YAW` are `[min,max]` pairs in degrees. The engine clamps **only when `min != max`**:
 
-- **Pitch** — a plain clamp to `[min,max]`.
-- **Yaw** — a *wrap-aware* clamp. The arc is a directed interval on the circle, so
+- **Pitch**, a plain clamp to `[min,max]`.
+- **Yaw**, a *wrap-aware* clamp. The arc is a directed interval on the circle, so
   `YAW [105, 255]` is the 150° arc running from 105° to 255°, and `YAW [-155, -5]` is a different
   arc, not the same one renamed. A target outside the arc is not clamped by shortest path: the
   engine tries the ±2π alias and, if that is still outside, snaps to whichever **end stop is
   angularly nearer**.
 
-⚠ **`YAW [0, 0]` does not lock the turret forward — it removes the traverse limit entirely.** One
+⚠ **`YAW [0, 0]` does not lock the turret forward, it removes the traverse limit entirely.** One
 shipped entry authors it, and because the clamp is gated on `min != max` the raw solved yaw passes
 through untouched. The same holds for an absent key (both limits default to zero). Reading `[0,0]`
 as "fixed" points that turret permanently down its rest bearing and it will never fire.
 
-At load the turret is posed at the **centre of its arc** — `min + (max-min)/2` on each axis — and an
+At load the turret is posed at the **centre of its arc**, `min + (max-min)/2` on each axis, and an
 axis whose limits are equal is left unrotated.
 
 ## Runtime behavior
@@ -222,7 +222,7 @@ Three gates, in order:
    under a site the mission's `.gw` switched off (`NodeSetActive off b_turret1`, C3/M03) is out
    of the world with its subtree, so the gate reads the node's visibility in the tree, never its
    own flag alone; CSVM's `TurretController.Alive` does the same (`mission-off-turrets` suite).
-2. The **`DEACTIVATE`** node, if the entry names one, must *also* be alive — destroying it
+2. The **`DEACTIVATE`** node, if the entry names one, must *also* be alive, destroying it
    disables the turret without destroying it. (Unauthored in retail; the mechanism exists.)
 3. **`ACTIVATED`** must be set. **22 entries ship `ACTIVATED 0`** and are inert until something
    wakes them: `WAKEUP_TURRETS` and `WAKEUP_ZEP_TURRETS` ([ai-nets.md](ai-nets.md) lists
@@ -248,10 +248,10 @@ flag on every turret it finds standing there, so one call arms (or stows) every 
 ([instant-action.md](instant-action.md#the-turret-arm-is-what-arms-the-instant-action-zeppelin)).
 Since the four `multiplayer1zep`/`multiplayer2zep` entries all ship dormant and Instant Action runs
 no objectives script, that builder call is the only reason the zeppelin you attack shoots back.
-The builder's own subtree write runs BEFORE a mission-script wake — the order the binary has — so
+The builder's own subtree write runs BEFORE a mission-script wake, the order the binary has, so
 a stand-in for the mission-script layer applied afterward still wins on the same turrets.
 
-Separately, **both loaders bail out entirely if a global world-state flag is clear** — the same
+Separately, **both loaders bail out entirely if a global world-state flag is clear**, the same
 flag that gates the `capacity` read in the generator loader
 ([mission-entities.md](mission-entities/enemy-generators.md#capacity-rule-and-limit)). In retail it must be set, or no
 turret would exist at all; it is noted because the two subsystems share it.
@@ -271,7 +271,7 @@ Where the key is a `[min,max]` pair each window is redrawn uniformly at random f
 where it is a scalar, min and max are the same value. The windows are re-rolled every transition,
 so no two turrets stay in phase.
 
-⚠ **Bored suppresses firing only — it does not suppress tracking.** The aim solution is computed
+⚠ **Bored suppresses firing only, it does not suppress tracking.** The aim solution is computed
 first and the fire flag is cleared afterwards, so a bored turret keeps its gun on the player the
 whole time it is holding fire. This is visible behaviour and worth reproducing: the original's
 emplacements track continuously and shoot in bursts.
@@ -280,7 +280,7 @@ emplacements track continuously and shoot in bursts.
 
 `WEAPON.DETECTION_RANGE` (350–1000 m across the 42) is handed to the engine's shared
 target-picker as the turret's search field, together with the turret's world position, its team,
-and the `SHOOT_UP_ONLY` flag. The picker scores every candidate and takes the minimum — the same
+and the `SHOOT_UP_ONLY` flag. The picker scores every candidate and takes the minimum, the same
 minimise-a-score structure the aircraft AI uses ([ai-rosters.md](ai-rosters.md)).
 
 `SHOOT_UP_ONLY` rejects any candidate whose altitude is below the turret's own. Unauthored in
@@ -342,12 +342,12 @@ splash below. Only the line-of-sight test stopped reading it.
 2. **Clamp** the solved pitch and yaw to the arcs, as above, and rebuild a direction from the
    clamped angles.
 3. **Slew.** The turret's actual barrel direction is moved toward that direction at a bounded rate
-   rather than snapped — the rate constant is `3.0` in the binary, and the resulting direction is
+   rather than snapped, the rate constant is `3.0` in the binary, and the resulting direction is
    renormalised each tick. This is what makes the original's turrets visibly swing.
 4. **Write** the resulting yaw and pitch onto the `PARTS` nodes.
 
 For a turret on a moving host (a zeppelin), the platform's own velocity is differenced from its
-position across the frame and folded into the solution — with a sanity cut that discards the
+position across the frame and folded into the solution, with a sanity cut that discards the
 estimate if it implies a platform speed over about 447 m/s.
 
 ### Firing
@@ -356,8 +356,8 @@ Two conditions gate the shot:
 
 - The barrel must be within **15°** of the solved aim direction (the binary compares against
   `0.965926` = cos 15°). A turret that is still slewing does not fire.
-- If the weapon leads and **no intercept solution exists** — the target is too fast, or outside the
-  projectile's reach — the turret does not fire at all. It does not fall back to a straight shot.
+- If the weapon leads and **no intercept solution exists**, the target is too fast, or outside the
+  projectile's reach, the turret does not fire at all. It does not fall back to a straight shot.
 
 `WEAPON.FIRE_RATE` is the interval between shots, redrawn as `uniform(min, max)` after each one
 (the carried entries author scalars, min = max; most standalone entries author real
@@ -410,12 +410,12 @@ All eight distinct `WEAPON.NAME` values are `BALLISTICS` ids resolving in `weapo
 | `wep_29` | 13 | turret gun | 0.25 / 0.25 | 1000 | 450 |
 | `wep_27` | 6 | AA flak rocket | 10 / 10 | 900 | 850 |
 | `wep_23` | 3 | turret gun (MP) | 1.0 / 1.5 | 1000 | 400 |
-| `wep_30` / `wep_60` / `wep_28` / `wep_06` | 1 each | 30-cal, 60-cal, cannonball, HE rocket | — | — | — |
+| `wep_30` / `wep_60` / `wep_28` / `wep_06` | 1 each | 30-cal, 60-cal, cannonball, HE rocket | - | - | - |
 
 ⚠ `WEAPON.NAME` is a `BALLISTICS` **id**, not a display name. `30slug` is the *inner* `NAME` field
 of a ballistics record and is a different thing.
 
-`WEAPON.AMMO` is only ever `9999` or `12000` — effectively unlimited, but it is real state: it
+`WEAPON.AMMO` is only ever `9999` or `12000`, effectively unlimited, but it is real state: it
 persists across save/restore.
 
 ## Value census
@@ -427,7 +427,7 @@ persists across save/restore.
 
 ## Scope limit
 
-- Turret **airframes** — the five aircraft that carry a turret, and the marker rig that mounts it —
+- Turret **airframes**, the five aircraft that carry a turret, and the marker rig that mounts it,
   are [markers.md](markers.md) and [vehicle.md](vehicle.md). `ai.zrd` supplies the gunner, not the
   mount.
 - Zeppelin **broadside cannons** are a separate system with their own arc and fire logic, in

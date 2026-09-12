@@ -52,7 +52,7 @@ public class MeshLightFieldTests
     [Fact]
     public void EveryAuthoredLightKeepsItsOwnPositionAndColour()
     {
-        // The control: three lights are read, in order, with distinct positions — so the checks
+        // The control: three lights are read, in order, with distinct positions, so the checks
         // above are reading three different records and not one repeated.
         var lights = Load();
         Assert.Equal(3, lights.Count);

@@ -3,7 +3,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The original's STATIC cameras — the crash cut, the death camera and the flyby — as one
+/// <summary>The original's STATIC cameras, the crash cut, the death camera and the flyby, as one
 /// law: a world point chosen once out of <see cref="CamParams"/>, lifted clear of whatever terrain
 /// stands under it, then held while the view re-aims at the aircraft every frame. All three share
 /// the lift, and the two random ones share the placement shape, so neither may grow an offset of
@@ -125,8 +125,8 @@ public sealed class StaticCameras
     public void Arm() => _armed = true;
 
     /// <summary>The death camera, one step: place once if a placement is owed, then report the held
-    /// point. There is no timer and no re-frame — the original chooses one spot for the whole
-    /// hold — so every later step re-aims at a moving wreck from a fixed vantage.</summary>
+    /// point. There is no timer and no re-frame, the original chooses one spot for the whole
+    /// hold, so every later step re-aims at a moving wreck from a fixed vantage.</summary>
     public Vector3 StepDeath(Vector3 planePos, Basis attitude, float speed, IWorldQuery? world,
         Godot.Collections.Array<Rid>? exclude)
     {
@@ -176,7 +176,7 @@ public sealed class StaticCameras
 
     // The shared tail of both placements: the local offset through the aircraft's basis, the
     // authored world-Y addition, the authored absolute floor, then the terrain lift. The order is
-    // the original's and matters — the floor is applied before the probe, so a candidate under the
+    // the original's and matters, the floor is applied before the probe, so a candidate under the
     // floor is lifted to it first and only then measured against the ground.
     private Vector3 Place(Vector3 local, Vector3 planePos, Basis attitude, float altAdd,
         float minAlt, IWorldQuery? world, Godot.Collections.Array<Rid>? exclude)

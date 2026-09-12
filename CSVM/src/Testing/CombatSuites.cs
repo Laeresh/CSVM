@@ -39,7 +39,7 @@ internal static class CombatSuites
         }
 
         // A partial stock fit takes the FILL ORDER's prefix (1,5,2,6,3,7,4,8), not
-        // pylon1..pylonN — Hardpoint.Index must be the true pylon number so the weapon gauge's
+        // pylon1..pylonN, Hardpoint.Index must be the true pylon number so the weapon gauge's
         // belt lights land at the original's physical positions, gaps included.
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -87,7 +87,7 @@ internal static class CombatSuites
     }
 
     // A custom build's own half of the bind, against real geometry: a wing's hardpoint count must
-    // hang that wing's pylons and no others. Only a bound model can show it — a pylon NUMBER
+    // hang that wing's pylons and no others. Only a bound model can show it, a pylon NUMBER
     // proves nothing, since the wings interleave across the centreline (nose -Z, right +X).
     internal static void CustomBuildBind(TestContext ctx, GameZ planesGamez, TextureArchive textures,
         WeaponDefs weapons, StockLoadouts stock)
@@ -118,7 +118,7 @@ internal static class CombatSuites
     }
 
     // The AI half of the same bind: a militia def's authored weapons tuples onto its airframe's rig,
-    // through the same Loadout.Bind. Black Hat's Warhawk is the case worth pinning — eight torpedoes
+    // through the same Loadout.Bind. Black Hat's Warhawk is the case worth pinning, eight torpedoes
     // and a gun off one authored list, told apart by the weapon def's own CANNON flag.
     internal static void AiLoadoutBind(TestContext ctx, GameZ planesGamez, TextureArchive textures,
         WeaponDefs weapons)
@@ -178,7 +178,7 @@ internal static class CombatSuites
                 }
             }
             ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
-            // The whole rig, not just what stock names — so every weapon has a mount of its
+            // The whole rig, not just what stock names, so every weapon has a mount of its
             // own class and a skip means a real gap, not a fallback that did not fire.
             var loadout = Loadout.ForRig(plane, weapons, stock);
             pool = new ProjectilePool(textures, null, null);
@@ -188,11 +188,11 @@ internal static class CombatSuites
             ctx.Same(WeaponDefCount, result.Ok, $"weapons that mounted and fired");
             ctx.Same(0, result.Errors, $"weapons that threw");
             // ForRig seats 4 gun-group slots on every airframe (loadout-forrig proves that across
-            // all 11); the pylon count is per-rig, so only its presence is pinned here — 0 pylons
+            // all 11); the pylon count is per-rig, so only its presence is pinned here, 0 pylons
             // would turn every hardpoint weapon into a skip.
             ctx.Same(RigGunGroups, result.GunMounts, $"gun groups the bench fired from");
             ctx.Check(result.PylonMounts > 0, $"pylons the bench fired from ({result.PylonMounts})");
-            // A skip is a success-looking outcome in the report — a weapon with no mount of its
+            // A skip is a success-looking outcome in the report, a weapon with no mount of its
             // class on this plane never fires, and nothing else would notice.
             ctx.Same(0, result.Skipped, $"weapons with no mount");
         }
@@ -205,8 +205,8 @@ internal static class CombatSuites
     }
 
     // B2's per-muzzle slot state (the forget + catch-up pass), B3's intercept solver and
-    // B4's candidate scan, the first three in isolation — no plane, no pool,
-    // AimAssist is engine-free by design — plus a golden check that the player.json
+    // B4's candidate scan, the first three in isolation, no plane, no pool,
+    // AimAssist is engine-free by design, plus a golden check that the player.json
     // and weapons.json values the assist consumes parse at their documented shipped figures
     // at their shipped figures. The ordnance list is the one
     // case that needs a live pool, since the list IS a filter over the rounds in flight.
@@ -235,7 +235,7 @@ internal static class CombatSuites
 
     // The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
     // convergence given enough time, and an outright snap on a single frame at or past
-    // 1/catchup_rate — the real hitch-behaviour difference docs/org/aim-assist.md flags, not a
+    // 1/catchup_rate, the real hitch-behaviour difference docs/org/aim-assist.md flags, not a
     // rounding detail to smooth away.
     internal static void AimAssistCatchup(TestContext ctx)
     {
@@ -292,7 +292,7 @@ internal static class CombatSuites
     {
         const float forgetInterval = 1.5f; // shipped sticky_bullet_forget_interval
         const float dt = 1f / 60f;
-        var marker = new Vector3(0.5f, 0f, -0.8660254f); // 30° off forward — distinct from "forgotten"
+        var marker = new Vector3(0.5f, 0f, -0.8660254f); // 30° off forward, distinct from "forgotten"
 
         var slot = new GunAimSlot
         {
@@ -346,7 +346,7 @@ internal static class CombatSuites
 
     // Golden check: the keys B2/B4 consume parse off the real player.json and
     // weapons.json at their documented shipped values, not just their compiled-in defaults. The
-    // dist_factor one matters most — it ships at 0.0 where the executable's compiled fallback is
+    // dist_factor one matters most, it ships at 0.0 where the executable's compiled fallback is
     // 2.5e-4, so a reader that quietly failed to find the key would restore a distance term the
     // shipped data deliberately turns off.
     internal static void AimAssistShippedData(TestContext ctx)
@@ -414,7 +414,7 @@ internal static class CombatSuites
         ctx.Check(!hit, $"aim-assist intercept: a target outrunning the round has no solution");
     }
 
-    // The B4 scan fixture's baseline context — see the ScanSpeed/ScanRange/ScanConeDeg constants.
+    // The B4 scan fixture's baseline context, see the ScanSpeed/ScanRange/ScanConeDeg constants.
     internal static AimScan MakeScan(float distFactor = 0f, object? self = null) => new()
     {
         MuzzlePosition = Vector3.Zero,
@@ -436,8 +436,8 @@ internal static class CombatSuites
     }
 
     // B4's rejection gates, each proved able to fail: the same candidate that is accepted
-    // on the baseline is rejected when exactly one thing changes. Covers the engine's order —
-    // self, not live, same team (and either side unaffiliated), out of RANGE, outside the cone —
+    // on the baseline is rejected when exactly one thing changes. Covers the engine's order,
+    // self, not live, same team (and either side unaffiliated), out of RANGE, outside the cone,
     // plus the per-target `+0x50` cone override, which nothing ships but which is ported
     // deliberately (Decision 2), and the turret pass, which exists and iterates nothing until M4
     // puts a list in it.
@@ -504,7 +504,7 @@ internal static class CombatSuites
             $"aim-assist scan: a target advertising a 20° cone (+0x50) is accepted where the weapon's {ScanConeDeg:0}° rejected it");
 
         // The turret pass: nothing in CSVM fills this list until M4, so the check that matters is
-        // that the pass is wired — a turret put in it can win, and no code change is owed.
+        // that the pass is wired, a turret put in it can win, and no code change is owed.
         set.Clear();
         set.AddTurret(deadAhead, Vector3.Zero, enemy, live: true, source: null);
         ctx.Check(AimAssist.Scan(scan, set, out best) && best.Kind == AimTargetKind.Turret,
@@ -514,7 +514,7 @@ internal static class CombatSuites
     // Selection among survivors, on the shipped `dist_factor 0.0`: a distant
     // on-axis target outranks a near off-axis one at any range inside RANGE, because the distance
     // term is deleted outright. The contrast case runs the identical geometry at the executable's
-    // compiled 2.5e-4 default and shows the winner FLIPS — so this is a measurement of the shipped
+    // compiled 2.5e-4 default and shows the winner FLIPS, so this is a measurement of the shipped
     // value, not of the arithmetic being insensitive to it.
     internal static void AimAssistSelection(TestContext ctx)
     {
@@ -533,7 +533,7 @@ internal static class CombatSuites
 
     // The rocket snap, on a live pool: a real proximity-fused round in flight is a
     // candidate, and it outranks the aircraft behind it. The ordnance list is a FILTER over the
-    // rounds in flight, so this is the one B4 case that cannot be proved off-engine — and the gun
+    // rounds in flight, so this is the one B4 case that cannot be proved off-engine, and the gun
     // round fired alongside is the able-to-fail half: it is in the same pool, alive, and must NOT
     // be collected, since it carries no proximity fuse.
     internal static void AimAssistOrdnancePriority(TestContext ctx)
@@ -560,7 +560,7 @@ internal static class CombatSuites
             ctx.Host.AddChild(live);
 
             // The incoming round: on the shooter's nose axis 400 m out, flying straight back at it,
-            // fired by player 1. The aircraft sits 800 m out and 3° off-axis — inside the cone, so
+            // fired by player 1. The aircraft sits 800 m out and 3° off-axis, inside the cone, so
             // it is a genuine survivor the round has to outrank, not a candidate the gates drop.
             var incoming = ScanPoint(400f, 0f);
             live.Spawn(fused, new Transform3D(Basis.LookingAt(Vector3.Back, Vector3.Up), incoming),
@@ -658,7 +658,7 @@ internal static class CombatSuites
     {
         var rng = new RandomNumberGenerator { Seed = 4242 };
         float cone = Mathf.DegToRad(1f);
-        // A plane rolled 30° and yawed 40° — nothing lines up with the world axes.
+        // A plane rolled 30° and yawed 40°, nothing lines up with the world axes.
         var basis = new Basis(Vector3.Up, Mathf.DegToRad(40f)) * new Basis(Vector3.Forward, Mathf.DegToRad(30f));
         var nose = -basis.Z;
         var smoothedLocal = new Vector3(0.25f, 0.1f, -0.96f).Normalized(); // a gun line lagging off-centre
@@ -667,7 +667,7 @@ internal static class CombatSuites
             new GunAimSlot { Active = true, Smoothed = smoothedLocal, Target = AimAssist.LocalForward, LastUpdate = 0.0 },
         };
 
-        // A target 8° off the nose, well inside a 20° cone, stationary — its intercept direction is
+        // A target 8° off the nose, well inside a 20° cone, stationary, its intercept direction is
         // just the displacement direction, so the expected local target is computable by hand.
         var muzzle = new Vector3(0f, 500f, 0f);
         var offAxis = (nose + basis.X * 0.14f).Normalized();
@@ -708,7 +708,7 @@ internal static class CombatSuites
             $"aim-assist fire: with nothing to snap onto the slot's target is seeded with the plane's own forward axis");
     }
 
-    // Loadout.ForRig against all 11 player airframes — 4 gun groups
+    // Loadout.ForRig against all 11 player airframes, 4 gun groups
     // covering every `firepointN` the rig actually carries (the Kestrel's odd 7th), one
     // hardpoint per `pylonN`, no marker bound to two groups, and every synthesized group
     // fireable even where stock marks the slot a turret.
@@ -813,7 +813,7 @@ internal static class CombatSuites
         try
         {
             // A flying plane stand-in: the C1 default spawn's pose (heading well off -Z, 9 km
-            // from the world origin) — the exact conditions that made the bug invisible to every
+            // from the world origin), the exact conditions that made the bug invisible to every
             // earlier -Z-heading check.
             var pose = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(132f)),
                 new Vector3(-7065f, 326f, -5519f));
@@ -1548,7 +1548,7 @@ internal static class CombatSuites
         }
 
         // The Fury worked through: 90/90 summed over the player's four zones against the AI def's
-        // authored 72/72 — the ~20 % the original's enemies were missing.
+        // authored 72/72, the ~20 % the original's enemies were missing.
         var furyAi = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
         var furyPlayer = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
         float summed = 0f;
@@ -1693,7 +1693,7 @@ internal static class CombatSuites
             var first = Fly(spawner1);
             var second = Fly(spawner1);
 
-            // A fresh spawner restarts at ordinal 0, and the draw is keyed by ordinal — so this is
+            // A fresh spawner restarts at ordinal 0, and the draw is keyed by ordinal, so this is
             // the same aircraft as `first`, which is what a --det replay reproduces.
             var spawner2 = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
             var replay = Fly(spawner2);
@@ -1718,7 +1718,7 @@ internal static class CombatSuites
         }
     }
 
-    // A static world plate for the graze runs — layer 1 (the world), placed once at its
+    // A static world plate for the graze runs, layer 1 (the world), placed once at its
     // final pose because a body MOVED after creation is invisible to space queries this frame.
     internal static StaticBody3D Plate(string name, Vector3 size, Vector3 at)
     {
@@ -1765,7 +1765,7 @@ internal static class CombatSuites
 
             // The neighbour: a long body (a zeppelin gasbag/long building mesh, the shape the
             // original bug showed) whose CENTRE (transform origin) sits well past `radius`, while its near
-            // face sits `nearFaceDistance` from the detonation — well inside `radius`.
+            // face sits `nearFaceDistance` from the detonation, well inside `radius`.
             float nearFaceDistance = 2f;
             float halfLen = radius + 20f;
             neighbor = new StaticBody3D { Name = "blast-test-neighbor" };
@@ -1929,7 +1929,7 @@ internal static class CombatSuites
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        // The first gun carrying both damage magnitudes — data-driven, not a hardcoded id.
+        // The first gun carrying both damage magnitudes, data-driven, not a hardcoded id.
         WeaponDef? gun = weapons.All.FirstOrDefault(w =>
             w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
         ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE and HEALTH_DAMAGE exists in the data");
@@ -1997,7 +1997,7 @@ internal static class CombatSuites
                 $"an aircraft body reads as surface id {SurfaceRegistry.Player} (player), the IMPACT row 44 weapons author");
 
             // The kill-attribution seam, scored exactly the way GameSession does in --vs:
-            // each rig's Downed report forwarded into a real (unlimited, untimed) VersusMatch —
+            // each rig's Downed report forwarded into a real (unlimited, untimed) VersusMatch,
             // a killer inside the roster is a kill, anything else a plain death.
             var match = new VersusMatch(2, killTarget: 0, timeLimit: 0f);
             void ScoreDowned(FlightController rig) => rig.Downed += (victim, killer) =>
@@ -2100,7 +2100,7 @@ internal static class CombatSuites
             }
 
             // A bearing straight through a named collider box's own centre (identity attitude:
-            // plane-local == world − pos), from 30 m outside it along the firing axis — so the
+            // plane-local == world − pos), from 30 m outside it along the firing axis, so the
             // wing rounds cross the wing at its real height/chord rather than the fuselage line.
             Transform3D BoxMuzzle(string boxName, bool leftSide, Vector3 fireDir)
             {
@@ -2121,7 +2121,7 @@ internal static class CombatSuites
             }
 
             ExhaustPart("nose", noseMuzzle);
-            // The retirement's own pin: the nose is a `critical` part and it is DEAD — under the
+            // The retirement's own pin: the nose is a `critical` part and it is DEAD, under the
             // old any-critical-part rule this plane would be down. The decoded rule keeps it
             // flying until the whole vehicle's health is gone.
             ctx.Check(!target.Crashed,
@@ -2148,7 +2148,7 @@ internal static class CombatSuites
             ctx.Check(match.KillsOf(0) == 1 && match.DeathsOf(1) == 1,
                 $"rounds into a wreck report no second death kills(P1)={match.KillsOf(0)}");
 
-            // A crash with no round behind it — the terrain/mid-air shape — is a death with a
+            // A crash with no round behind it, the terrain/mid-air shape, is a death with a
             // null killer: a tally for the victim, a kill for nobody.
             target.Respawn();
             target.DebugForceCrash();
@@ -2184,7 +2184,7 @@ internal static class CombatSuites
                 $"an unowned round's kill is a death with no killer deaths(P2)={match.DeathsOf(1)} kills={match.KillsOf(0)}/{match.KillsOf(1)}");
 
             // The VS respawn loop, in sim frames. Default (AutoRespawnAfter null): a crash
-            // waits for R — 4 s of crash-cam sim steps respawn nothing.
+            // waits for R, 4 s of crash-cam sim steps respawn nothing.
             for (int i = 0; i < 240; i++)
                 target.SimStep(1f / 60f);
             ctx.Check(target.Crashed, $"without AutoRespawnAfter a crash waits for R (still down after 4 s)");
@@ -2230,7 +2230,7 @@ internal static class CombatSuites
             ctx.Note($"rocket phases use {rocket.Id} (fuse {fuseRange:0} m, blast {blastRadius:0} m, dmg {rocketDmg:0})");
 
             // The crossing line: level with the target nose's own nearest hull point, a fixed gap
-            // ahead of its front face — the nearest box to any point on it is that front face, so
+            // ahead of its front face, the nearest box to any point on it is that front face, so
             // the detonation distance IS the gap and the struck part maps forward (the nose).
             const float FuseGap = 5f;
             ctx.Check(FuseGap < fuseRange && blastRadius >= 60f,
@@ -2242,7 +2242,7 @@ internal static class CombatSuites
                 Basis.LookingAt(Vector3.Right, Vector3.Up), passPoint + new Vector3(-150f, 0f, 0f));
 
             // A third airframe straight below the pass: inside the blast radius but farther from
-            // the detonation than the fused-on target — the nearer > farther falloff witness.
+            // the detonation than the fused-on target, the nearer > farther falloff witness.
             bystander = BuildRig(2, passPoint + new Vector3(0f, -0.4f * blastRadius, 0f));
 
             void FireRocket(Transform3D muzzle, int shooterId, int steps = 30)
@@ -2272,7 +2272,7 @@ internal static class CombatSuites
             ctx.Check(Pristine(shooter), $"the shooter's own plane took nothing from its own blast");
 
             // --- the same pass fired by nobody: an unowned round excludes no plane, so the
-            // shooter's airframe — 500 m out, far beyond IMPACT_PROXIMITY — is a legal blast
+            // shooter's airframe, 500 m out, far beyond IMPACT_PROXIMITY, is a legal blast
             // candidate and still records nothing: zero outside the radius.
             target.Respawn();
             bystander.Respawn();
@@ -2306,7 +2306,7 @@ internal static class CombatSuites
                 $"a wreck neither fuses a rocket nor soaks its blast");
 
             // --- the launch trap: a rocket spawns INSIDE its shooter's own collision boxes.
-            // Owner exclusion must keep it from fusing on or blasting its own plane at launch —
+            // Owner exclusion must keep it from fusing on or blasting its own plane at launch,
             // and the round must fly on and still fuse on the opponent downrange.
             target.Respawn();
             var aim = (passPoint - shooterPos).Normalized();
@@ -2468,7 +2468,7 @@ internal static class CombatSuites
                 $"two distinct pilot indices share one explicit team, a third sits on another: human={human.Team} wingman={wingman.Team} enemy={enemy.Team}");
 
             // --- targeting: the plumbed scan (CollectAircraft -> AimAssist.Scan) reads Team, not
-            // PlayerIndex — it snaps onto the team-2 enemy and refuses the team-1 wingman.
+            // PlayerIndex, it snaps onto the team-2 enemy and refuses the team-1 wingman.
             var candidates = new AimCandidateSet();
             live.CollectAircraft(candidates);
             var scan = new AimScan

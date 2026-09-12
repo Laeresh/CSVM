@@ -6,7 +6,7 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>Which UV axes of a surface stay inside [0,1] — see
+/// <summary>Which UV axes of a surface stay inside [0,1], see
 /// <see cref="SceneBuilder.UvAxesWithinUnitSquare"/>. A fitting axis never exercises the
 /// sampler wrap, so clamping it is free and removes the wrap's edge-bleed hairline.</summary>
 [Flags]
@@ -26,7 +26,7 @@ public enum UvClampAxes
 /// Polygons carry a draw priority (GameZPolygon.Priority) the original engine uses to
 /// layer coplanar geometry (terrain-transition patches, road/shadow decals, plane
 /// logos over the fuselage, skydome behind everything); non-zero priorities become a
-/// per-surface depth bias — a view-space pull toward the eye — so those layers
+/// per-surface depth bias, a view-space pull toward the eye, so those layers
 /// resolve without z-fighting at any viewing distance.
 /// </summary>
 public sealed class SceneBuilder
@@ -36,7 +36,7 @@ public sealed class SceneBuilder
 
     /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
     /// type id (<see cref="GameZMaterial.SoilId"/>) for its dominant material, by polygon count
-    /// — the same body granularity <see cref="SurfaceMeta"/> already uses, not a per-triangle
+    ///, the same body granularity <see cref="SurfaceMeta"/> already uses, not a per-triangle
     /// value. A different name space from <see cref="SurfaceMeta"/>'s texture-derived class, so
     /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
     public const string SurfaceIdMeta = "csky_surface_id";
@@ -63,7 +63,7 @@ public sealed class SceneBuilder
     // the airfield's apron detail over its base tile, road decals over rail decals. Spending
     // the whole flat index range on that spans 1.22-2.86 priority levels per chapter, which is
     // why a WORLD build ranks by the conflict graph instead (see ConflictRankBias); this is what
-    // a build with no such graph — an aircraft, the --node= viewer — still uses.
+    // a build with no such graph, an aircraft, the --node= viewer, still uses.
     public const float NodeOrderBias = 5e-8f;
 
     // The world's cross-node tie-break: one slot per conflicting layer, not per node
@@ -92,18 +92,18 @@ public sealed class SceneBuilder
     /// <summary>A polygon without it: clutter-eligible ground.</summary>
     public static readonly Color ClearColor = new(0f, 1f, 0f);
 
-    /// <summary>What the clutter itself is painted in that view — the decorations and sprite cards
+    /// <summary>What the clutter itself is painted in that view, the decorations and sprite cards
     /// scattered ONTO the ground, stamped per instance as a full-strength
     /// <see cref="TintParam"/>. Their own polygons are unflagged, so without this a city block
     /// would read as clutter-eligible ground.</summary>
     public static readonly Color ClutterColor = new(0.1f, 0.35f, 1f, 1f);
 
     /// <summary>Surfaces given a CLAMPed sampler because their UVs never leave the unit square
-    /// (the hairline-seam fix — see <see cref="UvsWithinUnitSquare"/>). Process-wide across every
+    /// (the hairline-seam fix, see <see cref="UvsWithinUnitSquare"/>). Process-wide across every
     /// builder, purely for the load log; it is also what tells a capture which build made it.</summary>
     public static int ClampedSurfaceTotal;
 
-    /// <summary>Surfaces given the shader-side single-axis edge clamp instead — one UV axis
+    /// <summary>Surfaces given the shader-side single-axis edge clamp instead, one UV axis
     /// fits the unit square while the other tiles or scrolls (see
     /// <see cref="UvAxesWithinUnitSquare"/>). Same load-log role as
     /// <see cref="ClampedSurfaceTotal"/>.</summary>
@@ -179,8 +179,8 @@ public sealed class SceneBuilder
     internal float DepthBiasScale = 1f;
 
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
-    /// building. Null — every aircraft, every <c>--node=</c> subtree, any build with no conflict
-    /// graph — leaves the cross-node tie-break on the flat node index, which is what those builds
+    /// building. Null, every aircraft, every <c>--node=</c> subtree, any build with no conflict
+    /// graph, leaves the cross-node tie-break on the flat node index, which is what those builds
     /// have always used and keeps them byte-identical.</summary>
     internal IReadOnlyDictionary<int, int>? ConflictRanks;
 
@@ -208,7 +208,7 @@ void vertex() {
         ? clamp((range_far - dist) * fade_slope, 0.0, 1.0)
         : 1.0 - smoothstep(2400.0, 4000.0, dist);
     // Lit for the first half of each 2x period, dark for the second, off one clock shared by
-    // every light — which is what the original's per-light timers do, since they all start
+    // every light, which is what the original's per-light timers do, since they all start
     // together at load and none of them is ever reseeded.
     float lit = (blink_period > 0.0)
         ? 1.0 - step(0.5, fract(csky_time / (2.0 * blink_period)))
@@ -227,8 +227,8 @@ void fragment() {
     private const float UvEpsilon = 1e-6f;
 
     // Depth-bias fraction per priority level. Polygons are pulled toward the eye by
-    // priority × this fraction of their view distance — same projected position, nearer
-    // depth — replicating the original's coplanar-decal layering (terrain patches,
+    // priority × this fraction of their view distance, same projected position, nearer
+    // depth, replicating the original's coplanar-decal layering (terrain patches,
     // road/shadow decals, plane logos) without z-fighting at any range.
     // TUNE: big enough to beat coplanar interpolation noise at 10 km, small enough that
     // the ±49 extremes (cockpit gauges, skydome) stay well under 1% of view distance.
@@ -242,7 +242,7 @@ void fragment() {
     private const int SurfaceRankCap = 5;
     // The no_clutter draw-order offset (GameZPolygon.NoClutter): where two coplanar layers are
     // painted over each other, the flagged one is measured to be the layer that draws on top. It is
-    // a second layering axis, not a priority value — decode and evidence in docs/formats/gamez.md.
+    // a second layering axis, not a priority value, decode and evidence in docs/formats/gamez.md.
     // ⚠ Keep this at HALF a level, not the original's whole one. Priority 1 is a genuinely authored
     // value, so a full level would tie a flagged face with a real priority-1 overlay, and the two
     // were measured to resolve every C5 overlap identically.
@@ -325,12 +325,12 @@ void fragment() {
     private readonly Dictionary<(int Material, bool Fogged, bool ClampUv), Material> _glowMaterialCache = new();
     // Cylindrical (Y- or X-axis) billboard material. Unlike glow flares it respects the texture's
     // own alpha classification (trees and cables are hard cutouts, fire and flame are soft) and it
-    // dims with the world SUNLIGHT unless the texture is itself a light source — the caller's
+    // dims with the world SUNLIGHT unless the texture is itself a light source, the caller's
     // glowTexture predicate, the same delegate the spherical path uses, so one rule governs every
     // light-vs-scenery billboard in the renderer.
     private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged, bool ClampUv), Material> _cylindricalMaterialCache = new();
     // Every textured material this builder made, paired with the texture name it resolved
-    // from — the registry a live repaint needs (the viewer's livery lab re-runs the paint
+    // from, the registry a live repaint needs (the viewer's livery lab re-runs the paint
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
     // for every slider pixel). Only shader materials carrying an `albedo_tex` are listed.
     private readonly List<(ShaderMaterial Material, string TextureName)> _texturedMaterials = new();
@@ -377,14 +377,14 @@ void fragment() {
     public int ColliderCount { get; private set; }
 
     /// <summary>Mesh instances this builder moved onto a <see cref="ZoneGate"/> layer, indexed by
-    /// gamez <c>zone_id</c> (slots 1…<see cref="ZoneGate.MaxZoneId"/>; slot 0 is always 0 —
+    /// gamez <c>zone_id</c> (slots 1…<see cref="ZoneGate.MaxZoneId"/>; slot 0 is always 0,
     /// <c>zone_id</c> 0 and −1 are ungated). Zero everywhere for a build that passed
     /// <c>zoneGate: false</c>, which is the aircraft, the deck and the dome.
     /// ⚠ Keep this census. A gate that silently stopped stamping and a chapter that authors no
     /// zoned content render identically, and only this count tells them apart.</summary>
     public int[] ZoneGatedMeshes { get; } = new int[ZoneGate.MaxZoneId + 1];
 
-    /// <summary>Models built from an authored <c>lighting: false</c> / <c>fog: false</c> flag —
+    /// <summary>Models built from an authored <c>lighting: false</c> / <c>fog: false</c> flag,
     /// the one-line evidence that a chapter's self-lit and unfogged geometry was actually read
     /// (a night chapter reporting zero means the flags are not reaching the materials).</summary>
     public int UnlitModelCount { get; private set; }
@@ -444,7 +444,7 @@ void fragment() {
     public static BillboardKind? ClassifyBillboard(GameZMesh mesh)
     {
         if (mesh.ModelType == null)
-            return null; // legacy extraction — caller falls back
+            return null; // legacy extraction, caller falls back
         if (mesh.ModelType != "Facade")
             return BillboardKind.None;
         return mesh.FacadeMode switch
@@ -529,7 +529,7 @@ void fragment() {
         return new Shader { Code = code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..] };
     }
 
-    /// <summary>The surface class one texture name names — <c>"water"</c>, <c>"buildings"</c>, or
+    /// <summary>The surface class one texture name names, <c>"water"</c>, <c>"buildings"</c>, or
     /// null for the untagged default. The collision buckets are built from this
     /// (<see cref="CollidersForMesh"/>), and <c>MapEdgeExtender</c>'s <c>--dump-tilegrid</c> census
     /// reports it for every tile candidate it rejected: what the dropped geometry IS, not how big
@@ -545,7 +545,7 @@ void fragment() {
         if (t.StartsWith("water") || t.StartsWith("wtr") || t.StartsWith("srf")
             || t.Contains("wakefront") || t.Contains("watersquirt"))
             return "water";
-        // 'empire'/'chrysler' are the C2/C5 film-set skyscraper walls (empire1, chrysler1/2 —
+        // 'empire'/'chrysler' are the C2/C5 film-set skyscraper walls (empire1, chrysler1/2,
         // the only 3 matching textures install-wide, measured before widening the classifier).
         if (t.Contains("build") || t.StartsWith("hangar") || t.StartsWith("bld")
             || t.Contains("cblock") || t.Contains("warehouse") || t.Contains("roof")
@@ -595,7 +595,7 @@ void fragment() {
     }
 
     /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
-    /// named <c>node_bias</c> — placed world, clutter decorations, map-edge tiles — comes from
+    /// named <c>node_bias</c>, placed world, clutter decorations, map-edge tiles, comes from
     /// here, so the three cannot drift apart.</summary>
     internal float NodeBiasOf(int nodeIndex)
     {
@@ -679,7 +679,7 @@ void fragment() {
     }
 
     // Total triangulated area of one polygon, triangulated exactly as EmitPolygon does
-    // (strip order for tri_strips, a fan otherwise) — a strip's raw index list is not an
+    // (strip order for tri_strips, a fan otherwise), a strip's raw index list is not an
     // outline, so fanning it would measure the wrong shape.
     private static float PolygonArea(GameZMesh mesh, GameZPolygon poly)
     {
@@ -707,7 +707,7 @@ void fragment() {
     }
 
     // Same triangulation as EmitPolygon/PolygonArea (strip order for tri_strips, a fan
-    // otherwise), but positions only — a collision shape carries no material/UV/normal data.
+    // otherwise), but positions only, a collision shape carries no material/UV/normal data.
     // ⚠ Do not filter polygons here by texture alpha. The original's weapon ray reads no texture
     // at all (docs/org/weaponRay.md), so an alpha-cutout card is solid to it too.
     // `flip` reverses each triangle, which is what a one-sided shape needs (see CollidersForMesh).
@@ -847,7 +847,7 @@ void fragment() {
                 n3d.SetMeta(MissionStructureGasbagMeta, true);
             }
         }
-        // Root transform is the node's OWN Local, not its world transform — a caller slicing a
+        // Root transform is the node's OWN Local, not its world transform, a caller slicing a
         // nested node must overwrite it with GameZ.WorldTransformOf(node) or it lands at the
         // parent's origin.
         if (node.Local is { } local)
@@ -860,7 +860,7 @@ void fragment() {
             n3d.Visible = node.Active;
 
         // The node's own zone_id layer, resolved once for both mesh instances below. 0 =
-        // ungated (zone_id −1/0, or the gate switched off for this build) — leave the instance on
+        // ungated (zone_id −1/0, or the gate switched off for this build), leave the instance on
         // the default layer, which every cull mask always keeps.
         uint zoneLayer = zoneGate ? ZoneGate.LayerFor(node.ZoneId) : 0u;
         if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
@@ -921,7 +921,7 @@ void fragment() {
     }
 
     // One static trimesh body PER SURFACE CLASS actually present in the mesh, not one body for
-    // the whole mesh — see CollidersForMesh. The parent node carries the world transform, so
+    // the whole mesh, see CollidersForMesh. The parent node carries the world transform, so
     // each collider lines up with the rendered surface it was carved from. Shapes are cached per
     // mesh index and shared across instances (shapes are resources).
     private void AttachCollision(Node3D parent, int meshIndex)
@@ -943,7 +943,7 @@ void fragment() {
             // common case and stamps nothing.
             if (surface != null)
                 body.SetMeta(SurfaceMeta, surface);
-            // Every body carries the original's numeric surface id too — a different name space
+            // Every body carries the original's numeric surface id too, a different name space
             // from the class string above (see SurfaceIdMeta).
             body.SetMeta(SurfaceIdMeta, surfaceId);
             parent.AddChild(body);
@@ -1027,7 +1027,7 @@ void fragment() {
     }
 
     // Point-sprite lights: camera-facing soft radial glows, additive so they shine over whatever is
-    // behind them. The data drives reach and blink — FadeFar/FadeSlope are the original's own
+    // behind them. The data drives reach and blink, FadeFar/FadeSlope are the original's own
     // distance fade, BlinkPeriod its beacon flash; the sprite's size is this renderer's, since the
     // original draws one screen pixel and has no size to copy. One POINTS surface per
     // (fade, blink) group per mesh. The camera-anchored skydome's stars sit past any data range,
@@ -1094,7 +1094,7 @@ void fragment() {
         // they would swing around the node as the camera turns.
         bool glowSprite = IsGlowSpriteMesh(mesh);
         // ⚠ Never recentre a single-axis facade. Its shader spins the quad about the model origin,
-        // so an offset quad ORBITS it — which is how the lighthouse beam sweeps, the street lamps
+        // so an offset quad ORBITS it, which is how the lighthouse beam sweeps, the street lamps
         // hang off their poles, and a muzzle flash sits at the barrel tip, not the gun's pivot.
         var cylAxis = GetCylindricalAxis(mesh);
         var offset = Vector3.Zero;
@@ -1147,7 +1147,7 @@ void fragment() {
 
         // ⚠ Overlay passes must become groups AFTER every base group, so a mesh's whole base skin is
         // committed before anything drawn on top of it. Their ordering over their own base is
-        // OverlayPassBias, never rank — see the constant.
+        // OverlayPassBias, never rank, see the constant.
         for (int pass = 1; pass <= overlayLevels; pass++)
         {
             foreach (var poly in mesh.Polygons)
@@ -1238,7 +1238,7 @@ void fragment() {
     }
 
     // The UV scroll rate for one model: the caller's per-model override if it has one, else the
-    // model's own texture_scroll field. The two are the same setting read at two different times —
+    // model's own texture_scroll field. The two are the same setting read at two different times,
     // the engine's Object3DSetScroll writes this field, so a chapter's tex_fx.gw rates are already
     // baked into the shipped gamez while the per-mission ones can only be applied at load.
     private Vector2 EffectiveScroll(GameZMesh mesh, int meshIndex) =>
@@ -1272,7 +1272,7 @@ void fragment() {
         return false;
     }
 
-    // A glow flare SPRITE — the lamp and beacon light quads: billboards fully toward the camera,
+    // A glow flare SPRITE, the lamp and beacon light quads: billboards fully toward the camera,
     // never night-dimmed, since a light source is not lit scenery. That is ClassifyBillboard's
     // Spherical case minus the cloud sprites, which are routed through _billboardTexture instead.
     // ⚠ The legacy branch (one polygon plus a "flare"-ish texture name) is not the real rule. It
@@ -1410,7 +1410,7 @@ void fragment() {
                     ? new Color(0.5f, 0.5f, 0.5f)
                     : Colors.Magenta);
 
-            // Soft-alpha textures (shadow decals, clouds, prop blur, waterfalls, smoke — detected
+            // Soft-alpha textures (shadow decals, clouds, prop blur, waterfalls, smoke, detected
             // from the pixels) and the caller's explicit blend list alpha-blend; every other alpha
             // texture scissors to a hard cutout, which is right for fences, trees and railings.
             bool blend = _textures.LastHadAlpha
@@ -1473,8 +1473,8 @@ void fragment() {
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
             bias += NoClutterLayerBias;
-        // An overlay pass shares its base's priority and no_clutter flag by construction — it is
-        // the same polygon — so this term is the whole of what puts it in front (OverlayPassBias).
+        // An overlay pass shares its base's priority and no_clutter flag by construction, it is
+        // the same polygon, so this term is the whole of what puts it in front (OverlayPassBias).
         bias += pass * OverlayPassBias;
         bias = Mathf.Clamp(bias * DepthBiasScale, -MaxScaledBias, MaxScaledBias);
         mat.SetShaderParameter("depth_bias", bias);
@@ -1530,7 +1530,7 @@ void fragment() {
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
         // The shared ordered instance-uniform block; this shader always carries instance uniforms,
-        // so it always takes the full preamble — see the contract in the .gdshaderinc. `csky_fog_on`
+        // so it always takes the full preamble, see the contract in the .gdshaderinc. `csky_fog_on`
         // is a per-instance runtime fog opt-out that nothing sets to 0 today.
         sb.AppendLine(InstanceUniformsInclude);
         // Distance fog + the per-mission SUNLIGHT dimming.
@@ -1543,7 +1543,7 @@ void fragment() {
             sb.AppendLine("varying flat float v_clutter_alpha;");
         }
         if (fullbright)
-            sb.AppendLine(LightsInclude); // LIGHT_STATE spill — fullbright passes only
+            sb.AppendLine(LightsInclude); // LIGHT_STATE spill, fullbright passes only
         if (textured)
         {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -1564,7 +1564,7 @@ void fragment() {
             sb.AppendLine("uniform vec2 scroll_rate = vec2(0.0);");
         }
         // Single-axis edge clamp (see UvAxesWithinUnitSquare): the sampler stays repeat_enable
-        // for the tiling axis, so the fitting axis is clamped on the coordinate instead —
+        // for the tiling axis, so the fitting axis is clamped on the coordinate instead,
         // inset by half a texel so no bilinear tap can cross the edge and wrap.
         if (textured && edgeClamp != UvClampAxes.None)
             sb.AppendLine("uniform vec2 uv_edge_inset = vec2(0.0);");
@@ -1590,7 +1590,7 @@ void vertex() {{
 {clutterVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
-    // depth nudged nearer by bias × distance — a scale-invariant polygon offset.
+    // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
     VERTEX *= 1.0 - (depth_bias + node_bias);
 }}
 
@@ -1653,7 +1653,7 @@ void fragment() {{");
         if (fogged || fullbright)
             sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
         // Point lights go in before the fog mix and are not scaled by csky_world_light: a lamp does
-        // not dim at night. ⚠ Keep the braces — unguarded this lands in the SHADED shader too,
+        // not dim at night. ⚠ Keep the braces, unguarded this lands in the SHADED shader too,
         // where light_n does not exist and every aircraft falls back to Godot's default material.
         if (fullbright)
         {
@@ -1690,7 +1690,7 @@ void fragment() {{");
         return shader;
     }
 
-    // A camera-facing billboard material for the cloud sprites (cloud1/cloud2 — flat 2D cards
+    // A camera-facing billboard material for the cloud sprites (cloud1/cloud2, flat 2D cards
     // in the source). Unlike the bias shader it does no depth bias (free-floating sprites have
     // nothing coplanar to fight) but carries the identical cylindrical distance-fog term, so
     // distant sprites fade into the fog wall in step with the terrain they float over. blend /
@@ -1724,16 +1724,16 @@ void fragment() {{");
             sb.Append(", blend_mix, depth_draw_never");
         sb.AppendLine(";");
         // A sprite whose UVs never leave the unit square never needs the sampler to wrap, and
-        // wrapping it bleeds the texture's opposite edge in at the UV border — the same
+        // wrapping it bleeds the texture's opposite edge in at the UV border, the same
         // hairline artifact UvsWithinUnitSquare exists for.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
         // Same global distance-fog params as the world shader. Clouds always fog, so this shader
-        // never reads csky_fog_on — and an OPAQUE cloud sprite therefore declares no instance
+        // never reads csky_fog_on, and an OPAQUE cloud sprite therefore declares no instance
         // uniform at all, deliberately keeping it off the instance-uniform buffer.
         sb.AppendLine(AtmosphereInclude);
         // The alpha-writing variants already carry csky_opacity, i.e. they are on that buffer
-        // regardless — so they take the shared ordered preamble and agree on indices with every
+        // regardless, so they take the shared ordered preamble and agree on indices with every
         // other shader, at no additional cost.
         if (blend || scissor)
             sb.AppendLine(InstanceUniformsInclude);
@@ -1741,7 +1741,7 @@ void fragment() {{");
         sb.AppendLine(@"
 void vertex() {
     // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
-    // hand — the bias shader can't billboard, like FogVolumeClutter). The mesh was recentered on its
+    // hand, the bias shader can't billboard, like FogVolumeClutter). The mesh was recentered on its
     // quad centre and the instance placed there, so the quad pivots at its centre.
     MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
         INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
@@ -1759,7 +1759,7 @@ void fragment() {
             sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
         // Glow flares are light sources: no SUNLIGHT night dimming (a lamp doesn't get
-        // darker at night — it's what lights the scene), and neither is a model the artists
+        // darker at night, it's what lights the scene), and neither is a model the artists
         // authored `lighting: false`. Clouds ride the world brightness.
         string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
         if (glow && GraphicsMode.Enhanced)
@@ -1800,7 +1800,7 @@ void fragment() {
     private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
         bool clampUv)
     {
-        lit |= glow; // a glow variant already ignores csky_world_light — same key
+        lit |= glow; // a glow variant already ignores csky_world_light, same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
             | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0) | (GraphicsMode.Enhanced ? 128 : 0);
         if (CylindricalShaders.TryGetValue(key, out var cached))
@@ -1812,7 +1812,7 @@ void fragment() {
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
         sb.AppendLine(";");
-        // Clamp when the facade's UVs never leave the unit square — see GetBillboardShader.
+        // Clamp when the facade's UVs never leave the unit square, see GetBillboardShader.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
         // csky_world_light arrives with the atmosphere include and is READ only when !glow
@@ -1820,7 +1820,7 @@ void fragment() {
         // costs nothing, since a global uniform is project-wide rather than per-instance.
         sb.AppendLine(AtmosphereInclude);
         // Only the alpha-writing variants carry an instance uniform at all, so only they take
-        // the preamble — an opaque facade stays off the instance-uniform buffer entirely.
+        // the preamble, an opaque facade stays off the instance-uniform buffer entirely.
         if (blend || scissor)
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude);

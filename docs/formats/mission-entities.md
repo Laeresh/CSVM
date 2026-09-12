@@ -1,4 +1,4 @@
-# Mission entities — `zeppelins.json` and `egen.json`
+# Mission entities, `zeppelins.json` and `egen.json`
 
 Part of the [format documentation](README.md). `zeppelins.json`, in a mission's own zrdr archive
 (`<chapter>/<mission>/zrdr.zbd`), configures the zeppelins the player attacks or escorts.
@@ -9,7 +9,7 @@ The whole-install census contains 58 zeppelin instances across 50 `zeppelins.jso
 `zeppelins.json` uses the standard flat alternating `KEY, [values…]` shape
 ([shared conventions](README.md#shared-conventions-zrdr-readers)); all numbers arrive as floats.
 
-## `zeppelins.json` — one entry per zeppelin instance
+## `zeppelins.json`, one entry per zeppelin instance
 
 The root is a list of instances, each an alternating property list. 15 keys are on all 58
 instances; the rest are conditional.
@@ -23,19 +23,19 @@ instances; the rest are conditional.
 | `max_rate_yaw`, `max_rate_pitch` | °/s | turn-rate limits |
 | `min_pitch` / `max_pitch` | ° | ±30 throughout |
 | `net` | name | the AI "net" (roster/behaviour group) it belongs to |
-| `targets` | node names | who it shoots at once the script engages the cannons — `player`, or another zeppelin (`piratezep`, `dantezep`, …); inert without `COMPLETED_ZEPCANNONS` (see [Broadside firing](#broadside-firing)). ⚠ The 8 IA1 files author `targets, null` — key present, no list — so the "47" key census is 39 name lists + 8 nulls |
+| `targets` | node names | who it shoots at once the script engages the cannons, `player`, or another zeppelin (`piratezep`, `dantezep`, …); inert without `COMPLETED_ZEPCANNONS` (see [Broadside firing](#broadside-firing)). ⚠ The 8 IA1 files author `targets, null`, key present, no list, so the "47" key census is 39 name lists + 8 nulls |
 | `healthy` | `[[zoneNode, "panels"], …]` | the **critical** zones; second field is `"panels"` on all 316 entries |
-| `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine — see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
+| `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine, see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
 | `engines` | node names | the engine nacelles (12 or 14: `leng11`…`reng42`) |
 | `gasbags` | `[[name, hp, [animName]], …]` | per-gasbag hit points (80–400) and its destruction anim, which demolishes that gasbag's whole section ([below](#a-gasbag-section-owns-its-bays-and-its-engines)) |
 | `cannon_fire_delay` / `cannon_fire_range` | s / m | broadside cadence (10/15/20 s) and reach (500–15000 m) |
 | `left_cannons` / `right_cannons` | `[[node, deployAnim, retractAnim], …]` | the broadside guns and the animations that run them out and back in |
 | `cannon_health` | see below | per-cannon damage record (24 of 58 instances) |
-| `cannon_inaccuracy` | ° | on 3 instances: 10.0 on C2B/M04's pair, 6.0 on C4/M05's `blackhatzep`. An absent key scatters nothing — the remake reads it as 0 |
-| `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three. The names mint ids in the one shared team space — `neutral` 0, `ally` 1, `enemy` 2 — and a bare integer is stored raw; the engine then fans that one value across the whole airship ([../org/targeting.md](../org/targeting.md), "Zeppelins carry a record override") |
-| `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on the script's `WAKEUP_ENEMIES`, and hidden until then — C3/M01's `cargozep1` is revealed by the same objective's `WAKE_ANIM fadein_cg1zep`, an opacity 0 → 1 fade), and C1/M04 + C2/M03 author `0` (active). Asserted in `CSVM.Tests/ZeppelinsTests.cs` |
+| `cannon_inaccuracy` | ° | on 3 instances: 10.0 on C2B/M04's pair, 6.0 on C4/M05's `blackhatzep`. An absent key scatters nothing, the remake reads it as 0 |
+| `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three. The names mint ids in the one shared team space, `neutral` 0, `ally` 1, `enemy` 2, and a bare integer is stored raw; the engine then fans that one value across the whole airship ([../org/targeting.md](../org/targeting.md), "Zeppelins carry a record override") |
+| `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on the script's `WAKEUP_ENEMIES`, and hidden until then, C3/M01's `cargozep1` is revealed by the same objective's `WAKE_ANIM fadein_cg1zep`, an opacity 0 → 1 fade), and C1/M04 + C2/M03 author `0` (active). Asserted in `CSVM.Tests/ZeppelinsTests.cs` |
 
-**`cannon_health` entry** —
+**`cannon_health` entry**,
 `[cannonNode, "gunback", "frame", gasbagName, hp, [destroyAnim], [[frac, stageAnim], …]]`.
 Fields 1 and 2 are `"gunback"` and `"frame"` on all 144 entries (sub-nodes of the cannon model);
 field 3 names the **gasbag the cannon is attached to**; `hp` is 200 throughout; then the
@@ -55,14 +55,14 @@ survivors < num_healthy_required
 ```
 
 ⚠ **The design document expresses the same rule as a destroy-count, which is the inverse.** Reading
-it that way gives a zeppelin that will not die — a failure mode that looks like a damage bug rather
+it that way gives a zeppelin that will not die, a failure mode that looks like a damage bug rather
 than an off-by-one, so assert the direction in a test. The design's worked example (four critical
 gasbags, threshold 3) is a *destroy* count; this install ships 5–6 gasbags with a *survivor*
 threshold of 2–5.
 
 **The data corroborates the polarity through the hull-death anim defs.** Each zeppelin ships an
 `ANIMATION_DEFINITION` on its own node gated by an `ACTIVATION_PREREQUISITE` counting the gasbag
-`finish_*` anims with a `MINIMUM_TO_SATISFY` — and that minimum is exactly
+`finish_*` anims with a `MINIMUM_TO_SATISFY`, and that minimum is exactly
 `len(healthy) − num_healthy_required + 1`, the destroyed count at which survivors first drop
 below the threshold (piratezep: 3 of 6 finishes against required 4 of 6; multiplayer1zep: 3 of 5
 against required 3 of 5). The def pops the remaining gasbags and calls the hull's own
@@ -75,7 +75,7 @@ pool is always the record's `gasbags` hp. Cannon defs carry `HEALTH 60` exactly 
 authors no `cannon_health` (the campaign zeppelins), and `HEALTH 0` where it does (the IA1/MP3
 family, hp 200 in the record). Engines/turrets are def-only (`HEALTH 30–40`/`10`, no record
 key). The remake seeds record-first, def where unauthored. ⚠ One shipped gap: C5/M01's
-`piratezep` authors `healthy` (with `gasbag5` listed twice — count entries literally) but no
+`piratezep` authors `healthy` (with `gasbag5` listed twice, count entries literally) but no
 `gasbags`, and its gasbag defs are `HEALTH 0` like all others, so no hp is authored anywhere;
 what the original does there is undecoded, and the remake leaves those zones undamageable and
 says so in a `zep:` line rather than inventing a default.
@@ -124,7 +124,7 @@ pools are still waiting on the +1 s and +8 s burns.
 
 `yaw`, `pitch`, `accel_pitch`, `accel_yaw`, `max_rate_yaw`, `max_rate_pitch` and
 `cannon_inaccuracy` are authored in degrees and converted to radians as they are read.
-**`min_pitch` and `max_pitch` are not converted** — they stay in degrees.
+**`min_pitch` and `max_pitch` are not converted**, they stay in degrees.
 
 ⚠ **Consequently the original's own initial-pitch clamp never fires.** Immediately after loading,
 the engine clamps the (already radian) `pitch` against the (still degree) `min_pitch`/`max_pitch`;
@@ -196,14 +196,14 @@ before the airship comes to rest, and a hull seated on an armed node from the st
 flew a leg to be levelled on, begins at the record's own `pitch`, which all 58 instances author as
 0. Do not read `FUN_004bf500` as a levelling routine, and do not give it a settle term to make one.
 
-**A structural dead end — the current node's only edge is the one just flown — holds the same way,
+**A structural dead end, the current node's only edge is the one just flown, holds the same way,
 unconditionally, ahead of and regardless of any authored stop-point id.** Some nets author their
 far node as an armed stop under an unaddressable id (id 0, which the script side rejects before it
 ever reaches a node lookup) so the existing stop-point mechanism already parks the airship there
 for good; a net that does not author that pattern at its far node (C1B/M03's `Klondike1`, ridden by
 `piratezep`) still holds there, because the dead-end rule is unconditional and does not depend on
 the file authoring anything at that node. Without it a follower reaching an unarmed dead end
-re-picks its only neighbour — the node it just left — and re-flies the route, which for a net whose
+re-picks its only neighbour, the node it just left, and re-flies the route, which for a net whose
 nodes carry real altitude changes reads as the airship porpoising along its route and never
 levelling off at the end (`BL-529`).
 
@@ -224,24 +224,24 @@ until `pzep_stop_loading`. `OBJECTIVE21`/`22`/`23` release id 8 and the airship 
 Behaviour rather than format, but it is what the cannon keys drive, and it is decoded from the
 binary rather than inferred:
 
-- **The ammunition is hardcoded `wep_28`** (the cannonball, [weapons.md](weapons.md)) — looked up by
+- **The ammunition is hardcoded `wep_28`** (the cannonball, [weapons.md](weapons.md)), looked up by
   name in the fire routine. No zeppelin key names a weapon.
 - **The arc is a 90° cone centred on the firing side's perpendicular.** The engine builds a ±1 unit
   vector along the hull's lateral axis by the cannon's side flag, rotates it into world space, and
-  requires `dot(toTarget, sideNormal) > 0.707` — a 45° half-angle.
+  requires `dot(toTarget, sideNormal) > 0.707`, a 45° half-angle.
 - **A cannon fires only from its ready state.** Cannons run a small state machine; a cannon that is
   stowed triggers its deploy animation instead of firing, and cannons mid-deploy or mid-retract are
   skipped entirely. This is the design's hatch-open-then-fire sequence.
 - **Re-fire is per cannon**, not per zeppelin: each sets its own next-fire time to
   `now + cannon_fire_delay`.
-- **Against another zeppelin, the target is a randomly chosen gasbag** — the engine collects that
+- **Against another zeppelin, the target is a randomly chosen gasbag**, the engine collects that
   zeppelin's gasbags with health ≥ 0 that fall inside the 0.707 arc and picks one with `rand()`.
   Against anything else it aims at the target directly.
 - ⚠ **Hit resolution is ballistic, not probabilistic.** The engine runs a lead/intercept solve
   against the target from the projectile's speed and spawns a real round along the solved
   direction, scattered by `cannon_inaccuracy`; a target with no intercept solution is skipped. The
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
-  100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
+  100 % near 200 m. **Nothing like that roll is in the shipped fire path**, treat the design's
   curve as design-era and do not implement it.
 - ⚠ **A broadside is inert until the objective script engages it.** The zeppelin object's byte
   `+0xc` is zeroed by the constructor (`FUN_004bd460`, `0x004bd46x`), never touched by the record
@@ -285,7 +285,7 @@ What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 
 - **The deploy anims author their own timing.** Every `deployAnim`/`retractAnim` names a
   compiled per-mission `mis_anim` def (`lbroad11-deploy_pzep_lbroad11`) whose longest
-  `OBJECT_MOTION_FROM_TO` `run_time` is 4 s (door swing) over a 3 s gun extension — the remake
+  `OBJECT_MOTION_FROM_TO` `run_time` is 4 s (door swing) over a 3 s gun extension, the remake
   reads the deploy duration from the def rather than inventing one. The decode names no STOW
   trigger; the remake retracts after an invented, named 10 s without a bearing target.
 - **Side alternation is geometric.** The two 45°-half-angle cones sit on opposite normals, so
@@ -311,14 +311,14 @@ max_accel' = (0.8 * f + 0.2) * max_accel
 So acceleration retains a 20 % floor while speed goes to zero at total engine loss. ⚠ The design
 document describes a three-band model instead (the first 30 % of engines costing 10 % of
 performance, the next 40 % band a further 40 %, the last 30 % the remaining 50 %). The *qualitative*
-claim survives — a concave curve, so each further engine lost hurts more than the last — but the
+claim survives, a concave curve, so each further engine lost hurts more than the last, but the
 arithmetic is the square root above, not the bands.
 
 **The mechanism is a shrinking list, and one other system reads it.** `FUN_004bf150` holds the
 engines as a vector at `+0x4c`…`+0x50` and, every frame the zeppelin is alive and active, **erases**
 each entry whose node has lost its active bit; `alive` is then the vector's size and `total` the
 load-time count kept at `+0x98`. Because the vector is compacted rather than flagged, "the engine
-vector is empty" is a directly testable "every engine is destroyed" — and that is exactly what
+vector is empty" is a directly testable "every engine is destroyed", and that is exactly what
 Instant Action's `zeppelin_run` wins on, ahead of the hull's own death byte. See
 [instant-action.md](instant-action.md), "The zeppelin run is won on the ENGINES". Nothing else in
 the zeppelin module reads the vector, so a mission that is not an Instant Action zeppelin run feels

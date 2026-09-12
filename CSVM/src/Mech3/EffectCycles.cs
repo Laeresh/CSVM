@@ -8,7 +8,7 @@ namespace CSVM.Mech3;
 /// <summary>
 /// The <c>EFFECTS</c> block of the shared <c>effects.zrd</c>: the original's second source of
 /// texture flipbooks, and the one that lights C1's refinery vent. An entry names a node, but what
-/// it animates is that node's material — this pass resolves node → first mesh → surface 0's
+/// it animates is that node's material, this pass resolves node → first mesh → surface 0's
 /// material and writes the frame list there before the world builds, so
 /// <see cref="TextureCycler"/> picks it up unchanged like any other cycling material.
 /// Mechanism, addresses and the two entries (<c>fire1.flt</c>, <c>fire2.flt</c>): see this
@@ -17,7 +17,7 @@ namespace CSVM.Mech3;
 public static class EffectCycles
 {
     /// <summary>Installs every EFFECTS flipbook onto the gamez material it targets, and returns one
-    /// summary line per entry for the build log. A missing or unreadable reader is not an error —
+    /// summary line per entry for the build log. A missing or unreadable reader is not an error,
     /// the world simply keeps its static base textures.</summary>
     public static List<string> Apply(GameZ gamez, string sharedZrdrPath)
     {

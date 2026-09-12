@@ -47,7 +47,7 @@ internal static class DisplaySettingsSuites
 
     [Suite("display-vsync",
         "The V-Sync setting: --no-vsync beats a saved cap, the saved word beats the display.vsync "
-        + "config key, the key beats the default and the default is V-Sync on, a word the vocabulary "
+        + "config key, the key beats the default and the default is V-Sync off, a word the vocabulary "
         + "does not know reads as never set, a --det launch reads no saved word while a plain one "
         + "does, the VIDEO page opens on the saved word, and applying what its ACCEPT CHANGES "
         + "carried leaves Engine.MaxFps and DisplayServer.WindowGetVsyncMode reading back the cap")]
@@ -59,18 +59,21 @@ internal static class DisplaySettingsSuites
         var savedCap = VSyncSetting.Resolve(false, "144", true);
         ctx.Check(!savedCap.Enabled && savedCap.MaxFps == 144 && savedCap.Source == "options.json",
             $"the saved cap is V-Sync off at that rate ({Describe(savedCap)})");
-        var savedOn = VSyncSetting.Resolve(false, DisplayWords.VSyncOn, false);
-        ctx.Check(savedOn.Enabled && savedOn.Source == "options.json",
-            $"and a saved on beats a config key that says off ({Describe(savedOn)})");
-        var key = VSyncSetting.Resolve(false, null, false);
-        ctx.Check(!key.Enabled && key.MaxFps == VSyncSetting.Uncapped && key.Source == VSyncSetting.Key,
-            $"with nothing saved the config key decides ({Describe(key)})");
-        var fallback = VSyncSetting.Resolve(false, null, true);
-        ctx.Check(fallback.Enabled && fallback.MaxFps == VSyncSetting.Uncapped,
-            $"and with neither, V-Sync is on, the behaviour with no options file ({Describe(fallback)})");
-        var unknown = VSyncSetting.Resolve(false, "sometimes", true);
-        ctx.Check(unknown.Enabled && unknown.Source == fallback.Source,
-            $"a word the vocabulary does not know reads as never set rather than as off ({Describe(unknown)})");
+        var savedOff = VSyncSetting.Resolve(false, DisplayWords.VSyncOff, true);
+        ctx.Check(!savedOff.Enabled && savedOff.Source == "options.json",
+            $"and a saved off beats a config key that says on ({Describe(savedOff)})");
+        var key = VSyncSetting.Resolve(false, null, true);
+        ctx.Check(key.Enabled && key.MaxFps == VSyncSetting.Uncapped && key.Source == VSyncSetting.Key,
+            $"with nothing saved a config key that says on decides ({Describe(key)})");
+        var fallback = VSyncSetting.Resolve(false, null, VSyncSetting.ConfigDefault);
+        ctx.Check(!fallback.Enabled && fallback.MaxFps == VSyncSetting.Uncapped && fallback.Source == "default",
+            $"and with neither, V-Sync is off and uncapped, the behaviour with no options file ({Describe(fallback)})");
+        ctx.Check(VSyncSetting.TryParseWord(VSyncSetting.Default, out bool defaultOn, out int defaultCap)
+            && defaultOn == fallback.Enabled && defaultCap == fallback.MaxFps,
+            $"which is the pacing the default word the VIDEO page shows spells ({VSyncSetting.Default})");
+        var unknown = VSyncSetting.Resolve(false, "sometimes", VSyncSetting.ConfigDefault);
+        ctx.Check(!unknown.Enabled && unknown.Source == fallback.Source,
+            $"a word the vocabulary does not know reads as never set rather than as a choice ({Describe(unknown)})");
 
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
@@ -105,31 +108,34 @@ internal static class DisplaySettingsSuites
     }
 
     [Suite("display-mode",
-        "The display-mode setting: the saved word beats the default and the default is windowed, "
-        + "which is what project.godot ships, a word the vocabulary does not know reads as never "
-        + "set, borderless and exclusive fullscreen resolve to the two engine modes Godot spells "
-        + "the other way round, a --det launch reads no saved word while a plain one does, and the "
+        "The display-mode setting: the saved word beats the default and the default is borderless, "
+        + "the window filling the screen, a word the vocabulary does not know reads as never set, "
+        + "borderless and exclusive fullscreen resolve to the two engine modes Godot spells the "
+        + "other way round, a scripted run keeps project.godot's windowed window since the setting "
+        + "never reaches it, a --det launch reads no saved word while a plain one does, and the "
         + "VIDEO page opens on the saved word and carries it on what ACCEPT CHANGES applies")]
     internal static void DisplayMode(TestContext ctx)
     {
         var saved = DisplayModeSetting.Resolve(DisplayWords.Fullscreen);
         ctx.Check(saved.Mode == DisplayServer.WindowMode.ExclusiveFullscreen && saved.Source == "options.json",
             $"the saved fullscreen word is the exclusive mode ({saved.Mode}, {saved.Source})");
-        var borderless = DisplayModeSetting.Resolve(DisplayWords.Borderless);
-        ctx.Check(borderless.Mode == DisplayServer.WindowMode.Fullscreen,
-            $"and borderless is Godot's Fullscreen, the window that fills the screen ({borderless.Mode})");
+        var windowed = DisplayModeSetting.Resolve(DisplayWords.Windowed);
+        ctx.Check(windowed.Mode == DisplayServer.WindowMode.Windowed && windowed.Source == "options.json",
+            $"the saved windowed word is the bordered window ({windowed.Mode}, {windowed.Source})");
         var none = DisplayModeSetting.Resolve(null);
-        ctx.Check(none.Mode == DisplayServer.WindowMode.Windowed && none.Word == DisplayWords.Windowed
+        ctx.Check(none.Mode == DisplayServer.WindowMode.Fullscreen && none.Word == DisplayWords.Borderless
             && none.Source == "default",
-            $"with nothing saved the mode is windowed, project.godot's own ({none.Mode}, {none.Source})");
+            $"with nothing saved the mode is borderless, Godot's Fullscreen, the window that fills the screen ({none.Mode}, {none.Source})");
+        ctx.Check(DisplayModeSetting.Resolve(DisplayWords.Borderless).Mode == none.Mode,
+            $"which is the mode the saved borderless word resolves to as well");
         var unknown = DisplayModeSetting.Resolve("maximized");
         ctx.Check(unknown.Mode == none.Mode && unknown.Source == none.Source,
             $"a word the vocabulary does not know reads as never set ({unknown.Mode}, {unknown.Source})");
-        // The run's own window is the control on the mapping: a --run-tests process is windowed, so
-        // the engine's answer and the word's must agree. The mode is never changed here, a scripted
-        // run's window being hidden off screen for the rest of the suites to render into.
-        ctx.Check(DisplayServer.WindowGetMode() == none.Mode,
-            $"and the engine agrees this run's own window is that mode ({DisplayServer.WindowGetMode()})");
+        // The run's own window is the control on the guard: a --run-tests process is scripted, so the
+        // default above never reaches it and it stands in project.godot's windowed window. The mode is
+        // never changed here, a scripted run's window being hidden off screen for the other suites.
+        ctx.Check(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Windowed,
+            $"and this scripted run's own window is still project.godot's windowed one ({DisplayServer.WindowGetMode()})");
 
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
@@ -164,42 +170,47 @@ internal static class DisplaySettingsSuites
     }
 
     [Suite("display-resolution",
-        "The resolution setting: the list a screen offers holds that screen's own size and the "
-        + "project default and no size larger than the screen, a saved size the list offers beats "
-        + "the default, a saved size it does not offer falls back to the project default rather "
-        + "than to the nearest, a --det launch reads no saved size while a plain one does, and the "
-        + "VIDEO page opens on the saved size and carries it on what ACCEPT CHANGES applies")]
+        "The resolution setting: the list a screen offers holds that screen's own size as its "
+        + "fallback and no size larger than the screen, a saved size the list offers beats the "
+        + "fallback, a saved size it does not offer and nothing saved both fall back to the screen's "
+        + "own size rather than to the nearest or to project.godot's, a --det launch reads no saved "
+        + "size while a plain one does, and the VIDEO page opens on the saved size and carries it on "
+        + "what ACCEPT CHANGES applies")]
     internal static void DisplayResolution(TestContext ctx)
     {
         var offered = ResolutionSetting.SizesUnder(1920, 1080);
-        ctx.Check(offered.Contains("1920x1080") && offered.Contains(ResolutionSetting.Default)
-            && !offered.Contains("2560x1440"),
-            $"a 1920x1080 screen offers its own size and the default but nothing larger ({string.Join(" ", offered)})");
+        ctx.Check(offered.Words.Contains("1920x1080") && offered.Fallback == "1920x1080"
+            && offered.Words.Contains(ResolutionSetting.ProjectSize) && !offered.Words.Contains("2560x1440"),
+            $"a 1920x1080 screen offers its own size as the fallback and the sizes under it, nothing larger ({string.Join(" ", offered.Words)})");
         var narrow = ResolutionSetting.SizesUnder(800, 600);
-        ctx.Check(narrow.Contains("800x600") && narrow.Contains(ResolutionSetting.Default),
-            $"a screen smaller than the default still offers both, so the fallback is always pickable ({string.Join(" ", narrow)})");
+        ctx.Check(narrow.Words.Contains("800x600") && narrow.Fallback == "800x600"
+            && !narrow.Words.Contains(ResolutionSetting.ProjectSize),
+            $"a screen smaller than project.godot's window offers its own size and not that window ({string.Join(" ", narrow.Words)})");
         var saved = ResolutionSetting.Resolve("1920x1080", offered);
         ctx.Check(saved is { Width: 1920, Height: 1080, Source: "options.json" },
             $"a saved size the screen offers is the one applied ({Describe(saved)})");
         var unsupported = ResolutionSetting.Resolve("2560x1440", offered);
-        ctx.Check(unsupported is { Width: ResolutionSetting.DefaultWidth, Height: ResolutionSetting.DefaultHeight, Source: "default" },
-            $"a saved size it does not offer falls back to the project default, not to 1920x1080 ({Describe(unsupported)})");
+        ctx.Check(unsupported is { Width: 1920, Height: 1080, Source: "default" },
+            $"a saved size it does not offer falls back to the screen's own size ({Describe(unsupported)})");
         var none = ResolutionSetting.Resolve(null, offered);
-        ctx.Check(none.Word == ResolutionSetting.Default && none.Source == unsupported.Source,
+        ctx.Check(none.Word == offered.Fallback && none.Source == unsupported.Source,
             $"and nothing saved reads the same way ({Describe(none)})");
+        var blind = ResolutionSetting.Resolve(null, ResolutionSetting.Unknown);
+        ctx.Check(blind is { Width: ResolutionSetting.ProjectWidth, Height: ResolutionSetting.ProjectHeight, Source: "default" },
+            $"while a list built with no screen to ask falls back to project.godot's window ({Describe(blind)})");
 
         // This run's own screen is the control on the enumeration: every size the list offers has to
-        // fit inside what the engine reports, and the screen's own size has to be on it.
+        // fit inside what the engine reports, and the screen's own size has to be its fallback.
         var screen = DisplayServer.ScreenGetSize(DisplayServer.WindowGetCurrentScreen());
         var here = ResolutionSetting.ScreenSizes();
         bool fits = true;
-        foreach (var word in here)
+        foreach (var word in here.Words)
         {
             fits &= OptionsStore.TryParseResolution(word, out int w, out int h) && w <= screen.X && h <= screen.Y;
         }
 
-        ctx.Check(fits && here.Contains(OptionsStore.FormatResolution(screen.X, screen.Y)),
-            $"this screen's list fits inside the {screen.X}x{screen.Y} the engine reports and holds it ({string.Join(" ", here)})");
+        ctx.Check(fits && here.Words.Contains(here.Fallback) && here.Fallback == OptionsStore.FormatResolution(screen.X, screen.Y),
+            $"this screen's list fits inside the {screen.X}x{screen.Y} the engine reports and falls back to it ({string.Join(" ", here.Words)})");
 
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);

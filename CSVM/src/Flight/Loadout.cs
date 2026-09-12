@@ -8,9 +8,9 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The parsed <c>CSVM/data/stock_loadouts.json</c> — the 11 aircraft's default weapon
+/// <summary>The parsed <c>CSVM/data/stock_loadouts.json</c>, the 11 aircraft's default weapon
 /// fit, hand-authored config (see <see href="../../docs/formats/loadouts.md">loadouts.md</see>).
-/// Pure data: no plane binding, no weapon resolution — <see cref="Loadout.Bind"/> does that
+/// Pure data: no plane binding, no weapon resolution, <see cref="Loadout.Bind"/> does that
 /// against a built plane.</summary>
 public sealed class StockLoadouts
 {
@@ -171,7 +171,7 @@ public sealed class StockLoadouts
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
 }
 
-/// <summary>One plane's stock loadout, as authored — before binding to a model.</summary>
+/// <summary>One plane's stock loadout, as authored, before binding to a model.</summary>
 public sealed class LoadoutDef
 {
     public string Def = "";       // "pbloodhawk"
@@ -189,7 +189,7 @@ public sealed class GunSpec
     public int Caliber;
     public string Ammo = "slug";
     public List<string> Markers = new();
-    public bool Turret;           // an AI turret slot — parsed but built inert
+    public bool Turret;           // an AI turret slot, parsed but built inert
 
     /// <summary>The weapon id outright, bypassing <see cref="Caliber"/> + <see cref="Ammo"/>. An AI
     /// def names its gun as a <c>wep_NN</c> and never as a caliber (<see cref="Loadout.BindAi"/>).</summary>
@@ -212,12 +212,12 @@ public sealed class HardpointSpec
 /// <summary>
 /// A plane's stock loadout <b>bound to its built model</b>: each gun group's authored markers
 /// resolved to live muzzle <see cref="Node3D"/>s and its caliber+ammo resolved to a
-/// <see cref="WeaponDef"/>, each hardpoint bound to its pylon node — a live set of gun groups and
+/// <see cref="WeaponDef"/>, each hardpoint bound to its pylon node, a live set of gun groups and
 /// hardpoints with independent ammo counters, ready for the firing code to draw from.
 ///
 /// <para>Marker resolution is against the built tree's <c>cs_name</c> meta (as
 /// <see cref="UI.MarkerOverlay"/> reads it). A named marker that is absent is a <b>loud error</b>
-/// — a thrown exception naming the plane, slot and marker — never a silent skip, since a wrong
+///, a thrown exception naming the plane, slot and marker, never a silent skip, since a wrong
 /// binding would silently fire a gun from nowhere.</para>
 /// </summary>
 public sealed class Loadout
@@ -254,14 +254,14 @@ public sealed class Loadout
     public IReadOnlyList<GunGroup> Guns { get; }
     public IReadOnlyList<Hardpoint> Hardpoints { get; }
 
-    /// <summary><see cref="Hardpoints"/> positions sorted by <see cref="Hardpoint.Index"/> — the
+    /// <summary><see cref="Hardpoints"/> positions sorted by <see cref="Hardpoint.Index"/>, the
     /// sequence the hardpoint selector steps along, handed to <see cref="FireControl"/>.
     /// ⚠ The list itself is in <see cref="PylonFillOrder"/>, which says which pylons a fit occupies,
     /// NOT where they sit along the wing: stepping the list walks the gauge belt 1,5,2,6,… and back.
     /// Those are two separate orders and neither may be respelt as the other.</summary>
     public IReadOnlyList<int> PylonStepOrder { get; }
 
-    /// <summary>The gun groups the player can actually fire (turret slots excluded — built inert).</summary>
+    /// <summary>The gun groups the player can actually fire (turret slots excluded, built inert).</summary>
     public IEnumerable<GunGroup> FirableGuns
     {
         get
@@ -497,7 +497,7 @@ public sealed class Loadout
             }
             if (markers.Count == 0)
             {
-                // Neither half of this slot's pair exists on the rig — nothing to synthesize.
+                // Neither half of this slot's pair exists on the rig, nothing to synthesize.
                 continue;
             }
             GunSpec? stockSpec = null;
@@ -561,7 +561,7 @@ public sealed class Loadout
     }
 
     // Builds a `cs_name → Node3D` map of the plane's marker nodes (firepoints,
-    // pylons, target) from the built tree — the same `cs_name` meta SceneBuilder stamps.
+    // pylons, target) from the built tree, the same `cs_name` meta SceneBuilder stamps.
     private static Dictionary<string, Node3D> CollectMarkers(Node3D plane)
     {
         var map = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
@@ -584,9 +584,9 @@ public sealed class Loadout
 }
 
 /// <summary>One live gun group: its resolved weapon, muzzle nodes, and an <b>independent</b> ammo
-/// counter (the Balmoral's two .50 groups each carry their own — playtest-confirmed). Turret
+/// counter (the Balmoral's two .50 groups each carry their own, playtest-confirmed). Turret
 /// groups are bound but inert (<see cref="IsTurret"/>). The <see cref="IGunSlot"/> face is
-/// what <see cref="FireControl"/> fires through — the node-free slice of this class.</summary>
+/// what <see cref="FireControl"/> fires through, the node-free slice of this class.</summary>
 public sealed class GunGroup : IGunSlot
 {
     public int Slot;
@@ -605,7 +605,7 @@ public sealed class GunGroup : IGunSlot
 
     public WeaponDef Weapon { get; set; } = null!;
 
-    public int Capacity { get; set; }  // CLUSTER_SIZE — the full per-group load
+    public int Capacity { get; set; }  // CLUSTER_SIZE, the full per-group load
 
     public int Ammo { get; set; }      // mutable remaining rounds
 
@@ -614,7 +614,7 @@ public sealed class GunGroup : IGunSlot
 
 /// <summary>One live hardpoint (pylon): its resolved ordnance weapon and a per-pylon ammo counter
 /// (rocket capacity = pylon count × CLUSTER_SIZE, per pylon). The <see cref="IPylonSlot"/>
-/// face is what <see cref="FireControl"/> launches through — the node-free slice of this class.</summary>
+/// face is what <see cref="FireControl"/> launches through, the node-free slice of this class.</summary>
 public sealed class Hardpoint : IPylonSlot
 {
     public int Index;             // pylon number, 1-based

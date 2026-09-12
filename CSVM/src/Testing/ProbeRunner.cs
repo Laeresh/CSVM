@@ -14,7 +14,7 @@ namespace CSVM.Testing;
 /// GameSession quit into: each reads a <see cref="SessionSpec"/> (passed per call, since a
 /// menu launch can replace the caller's spec between calls) plus the base paths settled once in
 /// `_Ready`, produces a report to stdout and `./.scratch/`, and hands back a verdict for the
-/// caller's exit code. No reference back to the host node — the two probes that need one
+/// caller's exit code. No reference back to the host node, the two probes that need one
 /// (<see cref="RunTestSuites"/>, for its throwaway world host; <see cref="RunEffectsTest"/>, for
 /// the effect-play point) take exactly the camera/node they need as parameters.</summary>
 public sealed class ProbeRunner
@@ -223,8 +223,8 @@ public sealed class ProbeRunner
         return node;
     }
 
-    /// <summary>--dump-markers[=plane] (docs/cli.md): the airframe marker-rig report — stdout and
-    /// <c>./.scratch/markers_dump.txt</c> — that <c>docs/formats/markers.md</c> regenerates from.
+    /// <summary>--dump-markers[=plane] (docs/cli.md): the airframe marker-rig report, stdout and
+    /// <c>./.scratch/markers_dump.txt</c>, that <c>docs/formats/markers.md</c> regenerates from.
     /// See <see cref="Mech3.MarkerRig"/>.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpMarkers(SessionSpec spec)
@@ -238,7 +238,7 @@ public sealed class ProbeRunner
             return false;
         }
         GD.Print(r.Text);
-        // ./.scratch/ inside the workspace, per PROJECT_CONTEXT.md — never the OS temp dir.
+        // ./.scratch/ inside the workspace, per PROJECT_CONTEXT.md, never the OS temp dir.
         WriteScratch("markers_dump.txt", r.Text);
         GD.Print($"{r.Summary} → ./.scratch/markers_dump.txt");
         return true;
@@ -246,7 +246,7 @@ public sealed class ProbeRunner
 
     /// <summary>Writes one report into the workspace scratch folder, by absolute path. Relative
     /// paths resolve against the process working directory, not the repo, so a run launched from
-    /// anywhere else would silently scatter its artifacts. The one shared write path — even
+    /// anywhere else would silently scatter its artifacts. The one shared write path, even
     /// <c>GameSession</c>'s <c>--weapon-test</c> report writes through this rather than
     /// duplicating it.</summary>
     public void WriteScratch(string fileName, string text)
@@ -289,7 +289,7 @@ public sealed class ProbeRunner
         };
         if (DisplayServer.GetName() == "headless")
         {
-            // The dummy renderer compiles no shaders, so a shader error cannot occur — and
+            // The dummy renderer compiles no shaders, so a shader error cannot occur, and
             // therefore cannot be screened. Say so rather than letting the clean error census read
             // as proof.
             Log.Warn("test", $"headless display — no shaders compiled, so the error screen cannot see a shader error");
@@ -300,8 +300,8 @@ public sealed class ProbeRunner
         return code;
     }
 
-    /// <summary>--dump-weapons[=id|name] (docs/cli.md): the <see cref="Flight.WeaponDefs"/> report —
-    /// stdout and <c>./.scratch/weapons_dump.txt</c> — checked against weapons.md; a clean run (no
+    /// <summary>--dump-weapons[=id|name] (docs/cli.md): the <see cref="Flight.WeaponDefs"/> report,
+    /// stdout and <c>./.scratch/weapons_dump.txt</c>, checked against weapons.md; a clean run (no
     /// UNHANDLED lines) is the pass.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpWeapons(SessionSpec spec)
@@ -383,8 +383,8 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
-    /// <summary>--dump-ai[=chapter] (docs/cli.md): a pure-data report over the five AI families —
-    /// see <see cref="Probes.Ai"/> — to stdout and <c>./.scratch/ai_dump.txt</c>. No world, no
+    /// <summary>--dump-ai[=chapter] (docs/cli.md): a pure-data report over the five AI families,
+    /// see <see cref="Probes.Ai"/>, to stdout and <c>./.scratch/ai_dump.txt</c>. No world, no
     /// scene: every family is read straight off the extraction.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpAi(SessionSpec spec)
@@ -402,7 +402,7 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
-    /// <summary>--effects-test (docs/cli.md): the world-effects headless verify — see
+    /// <summary>--effects-test (docs/cli.md): the world-effects headless verify, see
     /// <see cref="Probes.Effects"/>. Plays every effect at the camera point so range-gated ones
     /// (gunhit's PLAYER_RANGE) pass. Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>
     public void RunEffectsTest(SessionSpec spec, Camera3D camera, Mech3.AnimRuntime effects,
@@ -416,7 +416,7 @@ public sealed class ProbeRunner
 
     /// <summary>--damage-test[=name] / --damage-hd=N: sweep one live destructible instance per
     /// distinct def through its damage stages (or through discrete weapon hits) and report what
-    /// each check found — see <see cref="Probes.Damage"/>, which the <c>damage-stages</c> /
+    /// each check found, see <see cref="Probes.Damage"/>, which the <c>damage-stages</c> /
     /// <c>damage-hd</c> suites assert on. Reports to stdout, <c>./.scratch/damage_test.txt</c> and
     /// <c>./.scratch/world_colliders.txt</c>.</summary>
     public void RunDamageTest(SessionSpec spec, Mech3.AnimRuntime runtime)
