@@ -1168,47 +1168,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-656`'s closing commit, `PT-111`, `docs/org/targeting.md` "Where a mission
   structure is".
 
-- `BL-335` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
-  flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
-  traced the same day and **fully decoded 2026-08-13**. The decode is
-  [`docs/org/textures.md`](docs/org/textures.md), with the particle side in
-  [`docs/org/puffer.md`](docs/org/puffer.md).
-  **The engine's rule, whole:** a sprite is drawn **additively if and only if bit 2 (`0x04`) of its
-  texture's render-flags word is set**, and alpha-mixed otherwise. That word is the u16 at offset
-  `0x0E` of the 16-byte texture header, landing at `+0x0c` of the image object (`FUN_0052f7f0`).
-  `FUN_005a4210` is the explicit form: set gives `SRCBLEND/DESTBLEND = ONE, ONE`; clear gives
-  `SRCALPHA, INVSRCALPHA`. Particle quads take the deferred transparent list instead, where
-  `FUN_005a6160` sets only `DESTBLEND` from the same bit, so additive there is `SRCALPHA, ONE`.
-  Blend is therefore a property of the **texture**, so it is per particle and per flipbook frame.
-  **Neither the `COLORS` ramp nor the sprite's darkness plays any part.** The ramp does pick between
-  two dispatch entries (`DAT_009be790` → `FUN_005a4b70`, `DAT_009be78c` → `LAB_005a4580`, installed
-  by `FUN_005a8c00`), but they differ only in FLAT vs GOURAUD shading and in whether the ramp colour
-  survives into the vertices; neither touches a blend register.
-  **Ours** (`Puffer.Create`) is `ramp OR diesDark ⇒ Mix, else Additive`, where `diesDark` is
-  `SmokeLuminance` measured off the frame a particle dies on. That is wrong in both directions: it
-  draws a ramp-less unflagged sprite additively where the engine mixes, and mixes a flagged sprite
-  carrying a ramp where the engine adds.
-  **The census, install-wide:** 31 of C1's 881 textures carry the bit (26 of C3's 732), and they are
-  exactly the emissive elements: `fire101` … `fire112`, the lens flares, the impact rings and the
-  HUD hilites/indicators. Of the puffer sprites, **only `fire101` … `fire112` are additive**;
-  `fire_f01`, `fire_f02`, `fire_f06`, `smoke101/102/103`, `exp_yel01` and `thickblksmoke` are all
-  alpha-mixed.
-  ⚠ **Do not just delete the darkness rule. On its own it makes the reported case worse.**
-  `fire_n_smoke` authors `colors: null` and dies on `fire_f06`, which is **unflagged**, so
-  `blend_mix` is the correct answer that our rule happens to reach by the wrong route. Removing it
-  without implementing the texture flag flips that emitter to additive and puts the symptom back.
-  ⚠ **`TextureArchive` does not carry the field.** It classifies alpha from the decoded pixels and
-  never sees the header word, so the raw value (`texture_infos[].stretch` in each chapter's
-  `texture/manifest.json`) has to be plumbed through before the rule can be applied. See
-  [`docs/org/textures.md`](docs/org/textures.md)'s "Suggested extractor changes" for the field name.
-  ⚠ Expect this to move every puffer-bearing golden (the seven listed in `docs/architecture.md`'s
-  `SizeScaleDefault` note).
-  ⚠ **Correction to the earlier entry: the original DOES depth-sort.** `FUN_005a6160` fills an index
-  array, `FUN_005a5fa0` sorts it by a per-polygon key proportional to distance (`LAB_005a5f00`
-  returns `key[b] − key[a]`, so farthest first), and only then does it draw. The sort is across the
-  whole frame's transparent polygons, not within one emitter. Our one `MultiMesh` per emitter with
-  `depth_draw_never` and no sort is a **separate delta** from the blend rule, and it is the one that
-  actually produces dark-over-fire. Fixing blend alone will not close the reported symptom.
+- `BL-829` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Our particle sprites draw in emitter and instance
+  order; the original depth-sorts every transparent polygon in the frame.** This is what produces
+  dark-over-fire at C1's refuel tanks, where an old near-black `fire_f06` puff paints over a young
+  bright flame from the same emitter. The blend half of that report is settled and landed (the
+  texture's own additive bit, [`docs/org/textures.md`](docs/org/textures.md)); ordering is the half
+  that is left, and it is the half that produces the symptom.
+  **The rule, decoded:** `FUN_005a6160` fills an index array over the frame's queued transparent
+  polygons, `FUN_005a5fa0` sorts it, and only then does it draw. The key is built at
+  `005a5fc2`-`005a6003` as `ftol(C / minRHW)` over the quad's smallest reciprocal depth, so it is
+  proportional to distance, and a polygon at or behind the eye takes the sentinel `999`. The
+  comparator `LAB_005a5f00` returns `key[b] - key[a]`, so the order is farthest first. Equal-depth
+  runs are then regrouped by texture (`LAB_005a5f30`) and by texture-and-depth (`LAB_005a5f60`) to
+  hold state changes down, and setting `DAT_009be6ec` skips the depth sort while keeping that
+  grouping. Details in [`docs/org/textures.md`](docs/org/textures.md), "The transparent list is
+  depth-sorted".
+  **Ours:** one `MultiMesh` per emitter with `depth_draw_never` and no per-particle sort, so
+  particles paint in instance order, which is the order `Puffer._Process` happens to write them in,
+  and emitters paint in scene-tree order.
+  *⚠ Traps:* sorting WITHIN an emitter is not the original's rule and does not reproduce it, since
+  the sort spans every transparent polygon in the frame, emitters and gamez alike. A MultiMesh
+  draws in instance order, so honouring the rule means writing each frame's particles back-to-front
+  per camera, and one MultiMesh is shared by every splitscreen pane
+  ([`docs/org/puffer.md`](docs/org/puffer.md), "One alpha per particle across the panes"), so a
+  per-camera order needs one mesh per pane or a different structure. Turning depth write back on is
+  not the original's behaviour either: it sorts, it does not z-test its transparent queue. Measure
+  cost before committing to a per-frame sort; a crash rig can hold hundreds of live particles.
+  *Cross-refs:* `PT-141` judges the landed blend rule at the controls and sees this ordering at the
+  same time; `BL-508` (the alpha-cutout scope) would move thousands of foliage and railing cards
+  into the same transparent pass, so the two decisions share a sort.
 
 - `BL-293` `[Tuning]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Rocket impact rings: the fixed-axis upper ring is faithful but reads
   poorly — parked** (PT-35). Faithfulness versus feels-good, decide later: the original

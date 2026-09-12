@@ -147,16 +147,12 @@ could never draw at all. Read as seconds, `large_30sec_fire`'s `fire_n_smoke` bu
 other ~95 % of a 3.5–5.5 s life — which is what collapsed the game's most-called death effect
 into a stationary red ball instead of a climbing flame.
 
-Rendering note (measured, remake convention): the authored data never states a blend mode, so
-it is **derived from the sprite a particle dies on** — the last flipbook frame, or the mean of a
-static pool. Near-black ⇒ alpha-blend, else additive. A COLORS ramp forces alpha-blend too (its
-own alpha ends at 0, and a near-black smoke ramp is invisible additively). The measured
-population separates cleanly: alpha-weighted mean luminance is 0.004 for `thickblksmoke*` and
-0.018 for `fire_f06`, then nothing until 0.12 (`fire101`), 0.17 (`exp_yel01`), 0.22 (`smoke101`)
-and 0.34 (`fire_f01`) — so white smoke and flashes stay additive and only genuinely black
-sprites flip. A presence-of-COLORS rule alone was not enough: `fire_n_smoke` and
-`large_black_smokeball` both carry `colors: null` yet end on black sprites, and adding those
-turned every dying smoke puff into more glow.
+**Rendering note: no `PUFFER_STATE` key states a blend mode, because blend is not the emitter's to
+state.** A sprite draws additively exactly when bit 2 of its texture's render-flags word is set,
+which makes the verdict per particle and per flipbook frame rather than per emitter; the decode is
+[`../org/textures.md`](../org/textures.md). No texture any puffer in this install names carries the
+bit, so every authored emitter alpha-mixes. Neither the `COLORS` ramp nor the sprite's own
+brightness enters into it.
 
 ## Aircraft speed-cue wisps
 

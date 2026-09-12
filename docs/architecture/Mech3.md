@@ -20,11 +20,11 @@ Fields: [../formats/gamez.md](../formats/gamez.md), [../formats/world-structure.
 Texture lookup over an unzbd texture extraction, a zip or an unpacked PNG dir. It absorbs the
 stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing
 doubled period) and classifies each texture's alpha twice, for two unrelated readers:
-`LastHadAlpha`/`LastAlphaIsSoft` from the decoded pixels, which is what blend-versus-scissor keys
-on, and `LastAlphaClass` from the extractor's own manifest field, the one reader that sees the
-`Simple` textures; no lighting decision keys on it. `Build` is the one construction path (decode, classify,
-drop-in, mip chain) and `Find` caches its result; `BuildMipped` hands the same Image to
-`--dump-mips` un-cached. Names and alpha: [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
+`LastHadAlpha`/`LastAlphaIsSoft` from the decoded pixels, which scissor-versus-blend keys on, and
+`LastAlphaClass` from the extractor's own manifest field, the one reader that sees the `Simple`
+textures. The same manifest supplies `RenderFlags`, whose bit 2 (`IsAdditive`) is the original's
+whole sprite-blend rule. `Build` is the one construction path (decode, classify, drop-in, mip
+chain) and `Find` caches it; `BuildMipped` hands it to `--dump-mips` un-cached. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,

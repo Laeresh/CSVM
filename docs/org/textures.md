@@ -1,8 +1,7 @@
 # The texture header and the blend rule, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-13, while closing `BL-335`'s open question.
-Every claim below names the function it came from.
+`crimson.exe`, `language x86:LE:32:default`). Every claim below names the function it came from.
 
 Everything here is a description of *behaviour and layout*. No decompiler output is reproduced; the
 addresses are given so any claim can be re-checked at source.
@@ -156,7 +155,7 @@ Nothing else in 881 textures carries it, and every member is a glow or emissive 
 same set minus `bigflare01/02` and the impact rings. That correlation is what identifies the bit;
 it is not an inference from the extractor's field name.
 
-**Sprites that do NOT carry it**, including every one named in `BL-335`: `fire_f01`, `fire_f02`,
+**Sprites that do NOT carry it**, which is every sprite any puffer names: `fire_f01`, `fire_f02`,
 `fire_f06`, `smoke101`, `smoke102`, `smoke103`, `exp_yel01`, `thickblksmoke`. All alpha-mixed.
 
 ## What this means for particles
@@ -271,13 +270,24 @@ The existing enum values map as: `None` = 0, `Horizontal` = 1, `Vertical` = 2, `
 Nothing else in the header needs renaming; `flags`, `width`, `height`, `palette_count` and `zero08`
 all match the engine's use.
 
-## Where CSVM differs today
+## How CSVM reads it
 
-`TextureArchive` classifies alpha from the decoded pixels and never sees the render-flags word, so
-the additive bit is not in our pipeline at all. `Puffer.Create` decides blend with
-`ramp OR diesDark ⇒ Mix, else Additive`, which is wrong in both directions against the rule above:
-it draws a ramp-less unflagged sprite additively where the engine mixes, and mixes a flagged sprite
-that has a ramp where the engine adds. See `BL-335`.
+`TextureArchive.RenderFlags` carries the word off each archive's own extraction manifest (the
+`stretch` field) and `IsAdditive` tests bit 2; a name the archive cannot resolve, and a PNG-only
+tree with no manifest, read as 0 and therefore alpha-mix, which is the engine's own fallback.
+`Puffer.Create` asks it once per atlas column, so the verdict is per particle and per flipbook
+frame; `MultiMeshEmitterRenderer` draws a column set that spans both blends as two MultiMeshes and
+routes each particle by the column it is showing. Godot's `blend_add` is `SRC_ALPHA, ONE`, which is
+the sorted transparent pass's additive and so the one that applies to particles.
+
+**No shipped puffer sprite carries the bit**, so every puffer in the install alpha-mixes and the
+split path is reachable only by a frame list nothing authors. The flagged textures are consumed by
+mesh polygons and the HUD instead: the `fire101`…`fire112` flipbook, the lens flares, the impact
+rings and the HUD hilites. Those draw through `SceneBuilder`, which does not read the word yet.
+
+⚠ **The word is per archive, not per name.** `bigflare01`, `ring_he` and `beflare5` are flagged in
+some chapters and not in others, so an install-wide name table would answer wrongly for whichever
+chapter it was not built from.
 
 `TextureArchive.LastAlphaIsSoft` calls a texture's alpha **soft** when fewer than 45% of its ink
 texels (alpha >= 32) are truly opaque (alpha >= 200), measured install-wide in
@@ -298,7 +308,6 @@ requires the lookup to fail, so the seven chapters that do ship the pair keep dr
 `SceneBuilder.UndrawnPolygonCount` reports 2 for a C3 world build and 0 for every other chapter,
 which is the tripwire if that ever stops being true.
 
-⚠ The one case that prompted the trace comes out right by accident. `fire_n_smoke` dies on
-`fire_f06`, which is unflagged and therefore alpha-mixed in the original; our darkness rule reaches
-`blend_mix` for it by a different route. **Dropping the darkness rule without implementing the
-texture flag would break the reported case rather than fix it.**
+The alpha-weighted luminance of the sprite a particle dies on decides one thing only, and it is not
+blend: the soft-particle depth fade, a render nicety with no counterpart in the original
+([puffer.md](puffer.md)).

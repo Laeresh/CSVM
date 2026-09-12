@@ -34,12 +34,14 @@ public interface IEmitterRenderer
 }
 
 /// <summary>
-/// The real renderer: ONE <see cref="MultiMesh"/> of billboarded quads (one draw call), whose
-/// shared shader billboards each instance toward the camera, picks its flipbook column from
-/// per-instance custom data, and composites additively or mixed.
-/// ⚠ The blend is already resolved by the time it gets here — <c>Puffer.Create</c> derives it from
-/// the COLORS ramp and the dying sprite's luminance (effects.md). This type takes the verdict, not
-/// the question: there is no <c>Auto</c> to re-derive, because it holds no state to derive it from.
+/// The real renderer: billboarded quads in a <see cref="MultiMesh"/> (one draw call), whose shared
+/// shader billboards each instance toward the camera, picks its flipbook column from per-instance
+/// custom data, and composites additively or mixed.
+/// ⚠ Blend belongs to the TEXTURE, not to the emitter, so this type takes one verdict per atlas
+/// column rather than one per emitter. A column set that disagrees draws as two MultiMeshes, one
+/// per blend, and each particle goes to the one its current column names. The verdict itself is
+/// read off the texture header in <c>Puffer.Create</c>, which is what keeps this seam free of
+/// <c>TextureArchive</c>.
 /// </summary>
 public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 {
@@ -100,22 +102,59 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     private readonly ImageTexture _atlas;
     private readonly int _frameCount;
-    private readonly bool _blendMix;
+    // One verdict per atlas column, so a flipbook that crosses from a flagged frame to an
+    // unflagged one changes blend mid-life exactly as the original does.
+    private readonly bool[] _additiveFrames;
     private readonly bool _softParticles;
 
-    private MultiMeshInstance3D _mmi = null!;
-    private MultiMesh _mm = null!;
+    // The mixed list and the additive one. Only the blends the column set actually uses are built,
+    // so the common uniform case stays at one MultiMesh and one draw call.
+    private Layer? _mix;
+    private Layer? _add;
 
     /// <summary>Builds the renderer for an already-packed <paramref name="atlas"/> of
-    /// <paramref name="frameCount"/> side-by-side frames. <paramref name="blendMix"/> alpha-blends
-    /// instead of adding (a COLORS ramp or a near-black dying sprite), and
-    /// <paramref name="softParticles"/> enables the depth fade.</summary>
-    public MultiMeshEmitterRenderer(ImageTexture atlas, int frameCount, bool blendMix, bool softParticles)
+    /// <paramref name="frameCount"/> side-by-side frames. <paramref name="additiveFrames"/> is one
+    /// flag per atlas column, true where the texture's render-flags word carries the additive bit
+    /// (<c>docs/org/textures.md</c>); <paramref name="softParticles"/> enables the depth fade.</summary>
+    public MultiMeshEmitterRenderer(ImageTexture atlas, int frameCount,
+        IReadOnlyList<bool> additiveFrames, bool softParticles)
     {
         _atlas = atlas;
         _frameCount = frameCount;
-        _blendMix = blendMix;
+        _additiveFrames = new bool[Mathf.Max(1, frameCount)];
+        for (int i = 0; i < _additiveFrames.Length && i < additiveFrames.Count; i++)
+            _additiveFrames[i] = additiveFrames[i];
         _softParticles = softParticles;
+    }
+
+    /// <summary>True when the column set spans both blends, so this emitter draws two MultiMeshes
+    /// instead of one. Readable so a suite can assert the split without reading pixels.</summary>
+    public bool Split => AnyAdditive && !AllAdditive;
+
+    /// <summary>Diagnostics: how many particles the last published frame put in each blend's draw
+    /// list, which is how a suite asserts the per-frame routing without reading pixels.</summary>
+    public (int Mixed, int Additive) DrawnCounts => (_mix?.Drawn ?? 0, _add?.Drawn ?? 0);
+
+    private bool AnyAdditive
+    {
+        get
+        {
+            foreach (bool a in _additiveFrames)
+                if (a)
+                    return true;
+            return false;
+        }
+    }
+
+    private bool AllAdditive
+    {
+        get
+        {
+            foreach (bool a in _additiveFrames)
+                if (!a)
+                    return false;
+            return true;
+        }
     }
 
     public void Attach(Node3D owner, int capacity, float cullMargin)
@@ -124,54 +163,31 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         // absorbed into EmitterDirector's EffectPoolMiss scope; fires alone only when nothing else
         // is already open.
         using var _ = PerfSample.Scope(PerfSite.MaterialCreate);
-        var mat = new ShaderMaterial { Shader = ShaderFor(_blendMix, _softParticles) };
-        mat.SetShaderParameter("atlas", _atlas);
-        mat.SetShaderParameter("frame_count", (float)_frameCount);
-
-        _mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseCustomData = true,
-            UseColors = true,
-            Mesh = new QuadMesh { Size = Vector2.One },
-            InstanceCount = capacity,
-            VisibleInstanceCount = 0,
-        };
-        _mmi = new MultiMeshInstance3D
-        {
-            Multimesh = _mm,
-            MaterialOverride = mat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            // billboarding moves verts off the MultiMesh's computed AABB — pad culling; the
-            // margin covers the largest tuned size any spawn path could produce
-            ExtraCullMargin = cullMargin,
-        };
-        owner.AddChild(_mmi);
+        if (!AllAdditive)
+            _mix = Layer.Build(this, owner, capacity, cullMargin, additive: false);
+        if (AnyAdditive)
+            _add = Layer.Build(this, owner, capacity, cullMargin, additive: true);
     }
 
     public void Grow(int capacity)
     {
-        // Setting InstanceCount reallocates the buffer and clears every slot; the emitter's next
-        // frame writes all its live ones back before Show, so nothing drawn is lost for longer.
-        if (_mm != null && capacity > _mm.InstanceCount)
-        {
-            _mm.VisibleInstanceCount = 0;
-            _mm.InstanceCount = capacity;
-        }
+        _mix?.Grow(capacity);
+        _add?.Grow(capacity);
     }
 
     public void Write(int index, Vector3 position, float size, float frame, float alpha, Color color)
     {
-        _mm.SetInstanceTransform(index,
-            new Transform3D(Basis.Identity.Scaled(new Vector3(size, size, size)), position));
-        _mm.SetInstanceCustomData(index, new Color(frame, alpha, 0f, 0f));
-        _mm.SetInstanceColor(index, color);
+        // The shader picks its column with the same rounding, so a particle lands in the list that
+        // draws the frame it is actually showing.
+        int col = Mathf.Clamp(Mathf.FloorToInt(frame + 0.5f), 0, _additiveFrames.Length - 1);
+        var layer = _additiveFrames[col] ? _add : _mix;
+        layer?.Write(position, size, frame, alpha, color);
     }
 
     public void Show(int liveCount)
     {
-        if (_mm != null)
-            _mm.VisibleInstanceCount = liveCount;
+        _mix?.Publish();
+        _add?.Publish();
     }
 
     private static Shader ShaderFor(bool mix, bool soft)
@@ -184,5 +200,75 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             ShaderVariants[(mix, soft)] = shader = new Shader { Code = code };
         }
         return shader;
+    }
+
+    // One blend's draw list. The write cursor counts up across a frame's writes and is published
+    // and reset by Show, so neither half has to know the emitter's own packed indices.
+    private sealed class Layer
+    {
+        private MultiMeshInstance3D _mmi = null!;
+        private MultiMesh _mm = null!;
+        private int _written;
+
+        public int Drawn { get; private set; }
+
+        public static Layer Build(MultiMeshEmitterRenderer owner, Node3D parent, int capacity,
+            float cullMargin, bool additive)
+        {
+            var mat = new ShaderMaterial { Shader = ShaderFor(!additive, owner._softParticles) };
+            mat.SetShaderParameter("atlas", owner._atlas);
+            mat.SetShaderParameter("frame_count", (float)owner._frameCount);
+            var layer = new Layer();
+            layer._mm = new MultiMesh
+            {
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseCustomData = true,
+                UseColors = true,
+                Mesh = new QuadMesh { Size = Vector2.One },
+                InstanceCount = capacity,
+                VisibleInstanceCount = 0,
+            };
+            layer._mmi = new MultiMeshInstance3D
+            {
+                Multimesh = layer._mm,
+                MaterialOverride = mat,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // billboarding moves verts off the MultiMesh's computed AABB — pad culling; the
+                // margin covers the largest tuned size any spawn path could produce
+                ExtraCullMargin = cullMargin,
+            };
+            parent.AddChild(layer._mmi);
+            return layer;
+        }
+
+        public void Grow(int capacity)
+        {
+            // Setting InstanceCount reallocates the buffer and clears every slot; the emitter's next
+            // frame writes all its live ones back before Show, so nothing drawn is lost for longer.
+            if (_mm != null && capacity > _mm.InstanceCount)
+            {
+                _mm.VisibleInstanceCount = 0;
+                _mm.InstanceCount = capacity;
+            }
+        }
+
+        public void Write(Vector3 position, float size, float frame, float alpha, Color color)
+        {
+            if (_mm == null || _written >= _mm.InstanceCount)
+                return;
+            int index = _written++;
+            _mm.SetInstanceTransform(index,
+                new Transform3D(Basis.Identity.Scaled(new Vector3(size, size, size)), position));
+            _mm.SetInstanceCustomData(index, new Color(frame, alpha, 0f, 0f));
+            _mm.SetInstanceColor(index, color);
+        }
+
+        public void Publish()
+        {
+            if (_mm != null)
+                _mm.VisibleInstanceCount = _written;
+            Drawn = _written;
+            _written = 0;
+        }
     }
 }

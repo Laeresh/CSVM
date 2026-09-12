@@ -309,8 +309,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **The 1-pixel cull** (`FUN_0057c5c0`), skipped | A software-rasteriser fill defence; at modern resolutions it would discard sprites the original drew |
 | **`K = 0.02`** rather than the software `0.01` | This project has no software path |
 | **The life-fade envelope** (ease the additive glow in/out) | A render nicety with no authored key behind it. It is bypassed entirely whenever a `COLORS` ramp is present, since the ramp owns the alpha |
-| **The blend mode, derived from the sprite a particle dies on** | The authored data never states one. Measured rule in [`formats/effects.md`](../formats/effects.md) |
-| **The soft-particle depth fade** (over the last ~1.5 m before the scene depth) | A render nicety with no counterpart in the original, softening the hard line where a tilted billboard dips into terrain. Paired with the blend: off for MIX, whose dark sprites sit at ground-level sites where the fade would zero them against the terrain right behind them; on for additive, which leaks through it anyway |
+| **The soft-particle depth fade** (over the last ~1.5 m before the scene depth) | A render nicety with no counterpart in the original, softening the hard line where a tilted billboard dips into terrain. Off for a sprite set that dies dark, whose ground-level sites would otherwise fade every fresh puff to invisible against the terrain right behind it; on for the rest, which leak through it anyway |
 | **Particle pools with a ceiling**, and pooled copies of each effect template | See the ⚠ below — INVENTED on both counts. A continuous emitter's pool doubles on demand up to `ContinuousPoolMax`, so only the ceiling is the divergence, not the starting size |
 | **The `COLORS` ramp linearised in the shader** | Not a divergence but a translation: the ramp's bytes are DX7 framebuffer values (the smoke screen's `53,74,37`), and Godot's linear pipeline needs `csky_srgb_to_linear` on them to put the same byte back on screen, as every fullbright pass already does. Multiplied in raw, that ramp draws `109,126,92` against the reference's `50,68,35`, two shades too pale on every ramped puffer |
 | **One alpha per particle across the panes** | The original evaluates the fade per particle per DRAW, so each splitscreen pane gets its own distances. Ours is one `MultiMesh` per emitter shared by every pane with the alpha written once per frame, so since `BL-339` the bands are run against EVERY pane's camera and the particle takes the most favourable answer: drawn if any pane should see it, at that pane's alpha. A pane can therefore see a puff its own camera would have faded further; per-pane alpha would take one MultiMesh per pane. Identical to the original wherever there is one viewer, which is every capture, freecam shot and single-player session. Relatedly, an emitter drawing on the very first frame of a session can beat the camera publish by one frame and draw unfaded — one frame of full alpha at session start, left alone rather than deferred |
@@ -356,7 +355,7 @@ particle of the run, so it is a maximum over ~300 draws rather than a mean, and 
 stream is seeded by how many puffers were built before it. Read the ratios and the deltas, not the
 last decimal.
 
-### ⚠ Our blend verdict disagrees with the engine's (settled 2026-08-13, still open in code)
+### The blend verdict
 
 **The blend rule is a property of the texture, not of the particle.** A sprite is drawn additively
 if and only if bit 2 of its texture's render-flags word is set; otherwise it is alpha-mixed. The
@@ -373,23 +372,22 @@ shading and in whether the ramp colour survives into the vertices. Neither touch
 The ramp-less branch also forces vertex colour to white and alpha to `(1 − ageFrac)`, the engine's
 own life envelope, which is unchanged from the earlier reading.
 
-**Nothing about the sprite's darkness enters into it either.** CSVM's `Puffer.Create` uses
-`ramp OR diesDark ⇒ Mix, else Additive`, where `diesDark` is the alpha-weighted luminance of the
-frame a particle dies on (`Puffer.SmokeLuminance`). That is wrong in both directions against the
-engine: it draws a ramp-less unflagged sprite additively where the engine mixes, and mixes a flagged
-sprite carrying a ramp where the engine adds.
+**Nothing about the sprite's darkness enters into it either.** `Puffer.Create` reads the flag once
+per atlas column off the chapter's own `TextureArchive`, so the verdict is per particle and per
+flipbook frame, and `MultiMeshEmitterRenderer` draws a column set spanning both blends as one
+MultiMesh per blend. Godot's `blend_add` is `SRC_ALPHA, ONE`, which is exactly the sorted
+transparent pass's additive.
 
-Our threshold is `16/255`, and the measured population separates cleanly either side of it — the
-sprites that flip are `fire_f06` at 0.018 and `thickblksmoke` at 0.004, with nothing between there
-and `fire101` at 0.12 (`exp_yel01` 0.17, `smoke101` 0.22, `fire_f01` 0.34). A flipbook is measured
-on its LAST frame and a static `TEXTURES` pool on its mean, since a pool sprite is picked once at
-birth and held.
+**Not one puffer sprite in the install carries the flag**, so every emitter alpha-mixes. The
+flagged textures all belong to other draw paths: the `fire101` … `fire112` mesh flipbook, the lens
+flares, the impact rings and the HUD hilites.
 
-⚠ **The reported case comes out right by accident, so the darkness rule must not be dropped on its
-own.** `fire_n_smoke` dies on `fire_f06`, which is unflagged and therefore alpha-mixed in the
-original; our rule reaches `blend_mix` for it by a different route. Removing the rule without
-implementing the texture flag would flip that emitter to additive and put the reported symptom back.
-Of the sprites above, only `fire101` … `fire112` carry the flag.
+⚠ **The sprite-darkness measurement survives, and it decides the soft-particle fade alone.**
+`Puffer.SmokeLuminance` thresholds the alpha-weighted luminance of the frame a particle dies on at
+`16/255` — `fire_f06` 0.018 and `thickblksmoke` 0.004 below it, `fire101` 0.12, `exp_yel01` 0.17,
+`smoke101` 0.22 and `fire_f01` 0.34 above — and a dark dying sprite turns the depth fade off,
+because those sit at ground level where it would zero every fresh puff against the terrain behind
+it. Wiring it back into blend would put the decoded rule back out.
 
 ⚠ **The ordering delta is ours, not the engine's.** Each of our emitters is one `MultiMesh` with
 `depth_draw_never` and no per-particle sort, so mixed sprites paint in instance-index order and an

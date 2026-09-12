@@ -16,6 +16,7 @@
     "puffer-priority-size": 0.002,
     "puffer-fire-column": 1.535,
     "puffer-idle-process-gate": 0.02,
+    "puffer-blend-flag": 0.05,
     "loadout-bind": 4.436,
     "weapons-fire": 0.387,
     "aim-assist": 0.030,

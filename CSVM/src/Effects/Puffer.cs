@@ -9,11 +9,6 @@ using Godot;
 
 namespace CSVM.Effects;
 
-/// <summary>How a puffer's sprites composite. The authored data never says, so <see cref="Auto"/>
-/// derives it: a COLORS ramp or a near-black dying sprite ⇒ <c>blend_mix</c>, else
-/// <c>blend_add</c>. The explicit modes force the verdict.</summary>
-public enum PufferBlend { Auto, Additive, Mix }
-
 /// <summary>The three camera-distance switches plus the original's own far-band multiplier, forced
 /// instead of read from <c>config.json</c>. Only <see cref="Puffer.CreateWith"/> — the test entry
 /// point — accepts one; the real path always reads Config, whose keys default to exactly the
@@ -362,11 +357,12 @@ public sealed partial class Puffer : Node3D
     /// unless authored.</summary>
     public const float PriorityScaleDefault = 0.02f;
 
-    // Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on
-    // counts as smoke, so the emitter alpha-blends instead of adding. The measured population
-    // separates cleanly either side of it: fire_f06 0.018 and thickblksmoke 0.004 below,
-    // nothing above it under 0.12 (fire101 0.12, exp_yel01 0.17, smoke101 0.22, fire_f01 0.34)
-    // — so white smoke stays additive and only genuinely black sprites flip.
+    // Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on counts as
+    // smoke. ⚠ This decides only the soft-particle depth fade, never the blend: blend is the
+    // texture's own additive bit (docs/org/textures.md). Dark sprites sit at ground-level sites
+    // where the fade would zero every fresh puff against the terrain behind it, and the measured
+    // population separates cleanly here — fire_f06 0.018 and thickblksmoke 0.004 below, nothing
+    // above it under 0.12. See docs/org/puffer.md.
     private const float SmokeLuminance = 16f / 255f;
 
     // Life-fade envelope (a render nicety, not in the reader): ease the additive glow in
@@ -461,12 +457,10 @@ public sealed partial class Puffer : Node3D
     /// <summary>Builds an emitter for <paramref name="state"/>, loading its texture frames into an
     /// atlas; null if a frame is missing. <paramref name="activeDuration"/> is the burst duration
     /// (ignored by DISTANCE_INTERVAL states). <paramref name="sustained"/> selects continuous
-    /// emission over a burst. <paramref name="blend"/> overrides the auto verdict (see
-    /// <see cref="PufferBlend"/>); <paramref name="softParticles"/> null pairs the depth fade with
-    /// it. <paramref name="ambience"/> null is still air.</summary>
+    /// emission over a burst. <paramref name="softParticles"/> null takes the measured default (see
+    /// <see cref="SmokeLuminance"/>). <paramref name="ambience"/> null is still air.</summary>
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
-        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool? softParticles = null,
-        EffectAmbience? ambience = null)
+        bool sustained = false, bool? softParticles = null, EffectAmbience? ambience = null)
     {
         bool sequenced = state.TextureSequence.Count > 0;
         var frameNames = sequenced
@@ -475,14 +469,15 @@ public sealed partial class Puffer : Node3D
         var (atlas, diesDark) = BuildAtlas(frameNames, textures, sequenced);
         if (atlas == null)
             return null;
-        // Auto: a COLORS ramp still forces MIX (its own alpha ends at 0), and so does a sprite
-        // set whose dying frame is near-black.
-        var resolved = blend != PufferBlend.Auto ? blend
-            : state.Colors.Count > 0 || diesDark ? PufferBlend.Mix
-            : PufferBlend.Additive;
+        // The whole blend verdict: the texture's own additive bit, read per frame because the
+        // sprite changes under the particle. Neither the COLORS ramp nor the sprite's darkness
+        // enters into it — see docs/org/textures.md.
+        var additive = new bool[frameNames.Count];
+        for (int i = 0; i < frameNames.Count; i++)
+            additive[i] = textures.IsAdditive(frameNames[i]);
         var puffer = new Puffer();
-        puffer.Init(state, new MultiMeshEmitterRenderer(atlas, frameNames.Count,
-            resolved == PufferBlend.Mix, softParticles ?? resolved != PufferBlend.Mix),
+        puffer.Init(state, new MultiMeshEmitterRenderer(atlas, frameNames.Count, additive,
+            softParticles ?? !(state.Colors.Count > 0 || diesDark)),
             activeDuration, sustained, ambience);
         return puffer;
     }
@@ -696,9 +691,10 @@ public sealed partial class Puffer : Node3D
     }
 
     // Packs the frames side by side into one atlas, and measures whether a particle DIES
-    // on a dark sprite — the flipbook's last frame, or a static pool's mean luminance. This is what
-    // distinguishes "fire_n_smoke", whose flipbook ends near-black despite starting bright; see
-    // `docs/org/puffer.md`. Null atlas when a frame is missing.
+    // on a dark sprite — the flipbook's last frame, or a static pool's mean luminance. That
+    // measurement drives the soft-particle default alone (see SmokeLuminance), and distinguishes
+    // "fire_n_smoke", whose flipbook ends near-black despite starting bright. Null atlas when a
+    // frame is missing.
     private static (ImageTexture? Atlas, bool DiesDark) BakeAtlas(IReadOnlyList<string> names,
         TextureArchive textures, bool sequenced)
     {

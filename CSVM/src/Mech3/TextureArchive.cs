@@ -639,6 +639,11 @@ public static class TextureDropIn
 /// docs/architecture.md.</summary>
 public sealed class TextureArchive : IDisposable
 {
+    // Bit 2 of the render-flags word at offset 0x0E of the 16-byte texture header: the original
+    // draws a sprite from a texture carrying it with DESTBLEND ONE and alpha-mixes every other.
+    // The decode, the other bits and the install-wide census are in docs/org/textures.md.
+    private const int AdditiveTransparentBit = 0x04;
+
     // Texture names referenced by gamez meshes that ship in NO archive of a retail
     // install — verified absent across all extracted chapters. The
     // original engine tolerates them (renders neutral), so we do too: a quiet gray
@@ -685,6 +690,9 @@ public sealed class TextureArchive : IDisposable
     // Archive base name -> the extractor's own alpha class, off the extraction manifest. Empty when
     // the tree ships PNGs alone, which is why every read of it falls back to the pixel test.
     private readonly Dictionary<string, AlphaClass> _alphaClasses = new(StringComparer.OrdinalIgnoreCase);
+    // Archive base name -> the texture header's render-flags word, off the same manifest. Empty on a
+    // PNG-only tree, which reads as 0 and so alpha-mixes, the engine's own fallback value.
+    private readonly Dictionary<string, int> _renderFlags = new(StringComparer.OrdinalIgnoreCase);
     // Distinct texture names this archive failed to resolve, each already logged once.
     private readonly HashSet<string> _reportedMissing = new(StringComparer.OrdinalIgnoreCase);
     // Authored _N siblings whose dimensions disagreed with the level they claim, logged once each.
@@ -717,7 +725,7 @@ public sealed class TextureArchive : IDisposable
             }
         }
         AuthoredMipBases = new List<string>(bases);
-        ReadAlphaManifest();
+        ReadTextureManifest();
         // An override naming a texture this archive does not hold would silently colour nothing,
         // which reads exactly like "the object is not drawing" — the answer the flag exists to give.
         TextureDropIn.CheckNames(path, _byBaseName.Keys);
@@ -830,6 +838,25 @@ public sealed class TextureArchive : IDisposable
         AbsentAndUndrawn.Contains(Path.GetFileNameWithoutExtension(materialTextureName))
         && Find(materialTextureName) == null;
 
+    /// <summary>The texture header's render-flags word as the extractor read it, 0 for a name this
+    /// archive does not hold and for a PNG-only tree with no manifest. Bit 2 is the blend flag;
+    /// bits 0, 1 and 3 are named by data correlation only (docs/org/textures.md).</summary>
+    public int RenderFlags(string materialTextureName)
+    {
+        // ⚠ Read the flags off the RESOLVED archive name, never the material's: a truncated or
+        // renamed material name is not a manifest key (see Resolve).
+        var resolved = Resolve(Path.GetFileNameWithoutExtension(materialTextureName));
+        return resolved != null
+            && _renderFlags.TryGetValue(Path.GetFileNameWithoutExtension(resolved), out int flags)
+            ? flags : 0;
+    }
+
+    /// <summary>True when the texture carries the additive-transparent bit, which is the whole of
+    /// the original's blend rule: a sprite drawn from it adds, every other alpha-mixes
+    /// (docs/org/textures.md). Unknown reads as alpha-mixed, the engine's own fallback.</summary>
+    public bool IsAdditive(string materialTextureName) =>
+        (RenderFlags(materialTextureName) & AdditiveTransparentBit) != 0;
+
     public ImageTexture? Find(string materialTextureName)
     {
         var baseName = Path.GetFileNameWithoutExtension(materialTextureName);
@@ -941,6 +968,25 @@ public sealed class TextureArchive : IDisposable
         return opaque < ink * 0.45f || ink == 0;
     }
 
+    // The extractor spells the render-flags word as an enum, which is why the additive bit hides
+    // behind an `Unk` name: None/Horizontal/Vertical/Both are bits 0 and 1, and `UnkN` is the raw
+    // value N. A number is accepted too, so a later extractor that stops spelling it still reads.
+    private static int RenderFlagsOf(JsonElement stretch)
+    {
+        if (stretch.ValueKind == JsonValueKind.Number)
+            return stretch.TryGetInt32(out int raw) ? raw : 0;
+        return stretch.GetString() switch
+        {
+            "None" => 0,
+            "Horizontal" => 1,
+            "Vertical" => 2,
+            "Both" => 3,
+            { } s when s.StartsWith("Unk", StringComparison.Ordinal)
+                && int.TryParse(s.AsSpan(3), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) => n,
+            _ => 0,
+        };
+    }
+
     private static bool ImageHasAlpha(Image img) =>
         img.GetFormat() is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444 && img.DetectAlpha() != Image.AlphaMode.None;
 
@@ -1023,9 +1069,10 @@ public sealed class TextureArchive : IDisposable
             ? stored
             : hasPixelAlpha ? AlphaClass.Full : AlphaClass.None;
 
-    // The extraction manifest's `alpha` field per texture, and nothing else from it. Absent from a
-    // deployed PNG-only tree, which is not an error: AlphaClassOf falls back to the pixels there.
-    private void ReadAlphaManifest()
+    // The extraction manifest's per-texture `alpha` and `stretch` fields, and nothing else from it.
+    // Absent from a deployed PNG-only tree, which is not an error: AlphaClassOf falls back to the
+    // pixels there and the render flags fall back to 0.
+    private void ReadTextureManifest()
     {
         var bytes = ReadBytes("manifest.json");
         if (bytes == null)
@@ -1038,10 +1085,13 @@ public sealed class TextureArchive : IDisposable
                 return;
             foreach (var info in infos.EnumerateArray())
             {
-                if (info.TryGetProperty("name", out var name) && name.GetString() is { } texName
-                    && info.TryGetProperty("alpha", out var alpha)
+                if (!info.TryGetProperty("name", out var name) || name.GetString() is not { } texName)
+                    continue;
+                if (info.TryGetProperty("alpha", out var alpha)
                     && Enum.TryParse(alpha.GetString(), out AlphaClass cls))
                     _alphaClasses[texName] = cls;
+                if (info.TryGetProperty("stretch", out var stretch))
+                    _renderFlags[texName] = RenderFlagsOf(stretch);
             }
         }
         catch (JsonException e)

@@ -1528,6 +1528,88 @@ internal static class PufferSuites
         }
     }
 
+    // The blend rule, over the chapter's own archive and a real emitter: a sprite adds exactly when
+    // bit 2 of its texture's render-flags word is set. The reader half (which enum spelling carries
+    // the bit) is a unit; what needs an engine is that the shipped textures still carry the values
+    // the census read, and that a flipbook crossing the flag routes its particles per frame.
+    [Suite("puffer-blend-flag",
+        "a puffer's blend is its texture's own additive bit, read per frame, over the chapter's shipped archive")]
+    internal static void PufferBlendFlag(TestContext ctx)
+    {
+        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
+        using var textures = new TextureArchive(texturePath);
+
+        // The flagged set is exactly the emissive elements, and the value is a bitfield: fire101
+        // ships 7 (additive plus both stretch bits) and splashbase ships 3 (both stretch bits and no
+        // additive), so a reader that tested the word for zero would call splashbase additive.
+        ctx.Same(7, textures.RenderFlags("fire101"), $"fire101's render-flags word");
+        ctx.Same(3, textures.RenderFlags("splashbase"), $"splashbase's render-flags word");
+        ctx.Check(textures.IsAdditive("fire101") && textures.IsAdditive("fire112"),
+            $"the fire flipbook carries the additive bit");
+        ctx.Check(!textures.IsAdditive("splashbase"), $"splashbase stretches but does not add");
+        foreach (var name in new[]
+                 {
+                     "fire_f01", "fire_f06", "smoke101", "smoke103", "thickblksmoke01",
+                     "exp_yel01", "poleflare", "magnesiumtip", "watersquirt",
+                 })
+        {
+            ctx.Check(!textures.IsAdditive(name), $"{name} is alpha-mixed — no puffer sprite carries the bit");
+        }
+        ctx.Check(!textures.IsAdditive("no_such_texture"),
+            $"a name the archive cannot resolve alpha-mixes, which is the engine's own fallback");
+
+        // A rocket trail is one of the emitters the rule moves: ramp-less and ending on a bright
+        // sprite, so the darkness verdict used to add it and the texture flag mixes it.
+        var trail = PufferState.Load(ctx.ZrdrPath, "missile_puffers.json", "trailpuffer");
+        ctx.Check(trail != null, $"missile_puffers.json defines trailpuffer");
+        if (trail != null)
+        {
+            ctx.Same(0, trail.Colors.Count, $"trailpuffer authors no COLORS ramp");
+            foreach (var (_, frame) in trail.TextureSequence)
+                ctx.Check(!textures.IsAdditive(frame), $"trailpuffer frame {frame} alpha-mixes");
+        }
+
+        PufferBlendRouting(ctx, textures);
+    }
+
+    // Blend is per FRAME, so a flipbook whose columns disagree draws two lists and each particle
+    // goes to the one its current column names. No shipped puffer mixes flagged and unflagged
+    // frames, so the split is built here out of two real textures that do disagree.
+    private static void PufferBlendRouting(TestContext ctx, TextureArchive textures)
+    {
+        var atlas = textures.Find("fire101");
+        ctx.Check(atlas != null, $"the archive decodes fire101");
+        if (atlas == null)
+            return;
+        var renderer = new MultiMeshEmitterRenderer(atlas, 2, new[] { true, false }, softParticles: false);
+        ctx.Check(renderer.Split, $"a column set spanning both blends reports as split");
+        var owner = new Node3D();
+        ctx.Host.AddChild(owner);
+        try
+        {
+            renderer.Attach(owner, 8, cullMargin: 1f);
+            for (int i = 0; i < 3; i++)
+                renderer.Write(i, Vector3.Zero, 1f, 0f, 1f, Colors.White);
+            for (int i = 3; i < 5; i++)
+                renderer.Write(i, Vector3.Zero, 1f, 1f, 1f, Colors.White);
+            renderer.Show(5);
+            ctx.Same(2, renderer.DrawnCounts.Mixed, $"the unflagged column's particles draw mixed");
+            ctx.Same(3, renderer.DrawnCounts.Additive, $"the flagged column's particles draw additive");
+
+            // The counts are per frame, not cumulative: a following frame that draws nothing must
+            // publish zero rather than leave the last frame's instances visible.
+            renderer.Show(0);
+            ctx.Same(0, renderer.DrawnCounts.Mixed + renderer.DrawnCounts.Additive,
+                $"an empty frame publishes nothing in either list");
+        }
+        finally
+        {
+            owner.QueueFree();
+        }
+    }
+
     // Stays whole here rather than splitting an engine-free half into CSVM.Tests: Probes.Loadouts
     // calls StockLoadouts.Load and PlaneBuilder.Build to resolve Loadout.Bind's markers, both
     // native-backed and fatal off-engine, and binding needs a built plane either way.

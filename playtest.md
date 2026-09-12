@@ -436,6 +436,26 @@ reasons that have nothing to do with any of these checks.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
   one-pixel tolerance are in the landing commit (`git log --grep=BL-778`).
 
+- `PT-141` `[Own]` **Gun smoke, sparks, gun-hit fire and the crash plume alpha-mix instead of
+  glowing (`BL-829`).** Blend is the texture's own additive bit and not one shipped puffer sprite
+  carries it, so every emitter in the install alpha-mixes. Eleven authored sprite sets change under
+  that rule and all of them are in this sortie: the muzzle smoke (`muzzlepuffer`), the gun-hit fire
+  (`firepuffer`), the yellow and red sparks (`sparker1`-`4`, `man_sparkly_spark`,
+  `ind_please_spark`, `red_trailpuffer_01`), the magnesium flash (`whitehotpuffer`), the rocket and
+  torpedo trails (`trailpuffer`, `torpufferblast`) and the crash smoke (`trailpuffer2`). The fire
+  and thick-smoke flipbooks that end on a near-black frame are unchanged, so the refuel-tank flames
+  and the building fires should look exactly as they did.
+  *Look for:*
+  - (a) muzzle smoke and spark showers read as lit smoke and lit specks over the scenery rather
+    than as white blowout, at close range and against both sky and dark ground;
+  - (b) the crash plume's specks still separate from the fireball instead of disappearing into it;
+  - (c) nothing about the burning buildings, the refuel tanks or the damage trail has changed.
+  *Variations:* rockets and torpedoes for the trails, `--weapon=wep_07`; the crash plume alone,
+  `--crash=5`.
+  *Blocks:* the decoded blend rule is landed either way, so a fail here is not a revert but a
+  question about what else the original does to those sprites; it mints a new `BL` naming the
+  emitter and what it should look like. A pass retires this item.
+
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
 ```powershell

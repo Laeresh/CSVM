@@ -64,6 +64,51 @@ public class TextureArchiveTests
         Assert.False(archive.IsAbsentAndUndrawn("probe_plain"));
     }
 
+    // The blend rule is the texture header's own render-flags word, which the extractor spells as
+    // the `stretch` enum (docs/org/textures.md). Reading it is name-and-manifest arithmetic, so it
+    // belongs here; what the shipped chapters actually carry is the `puffer-blend-flag` suite.
+
+    [Fact]
+    public void OnlyBitTwoOfTheRenderFlagsWordMeansAdditive()
+    {
+        using var archive = new TextureArchive(FlagDir());
+        // Every non-additive spelling, including "Both", whose word is non-zero for the stretch
+        // bits alone: a reader testing the word for zero would call it additive.
+        Assert.False(archive.IsAdditive("probe_none"));
+        Assert.False(archive.IsAdditive("probe_horizontal"));
+        Assert.False(archive.IsAdditive("probe_vertical"));
+        Assert.False(archive.IsAdditive("probe_both"));
+        Assert.False(archive.IsAdditive("probe_unk8"));
+        // Additive alone, and additive carried alongside both stretch bits (the fire flipbook's 7).
+        Assert.True(archive.IsAdditive("probe_unk4"));
+        Assert.True(archive.IsAdditive("probe_unk7"));
+        Assert.Equal(3, archive.RenderFlags("probe_both"));
+        Assert.Equal(7, archive.RenderFlags("probe_unk7"));
+    }
+
+    [Fact]
+    public void AnUnknownTextureAlphaMixes()
+    {
+        using var archive = new TextureArchive(FlagDir());
+        // The engine's own terminal fallback is a flagless image, so an unresolvable name mixes
+        // rather than adding — the answer that cannot make a sprite glow where nothing should.
+        Assert.Equal(0, archive.RenderFlags("probe_absent"));
+        Assert.False(archive.IsAdditive("probe_absent"));
+        // A material name arrives truncated and extensioned; the flags follow the resolved name.
+        Assert.True(archive.IsAdditive("probe_unk7.tif"));
+    }
+
+    [Fact]
+    public void AFrameListCarriesOneVerdictPerFrame()
+    {
+        using var archive = new TextureArchive(FlagDir());
+        // Blend belongs to the texture, so a flipbook crossing from a flagged frame to an unflagged
+        // one changes blend under the particle rather than picking one verdict for the emitter.
+        var frames = new[] { "probe_unk7", "probe_unk4", "probe_none", "probe_both" };
+        Assert.Equal(new[] { true, true, false, false },
+            System.Array.ConvertAll(frames, archive.IsAdditive));
+    }
+
     [Fact]
     public void AnArchiveOverAnEmptyDirectoryHasNoMissesYet()
     {
@@ -131,6 +176,26 @@ public class TextureArchiveTests
         {
             File.WriteAllBytes(Path.Combine(dir, name), System.Array.Empty<byte>());
         }
+        return dir;
+    }
+
+    // A texture directory plus the extraction manifest's own shape, one texture per `stretch`
+    // spelling. The PNGs stay empty: nothing here decodes a pixel.
+    private static string FlagDir()
+    {
+        var dir = TestData.TempDir();
+        var infos = new System.Text.StringBuilder();
+        foreach (var spelling in new[] { "None", "Horizontal", "Vertical", "Both", "Unk4", "Unk7", "Unk8" })
+        {
+            var name = "probe_" + spelling.ToLowerInvariant();
+            File.WriteAllBytes(Path.Combine(dir, name + ".png"), System.Array.Empty<byte>());
+            if (infos.Length > 0)
+            {
+                infos.Append(',');
+            }
+            infos.Append($"{{\"name\":\"{name}\",\"alpha\":\"None\",\"stretch\":\"{spelling}\"}}");
+        }
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), $"{{\"texture_infos\":[{infos}]}}");
         return dir;
     }
 

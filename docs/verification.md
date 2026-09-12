@@ -772,6 +772,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   world builds, and the same census's sixteen `MP3` rearm bases do resolve in all eight
   (`org/targeting.md`). The check is one grep of each world's `nodes.json`, and it separates a data
   author's copied record from a feature the player can reach.
+- **SRC-15** — **A rule inferred from the artwork can agree with the original on the shipped data
+  and still be the wrong rule; find the field the engine reads before believing a threshold that
+  separates cleanly.** The puffer blend verdict thresholded the dying sprite's alpha-weighted
+  luminance at `16/255`, a population that separates with nothing between 0.018 and 0.12, and it
+  reached the right answer for the case it was built on; the engine reads bit 2 of the texture
+  header's render-flags word, which no puffer sprite in the install carries
+  (`org/textures.md`).
 
 ## What this project cannot verify itself
 
