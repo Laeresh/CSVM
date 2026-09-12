@@ -95,9 +95,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ `New-ItemId.ps1` gets its BOM and loses its em dashes
 22. ☑ `SetNet` reports a missing net as no move
-23. ☐ A death choreography is only the def's death sequence
+23. ☑ A death choreography is only the def's death sequence
 24. ❌ `KeepsTheShot` holds only the episode that raised the ending
-25. ☐ A queued start past the budget still gets its zero-dt advance
+25. ☑ A queued start past the budget still gets its zero-dt advance
 26. ☑ A turret voice culls at 1.1x its range, as decoded
 27. ☑ `ADD_OTHER_TARGET` and its remove reach the mode table's points
 28. ☑ The goldens README count and the re-pinned `exercises` fields
@@ -828,7 +828,50 @@ director's category; the count then says what happened.
 **Verify.** A unit with a constructed clause naming `no_such_net` reads `moved == 0` and the
 warning; the C4/M05 and C2/M05 pins unchanged.
 
-## C23 ☐ A death choreography is only the def's death sequence
+## C23 ☑ A death choreography is only the def's death sequence
+
+**Landed.** `AuthoredInDeathChoreography` reads the chain through `OwnDeathSequencesOf`, the one
+derivation of a def's death chain the module already carries, instead of testing "not ON_CALL"
+itself. That chain is the def's Initial sequences, its compiled destruction slot, and the ON_CALL
+sequences those two reach through `CALL_SEQUENCE`. The member moved down beside that derivation
+and is no longer static. The correction is a widening rather than the narrowing the item expected,
+and it has a shipped case: C5's `agyrobus` ends `destroy_craft` with `CALL_SEQUENCE randomdestseq`,
+whose first branch switches `destroyed` back off as the wreck is launched, so a live kill of the
+autogyro bus handed its own pool full HP back on that draw.
+
+**Evidence correction.** The item's premise, that a def names a death sequence its other
+non-ON_CALL sequences sit outside of, does not hold in the authored data. `RunDeathSequence` plays
+ALL of a def's Initial sequences plus its destruction slot, which its own comment and
+`docs/formats/destructibles.md` both state ("never try to pick the death sequence out by name"), so
+"not ON_CALL" already WAS the set the death plays, and there is no "elsewhere" among the Initial
+sequences for an authored repair to sit in. The names bear that out: over the 2,603 defs carrying
+`HEALTH > 0` in the eight chapters, the 2,183 chain sequences that switch a healthy/destroyed/`dbase`
+node carry 24 distinct names and 259 no name at all, `destroyit` covering 1,655 of them and the
+rest running through `hit_me_now`, `effects`, `gone` and `win_smsh`. The one real gap between the
+predicate and the chain was the ON_CALL sequences the chain calls, which the carried-pose read
+already follows. A re-run of `BL-733`'s census over all 16,114 compiled definition files reproduces
+its fourteen defs in three families exactly and adds `agyrobus` as the one case of that shape. The
+item also attributes the fourteen defs to the `death-not-a-revival` suite; the suite flies two of
+the three families, and the fourteen come from the census on `docs/formats/destructibles.md`.
+
+**Owed elsewhere.** `docs/formats/destructibles.md`'s revival paragraph says a revival can arrive
+from "a `RESET_STATE`, an ON_CALL sequence, or another def's script", which this change makes true
+only of an ON_CALL sequence the death chain does not call; that page is outside this item's file
+ownership and is left for the orchestrator.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` 0 warnings, 0 errors.
+`CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean.
+`RunTests.ps1 -Suite "death-not-a-revival,anim-call-start-order" -SkipUnits -SkipGoldens`: PASS,
+2 passed, 0 failed, engine errors clean. Able to fail: with the predicate restored to its
+non-ON_CALL form the same run is FAIL on "the wreck its called sequence clears away leaves the pool
+dead status=Healthy hp=10". The eight neighbouring destruction suites (`start-state-swap-pool`,
+`damage-hd`, `called-death-chain`, `carried-state-silent`, `carried-pose-called-sequence`,
+`death-slot`, `damage-stages`, `self-ref-launch`) are 8 passed, 0 failed, which covers both other
+revival sources, the `RESET_STATE` baseline and the destroy/reset/destroy path.
+`RunTests.ps1 -SkipEngine -SkipGoldens`: 4090 passed, 0 failed, 2 skipped of 4092.
+`RunTests.ps1 -SkipUnits -SkipEngine`: 23 shots hash-identical.
+
+**Original approach (kept for reference).**
 
 **Goal.** A `dbase` deactivation counts as the def's own death only when it is inside the death
 sequence, as `BL-733`'s entry asked; an authored repair elsewhere still revives.
@@ -907,7 +950,32 @@ frame; a wrong gate either brings the flash back or freezes the next episode.
 **Verify.** `campaign-mission-end` runs all three fade paths green; a new phase starts a second
 episode after a result and reads it handing off; `PT-137` stays owed for the look.
 
-## C25 ☐ A queued start past the budget still gets its zero-dt advance
+## C25 ☑ A queued start past the budget still gets its zero-dt advance
+
+**Landed.** Two halves, both needed. `DrainQueuedStarts` leaves the overflow ON the queue instead
+of clearing it, which is what `MaxQueuedStarts`'s own comment always said it did ("before the rest
+wait for the next walk"). `WalkInstances` then holds a still-queued instance out of its step loop,
+through a set built only when the queue is not empty at the head of a walk, so the next pass cannot
+charge that instance a real dt before the drain at its tail gives it the zero-dt advance it was
+queued for. The drain's own summary now says it reaches as far as one walk's budget. Behaviour is
+unchanged below the budget, where the queue is always empty at the head of a walk.
+
+**Evidence correction.** The queue cannot be left alone and drained a pass later on its own: the
+overflowed instances are live and in `_instances`, so the next walk would step them at its real dt
+and only then burst them at zero, which is the same violation one pass later. Reverting either half
+alone leaves all 88 overflowed callees charged.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` 0 warnings, 0 errors.
+`CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean.
+`RunTests.ps1 -Suite "death-not-a-revival,anim-call-start-order" -SkipUnits -SkipGoldens`: PASS,
+2 passed, 0 failed, engine errors clean; the new block's note reads "first advances by walk: 512 in
+walk 3, 88 in walk 4", so the 512 budget is met and crossed. Able to fail: restoring the
+`_queuedStarts.Clear()` fails on "88 of 600 reached an event stamped at 0.02 s in the same advance
+as their t=0 one", and so does dropping the walk's hold-out with the queue kept.
+`RunTests.ps1 -SkipEngine -SkipGoldens`: 4090 passed, 0 failed, 2 skipped of 4092.
+`RunTests.ps1 -SkipUnits -SkipEngine`: 23 shots hash-identical.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every instance queued by the walk receives its zero-dt first advance, whatever the
 per-pass budget.

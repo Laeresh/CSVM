@@ -481,7 +481,7 @@ internal static class DestroyChoreographySuites
     // ⚠ Read the pool twice, once in the frames after the kill and once past the sink. The two
     // events are a minute apart, so a fix covering only the synchronous death burst passes the first.
     [Suite("death-not-a-revival",
-        "the Barracuda's own death switches its dbase node off and sinks its destroyed hull away a minute later, and a lifesaver's switches `destroyed` itself off in the same breath as `healthy`; none of the three hands the killed pool its health back")]
+        "the Barracuda's own death switches its dbase node off and sinks its destroyed hull away a minute later, a lifesaver's switches `destroyed` itself off in the same breath as `healthy`, and a constructed def clears its wreck away from the ON_CALL sequence its death calls; none of the four hands the killed pool its health back, while a baseline outside that chain still revives it")]
     internal static void OwnDeathIsNotARevival(TestContext ctx)
     {
         ctx.WithWorld("C3", collision: false, mission: "M03", world =>
@@ -538,6 +538,8 @@ internal static class DestroyChoreographySuites
             ctx.Check(boat.Status == DestructibleRegistry.State.Destroyed && boat.Health <= 0f,
                 $"the lifesaver's own death leaves its pool dead status={boat.Status} hp={boat.Health:0.##}");
         });
+
+        WreckClearedFromACalledSequence(ctx);
     }
 
     // ---- a carried pose reaches the pieces a called sequence hides -----------------------------
@@ -2504,4 +2506,94 @@ internal static class DestroyChoreographySuites
 
         return pools;
     }
+
+    // The third authored shape of a wreck removing itself: the clear-away step sits in an ON_CALL
+    // sequence the death itself calls, which is C5's agyrobus (destroy_craft calls randomdestseq,
+    // and that switches `destroyed` off as the wreck is launched). Constructed rather than flown,
+    // because the shipped case opens on IF RandomWeight and only one draw reaches the switch.
+    // ⚠ Assert the repair outside the chain in the same pass. A guard that swallowed every
+    // backward swap would pass the first check and silently retire the revival branch.
+    private static void WreckClearedFromACalledSequence(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const string Anim = "wreck_clears_itself";
+        var stage = new Node3D { Name = "RevivalStage" };
+        var anchor = new Node3D { Name = Anim };
+        anchor.AddChild(new Node3D { Name = "healthy" });
+        anchor.AddChild(new Node3D { Name = "destroyed" });
+        stage.AddChild(anchor);
+        var runtime = new AnimRuntime
+        {
+            AutoStart = false,
+            ManualAdvance = true,
+            SoundHandledElsewhere = true,
+        };
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, AnimProgram.FromDefinitions(new[] { WreckClearingDef(Anim) }));
+            var pool = runtime.Destructibles.All.FirstOrDefault(i => i.Def.AnimName == Anim);
+            ctx.Check(pool != null,
+                $"the constructed def registers its pool pools={runtime.Destructibles.All.Count}");
+            if (pool is not { } wreck)
+            {
+                return;
+            }
+
+            runtime.DamageAt(wreck.Anchor, wreck.MaxHealth + 1f);
+            for (int i = 0; i < 4; i++)
+            {
+                runtime.Advance(Tick);
+            }
+
+            ctx.Check(wreck.Status == DestructibleRegistry.State.Destroyed && wreck.Health <= 0f,
+                $"the wreck its called sequence clears away leaves the pool dead status={wreck.Status} hp={wreck.Health:0.##}");
+
+            // The other direction: a RESET_STATE is outside the death chain, so the same backward
+            // swap read from there is the repair it looks like.
+            runtime.RunResetStateEvents(Anim);
+            ctx.Check(wreck.Status == DestructibleRegistry.State.Healthy && wreck.Health >= wreck.MaxHealth,
+                $"a baseline outside that chain still revives the pool status={wreck.Status} hp={wreck.Health:0.##}");
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+        }
+    }
+
+    // A destructible whose death hides `healthy`, shows `destroyed` and then calls the ON_CALL
+    // sequence that clears the wreck away, with a RESET_STATE naming the standing pose.
+    private static AnimDefinition WreckClearingDef(string animName)
+    {
+        var def = new AnimDefinition { Name = animName, AnimName = animName, Health = 10f };
+        var death = new AnimSequence();
+        death.Events.Add(SwitchEvent("healthy", false));
+        death.Events.Add(SwitchEvent("destroyed", true));
+        death.Events.Add(new AnimEvent
+        {
+            Kind = "CallSequence",
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = "clear_away" }),
+        });
+        var clear = new AnimSequence { Name = "clear_away", OnCallOnly = true };
+        clear.Events.Add(SwitchEvent("destroyed", false));
+        def.Sequences.Add(death);
+        def.Sequences.Add(clear);
+        var reset = new AnimSequence();
+        reset.Events.Add(SwitchEvent("healthy", true));
+        reset.Events.Add(SwitchEvent("destroyed", false));
+        def.ResetState = reset;
+        return def;
+    }
+
+    private static AnimEvent SwitchEvent(string node, bool state) => new()
+    {
+        Kind = "ObjectActiveState",
+        Data = new AnimData(new Dictionary<string, object?>
+        {
+            ["node"] = node,
+            ["state"] = state,
+        }),
+    };
 }

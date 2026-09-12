@@ -1999,17 +1999,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private static bool AuthoredInResetState(AnimDefinition def, AnimEvent ev) =>
         def.ResetState is { } reset && reset.Events.Contains(ev);
 
-    // Does this event come from the definition's own death choreography, the non-ON_CALL sequences
-    // and destruction slot RunDeathSequence plays? Reference identity again, and static rather than
-    // a look at what is dying: a death's later events land minutes after its burst has returned.
-    private static bool AuthoredInDeathChoreography(AnimDefinition def, AnimEvent ev)
-    {
-        foreach (var seq in def.Sequences)
-            if (!seq.OnCallOnly && seq.Events.Contains(ev))
-                return true;
-        return def.DeathSlot is { } slot && slot.Events.Contains(ev);
-    }
-
     // The name of def's own healthy-role node, for DestructibleKilled: the node an OBJECT_ACTIVE_
     // STATE switches off in def's own Initial sequences (the visible-death case), or else the one
     // RESET_STATE holds ACTIVE (the RESET-derived swap ApplyDeathSwap plays instead). Null for a
@@ -2141,9 +2130,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Runs the first advance of every definition a <c>CALL_ANIMATION</c> started during
-    /// this tick's walk, in the order the calls were made. The original's dispatcher appends a
-    /// started instance to the tail of the list it is walking and re-reads the link after every
-    /// callback, so a callee is reached in the same pass, after the caller's remaining events.
+    /// this tick's walk, in the order the calls were made, as far as one walk's budget reaches.
+    /// The original's dispatcher appends a started instance to the tail of the list it is walking
+    /// and re-reads the link after every callback, so a callee is reached in the same pass, after
+    /// the caller's remaining events.
     /// Decode: docs/org/sequences.md.</summary>
     private void DrainQueuedStarts()
     {
@@ -2151,10 +2141,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             if (started >= MaxQueuedStarts)
             {
-                // Leave the rest to the next walk rather than running them here: they are live
-                // instances already, so that walk advances them like any other.
+                // ⚠ Leave the rest QUEUED, never cleared. A start still on the queue is owed its
+                // zero-dt advance, and the next walk owes it the same one; dropping it hands the
+                // instance a real dt as its first advance, which AdvanceStarted forbids.
                 Count("CallAnimation(tick start budget)");
-                _queuedStarts.Clear();
                 return;
             }
             var (inst, protect) = _queuedStarts[0];
@@ -3845,6 +3835,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
+    // Does this event come from the definition's own death choreography, one of the sequences
+    // OwnDeathSequencesOf names? Reference identity on the authored event, and a test of where it
+    // was authored rather than of what is dying. A death's later events land minutes after its
+    // burst has returned. ⚠ Read the chain through that one method. A wreck clearing itself away
+    // from a called ON_CALL sequence is as much a death as one doing it from an Initial sequence.
+    private bool AuthoredInDeathChoreography(AnimDefinition def, AnimEvent ev) =>
+        OwnDeathSequencesOf(def).Any(seq => seq.Events.Contains(ev));
+
     // Keeps a destructible's HP pool in step with a healthy/destroyed OBJECT_ACTIVE_STATE swap
     // dispatched outside DamageAt's own kill, such as a start-state script authoring an object
     // destroyed before the player arrives. Without this the pool stays Healthy at full HP
@@ -4122,6 +4120,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _advancing.Clear();
         _advancing.AddRange(_instances);
+        // Only a walk that hit the start budget leaves anything queued this far. Those instances
+        // are live but still owed their zero-dt first advance, so this pass steps around them and
+        // the drain below gives them the advance they were queued for.
+        var owedStarts = _queuedStarts.Count == 0
+            ? null
+            : new HashSet<AnimInstance>(_queuedStarts.Select(q => q.Inst));
         // Saved and restored rather than set and cleared, so a nested advance cannot end the outer
         // walk's queueing window behind it.
         bool wasWalking = _walkingInstances;
@@ -4131,7 +4135,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             for (int i = _advancing.Count - 1; i >= 0; i--)
             {
                 var inst = _advancing[i];
-                if (!_instances.Contains(inst))
+                if (!_instances.Contains(inst) || owedStarts?.Contains(inst) == true)
                 {
                     continue;
                 }

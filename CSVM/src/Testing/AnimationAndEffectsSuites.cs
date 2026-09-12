@@ -895,7 +895,7 @@ internal static class AnimationAndEffectsSuites
     // callee's INVALIDATE_ANIMATION latch a name the caller has yet to call, which the original
     // cannot reach. Decode: docs/org/sequences.md.
     [Suite("anim-call-start-order",
-        "a CALL_ANIMATION callee takes its first step after the caller's remaining events of the same tick rather than inside the call, so a callee that invalidates a name the caller calls one event later cannot cancel that call")]
+        "a CALL_ANIMATION callee takes its first step after the caller's remaining events of the same tick rather than inside the call, so a callee that invalidates a name the caller calls one event later cannot cancel that call; a fan-out past the walk's start budget still gives every one of its callees that first step at zero dt, on the walk after")]
     internal static void CallStartOrder(TestContext ctx)
     {
         const float Tick = 1f / 30f;
@@ -948,6 +948,8 @@ internal static class AnimationAndEffectsSuites
             runtime.Free();
             stage.Free();
         }
+
+        QueuedStartsPastTheBudget(ctx);
     }
 
     // ---- the MAIN_ROOT_NODE self-reference: a launch onto the def's own anchor -------------------
@@ -2300,6 +2302,94 @@ internal static class AnimationAndEffectsSuites
                 ctx.Check(Mathf.Abs(at[l][s] - step.At) <= BurstSlack,
                     $"{tag} #{step.Index} {step.Kind} fires at its authored {step.At:0.###} s ({at[l][s]:0.###} s)");
             }
+        }
+    }
+
+    // One walk drains 512 queued starts and leaves the rest for the next walk, which still owes
+    // each of them the zero-dt advance it was queued for. A start dropped from the queue instead
+    // takes that walk's real dt as its first advance, and its t=0 events then land in the same
+    // advance as an event stamped inside the first tick.
+    // ⚠ Read both events of a callee, never the count of first advances. Every callee fires its
+    // t=0 event whatever dt it was first advanced with, so only the stamped one tells the two apart.
+    private static void QueuedStartsPastTheBudget(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const float Stamped = 0.02f;    // inside one tick, so only a charged first advance reaches it
+        const int Fans = 3;             // one sequence's runner fires at most 256 events per advance
+        const int PerFan = 200;         // so three of them queue 600 starts in one walk, past the 512
+        const int Callees = Fans * PerFan;
+        const string Caller = "budget_caller";
+        const string Nothing = "budget_nothing";
+        var defs = new List<AnimDefinition>();
+        var caller = new AnimDefinition { Name = Caller, AnimName = Caller };
+        for (int fan = 0; fan < Fans; fan++)
+        {
+            var seq = new AnimSequence { Name = $"fan{fan}" };
+            for (int i = 0; i < PerFan; i++)
+            {
+                string callee = $"budget_callee{(fan * PerFan) + i:000}";
+                // The first call of each fan is scheduled, so the whole fan-out is dispatched by a
+                // tick's walk rather than by the instant burst a Play runs; the rest follow it in
+                // the same tick.
+                seq.Events.Add(i == 0
+                    ? OrderEvent("CallAnimation", callee, "Sequence", 0.1f)
+                    : OrderEvent("CallAnimation", callee));
+                defs.Add(OrderDef(callee,
+                    OrderEvent("StopAnimation", Nothing),
+                    OrderEvent("InvalidateAnimation", Nothing, "Sequence", Stamped)));
+            }
+
+            caller.Sequences.Add(seq);
+        }
+
+        defs.Add(caller);
+        var stage = new Node3D { Name = "StartBudgetStage" };
+        var runtime = new AnimRuntime
+        {
+            AutoStart = false,
+            ManualAdvance = true,
+            SoundHandledElsewhere = true,
+        };
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, AnimProgram.FromDefinitions(defs));
+            int tick = 0;
+            var burst = new Dictionary<string, int>();
+            var stamped = new Dictionary<string, int>();
+            runtime.OnEventDispatched = d =>
+            {
+                string name = d.Def.AnimName ?? string.Empty;
+                if (!name.StartsWith("budget_callee", System.StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var landed = d.EventKind == "StopAnimation" ? burst : stamped;
+                if (!landed.ContainsKey(name))
+                {
+                    landed[name] = tick;
+                }
+            };
+            ctx.Same(1, runtime.Play(Caller).Count, $"the caller starts as one instance");
+            for (tick = 1; tick <= 12; tick++)
+            {
+                runtime.Advance(Tick);
+            }
+
+            ctx.Same(Callees, burst.Count, $"every one of the {Callees} calls starts its callee");
+            int charged = burst.Count(b => stamped.TryGetValue(b.Key, out int at) && at <= b.Value);
+            ctx.Same(0, charged,
+                $"every callee's first advance is at zero dt: {charged} of {burst.Count} reached an event stamped at {Stamped:0.###} s in the same advance as their t=0 one");
+            var passes = burst.Values.GroupBy(t => t).OrderBy(g => g.Key)
+                .Select(g => $"{g.Count()} in walk {g.Key}");
+            ctx.Note($"first advances by walk: {string.Join(", ", passes)}");
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
         }
     }
 
