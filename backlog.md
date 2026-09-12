@@ -2754,17 +2754,6 @@ usual.
   v3 writer. *⚠ Traps:* not a path fault, and a worktree shares the main checkout's `user://`.
   *Cross-refs:* `BL-662` (the v3 store), `BL-675`'s closing commit.
 
-- `BL-868` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM05]` **CM05 (C3/M04): one Brigand under the
-  Pandora fails the mission; what wakes the authored instant loss, and is one enough?**
-  *Evidence:* reported at the controls as a question. `extracted/C3/M04/zrdr/objectives.zrd.json`
-  authors `OBJECTIVE10` as `INSTANTLOSS`, `BEGIN_DORMANT`, napped by the zeppelin-damage
-  objective's completion (`NAP_OBJECTIVE_WHEN_I_COMPLETE 10, 45.0`); whatever wakes it is the
-  loss condition. *Fix shape:* read the objective graph for the waker and its condition (a
-  Brigand reaching a stop point at the Pandora, a count, a timer) and answer whether one Brigand
-  under the hull is the authored loss. Answered yes, this closes as an answer; answered no, or if
-  CSVM wakes it on a condition the data does not author, it becomes a Bug on the objective
-  runtime. *Cross-refs:* `BL-523` (CM05's patrol cycle), `docs/formats/objectives.md`.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

@@ -15,7 +15,8 @@ script is nearly empty.
 carrying **1,338** `OBJECTIVEn` blocks in total. Every directive that census found appears in
 the reference below; the shipped-but-dead directives are listed under
 [Data anomalies](#data-anomalies). The worked example is `extracted\C2\M01\zrdr\objectives.zrd.json`
-(82 objectives, the Hollywood "Spruce Goose" mission).
+(82 objectives, the Hollywood "Spruce Goose" mission); a second, shorter walk covers CM05's
+zeppelin-damage fuse in `extracted\C3\M04`.
 
 ## Contents
 
@@ -34,6 +35,7 @@ the reference below; the shipped-but-dead directives are listed under
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
 - [Data anomalies](#data-anomalies)
 - [Worked example: C2/M01](#worked-example-c2m01)
+- [Worked example: CM05's zeppelin-damage fuse](#worked-example-cm05s-zeppelin-damage-fuse)
 - [Evidence & limits](#evidence--limits)
 
 ## Conceptual model
@@ -496,6 +498,38 @@ survive an ambush, and escort the Goose out.
 
 The walk exercises every directive family the mission uses and contradicts none of the traced
 semantics.
+
+## Worked example: CM05's zeppelin-damage fuse
+
+CM05 (`C3/M04`) authors the same fuse shape on the Pandora, and it answers a question the
+mission raises at the controls: what actually fails the mission when Brigands are under the
+hull. The answer is the airship's engine nacelles, counted, and nothing else.
+
+- **The rungs.** OBJ6 (awake from start), OBJ7, OBJ8 and OBJ9 (each `BEGIN_DORMANT -1`) carry
+  the same twelve `INACTIVEn [piratezep, <engine>, healthy]` paths over the hull's twelve
+  engine nacelles, with `INACTIVE_COMPLETION_COUNT` 1, 2, 4 and 6. Each completion plays its
+  own radio line (`snd_HI4LowDmg`, two `Sparks` lines, `snd_HI4HvyDmg`) and naps the next rung
+  1 s later, so the chain climbs one rung per nacelle count reached.
+- **The fuse.** OBJ9's completion, six nacelles out, releases the hull's dock stop point
+  (`COMPLETED_STOPPOINT [M4PirateZep, 1, 0]`), wakes OBJ19, and naps OBJ10 for 45 s. OBJ10 is
+  `INSTANTLOSS` with `BEGIN_DORMANT -1` and **no completion condition**, so it completes on its
+  first tick awake: the nap running out is the loss, 45 s after the sixth nacelle dies.
+- **The only route in.** No other directive in the file names objective 10, and OBJ10 is the
+  mission's only `INSTANTLOSS`. So the loss counts nacelles, never Brigands, a zone, a timer or
+  damage on the player, and five nacelles out leave the mission running indefinitely.
+- **Whether one attacker is enough.** Each nacelle is its own 40 HP `WeaponHit` destructible
+  whose death switches the `healthy` model off, which is the bit the rungs read: 240 HP of
+  nacelle between a lone attacker and the fuse. All five `medbrigand_*` roster blocks carry a
+  +0.5 `rating_biases` weight onto `piratezep` (the Medusa ace is weighted -1.0 off it), and
+  nothing caps attackers, repairs a nacelle or re-arms a rung. One Brigand left alone therefore
+  reaches the sixth nacelle given time, and the player's own rounds into the nacelles count the
+  same way. A burning gasbag section is the second route to the same count, since each bay's
+  death takes that bay's engines with it.
+
+CSVM's runtime evaluates this as authored, pinned over the mission's own built world by the
+`campaign-pandora-loss` suite: twelve nacelles switched on behind their own 40 HP pools, five
+out leaving OBJ10 dormant with the mission running, the sixth napping it for 45 s, and the
+outcome turning Lost 45.00 s later.
 
 ## Evidence & limits
 
