@@ -238,6 +238,7 @@
     "ordnance-launch-axis": 0.543,
     "partition-areas": 0.716,
     "pause-sheet": 0.27,
+    "pause-world-icons": 2.05,
     "perf-hud-layout": 0.009,
     "persist-chain-kill": 2.07,
     "plane-shader-reuse": 0.252,

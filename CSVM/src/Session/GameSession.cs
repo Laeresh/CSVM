@@ -3532,27 +3532,41 @@ public partial class GameSession : Node3D
         var rows = UI.PauseReadout.Rows(objectives, n => graph?.CompletedOf(n) ?? false);
 
         var icons = new List<UI.PauseWorldIcon>();
-        if (sheet.Shared.OwnShip.Length > 0 && RigOf(pauseState.OwnerPlayerIndex)?.Controller is { } own)
+        if (RigOf(pauseState.OwnerPlayerIndex)?.Controller is { } own)
         {
             var forward = -own.GlobalTransform.Basis.Z;
-            icons.Add(new UI.PauseWorldIcon(
+            if (UI.PauseReadout.Icon(
                 sheet.Shared.OwnShip, own.GlobalPosition.X, own.GlobalPosition.Z,
-                UI.MissionMap.Heading(forward.X, forward.Z)));
+                forward.X, forward.Z) is { } ship)
+            {
+                icons.Add(ship);
+            }
         }
 
         // The original looks its own zeppelin up by name and draws nothing when the mission has
         // none, which is the same answer an empty find gives here. Its icon turns with the hull,
         // which is what the reference stills show: the art is drawn along the course flown.
-        if (sheet.Shared.MyZep.Length > 0 && runtime != null)
+        foreach (var hull in runtime?.FindNodes(PirateZepNode) ?? Array.Empty<Node3D>())
         {
-            foreach (var hull in runtime.FindNodes(PirateZepNode))
+            var nose = -hull.GlobalTransform.Basis.Z;
+            if (UI.PauseReadout.Icon(
+                sheet.Shared.MyZep, hull.GlobalPosition.X, hull.GlobalPosition.Z,
+                nose.X, nose.Z) is { } zeppelin)
             {
-                var nose = -hull.GlobalTransform.Basis.Z;
-                icons.Add(new UI.PauseWorldIcon(
-                    sheet.Shared.MyZep, hull.GlobalPosition.X, hull.GlobalPosition.Z,
-                    UI.MissionMap.Heading(nose.X, nose.Z)));
-                break;
+                icons.Add(zeppelin);
             }
+
+            break;
+        }
+
+        // Where each icon landed, one line per pause. A pose outside the dialog's own world window
+        // draws nothing at all, and the sheet that results cannot be told from one whose lookup
+        // found nothing, so the two are separated here rather than at the controls.
+        foreach (var icon in icons)
+        {
+            string where = sheet.State.Map is { } chart
+                && chart.TryProject(icon.WorldX, icon.WorldZ, out _) ? "on" : "off";
+            Log.Info("ui", $"pause icon {icon.Bitmap} at ({icon.WorldX:0}, {icon.WorldZ:0}) {where} the chart");
         }
 
         return new UI.PauseReadout(rows, PauseMemento, icons);

@@ -83,6 +83,18 @@ public sealed record PauseReadout(
     public static PauseReadout Empty { get; } = new(
         Array.Empty<PauseObjective>(), string.Empty, Array.Empty<PauseWorldIcon>());
 
+    /// <summary>The chart icon one world pose takes: the shared block's bitmap at the pose's plan
+    /// position, turned by its forward vector. Null only when no bitmap is named, which is the
+    /// original's whole binding test; held here so a session and a suite place an icon alike.
+    /// ⚠ Whether the pose reaches the chart is <see cref="MissionMap.Icon"/>'s answer at
+    /// composition, and a pose outside the window yields an icon here and draws nothing
+    /// there.</summary>
+    public static PauseWorldIcon? Icon(
+        string bitmap, float worldX, float worldZ, float forwardX, float forwardZ) =>
+        bitmap.Length == 0
+            ? null
+            : new PauseWorldIcon(bitmap, worldX, worldZ, MissionMap.Heading(forwardX, forwardZ));
+
     /// <summary>The parchment's rows for one mission's note, each marked by what
     /// <paramref name="completed"/> answers for that row's own <c>OBJECTIVEn</c> number.
     /// ⚠ Ask by the number, never by the row's priority: priority is the note's row order, and a
