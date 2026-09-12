@@ -471,9 +471,9 @@ public partial class FlightController : Node3D
     private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
     private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F6/F7 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
-    // Suppresses the rocket trigger's next read when a cutscene skip or a pause-menu
-    // Resume hands input back while F/A is still down from confirming it.
-    private readonly RocketTriggerLatch _rocketLatch = new();
+    // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
+    // hands input back while the control that confirmed it is still down.
+    private readonly FlightReentryLatch _reentryLatch = new();
 
     // This seat's keymap, and three views of it. One map, three readers, because the keyboard half
     // and the pad half of an attitude action are processed differently here and then summed: the
@@ -798,10 +798,10 @@ public partial class FlightController : Node3D
             if (!_lifecycle.SetInert(value))
                 return;
             // Going live is flight's own resume/skip re-entry point: a cutscene's skip or its
-            // natural handoff clears Inert on the same frame the button that ended it (F/A) can
-            // still be down.
+            // natural handoff clears Inert on the same frame the button that ended it can still be
+            // down, and a cutscene takes any key or pad button.
             if (!value)
-                SuppressRocketTriggerOnRegainedInput();
+                SwallowInputHeldThroughReentry();
             ApplyPresence();
             InertChanged?.Invoke(this);
         }
@@ -2176,7 +2176,7 @@ public partial class FlightController : Node3D
 
     // N / gamepad X, the nitro command (the original's MSG_CMD_NITROUS "Use Nitro-Booster").
     // A level read: the command arm engages on pressed-or-held and ignores it otherwise.
-    private bool NitroPressed() => AutoNitro || _actions.Held(InputAction.Nitro);
+    private bool NitroPressed() => AutoNitro || ReadLatched(InputAction.Nitro);
 
     // The nitro lifecycle for this step, in the original's order: the command arm (human key,
     // or the AI's nitro-flagged maneuver), then the tank, then the edges the flag produced.
@@ -2262,31 +2262,45 @@ public partial class FlightController : Node3D
     }
 
     // Space / gamepad B, the gun trigger (caller drives the fire-rate clock);
-    // `--fire` holds it down for unattended runs.
-    private bool FirePressed() => AutoFire || _actions.Held(InputAction.FireGuns);
+    // `--fire` holds it down for unattended runs, and stays outside the latch because no re-entry
+    // press put it down. Gamepad B is also the menu's Back, so a pause-sheet dismiss reaches here.
+    private bool FirePressed() => AutoFire || ReadLatched(InputAction.FireGuns);
 
     // F / gamepad A, the rocket trigger. One discrete pull launches one rocket (holding
     // does NOT auto-repeat; only the 1.0 s cooldown gates it), and `--fire-rockets` auto-repeats
     // for unattended runs. ⚠ Gamepad A must not also respawn: PadPressed is a level read, so a
     // button still held when the plane goes live fires a rocket on the spawn frame, the same
     // shape the latch below also catches, since it arms wherever flight regains input.
-    private bool RocketButtonDown() => _actions.Held(InputAction.FireRockets);
+    private bool RocketFirePressed() => ReadLatched(InputAction.FireRockets);
 
-    private bool RocketFirePressed() => _rocketLatch.Read(RocketButtonDown());
+    // Every discrete flight command reads through here, so one still-down control is swallowed
+    // once for whichever commands it is bound to (FlightReentryLatch.Latched names them).
+    private bool ReadLatched(InputAction action) =>
+        _reentryLatch.Read(action, _actions.Held(action));
 
     // Called at flight's own resume/skip re-entry points (the Inert setter above, and
     // PollPauseAndHalt's halt-clearing edge) so a press that just confirmed a cutscene skip or a
-    // pause-menu Resume cannot also read as the rocket trigger's next pull. ⚠ Pass the latch no
-    // button reading from here: a skip is handled inside an input handler, and this frame's
-    // snapshot predates the press that caused it (RocketTriggerLatch.Arm).
-    private void SuppressRocketTriggerOnRegainedInput() => _rocketLatch.Arm();
+    // pause-sheet dismiss cannot also read as a flight command. ⚠ Pass the latch no button reading
+    // from here: a skip is handled inside an input handler, and this frame's snapshot predates the
+    // press that caused it (FlightReentryLatch.Arm).
+    private void SwallowInputHeldThroughReentry() => _reentryLatch.Arm();
 
 #pragma warning disable SA1202
-    // The rocket trigger's own reading, for the suite that drives the cutscene-to-flight and
+    // The two triggers' own readings, for the suite that drives the cutscene-to-flight and
     // pause-to-flight boundaries: a headless run holds no button down, so the suite supplies the
-    // reading and asserts what the latch does with it. Kept beside the button reads it belongs
+    // reading and the production read is what answers it. Kept beside the button reads they belong
     // with rather than hoisted for SA1202's sake, the same trade made elsewhere here.
-    internal bool RocketTriggerReadsForTest(bool buttonDown) => _rocketLatch.Read(buttonDown);
+    internal bool RocketTriggerReadsForTest(bool buttonDown)
+    {
+        HoldActionForTest(InputAction.FireRockets, buttonDown);
+        return RocketFirePressed();
+    }
+
+    internal bool GunTriggerReadsForTest(bool buttonDown)
+    {
+        HoldActionForTest(InputAction.FireGuns, buttonDown);
+        return FirePressed();
+    }
 
     // This tick's reading for one action, written over the three readers after a real poll, so the
     // next SimStep in the same rendered frame reuses it rather than polling over it. The suites'
@@ -2318,13 +2332,13 @@ public partial class FlightController : Node3D
     // ⚠ The D-pad side follows the cockpit dial it drives: the GUNS gauge sits in the right column
     // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
     // mis-binding at the controls.
-    private bool GunSelectPressed() => _actions.Held(InputAction.SelectGunGroup);
+    private bool GunSelectPressed() => ReadLatched(InputAction.SelectGunGroup);
 
     // F3, the same walk the other way, its own bound action because the original's own keybind
     // page carries one per direction per weapon class. The gun cycle's second direction was never
     // watched at the original's controls; it is wired because that page names it, and the pages are
     // what the port reproduces where a play session cannot reach.
-    private bool GunSelectBackPressed() => _actions.Held(InputAction.SelectGunGroupPrev);
+    private bool GunSelectBackPressed() => ReadLatched(InputAction.SelectGunGroupPrev);
 
     // F9 / gamepad left-stick click, the auto-land button, read live by
     // LandingApproachRuntime.Tick() so a press lands in the same frame it happens. Kept beside the
@@ -2333,7 +2347,7 @@ public partial class FlightController : Node3D
     internal bool AutoLandPressed()
     {
         PollInput();    // read from outside this node's own tick, so it resolves its own frame
-        return AutoLand || _actions.Held(InputAction.AutoLand);
+        return AutoLand || ReadLatched(InputAction.AutoLand);
     }
 #pragma warning restore SA1202
 
@@ -2341,11 +2355,11 @@ public partial class FlightController : Node3D
     // carries ordnance (each pylon is its own selectable slot, whatever it loads, even a plane with
     // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
     // edge-detects.
-    private bool RocketSelectPressed() => _actions.Held(InputAction.SelectOrdnance);
+    private bool RocketSelectPressed() => ReadLatched(InputAction.SelectOrdnance);
 
     // F4, the hardpoint walk the other way, over the same physical mount order and skipping the
     // same empties, so a press each way from one pylon returns to it. Caller edge-detects.
-    private bool RocketSelectBackPressed() => _actions.Held(InputAction.SelectOrdnancePrev);
+    private bool RocketSelectBackPressed() => ReadLatched(InputAction.SelectOrdnancePrev);
 
     // This frame's pilot-HUD feed. The pipper's inputs are resolved HERE and only where there is a
     // reticle to draw: a muzzle midpoint reads one world transform per barrel, which every aircraft
@@ -3038,7 +3052,7 @@ public partial class FlightController : Node3D
             Rerun();   // the solo board takes R as a fresh run, distinct from a mid-run respawn
     }
 
-    private bool RespawnPressed() => _actions.Held(InputAction.Respawn);
+    private bool RespawnPressed() => ReadLatched(InputAction.Respawn);
 
     // P, Esc or gamepad Start, edge-detected so one press toggles once, gated on AllowPause
     // (false for AI rigs and the suites' bare test rigs). Esc opens the pause board rather than
@@ -3072,13 +3086,20 @@ public partial class FlightController : Node3D
             // The engine/whine/rattle loops hold their sample position through the freeze; the
             // one-shots already in flight are left to play out.
             Audio?.SetPaused(halted);
-            // Clearing is the pause board's own re-entry point: its Resume confirm can still have
-            // F/A down on this very frame.
+            // Clearing is the pause board's own re-entry point: the B or Enter that dismissed the
+            // sheet can still be down on this very frame.
             if (!halted)
-                SuppressRocketTriggerOnRegainedInput();
+                SwallowInputHeldThroughReentry();
         }
         return halted;
     }
+
+#pragma warning disable SA1202
+    // One frame of the pause poll for the suite that drives the pause-to-flight boundary: a
+    // headless rig renders no frame, so nothing calls _Process and the halt-clearing edge would
+    // never run. Kept beside the poll it drives rather than hoisted for SA1202's sake.
+    internal bool PollPauseForTest(GameClock? clock) => PollPauseAndHalt(clock);
+#pragma warning restore SA1202
 
     /// <summary>One frame of player targeting: rebuild the pool and re-resolve, prune the
     /// attacker queue, then dispatch this frame's input. That order is the original's, its

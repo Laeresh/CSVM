@@ -7,11 +7,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>What the flight side does with a button at the two moments a session hands input over:
-/// the frame a cutscene skip gives flight back, and the frame a respawn is asked for. Both are
-/// level reads on a fixed tick, so a button that was already down when flight resumed reads as a
-/// fresh pull unless something swallows it, and a respawn button read while the aeroplane is still
-/// flying is a free repair wherever the mission counts.</summary>
+/// <summary>What the flight side does with a control at the moments a session hands input over:
+/// the frame a cutscene skip gives flight back, the frame a pause-sheet dismiss does, and the frame
+/// a respawn is asked for. All are level reads on a fixed tick, so a control that was already down
+/// when flight resumed reads as a fresh command unless something swallows it, and one control
+/// serves both sides (gamepad B is the menu's Back and the gun trigger). A respawn button read
+/// while the aeroplane is still flying is a free repair wherever the mission counts.</summary>
 internal static class FlightInputHandoffSuites
 {
     private const float StepDt = 1f / 60f;
@@ -21,11 +22,12 @@ internal static class FlightInputHandoffSuites
     private const float SpawnAltitudeM = 800f;
 
     [Suite("flight-input-handback",
-        "the button that ended a mission intro does not also act on the flight it hands back: the "
-        + "intro's out-of-flight code takes the player out of flight, its hold code arms the skip, "
-        + "and the press that takes that skip reads the rocket trigger as consumed for as long as "
-        + "it stays down, through its release, and reads the next real pull through -- while a "
-        + "hand-back with nothing down costs the pull after it nothing")]
+        "the control that ended a mission intro or dismissed the pause sheet does not also act on "
+        + "the flight it hands back: the intro's out-of-flight code takes the player out of flight, "
+        + "its hold code arms the skip, and the press that takes that skip reads both triggers as "
+        + "consumed for as long as it stays down, through its release, and reads the next real "
+        + "press through -- gamepad B held across a pause resume fires no burst either, while a "
+        + "hand-back with nothing down costs the press after it nothing and --fire never latches")]
     internal static void FlightInputHandback(TestContext ctx)
     {
         var cutscene = new CutsceneController();
@@ -41,11 +43,13 @@ internal static class FlightInputHandoffSuites
         };
         try
         {
-            // The control: nothing has handed this aeroplane its input back, so every pull fires.
+            // The control: nothing has handed this aeroplane its input back, so every press fires.
             ctx.Check(pilot.RocketTriggerReadsForTest(true),
                 $"ABLE-TO-FAIL CONTROL: an aeroplane that never left flight reads a pull through");
             ctx.Check(!pilot.RocketTriggerReadsForTest(false) && pilot.RocketTriggerReadsForTest(true),
                 $"…and reads the pull after a release through as well");
+            ctx.Check(pilot.GunTriggerReadsForTest(true),
+                $"ABLE-TO-FAIL CONTROL: the same aeroplane reads a gun press through");
 
             var rig = new PlayerRig { Index = 0, Controller = pilot };
             cutscene.BindRigs(new[] { rig }, () => Array.Empty<FlightController>());
@@ -61,13 +65,25 @@ internal static class FlightInputHandoffSuites
             ctx.Check(pilot.RocketTriggerReadsForTest(true),
                 $"…while the pull after that fires, so the skip costs the player one press and no more");
 
+            // The gun trigger over the same boundary: gamepad B takes a skip as any button does,
+            // and B is the gun trigger too, so the burst is the one the player never asked for.
+            Skipped(ctx, cutscene, pilot, intro, "an episode skipped with B");
+            ctx.Check(!pilot.GunTriggerReadsForTest(true),
+                $"the B that took the skip fires no burst on the first frame of flight");
+            ctx.Check(!pilot.GunTriggerReadsForTest(true) && !pilot.GunTriggerReadsForTest(false),
+                $"…nor while it stays down, nor on its release");
+            ctx.Check(pilot.GunTriggerReadsForTest(true),
+                $"…while the press after that fires, so the skip costs the player one press and no more");
+
             // The other control: a hand-back nobody was holding a button through must not swallow
-            // the pull that follows it, which is what makes the assertions above a real gate.
+            // the press that follows it, which is what makes the assertions above a real gate.
             Skipped(ctx, cutscene, pilot, intro, "a second episode");
-            ctx.Check(!pilot.RocketTriggerReadsForTest(false),
-                $"a hand-back with the trigger up reads nothing on the frame it happens");
-            ctx.Check(pilot.RocketTriggerReadsForTest(true),
-                $"…and the pull straight after it fires");
+            ctx.Check(!pilot.RocketTriggerReadsForTest(false) && !pilot.GunTriggerReadsForTest(false),
+                $"a hand-back with both triggers up reads nothing on the frame it happens");
+            ctx.Check(pilot.RocketTriggerReadsForTest(true) && pilot.GunTriggerReadsForTest(true),
+                $"…and the press straight after it fires on both");
+
+            PauseResumed(ctx, pilot);
         }
         finally
         {
@@ -75,7 +91,7 @@ internal static class FlightInputHandoffSuites
             cutscene.Free();
         }
 
-        ctx.Note($"the press that skips a mission intro is consumed through its release in flight");
+        ctx.Note($"the press that skips an intro or dismisses the pause sheet is consumed in flight");
     }
 
     [Suite("flight-live-respawn-gate",
@@ -145,7 +161,7 @@ internal static class FlightInputHandoffSuites
     }
 
     // One skipped episode on a bound rig: out of flight, the skip armed, then the press taken. The
-    // hand-back is what arms the trigger's consumed-press latch, so each leg drives the real codes.
+    // hand-back is what arms flight's consumed-input latch, so each leg drives the real codes.
     private static void Skipped(TestContext ctx, CutsceneController cutscene, FlightController pilot,
         string intro, string what)
     {
@@ -155,6 +171,40 @@ internal static class FlightInputHandoffSuites
             $"…and its code {CutsceneController.CodeHoldsWorld} arms the skip a press can take");
         ctx.Check(cutscene.Skip() && !cutscene.Playing && !pilot.Inert && !pilot.Held,
             $"…and the press ends {what} and hands flight back on that same frame");
+    }
+
+    // The other re-entry point: the pause sheet, dismissed with gamepad B, which is the gun trigger
+    // as well. The board's own Dismissed action is the resume, and the halt-clearing poll after it
+    // is where flight takes the frame back with B still down.
+    private static void PauseResumed(TestContext ctx, FlightController pilot)
+    {
+        var state = new PauseState();
+        pilot.PauseState = state;
+        ctx.Check(!pilot.PollPauseForTest(null), $"the flight is running before the sheet goes up");
+        ctx.Check(state.TryToggle(0) && pilot.PollPauseForTest(null),
+            $"the pause sheet halts the flight for the player who opened it");
+
+        state.ForceResume();
+        ctx.Check(!pilot.PollPauseForTest(null),
+            $"…and the B that dismisses it hands the flight straight back");
+        ctx.Check(!pilot.GunTriggerReadsForTest(true),
+            $"the B that dismissed the sheet fires no burst on the frame flight comes back");
+        ctx.Check(!pilot.GunTriggerReadsForTest(true) && !pilot.GunTriggerReadsForTest(false),
+            $"…nor while it stays down, nor on its release");
+        ctx.Check(pilot.GunTriggerReadsForTest(true),
+            $"…while the press after that fires, so the resume costs the player one press and no more");
+
+        // --fire is a switch a scripted run sets, not a control anybody held through the resume, so
+        // the latch never sees it: an unattended soak keeps firing across a hand-back.
+        state.TryToggle(0);
+        pilot.PollPauseForTest(null);
+        state.ForceResume();
+        pilot.PollPauseForTest(null);
+        pilot.AutoFire = true;
+        ctx.Check(pilot.GunTriggerReadsForTest(false),
+            $"ABLE-TO-FAIL CONTROL: --fire fires through a resume with no button down at all");
+        pilot.AutoFire = false;
+        pilot.PauseState = null;
     }
 
     // Half the tank, taken off the tank itself: the burn is dt x lever x BurnRate, and half a tank

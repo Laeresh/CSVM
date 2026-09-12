@@ -124,15 +124,15 @@ position whatever it carries, so the selector steps across slots rather than ord
 cycles even a uniform loadout, the per-hardpoint reading the original gives at the controls.
 Stateless, proven through `FireControl`'s own interface. Read `FireControl.cs` next.
 
-## src/Flight/RocketTriggerLatch.cs
-The rocket trigger's consumed-press latch. A cutscene skip or a pause-menu Resume can hand flight
-input back on the same frame the button that confirmed it is still physically down, and
-`FlightController`'s edge-free button read would take that still-down press as a fresh pull. `Arm`
-is called where input comes back and `Read` is the trigger's own read every frame after, reporting
-released until the button lets go. The arm takes no button reading: a re-entry point can run inside
-an input handler whose cached snapshot predates the press this latch exists to swallow, and the
-first `Read` after the arm follows a fresh poll and disarms itself when nothing was down. Pure state
-with no `Node` and no clock, public so its own unit tests drive it. Read `FireControl.cs` next.
+## src/Flight/FlightReentryLatch.cs
+Flight's consumed-input latch. A cutscene skip or a pause-sheet dismiss hands input back on the
+frame the control that confirmed it is still down, and one control serves both sides: gamepad B is
+`MenuBack` and `FireGuns`, gamepad A is `MenuAccept` and `FireRockets`, and a cutscene takes any key.
+`Arm` runs where input comes back and `Read` is each latched action's own read after it, released
+until that control lets go; `Latched` names the discrete commands covered and
+`FlightController.ReadLatched` is the one read site they share. The arm takes no button reading: a
+re-entry point can run inside an input handler whose snapshot predates the press this exists to
+swallow. Pure state, public so its own unit tests drive it. Read `FireControl.cs` next.
 
 ## src/Flight/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free

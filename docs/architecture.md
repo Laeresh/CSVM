@@ -139,7 +139,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ZeppelinMotion.cs`, the kinematic zeppelin motion law: forward-only net flight under the record's limits, the eased steer law, the stop approach.
 - `src/Flight/ManeuverExecutor.cs`, plays one library maneuver's attitude-step program as `FlightInput` per sim step, for the `evasive maneuver` mode.
 - `src/Flight/WeaponCursor.cs`, `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
-- `src/Flight/RocketTriggerLatch.cs`, the rocket trigger's consumed-press latch: a press still held when flight regains input reads as released.
+- `src/Flight/FlightReentryLatch.cs`, flight's consumed-input latch: a control still held when flight regains input reads as released on every command it is bound to.
 - `src/Flight/Ballistics.cs`, the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/DisablingIntensity.cs`, the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds wash and stun.
 - `src/Flight/Difficulty.cs`, the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier at spawn.

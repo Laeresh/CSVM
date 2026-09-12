@@ -40,7 +40,7 @@ public static class CinemaHandoff
 /// film owns, and the tail of the press that ended it. A skip is a press the film takes and the
 /// screen never sees go down, so without this the screen reads the release (a pointer) or the edge
 /// arriving with the hand-back (a key, a pad button) as a gesture of its own and fires whatever
-/// stands under the pointer or in the focus. <c>Flight/RocketTriggerLatch.cs</c> swallows the same
+/// stands under the pointer or in the focus. <c>Flight/FlightReentryLatch.cs</c> swallows the same
 /// still-held press on the flight side.</summary>
 public sealed class CinemaFilm
 {
