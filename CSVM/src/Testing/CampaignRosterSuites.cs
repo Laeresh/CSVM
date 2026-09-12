@@ -49,7 +49,9 @@ internal static class CampaignRosterSuites
     private const string BomberChapter = "C3";
     private const string BomberMission = "M05";
     private const int BomberNetId = 19;
-    private const float BomberRunS = 60f;
+    // Long enough for the formation to walk several nodes and, in the formation suite, for the
+    // hit bomber to settle back beside the other two after the shot at BomberFireAtS.
+    private const float BomberRunS = 40f;
     private const float BomberFireAtS = 20f;
 
     // How far apart the three may ever get. Their spawn spread is about 145 m, and a run that
@@ -886,7 +888,7 @@ internal static class CampaignRosterSuites
     [Suite("campaign-bomber-formation",
         "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "
         + "built world: all three carry net 19, they leave their shared seat node the same way "
-        + "and fly one node of it together for a minute with nobody engaging them, and a "
+        + "and fly one node of it together for forty seconds with nobody engaging them, and a "
         + "certain steady-hand failure on one leaves it on that node and back with the other two")]
     internal static void BomberFormation(TestContext ctx)
     {
@@ -900,12 +902,12 @@ internal static class CampaignRosterSuites
     /// bombers in a world built WITH colliders, which the formation suite above cannot exercise.
     /// The ray is measured on the real rigs (it sees the netted aircraft beside it and never the
     /// caster, <c>FUN_0041f810</c>'s deactivate-cast-restore), the formation's own probe geometry
-    /// is sampled over a flown minute, and two of the three are then put in trail so the override
+    /// is sampled over forty flown seconds, and two of the three are then put in trail so the override
     /// has to arm on another netted aircraft, climb out and release back onto the net.</summary>
     [Suite("campaign-bomber-crash-probe",
         "the avoid-crash probe between C3/M05's three netted bombers in a COLLISION world: the "
         + "world-and-aircraft ray sees the netted aircraft beside it and never its own airframe, "
-        + "the authored formation flies a minute of its net without becoming a nose-to-tail queue "
+        + "the authored formation flies forty seconds of its net without becoming a nose-to-tail queue "
         + "on each other's lookahead rays, and one held 200 m astern of another arms the override "
         + "on that aircraft, climbs out 1000 m and releases back onto the net when the line clears")]
     internal static void BomberCrashProbe(TestContext ctx)

@@ -741,84 +741,111 @@ internal static class WorldAndToolSuites
 
     // ---- needs a chapter world ------------------------------------------------------------------
 
-    // The invisible-wall tripwire: after a chapter's world has bootstrapped — mission
-    // setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep — no collider may still be
-    // enabled where nothing is drawn. Every chapter, because what each mission hides differs and
-    // the failure is silent until someone flies into it (C1/IA1's `hk_zep`).
-    [Suite("collision-visibility",
-        "nothing a chapter hides is left solid: no enabled collider under an invisible node")]
-    internal static void CollisionVisibility(TestContext ctx)
-    {
-        foreach (var (chapter, _, _) in Census)
-        {
-            ctx.WithWorld(chapter, collision: true, world =>
-            {
-                var solid = Probes.InvisibleEnabledColliders(world.Session.Root);
-                ctx.Same(0, solid.Count, $"{chapter} invisible-but-solid colliders");
-                for (int i = 0; i < solid.Count && i < 8; i++)
-                {
-                    ctx.Note($"{chapter} solid where nothing is drawn: {solid[i]}");
-                }
-            });
-        }
-    }
-
-    // The ground's sidedness, chapter by chapter, at the centre of every world partition cell: a
-    // ray from above must still meet a collider, and one from below must pass through wherever the
-    // source polygon clears SHOW_BACKFACE. The first column is the tripwire against the failure a
-    // per-polygon sidedness rule risks, an aircraft falling through the map; the second is the
-    // contact the original never has, and CM12's ace is stuck under it.
-    [Suite("world-ground-solid",
-        "every chapter's ground answers a ray from above at each partition-cell centre, and the " +
-        "one-sided part of it answers nothing from below")]
-    internal static void WorldGroundSolid(TestContext ctx)
+    // The three every-chapter censuses in one pass, because the world build is nearly the whole
+    // cost of each and three suites building the same eight chapters paid it three times over.
+    [Suite("chapter-census",
+        "every chapter's built world, once each with collision: nothing a chapter hides is left "
+        + "solid (no enabled collider under an invisible node), the ground answers a ray from "
+        + "above at each partition-cell centre and its one-sided part answers nothing from below, "
+        + "and the destructible registry holds the pinned instance and node-group totals with the "
+        + "two 8-inch cannons booting standing")]
+    internal static void ChapterCensus(TestContext ctx)
     {
         var report = new System.Text.StringBuilder();
         foreach (var (chapter, expectAbove, expectBelow) in GroundCensus)
         {
+            var (_, instances, anchors) = Census.First(c => c.Chapter == chapter);
             ctx.WithWorld(chapter, collision: true, world =>
             {
-                var grid = world.Gamez.FindByName("world1");
-                ctx.Check(grid?.PartitionCellX > 0f && grid.PartitionCols > 0,
-                    $"{chapter} carries a partition grid to sample over");
-                if (grid?.PartitionCellX is not > 0f)
-                    return;
-
-                var space = ctx.Host.GetWorld3D().DirectSpaceState;
-                int above = 0, below = 0;
-                for (int row = 0; row < grid.PartitionRows; row++)
-                {
-                    for (int col = 0; col < grid.PartitionCols; col++)
-                    {
-                        float x = grid.PartitionOriginX + ((col + 0.5f) * grid.PartitionCellX);
-                        float z = grid.PartitionOriginZ - ((row + 0.5f) * grid.PartitionCellZ);
-                        var down = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                            new Vector3(x, GroundProbeCeilingM, z),
-                            new Vector3(x, GroundProbeFloorM, z), CollisionLayers.World));
-                        if (down.Count == 0)
-                            continue;
-                        above++;
-                        // From just under whatever the downward ray found, so the second ray tests
-                        // that same surface rather than one a whole map's depth away.
-                        float surfaceY = down["position"].AsVector3().Y;
-                        var up = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                            new Vector3(x, surfaceY - GroundProbeStandoffM, z),
-                            new Vector3(x, surfaceY + GroundProbeStandoffM, z), CollisionLayers.World));
-                        if (up.Count > 0)
-                            below++;
-                    }
-                }
-
-                int cells = grid.PartitionRows * grid.PartitionCols;
-                report.AppendLine($"{chapter}: {cells} cells, {above} answer from above, {below} of those also from below");
-                ctx.Same(cells, above, $"{chapter} cells whose ground stops a ray from above");
-                ctx.Same(expectAbove, above, $"{chapter} ground solid from above");
-                ctx.Same(expectBelow, below, $"{chapter} of those also solid from below");
-                ctx.Note($"{chapter} ground: {above}/{cells} cells solid from above, {below} also solid from below");
+                CheckNothingHiddenIsSolid(ctx, chapter, world);
+                CheckGroundSidedness(ctx, chapter, world, expectAbove, expectBelow, report);
+                CheckDestructibleTotals(ctx, chapter, world, instances, anchors);
             });
         }
 
-        ctx.WriteArtifact("test-world-ground-solid.txt", report.ToString());
+        ctx.WriteArtifact("test-chapter-census.txt", report.ToString());
+    }
+
+    // The invisible-wall tripwire: after a chapter's world has bootstrapped — mission
+    // setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep — no collider may still be
+    // enabled where nothing is drawn. Every chapter, because what each mission hides differs and
+    // the failure is silent until someone flies into it (C1/IA1's `hk_zep`).
+    internal static void CheckNothingHiddenIsSolid(TestContext ctx, string chapter, TestWorld world)
+    {
+        var solid = Probes.InvisibleEnabledColliders(world.Session.Root);
+        ctx.Same(0, solid.Count, $"{chapter} invisible-but-solid colliders");
+        for (int i = 0; i < solid.Count && i < 8; i++)
+        {
+            ctx.Note($"{chapter} solid where nothing is drawn: {solid[i]}");
+        }
+    }
+
+    // The ground's sidedness at the centre of every world partition cell: a ray from above must
+    // still meet a collider, and one from below must pass through wherever the source polygon
+    // clears SHOW_BACKFACE. The first column is the tripwire against the failure a per-polygon
+    // sidedness rule risks, an aircraft falling through the map; the second is the contact the
+    // original never has, and CM12's ace is stuck under it.
+    internal static void CheckGroundSidedness(TestContext ctx, string chapter, TestWorld world,
+        int expectAbove, int expectBelow, System.Text.StringBuilder report)
+    {
+        var grid = world.Gamez.FindByName("world1");
+        ctx.Check(grid?.PartitionCellX > 0f && grid.PartitionCols > 0,
+            $"{chapter} carries a partition grid to sample over");
+        if (grid?.PartitionCellX is not > 0f)
+            return;
+
+        var space = ctx.Host.GetWorld3D().DirectSpaceState;
+        int above = 0, below = 0;
+        for (int row = 0; row < grid.PartitionRows; row++)
+        {
+            for (int col = 0; col < grid.PartitionCols; col++)
+            {
+                float x = grid.PartitionOriginX + ((col + 0.5f) * grid.PartitionCellX);
+                float z = grid.PartitionOriginZ - ((row + 0.5f) * grid.PartitionCellZ);
+                var down = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    new Vector3(x, GroundProbeCeilingM, z),
+                    new Vector3(x, GroundProbeFloorM, z), CollisionLayers.World));
+                if (down.Count == 0)
+                    continue;
+                above++;
+                // From just under whatever the downward ray found, so the second ray tests
+                // that same surface rather than one a whole map's depth away.
+                float surfaceY = down["position"].AsVector3().Y;
+                var up = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    new Vector3(x, surfaceY - GroundProbeStandoffM, z),
+                    new Vector3(x, surfaceY + GroundProbeStandoffM, z), CollisionLayers.World));
+                if (up.Count > 0)
+                    below++;
+            }
+        }
+
+        int cells = grid.PartitionRows * grid.PartitionCols;
+        report.AppendLine($"{chapter}: {cells} cells, {above} answer from above, {below} of those also from below");
+        ctx.Same(cells, above, $"{chapter} cells whose ground stops a ray from above");
+        ctx.Same(expectAbove, above, $"{chapter} ground solid from above");
+        ctx.Same(expectBelow, below, $"{chapter} of those also solid from below");
+        ctx.Note($"{chapter} ground: {above}/{cells} cells solid from above, {below} also solid from below");
+    }
+
+    internal static void CheckDestructibleTotals(TestContext ctx, string chapter, TestWorld world,
+        int instances, int anchors)
+    {
+        // The registry totals, never the swept rows — the sweep is capped at
+        // Probes.SweepCap and would silently under-count.
+        var registry = world.Runtime.Destructibles;
+        ctx.Same(instances, registry.Count, $"{chapter} destructible instances");
+        ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
+
+        // The two 8-inch cannons are the whole install's only pools whose RESET_STATE
+        // switches `dbase` ON beside `healthy` ACTIVE, so they are where a base read as
+        // half a death boots destroyed and swallows every shot.
+        foreach (var gun in registry.All.Where(i =>
+            AnimRuntime.NameOf(i.Anchor).StartsWith("8igun", System.StringComparison.OrdinalIgnoreCase)))
+        {
+            ctx.Check(gun.Status == DestructibleRegistry.State.Healthy
+                      && gun.Health == gun.MaxHealth,
+                $"{chapter} {AnimRuntime.NameOf(gun.Anchor)} boots standing hp={gun.Health}/{gun.MaxHealth} state={gun.Status}");
+        }
     }
 
     // ---- needs Godot's Image, nothing else -------------------------------------------------------
@@ -980,33 +1007,6 @@ internal static class WorldAndToolSuites
         }
         ctx.Same(0, drift, $"two dressed builds are identical transform for transform");
         ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
-    }
-
-    [Suite("destructible-census", "per-chapter destructible registry totals")]
-    internal static void DestructibleCensus(TestContext ctx)
-    {
-        foreach (var (chapter, instances, anchors) in Census)
-        {
-            ctx.WithWorld(chapter, collision: false, world =>
-            {
-                // The registry totals, never the swept rows — the sweep is capped at
-                // Probes.SweepCap and would silently under-count.
-                var registry = world.Runtime.Destructibles;
-                ctx.Same(instances, registry.Count, $"{chapter} destructible instances");
-                ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
-
-                // The two 8-inch cannons are the whole install's only pools whose RESET_STATE
-                // switches `dbase` ON beside `healthy` ACTIVE, so they are where a base read as
-                // half a death boots destroyed and swallows every shot.
-                foreach (var gun in registry.All.Where(i =>
-                    AnimRuntime.NameOf(i.Anchor).StartsWith("8igun", System.StringComparison.OrdinalIgnoreCase)))
-                {
-                    ctx.Check(gun.Status == DestructibleRegistry.State.Healthy
-                              && gun.Health == gun.MaxHealth,
-                        $"{chapter} {AnimRuntime.NameOf(gun.Anchor)} boots standing hp={gun.Health}/{gun.MaxHealth} state={gun.Status}");
-                }
-            });
-        }
     }
 
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps

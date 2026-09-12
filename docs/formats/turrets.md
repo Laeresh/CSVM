@@ -309,8 +309,7 @@ and excluding the **mounting section** in between leaks just as badly, because a
 modelling group and holds the far side of the same hull. On `piratezep` the section rule left
 **422 of 517** in-arc bearings that cross 120 m or more of the hull's own body clear, and the
 belly rings `ctur1` to `ctur3` fired straight through 162 to 255 m of it. The distance rule leaves
-172, and every ring keeps 54 % to 79 % of its in-arc field of fire
-(`turret-moving-hull-blocks-own-fire`).
+172, and every ring keeps 54 % to 79 % of its in-arc field of fire.
 
 The 1.5 m is measured, not decoded: a ring's own bodies engulf it out to about 1 m (`g21` and
 `gun` answer at 0 to 1 m), and the nearest hull skin standing over one answers at 2 m. The
