@@ -730,6 +730,10 @@ public sealed class CampaignDirector
             _deathWiredTo[seat] = human;
             int down = seat;
             human.Downed += (_, _) => OnPlayerDown(down, human);
+            // Pinned beside the death wiring, and for its reason: a story mission is lost with the
+            // aeroplane, so a respawn taken while flying would repair, restock and refuel for free.
+            // A 967 swap's new aeroplane arrives here as a new identity and is pinned with it.
+            human.AllowLiveRespawn = false;
         }
     }
 

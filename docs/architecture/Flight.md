@@ -128,12 +128,12 @@ Stateless, proven through `FireControl`'s own interface. Read `FireControl.cs` n
 ## src/Flight/RocketTriggerLatch.cs
 The rocket trigger's consumed-press latch. A cutscene skip or a pause-menu Resume can hand flight
 input back on the same frame the button that confirmed it is still physically down, and
-`FlightController`'s edge-free button read would take that still-down press as a fresh pull.
-`ArmIfHeld` is called at the moment input comes back and `Read` is the trigger's own read every frame
-after, reporting released until the button lets go. Pure state with no `Node` and no clock, public
-rather than `internal` so its own unit tests can drive it directly, since this project carries no
-`InternalsVisibleTo`. `FlightController` is the only caller. Read `FireControl.cs` for the machine
-the reading feeds.
+`FlightController`'s edge-free button read would take that still-down press as a fresh pull. `Arm`
+is called where input comes back and `Read` is the trigger's own read every frame after, reporting
+released until the button lets go. The arm takes no button reading: a re-entry point can run inside
+an input handler whose cached snapshot predates the press this latch exists to swallow, and the
+first `Read` after the arm follows a fresh poll and disarms itself when nothing was down. Pure state
+with no `Node` and no clock, public so its own unit tests drive it. Read `FireControl.cs` next.
 
 ## src/Flight/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free
@@ -1019,8 +1019,8 @@ reports, and holds the state the engine can only hold as state. Every physics qu
 one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
-damage are the player's path exactly. `Held`, `Inert`, `Spectating` and `CameraOwned` are the flags
-a lab, a cutscene or a session pins it with. Read `FlightHud.cs` and `AircraftLifecycle.cs` next.
+damage are the player's path exactly. `Held`, `Inert`, `Spectating`, `CameraOwned` and
+`AllowLiveRespawn` are the flags a session or a lab pins it with. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs
 The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle

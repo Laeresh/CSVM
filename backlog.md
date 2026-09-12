@@ -733,18 +733,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
 
-- `BL-858` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Skipping a mission intro with pad A fires a
-  rocket the moment flight comes back.** *Evidence:* reported at the controls on main at
-  `abd9d718`, campaign intro, pad A as the skip. `Flight/RocketTriggerLatch.cs` exists for exactly
-  this press: it arms when input returns after a cutscene skip or a pause Resume and swallows the
-  still-held trigger. Pad A is the guarded button, so either the intro's return path never calls
-  `ArmIfHeld`, or the latch is armed and released before the trigger's first read. *Fix shape:*
-  trace the intro's hand-back (`Session/CutsceneController.cs`, the episode's end) to the arming
-  call, and pin the intro case in the latch's suite beside the pause case. *⚠ Traps:* the latch's
-  own unit tests pass; the hole is in who calls it, not in its state machine. *Cross-refs:* `PT-93`
-  (the skipper flight); the menu side of the same leak is closed, the Original shell consuming a
-  skip's press through its release (`UI/CinemaHandoff.cs`'s `CinemaFilm`).
-
 - `BL-859` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A custom-built plane's flak lands on one wing in
   flight while the flight check shows it on both.** *Evidence:* reported at the controls: the campaign
   Devastator built in the hangar (Gypsy Magic) with all four pylons set to flak one at a time
@@ -2873,16 +2861,6 @@ usual.
   when FLY was pressed; the pause board's Exit picks by `SessionSpec`. *⚠ Traps:* Exit is not a
   loss; do not route it through the debrief. A CLI launch still quits. *Cross-refs:*
   `UI/Menu/MenuReturnDestination.cs`, `PT-88` (the result carry this must not touch).
-
-- `BL-863` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Respawn (R, pad Y) works while alive in a
-  campaign or Instant Action flight, a free repair and restock.** *Evidence:*
-  `Flight/FlightController.cs:3608-3612` calls `Respawn()` whenever either device holds
-  `InputAction.Respawn`, alive or crashed; the crashed branch at `:1634-1647` already reads it
-  only with a life left. *Fix shape:* in campaign and Instant Action, read the live-flight
-  respawn only while `Crashed` with a respawn available (a life left, or `--no-crash-loss`); free
-  flight and the stunt runs keep the live respawn, where R is "put me back at the spawn" and not a
-  cheat. Y stays unassigned while alive until a feature wants it. *Cross-refs:* `PT-93` (c),
-  `AircraftLifecycle`, `docs/controls.md`.
 
 - `BL-868` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM05]` **CM05 (C3/M04): one Brigand under the
   Pandora fails the mission; what wakes the authored instant loss, and is one enough?**

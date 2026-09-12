@@ -404,6 +404,13 @@ public partial class FlightController : Node3D
     /// here; this node holds no mission state and decides no rule.</summary>
     public bool Spectating;
 
+    /// <summary>Whether R and pad Y respawn a LIVE aircraft. False wherever the mission counts: in
+    /// a campaign mission and in Instant Action a respawn taken while flying is a free repair,
+    /// restock and refuel, so those two pin it and the button is read only from
+    /// <see cref="Crashed"/>. True in free flight, the stunt runs and the dogfight, where R means
+    /// "put me back at the spawn". Pinned by the session's own director, never from here.</summary>
+    public bool AllowLiveRespawn = true;
+
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     // Spawn throttle/speed come from the mission's PLAYER_INIT via Setup (docs/formats/spawns.md).
     // ⚠ These two are only the no-mission fallback (labs, tests, AI rigs), and they are the OLD
@@ -2235,8 +2242,30 @@ public partial class FlightController : Node3D
 
     // Called at flight's own resume/skip re-entry points (the Inert setter above, and
     // PollPauseAndHalt's halt-clearing edge) so a press that just confirmed a cutscene skip or a
-    // pause-menu Resume cannot also read as the rocket trigger's next pull.
-    private void SuppressRocketTriggerOnRegainedInput() => _rocketLatch.ArmIfHeld(RocketButtonDown());
+    // pause-menu Resume cannot also read as the rocket trigger's next pull. ⚠ Pass the latch no
+    // button reading from here: a skip is handled inside an input handler, and this frame's
+    // snapshot predates the press that caused it (RocketTriggerLatch.Arm).
+    private void SuppressRocketTriggerOnRegainedInput() => _rocketLatch.Arm();
+
+#pragma warning disable SA1202
+    // The rocket trigger's own reading, for the suite that drives the cutscene-to-flight and
+    // pause-to-flight boundaries: a headless run holds no button down, so the suite supplies the
+    // reading and asserts what the latch does with it. Kept beside the button reads it belongs
+    // with rather than hoisted for SA1202's sake, the same trade made elsewhere here.
+    internal bool RocketTriggerReadsForTest(bool buttonDown) => _rocketLatch.Read(buttonDown);
+
+    // This tick's reading for one action, written over the three readers after a real poll, so the
+    // next SimStep in the same rendered frame reuses it rather than polling over it. The suites'
+    // stand-in for hardware nothing headless can hold down.
+    internal void HoldActionForTest(InputAction action, bool held)
+    {
+        PollInput();
+        var read = ControlValue.Digital(held);
+        _actions.Current.Store(action, read);
+        _keyActions.Current.Store(action, read);
+        _padActions.Current.Store(action, read);
+    }
+#pragma warning restore SA1202
 
     // G / gamepad D-pad Right, cycles the gun selector forward through the firable groups (1 → 2 →
     // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
@@ -3605,10 +3634,13 @@ public partial class FlightController : Node3D
         float padRoll = -StickCurve(_padActions.Axis(InputAction.RollRight, InputAction.RollLeft));
         float padYaw = _padActions.Axis(InputAction.YawLeft, InputAction.YawRight);
         float padThrottle = _padActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown);
-        if (_padActions.Held(InputAction.Respawn))
+        // The live respawn, read only where the mission does not count (AllowLiveRespawn): this
+        // body runs on a flying aircraft alone, since SimStep leaves through its crashed branch,
+        // and that branch's own read is what brings a crashed pilot back.
+        if (AllowLiveRespawn && _padActions.Held(InputAction.Respawn))
             Respawn();
 
-        if (_keyActions.Held(InputAction.Respawn))
+        if (AllowLiveRespawn && _keyActions.Held(InputAction.Respawn))
             Respawn();
 
         // The burn reads the lever as it stands entering this tick, and a dry tank skips the step

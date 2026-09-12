@@ -606,6 +606,9 @@ public sealed class InstantActionDirector
             // human seat for splitscreen (ProjectilePool.ScoredShooters).
             inputs.Projectiles?.ScoredShooters.Add(pilot.PlayerIndex);
             pilot.AutoRespawnAfter = inputs.RespawnDelay; // crash cam, then back in, R skips
+            // A mission with lives counts them, so R is the crash cam's skip and nothing else: a
+            // respawn taken while flying would repair, restock and refuel for free.
+            pilot.AllowLiveRespawn = false;
             pilot.Downed += (victim, _) =>
             {
                 if (iaEnd.NotifyPilotDown(victim))
