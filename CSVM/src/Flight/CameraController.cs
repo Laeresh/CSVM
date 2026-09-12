@@ -4,6 +4,44 @@ using Godot;
 
 namespace CSVM.Flight;
 
+/// <summary>Which camera drew this pilot's frame, the identity the view breadcrumb names. Not a
+/// <see cref="PilotViewMode"/>: that is the view the pilot SELECTED, while this is the camera that
+/// actually held the frame, including the ones a held key, the right stick or the aircraft's own
+/// destruction puts it into. The breadcrumb writes a name and never one of these values, so the
+/// order here is free to read well.</summary>
+public enum CameraView
+{
+    /// <summary>The following chase camera, logged under the pad's unbound middle digit.</summary>
+    Chase,
+
+    /// <summary>One of the numpad's fixed views, logged under its own pad digit. Which one is the
+    /// index handed alongside, since the pose is a row of the view table rather than a value
+    /// here.</summary>
+    Fixed,
+
+    /// <summary>The look-behind view: numpad 0, the right-stick click, or <c>--view=back</c>.</summary>
+    Back,
+
+    /// <summary>The pad look-around, a continuously variable twin of the numbered views rather
+    /// than one of their digits.</summary>
+    PadLook,
+
+    /// <summary>The two SELECTED first-person views, which are modes rather than held keys: a
+    /// scripted <c>--view=cockpit</c>/<c>--view=nose</c> run reads its own mode back off the
+    /// breadcrumb, and a capture proves which view it framed.</summary>
+    Cockpit,
+
+    Nose,
+
+    /// <summary>The two STATIC cameras a scripted run can be in: the flyby a key or
+    /// <c>--view=flyby</c> entered, and the death camera the player's own destruction cuts to. Both
+    /// hold a WORLD point, so the breadcrumb's plane-frame offset grows as the aircraft leaves,
+    /// which is how a held camera is told from one riding the aeroplane.</summary>
+    Flyby,
+
+    Death,
+}
+
 /// <summary>
 /// Drives the flown aircraft's camera: the roll-following chase camera, the numpad fixed views,
 /// the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or Nose)
@@ -24,28 +62,6 @@ public sealed class CameraController
     /// <summary>The <c>--view=flyby</c> sentinel: start in the flyby camera and re-enter it after
     /// every respawn, the scripted twin of pressing the flyby key.</summary>
     public const int PinnedFlybyView = 11;
-
-    /// <summary>LogView's marker for the look-behind view (the numpad views log their digit).</summary>
-    public const int BackViewLog = -2;
-
-    /// <summary>LogView's marker for the pad look-around — a continuously variable
-    /// twin of the numbered views rather than one of their digits.</summary>
-    public const int PadLookLog = -3;
-
-    /// <summary>LogView's markers for the two SELECTED first-person views, which are modes rather
-    /// than held keys: a scripted <c>--view=cockpit</c>/<c>--view=nose</c> run reads its own mode
-    /// back off the breadcrumb, and a capture proves which view it framed.</summary>
-    public const int CockpitViewLog = -4;
-
-    public const int NoseViewLog = -5;
-
-    /// <summary>LogView's markers for the two STATIC cameras a scripted run can be in: the flyby a
-    /// key or <c>--view=flyby</c> entered, and the death camera the player's own destruction cuts
-    /// to. Both hold a WORLD point, so the breadcrumb's plane-frame offset grows as the aircraft
-    /// leaves, which is how a held camera is told from one riding the aeroplane.</summary>
-    public const int FlybyViewLog = -6;
-
-    public const int DeathViewLog = -7;
 
     /// <summary>The fixed head-pitch offset <c>FUN_0042d980</c> applies about the same axis as
     /// elevation, in both first-person views: −4.70° = −0.08203 rad (bit pattern
@@ -124,29 +140,12 @@ public sealed class CameraController
     // PinnedBackView (--view=back) the look-behind.
     private readonly int _pinnedView;
 
-    // The authored special-camera geometry (camparam): the crash camera's offset and the
-    // look-behind view's distance bounds.
-    private readonly float _crashHoriz, _crashY, _backMin, _backMax;
-
-    // The whole resolved block, for the two clearance fields the crash cut hands the shared probe.
-    // Held as the block rather than copied out field by field because <see cref="Statics"/> reads
-    // a dozen more of them and two copies of one plane's tuning would be two things to keep level.
+    // This plane's whole resolved camera block (camparam): every authored figure the views read,
+    // from the chase distance and its bounds to the crash offset and the clearance fields the
+    // crash cut hands the shared probe. Held as the block, so this plane's tuning has one copy
+    // and not two, which is how Statics takes the dozen fields it reads as well.
+    // See docs/formats/camparam.md.
     private readonly CamParams _camParams;
-
-    // The authored base distance and speed factor (camparam, per plane). The fixed numpad views
-    // take the same dynamic radius as the chase camera, so a snap changes the angle and nothing
-    // else — they are one number, and moving only one desyncs the two cameras.
-    private readonly float _dist, _distFactor;
-
-    // The authored bounds the speed-driven distance is held inside before any zoom
-    // (camparam `dist_min`/`dist_max`, per plane). The near one is the pose the view rests at.
-    private readonly float _distMin, _distMax;
-
-    // The authored throttle transient (camparam `dist_vary`/`dist_catch_up`, per plane): the gain
-    // in metres per (m/s) of speed lag, and the rate the lagged copy chases the real speed at.
-    // ⚠ `dist_catch_up` is per REAL second, not a converted figure: the original eases it on its
-    // per-frame wall dt and so does this clock. See docs/formats/camparam.md.
-    private readonly float _distVary, _distCatchUp;
 
     // The plane-local offset of this aircraft's authored cockpit_camera marker (PlaneBuilder,
     // fallback (0,0,0) when the plane has none) — both first-person views share it, there is no
@@ -159,8 +158,9 @@ public sealed class CameraController
     // into that global's own home.
     private readonly float _externalFovDeg;
 
-    // The dynamic chase radius: _dist + _distFactor·V + the throttle transient. Advanced by
-    // UpdateDynamics on the sim clock; read by both the chase camera and the fixed views.
+    // The dynamic chase radius: `dist` + `dist_factor`·V + the throttle transient. Advanced by
+    // UpdateDynamics on the sim clock, and read by both the chase camera and the fixed views:
+    // they are one number, so a numpad snap changes the angle and nothing else.
     private float _radius;
     private float _laggedSpeed;                  // the transient's state: speed's own lagged copy
     private float _distExcess;                   // this step's transient, metres beyond d(V)
@@ -177,7 +177,7 @@ public sealed class CameraController
     private Vector3 _offset;
 
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
-    private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
+    private CameraView _viewPrev = CameraView.Chase; // the view the last logged frame was drawn from
 
     public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView,
         PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default,
@@ -188,17 +188,7 @@ public sealed class CameraController
         _pinnedView = pinnedView;
         ViewMode = viewMode;
         _camParams = cam;
-        _dist = cam.Dist;
-        _distFactor = cam.DistFactor;
         _radius = cam.Dist;
-        _distMin = cam.DistMin;
-        _distMax = cam.DistMax;
-        _distVary = cam.DistVary;
-        _distCatchUp = cam.DistCatchUp;
-        _crashHoriz = cam.CrashHoriz;
-        _crashY = cam.CrashY;
-        _backMin = cam.BackDistMin;
-        _backMax = cam.BackDistMax;
         _cockpitCameraOffset = cockpitCameraOffset;
         _externalFovDeg = camera.Fov;
         Statics = new StaticCameras(cam, staticDraw ?? Rng.Stream(Rng.Camera).Randf);
@@ -243,7 +233,8 @@ public sealed class CameraController
 
     // The radius every forward-facing external pose reads. _radius itself never carries either
     // term; the look-behind takes its own bounds and no zoom at all.
-    private float EffectiveRadius => ExternalRadius(_radius, _distMin, _distMax, _zoomShown);
+    private float EffectiveRadius =>
+        ExternalRadius(_radius, _camParams.DistMin, _camParams.DistMax, _zoomShown);
 
     /// <summary>One press of the original's "Cycle Cockpit Views" key advances the three-stop
     /// cycle: Cockpit → Nose → Chase → Cockpit. It also leaves the flyby, which is how the
@@ -354,7 +345,7 @@ public sealed class CameraController
     /// numpad views, for the same scripted-capture reason.</summary>
     public void BackView(in Transform3D renderPose)
     {
-        float r = Mathf.Clamp(_radius, _backMin, _backMax);
+        float r = Mathf.Clamp(_radius, _camParams.BackDistMin, _camParams.BackDistMax);
         var dir = new Vector3(0f, 0f, -1f);     // ahead of the nose, plane frame
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * r));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
@@ -496,7 +487,8 @@ public sealed class CameraController
         }
         AimStatic(
             StaticCameras.LiftClearOfWorld(
-                impact + (behind * _crashHoriz) + (Vector3.Up * _crashY), _camParams, world, exclude),
+                impact + (behind * _camParams.CrashHoriz) + (Vector3.Up * _camParams.CrashY),
+                _camParams, world, exclude),
             impact);
     }
 
@@ -554,9 +546,9 @@ public sealed class CameraController
         {
             return;
         }
-        _distExcess = DistTransient(_laggedSpeed, speed, _distVary, _distCatchUp, dt,
-            out _laggedSpeed);
-        _radius = _dist + (_distFactor * speed) + _distExcess;
+        _distExcess = DistTransient(_laggedSpeed, speed, _camParams.DistVary, _camParams.DistCatchUp,
+            dt, out _laggedSpeed);
+        _radius = _camParams.Dist + (_camParams.DistFactor * speed) + _distExcess;
 
         // Measurement breadcrumb (file sink always writes debug): a sim-time series of the
         // realized radius, from which a plateau law fit or a transient decay fit can be made
@@ -603,7 +595,7 @@ public sealed class CameraController
     {
         _laggedSpeed = speed;
         _distExcess = 0f;
-        _radius = _dist + (_distFactor * speed);
+        _radius = _camParams.Dist + (_camParams.DistFactor * speed);
         // A settle-immediately pose starts the pilot looking where the aircraft is going; a head
         // left panned across a respawn would frame the spawn from over the pilot's shoulder.
         Head.Reset();
@@ -675,13 +667,14 @@ public sealed class CameraController
         _camera.LookAt(focus, Vector3.Up);
     }
 
-    /// <summary>One line per frame a fixed view (or the look-behind, <see cref="BackViewLog"/>)
-    /// is held, plus one on the frame it is released — read back off the camera's own transform,
-    /// so it reports where the camera ENDED UP rather than the values that were fed to it.
-    /// Silent (and free) on an ordinary chase-camera flight.</summary>
-    public void LogView(int view, Vector3 planePos, Basis attitude)
+    /// <summary>One line per frame a view other than the chase camera is held, plus one on the
+    /// frame it is released, read back off the camera's own transform so it reports where the
+    /// camera ENDED UP rather than the values that were fed to it. <paramref name="fixedView"/> is
+    /// the row of <see cref="Views"/> a <see cref="CameraView.Fixed"/> frame took, and is ignored
+    /// for every other view. Silent (and free) on an ordinary chase-camera flight.</summary>
+    public void LogView(CameraView view, Vector3 planePos, Basis attitude, int fixedView = -1)
     {
-        if (view == -1 && _viewPrev == -1)
+        if (view == CameraView.Chase && _viewPrev == CameraView.Chase)
         {
             return;
         }
@@ -689,15 +682,24 @@ public sealed class CameraController
         var toPlane = attitude.Inverse();
         var offset = toPlane * (_camera.Position - planePos);
         var aim = toPlane * -_camera.Basis.Z;   // the camera's forward axis, in the plane's frame
-        string n = view == BackViewLog ? "back"
-            : view == PadLookLog ? "padlook"
-            : view == CockpitViewLog ? PilotView.Name(PilotViewMode.Cockpit)
-            : view == NoseViewLog ? PilotView.Name(PilotViewMode.Nose)
-            : view == FlybyViewLog ? "flyby"
-            : view == DeathViewLog ? "death"
-            : (view < 0 ? "0" : Views[view].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        string n = ViewName(view, fixedView);
         Log.Debug("flight", $"view n={n} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
     }
+
+    // The breadcrumb's name for each view, the one place a scripted capture's own spelling is
+    // written: a numpad pose reads back as the pad digit that asked for it and the chase camera as
+    // 0, the unbound middle of the pad, while the rest take the word the CLI and the docs use.
+    private static string ViewName(CameraView view, int fixedView) => view switch
+    {
+        CameraView.Fixed => Views[fixedView].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        CameraView.Back => "back",
+        CameraView.PadLook => "padlook",
+        CameraView.Cockpit => PilotView.Name(PilotViewMode.Cockpit),
+        CameraView.Nose => PilotView.Name(PilotViewMode.Nose),
+        CameraView.Flyby => "flyby",
+        CameraView.Death => "death",
+        _ => "0",
+    };
 
     // The write every static camera shares: sit on the held world point and look at the aircraft.
     // ⚠ Godot's LookAt rejects an up parallel to the view direction, which a camera lifted to

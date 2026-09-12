@@ -1936,6 +1936,7 @@ public partial class FlightController : Node3D
             _cam.RestoreExternalFov();
             bool firstPersonPose = false;
             int view = _cam.ActiveView();
+            var logged = CameraView.Chase;
             if (_cam.FlybyActive)
             {
                 // Above the numpad views on purpose: the flyby is a camera the aeroplane was put
@@ -1943,11 +1944,12 @@ public partial class FlightController : Node3D
                 // it runs. Sim time, so the pass survives a frame-rate change and a halt freezes it.
                 _cam.FlybyView((float)(clock?.Time ?? 0.0), _renderPose, _model.Speed,
                     World, Body?.ExcludeSelf);
-                view = CameraController.FlybyViewLog;
+                logged = CameraView.Flyby;
             }
             else if (view >= 0)
             {
                 _cam.FixedView(view, _renderPose);
+                logged = CameraView.Fixed;
             }
             else if (_cam.FirstPerson)
             {
@@ -1960,9 +1962,7 @@ public partial class FlightController : Node3D
                 _cam.FirstPersonView(_renderPose);
                 _cam.ApplyFirstPersonFov();
                 firstPersonPose = true;
-                view = _cam.ViewMode == PilotViewMode.Nose
-                    ? CameraController.NoseViewLog
-                    : CameraController.CockpitViewLog;
+                logged = _cam.ViewMode == PilotViewMode.Nose ? CameraView.Nose : CameraView.Cockpit;
             }
             // E42: this player's right-stick click looks back, the pad twin of holding
             // numpad 0 — read here, not in CameraController, same "no pad devices in the camera"
@@ -1970,7 +1970,7 @@ public partial class FlightController : Node3D
             else if (_cam.BackActive(_padActions.Held(InputAction.LookBack)))
             {
                 _cam.BackView(_renderPose);
-                view = CameraController.BackViewLog;
+                logged = CameraView.Back;
             }
             else
             {
@@ -1980,7 +1980,7 @@ public partial class FlightController : Node3D
                     // E42: the right stick swings the view around the plane instead of
                     // the usual chase pose — see CameraController.PadLook.
                     _cam.PadLook(_renderPose, lookX, lookY);
-                    view = CameraController.PadLookLog;
+                    logged = CameraView.PadLook;
                 }
                 else
                 {
@@ -1996,7 +1996,7 @@ public partial class FlightController : Node3D
             ShowPanel(CockpitVisibility.Rules(_cam.ViewMode, firstPersonPose).Interior);
             // After the hide, so the pass shows exactly the frames the interior itself does.
             CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
-            _cam.LogView(view, _model.Position, _model.Attitude);
+            _cam.LogView(logged, _model.Position, _model.Attitude, fixedView: view);
         }
 
         // heading of the nose: 0 = north (−Z), 90 = east (+X) — shared by the compass and the marker
@@ -2766,7 +2766,7 @@ public partial class FlightController : Node3D
     private void StepDeathView()
     {
         _cam?.DeathView(_renderPose, _model.Speed, World, Body?.ExcludeSelf);
-        _cam?.LogView(CameraController.DeathViewLog, _model.Position, _model.Attitude);
+        _cam?.LogView(CameraView.Death, _model.Position, _model.Attitude);
     }
 
     // What every static camera owes the screen: no HUD (the original's crash and death footage

@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ `TemplateStage` freed-key walk shared
 13. ☑ One `Play` delegate and one `Once` for the three cinemas
 14. ☐ `ObjectiveSites` collects both target classes through one method
-15. ☐ `CameraController` reads its tuning through `_camParams` and names its views
+15. ☑ `CameraController` reads its tuning through `_camParams` and names its views
 16. ☑ `CinemaSkips` without the repeated arms and the mirror enum
 17. ☑ The export set out of `SelectionService`
 18. ☐ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
@@ -487,7 +487,32 @@ match; land B14 first.
 **Verify.** `target-class-cycle` (46 on C3/M01) and `mode-target-table` suites green; 23 goldens
 identical.
 
-## B15 ☐ `CameraController` reads its tuning through `_camParams` and names its views
+## B15 ☑ `CameraController` reads its tuning through `_camParams` and names its views
+
+**Landed.** The ten copied tuning fields (`_dist`, `_distFactor`, `_distMin`, `_distMax`,
+`_distVary`, `_distCatchUp`, `_crashHoriz`, `_crashY`, `_backMin`, `_backMax`) are gone and every
+use site reads `_camParams.<X>`, so one plane's tuning has a single copy; `CamParams` is only ever
+written by its own `Load`, so the live read is the copy's value in every case. The six log
+sentinels (`BackViewLog` to `DeathViewLog`) are replaced by a `CameraView` enum (Chase, Fixed,
+Back, PadLook, Cockpit, Nose, Flyby, Death) that `LogView` maps to the breadcrumb's name in one
+`ViewName`, with the numpad pose's row of the view table handed alongside as `fixedView`.
+`FlightController` names the view each arm took instead of overwriting the fixed-view index with a
+negative marker. `PinnedBackView`/`PinnedFlybyView` stay as they are: they are the `--view=`
+digit space, which `SessionSpec.View`, `FlightRosterInputs`, `FlightPolicy` and
+`FlightController.PinnedView` carry as an int and `SessionSpec` prints into a warning line, so
+typing that identity is a separate change reaching well past this file. Every numeric value, log
+name and persisted value is unchanged.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln -t:Rebuild` 0 warnings, 0
+errors; `CheckCommentCaps.ps1` and `CheckDocEntries.ps1` both clean; `RunTests.ps1 -UnitFilter
+"FullyQualifiedName~Camera" -SkipEngine -SkipGoldens` 64 passed, 0 failed, 0 skipped of 64; the
+engine suites `blacke-drop-cameras`, `campaign-wingwalk-camera`, `death-camera`, `flyby-camera`
+(selector `camera`), `look-stick`, the four `cockpit` suites and `campaign-mission-end` all pass
+with engine errors clean; `RunTests.ps1 -SkipUnits -SkipEngine` reports 23 shots hash-identical.
+`docs/architecture/Flight.md` needed no edit: its entry already names the `CamParams` members the
+radius law reads and says nothing about the log markers.
+
+**Original approach (kept for reference).**
 
 **Goal.** The chase camera reads its per-airframe tuning from one record, and a view identity is
 a named value.
