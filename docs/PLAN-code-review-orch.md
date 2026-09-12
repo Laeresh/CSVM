@@ -73,7 +73,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Hard standards violations
 
 1. ☐ Two `_Avoid_` terms: "AI roster" and "deviation"
-2. ☐ `<para>` in three XML doc blocks
+2. ☑ `<para>` in three XML doc blocks
 3. ☐ `GD.Print` to `Log` in the three session files
 4. ☐ History and item references out of seven comments
 5. ☑ One banned phrase and two dates in live prose
@@ -135,7 +135,23 @@ Grep both terms repo-wide before closing, since the review read only the range's
 **Verify.** `Select-String` for both phrases over `CSVM/src`, `CSVM.Tests`, `docs`, `analysis`
 returns nothing; `CheckCommentCaps.ps1` clean; unit tier green.
 
-## A2 ☐ `<para>` in three XML doc blocks
+## A2 ☑ `<para>` in three XML doc blocks
+
+**Landed.** The three `<para>` tags are gone and their text stands as further sentences of the
+summary it already sat in. In `AiStepCostTests.cs` and `ProcessPassCostTests.cs` the
+ambient-statics warning follows the summary directly, with the blank `///` separator line dropped
+and the warning rewrapped; in `WarningShotCue.cs` the time-not-rounds paragraph joins the summary
+the same way. No prose was cut and no member moved, so the two type blocks shrink to 9 and 10
+lines against the 12-line type cap and `WarningShotCue`'s stays at 11.
+
+**Verified.** <pending orchestrator run> `Select-String '<para>'` over the three files returns
+nothing (the only remaining hits for the substring are `parallel` and `<param>`);
+`CheckCommentCaps.ps1 -Root <worktree>` reports all comment blocks within cap; `dotnet build
+CSVM/CSVM.sln` succeeds with 0 warnings and 0 errors; `RunTests.ps1 -SkipEngine -SkipGoldens`
+passes, 4090 passed, 0 failed, 2 skipped of 4092 (the two skips are the cinema tests that need
+extracted game data).
+
+**Original approach (kept for reference).**
 
 **Goal.** No `<para>` tag in the range's XML doc; the build generates no doc file so it renders
 for nobody.
