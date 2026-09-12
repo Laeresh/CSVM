@@ -555,7 +555,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   would look better"), and the light is still world-fixed — at speed it lags the plane by ~2 m
   for its 2 frames, which the weapon-lab sign-off could not see. Same anchoring work, one
   landing; re-judge both **in flight**, not the lab. When landing, check whether the forward
-  offset is authored (a node offset in the def) — if so this is a deliberate deviation and the
+  offset is authored (a node offset in the def) — if so this is a remake-only rule and the
   entry's close should say so. (b) The user's engine-semantics
   hypothesis, open: the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
   concurrently (all branches) by the original engine rather than pick-one — which would make the
@@ -838,11 +838,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   orientation matrix as the nose when it is minus the nose (`SRC-12`), so the capture decides it.
 
 - `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
-  one deviation is deliberately held back** (`Precipitation.cs:29-62` — type/tint/rate/density
+  one remake-only rule is deliberately held back** (`Precipitation.cs:29-62` — type/tint/rate/density
   are authored; fall speed, box size, particle counts, streak length/width, sway are 16 TUNE
   constants; the sprites themselves are procedural stand-ins for the original's untextured
   line/point primitives, and rain streaking along fall-direction-vs-velocity is a documented
-  deviation pending an A/B). Needs original rain and snow footage to calibrate — worth a CAP
+  remake-only rule pending an A/B). Needs original rain and snow footage to calibrate — worth a CAP
   when weather work resumes.
   ⚠ One calibration fact is already on file (`CAP-11`, 2026-08-07, user): C2B IA1's rain falls
   below the cloud cover as **one-pixel-wide streaks** — narrow enough that the 2560-wide Game DVR
@@ -1204,7 +1204,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   because that is what the data authors. The proposal on the table for the feel side: upper ring
   facing the plane / against the rocket's flight direction. The ring anims carry no rotation data
   (scale/opacity only — `docs/formats/weapon-effects.md`), so any change is engine-side and a
-  deliberate deviation from a decoded rule.
+  remake-only rule over a decoded one.
   Cross-link: `BL-292` (crash-splash orientation, different spawn path; scheduled in
   `PLAN-m3-polish-10` A3).
 

@@ -326,7 +326,7 @@ speed). The def authors ONE `mb_spinflame` node with a 3-way `RANDOM_WEIGHT` rol
 what the original engine renders from that — one picked branch or all three at once — is not
 recoverable from the data. The pick-one reading (one rolled quad playing the
 `_muzzle1`→`_muzzle2` flipbook) was implemented and **rejected at the controls (
-`BL-263`)**: it does not reproduce the stills, and the deviation is recorded here as deliberate.
+`BL-263`)**: it does not reproduce the stills, and what stands is a documented remake-only rule.
 The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
 through its own separate pool.
 

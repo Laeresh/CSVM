@@ -120,7 +120,7 @@ its next window instead. `PhysicsTickCost` above is the same shape around the ph
 `docs/verification.md` PERF-1.
 
 ## src/Utils/AiStepCost.cs
-The wall cost of the session's AI roster walks and how many aircraft they walked, banked by an
+The wall cost of the flight roster's AI walks and how many aircraft they walked, banked by an
 `Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft`. It is the only `--perf`
 term that attributes frame cost to the AI: `proc_ms` and `phys_tick_ms` bracket whichever callback
 the clock mode makes the walk ride, so a plane-count sweep otherwise reads only as a whole-frame

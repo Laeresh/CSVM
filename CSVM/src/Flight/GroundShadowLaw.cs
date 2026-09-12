@@ -8,7 +8,7 @@ namespace CSVM.Flight;
 /// lands, how large, how dark, and when it is not drawn at all. Every constant here is decoded
 /// from the retail executable and carries its address in
 /// <see href="../../../docs/org/shadows.md">docs/org/shadows.md</see>; nothing is fitted. The
-/// drawing half is <see cref="GroundShadowPass"/>, which is also where the deviations live.
+/// drawing half is <see cref="GroundShadowPass"/>, which is also where the remake-only rules live.
 /// </summary>
 public static class GroundShadowLaw
 {

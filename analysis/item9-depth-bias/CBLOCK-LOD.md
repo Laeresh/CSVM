@@ -319,7 +319,7 @@ winner explicitly, which is exactly what rule 8 said was missing.
 value (955 C5 polygons, 2207 in C1), so a full +1 level makes a subface *tie* with a genuine
 priority-1 overlay; 1e-4 stays inside the hierarchy while being 50× `SurfaceRankBias` and 2000×
 `NodeOrderBias`. Record that the original's literal value is 1 whole level — this is a deliberate,
-documented deviation, not an accident.
+documented remake-only rule, not an accident.
 
 The residual 120,999 m² still "behind" at either offset is where the **base has a higher authored
 priority** than its subface (base 0 vs subface −10). That is an authored decision and the offset

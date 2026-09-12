@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Hard standards violations
 
-1. ☐ Two `_Avoid_` terms: "AI roster" and "deviation"
+1. ☑ Two `_Avoid_` terms: "AI roster" and "deviation"
 2. ☑ `<para>` in three XML doc blocks
 3. ☐ `GD.Print` to `Log` in the three session files
 4. ☑ History and item references out of seven comments
@@ -117,7 +117,29 @@ run beside anything except A7. Items otherwise run in listed order.
 
 # Wave A — Hard standards violations
 
-## A1 ☐ Two `_Avoid_` terms: "AI roster" and "deviation"
+## A1 ☑ Two `_Avoid_` terms: "AI roster" and "deviation"
+
+**Landed.** "AI roster" in the session sense became "the flight roster's AI walk" (or "an AI walk
+over the flight roster") in `AiStepCost.cs`, `docs/architecture.md`, `docs/architecture/Utils.md`,
+`docs/cli.md` and both `analysis/perf/scenarios.json` metric notes; "deviation" in the
+remake-behaviour sense became "remake-only rule" in `GeneratorCycle.cs`, `GroundShadowLaw.cs`,
+`docs/formats/weapon-effects.md`, four `backlog.md` entries and
+`analysis/item9-depth-bias/CBLOCK-LOD.md`. The repo-wide grep found more of both than the
+review's added-line read had: `GroundShadowLaw.cs`, `weapon-effects.md`, the backlog entries and
+the analysis page were not on the evidence list. Uses left standing are a different referent, not
+the avoided one: `docs/formats/ai-rosters.md` and its citations describe the original's `aiv`
+roster data, which genuinely holds no human, and every surviving "deviation" is either the
+`DEVIATION_DISTANCE` / `RANDOM_DEVIATION` authored quantity, a measured statistical deviation, or
+`CONTEXT.md`'s own `_Avoid_` entry. `docs/cli.md`'s `--perf` bullet was 4 characters under its
+600-char cap, so the longer term is paid for by dropping a copula and one article.
+
+**Verified.** <pending orchestrator run> `Select-String` over `CSVM/src`, `CSVM.Tests`, `docs`,
+`analysis`, `backlog.md`, `playtest.md`, `PROJECT_CONTEXT.md` for `AI[- ]roster` and `deviation`
+returns only the justified cases above. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and
+`CheckEncoding.ps1` clean. `dotnet build CSVM/CSVM.sln` 0 warnings, 0 errors.
+`RunTests.ps1 -SkipEngine -SkipGoldens`: PASS, units 4090 passed, 0 failed, 2 skipped of 4092.
+
+**Original approach (kept for reference).**
 
 **Goal.** No word from `CONTEXT.md`'s `_Avoid_` lists survives in code or docs added by the range.
 

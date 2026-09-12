@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace CSVM.Utils;
 
 /// <summary>
-/// The wall cost of the session's AI roster walks in a window, and how many aircraft they walked.
+/// The wall cost of the flight roster's AI walks in a window, and how many aircraft they walked.
 /// The whole-frame terms cannot answer either question: <c>proc_ms</c> and <c>phys_tick_ms</c>
 /// bracket whichever callback the clock mode makes the walk ride, so a plane-count sweep reads
 /// only as a differential between two whole frames. This brackets the walk itself, which is what
@@ -24,7 +24,7 @@ public static class AiStepCost
     /// <summary>Walks completed since the last <see cref="Take"/>.</summary>
     public static long Steps => _steps;
 
-    /// <summary>Stamps the start of one AI roster walk.</summary>
+    /// <summary>Stamps the start of one AI walk over the flight roster.</summary>
     public static void Open() => _openedAt = Stopwatch.GetTimestamp();
 
     /// <summary>Closes the walk and banks its wall cost and the <paramref name="planes"/> it
