@@ -1909,21 +1909,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the one with no width, which is the shape of a short label rather than a name. *Cross-refs:*
   `BL-764`'s landing (`git log --grep=BL-764`), which settled the same screen's buttons.
 
-- `BL-767` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **A message box's rollover
-  frame is drawn for the pad focus, so a button never returns to its normal frame and the pointer's
-  own hover barely reads.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing
-  sortie, "Hover for buttons not really visible (removes the border), does not return to default if
-  not hovered". The dialog draws each answer at `PlaqueFrame(4, focused, held)` with `focused` being
-  the row index the pad and keyboard carry (`CSVM/src/UI/Menu/Original/OriginalCampaign.cs:396-409`),
-  and a dialog always has one focused answer, so frame 2 stands whatever the pointer does. The
-  reference the shared drawing cites shows OK on its normal frame with the pointer elsewhere
-  (`CSVM/src/UI/CampaignBoards.cs:370-375`). *Fix shape:* the strip frame follows the pointer while
-  one is present, and the pad focus is shown some other way, so an unhovered default answer sits on
-  frame 1. *⚠ Traps:* a pad-only player still has to see which answer is armed, so the pad focus
-  cannot simply stop drawing. Whether frame 2 of `MB_B_Buttons.Png` is the rollover at all is worth
-  reading off the strip before its look is called wrong. *Cross-refs:* `BL-744`'s landing
-  (`git log --grep=BL-744`), the same box's icon.
-
 - `BL-780` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]`
   `[Evidence: decoded]` **The About box's product identification number reads `???`, because
   CSVM does not read the registry value the original reads.**

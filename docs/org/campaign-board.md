@@ -181,14 +181,23 @@ On a pad, focus is the rollover frame and a held confirm is the depressed one. T
 what changed about focus: the cursor was a highlighted text row and is now a plaque in the state
 the original's own art already carried.
 
-The messagebox's buttons take no screen palette. `MB_B_Buttons.Png`'s four frames are grey,
-charcoal, black and light grey, and `[GLOBALVARS]` gives their labels `0xFFFFFFFF` on the normal
-and rollover frames and `0xFF000000` on the depressed one (`G2` to `G4`), so `BoardInk.Dialog` and
-`BoardInk.DialogPressed` are fixed white and black whatever screen the box covers. A palette ink
-would put the paper screens' black `LabelActivate` on the black rollover frame. The reference shot
-shows the one-button box's OK on its normal frame, the pointer being elsewhere, which is what the
-cursor-driven board draws; Original draws the focused answer on its rollover frame as it does every
-other plaque.
+The messagebox's buttons take no screen palette. `MB_B_Buttons.Png` is 62x76, four 62x19 frames of
+one pill shape at four brightnesses: the disabled frame fills at `0x55` inside a `0x99` rim, normal
+at `0x21` inside `0x67`, rollover at `0x00` inside `0x35` and depressed at `0xB7` inside `0xFD`.
+`[GLOBALVARS]` gives their labels `0xFFFFFFFF` on the normal and rollover frames and `0xFF000000`
+on the depressed one (`G2` to `G4`), so `BoardInk.Dialog` and `BoardInk.DialogPressed` are fixed
+white and black whatever screen the box covers. A palette ink would put the paper screens' black
+`LabelActivate` on the black rollover frame.
+
+**The rollover frame is the pointer's, not the focus's.** `MESSAGEBOX.SCRIPT`'s `gui_init` focuses
+one button on every raise, `CX` for the `0x1` box and `BX` for the plain `0x4` pair (`DX` when the
+`0x20` or `0x40` bit is set), and the reference shot of a `0x1` box has that focused OK on its
+normal frame, its fill measuring `0x22` inside a `0x66` rim, with the pointer elsewhere. So the
+original's focus moves no frame at all. A remake whose pointer and cursor are one thing cannot
+leave the cursor invisible, so Original draws the answer under the pointer on the rollover frame
+and marks the focused answer with the same `DISABLED` outline the option pages put on a row whose
+art carries no focus state, three pixels clear of the strip and only while the pointer is
+somewhere else.
 
 ## Which player the profile screen opens on
 

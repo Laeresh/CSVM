@@ -1110,6 +1110,48 @@ public class OriginalShellTests
         Assert.Null(shell.Dialog);
     }
 
+    /// <summary>A dialog answer's strip frame follows the pointer and nothing else: the rollover
+    /// frame while the pointer is on it, the normal frame the moment the pointer is anywhere else,
+    /// and the normal frame for a player who has no pointer at all. The cursor that a pad walks is
+    /// the focus mark instead, drawn clear of the strip and only while the pointer is elsewhere,
+    /// so the box never opens with an answer already lit.</summary>
+    [Fact]
+    public void ADialogAnswerTakesTheRolloverFrameFromThePointerAndTheFocusMarkFromTheCursor()
+    {
+        var shell = CreditsShell();
+
+        // Raised from the pad, no pointer having ever been in play.
+        shell.Step(Accept);
+        Assert.NotNull(shell.Dialog);
+        Assert.Equal(OriginalShell.DialogOkKey, shell.FocusedKey);
+        var ok = shell.Rows.Single();
+        Assert.Equal(1, AnswerFrame(shell));
+        var mark = Assert.Single(Marks(shell));
+        Assert.True(mark.Border);
+        Assert.Equal((ok.X - 3f, ok.Y - 3f, ok.Width + 6f, ok.Height + 6f), (mark.X, mark.Y, mark.Width, mark.Height));
+        Assert.Equal((shell.Inks.Disabled.R, shell.Inks.Disabled.G, shell.Inks.Disabled.B), (mark.R, mark.G, mark.B));
+
+        // The mark stands over the box, or the box's own background would paint it out.
+        var overlays = shell.Compose().Overlays;
+        Assert.Equal(mark, Assert.Single(overlays[^1].Fills));
+        Assert.NotEmpty(overlays[^2].Lines);
+
+        shell.Step(Pointer(ok.X + 10f, ok.Y + 10f));
+        Assert.Equal(2, AnswerFrame(shell));
+        Assert.Empty(Marks(shell));
+
+        // Off the answer and the strip is back where the reference shot has it, the mark returning
+        // because the hover left the focus on the answer it walked onto.
+        shell.Step(Pointer(ok.X - 40f, ok.Y + 10f));
+        Assert.Equal(1, AnswerFrame(shell));
+        Assert.Single(Marks(shell));
+
+        // A press on the answer is the depressed frame, and no mark stands under a lit answer.
+        shell.Step(Pointer(ok.X + 10f, ok.Y + 10f, pressed: true, clicked: true));
+        Assert.Equal(3, AnswerFrame(shell));
+        Assert.Empty(Marks(shell));
+    }
+
     /// <summary>The credits screen's hidden line: the secondary button held inside the authored
     /// region shows it and letting go there takes it away, the line standing at its own corner in
     /// its own ink with the stored characters shifted back down.</summary>
@@ -1213,6 +1255,21 @@ public class OriginalShellTests
         shell.Step(Pointer(x, y, pressed: true, clicked: true));
         return shell.Step(Pointer(x, y));
     }
+
+    // The standing dialog's panel: the one overlay carrying words, the pointer's own carrying none.
+    private static BoardPanel Box(OriginalShell shell) =>
+        shell.Compose().Overlays.First(o => o.Lines.Count > 0);
+
+    // The focus marks standing over the box, which ride a panel of nothing but fills.
+    private static System.Collections.Generic.List<BoardFill> Marks(OriginalShell shell) =>
+        shell.Compose().Overlays
+            .Where(o => o.Pictures.Count == 0 && o.Lines.Count == 0)
+            .SelectMany(o => o.Fills)
+            .ToList();
+
+    // The strip frame the box's single answer draws, its picture standing after the background
+    // and the icon.
+    private static int AnswerFrame(OriginalShell shell) => Box(shell).Pictures[2].Frame;
 
     // The bitmap the composed pointer overlay draws, which is the last overlay's one picture.
     private static string PointerArt(OriginalShell shell) =>

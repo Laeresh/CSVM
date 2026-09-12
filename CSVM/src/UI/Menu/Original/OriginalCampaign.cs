@@ -69,6 +69,11 @@ public sealed partial class OriginalShell
     // The name box's own height where the row carries none.
     private const float FallbackFieldHeight = 20f;
 
+    // How far outside an answer's own rectangle its focus mark stands. The strip fills its frame
+    // corner to corner but for the pill's rounded ends, so a mark on the rectangle itself would be
+    // drawn under the art and lost; three pixels clear puts it on the box's black ground.
+    private const float DialogMarkOutset = 3f;
+
     private readonly CampaignFeature? _campaign;
     private readonly Func<CampaignProfileStore>? _profiles;
     private readonly Func<CSVM.Flight.StockLoadouts?>? _stock;
@@ -413,23 +418,42 @@ public sealed partial class OriginalShell
         return rows;
     }
 
-    // The standing dialog as the shared board component's messagebox panel, each answer in the
-    // frame of its state under the cursor and the pointer, and in the box's own ink rather than
-    // the screen's, which on a paper screen would hide the label on the dark strip.
-    private BoardPanel ComposeDialog(IReadOnlyList<OriginalRow> rows, int focus)
+    // The standing dialog as the shared board component's messagebox panel.
+    // ⚠ Do not take the strip frame off the focus. Every raise focuses an answer, so a frame read
+    // from it would stand on the default answer for the life of the box, which is not what the
+    // original draws; the pointer owns the rollover frame and the cursor gets the focus mark
+    // instead (docs/org/campaign-board.md). The ink is the box's own rather than the screen's,
+    // which on a paper screen would hide the label on the dark strip.
+    private void ComposeDialog(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays)
     {
         var dialog = _dialog!;
         var buttons = new List<CampaignBoards.DialogButton>(dialog.Answers.Count);
+        var marks = new List<BoardFill>();
         for (int i = 0; i < dialog.Answers.Count; i++)
         {
-            bool focused = i == focus;
+            // The hit is re-checked rather than trusted, since the hover index outlives the frame
+            // that set it and the answers are not the rows it was measured against.
+            var row = i < rows.Count ? rows[i] : null;
+            bool lit = i == _hover && row != null && _pointer is { } at && row.Contains(at.X, at.Y);
             bool held = i == _pressed;
+            if (i == focus && !lit && row != null)
+            {
+                marks.Add(FocusBox(row, DialogMarkOutset));
+            }
+
             buttons.Add(new CampaignBoards.DialogButton(
                 dialog.Answers[i].LayoutKey, dialog.Answers[i].Label,
-                ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.DialogInk(held)));
+                ComposedBoard.PlaqueFrame(4, lit, held), ComposedBoard.DialogInk(held)));
         }
 
-        return CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout, dialog.Chrome);
+        overlays.Add(CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout, dialog.Chrome));
+        if (marks.Count > 0)
+        {
+            // The mark rides its own panel over the box rather than the box's fill layer, which a
+            // panel draws before its pictures: the messagebox's background covers the whole panel,
+            // so a mark inside it would be drawn and then painted over.
+            overlays.Add(new BoardPanel(marks, Array.Empty<BoardPicture>(), Array.Empty<BoardLine>()));
+        }
     }
 
     private bool RosterHas(string name)
@@ -1307,7 +1331,7 @@ public sealed partial class OriginalShell
 
         if (_dialog != null)
         {
-            overlays.Add(ComposeDialog(rows, focus));
+            ComposeDialog(rows, focus, overlays);
         }
     }
 

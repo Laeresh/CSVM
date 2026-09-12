@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using CSVM.Flight;
 using CSVM.Session;
@@ -57,7 +58,9 @@ internal static class MenuOriginalCampaignSuites
         + "decoded slot cap is refused in the original's own words until a plane is sold back, the "
         + "screenshot aids' input script stands the pilot's plane list and the ammo screen's rocket "
         + "list open and draws them through idle frames while export is still the EXPORT press and a "
-        + "script spelling the secondary press this presentation lacks is refused whole, and "
+        + "script spelling the secondary press this presentation lacks is refused whole, the standing "
+        + "box's answer takes its rollover frame from the pointer alone and wears the cursor's focus "
+        + "mark only while the pointer is elsewhere, and "
         + "Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
@@ -747,7 +750,79 @@ internal static class MenuOriginalCampaignSuites
         shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
         shell.RunAidScript(CampaignAidProfiles.ExportArgument);
         ctx.Check(shell.Dialog != null, $"and export is still the EXPORT press, its box standing ({shell.Dialog?.Message})");
+        DialogFrames(ctx, shell);
         shell.CloseCampaign();
+    }
+
+    // The messagebox's answer strip through the three states it can stand in, over the install's own
+    // MB_B_Buttons.Png. The rollover frame is the pointer's alone: MESSAGEBOX.SCRIPT focuses an
+    // answer on every raise and the original still draws that answer on its normal frame, so what
+    // the cursor gets is the focus mark, and only while the pointer is somewhere else.
+    private static void DialogFrames(TestContext ctx, OriginalShell shell)
+    {
+        var ok = shell.Rows[0];
+        string frames = AnswerFrames(shell);
+        int marks = MarkCount(shell);
+        ctx.Check(frames == "1" && marks == 1,
+            $"the raised box draws its answer on the normal frame under one focus mark (frames {frames}, {marks} marks)");
+
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(ok.X + 4f, ok.Y + 4f, false, false) });
+        frames = AnswerFrames(shell);
+        marks = MarkCount(shell);
+        ctx.Check(frames == "2" && marks == 0,
+            $"the pointer on the answer takes the rollover frame and drops the mark (frames {frames}, {marks} marks)");
+
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(ok.X - 60f, ok.Y + 4f, false, false) });
+        frames = AnswerFrames(shell);
+        marks = MarkCount(shell);
+        ctx.Check(frames == "1" && marks == 1,
+            $"and the pointer elsewhere puts it back on the normal frame (frames {frames}, {marks} marks)");
+    }
+
+    // The standing dialog's panel: the last overlay carrying words, since a box is composed over
+    // whatever the screen already put up (an open list, the seat strip) and the pointer's own
+    // overlay, which follows it, carries none.
+    private static BoardPanel DialogPanel(OriginalShell shell)
+    {
+        var overlays = shell.Compose().Overlays;
+        for (int i = overlays.Count - 1; i >= 0; i--)
+        {
+            if (overlays[i].Lines.Count > 0)
+            {
+                return overlays[i];
+            }
+        }
+
+        return new BoardPanel(Array.Empty<BoardFill>(), Array.Empty<BoardPicture>(), Array.Empty<BoardLine>());
+    }
+
+    // The focus marks standing over the box, which ride a panel of nothing but fills.
+    private static int MarkCount(OriginalShell shell)
+    {
+        int marks = 0;
+        foreach (var overlay in shell.Compose().Overlays)
+        {
+            if (overlay.Pictures.Count == 0 && overlay.Lines.Count == 0)
+            {
+                marks += overlay.Fills.Count;
+            }
+        }
+
+        return marks;
+    }
+
+    // The strip frames the box's answers draw, in order, their pictures standing after the
+    // background and the icon.
+    private static string AnswerFrames(OriginalShell shell)
+    {
+        var box = DialogPanel(shell);
+        var frames = new List<string>();
+        for (int i = 2; i < box.Pictures.Count; i++)
+        {
+            frames.Add(box.Pictures[i].Frame.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return string.Join(",", frames);
     }
 
     private static bool HasLine(ComposedBoard board, string text)

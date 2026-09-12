@@ -190,6 +190,24 @@ public class OriginalCampaignTests : IDisposable
             (int)DialogIcon.Query,
             DialogIconTests.IconFrame(shell.Compose().Overlays.First(o => o.Lines.Count > 0)));
 
+        // Raised from a click, the pointer resting where DELETE PLAYER was: neither answer is lit,
+        // so both keep the normal frame and the mark alone says Yes is the one Accept would take.
+        var yes = shell.Rows[0];
+        var no = shell.Rows[1];
+        var box = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
+        Assert.Equal(new[] { 1, 1 }, box.Pictures.Skip(2).Select(p => p.Frame));
+        var mark = Assert.Single(Marks(shell));
+        Assert.True(mark.Border);
+        Assert.Equal((yes.X - 3f, yes.Y - 3f), (mark.X, mark.Y));
+
+        // The pointer carries the rollover frame and the cursor with it, so a hovered answer is
+        // the lit one and wears no mark, and the answer left behind is back on its normal frame.
+        shell.Step(Pointer(no.X + 4f, no.Y + 4f));
+        box = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
+        Assert.Equal(new[] { 1, 2 }, box.Pictures.Skip(2).Select(p => p.Frame));
+        Assert.Empty(Marks(shell));
+        Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
+
         shell.Step(Back);
         Assert.Null(shell.Dialog);
         Assert.NotNull(_store.Load("Zachary"));
@@ -520,11 +538,13 @@ public class OriginalCampaignTests : IDisposable
         Assert.NotNull(scratchPlanes.Load(campaign.Profile!.Planes[0].Name));
         Assert.Null(_planes.Load(campaign.Profile.Planes[0].Name));
 
-        // The focused OK on its rollover frame, in the box's white rather than the paper palette.
+        // With no pointer on it OK stands on its normal frame under the focus mark, in the box's
+        // white rather than the paper palette.
         var panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
         var label = Assert.Single(panel.Lines, l => l.Text == ok.Label);
         Assert.Equal(BoardInk.Dialog, label.Ink);
-        Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 2);
+        Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 1);
+        Assert.True(Assert.Single(Marks(shell)).Border);
 
         // Held under the pointer it takes the depressed frame and the black that reads on it.
         shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
@@ -592,6 +612,13 @@ public class OriginalCampaignTests : IDisposable
 
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+
+    // The focus marks standing over a raised box, which ride a panel of nothing but fills.
+    private static System.Collections.Generic.List<BoardFill> Marks(OriginalShell shell) =>
+        shell.Compose().Overlays
+            .Where(o => o.Pictures.Count == 0 && o.Lines.Count == 0)
+            .SelectMany(o => o.Fills)
+            .ToList();
 
     // One click as the shell reads it: the press arms the row and the release on it fires, so the
     // step that carries the activation is the second one.
