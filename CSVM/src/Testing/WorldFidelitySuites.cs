@@ -9,10 +9,11 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>Suites over the mid-mission world behaviours the shipped data drives: the area-selected
-/// node toggle C3's story missions switch their map with, the scripted-path follower that taxis
-/// an authored vehicle off a runway and hands it to the flight model, the mission script's
-/// hangar door, and the FOG_STATE animation event.</summary>
+/// <summary>Suites over the mid-mission world behaviours the shipped data drives: the authored
+/// <c>flags.active</c> a node starts at whatever its depth, the area-selected node toggle C3's
+/// story missions switch their map with, the scripted-path follower that taxis an authored vehicle
+/// off a runway and hands it to the flight model, the mission script's hangar door, and the
+/// FOG_STATE animation event.</summary>
 internal static class WorldFidelitySuites
 {
     // The mission whose first objective opens a ground hangar, the definition it wakes, and the
@@ -33,6 +34,18 @@ internal static class WorldFidelitySuites
     private const string FogName = "drop_fog";
 
     private const float FogGray = 0.69f;
+
+    // The barrage-balloon site whose turret carries an authored-inactive `healthy` variant below a
+    // world root, the mission that arms it, and the definition that switches it on.
+    private const string ActiveChapter = "C1";
+
+    private const string ActiveMission = "M05";
+
+    private const string ActiveTurret = "bbtur11";
+
+    private const string ActiveVariant = "healthy";
+
+    private const string ActiveAnim = "attack_balloon11";
 
     // The only chapter authoring the area verb, and the mission that switches the third area off.
     private const string AreaChapter = "C3";
@@ -131,6 +144,46 @@ internal static class WorldFidelitySuites
                 $"the credited launch identifies its template and starts on the hull's take-off path");
             ctx.Check(runway != null && runway.GlobalPosition.DistanceTo(submarine.GlobalPosition) > 1f,
                 $"that path point is the deck ahead of the hull's origin, not the origin itself");
+        });
+    }
+
+    [Suite("world-node-active-depth",
+        "a gamez node's flags.active is the built node's starting visibility at EVERY depth, not "
+        + "only at a world root: C1's bbtur11/healthy builds switched off while its active parent "
+        + "builds shown, and attack_balloon11 still switches the variant on")]
+    internal static void WorldNodeActiveDepth(TestContext ctx)
+    {
+        ctx.WithWorld(ActiveChapter, collision: false, world =>
+        {
+            if (VariantOf(world, out int turret, out int variant) is not { } names)
+            {
+                ctx.Check(false, $"C1 ships '{ActiveTurret}/{ActiveVariant}' below a world root");
+                return;
+            }
+
+            ctx.Check(!names.VariantActive && names.TurretActive,
+                $"'{ActiveVariant}' ships inactive under an active '{ActiveTurret}', both under the world root '{names.Root}'");
+            var built = world.Runtime.FindNodeByIndex(variant);
+            var parent = world.Runtime.FindNodeByIndex(turret);
+            ctx.Check(built is { Visible: false },
+                $"the authored-inactive variant is built and switched off (built={built != null})");
+            ctx.Check(parent is { Visible: true },
+                $"its authored-active parent is built and switched on (built={parent != null})");
+        });
+
+        ctx.WithWorld(ActiveChapter, collision: false, ActiveMission, world =>
+        {
+            if (VariantOf(world, out _, out int variant) == null
+                || world.Runtime.FindNodeByIndex(variant) is not { } built)
+            {
+                ctx.Check(false, $"{ActiveChapter}/{ActiveMission} builds the variant");
+                return;
+            }
+
+            ctx.Check(!built.Visible, $"the mission that arms the site starts it switched off too");
+            var started = world.Runtime.Play(ActiveAnim);
+            ctx.Check(started.Count == 1 && built.Visible,
+                $"'{ActiveAnim}' still switches it on started={started.Count}");
         });
     }
 
@@ -724,6 +777,55 @@ internal static class WorldFidelitySuites
     }
 
     private static Node3D? First(IReadOnlyList<Node3D> found) => found.Count > 0 ? found[0] : null;
+
+    // The turret and its authored variant child as gamez indices, plus the world root they hang
+    // under, so the suite reports the data it stands on instead of hard-coding node numbers.
+    private static (string Root, bool TurretActive, bool VariantActive)? VariantOf(
+        TestWorld world, out int turret, out int variant)
+    {
+        turret = variant = -1;
+        if (world.Gamez.FindByName(ActiveTurret) is not { } node)
+        {
+            return null;
+        }
+
+        foreach (int child in node.Children)
+        {
+            if (child >= 0 && child < world.Gamez.Nodes.Count
+                && world.Gamez.Nodes[child].Name.Equals(ActiveVariant, StringComparison.OrdinalIgnoreCase))
+            {
+                variant = child;
+                break;
+            }
+        }
+
+        if (variant < 0)
+        {
+            return null;
+        }
+
+        turret = node.Index;
+        string root = ActiveTurret;
+        for (var at = node; at != null; at = ParentOf(world, at))
+        {
+            root = at.Name;
+        }
+
+        return (root, node.Active, world.Gamez.Nodes[variant].Active);
+    }
+
+    private static GameZNode? ParentOf(TestWorld world, GameZNode node)
+    {
+        foreach (var candidate in world.Gamez.Nodes)
+        {
+            if (candidate.Children.Contains(node.Index))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
 
     private static bool AllClosed(List<Node3D> panels, List<Vector3> rest)
     {

@@ -105,11 +105,9 @@ public static class RosterMarkers
         return map;
     }
 
-    // ⚠ The authored `active` bit has to be applied here. The world walk honours it by refusing to
-    // build the node at all (WorldBuilder.Add), which is not open to us: a definition addresses
-    // these by index and an index with no node behind it is dropped rather than name-matched. So
-    // the node is built and switched off instead, which is the state the original starts it in —
-    // an arming volume that shipped inactive must not read as armed on the first frame.
+    // ⚠ The authored `active` bit has to be applied here too. A graft onto the rig never goes
+    // through the world walk, which is the one caller that asks SceneBuilder for it, and an arming
+    // volume that shipped inactive must not read as armed on the first frame.
     private static void ApplyAuthoredActive(GameZ gamez, Node3D built)
     {
         if (built.HasMeta(AnimRuntime.IndexMeta))

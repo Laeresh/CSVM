@@ -486,16 +486,16 @@ void fragment() {
     }
 
     /// <summary>Builds the subtree rooted at <paramref name="node"/>; null if skipped entirely.
-    /// <paramref name="collisionSkip"/> renders a subtree but exempts it from collision; it and the
-    /// two force flags are inherited by every descendant. <paramref name="forceLit"/> applies
-    /// <c>csky_world_light</c> whatever the authored <c>lighting</c> flag says, which is the deck's
-    /// exception (<see cref="WorldBuilder"/>). ⚠ <paramref name="zoneGate"/> is per node, never
-    /// inherited: the data puts parents and children on different zones.</summary>
+    /// ⚠ <paramref name="zoneGate"/> is per node: the data puts parents and children on different
+    /// zones. The rest are inherited by every descendant: <paramref name="collisionSkip"/> renders a
+    /// subtree but exempts it from collision, <paramref name="applyActive"/> starts each node at its
+    /// own <c>flags.active</c>, and <paramref name="forceLit"/> applies <c>csky_world_light</c>
+    /// whatever the authored <c>lighting</c> flag says, which is the deck's exception.</summary>
     public Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip = null,
         Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false,
-        bool forceLit = false, bool zoneGate = false) =>
+        bool forceLit = false, bool zoneGate = false, bool applyActive = false) =>
         BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided, forceLit,
-            zoneGate);
+            zoneGate, applyActive);
 
     /// <summary>Re-resolves every textured material through the current substitution hook and
     /// writes the result back into the live material. Used by the viewer's livery lab: the
@@ -814,7 +814,7 @@ void fragment() {
 
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
         Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit,
-        bool zoneGate)
+        bool zoneGate, bool applyActive)
     {
         if (skip != null && skip(node))
             return null;
@@ -852,6 +852,12 @@ void fragment() {
         // parent's origin.
         if (node.Local is { } local)
             n3d.Transform = local;
+
+        // ACTIVE is live visibility, not existence: the record's bit is the node's starting state
+        // and choreography moves it, so an inactive node is still built and indexed. Opt-in because
+        // a library root a caller slices out (a plane, a prop) ships inactive and IS its subject.
+        if (applyActive)
+            n3d.Visible = node.Active;
 
         // The node's own zone_id layer, resolved once for both mesh instances below. 0 =
         // ungated (zone_id −1/0, or the gate switched off for this build) — leave the instance on
@@ -907,7 +913,7 @@ void fragment() {
             if (childIndex < 0 || childIndex >= _gamez.Nodes.Count)
                 continue;
             var child = BuildSubtree(_gamez.Nodes[childIndex], skip, collisionSkip, collidable,
-                forceDoubleSided, forceLit, zoneGate);
+                forceDoubleSided, forceLit, zoneGate, applyActive);
             if (child != null)
                 n3d.AddChild(child);
         }

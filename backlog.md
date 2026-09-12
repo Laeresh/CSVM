@@ -1097,29 +1097,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is landed and works; only the ambient half is inert. *Cross-refs:* `BL-332`'s closing record in
   `PLAN-M5-polish-10` `B13`, `CAP-54`.
 
-- `BL-800` `[Fidelity]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The world build applies a gamez node's `flags.active` only at world roots, while the original applies it to every node.**
-  *Evidence:* `WorldBuilder.Add` writes `built.Visible = node.Active` on each child of `world1`
-  and `SceneBuilder.BuildSubtree` never writes visibility, so a node below a world root builds
-  shown whatever its flag says. The original copies the flag straight through:
-  `gClsBlockReadNode` (`FUN_004e3690`, `cls_zbd.c`) reads the 212-byte node record and copies its
-  first 208 bytes into the live node object, so bit 2 of `node+0x24` is the record's own
-  `flags.active`, at every depth, and only `gwNodeSetActive` (`FUN_004cca30`) moves it afterwards.
-  32 world nodes across the eight chapters sit in that gap: `letterbox` and `sunlight` in all
-  eight, C1's nine barrage-balloon turret `healthy` variants (`lifesaver11`…`lifesaver33`, each
-  `bbtur<nn>/healthy`, which `attack_balloon<nn>` is what switches on), C3's three
-  `britbalmoral_<n>/markers/pylon8/bb_approach<n>/half_cone/land_on`, and C4's four parentless
-  `anim2_autogyro`/`anim2_warhawk`/`anim2_brigand`/`anim_warhawk` roots. *Fix shape:* apply the
-  flag where the subtree is built rather than at the walk root, then census what changes.
-  *⚠ Traps:* several of the 32 are already switched off by another mechanism (`letterbox` by
-  `WorldSession`, the destructible `healthy` variants by their own `RESET_STATE`), so the fix must
-  be measured against what the world actually draws, not against the flag count. `sunlight` is a
-  light rather than geometry and does not go through `Visible` at all. No prerequisite node is
-  affected: every one of the 784 REQUIRED `ACTIVATION_PREREQUISITE` node entries names a node
-  shipping `active: true`, so the animation gate reads the same state in both engines.
-  *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) ("The node
-  form reads the node's own live flag"), [`docs/formats/gamez.md`](docs/formats/gamez.md)
-  (`flags.active` as initial runtime visibility), `WorldBuilder.cs`, `SceneBuilder.cs`.
-
 - `BL-803` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics lays a
   dithering pattern over the whole screen.** *Evidence:* reported at the controls under Enhanced
   Graphics as a "dithering effect over the screen"; which chapter, view and window size are not

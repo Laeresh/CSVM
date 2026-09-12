@@ -53,6 +53,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   name the parent before reading a number as a count of objects.** One flak over a C1 aagun dealt
   four splash shares over two nodes, each split into a `col` and a `col_buildings` body by
   `SceneBuilder.AttachCollision`'s per-surface-class carve.
+- **METHOD-28** — **A/B a new opt-in flag against the code it replaces, never against the flag
+  switched off once that code is already deleted.** Turning `applyActive` off in a tree whose
+  root-level `built.Visible = node.Active` had gone measured a third state nobody ships, and the
+  census read four placed roots (C1's fuel trucks, `piratezep`, `barracuda`) as changed by the fix
+  until the real baseline was put back.
 
 ## DIAG — chasing a symptom
 

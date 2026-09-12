@@ -215,6 +215,7 @@
     "warhawk-torpedo-run": 1.600,
     "debug-kill-target": 0.408,
     "ranked-pool-carried-turret-dedup": 0.610,
+    "world-node-active-depth": 3.540,
     "partition-areas": 1.156,
     "scripted-path": 1.440,
     "generator-takeoff-run": 2.907,

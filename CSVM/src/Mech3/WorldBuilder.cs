@@ -1049,16 +1049,13 @@ public sealed class WorldBuilder
             return;
         var node = _gamez.Nodes[nodeIndex];
         bool isDeck = _deckNodes.Contains(nodeIndex);
-        // ⚠ Deck tiles are the one exception to the world's backface culling. They are authored
-        // single-sided, but the player flies through the deck, so the same quad must read as a
-        // ceiling from below and a floor from above. The other two deck flags: weather.md.
+        // ⚠ Deck tiles are the one exception to the world's backface culling: authored
+        // single-sided, but flown through, so the quad reads from both faces (weather.md has the
+        // other two). applyActive starts EVERY node of the subtree at its own record's ACTIVE bit.
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
-            forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck);
+            forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck, applyActive: true);
         if (built != null)
         {
-            // ACTIVE is live visibility, not existence. Mission choreography can switch an
-            // authored-inactive entity on later, so it must already be indexed and staged.
-            built.Visible = node.Active;
             if (IsParkedAtOrigin(node, built))
             {
                 _parkedAtOrigin.Add((node, built));

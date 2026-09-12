@@ -21,7 +21,12 @@ This page documents format facts only and contains no game asset data.
   animation and objective code can resolve an authored-inactive node and activate it later. C3/M03
   is the direct shipped case: `barracuda` begins inactive, then `sub_movement` activates and moves
   the submarine before its enemy generator is credited. A world builder must therefore stage an
-  inactive placed root and hide it; dropping the root makes the later name/index references fail.
+  inactive node and hide it; dropping it makes the later name/index references fail. **The flag
+  binds at every depth, not only at a placed root**: `gClsBlockReadNode` copies each record's own
+  flags word into its live node ([anim-definitions.md](anim-definitions.md), "The node form reads
+  the node's own live flag"). 36 nodes ship inactive across the eight chapters, and nine of them sit
+  below a placed root, C1's `bbtur<nn>/healthy` barrage-balloon turret variants that
+  `attack_balloon<nn>` switches on.
   A **zeppelin record is one such activator**: C2's gamez alone ships `piratezep` inactive (the
   chapter's `support\c2\load.gw` switches it off right after loading it) and neither `m02.gw` nor
   `m03.gw` sets it back, so `zeppelins.zrd` naming the node is what puts the hull on screen, the
