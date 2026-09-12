@@ -26,6 +26,10 @@ namespace CSVM.Testing;
 /// </summary>
 internal static class MenuHangarSuites
 {
+    // The weight line the set-airframe swap writes, IDS_PX_OVERALLSPEED_TITLE, whose last word is
+    // the one this suite reads back off the hub (docs/org/hangar.md, "The two red figures").
+    private const int PendingWeightString = 1032;
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -101,7 +105,9 @@ internal static class MenuHangarSuites
         + "an unedited build and raises the three-button query box over an edited one, whose Cancel puts "
         + "the airframe back and whose Yes takes the stock build, the hub's PLANE COST is red past "
         + "the wallet and its CURRENT WEIGHT red past the airframe's capacity and both plain otherwise, "
-        + "an open list's focused row is what the two figures price without taking it, a tab page's "
+        + "an open list's focused row is what the two figures price without taking it, a previewed "
+        + "airframe row instead leaving that weight line on the shipped Pending word in the page's ink "
+        + "where a hardpoint row over the same capacity keeps the figure and the red, a tab page's "
         + "description box follows the shipped figures with the heading that string ends with and the "
         + "component's own prose flowed inside the authored box, a decal list opens as the page's "
         + "five-across two-down grid of the sheet's own tiles with its scrollbar counting rows of "
@@ -1078,7 +1084,7 @@ internal static class MenuHangarSuites
             $"the totals page keeps the note and names the shortfall in the original's words ({shell.Screen})");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.HangarEngine, $"Back returns to the tab the hub last showed ({shell.Screen})");
-        OriginalOverweight(ctx, shell, hangar, layout);
+        OriginalOverweight(ctx, host, seat, shell, fit, hangar, layout);
         WalletInventory(ctx, host, seat, shell, fit, hangar);
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen, $"Back then cancels the build and resumes the cabin ({shell.Screen})");
@@ -1090,7 +1096,8 @@ internal static class MenuHangarSuites
     // The weight line's own arm, over the picks that reach it: the lightest airframe under every
     // armour press and every hardpoint is past its capacity, so the line takes the red literal,
     // and the ink goes back with the presses. The build is dropped with the rest at the cancel.
-    private static void OriginalOverweight(TestContext ctx, OriginalShell shell, HangarFeature hangar, MenuLayout layout)
+    private static void OriginalOverweight(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, MenuLayout layout)
     {
         hangar.PickAirframe(0);
         hangar.AnswerDefaultsAsk(true);
@@ -1104,6 +1111,7 @@ internal static class MenuHangarSuites
         var board = shell.Compose();
         ctx.Check(hangar.Bill.Verdict == PurchaseVerdict.Overweight && HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink == BoardInk.Alarm,
             $"the weight line is red over capacity ({hangar.Bill.Total.Weight} of {hangar.Bill.Capacity} lbs., {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink})");
+        OriginalPendingWeight(ctx, host, seat, shell, fit, hangar, layout);
         for (int zone = 0; zone < 4; zone++)
         {
             hangar.SetArmour(zone, 0);
@@ -1114,6 +1122,45 @@ internal static class MenuHangarSuites
         board = shell.Compose();
         ctx.Check(hangar.Bill.Verdict != PurchaseVerdict.Overweight && HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink == BoardInk.Dialog,
             $"and back in the page's ink under it ({hangar.Bill.Total.Weight} of {hangar.Bill.Capacity} lbs., {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink})");
+    }
+
+    // The airframe row's own answer, which is not the answer every other row gives. The decoded
+    // set-airframe swap writes the pending weight line and reports the build inside its capacity
+    // whatever it weighs, so the same overweight build reads the shipped Pending word in the
+    // page's ink under an open airframe list, and its own figure in the red under an open
+    // hardpoint list. Leaves the hub on the engine tab it found.
+    private static void OriginalPendingWeight(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, MenuLayout layout)
+    {
+        string word = hangar.Strings.Text(PendingWeightString, "CURRENT WEIGHT: Pending").Split('\n')[^1].Trim();
+        var airframeTab = Row(shell, "PX_B_AIRFRAME")!;
+        Click(host, seat, Pointer(fit, airframeTab.X + 5f, airframeTab.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.OpenHangarDropdownOn(OriginalShell.AirframeDropKey) && shell.Screen == OriginalScreen.HangarAirframe,
+            $"the airframe list opens over the overweight build ({shell.Screen}, {shell.OpenHangarDropdown})");
+        var board = shell.Compose();
+        var weight = HubFigure(layout, board, "PX_T_CURRENTWEIGHT");
+        ctx.Check(word.Length > 0 && weight?.Text.EndsWith(word, StringComparison.Ordinal) == true
+            && !weight.Text.Any(char.IsDigit) && weight.Ink == BoardInk.Dialog,
+            $"the previewed airframe row weighs against nothing and never reddens ({weight?.Text}, {weight?.Ink})");
+        ctx.Check(HubFigure(layout, board, "PX_T_PLANECOST")?.Text.Contains(
+            "$" + hangar.BillWithAirframe(0).Total.Cost.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true,
+            $"while the cost line beside it still prices the row ({HubFigure(layout, board, "PX_T_PLANECOST")?.Text})");
+        Press(host, seat, Back);
+
+        var hardpointTab = Row(shell, "PX_B_HARDPOINTS")!;
+        Click(host, seat, Pointer(fit, hardpointTab.X + 5f, hardpointTab.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.OpenHangarDropdownOn("HP_D_POINT0"), $"a hardpoint list opens over the same build ({shell.OpenHangarDropdown})");
+        board = shell.Compose();
+        weight = HubFigure(layout, board, "PX_T_CURRENTWEIGHT");
+        var previewed = hangar.BillWithHardpoints(0, CustomPlaneDef.MaxHardpointsPerWing);
+        ctx.Check(weight?.Text.Contains(previewed.Total.Weight.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true
+            && weight.Ink == BoardInk.Alarm,
+            $"where a hardpoint row keeps the comparison and the red ({weight?.Text}, {weight?.Ink})");
+        Press(host, seat, Back);
+        var engineTab = Row(shell, "PX_B_ENGINE")!;
+        Click(host, seat, Pointer(fit, engineTab.X + 5f, engineTab.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.HangarEngine && shell.OpenHangarDropdown == null,
+            $"and the hub is left on the tab this page found ({shell.Screen}, {shell.OpenHangarDropdown})");
     }
 
     // A hub figure by the authored box it stands in, which is what tells the cost line from the

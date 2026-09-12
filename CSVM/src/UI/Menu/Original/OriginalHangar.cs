@@ -151,6 +151,11 @@ public sealed partial class OriginalShell
     // carries for a button; the wallet-free commit borrows it.
     private const int ExportLabelString = 1139;
 
+    // The weight line the set-airframe callback swaps in, IDS_PX_OVERALLSPEED_TITLE's own
+    // "CURRENT WEIGHT: Pending", which carries no figure and is never red
+    // (docs/org/hangar.md, "The two red figures").
+    private const int PendingWeightString = 1032;
+
     // What the three tabs with no component of their own write on their name row, the shipped
     // IDS_PX_ARMORNAME set. The other three name the airframe, the engine or the gun instead.
     private const int ArmourNameString = 1150;
@@ -1605,7 +1610,8 @@ public sealed partial class OriginalShell
         // weight red past the capacity, one literal red on every screen and none on a wallet-free
         // door, which checks no funds (docs/org/hangar.md, "The two red figures").
         bool overFunds = hangar.Unaffordable(bill.Total.Cost);
-        bool overWeight = standing != null && bill.Verdict == PurchaseVerdict.Overweight;
+        bool pendingWeight = standing == null || PreviewingAirframe(rows, focus);
+        bool overWeight = !pendingWeight && bill.Verdict == PurchaseVerdict.Overweight;
         AddHangarText(hub, lines, "PX_T_PLANENAME", HubLabelFont, BoardInk.Dialog);
         if (hub.Widget("PX_T_PLANECOST") is { } cost)
         {
@@ -1639,9 +1645,9 @@ public sealed partial class OriginalShell
 
         if (hub.Widget("PX_T_CURRENTWEIGHT") is { } weight)
         {
-            string text = standing != null
-                ? Fill(weight.Text ?? "CURRENT WEIGHT: %1!d! lbs.", bill.Total.Weight)
-                : Fill(weight.Text ?? "CURRENT WEIGHT: %1!d! lbs.", "Pending").Replace("Pending lbs.", "Pending");
+            string text = pendingWeight
+                ? Fill(hangar.Strings.Text(PendingWeightString, "CURRENT WEIGHT: Pending"))
+                : Fill(weight.Text ?? "CURRENT WEIGHT: %1!d! lbs.", bill.Total.Weight);
             lines.Add(new BoardLine(text, weight.Int("X"), weight.Int("Y"), weight.Int("Width"), HubTextFont,
                 overWeight ? BoardInk.Alarm : BoardInk.Dialog));
         }
@@ -1710,6 +1716,12 @@ public sealed partial class OriginalShell
 
         return hangar.AirframeChosen ? hangar.Scratch.Airframe : null;
     }
+
+    // Whether the figures stand on an airframe row the cursor is only previewing. The set-airframe
+    // callback leaves the weight line pending, so a candidate airframe is weighed against nothing.
+    // ⚠ Every other list keeps its comparison; the original judges those against the capacity.
+    private bool PreviewingAirframe(IReadOnlyList<OriginalRow> rows, int focus) =>
+        _hangarOpen == AirframeDropKey && FocusedItem(rows, focus, AirframeDropKey) != null;
 
     // The build the hub's figures price: the scratch plane as it stands, or as it would stand with
     // the row under the cursor in an open list taken. Nothing is written, so leaving a list without

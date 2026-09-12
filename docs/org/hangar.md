@@ -495,10 +495,17 @@ palette, the way `BoardInk.Dialog` is white on every board: a palette entry woul
 where the script has a literal. Two remake additions stand beside them and are not this. The cash
 figure's own mark (the note going to the problems ink over a build the wallet cannot cover) is ours,
 as is the preview: Original's hub prices the row under the cursor in an open list as though it were
-taken, so PLANE COST, CURRENT WEIGHT, WEIGHT CAPACITY and the AIRFRAME line follow the focused row
-the way the description box and the blueprint already do. The cash mark previews with them, off the
-one previewed bill, so the note and the cost line can never disagree on screen. Nothing is written
-by a preview, so leaving a list without a pick restores every figure.
+taken, so PLANE COST, WEIGHT CAPACITY and the AIRFRAME line follow the focused row the way the
+description box and the blueprint already do. The cash mark previews with them, off the one
+previewed bill, so the note and the cost line can never disagree on screen. Nothing is written by a
+preview, so leaving a list without a pick restores every figure.
+
+**The airframe list is the one row the weight line does not follow.** A candidate airframe is what
+the pending dword above marks, so the open airframe list puts `langui` 1032 on the weight line and
+leaves it in the page's ink however heavy the build is, which is the swap's own reading: the weight
+a build carries is not a figure to judge against the airframe it was built on. Every other list
+keeps the comparison, since 2214 runs on each of those changes with the dword clear, so an engine,
+armour, gun or hardpoint row still shows the previewed weight and still reddens past the capacity.
 
 ### The sell price is the full build cost
 
