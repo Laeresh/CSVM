@@ -508,6 +508,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reference to compare against; `CAP-47` is that clip.
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
+- `BL-841` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` **`ApplyPylons` overwrites a `none`
+  loadout cell, so a custom plane that is not an airframe swap may mount a pylon it never bought.**
+  *Evidence:* noted and left unfiled in `BL-718`'s closing commit (`git log --grep=BL-718`), which
+  made a swap fit the def's own stock loadout through the same apply; whether a shipped custom
+  build can reach the overwrite with an empty cell is not read. *Fix shape:* build a custom plane
+  with an empty cell through the plane construction hub, apply, and pin that the cell stays
+  empty; if it does not, skip `none` cells on the non-swap path. *Cross-refs:* `BL-718`'s closing
+  commit (the swap table holds weapon ids, not counts), `docs/formats/vehicle.md`.
 
 ## Weapons & combat
 
@@ -1108,6 +1116,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
   crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
   `EnableWaterReflections`.
+- `BL-835` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` `[C5]` **The authored mip LOD
+  bias reaches only the world-mesh shader arm, where the original sets it as one device-wide
+  render state.** *Evidence:* `BL-538`'s close read `MipBias` off `adjust.gw` as
+  `D3DRENDERSTATE_MIPMAPLODBIAS`, which every texture sample on the device takes;
+  `CSVM/src/Mech3/SceneBuilder.cs:1614` (at `7d2e9881`) feeds it to the world-mesh material
+  only, while the billboard arm (`:1729`), the facade arm (`:1816`) and
+  `CSVM/src/Mech3/Clutter.cs:655` sample unbiased. *Fix shape:* route the same shader global
+  through every sampling arm; `c5-city-night` re-pins with the cause named. *⚠ Traps:* the bias
+  moves C5's dark band out by 1.74x and does not remove it; the band itself is `BL-538`'s open
+  look, and this item is not evidence about it. *Cross-refs:* `BL-538`, `docs/verification.md`
+  WORLD-38, `docs/org/textures.md`.
 
 ## Effects & animation runtime
 
@@ -1358,6 +1377,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the way past; `BL-455` deletes it.
   *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`, `BL-783` (the same gap
   for the display settings), `docs/menu-presentations.md`.
+- `BL-837` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The chase camera's throttle
+  transient is authored per real second but is stepped on the sim clock, and the two clocks were
+  never measured against each other.** *Evidence:* `BL-816`'s decode has the easing dt as
+  `GetTickCount` wall time per rendered frame; `CSVM/src/Flight/CameraController.cs:526` (at
+  `7d2e9881`) runs from `FlightController.cs:1743`'s sim step, so `dist_catch_up` is applied per
+  sim second. Under `--det` and on a rig where the sim clock lags wall time the settle is slower
+  than authored. *Fix shape:* log both clocks over the flown C1 chase shot; if they diverge, step
+  the easing on the engine's wall clock (the pinned goldens hold under `--det` only if the
+  deterministic clock is what the easing reads, so decide that first). *Cross-refs:* `BL-816`'s
+  closing commit, `docs/verification.md` DET-11, `docs/formats/camparam.md`.
 
 ## Cameras & views
 
@@ -2291,6 +2320,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   stamp's placement is deliberate and cross-presentation, so hiding it on one presentation is a
   decision about what a bug report carries, not a fidelity fix. *Cross-refs:* `BL-805`'s closing
   commit (the rest of the top level's reading), `docs/org/menu-inventory.md` Part 4.
+- `BL-834` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The warning-shot shield
+  arms on every human-piloted aeroplane, where the original ticks it only for the player vehicle
+  while the `Network` key is zero.** *Evidence:* `BL-826`'s decode: the world tick calls the
+  accumulator only for the player vehicle and only while `*DAT_0064f750` is zero, so a
+  multiplayer session shields nobody; `CSVM/src/Flight/FlightController.cs:3708` (at `7d2e9881`)
+  gates on `IsHumanPiloted` alone, so all four splitscreen pilots carry it, and no doc records the
+  difference. *Fix shape:* decide whether a splitscreen session shields every human pilot (a
+  remake-only rule, then written on the shield's docs page) or none; either is one condition.
+  *Cross-refs:* `BL-826`'s closing commit, `docs/verification.md` SRC-11, `BL-389` (the
+  splitscreen weapon mix, the same family).
+- `BL-838` `[Bug]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The ground shadow's forward
+  skew, threefold growth and fade exemption key on any human-piloted aeroplane, so a four-pilot
+  launch draws four player-shaped shadows in every pane.** *Evidence:*
+  `CSVM/src/Flight/GroundShadowPass.cs:228` (at `7d2e9881`) tests `IsHumanPiloted`; the decode
+  behind `BL-331` keys the skew on the one local player. *Fix shape:* decide whether each pane's
+  own pilot takes the player shape (per-pane, the decoded intent read per viewer) or only seat 0;
+  then key on the pane's viewer, pinned in the `ground-shadow` suite over a two-pane session.
+  *Cross-refs:* `BL-331` (the shadow's open halves), `docs/verification.md` SRC-12.
 
 ## Splitscreen
 
@@ -2362,6 +2409,32 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-391` (base engine level,
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
+- `BL-832` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The original's forced AI
+  park runs at every mission start, but CSVM parks only off an intro episode's hold, so a mission
+  that opens without a story intro takes no park.** *Evidence:* `BL-736`'s close
+  (`git log --grep=BL-736`) found the four park calls in the start path of every mission and
+  none hosted by `player_setup`; the entry's own fix shape, extending the park to the
+  `player_setup` bootstrap with a suite over an Instant Action wave, was not done, and what lifts
+  the park (`FUN_0041f2e0`, code 914) is unread. *Fix shape:* decode the lift, then park from the
+  mission-start path rather than the intro hold, with a suite over an Instant Action wave.
+  *⚠ Traps:* `BL-736` closed on "CSVM already matches" for the story intro alone; do not re-close
+  on that reading. *Cross-refs:* `BL-736`'s closing commit, `docs/formats/anim-definitions/cutscenes.md`.
+- `BL-836` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **An AI ordered into Evade from
+  outside the damage path is flagged as evading, so a scripted manoeuvre suppresses its
+  steady-hand roll for the whole episode.** *Evidence:* `CSVM/src/Flight/AiModeMachine.cs:682`
+  (at `7d2e9881`) sets `Evading = true` on every entry into the Evade state, and `:394` reads it
+  to hold the roll; the decode behind `BL-558` names four writers of the original's `+0xBA` flag,
+  all inside the damage routine `FUN_004b9bc0`. *Fix shape:* set the flag only from the damage
+  arm's entry, and add an `ai-modes` phase that orders an Evade without damage and reads the roll
+  still available. *Cross-refs:* `BL-558`'s closing commit, `docs/org/aiControlLaw.md` (SRC-13).
+- `BL-839` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A campaign launch whose profile
+  failed to load binds no target table, because the guard that keeps a director-free world
+  flight off the mode table also excludes it.** *Evidence:* `CSVM/src/Session/GameSession.cs:3013`
+  (at `7d2e9881`) tests `CampaignProfile == null`; it was added because `campaign-4p-grid` flies
+  without its `csvm-golden` profile on the test machine and moved when the mode table bound.
+  *Fix shape:* key the guard on "launched as a campaign", not on the profile having loaded, then
+  either give the grid golden its profile or re-pin it with the cause named. *Cross-refs:*
+  `BL-828`'s closing commit, `docs/verification.md` SRC-14, `analysis/goldens/README.md`.
 
 ## Missions, modes & campaign
 
@@ -2706,6 +2779,24 @@ usual.
   there. *⚠ Traps:* REPLAY MISSION must not be offered on it, and the page arrows must not read a
   mission-result record at slot 0, which the original's array does not have (indexed from 1).
   *Cross-refs:* `docs/formats/campaign-screens.md` (`SCRAPBOOK.CSV`, "Mission slots and spreads").
+- `BL-833` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The allocation-free scope
+  test passes when any one of its five windows is clean, so an allocator that charges
+  intermittently, the failure shape that was observed, passes.** *Evidence:*
+  `CSVM.Tests/PerfSampleTests.cs:288-305` (at `7d2e9881`) accepts one exactly-zero window of
+  five; the negative control proves only that a constant allocator is still caught. `BL-584`
+  closed with the cause of the original flake unknown. *Fix shape:* require every window clean,
+  keeping PERF-28's diagnostics on the first non-zero one; if that flakes again, the diagnostics
+  are the lead. *⚠ Traps:* do not widen to a tolerance; gen-0 charging and tiered JIT are ruled
+  out twice over (`git log --grep=BL-584`). *Cross-refs:* `BL-584`'s closing commit,
+  `docs/verification.md` PERF-28, `BL-818` (the scrapbook race found on the way).
+- `BL-840` `[Feature]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **Six of the eight stored
+  campaign profiles, `Gab` with 18 missions done among them, are schema version 2 and the
+  version-3 store refuses them.** *Evidence:* `BL-675`'s close (`git log --grep=BL-675`): the
+  refusal is by `BL-662`'s design and the store now reports the version and path instead of "no
+  such profile". *Fix shape:* a decision first, a one-shot v2 to v3 converter (read the v2 shape
+  from the store's history) or accepting the loss; the converter is one reader plus the existing
+  v3 writer. *⚠ Traps:* not a path fault, and a worktree shares the main checkout's `user://`.
+  *Cross-refs:* `BL-662` (the v3 store), `BL-675`'s closing commit.
 
 ## Tooling, platform & docs
 
