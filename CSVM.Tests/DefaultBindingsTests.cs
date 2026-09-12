@@ -167,6 +167,23 @@ public class DefaultBindingsTests
             map.Bindings(InputAction.SelectOrdnancePrev));
     }
 
+    /// <summary>The spyglass toggle ships on both devices. The original's own Shift+S is
+    /// unreachable (a binding is one control, and both halves are flight actions here), so the
+    /// keyboard takes F2 for its camera 2 and the pad takes Misc1, the one control no other flight
+    /// action holds. Recorded so a later edit cannot quietly leave a pad-only pilot without it.
+    /// </summary>
+    [Fact]
+    public void TheSpyglassToggle_ShipsOnBothDevices()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var bound = map.Bindings(InputAction.ToggleSpyglass);
+
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.ToggleSpyglass));
+        Assert.Contains(new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2)), bound);
+        Assert.Contains(new Binding(Pad, BindingControl.Button((int)JoyButton.Misc1)), bound);
+        Assert.Equal(2, bound.Count);
+    }
+
     /// <summary>Free look is the held right mouse button, the one action the model had no kind for
     /// until <see cref="BindingControl.Mouse"/> existed.</summary>
     [Fact]

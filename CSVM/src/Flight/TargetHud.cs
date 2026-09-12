@@ -49,6 +49,10 @@ public sealed partial class TargetHud : Control
     /// aircraft of its own (a spectator) should see.</summary>
     public FlightController? Own;
 
+    /// <summary>The live per-zone fog band (near, far) the spyglass's range gate is derived from,
+    /// or null on a pane with no weather bound, where the gate is its 2000 m cap alone.</summary>
+    public System.Func<Vector2>? FogRange;
+
     // 1440p reference metrics (scaled by HudMetrics, matches VersusHud's calibration).
     private const int RefMarkerFont = 14;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
@@ -62,6 +66,12 @@ public sealed partial class TargetHud : Control
     private const float RefHeadHalf = 5f;
     private const float RefEdgeLabelUp = 45f;
     private const float RefShaftWidth = 2f;    // ours: the original draws a 1 px line sprite
+
+    // The spyglass disc's own label rule: the three lines plus their 3-pixel gap must still fit
+    // under the disc's bottom or the block flips above its top (0x006082d8 and the literal 0x2d).
+    private const float RefDiscLabelBlock = 48f;
+    private const float RefDiscRimWidth = 2f;  // ours, like the shaft: the original's is a 1 px circle
+    private const int DiscSegments = 48;
 
     // The selected target's marker: the original's own absolute pixel constants (0x00607a0c /
     // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor), read at the 1440p reference and
@@ -93,14 +103,19 @@ public sealed partial class TargetHud : Control
         { "Destroy", "Disable", "Disable Engines", "Damage" };
 
     private readonly List<string> _labelLines = new();  // rebuilt per draw
+    private readonly Vector2[] _discPoints = new Vector2[DiscSegments];  // the mask, refilled per draw
+    private readonly Vector2[] _discUvs = new Vector2[DiscSegments];
 
     private readonly AimCandidateSet _hostileScan = new(); // rebuilt per frame, aircraft list only
     private readonly List<(TargetRef Target, bool Friendly)> _marks = new(); // --debug-markers
 
     private Camera3D _camera = null!;
+    private SpyglassView? _spyglass;
     private FlightController? _hostile;
     private string _hostileTag = "AI";
     private bool _bracketed;   // last frame's gate answer, for the hysteresis
+    private object? _heldSubject;  // what the spyglass is holding, the clone at +0x20c
+    private float _heldRadius;     // that subject's framing radius, measured once per hold
 
     /// <summary>This pane's own world pose, fed every frame by FlightController, the tracked
     /// hostile's clock bearing reads off it, exactly like VersusHud's PlanePos/HeadingDeg.</summary>
@@ -108,6 +123,24 @@ public sealed partial class TargetHud : Control
 
     /// <summary>This pane's own nose heading, 0 = north (−Z), see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
+
+    /// <summary>This pane's own attitude, which the spyglass picture rolls with for an aircraft
+    /// target and ignores for every other class.</summary>
+    public Basis Attitude { get; set; } = Basis.Identity;
+
+    /// <summary>Whether this pane's spyglass is armed, <see cref="Spyglass.DefaultOn"/> at level
+    /// load; the pilot's toggle flips it and every other gate is re-answered every frame regardless
+    /// of it.</summary>
+    public bool SpyglassOn { get; set; } = Spyglass.DefaultOn;
+
+    /// <summary>Whether the round picture is up this frame, which is also what moves the anchor,
+    /// the shaft's start and the label. Answered by <see cref="UpdateSpyglass"/>.</summary>
+    public bool DiscShown { get; private set; }
+
+    /// <summary>Whether the picture's own viewport is rendering, which <see cref="DiscShown"/>
+    /// alone does not say: a pane with no scale yet shows the gate open and the viewport idle.
+    /// Read by the suite.</summary>
+    public bool PictureLive => _spyglass is { Live: true };
 
     /// <summary>This pane's tracked AI hostile, or null with none in the pool. Read by the
     /// suite; the fallback marker draws off the same field.</summary>
@@ -136,7 +169,7 @@ public sealed partial class TargetHud : Control
     /// exists, so an AI-free session's HUD output is unchanged.</summary>
     public static TargetHud Build(int playerIndex, Camera3D camera, ProjectilePool pool)
     {
-        return new TargetHud
+        var hud = new TargetHud
         {
             PlayerIndex = playerIndex,
             _camera = camera,
@@ -144,6 +177,11 @@ public sealed partial class TargetHud : Control
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
         };
+        // The picture hangs on the HUD control itself, so it lives inside this pane's viewport and
+        // renders this pane's world; it is idle until a target is off screen and inside the gate.
+        hud._spyglass = SpyglassView.Build(camera);
+        hud.AddChild(hud._spyglass);
+        return hud;
     }
 
     /// <summary>The nearest live hostile AI aircraft in <paramref name="scan"/>, or null. Pure
@@ -328,12 +366,31 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>The off-screen label block's anchor: the marker anchor's x untouched, and its y 3
-    /// pixels down in the pane's upper half or 45 up in the lower one, so the block sits clear of
-    /// the marker either way. There is no back-off along the arrow's direction
-    /// (docs/org/spyglass.md "The label anchor").</summary>
-    public static Vector2 EdgeLabelAnchor(Vector2 anchor, float paneHeight, float s) =>
-        new(anchor.X,
-            anchor.Y + (anchor.Y <= paneHeight * 0.5f ? RefLabelGap : -RefEdgeLabelUp) * s);
+    /// pixels down in the pane's upper half or 45 up in the lower one. With <paramref name="disc"/>
+    /// the same block is measured against the picture instead, 3 below its bottom unless the whole
+    /// block would fall off the pane, then 45 above its top. There is no back-off along the arrow's
+    /// direction (docs/org/spyglass.md "The label anchor").</summary>
+    public static Vector2 EdgeLabelAnchor(Vector2 anchor, float paneHeight, float s,
+        bool disc = false)
+    {
+        if (!disc)
+        {
+            return new Vector2(anchor.X,
+                anchor.Y + ((anchor.Y <= paneHeight * 0.5f ? RefLabelGap : -RefEdgeLabelUp) * s));
+        }
+
+        float bottom = anchor.Y + (Spyglass.RefRadius * s);
+        return new Vector2(anchor.X,
+            bottom + (RefDiscLabelBlock * s) <= paneHeight
+                ? bottom + (RefLabelGap * s)
+                : anchor.Y - ((Spyglass.RefRadius + RefEdgeLabelUp) * s));
+    }
+
+    /// <summary>Where the arrow's shaft starts: the marker anchor, or the disc's rim along the
+    /// bearing once the picture is up, so the shaft leaves the picture rather than crossing it
+    /// (<c>0x0049e2ae</c>).</summary>
+    public static Vector2 ShaftTail(Vector2 anchor, Vector2 dir, float s, bool disc) =>
+        disc ? anchor + (dir * (Spyglass.RefRadius * s)) : anchor;
 
     public override void _Process(double delta)
     {
@@ -342,6 +399,7 @@ public sealed partial class TargetHud : Control
         Size = GetViewportRect().Size;
         UpdateHostile();
         UpdateBrackets();
+        StepSpyglass();
         QueueRedraw();
     }
 
@@ -397,6 +455,53 @@ public sealed partial class TargetHud : Control
         _hostile = next;
     }
 
+    /// <summary>Re-answers whether the round picture is up for <paramref name="target"/> at
+    /// <paramref name="at"/>, and aims it when it is: armed, off screen, and inside
+    /// <see cref="Spyglass.RangeGate"/> for this pane's fog band, the wider gate while this same
+    /// subject is already held. The framing radius is measured once per hold, a mesh box being
+    /// fixed. Called every <see cref="_Process"/>; public so the suite drives it without pumping
+    /// frames.</summary>
+    public bool UpdateSpyglass(in TargetRef target, Vector3 at, bool offScreen)
+    {
+        bool held = _heldSubject != null && ReferenceEquals(_heldSubject, target.Source);
+        float gate = Spyglass.RangeGate(FogRange?.Invoke() ?? Vector2.Zero, held);
+        if (!SpyglassOn || !offScreen || PlanePos.DistanceTo(at) > gate)
+        {
+            ReleaseSpyglass();
+            return false;
+        }
+
+        if (!held)
+        {
+            _heldSubject = target.Source;
+            _heldRadius = FramingRadius(target);
+        }
+
+        DiscShown = true;
+        float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
+        if (_spyglass != null && s > 0f)
+        {
+            // Rolling with the pilot's own attitude is the original's aircraft case and nothing
+            // else's; a structure or a ship is watched level so the horizon reads as the horizon.
+            _spyglass.Aim(Spyglass.Pose(PlanePos, at, Attitude, target.Source is FlightController),
+                Spyglass.FovDeg(_heldRadius, PlanePos.DistanceTo(at)),
+                Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)));
+        }
+
+        return true;
+    }
+
+    /// <summary>Drops the picture and forgets what it was holding, so the next engage re-measures
+    /// its framing radius and takes the narrower gate. Idempotent, called on every frame the disc
+    /// is down.</summary>
+    public void ReleaseSpyglass()
+    {
+        DiscShown = false;
+        _heldSubject = null;
+        _heldRadius = 0f;
+        _spyglass?.Idle();
+    }
+
     public override void _Draw()
     {
         // Same zero-size guard as VersusHud: a draw can land before _Process has sized
@@ -443,6 +548,40 @@ public sealed partial class TargetHud : Control
             DrawOpponent(font, hostile.GlobalPosition, HudRed, _hostileTag, s, markerFont);
     }
 
+    // The target's framing radius: half the diagonal of its merged mesh box, which is what holds a
+    // banking aeroplane whole in the picture where half its widest span would clip the wingtips. A
+    // meshless or detached subject measures zero, and Spyglass.FovDeg then takes its 3 degrees.
+    private static float FramingRadius(in TargetRef target)
+    {
+        if (target.Source is not Node3D node || !GodotObject.IsInstanceValid(node)
+            || !node.IsInsideTree())
+        {
+            return 0f;
+        }
+
+        return UI.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
+    }
+
+    // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in
+    // _Draw: both latch, and a latch that advanced per repaint would depend on how often the pane
+    // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing.
+    private void StepSpyglass()
+    {
+        if (!Visible || Selected is not { Source: not null } sel
+            || !GodotObject.IsInstanceValid(_camera))
+        {
+            ReleaseSpyglass();
+            return;
+        }
+
+        var at = FlightController.TryRenderPosition(sel.Source, out var render)
+            ? render
+            : sel.Position;
+        var placed = EdgeMarker.Resolve(_camera.UnprojectPosition(at),
+            _camera.IsPositionBehind(at), Size);
+        UpdateSpyglass(sel, at, !placed.OnScreen);
+    }
+
     // The selected target's marker: on screen, the bracket box (when the gun reaches it) over the
     // label block; off screen, the edge arrow with that block plus the clock bearing and no box.
     // The FUN_004574d0 label anchor is computed from the box whether or not the box is drawn, so an
@@ -485,13 +624,46 @@ public sealed partial class TargetHud : Control
         }
 
         // Off screen: the edge arrow from the anchor out to the tip, and the label block above or
-        // below the anchor, with the tag broken onto its own lines the way HUD.png shows the
-        // original's.
-        DrawArrow(placed.Tip, placed.Anchor, placed.Dir, s, color);
+        // below it, the tag broken onto its own lines the way HUD.png shows. With the picture up
+        // all three measure against the disc instead, which is half a window further in.
+        bool disc = DiscShown;
+        float radius = Spyglass.RefRadius * s;
+        if (disc)
+        {
+            placed = EdgeMarker.Resolve(sp, behind, Size, radius);
+            DrawDisc(placed.Anchor, radius, color, s);
+        }
+
+        DrawArrow(placed.Tip, ShaftTail(placed.Anchor, placed.Dir, s, disc), placed.Dir, s, color);
         LabelLines(target, $"{EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock",
             _labelLines, keepSlots: false);
-        DrawLabelBlock(font, EdgeLabelAnchor(placed.Anchor, Size.Y, s), color, s, fontSize);
+        DrawLabelBlock(font, EdgeLabelAnchor(placed.Anchor, Size.Y, s, disc), color, s, fontSize);
         return true;
+    }
+
+    /// <summary>The picture itself: the viewport's texture masked to a circle of
+    /// <paramref name="radius"/> at <paramref name="center"/>, ringed in the marker's own colour.
+    /// The mask is a polygon rather than a shader, so it costs one draw call and needs no material
+    /// on the HUD control (the original blits a pre-cut round sprite).</summary>
+    private void DrawDisc(Vector2 center, float radius, Color color, float s)
+    {
+        for (int i = 0; i < DiscSegments; i++)
+        {
+            float a = Mathf.Tau * i / DiscSegments;
+            var unit = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+            _discPoints[i] = center + (unit * radius);
+            _discUvs[i] = (unit + Vector2.One) * 0.5f;
+        }
+
+        if (_spyglass?.GetTexture() is { } picture)
+        {
+            DrawColoredPolygon(_discPoints, Colors.White, _discUvs, picture);
+        }
+
+        float w = Mathf.Max(1f, RefDiscRimWidth * s);
+        var off = new Vector2(1.5f, 1.5f) * s;
+        DrawArc(center + off, radius, 0f, Mathf.Tau, DiscSegments, Shadow, w, antialiased: true);
+        DrawArc(center, radius, 0f, Mathf.Tau, DiscSegments, color, w, antialiased: true);
     }
 
     /// <summary>The bracket box: six line sprites forming a <c>[ ]</c> pair around the projected

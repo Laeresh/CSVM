@@ -97,4 +97,9 @@ public enum InputAction
     // view actions above because the members are contiguous and indexed by value; the rebinding
     // screen reads its caption off the name, so it needs no table entry either.
     FlybyView,
+
+    // The spyglass, the original's "Toggle Spyglass". Appended for the same reason the two above
+    // are: the members are positional and inserting one beside the view actions would renumber
+    // every action after it.
+    ToggleSpyglass,
 }

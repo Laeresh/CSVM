@@ -23,8 +23,11 @@ public static class EdgeMarker
     /// <summary>Resolves a projected target to its marker placement. <paramref name="behind"/> is
     /// the caller's <c>Camera3D.IsPositionBehind</c> answer: the projection of a point behind the
     /// camera is mirrored through centre, so it is forced off screen and its direction flipped
-    /// back. A projection landing on centre (dead ahead or dead astern) points down.</summary>
-    public static Placement Resolve(Vector2 projected, bool behind, Vector2 paneSize)
+    /// back. A projection landing on centre (dead ahead or dead astern) points down.
+    /// <paramref name="anchorInset"/> holds the ANCHOR further in without moving the on-screen
+    /// test, which is what the spyglass disc's half-window adds once the picture is up.</summary>
+    public static Placement Resolve(Vector2 projected, bool behind, Vector2 paneSize,
+        float anchorInset = 0f)
     {
         var inset = paneSize * InsetFraction;
         var inner = new Rect2(inset, paneSize - 2f * inset);
@@ -45,7 +48,7 @@ public static class EdgeMarker
         // A target still inside the pane keeps its own point as the tip, which is what shortens
         // the arrow to almost nothing as it crosses the inset boundary.
         var tip = !behind && pane.HasPoint(projected) ? projected : ToBoundary(pane, center, dir);
-        return new Placement(false, ToBoundary(inner, center, dir), dir, tip);
+        return new Placement(false, ToBoundary(Shrink(inner, anchorInset), center, dir), dir, tip);
     }
 
     /// <summary>Relative bearing of <paramref name="targetPos"/> from the pilot's own heading in
@@ -58,6 +61,21 @@ public static class EdgeMarker
         float rel = Mathf.PosMod(bearing - headingDeg, 360f);
         int h = Mathf.RoundToInt(rel / 30f) % 12;
         return h == 0 ? 12 : h;
+    }
+
+    // Pull every wall of `rect` in by `by`, never past its own centre: on a pane too small to
+    // hold the disc the anchor collapses to the middle instead of inverting the rectangle.
+    private static Rect2 Shrink(Rect2 rect, float by)
+    {
+        if (by <= 0f)
+        {
+            return rect;
+        }
+
+        float w = Mathf.Max(0f, rect.Size.X - (2f * by));
+        float h = Mathf.Max(0f, rect.Size.Y - (2f * by));
+        var size = new Vector2(w, h);
+        return new Rect2(rect.GetCenter() - (size / 2f), size);
     }
 
     // Walk from `from` along `dir` to the first wall of `rect`. The original steps out from the

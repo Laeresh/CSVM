@@ -378,6 +378,7 @@ public sealed class FlightHud
         {
             TargetHud.PlanePos = state.Position;
             TargetHud.HeadingDeg = state.HeadingDeg;
+            TargetHud.Attitude = state.Attitude;   // the spyglass picture rolls with the aeroplane
         }
         float mph = MphFromSpeedMps(state.SpeedMps);
         float ft = FeetFromWorldY(state.Position.Y);

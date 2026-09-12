@@ -116,7 +116,8 @@ public sealed partial class OriginalShell
         new[]
         {
             InputAction.CycleCockpitViews, InputAction.SelectChaseView, InputAction.FlybyView,
-            InputAction.LookBack, InputAction.LookCenter, InputAction.FreeLook,
+            InputAction.ToggleSpyglass, InputAction.LookBack, InputAction.LookCenter,
+            InputAction.FreeLook,
         },
         new[]
         {

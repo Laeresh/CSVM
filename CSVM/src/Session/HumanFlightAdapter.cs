@@ -454,6 +454,7 @@ internal sealed class HumanFlightAdapter
         // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
         var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
         pilotHud.TargetHud = targetHud;
+        targetHud.FogRange = _world.FogRange;   // the spyglass's range gate, null on a bare rig
         if (verbose)
             Log.Info("flight", $"targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 

@@ -316,16 +316,16 @@ and do not read the footage as evidence that it works.**
 
 | | Original | CSVM today |
 |---|---|---|
-| The picture | camera 2 rendered through a moved 96 x 96 `sgwin` window, masked by a radius-48 circle | nothing; `Flight/TargetHud.cs` draws no picture |
-| The toggle | action `0x30` on Shift+S, on at level load, blocked only while the player is dead | no action exists |
-| Gating | off-screen target, inside the fog-derived range, any target class | not applicable |
-| Range | `fogNear + (fogFar - fogNear) * 0.8`, capped 2000, engaging at 0.875 of that | not applicable |
-| Field of view | `2 * atan(1.1 * R / d)` clamped to 1.5-90 degrees, radius kept as a high-water mark | not applicable |
-| Camera pose | at the player's aircraft, aimed at the target, roll kept only for an aircraft | not applicable |
-| Edge inset | 5% of the viewport per axis, plus half the disc when shown | `EdgeMarker.InsetFraction`, the same 5% per axis, with no disc term to add |
-| Arrow | a shaft from the anchor (or the disc's rim) out to the point clamped to the full viewport, plus a 20 x 10 pixel head at the tip | the same shaft and head, `TargetHud.ArrowHead` over `EdgeMarker`'s anchor and tip; the rim push-out waits on the disc |
-| Label placement | anchor x unchanged, y offset `+3` in the screen's upper half and `-45` in the lower, `windowBottom + 3` / `windowTop - 45` when the disc is up | the same `+3` / `-45` rule, `TargetHud.EdgeLabelAnchor`; the disc's own rule waits on the disc |
-| Colour | `Target::GetColor` into all three primitives | the same rule, `TargetHud`'s `color` |
+| The picture | camera 2 rendered through a moved 96 x 96 `sgwin` window, masked by a radius-48 circle | `Flight/SpyglassView.cs`, a 96 x 96 `SubViewport` on the shared world, masked to a radius-48 circle by `TargetHud.DrawDisc`; the reference pixels scale by `HudMetrics`, and the mask is a generated polygon because no `sgwin` art ships |
+| The toggle | action `0x30` on Shift+S, on at level load, blocked only while the player is dead | `InputAction.ToggleSpyglass`, on at level load, dispatched inside `StepTargeting`'s `InPlay` gate; `F2` and the pad's Misc1, because a binding here is one control and both halves of Shift+S are flight actions (`docs/controls.md`) |
+| Gating | off-screen target, inside the fog-derived range, any target class | the same three, `TargetHud.UpdateSpyglass` |
+| Range | `fogNear + (fogFar - fogNear) * 0.8`, capped 2000, engaging at 0.875 of that | the same, `Spyglass.RangeGate` over `WeatherRig.FogGlobals.Range`; a band whose far is no further than its near takes the 2000 m cap alone, which is the empty stage and the suite rigs |
+| Field of view | `2 * atan(1.1 * R / d)` clamped to 1.5-90 degrees, radius kept as a high-water mark | the same clamp, `Spyglass.FovDeg`; the radius is the merged mesh box's half diagonal, measured once per hold, and a subject with no mesh takes the 3-degree no-target value |
+| Camera pose | at the player's aircraft, aimed at the target, roll kept only for an aircraft | the same, `Spyglass.Pose` off `TargetHud.Attitude` |
+| Edge inset | 5% of the viewport per axis, plus half the disc when shown | the same, `EdgeMarker.InsetFraction` plus the `anchorInset` the disc passes; the on-screen test stays on the bare 5% rect, since the original's off-screen flag is the whole viewport |
+| Arrow | a shaft from the anchor (or the disc's rim) out to the point clamped to the full viewport, plus a 20 x 10 pixel head at the tip | the same, `TargetHud.ShaftTail` and `ArrowHead` over `EdgeMarker`'s anchor and tip |
+| Label placement | anchor x unchanged, y offset `+3` in the screen's upper half and `-45` in the lower, `windowBottom + 3` / `windowTop - 45` when the disc is up | the same both ways, `TargetHud.EdgeLabelAnchor`'s `disc` variant |
+| Colour | `Target::GetColor` into all three primitives | the same rule, `TargetHud`'s `color`, the disc's rim included |
 | Occluders | recorded and restored unchanged, a no-op | nothing |
 
 The remake's `Ref*` constants are 1440p-reference pixels scaled by `HudMetrics`, and the original's

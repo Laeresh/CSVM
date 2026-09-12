@@ -468,7 +468,7 @@ public partial class FlightController : Node3D
     private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly List<AimCandidate> _targetSites = new(); // this frame's objective sites
-    private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
+    private readonly bool[] _targetKeyPrev = new bool[7];   // T/Y/U/I/O plus the spyglass pair
     private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F6/F7 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
     // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
@@ -3179,6 +3179,38 @@ public partial class FlightController : Node3D
         DispatchTargetKey(2, InputAction.TargetNextNonAircraft, () => sel.Next(TargetClass.NonAircraft));
         DispatchTargetKey(3, InputAction.TargetNearest, () => sel.NearestCrosshairs(_model.Position, _model.Attitude));
         DispatchTargetKey(4, InputAction.TargetClear, () => sel.Clear());
+
+        // The spyglass toggle, both halves on their own slots: unlike the five keys above, the pad
+        // control here is a button of its own rather than the tap/hold splitter, so a pad-only
+        // pilot reaches it without dispatching the action twice.
+        DispatchEdge(5, _keyActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
+        DispatchEdge(6, _padActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
+    }
+
+    // The pilot's spyglass arm/disarm. Every other gate (off screen, the range band) is re-answered
+    // every frame regardless, so this flips one flag and logs the transition.
+    private void ToggleSpyglass()
+    {
+        if (_pilotHud.TargetHud is not { } hud)
+        {
+            return;
+        }
+
+        hud.SpyglassOn = !hud.SpyglassOn;
+        Log.Info("flight",
+            $"targeting hud: P{PlayerIndex + 1} spyglass {(hud.SpyglassOn ? "on" : "off")}");
+    }
+
+    // DispatchTargetKey's edge rule for a control the CALLER reads, so one action can take a slot
+    // per device half rather than the keyboard alone.
+    private void DispatchEdge(int slot, bool down, System.Action act)
+    {
+        if (down && !_targetKeyPrev[slot])
+        {
+            act();
+        }
+
+        _targetKeyPrev[slot] = down;
     }
 
     /// <summary>Spends <c>--target=</c>'s one application. Waits for a non-empty pool first:

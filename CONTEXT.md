@@ -222,6 +222,11 @@ A target's bearing relative to the pilot's own heading, in clock hours: 12 ahead
 6 behind, 9 left. The original's "N o'clock" suffix.
 _Avoid_: o'clock value, clock direction, relative bearing in hours
 
+**Spyglass**:
+The round live picture of the selected target drawn at its edge marker while the target is off
+screen and inside the range gate. The picture alone is the **disc**.
+_Avoid_: zoom window, magnifier, picture-in-picture, scope
+
 ## Format documentation
 
 **Format family**:

@@ -108,6 +108,31 @@ public class EdgeMarkerTests
     }
 
     [Fact]
+    public void TheAnchorInsetMovesTheAnchorWithoutMovingTheOnScreenTest()
+    {
+        // The spyglass's half window: the anchor comes in by that much on the bearing, while the
+        // tip and the direction are untouched, and a point the bare rule calls on screen is still
+        // on screen (the original's off-screen flag is the full viewport, not the disc's inset).
+        var bare = EdgeMarker.Resolve(new Vector2(5000f, 400f), false, Pane);
+        var inset = EdgeMarker.Resolve(new Vector2(5000f, 400f), false, Pane, 48f);
+        Assert.Equal(new Vector2(bare.Anchor.X - 48f, 400f), inset.Anchor);
+        Assert.Equal(bare.Tip, inset.Tip);
+        Assert.Equal(bare.Dir, inset.Dir);
+        Assert.True(EdgeMarker.Resolve(new Vector2(0.06f * Pane.X, 400f), false, Pane, 48f).OnScreen);
+    }
+
+    [Fact]
+    public void AnAnchorInsetWiderThanThePaneCollapsesToTheCentre()
+    {
+        // A disc bigger than the pane it is drawn on must not invert the anchor rectangle; it
+        // collapses to the middle, so the picture stays on screen instead of flipping sides.
+        var placed = EdgeMarker.Resolve(new Vector2(5000f, 5000f), false, Pane, 5000f);
+        Assert.False(placed.OnScreen);
+        Assert.True(placed.Anchor.IsEqualApprox(Pane / 2f),
+            $"anchor {placed.Anchor} is not the pane centre");
+    }
+
+    [Fact]
     public void ClockHourReadsTheFourCardinalBearings()
     {
         var own = Vector3.Zero;

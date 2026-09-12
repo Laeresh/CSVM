@@ -2241,6 +2241,9 @@ public partial class GameSession : Node3D
             SoundDefs = state.SoundDefs,
             SoundGroups = state.SoundGroups,
             DebugCollision = state.DebugCollision,
+            // Read through the field rather than captured by value: the rig is built after these
+            // bindings, and a zone apply rewrites the band while the mission runs.
+            FogRange = () => _weatherRig?.FogGlobals.Range ?? Vector2.Zero,
         };
         var humanBindings = new HumanRosterBindings
         {

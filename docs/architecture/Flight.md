@@ -577,13 +577,31 @@ aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md).
 
 ## src/Flight/EdgeMarker.cs
 The off-screen edge marker's placement rules, engine-free and pure: `Resolve(projected, behind,
-paneSize)` answers on-screen against edge-clamped as a `Placement` (the inset rect test, the
-behind-the-camera mirror, the degenerate-direction fallback, the anchor's clamp to the inset
-boundary and the `Tip`'s to the pane itself, which are the arrow's two ends), and `ClockHour` is
-the bearing in hours. Owns `InsetFraction`, the original's 5 percent of each pane axis
-([../org/spyglass.md](../org/spyglass.md)). The camera stays with the callers: `VersusHud` and
-`TargetHud` project through their own pane and keep their own arrow, tag and label styling.
-`MarkerDraw` draws what this places; off-engine coverage is `CSVM.Tests/EdgeMarkerTests.cs`.
+paneSize, anchorInset)` answers on-screen against edge-clamped as a `Placement` (the inset rect
+test, the behind-the-camera mirror, the degenerate-direction fallback, the anchor's clamp to the
+inset boundary and the `Tip`'s to the pane itself, which are the arrow's two ends), and `ClockHour`
+is the bearing in hours. Owns `InsetFraction`, the original's 5 percent per pane axis;
+`anchorInset` (the spyglass disc's half window) moves the ANCHOR alone, never the on-screen test.
+The camera stays with the callers, each keeping its own arrow, tag and label styling. `MarkerDraw`
+draws what this places; coverage is `CSVM.Tests/EdgeMarkerTests.cs`.
+
+## src/Flight/Spyglass.cs
+The spyglass's decoded rules, engine-free and pure. `RangeGate(fogRange, held)` is the slant range
+the picture is allowed at: `near + (far - near) * 0.8`, capped at `RangeCapM`, times `EngageFactor`
+while nothing is held, so it engages nearer than it releases and cannot strobe at the boundary; a
+band whose far is no further than its near carries no fog information and takes the cap alone.
+`FovDeg(radius, distance)` is `2 * atan(1.1 R / d)` clamped to 1.5 and 90 degrees. `Pose` stands
+the camera at the pilot's own aircraft looking at the target, rolling with its attitude for an
+aircraft and level otherwise. Also owns `RefWindow`, `RefRadius` and `DefaultOn`. Decode:
+[../org/spyglass.md](../org/spyglass.md); coverage `CSVM.Tests/SpyglassTests.cs`.
+
+## src/Flight/SpyglassView.cs
+The spyglass picture: a square `SubViewport` rendering the SHARED world through a `Camera3D` of its
+own, one per pane, built with `TargetHud` and hung on it so it sits inside that pane's viewport.
+`Aim` points it (`Spyglass.Pose`/`FovDeg`), sizes it to the disc's drawn diameter, borrows the pane
+camera's clip planes and cull mask and starts it rendering; `Idle` stops it. Unlike
+`CockpitOverlay` the world is inherited rather than owned, so the target is the one in play and
+wears the flown zone's fog. `TargetHud.DrawDisc` masks the texture to a circle.
 
 ## src/Flight/StuntRunHud.cs
 The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`: the clock and
@@ -679,13 +697,13 @@ own placement".
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
-selection from `TargetSelection` (a campaign mission's objective sites included, since they ride
-that same selection), a nearest AI-hostile fallback where no selection exists, and
-`--debug-markers`' every-aircraft overlay. Draws the original's bracket box and label block and
-owns the colour table, the label layout, the selected gun's reach gate and the debug identity
-string. Off screen it owns the arrow, `ArrowHead` the decoded head and `EdgeLabelAnchor` the
-label's 3-below / 45-above rule, its shaft spanning `EdgeMarker`'s anchor and tip; placement is
-`EdgeMarker`'s. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+selection from `TargetSelection` (a campaign mission's objective sites included), a nearest
+AI-hostile fallback where no selection exists, and `--debug-markers`' every-aircraft overlay. Draws
+the original's bracket box and label block and owns the colour table, the label layout, the
+selected gun's reach gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`,
+`ShaftTail` and `EdgeLabelAnchor` over `EdgeMarker`'s placement. It also owns the spyglass's gates
+(`UpdateSpyglass`, `SpyglassOn`) and draws `SpyglassView`'s picture as the disc all three of those
+measure against. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own

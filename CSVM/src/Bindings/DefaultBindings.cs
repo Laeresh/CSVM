@@ -128,6 +128,12 @@ public static class DefaultBindings
         // F7 is the original's own key for this camera ("Access Chase View", which its own decode
         // settles as the flyby rather than the following chase view); the pad has no spare button.
         b.Keys(InputAction.FlybyView, Key.F7);
+
+        // The spyglass. Shift+S is unreachable here (a binding is one control, and both halves are
+        // flight actions), so F2 stands for its camera 2; Misc1 is the pad's one free control, and
+        // the original spends a joystick button on this too (docs/controls.md).
+        b.Keys(InputAction.ToggleSpyglass, Key.F2)
+            .Buttons(InputAction.ToggleSpyglass, JoyButton.Misc1);
         b.Keys(InputAction.LookUp, Key.Kp7, Key.Kp8, Key.Kp9);
         b.Keys(InputAction.LookDown, Key.Kp1, Key.Kp2, Key.Kp3);
         b.Keys(InputAction.LookLeft, Key.Kp7, Key.Kp4, Key.Kp1);

@@ -1138,6 +1138,147 @@ internal static class TargetingSuites
         }
     }
 
+    // The spyglass, in two halves. The placement half is pure (EdgeMarker's anchor inset,
+    // TargetHud.ShaftTail and the label block's disc variant) and runs over a bare pane; the gate
+    // half drives a real TargetHud with its real SubViewport over a spawned AI plane, so the
+    // picture's presence, the fog-derived range band and the arming toggle are witnessed rather
+    // than argued. Every gate check carries its own control, since a gate that is always open and
+    // a gate that is always shut both pass a one-sided test.
+    [Suite("spyglass-marker-hud",
+        "the spyglass (TargetHud + Spyglass + SpyglassView, every flight session): the round "
+        + "picture is up only while it is armed, the selected target is off screen and its slant "
+        + "range is inside the fog-derived gate, and the gate is wider while a subject is already "
+        + "held, so the picture engages nearer than it releases; a wider fog band opens it further "
+        + "out, up to the 2000 m cap; plus the three placement rules the disc brings, half the "
+        + "window added to the anchor's inset with the tip and the on-screen test untouched, the "
+        + "shaft starting on the rim, and the label 3 under the disc's bottom or 45 over its top")]
+    internal static void SpyglassMarkerHud(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        // --- the placement rules, pure over a 1440p pane at scale 1 ------------------------------
+        var pane = new Vector2(2560f, 1440f);
+        float radius = Spyglass.RefRadius;
+        var far = new Vector2(9000f, 720f);
+        var bare = EdgeMarker.Resolve(far, behind: false, pane);
+        var withDisc = EdgeMarker.Resolve(far, behind: false, pane, radius);
+        ctx.Check(Mathf.IsEqualApprox(withDisc.Anchor.X, bare.Anchor.X - radius)
+                  && withDisc.Tip == bare.Tip && withDisc.Dir == bare.Dir,
+            $"the picture pulls the anchor half a window further in ({bare.Anchor} to {withDisc.Anchor}) and moves neither the arrow's tip nor its bearing, so the disc sits inside the pane instead of half over its edge");
+        var justInside = new Vector2(pane.X * 0.06f, 720f);
+        ctx.Check(EdgeMarker.Resolve(justInside, false, pane, radius).OnScreen
+                  && EdgeMarker.Resolve(justInside, false, pane).OnScreen,
+            $"CONTROL: the extra inset moves the ANCHOR only; a point just inside the 5 % rect still reads on screen, because the original's off-screen flag is the whole viewport and not the disc's own margin");
+
+        ctx.Check(TargetHud.ShaftTail(withDisc.Anchor, withDisc.Dir, 1f, disc: true)
+                      == withDisc.Anchor + (withDisc.Dir * radius)
+                  && TargetHud.ShaftTail(withDisc.Anchor, withDisc.Dir, 1f, disc: false)
+                      == withDisc.Anchor,
+            $"the shaft starts on the rim once the picture is up ({TargetHud.ShaftTail(withDisc.Anchor, withDisc.Dir, 1f, true)}) and on the bare anchor otherwise ({withDisc.Anchor}), so it leaves the disc rather than crossing it");
+
+        var high = new Vector2(400f, 300f);
+        var low = new Vector2(400f, 1380f);
+        ctx.Check(TargetHud.EdgeLabelAnchor(high, pane.Y, 1f, disc: true) == new Vector2(400f, 351f)
+                  && TargetHud.EdgeLabelAnchor(low, pane.Y, 1f, disc: true) == new Vector2(400f, 1287f),
+            $"the label block measures against the PICTURE: 3 under the disc's bottom high on the pane ({TargetHud.EdgeLabelAnchor(high, pane.Y, 1f, true)}), and 45 over its top where the three lines would fall off the bottom ({TargetHud.EdgeLabelAnchor(low, pane.Y, 1f, true)})");
+        ctx.Check(TargetHud.EdgeLabelAnchor(high, pane.Y, 1f) == new Vector2(400f, 303f)
+                  && TargetHud.EdgeLabelAnchor(low, pane.Y, 1f) == new Vector2(400f, 1335f),
+            $"CONTROL: with no picture the same two anchors take the bare rule, 3 below and 45 above the marker itself ({TargetHud.EdgeLabelAnchor(high, pane.Y, 1f)} / {TargetHud.EdgeLabelAnchor(low, pane.Y, 1f)}), which is what the disc variant has to differ from");
+
+        // --- the gate, against a real hud, a real SubViewport and a spawned plane ----------------
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? bogey = null;
+        TargetHud? hud = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            bogey = new FlightController
+            {
+                PlaneModel = model,
+                Collider = PlaneCollider.Build(model),
+                PlayerIndex = FlightRoster.ShooterIdBase,
+                IsHumanPiloted = false,
+                Pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward),
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+                Name = "ai1_bogey",
+            };
+            bogey.AddChild(model);
+            bogey.Setup(new FlightModel(stats), null, new CamParams(), Vector3.Zero, Vector3.Forward);
+            ctx.Host.AddChild(bogey);
+
+            hud = TargetHud.Build(0, ctx.Camera, live);
+            ctx.Host.AddChild(hud);
+            hud.Size = pane;
+            hud.PlanePos = Vector3.Zero;
+            // A 1 km fog band puts the release gate at 800 m and the engage gate at 700.
+            hud.FogRange = () => new Vector2(0f, 1000f);
+            var bogeyRef = TargetRef.ForAircraft(
+                new AimCandidate { Team = AimAssist.TeamOfPilot(100), Live = true, Source = bogey },
+                TargetClass.Enemy, bogey.Name, "Bogey");
+            Vector3 At(float metres) => new(0f, 0f, -metres);
+
+            ctx.Check(hud.SpyglassOn, $"the spyglass is armed at level load, with no toggle pressed");
+            ctx.Check(hud.UpdateSpyglass(bogeyRef, At(600f), offScreen: true) && hud.DiscShown,
+                $"an off-screen target 600 m out is inside the 700 m engage gate, so the picture comes up");
+            ctx.Check(hud.PictureLive,
+                $"…and the picture's own viewport is rendering rather than only the flag being set");
+
+            // The asymmetry: 750 m is past the engage gate and inside the release gate, so a
+            // subject already held stays held where the same subject freshly acquired would not.
+            ctx.Check(hud.UpdateSpyglass(bogeyRef, At(750f), offScreen: true),
+                $"a HELD subject drifting out to 750 m stays in the picture, on the wider release gate");
+            ctx.Check(!hud.UpdateSpyglass(bogeyRef, At(850f), offScreen: true) && !hud.DiscShown
+                      && !hud.PictureLive,
+                $"past the 800 m release gate the picture drops and its viewport goes idle");
+            ctx.Check(!hud.UpdateSpyglass(bogeyRef, At(750f), offScreen: true),
+                $"CONTROL: the same 750 m that HELD does not ENGAGE, which is the pair that keeps the picture from strobing at the boundary");
+
+            // The band itself: a thicker fog opens the gate further out, up to the 2000 m cap.
+            ctx.Check(!hud.UpdateSpyglass(bogeyRef, At(1200f), offScreen: true),
+                $"1200 m is well past the 1 km band's gate");
+            hud.FogRange = () => new Vector2(0f, 3000f);
+            ctx.Check(hud.UpdateSpyglass(bogeyRef, At(1200f), offScreen: true),
+                $"…and the SAME range engages once the zone's fog band reaches 3 km, so the gate is read off the live weather rather than a constant");
+            ctx.Check(hud.UpdateSpyglass(bogeyRef, At(1900f), offScreen: true)
+                      && !hud.UpdateSpyglass(bogeyRef, At(2100f), offScreen: true),
+                $"the 3 km band's own gate would sit at 2400 m, but the 2000 m ceiling binds first: a held subject at 1900 m is still in the picture and one at 2100 m is not");
+
+            // The other two gates, each with the picture otherwise engaged.
+            hud.FogRange = () => new Vector2(0f, 1000f);
+            ctx.Check(!hud.UpdateSpyglass(bogeyRef, At(600f), offScreen: false) && !hud.DiscShown,
+                $"a target ON screen is watched with the eye, not the spyglass");
+            hud.SpyglassOn = false;
+            ctx.Check(!hud.UpdateSpyglass(bogeyRef, At(600f), offScreen: true),
+                $"disarmed, the same off-screen target 600 m out shows no picture");
+            hud.SpyglassOn = true;
+            ctx.Check(hud.UpdateSpyglass(bogeyRef, At(600f), offScreen: true) && hud.PictureLive,
+                $"CONTROL: re-armed, it comes straight back, so the toggle is what shut it and not one of the other gates");
+            hud.ReleaseSpyglass();
+            ctx.Check(!hud.DiscShown && !hud.PictureLive,
+                $"a hidden pane releases the picture outright");
+        }
+        finally
+        {
+            hud?.Free();
+            bogey?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The target-routing switch, driven directly against hand-built sources, no live
     // TargetSelection/AimCandidateSet scan behind it, since DebugForceCrash and AnimRuntime.DamageAt
     // already carry their own coverage elsewhere (AiSuites, DamageSuites and others). What is NEW
