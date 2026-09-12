@@ -241,6 +241,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   columns by 0.007 % to 0.712 % of pixels; two of three frames of the scene the item was filed on
   read byte-identical for the same reason.
 
+- **GOLD-15**, **Every shot renders at `project.godot`'s pinned viewport, so a rule that depends on
+  the window's ratio is only ever photographed at one of them; sweep the ratio in a suite instead.**
+  The cutscene fit took the smaller of the letterbox card's height and width terms, which is the
+  height below ratio 1.642 and the width above it, so 1280x720 pinned a frame 8.3 % short of the
+  card's own height and a 32:9 window showed 46 % of it, with no golden able to move.
+
 ## DET, determinism and randomness
 
 - **DET-2**, **Disable live input during scripted runs.**

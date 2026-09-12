@@ -1874,24 +1874,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `PLAN-cockpit-view` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
 
-- `BL-855` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A cutscene on a wide window crops the picture
-  top and bottom and loses its letterbox bars.** *Evidence:* two shot pairs at 1920x1080 and
-  3840x1080 (`--campaign=<profile>:0` and `:3`, `--frames=120 --screenshot`): at 32:9 the CM01
-  zeppelin stands 1.8 times taller in the frame than at 16:9, about 55 % of the 16:9 picture's
-  vertical extent is shown, and no bar is drawn; the Balmoral docking shot shows only the middle
-  of the airship. `Session/CutsceneController.cs` `FrameBars` fits the camera so the authored 5:3
-  card exactly covers the pane (`FramingFovDeg`): the card's height on a 4:3 pane, its width on
-  anything wider, so the vertical angle shrinks as the window widens and the bars, glued to
-  `camera1` at their authored size, fall outside the frame. The 16:9 case is already slightly
-  width-fit. *Fix shape:* fit the card's height on every aspect, so the vertical picture is the
-  original's 4:3 one on any monitor, and scale the bars' X so they cover whatever width remains;
-  one method, one rule, and the `campaign-intro-fill` golden re-pins. Flight and cockpit views are
-  right already and untouched (`CameraController.HorizontalToVerticalFovDeg`, vertical held).
-  *⚠ Traps:* not a pillarbox: the wide camera's extra world left and right is kept. Height-fit
-  applies at 16:9 too, which changes that picture a little on purpose. *Cross-refs:* `BL-452`'s
-  closing commit (why the card became the frame), `PT-93`,
-  [`docs/formats/anim-definitions/cutscenes.md`](docs/formats/anim-definitions/cutscenes.md).
-
 ## HUD & UI
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape**, `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE

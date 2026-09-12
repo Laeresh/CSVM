@@ -37,12 +37,11 @@ public sealed partial class CutsceneController : Node
     /// <see cref="BindRigs"/> re-applies the state for a session.</summary>
     public const int CodeOutOfFlight = 11;
 
-    /// <summary>How far the card is made to overhang the pane it covers. The unmargined fit is an
-    /// equality wherever the width term binds (every ratio at or above 1.64211, the 1280x720
-    /// default included), so the card's outer edge lands on the frame edge and the world shows
-    /// through the boundary column under MSAA and projection rounding. TUNE: the original's own
-    /// framing fov is undecoded, so this is a margin clear of that boundary, not a decoded
-    /// figure (BL-452).</summary>
+    /// <summary>How far the card is made to overhang the pane it covers. Both fits are equalities
+    /// without it, the height on every ratio and the stretched width on anything wider than the
+    /// card, so the card's outer edge would land on the frame edge and the world show through the
+    /// boundary column under MSAA and projection rounding. TUNE: the original's own framing fov is
+    /// undecoded, so this is a margin clear of that boundary, not a decoded figure.</summary>
     public const float CardOverscan = 0.02f;
 
     /// <summary>The definitions a story mission's start list plays as its opening movie: the
@@ -170,8 +169,10 @@ public sealed partial class CutsceneController : Node
     private MeshInstance3D? _cardMesh;
     // The bars node's authored scale, read alongside the card measurement and for the same reason:
     // PinBars re-asserts a pose every tick, and reading the scale back off a posed node would let
-    // it compound.
+    // it compound. The pane's width factor rides on top of it, recomputed each frame from the live
+    // viewport for the same reason.
     private Vector3 _barsScale = Vector3.One;
+    private float _barsWidth = 1f;
 
     // BL-452 watchdog state (WatchBars): the bars' visibility as of the last tick, and how many
     // times it has flipped in the current episode.
@@ -264,22 +265,38 @@ public sealed partial class CutsceneController : Node
         EpisodeOwner?.Controller is { IsHumanPiloted: true } pilot ? pilot : null;
 
     /// <summary>The vertical field of view, in degrees, at which the letterbox card of extent
-    /// <paramref name="cardBox"/> covers a pane of ratio <paramref name="aspect"/>, or null when
-    /// the card has no usable extent. Public because the fit is the whole of BL-452's first cause
-    /// and is asserted directly; <see cref="CardOverscan"/> is what keeps it off the equality.
-    /// </summary>
-    public static float? FramingFovDeg(Aabb cardBox, float aspect)
+    /// <paramref name="cardBox"/> covers a pane's height, or null when the card has no usable
+    /// extent. Aspect-free by design: the card's authored height is the frame on every window, the
+    /// way a 4:3 film plays on a wide screen, and <see cref="BarsWidthScale"/> covers the width a
+    /// wider pane adds. Public because the fit is asserted directly.</summary>
+    public static float? FramingFovDeg(Aabb cardBox)
     {
         float dist = Mathf.Abs(cardBox.GetCenter().Z);
         float halfHeight = cardBox.Size.Y * 0.5f;
-        float halfWidth = cardBox.Size.X * 0.5f;
-        if (dist <= 0f || halfHeight <= 0f || halfWidth <= 0f || aspect <= 0f)
+        if (dist <= 0f || halfHeight <= 0f)
         {
             return null;
         }
 
-        float half = Mathf.Min(halfHeight, halfWidth / aspect) / (1f + CardOverscan);
+        float half = halfHeight / (1f + CardOverscan);
         return Mathf.RadToDeg(2f * Mathf.Atan(half / dist));
+    }
+
+    /// <summary>How far the card has to stretch along the eye's right axis for the bars to reach
+    /// both edges of a pane of ratio <paramref name="aspect"/> framed by
+    /// <see cref="FramingFovDeg"/>. 1 at the card's own ratio and below, so a 4:3 pane gets the
+    /// authored card untouched, and a stretched card keeps <see cref="CardOverscan"/>'s margin on
+    /// the sides it grew to.</summary>
+    public static float BarsWidthScale(Aabb cardBox, float aspect)
+    {
+        float halfHeight = cardBox.Size.Y * 0.5f;
+        float halfWidth = cardBox.Size.X * 0.5f;
+        if (halfHeight <= 0f || halfWidth <= 0f || aspect <= 0f)
+        {
+            return 1f;
+        }
+
+        return Mathf.Max(1f, halfHeight * aspect / halfWidth);
     }
 
     /// <summary>Is this one of the story-mission opening definitions (<see cref="IntroAnims"/>)?
@@ -496,8 +513,9 @@ public sealed partial class CutsceneController : Node
         PollFastForward();
         MirrorCamera();
         StagePlayerAircraft();
-        PinBars();
+        // The fit first: the pin stretches the card to the pane this frame's fit measured.
         FrameBars();
+        PinBars();
         WatchBars();
         if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning
             && !AnyRaiserRunning())
@@ -1147,33 +1165,37 @@ public sealed partial class CutsceneController : Node
         }
 
         var pose = _cutsceneCamera.GlobalTransform.Orthonormalized();
-        _bars.GlobalTransform = new Transform3D(pose.Basis.Scaled(_barsScale), pose.Origin);
+        // The stretch is along the eye's right axis alone, so the bars keep their authored height
+        // and the gap between them stays the frame FrameBars fitted.
+        var basis = pose.Basis.Scaled(_barsScale);
+        _bars.GlobalTransform = new Transform3D(
+            new Basis(basis.X * _barsWidth, basis.Y, basis.Z), pose.Origin);
     }
 
     // The bars are a fixed card 7.5 m in front of the eye, so what they cover is a question of
     // frame shape: the card IS the frame, which is the only reading under which the geometry is a
-    // letterbox at all. Each camera takes the widest field of view the card still covers, less the
-    // overscan below: its authored height on a 4:3 pane, its width on anything wider than the 5:3
-    // it was cut for.
+    // letterbox at all. Its authored height is that frame on every pane, so the vertical picture is
+    // the 4:3 one a wider window widens around instead of cropping into, and the card stretches
+    // sideways to reach the edges of a pane wider than itself.
     private void FrameBars()
     {
-        if (_card == null || _rigs.Count == 0)
+        if (_card == null || _rigs.Count == 0 || FramingFovDeg(_cardBox) is not { } fov)
         {
             return;
         }
 
+        float widest = 0f;
         foreach (var rig in _rigs)
         {
             var size = rig.Camera.GetViewport().GetVisibleRect().Size;
-            float aspect = size.Y > 0f ? size.X / size.Y : 1f;
-            if (FramingFovDeg(_cardBox, aspect) is not { } fov)
-            {
-                continue;
-            }
-
+            widest = Mathf.Max(widest, size.Y > 0f ? size.X / size.Y : 1f);
             _fov.TryAdd(rig.Camera, rig.Camera.Fov);
             rig.Camera.Fov = fov;
         }
+
+        // One card serves every camera, so the widest pane is what it has to cover; a narrower one
+        // is then covered by more than it needs, which costs nothing.
+        _barsWidth = BarsWidthScale(_cardBox, widest);
     }
 
 

@@ -110,9 +110,10 @@ walks its live instances newest-first, and the `letterbox` instance is created b
 gets its turn. The rig cameras take `camera1`'s pose later still, from
 `CutsceneController.Tick` at `ProcessPriority` 1000, after the whole advance. Left at that, the bars
 clad the previous frame's frame while the eye is already in this one, and the world shows along
-whichever edge the camera is moving away from for as long as it keeps moving. The horizontal margin
-is the smallest one (`CardOverscan`, 2 % of the card's half-width at 16:9 and wider, against an 8 %
-vertical overhang), so this reads as a left or right leak and never a top or bottom one. The host
+whichever edge the camera is moving away from for as long as it keeps moving. The frame is fitted by
+the card's height, so the vertical margin is `CardOverscan`, 2 % of the card, on every window, and
+the horizontal one is 2 % as well from the card's own 1.642 ratio up and more below it: the leak
+reads on any edge. The host
 therefore re-asserts the pin itself, in the same instant it hands the pose to the rig cameras
 (`CutsceneController.PinBars`); the definition's own pin is unchanged and the two agree whenever the
 walk already got the order right.
@@ -1249,8 +1250,9 @@ beat deactivating it; the smooth phase between them is
   state inside a mission is not established here. Nothing stops the def by name, so a consumer has
   to retract the bars itself at the handoff (`CutsceneController`, `docs/architecture.md`).
 - **Undecoded: what field of view a cutscene is framed at.** The bars are a fixed card 7.5 m ahead
-  of the eye, 13.2924 by 8.0948, so the frame they letterbox is 56.7° vertical at 4:3 and the card
-  overhangs it horizontally. `camera1`'s own gamez `Camera` record carries `fov_h_base` /
+  of the eye, 13.2924 by 8.0948, so the frame they letterbox is 56.7° vertical on any window, the
+  card's own height, and the card overhangs it horizontally up to its own 1.642 ratio and has to be
+  stretched sideways above that. `camera1`'s own gamez `Camera` record carries `fov_h_base` /
   `fov_v_base` of 0 (runtime-filled), and the `CAMERA_STATE` events in the intro readers set only
   `NEAR_CLIP` and `LOD_MULTIPLIER`, so the number itself is not in the data.
 - The `player` reading above rests on the aircraft archive's own `nodes.json` (the base rule holds

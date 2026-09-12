@@ -72,11 +72,11 @@ internal static class CampaignSuites
 
     private static readonly int[] RestoreCodes = { 1, 10, 914, 667 };
 
-    // The pane ratios the letterbox fit is swept over: 4:3, 16:10, the 1.64211 crossover the two
-    // fit terms meet at, 16:9 (the project's own default 1280x720), 2558x1408 (the window the
-    // reported BL-452 leak was captured in), 21:9 and 3440x1440.
+    // The pane ratios the letterbox fit is swept over: 4:3, 16:10, the card's own 1.64211, 16:9
+    // (the project's own default 1280x720), 2558x1408 (the window the reported bars leak was
+    // captured in), 21:9, 3440x1440, and 3840x1080, the widest a borderless default reaches.
     private static readonly float[] LetterboxAspects =
-        { 4f / 3f, 1.6f, 1.64211f, 16f / 9f, 2558f / 1408f, 21f / 9f, 3440f / 1440f };
+        { 4f / 3f, 1.6f, 1.64211f, 16f / 9f, 2558f / 1408f, 21f / 9f, 3440f / 1440f, 32f / 9f };
 
     [Suite("campaign-persistence",
         "the cross-mission state log (B12, BL-243): three PERSIST_LOG objects destroyed in one "
@@ -790,7 +790,9 @@ internal static class CampaignSuites
         "the letterbox bars are data (D32): the chapter ships the node switched off as its "
         + "definition's base state, calling the definition switches it on outright with no "
         + "reveal, and the AT_NODE re-assert copies the cutscene camera's whole frame onto it "
-        + "every tick")]
+        + "every tick; the card's authored height frames the film on every pane ratio, so the "
+        + "film's rect is the same band of a 4:3 window and a 32:9 one, with the bars stretched "
+        + "sideways to cover the width a wider pane adds")]
     internal static void CutsceneLetterbox(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -896,8 +898,8 @@ internal static class CampaignSuites
         }
     }
 
-    // BL-452's first cause, over the chapter's OWN card rather than a written-down extent: the fit
-    // used to solve for equality, so the card's edge landed on the frame edge at 16:9 and wider.
+    // The card covers the pane on every ratio, over the chapter's OWN card rather than a
+    // written-down extent: the height fit, then the sideways stretch, checked edge by edge.
     // ⚠ The cutscene roots are an option, so this needs a world built the way a story mission's is.
     private static void LetterboxCoversThePane(TestContext ctx)
     {
@@ -907,42 +909,118 @@ internal static class CampaignSuites
         try
         {
             Aabb card = default;
+            Vector3[]? quads = null;
             ctx.WithWorld(IntroChapter, collision: false, IntroMission,
                 world =>
                 {
                     host.BindWorld(world.Runtime);
                     card = host.CardBox;
+                    quads = host.CardMesh?.Mesh?.GetFaces();
                 });
             ctx.Check(card.Size.X > 0f && card.Size.Y > 0f && card.GetCenter().Z < 0f,
                 $"the built {CutsceneController.BarsNode} carries a measurable card ({card.Size})");
+            if (CutsceneController.FramingFovDeg(card) is not { } fov)
+            {
+                ctx.Check(false, $"the built card carries no usable fit");
+                return;
+            }
+
+            // One vertical extent for every pane: the fit takes no aspect, which is the whole of
+            // the frame holding its shape on a window wider than the card.
+            float seenHalfHeight = Mathf.Tan(Mathf.DegToRad(fov) * 0.5f) * Mathf.Abs(card.GetCenter().Z);
             foreach (float aspect in LetterboxAspects)
             {
-                if (CutsceneController.FramingFovDeg(card, aspect) is not { } fov)
-                {
-                    ctx.Check(false, $"no fit at aspect {aspect:0.###}");
-                    continue;
-                }
-
+                float stretch = CutsceneController.BarsWidthScale(card, aspect);
                 // Each edge on its own account, in card units, so a card whose AABB centre is off
                 // the node origin fails on the side it is short of instead of averaging out: the
                 // reported leak was 17 px on one edge and none on the other.
-                float seenHalfHeight = Mathf.Tan(Mathf.DegToRad(fov) * 0.5f) * Mathf.Abs(card.GetCenter().Z);
                 float seenHalfWidth = seenHalfHeight * aspect;
                 // The pane is centred on the bars root's origin, which is where camera1 puts the
                 // eye; the card is wherever its own extent says, which need not be centred there.
-                float left = -seenHalfWidth - card.Position.X;
-                float right = card.End.X - seenHalfWidth;
+                float left = -seenHalfWidth - (card.Position.X * stretch);
+                float right = (card.End.X * stretch) - seenHalfWidth;
                 float below = -seenHalfHeight - card.Position.Y;
                 float above = card.End.Y - seenHalfHeight;
                 ctx.Check(left > 0f && right > 0f && below > 0f && above > 0f,
-                    $"at {aspect:0.###} the card overhangs the pane on every edge (l {left:0.####}, r {right:0.####}, b {below:0.####}, a {above:0.####})");
+                    $"at {aspect:0.###} the card stretched {stretch:0.####} overhangs the pane on every edge (l {left:0.####}, r {right:0.####}, b {below:0.####}, a {above:0.####})");
             }
+
+            LetterboxFilmRectByHeight(ctx, card, quads);
         }
         finally
         {
             ctx.CutsceneRoots = false;
             host.Free();
         }
+    }
+
+    // The film's rect, the gap the two bars leave, read off the card's own vertices and laid
+    // against a narrow pane and a wide one: the band is the same fraction of both, a 4:3 pane is
+    // framed by the unstretched card, and the wide pane's extra width is world kept rather than a
+    // crop of the narrow picture. The vertices are the mesh's own and the fit's extents the bars
+    // root's, so one factor carries between them: the pane's half-height is the card's own less
+    // the overscan.
+    private static void LetterboxFilmRectByHeight(TestContext ctx, Aabb card, Vector3[]? quads)
+    {
+        if (quads == null || quads.Length == 0 || CutsceneController.FramingFovDeg(card) is not { } fit)
+        {
+            ctx.Check(false, $"the card mesh carries vertices and a fit to read the bars' film rect off");
+            return;
+        }
+
+        float top = float.MinValue;
+        float bottom = float.MaxValue;
+        float topInner = float.MaxValue;
+        float bottomInner = float.MinValue;
+        foreach (var vertex in quads)
+        {
+            top = Mathf.Max(top, vertex.Y);
+            bottom = Mathf.Min(bottom, vertex.Y);
+            if (vertex.Y > 0f)
+            {
+                topInner = Mathf.Min(topInner, vertex.Y);
+            }
+            else
+            {
+                bottomInner = Mathf.Max(bottomInner, vertex.Y);
+            }
+        }
+
+        float half = (top - bottom) * 0.5f;
+        ctx.Check(half > 0f && topInner < top && bottomInner > bottom,
+            $"the card is a pair of bars with a gap ({bottom:0.###} to {bottomInner:0.###}, {topInner:0.###} to {top:0.###})");
+        if (!(half > 0f))
+        {
+            return;
+        }
+
+        // The rect the film occupies in a viewport of this pixel size, in fractions of it: the
+        // engine's own fit, the gap between the bars against the pane it framed, and the width the
+        // stretched bars reach across.
+        Rect2 Film(float width, float height)
+        {
+            float aspect = width / height;
+            float paneHalf = Mathf.Tan(Mathf.DegToRad(fit) * 0.5f) * Mathf.Abs(card.GetCenter().Z);
+            float toPane = paneHalf * (1f + CutsceneController.CardOverscan) / half;
+            float reach = CutsceneController.BarsWidthScale(card, aspect) * card.Size.X * 0.5f
+                / (paneHalf * aspect);
+            return new Rect2(
+                0f,
+                (paneHalf - (topInner * toPane)) / (2f * paneHalf),
+                Mathf.Min(1f, reach),
+                (topInner - bottomInner) * toPane / (2f * paneHalf));
+        }
+
+        var narrow = Film(1024f, 768f);
+        var wide = Film(3840f, 1080f);
+        ctx.Check(Mathf.IsEqualApprox(narrow.Size.X, 1f) && narrow.Position.Y > 0f
+            && narrow.Position.Y + narrow.Size.Y < 1f,
+            $"on a 1024x768 pane the film is the pane's full width by {narrow.Size.Y:0.####} of its height, {narrow.Position.Y:0.####} down");
+        ctx.Check(wide.IsEqualApprox(narrow),
+            $"on a 3840x1080 pane it is the same rect (x {wide.Position.X:0.####}, y {wide.Position.Y:0.####}, w {wide.Size.X:0.####}, h {wide.Size.Y:0.####})");
+        ctx.Check(Mathf.IsEqualApprox(CutsceneController.BarsWidthScale(card, 4f / 3f), 1f),
+            $"a 4:3 pane is framed by the authored card, unstretched");
+        ctx.Note($"the film's rect is the pane's full width by {narrow.Size.Y:0.###} of its height, {narrow.Position.Y:0.###} down from the top, on a 4:3 pane and a 32:9 one alike");
     }
 
     // The card is world geometry with no depth guarantee of its own, so anything the episode flies
