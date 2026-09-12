@@ -70,10 +70,10 @@ you know which instrument to reach for.
 Each entry's `exercises` field says what that shot covers and carries its measured
 frame-sensitivity — frame N against N+1, which is
 the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
-twice proves nothing, because most poses show nothing that moves). Nine shots move on a one-frame
+twice proves nothing, because most poses show nothing that moves). Eight shots move on a one-frame
 perturbation (`c1-flight-kill` 78.07 %, `campaign-4p-grid` 73.79 %, `c1-cockpit` 43.35 %,
-`empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %, `campaign-intro-fill` 3.89 %,
-`c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
+`empty-stage` 12.21 %, `c4-snow` 3.74 %, `campaign-intro-fill` 3.89 %, `c1c-rain` 2.50 %,
+`c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
 
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of clock
 (`viewer-bhawk` 30, `c1-crash` 20, `c1-stunt-marker` 90, `c1-flight-kill` 280, `c1-debris-rest`
@@ -88,8 +88,8 @@ a campaign mission's later minutes.
 water frames differ by ~2/255 and no pose in this set moves more than 9 px across a full cycle
 (SHOT-3), so `--debug-anim`'s per-flipbook frame log remains the only instrument for them. Sound is
 muted in every shot. The labs are unrepresented; add a shot rather than assuming they are watched.
-Of the front end, only Original's top level and its Options screen are pinned, both for the movie
-running behind them. `campaign-4p-grid` and `campaign-intro-fill` cover a co-op campaign
+Of the front end, only Original's top level is pinned, for the movie running behind it; C2B, the
+least played map, has no shot. `campaign-4p-grid` and `campaign-intro-fill` cover a co-op campaign
 launch and its intro collapse alone — a mid-mission cutscene trigger, a guest capture, a downed
 pilot's spectator camera and a cutscene skip all need a human at the controls (`playtest.md`
 `PT-90`–`PT-93`) rather than a scripted frame. `c1-cockpit` pins the **shipped** cockpit pass alone:

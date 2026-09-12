@@ -3,7 +3,7 @@
   "readme": "Wall-time budgets for RunTests.ps1's stages. They are AWARENESS thresholds, never verdicts: a stage over budget prints an 'over budget' marker and NEVER changes the exit code, because this is a workstation and load the script cannot see must not turn a correct tree red. The numbers live here rather than in RunTests.ps1's help so the help can name this file instead of figures that would drift out of it.",
   "rule": "Each budget is the slowest of three back-to-back warm runs on the development machine, plus 50 percent, rounded up to the next 5 seconds, with a 10 second floor so a sub-second stage is not tripped by ordinary process startup. A stage this file does not name is printed without a budget. Re-measure the same way and rewrite this file when the numbers stop describing the machine.",
   "measured": {
-    "conditions": "warm, CSVM_DATA_ROOT at the primary tree, nothing else on the test desktop, engine at the default 6 shards over the 305-suite catalog and goldens at the default 4 workers over 21 shots; the hitch and quick rows are older measurements under the same conditions at 4 shards, which the quick lane's single-shard selection does not read",
+    "conditions": "warm, CSVM_DATA_ROOT at the primary tree, nothing else on the test desktop, engine at the default 6 shards over the 305-suite catalog and goldens at the default 4 workers over 21 shots (the set is 18 shots since, measured 41.1 and 43.1 s on two quiet runs, inside the same budget); the hitch and quick rows are older measurements under the same conditions at 4 shards, which the quick lane's single-shard selection does not read",
     "full": {
       "runs": 3,
       "build": [0.8, 0.8, 0.8],

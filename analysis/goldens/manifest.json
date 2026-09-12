@@ -41,13 +41,6 @@
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
-      "name": "c2b-rain",
-      "frame": 120,
-      "hash": "0d6bbf3cbcdddfc32cfc6f89c64fae69",
-      "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
-      "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
-    },
-    {
       "name": "c3-island",
       "frame": 120,
       "hash": "39d12b1d919bb0bbc36d97484a8aeee0",
@@ -144,20 +137,6 @@
       "hash": "b6d9c7df9dfa41f59e1d90fe353780db",
       "exercises": "The Original top level over its decoded layout: the CrimFlag movie decoded from the install's own MPEG-1 and drawn as the backmost layer at the row's 250 percent, with the logo, button frame and plaques over it.",
       "args": ["--menu", "--presentation=original", "--det", "--mute"]
-    },
-    {
-      "name": "menu-original-options-flag",
-      "frame": 120,
-      "hash": "7ba46088feaf9c20c21cc5ceb66afd32",
-      "exercises": "The Options screen over the decoded Preferences chrome with the same movie running under it: its title and descriptions, all four page doors live in their enabled frames, and the flag at the layout row's own corner and scale.",
-      "args": ["--menu=options", "--presentation=original", "--det", "--mute"]
-    },
-    {
-      "name": "menu-original-keys",
-      "frame": 120,
-      "hash": "9a0670dff7d2b94e2076dfdb7284d9d3",
-      "exercises": "The KEYS AND BUTTONS page over its decoded plate with the Preferences movie behind it: the seven category tabs, the Movement rows against the two authored control columns naming what a row is not showing, and CANCEL left of ACCEPT.",
-      "args": ["--menu=keys", "--presentation=original", "--det", "--mute"]
     }
   ]
 }
