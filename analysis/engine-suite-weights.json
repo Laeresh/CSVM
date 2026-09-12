@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "readme": "Per-suite engine wall time in seconds, the weights RunTests.ps1 -Shards divides the catalog by. Regenerate from the four shard reports of one warm full run (.scratch\\engine\\owner-<pid>\\shardNof4\\test-report.json): a serial run of the whole catalog exceeds the engine stage's 300 s per-launch watchdog. These numbers are awareness for the balancer alone: a stale weight costs balance, never correctness, since every shard still reports its own verdicts and the merge checks the shards cover the selection exactly once.",
+  "readme": "Per-suite engine wall time in seconds, the weights RunTests.ps1 -Shards divides the catalog by. Regenerate from the shard reports of one warm full run (.scratch\\engine\\owner-<pid>\\shardNofM\\test-report.json): a serial run of the whole catalog exceeds the engine stage's 300 s per-launch watchdog. These numbers are awareness for the balancer alone: a stale weight costs balance, never correctness, since every shard still reports its own verdicts and the merge checks the shards cover the selection exactly once.",
   "measuredFrom": "warm 4-shard full-catalog run on the development machine, 289/289 passing",
   "defaultSeconds": 1.5,
   "groupsReadme": "Suites that must share one shard because the second reads the first's worlds out of that process DecodeCache; splitting them costs about 3 s of decode each.",

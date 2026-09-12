@@ -877,7 +877,7 @@ internal static class TargetingSuites
 
         // --- The shipped marker's rules: colour, the gun-reach bracket gate, the label lines -----
         // All three are pure and decoded (FUN_004a5f40 / FUN_004574d0 / FUN_004579e0); what no test
-        // can reach is the drawn geometry itself, which is the c1-targeting-hud golden.
+        // can reach is the drawn geometry itself, which is the c1-flight-kill golden.
         int hostileTeam = AimAssist.TeamOfPilot(100);
         var enemyRef = TargetRef.ForAircraft(
             new AimCandidate { Team = hostileTeam, Live = true, Source = new object() },

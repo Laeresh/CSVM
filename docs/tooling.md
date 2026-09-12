@@ -139,7 +139,7 @@ checked in, as the `[Trait("Tier", "Quick")]` classes and `SuiteCatalog.QuickTie
 prints a `not checked:` line per omitted surface, and never satisfies the landing gate.
 
 **The engine stage runs the full catalog in concurrent Godot processes.** `-Shards <n>` sets how
-many; the default is 4 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection,
+many; the default is 6 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection,
 and `-Shards 1` is the serial reference path. Membership comes from the harness's
 `shard:<index>/<count>` term over the per-suite weights at `analysis/engine-suite-weights.json`, so
 the same tree always divides the same way; an unweighted suite is charged the default and printed
