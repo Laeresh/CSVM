@@ -4,8 +4,10 @@ using CSVM.Mech3;
 
 namespace CSVM.UI.Menu;
 
-/// <summary>The reveal script's opcode vocabulary, censused across all 24 mission states
-/// (docs/formats/briefing.md). No other opcode occurs, so an unknown one is a reader bug.</summary>
+/// <summary>The reveal script's opcode vocabulary, censused across the briefing's 24 mission
+/// states, the pause screen's <c>ESC_SCRIPT</c>s and the load screen's <c>LOADING_SCRIPT</c>s
+/// (docs/formats/briefing.md). No other opcode occurs in any of the three, so an unknown one is a
+/// reader bug.</summary>
 public enum BriefingOp
 {
     /// <summary>Starts the mission's narration wav, which is the reveal's clock.</summary>
@@ -43,6 +45,11 @@ public enum BriefingOp
 
     /// <summary>Sends an element behind everything else in draw order.</summary>
     ToBack,
+
+    /// <summary>A bitmap cycle at a fixed position and rate. Only the load screen's script authors
+    /// one, for the propeller beside its bar; the remaining frames and the rate are not read,
+    /// because the screen composing them is a still and draws the cycle's first frame.</summary>
+    Cycle,
 }
 
 /// <summary>One dialog-space point, as the script's <c>at</c>, <c>path</c> and <c>points</c>
@@ -161,8 +168,9 @@ public sealed class BriefingDialog
         _states.TryGetValue(StateKey(campaign, mission), out var state) ? state : null;
 
     /// <summary>Reads one reveal script into its beats. Shared with <see cref="EscapeDialog"/>,
-    /// whose <c>ESC_SCRIPT</c> is the same opcode vocabulary over the same argument spellings; an
-    /// opcode outside <see cref="BriefingOp"/> is skipped rather than throwing.</summary>
+    /// whose <c>ESC_SCRIPT</c> and <c>LOADING_SCRIPT</c> are the same opcode vocabulary over the
+    /// same argument spellings; an opcode outside <see cref="BriefingOp"/> is skipped rather than
+    /// throwing.</summary>
     internal static List<BriefingStep> ParseScript(List<object?> script)
     {
         var steps = new List<BriefingStep>();
@@ -272,6 +280,15 @@ public sealed class BriefingDialog
                 Path = Points(d.List("points")),
                 Color = new BriefingColor(
                     (byte)d.Float("color"), (byte)d.Float("color", 0f, 1), (byte)d.Float("color", 0f, 2)),
+            },
+            BriefingOp.Cycle => new BriefingStep
+            {
+                Op = op,
+                Id = id,
+                Bitmap = d.List("bitmaps") is { Count: > 0 } frames && frames[0] is string frame0
+                    ? frame0
+                    : string.Empty,
+                At = new BriefingPoint(d.Float("at"), d.Float("at", 0f, 1)),
             },
             BriefingOp.Objective => new BriefingStep { Op = op, Id = id, Index = (int)d.Float("index") },
             _ => new BriefingStep { Op = op, Id = id },
@@ -516,7 +533,10 @@ public sealed class BriefingReveal
                 Narration = step.Id;
                 NarrationStarts++;
                 break;
+            // A cycle's first frame is placed exactly as a Pict is, its own point being the
+            // bitmap's top left: the load screen authors no center flag on one.
             case BriefingOp.Pict:
+            case BriefingOp.Cycle:
                 var placed = Ensure(step.Id);
                 placed.Bitmap = step.Bitmap;
                 placed.At = step.At;

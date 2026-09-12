@@ -62,9 +62,9 @@ public partial class Launcher : Node3D
     // than cutting at a hard edge.
     private const float EnhancedShadowFadeStart = 0.8f;
 
-    // The memento the pause aid draws. Awarding one over the campaign is not shipped, so it is the
-    // opening keepsake, the same picture the cabin draws (docs/org/pause-screen.md).
-    private const string PauseAidMemento = "ms_p_initialpinup1";
+    // The memento the pause and load screens draw. Awarding one over the campaign is not built, so
+    // it is the opening keepsake the original's own profile reset seeds (docs/org/pause-screen.md).
+    private const string SeededMemento = "ms_p_initialpinup1";
 
     // TUNE, judged at the controls, and the pair trades against each other: lower values put
     // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
@@ -1091,19 +1091,66 @@ public partial class Launcher : Node3D
         _launchFramesWaited = 0;
     }
 
-    // The load screen over the whole window, on the board layer. Campaign launches take the
-    // original's chart sheet and everything else its blackboard (docs/org/loading-screen.md).
-    private void ShowLoadScreen(bool campaign, string? missionType)
+    // The load screen over the whole window, on the board layer. A campaign launch takes the
+    // original's chart sheet for the mission being built and everything else its blackboard
+    // (docs/org/loading-screen.md).
+    private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
     {
-        // The sheet names the chapter and the flight; the blackboard writes its dialog's own four
-        // texts, and takes this only when the mode is ours and no dialog describes it.
-        string subject = campaign
-            ? $"{_spec.Chapter}   ·   {LaunchSubject()}"
-            : LaunchSubject().ToUpperInvariant();
+        // The blackboard writes its dialog's own four texts, and takes this heading only when the
+        // mode is ours and no dialog describes it. The chart sheet writes no words of ours at all.
+        string subject = campaign ? string.Empty : LaunchSubject().ToUpperInvariant();
+        var sheet = campaign
+            ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
+            : null;
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
         _loadLayer.AddChild(UI.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType));
+            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet));
         AddChild(_loadLayer);
+    }
+
+    // The chart sheet a story position resolves: the loading dialog the mission's own storage
+    // address names, that mission's objectives for the parchment, and the profile's memento.
+    private UI.LoadSheet? CampaignLoadSheet(int seq)
+    {
+        if (CampaignMissionAt(seq) is not { } named)
+        {
+            Log.Warn("ui", $"load screen: cm_sequence names no mission at seq {seq}");
+            return null;
+        }
+
+        string key = UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission);
+        var sheet = UI.LoadSheet.Load(
+            _zrdrPath, _messagesPath,
+            SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder),
+            key, SeededMemento);
+        if (sheet == null)
+        {
+            Log.Warn("ui",
+                $"load screen: Loading.zrd has no sheet for {named.ChapterFolder}/{named.MissionFolder}");
+            return null;
+        }
+
+        // The screen is torn down before the world appears, so this line is the only record of
+        // which mission's chart a launch actually drew.
+        string map = sheet.State.Map?.Bitmap ?? "-";
+        Log.Info("ui",
+            $"load screen: {named.ChapterFolder}/{named.MissionFolder} {key} map={map} objectives={sheet.Objectives.Count}");
+        return sheet;
+    }
+
+    // The mission a sequence position names, or null where cm_sequence carries none.
+    private CampaignMission? CampaignMissionAt(int seq)
+    {
+        CampaignMission? found = null;
+        foreach (var mission in Mech3.CampaignSequence.Load(_zrdrPath))
+        {
+            if (mission.Seq == seq)
+            {
+                found = mission;
+            }
+        }
+
+        return found;
     }
 
     // The Original presentation's pause sheet over the whole window, standing on its own with no
@@ -1112,18 +1159,9 @@ public partial class Launcher : Node3D
     // the zeppelin icon is absent. docs/org/pause-screen.md.
     private void ShowPauseSheet(int ordinal, int completed)
     {
-        var missions = Mech3.CampaignSequence.Load(_zrdrPath);
-        int seq = System.Math.Clamp(ordinal - 1, 0, System.Math.Max(0, missions.Count - 1));
-        CampaignMission? found = null;
-        foreach (var mission in missions)
-        {
-            if (mission.Seq == seq)
-            {
-                found = mission;
-            }
-        }
-
-        if (found is not { } named)
+        int last = System.Math.Max(0, Mech3.CampaignSequence.Load(_zrdrPath).Count - 1);
+        int seq = System.Math.Clamp(ordinal - 1, 0, last);
+        if (CampaignMissionAt(seq) is not { } named)
         {
             Log.Warn("ui", $"pause aid: cm_sequence names no mission at seq {seq}");
             return;
@@ -1178,7 +1216,7 @@ public partial class Launcher : Node3D
             }
         }
 
-        return new UI.PauseReadout(rows, PauseAidMemento, icons);
+        return new UI.PauseReadout(rows, SeededMemento, icons);
     }
 
     // What the load screen calls this flight: an Instant Action mission by the wizard's own name
@@ -1408,15 +1446,23 @@ public partial class Launcher : Node3D
         _menuHost.Show(destination);
         _menuAid = null;
         // The load screen is up for two frames during a build and torn down before anything
-        // renders, so a shot of it needs a door of its own that leaves it standing. Its argument
-        // names the Instant Action mission type, which is the whole of what the blackboard writes.
-        if (aid.StartsWith("loadboard", System.StringComparison.Ordinal))
+        // renders, so a shot of it needs a door of its own that leaves it standing. The campaign
+        // door's argument names the mission, the blackboard's the Instant Action mission type.
+        if (aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal))
+        {
+            var parts = aid.Split(':');
+            ShowLoadScreen(
+                campaign: true,
+                missionType: null,
+                missionSeq: System.Math.Max(
+                    1, parts.Length > 1 && int.TryParse(parts[1], out int cm) ? cm : 1) - 1);
+        }
+        else if (aid.StartsWith("loadboard", System.StringComparison.Ordinal))
         {
             int colon = aid.IndexOf(':');
             string missionType = colon < 0 ? string.Empty : aid[(colon + 1)..];
             ShowLoadScreen(
-                aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal),
-                missionType.Length > 0 ? missionType : _spec.IaDef?.MissionType);
+                false, missionType.Length > 0 ? missionType : _spec.IaDef?.MissionType);
         }
 
         // The pause sheet stands only while a mission is halted, so a shot of it needs the same

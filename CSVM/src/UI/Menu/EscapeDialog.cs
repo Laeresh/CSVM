@@ -75,7 +75,17 @@ public sealed record EscapeObjectivesList(
     float WrapWidth,
     float WrapHeight,
     float Spacing,
-    string CheckMark);
+    string CheckMark)
+{
+    /// <summary>The title's face size in authored pixels: <c>ObjListTitle</c>, which
+    /// <c>fonts.zrd</c> gives at 17. Held here rather than on either screen so the two that draw
+    /// this one shared widget cannot come to write it in two sizes.</summary>
+    public const float TitleFont = 17f;
+
+    /// <summary>A row's face size, <c>ObjList</c>, which <c>fonts.zrd</c> gives as Andy Bold at
+    /// 14.</summary>
+    public const float RowFont = 14f;
+}
 
 /// <summary>One button strip: the three bitmaps its three states draw and the label centred over
 /// them at the strip's own offset. There is no disabled frame, so a strip with nothing behind it is
@@ -128,11 +138,12 @@ public sealed record EscapeState(
     IReadOnlyList<BriefingStep> Steps);
 
 /// <summary>
-/// The pause screen's definition file: <c>escape.zrd</c> for a campaign session and
-/// <c>ia_escape.zrd</c> for Instant Action, both carrying the same 82 dialogs keyed the way the
-/// load screen keys its own. The shared <c>LOADINGDIALOG</c> block holds the objectives parchment,
-/// the two world-placed icons and the four button strips; a dialog holds its own map, memento and
-/// <c>ESC_SCRIPT</c>. Decode: docs/org/pause-screen.md.
+/// The definition file behind the pause screen and the campaign load screen: <c>escape.zrd</c> for
+/// a campaign pause, <c>ia_escape.zrd</c> for an Instant Action one and <c>Loading.zrd</c> for the
+/// load screen, all carrying dialogs keyed the same way. The shared <c>LOADINGDIALOG</c> block
+/// holds the objectives parchment, the two world-placed icons and the button strips; a dialog holds
+/// its own map, memento and beat sheet. Decode: docs/org/pause-screen.md and
+/// docs/org/loading-screen.md.
 /// </summary>
 public sealed class EscapeDialog
 {
@@ -142,6 +153,18 @@ public sealed class EscapeDialog
     /// <summary>The Instant Action definition file, which ships and so is always preferred for an
     /// Instant Action session.</summary>
     public const string InstantActionFile = "ia_escape.json";
+
+    /// <summary>The load screen's own definition file. ⚠ Its campaign dialogs are not a copy of
+    /// <see cref="CampaignFile"/>'s: the <c>PRIMITIVES</c> agree block for block, but every
+    /// <c>LOADING_SCRIPT</c> is a superset of the matching <c>ESC_SCRIPT</c>, adding the propeller
+    /// cycle and the mission's device icons, so reading one screen's content out of the other
+    /// file's dialog understates it.</summary>
+    public const string LoadingFile = "Loading.json";
+
+    // How far a beat sheet is run out, and in what step. Long enough for every authored wait and
+    // tween in the shipped dialogs, which is a tenth of a second and a few seconds respectively.
+    private const double SettleSeconds = 1.0;
+    private const int SettleSteps = 64;
 
     private readonly Dictionary<string, EscapeState> _states = new(StringComparer.OrdinalIgnoreCase);
 
@@ -199,6 +222,38 @@ public sealed class EscapeDialog
         }
 
         return dialog;
+    }
+
+    /// <summary>A dialog's beat sheet run out to the still both screens draw, rather than played:
+    /// a wait releases and a spin lands at its end revolutions. The reveal is given no narration
+    /// cue points, which settles it at once, since neither script carries a sound or a marker to
+    /// wait on.</summary>
+    public static BriefingReveal Settled(IReadOnlyList<BriefingStep> steps)
+    {
+        // ⚠ Do not build the reveal and leave it. An authored Wait blocks every beat after it, and
+        // 19 of the 24 loading dialogs (7 of the pausing ones) place their pins past one, so those
+        // charts would draw with no flags at all. One Advance releases one wait, hence the loop.
+        var reveal = new BriefingReveal(steps, Array.Empty<double>());
+        for (int i = 0; i < SettleSteps && !reveal.Complete; i++)
+        {
+            reveal.Advance(SettleSeconds);
+        }
+
+        return reveal;
+    }
+
+    /// <summary>One widget label resolved through the message table. A key the table does not
+    /// carry comes back as itself, which is worse than nothing on a strip or over a parchment, so
+    /// it yields the empty string instead.</summary>
+    public static string Label(Messages messages, string key)
+    {
+        if (key.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        string text = messages.Get(key);
+        return text.StartsWith("MSG_", StringComparison.Ordinal) ? string.Empty : text;
     }
 
     /// <summary>The dialog a key names, falling back to <c>default</c> the way the original's own
@@ -290,7 +345,7 @@ public sealed class EscapeDialog
 
         var primitives = d.Dict("PRIMITIVES");
         var memento = primitives?.Dict("MEMENTO");
-        var script = d.List("ESC_SCRIPT") ?? d.List("SCRIPT");
+        var script = d.List("ESC_SCRIPT") ?? d.List("LOADING_SCRIPT") ?? d.List("SCRIPT");
         return new EscapeState(
             key,
             background,

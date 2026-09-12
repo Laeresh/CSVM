@@ -30,14 +30,9 @@ public sealed record PauseSheet(
     string ObjectivesTitle,
     IReadOnlyList<string> ButtonLabels)
 {
-    // How far the script is run out, and in what step. Long enough for every authored wait and
-    // tween in the shipped dialogs, which is a tenth of a second and a few seconds respectively.
-    private const double SettleSeconds = 1.0;
-    private const int SettleSteps = 64;
-
-    /// <summary>Reads one dialog and its shared block, runs its script, and resolves every label
-    /// through the message table. The reveal is given no narration cue points, which settles the
-    /// whole sheet at once: an <c>ESC_SCRIPT</c> carries no sound and no marker to wait on.</summary>
+    /// <summary>Reads one dialog and its shared block, runs its script out through
+    /// <see cref="EscapeDialog.Settled"/>, and resolves every label through the message
+    /// table.</summary>
     public static PauseSheet? Load(
         string zrdrPath, string messagesPath, string dialogKey, bool instantAction)
     {
@@ -65,43 +60,15 @@ public sealed record PauseSheet(
         var labels = new List<string>();
         foreach (string key in PauseScreens.ButtonKeys)
         {
-            labels.Add(Text(messages, shared.Button(key)?.LabelKey ?? string.Empty));
+            labels.Add(EscapeDialog.Label(messages, shared.Button(key)?.LabelKey ?? string.Empty));
         }
 
         return new PauseSheet(
             state,
             shared,
-            Settled(state.Steps),
-            Text(messages, shared.Objectives?.TitleKey ?? string.Empty),
+            EscapeDialog.Settled(state.Steps),
+            EscapeDialog.Label(messages, shared.Objectives?.TitleKey ?? string.Empty),
             labels);
-    }
-
-    // The sheet is a still, so its script is run out rather than played. ⚠ Do not build the reveal
-    // and leave it: a script's authored Wait blocks every beat after it, and 7 of the 24 campaign
-    // dialogs place their flag pins past one, so those screens would draw a map with no flags at
-    // all. One Advance releases one wait, hence the loop; the cap only bounds a script that cannot
-    // complete, and a spin's own tween lands at its end revolutions the way a settled screen shows.
-    private static BriefingReveal Settled(IReadOnlyList<BriefingStep> steps)
-    {
-        var reveal = new BriefingReveal(steps, Array.Empty<double>());
-        for (int i = 0; i < SettleSteps && !reveal.Complete; i++)
-        {
-            reveal.Advance(SettleSeconds);
-        }
-
-        return reveal;
-    }
-
-    // A key the table does not carry comes back as itself, which is worse than nothing on a strip.
-    private static string Text(Messages messages, string key)
-    {
-        if (key.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        string text = messages.Get(key);
-        return text.StartsWith("MSG_", StringComparison.Ordinal) ? string.Empty : text;
     }
 }
 
@@ -136,10 +103,6 @@ public static class PauseScreens
 
     /// <summary>QUIT's row.</summary>
     public const int QuitRow = 3;
-
-    // The list's own face, which fonts.zrd gives as Andy Bold at 14 px, and the title's beside it.
-    private const float ListFont = 14f;
-    private const float TitleFont = 17f;
 
     /// <summary>The four strips, in the order the shared <c>BUTTONS</c> block authors them, which
     /// is also the order a cursor walks them.</summary>
@@ -184,8 +147,8 @@ public static class PauseScreens
         if (sheet.Shared.Objectives is { } titled && sheet.ObjectivesTitle.Length > 0)
         {
             lines.Add(new BoardLine(
-                sheet.ObjectivesTitle, titled.TitleAt.X, titled.TitleAt.Y, 0f, TitleFont,
-                BoardInk.Heading));
+                sheet.ObjectivesTitle, titled.TitleAt.X, titled.TitleAt.Y, 0f,
+                EscapeObjectivesList.TitleFont, BoardInk.Heading));
         }
 
         return new ComposedBoard(
@@ -226,7 +189,7 @@ public static class PauseScreens
         {
             new BoardNote(
                 entries, list.ListAt.X, list.ListAt.Y, list.WrapWidth, list.WrapHeight,
-                list.Spacing, ListFont, BoardInk.Row,
+                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row,
                 list.CheckMark.Length > 0
                     ? new BoardArt(BoardArtLibrary.Rimage, list.CheckMark)
                     : null,

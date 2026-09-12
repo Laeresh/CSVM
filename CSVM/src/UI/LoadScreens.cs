@@ -3,8 +3,71 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using CSVM.Mech3;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
+
+/// <summary>
+/// The campaign load screen's authored half, with the two things the original's own constructor
+/// binds into it at runtime: the mission's objectives, which the parchment lists, and the
+/// profile's memento image. Read once per launch, since a load screen is a still.
+/// Decode: docs/org/loading-screen.md.
+/// </summary>
+public sealed record LoadSheet(
+    EscapeState State,
+    EscapeShared Shared,
+    BriefingReveal Reveal,
+    string ObjectivesTitle,
+    IReadOnlyList<string> Objectives,
+    string Memento)
+{
+    /// <summary>Reads one campaign loading dialog, the block every dialog in the file shares and
+    /// the mission's own objectives, runs the beat sheet out through
+    /// <see cref="EscapeDialog.Settled"/>, and resolves the parchment's title. Null for an
+    /// unreadable extraction or a key the file does not carry, which leaves the screen its frame
+    /// and its bar.</summary>
+    public static LoadSheet? Load(
+        string zrdrPath,
+        string messagesPath,
+        string missionZrdrPath,
+        string dialogKey,
+        string memento)
+    {
+        EscapeDialog dialog;
+        Messages messages;
+        IReadOnlyList<BriefingObjective> objectives;
+        try
+        {
+            dialog = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
+            messages = Messages.Load(messagesPath);
+            objectives = BriefingObjectives.Load(
+                Zrdr.LoadFile(missionZrdrPath, "objectives.json"), messages);
+        }
+        catch (Exception e) when (e is IOException or JsonException)
+        {
+            return null;
+        }
+
+        if (dialog.Find(dialogKey) is not { } state || dialog.Shared is not { } shared)
+        {
+            return null;
+        }
+
+        var rows = new List<string>(objectives.Count);
+        foreach (var objective in objectives)
+        {
+            rows.Add(objective.Text);
+        }
+
+        return new LoadSheet(
+            state,
+            shared,
+            EscapeDialog.Settled(state.Steps),
+            EscapeDialog.Label(messages, shared.Objectives?.TitleKey ?? string.Empty),
+            rows,
+            memento);
+    }
+}
 
 /// <summary>
 /// What the mission load screen is made of, in the original's 800x600 dialog space: the campaign
@@ -30,6 +93,18 @@ public static class LoadScreens
     // loadListbody, the blurb and the win condition, measured the same way.
     private const float BodyFace = 13f;
 
+    // The frame behind the campaign sheet, which every campaign dialog names as its one background
+    // image. A sheet that did not read stands on it alone.
+    private const string Frame = "loadframe";
+
+    // The unlit bar, the PROGRESS entry every campaign dialog authors at one position. What fills
+    // it is the repaint's own pixel clip over prog_redload (docs/org/loading-screen.md).
+    private const string BarArt = "prog_blkload";
+
+    // The bar's authored top left.
+    private const float BarX = 90f;
+    private const float BarY = 548f;
+
     // The pitch the blurb's wrapped lines take, measured between the same two lines. Our own face
     // leads wider than this, which runs a three-line blurb through the chalk rule below it.
     private const float BodyLeading = 13f;
@@ -42,13 +117,19 @@ public static class LoadScreens
         Array.Empty<BoardPlaque>());
 
     /// <summary>The board for one launch. <paramref name="campaign"/> picks the paper sheet over the
-    /// blackboard, the split the original makes. <paramref name="missionType"/> names the Instant
-    /// Action dialog to read, or is null for a mode of ours, which takes
-    /// <paramref name="subject"/> as its heading instead.</summary>
+    /// blackboard, the split the original makes, and takes <paramref name="sheet"/> as its whole
+    /// content. <paramref name="missionType"/> names the Instant Action dialog to read, or is null
+    /// for a mode of ours, which takes <paramref name="subject"/> as its heading instead; neither
+    /// reaches the campaign sheet, which writes no words of ours.</summary>
     public static ComposedBoard For(
-        bool campaign, string subject, string? missionType, string zrdrPath, string messagesPath) =>
+        bool campaign,
+        string subject,
+        string? missionType,
+        string zrdrPath,
+        string messagesPath,
+        LoadSheet? sheet = null) =>
         campaign
-            ? CampaignSheet(subject)
+            ? CampaignSheet(sheet)
             : Blackboard(Texts(missionType, subject, zrdrPath, messagesPath));
 
     /// <summary>The mission-type letter that completes the dialog name, from the jump table at
@@ -100,30 +181,105 @@ public static class LoadScreens
         return lines;
     }
 
-    // The campaign screen: a chart sheet in its frame, with the unlit bar under it at the position
-    // the repaint measures its fill from. No pictures, which is what the campaign dialogs carry.
-    private static ComposedBoard CampaignSheet(string subject)
+    // The campaign screen, through the same drawer PauseScreens uses: the mission's chart at its
+    // authored crop, the pins, device icons and propeller its script places, the parchment, the
+    // memento over its shadow, and the unlit bar.
+    // ⚠ Place no ownship or zeppelin icon here: the load dialog's constructor binds neither, and
+    // the pause screen's is the only one that does (docs/org/pause-screen.md).
+    // An unreadable sheet leaves the frame and the bar standing, which is all this screen promises.
+    private static ComposedBoard CampaignSheet(LoadSheet? sheet)
     {
-        var lines = new List<BoardLine>(2)
+        var backdrop = new List<BoardPicture>
         {
-            new("LOADING", 60f, 60f, 460f, 26f, BoardInk.Heading),
+            new(
+                new BoardArt(BoardArtLibrary.Rimage, Background(sheet)), 0, 0, 0, false, 1f, 0f,
+                BoardFit.AuthoredWidth, BoardFit.AuthoredHeight),
         };
-        if (subject.Length > 0)
+        var pictures = new List<BoardPicture>();
+        var lines = new List<BoardLine>();
+        if (sheet != null)
         {
-            lines.Add(new BoardLine(subject, 60f, 100f, 460f, 15f, BoardInk.Row));
+            if (sheet.State.Map is { Bitmap.Length: > 0 } map)
+            {
+                pictures.Add(MissionMap.Sheet(map));
+            }
+
+            if (sheet.Shared.Objectives is { Background.Length: > 0 } list)
+            {
+                pictures.Add(new BoardPicture(
+                    new BoardArt(BoardArtLibrary.Rimage, list.Background),
+                    list.BackgroundAt.X, list.BackgroundAt.Y));
+            }
+
+            MissionMap.Elements(pictures, sheet.Reveal, back: true);
+            MissionMap.Elements(pictures, sheet.Reveal, back: false);
+            AddMemento(pictures, sheet);
+            if (sheet.Shared.Objectives != null && sheet.ObjectivesTitle.Length > 0)
+            {
+                lines.Add(new BoardLine(
+                    sheet.ObjectivesTitle, sheet.Shared.Objectives.TitleAt.X,
+                    sheet.Shared.Objectives.TitleAt.Y, 0f, EscapeObjectivesList.TitleFont,
+                    BoardInk.Heading));
+            }
         }
 
+        pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, BarArt), BarX, BarY));
         return new ComposedBoard(
-            new[]
-            {
-                new BoardPicture(
-                    new BoardArt(BoardArtLibrary.Rimage, "loadframe"), 0, 0, 0, false, 1f, 0f,
-                    BoardFit.AuthoredWidth, BoardFit.AuthoredHeight),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "prog_blkload"), 90, 548),
-            },
-            Array.Empty<BoardStroke>(),
+            pictures,
+            MissionMap.Strokes(sheet?.Reveal),
             lines,
-            Array.Empty<BoardPlaque>());
+            Array.Empty<BoardPlaque>(),
+            Notes(sheet),
+            backdrop);
+    }
+
+    // The frame the dialog names, which every campaign dialog authors as its one background image.
+    private static string Background(LoadSheet? sheet) =>
+        sheet?.State.Background is { Length: > 0 } named ? named : Frame;
+
+    // The parchment's rows: the mission's own objectives in the order the script indexed them.
+    // None is marked, because the screen stands before the mission it lists has run.
+    private static IReadOnlyList<BoardNote> Notes(LoadSheet? sheet)
+    {
+        if (sheet?.Shared.Objectives is not { } list)
+        {
+            return Array.Empty<BoardNote>();
+        }
+
+        var entries = new List<string>();
+        foreach (int index in sheet.Reveal.RevealedObjectives)
+        {
+            if (index >= 0 && index < sheet.Objectives.Count)
+            {
+                entries.Add(sheet.Objectives[index]);
+            }
+        }
+
+        if (entries.Count == 0)
+        {
+            return Array.Empty<BoardNote>();
+        }
+
+        return new[]
+        {
+            new BoardNote(
+                entries, list.ListAt.X, list.ListAt.Y, list.WrapWidth, list.WrapHeight,
+                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row),
+        };
+    }
+
+    // The memento's position is authored and its picture is not: the runtime replaces the
+    // placeholder with the profile's own memento image. Drawn after the script's elements so it
+    // sits over the shadow the script centres under it.
+    private static void AddMemento(List<BoardPicture> into, LoadSheet sheet)
+    {
+        string bitmap = sheet.Memento.Length > 0 ? sheet.Memento : sheet.State.MementoBitmap;
+        if (bitmap.Length > 0)
+        {
+            into.Add(new BoardPicture(
+                new BoardArt(BoardArtLibrary.Rimage, bitmap),
+                sheet.State.MementoAt.X, sheet.State.MementoAt.Y));
+        }
     }
 
     // The Instant Action screen: the blackboard, its three authored photographs each centred on

@@ -338,7 +338,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignAmmoPage.cs` — the AMMO SELECTION screen: four gun-group and eight pylon drop-downs over a working copy, written only by ACCEPT LOADOUT.
 - `src/UI/CampaignPlaneSelectionPage.cs` — the PLANE SELECTION screen: a drop-down, silhouette, ratings and weapon lists per slot, EXPORT, and its refusal.
 - `src/UI/Menu/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter that runs a state's beat sheet.
-- `src/UI/Menu/EscapeDialog.cs` — the pause screen's `escape.zrd` reader: the per-mission map with its crop and world window, the memento slot, and the shared parchment, icons and strips.
+- `src/UI/Menu/EscapeDialog.cs` — the `escape.zrd` and `Loading.zrd` reader: the per-mission map with its crop and world window, the memento slot, and the shared parchment, icons and strips.
 - `src/UI/Menu/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which a reveal opcode indexes.
 - `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's contents list, one row per mission below the campaign's position, plus the results page a mission's records compute.
 - `src/UI/CampaignScrapbookPage.cs` — the scrapbook itself: the browsed spread's scraps, the results card with its tabs and stamps, and the page arrows.
@@ -363,7 +363,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BootCard.cs` — the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
 - `src/UI/LoadBoard.cs` — the node that hangs the load screen over a build, tracking the window until the world appears.
-- `src/UI/LoadScreens.cs` — what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts.
+- `src/UI/LoadScreens.cs` — what the load screen is made of: the launching mission's own chart sheet, and the Instant Action blackboard carrying its dialog's own four texts.
 - `src/UI/PauseScreens.cs` — what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the four authored strips.
 - `src/UI/MissionMap.cs` — the one chart drawer every screen showing a mission's map shares: the sheet at its crop, the reveal's pins, and an icon placed by world position.
 - `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.

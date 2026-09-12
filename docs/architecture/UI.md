@@ -281,17 +281,17 @@ The load screen drawn over the whole window while a session builds: `LoadScreens
 through `ComposedBoardView`, so it inherits the authored-pixel surface and `BoardFit`'s scaling.
 Populated in `_Ready`, since the view sizes itself off the viewport, and it tracks the window every
 frame the way every shared board does. Holds no composition of its own, so what the screen says
-tests off engine.
+tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves.
 
 ## src/UI/LoadScreens.cs
-What the load screen is made of, engine-free: the campaign chart sheet, and the Instant Action
-blackboard with the four texts its own `loading_i` dialog places, read out of `Loading.zrd` and
-resolved through `messages.json` at the authored positions and wrap widths. The mission type picks
-the dialog by the exe's own letter; the environment digit is not plumbed because it selects nothing.
-Free flight and dogfight are ours rather than the original's, so they write the mode's name at the
-mode heading's place and nothing else. An absent or unreadable extraction yields no words rather
-than throwing, since this screen is shown while everything else is still loading. The dialogs, the
-face mapping and the line pitch: [../org/loading-screen.md](../org/loading-screen.md).
+What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
+one `Loading.zrd` dialog with its mission's objectives and the profile's memento; `LoadScreens`
+composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
+Action blackboard with the four texts its own `loading_i` dialog places. The mission type picks the
+blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
+mode's name and nothing else. An absent extraction yields the frame and the bar rather than
+throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
+sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 
 ## src/UI/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
@@ -731,18 +731,18 @@ twelve-opcode beat sheet against a caller-advanced clock, blocking on an authore
 narration's cue times and keeping each element's opacity, rotation and position as its tweens
 land. Elements come out in placement order, which is draw order; with no cue points every marker
 releases at once, so the map finishes under the narration rather than a timing being invented.
-Opcodes and their arguments: [../formats/briefing.md](../formats/briefing.md). `ParseScript` is
-shared with `EscapeDialog`, whose `ESC_SCRIPT` is the same vocabulary.
+Opcodes: [../formats/briefing.md](../formats/briefing.md). `ParseScript` is shared with
+`EscapeDialog`, whose two scripts add only `Cycle`, the load screen's propeller.
 
 ## src/UI/Menu/EscapeDialog.cs
-The pause screen's `escape.zrd` reader, engine-free: one dialog's chart sheet with its source crop
-and world window, its memento slot and its beat sheet, plus the shared block every dialog in the
-file borrows, which is the objectives parchment, the two icons the screen places by world position
-and the four button strips with their three bitmaps each. `EscapeMap.TryProject` is the world
-window: world X across, negated world Z down, and false rather than a clamp for a position off it.
-⚠ The `CLIP` is a rectangle in the bitmap and not on the screen, and every `WORLD` bound is stored
-truncated toward zero, both of which the type's own members say. The Instant Action twin
-`ia_escape.zrd` reads through the same class. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+The reader behind the pause screen and the campaign load screen: one dialog's chart sheet with its
+source crop and world window, its memento slot and its beat sheet, plus the block every dialog
+borrows, which is the objectives parchment, the two icons the pause screen places by world position
+and the four button strips. `escape.zrd`, `ia_escape.zrd` and `Loading.zrd` read through it, and
+`Settled` runs a beat sheet out to the still either screen draws. `EscapeMap.TryProject` is the
+world window: world X across, negated world Z down, false rather than a clamp for a position off it.
+⚠ The `CLIP` is a rectangle in the bitmap and not on the screen, and every `WORLD` bound is
+truncated toward zero, both of which the type's own members say. [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Menu/BriefingObjectives.cs
 The briefing's parchment note, read from a mission's own `objectives.zrd`: every `IDENTITY`

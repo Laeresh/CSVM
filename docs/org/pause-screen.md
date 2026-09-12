@@ -71,6 +71,12 @@ What differs:
 So one map drawer serves both screens, and the pause screen is the one that also places things by
 world position.
 
+⚠ **The two files' campaign dialogs are not copies of each other.** Their `PRIMITIVES` blocks agree
+entry for entry across all 24, and so do the flag pins and the memento shadow, but every
+`LOADING_SCRIPT` is a superset of the matching `ESC_SCRIPT`: the loading one also spins the
+propeller and places the mission's device icons
+([`loading-screen.md`](loading-screen.md)). Read each screen out of its own file.
+
 ## Which dialog is shown
 
 `FUN_004a0d20` opens `ia_escape.zrd` when `FUN_004639b0` (is-Instant-Action) holds and falls back to
@@ -211,10 +217,15 @@ with `BtnEscapeActivate` while held, the label centred at the strip's own `offse
 at its last `.`; `FUN_004a0d20` hands the result to `FUN_005c51a0` on the `MEMENTO` control, so the
 image the primitive draws is **the profile's memento file name without its extension**, and
 `momento_temp` in the data is a placeholder the runtime always replaces. `FUN_004113b0` seeds
-`DAT_0064b684` with `MS_P_InitialPinup1.jpg` when a profile is reset, and the 22 names the campaign
-can award are a 12-byte-record table at `0x0061af6c` pointing into the string block at `0x0061e12c`.
-Which mission awards which is the campaign's business and not this screen's; this screen draws
-whatever the profile holds.
+`DAT_0064b684` with `MS_P_InitialPinup1.jpg` when a profile is reset, and the names the campaign can
+award are a 12-byte-record table at `0x0061af6c`: a `char *` into the string block at `0x0061e12c`,
+a mission number and a third field of 0, 1, 2 or 4. It holds 23 records, 7 of them with mission 0
+(`InitialPinup1`, `InitialPinup3`, `JustineBattleax`, `Mom`, `DoggiePhoto`, `Swan&NathaninCabin`,
+`ZacharyandPlane`) and 16 naming a mission, whose number agrees with the digits in their own file
+names (`MS_P_12_01_BettysScreentest2.jpg` against mission 12). The table is read from
+`FUN_004113b0`, `FUN_00410270` and `0x0040c85f`. Which record an awarding picks, and what the third
+field selects, is the campaign's business and not this screen's; this screen draws whatever the
+profile holds.
 
 `FUN_005c4b30` binds the control from the **dialog's own** `PRIMITIVES`, so the position (`[533, 326]`
 in every campaign dialog) is authored while the picture is not. The script then places the shadow
@@ -258,9 +269,10 @@ released.
 
 `UI/PauseScreens.cs` composes the campaign pause sheet at its authored coordinates and
 `Flight/OriginalPauseBoard.cs` hangs it over the flown world in the Original presentation; the
-Built-in presentation keeps `Flight/PauseBoard.cs`. `UI/Menu/EscapeDialog.cs` is the `escape.zrd`
-reader and `UI/Menu/MissionMap.cs` the one map drawer this screen shares with the campaign briefing,
-which is where the world window and the pin placement live.
+Built-in presentation keeps `Flight/PauseBoard.cs`. `UI/Menu/EscapeDialog.cs` reads `escape.zrd`,
+its Instant Action twin and the load screen's `Loading.zrd`, and `UI/MissionMap.cs` is the one map
+drawer this screen shares with the campaign briefing and the load screen, which is where the world
+window and the pin placement live.
 
 **The three authored faces meet one of ours.** The extraction ships no menu typeface, so
 `BtnEscapeNormal`, `BtnEscapeRollover` and `BtnEscapeActivate` become one face in three palette

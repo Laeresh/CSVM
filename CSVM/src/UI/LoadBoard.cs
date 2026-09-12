@@ -20,15 +20,16 @@ public sealed partial class LoadBoard : Control
     /// <summary>Builds the board for one launch. <paramref name="campaign"/> picks the paper sheet
     /// over the blackboard, and <paramref name="missionType"/> the Instant Action dialog whose four
     /// texts the blackboard writes, null for a mode of ours. <paramref name="subject"/> is the
-    /// sheet's second line, and the heading a mode of ours takes in place of a dialog.</summary>
+    /// heading a mode of ours takes in place of a dialog. <paramref name="sheet"/> is the campaign
+    /// screen's whole content, null where the extraction could not answer for it.</summary>
     public static LoadBoard Build(
         string dataRoot, string zrdrPath, string messagesPath, bool campaign, string subject,
-        string? missionType)
+        string? missionType, LoadSheet? sheet = null)
     {
         var board = new LoadBoard
         {
             _dataRoot = dataRoot,
-            _board = LoadScreens.For(campaign, subject, missionType, zrdrPath, messagesPath),
+            _board = LoadScreens.For(campaign, subject, missionType, zrdrPath, messagesPath, sheet),
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,

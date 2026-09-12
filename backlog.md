@@ -1999,56 +1999,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not thread its load either; a pump from inside a blocking build is a legitimate shape if the
   Godot frame loop can be driven that way. *Playtest after fix:* launch any Instant Action mission
   from the menu and watch the bar step and the propeller turn until the world appears; then a
-  campaign launch for the sheet's own bar. *Cross-refs:* `BL-814` (what the campaign sheet
-  draws while this one makes it move), `BL-314` (the splitscreen
-  race whose clock starts while a load screen is still up), `docs/org/loading-screen.md`.
-
-- `BL-814` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The campaign
-  load screen is a bare chart sheet, where the original draws the mission's map with its pins and
-  icons, the objectives parchment listing the mission's objectives, and the profile's memento.**
-  *The decode and the drawer are done; only this screen's own wiring remains.* The pause screen
-  reaches all of it through the same control class from a sibling constructor, so
-  `docs/org/pause-screen.md` carries the decode and `CSVM/src/UI/MissionMap.cs` is the drawer:
-  the sheet at its crop (⚠ the `CLIP` is a rectangle in the map BITMAP, not on the screen, which is
-  what `docs/verification.md`'s SRC-16 is about), the reveal's pins and an icon placed by world
-  position. `CSVM/src/UI/Menu/EscapeDialog.cs` reads the same `MAP`, `MEMENTO` and
-  `OBJECTIVESLIST` blocks out of `escape.zrd`, whose campaign dialogs are content-identical to
-  `Loading.zrd`'s; `CSVM/src/UI/PauseScreens.cs` is the worked composition. Both open questions are
-  answered: `Objective OBJn index k` indexes `BriefingObjectives` (the keyed `IDENTITY` rows by
-  priority), and the `MEMENTO` bitmap is the profile's own memento image name with its extension
-  stripped, seeded `MS_P_InitialPinup1` by `FUN_004113b0` and awarded from a 22-entry table at
-  `0x0061af6c`. *What remains here:* `LoadScreens.CampaignSheet` still writes two lines of ours, so
-  give it the map, the parchment, the memento and the shadow the way `PauseScreens` does, keeping
-  the bar and the propeller; and decide whether the load screen places `OWNSHIP` and `MYZEP` at all,
-  since its own constructor binds neither and the pause screen's is the only one that does. Awarding
-  a memento per mission is still unbuilt, so both screens draw `ms_p_initialpinup1`.
-  *Evidence:* `OriginalScreenshots/Campaign Loading Screen CM01.png` and the two clips under
-  `OriginalScreenshots/Videos/` (`Loading Screen Mission CM01.mkv`, `Loading Screen Mission1.mkv`):
-  the map fills the sheet's frame, the objectives parchment sits top right with the mission's
-  numbered objectives, a photograph in a white border sits bottom right (the dog on one mission,
-  the pin-up on another, so it is the profile's memento rather than fixed art), the bar runs along
-  the bottom with 0 %, 50 % and 100 % marks, a compass rose at bottom left and the propeller at
-  bottom right. Each campaign dialog (`loading_c%d%d`, 24 of them, `extracted/zrdr/Loading.zrd.json`
-  `loading_c31` at line 254 onward) carries a `MAP` primitive naming the map bitmap with a screen
-  clip and a world window (`NW-m1MAP` at 16,19, clip 211,51 to 784,551, world -1571,5796 to
-  -7715,11940), a `MEMENTO` primitive at 533,326 whose `momento_temp` bitmap is a placeholder the
-  runtime replaces, a `PROGRESS` at 90,548, and a `LOADING_SCRIPT` that turns on the shared
-  `OBJECTIVESLIST` (parchment at 555,6, title at 595,25 in `ObjListTitle`, list at 580,50 wrapped 190
-  by 255, spacing 5), binds `OBJ1` to `OBJ4` by objective index, places the memento's shadow
-  (`momento_shad` centred on 661,454), the mission's pins (`pin1` to `pin4` at authored points),
-  the zeppelin and device icons, and spins the device forms. `FUN_004a1910` binds `OBJECTIVESLIST`
-  and `MEMENTO` only when `FUN_004639a0` holds (`docs/org/loading-screen.md`). Ours draws `loadframe`,
-  the unlit bar and two lines of our own text (`CSVM/src/UI/LoadBoard.cs:65-76`). *⚠ Traps:* a
-  reader that runs the script once and stops draws no pins at all on the seven dialogs that place
-  theirs past an authored `Wait`; `PauseSheet` settles its reveal for that reason, and a load screen
-  that reuses it must too. Which pin bitmap stands at each point is authored per dialog and there is
-  no reveal rule (`pin6` is the question-mark flag and `pin6_1` the numbered six), so never derive a
-  numbered set. Do not fold this into the animation (`BL-812`): the sheet is right or wrong on a
-  still screen. *Playtest after fix:* `--menu=loadboard-campaign` beside the CM01 screenshot at the
-  same window size, then a real campaign launch to see the memento and objectives follow the profile
-  and the mission. *Cross-refs:* `BL-812`, `docs/org/pause-screen.md`,
-  `docs/org/loading-screen.md`, `docs/formats/zrdr.md`, `CSVM/src/UI/PauseScreens.cs` and
-  `CSVM/src/UI/MissionMap.cs` (the composition and the drawer to reuse).
+  campaign launch for the sheet's own bar. *Cross-refs:* `BL-314` (the splitscreen
+  race whose clock starts while a load screen is still up), `docs/org/loading-screen.md` (the
+  campaign sheet's own content, which this one has to make move without changing).
 
 - `BL-825` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: footage]` **Whether the
   build stamp stays in the corner of the Original menu, where the original draws no text at all.**
@@ -2082,6 +2035,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   own pilot takes the player shape (per-pane, the decoded intent read per viewer) or only seat 0;
   then key on the pane's viewer, pinned in the `ground-shadow` suite over a two-pane session.
   *Cross-refs:* `BL-331` (the shadow's open halves), `docs/verification.md` SRC-12.
+
+- `BL-854` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The pause and
+  load screens always draw the opening pin-up, where the original's campaign awards a keepsake per
+  mission and shows whichever one the profile holds.** *Evidence:* both screens read the memento
+  slot the profile carries, and nothing ever writes it, so every sheet shows
+  `ms_p_initialpinup1`; the reference clips under `OriginalScreenshots/Videos/` show a dog
+  photograph on one mission and the pin-up on another, and the extraction ships 25 `ms_p_*`
+  pictures for the 23 the award table names. The table is decoded in `docs/org/pause-screen.md`:
+  12-byte records at `0x0061af6c`, each a name into the string block at `0x0061e12c`, a mission
+  number and a third field of 0, 1, 2 or 4, read from `FUN_004113b0`, `FUN_00410270` and
+  `0x0040c85f`. Seven records carry mission 0 (`MS_P_DoggiePhoto` among them) and 16 name a
+  mission whose number matches the digits in their own file name. *Fix shape:* decode what picks a
+  record (the third field, and what mission 0 means for the seven), then persist the awarded name
+  on `CampaignProfileDef` and hand it to the two sheets in place of the seeded constant; the
+  drawing side needs nothing, since both screens already draw whatever name they are given.
+  *⚠ Traps:* the memento name is stored with its extension stripped, so a profile field holding
+  `MS_P_DoggiePhoto.jpg` and a bitmap lookup of `ms_p_doggiephoto` are the same value at two
+  stages; do not add a second constant beside `Launcher.SeededMemento` for a new default, since a
+  profile with no award is exactly the seeded case. *Playtest after fix:* fly past the first
+  awarding mission, then pause and relaunch to see the same picture on both screens.
+  *Cross-refs:* `docs/org/pause-screen.md` (the table and the name rule),
+  `docs/org/loading-screen.md`, `CSVM/src/Session/CampaignProfileStore.cs`.
 
 ## Splitscreen
 

@@ -815,6 +815,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   against the extracted sheet gave a mean per-pixel channel-sum distance of 7.8 for the source crop
   and 180.0 for the screen clip, which is not a close call in either direction
   (`org/pause-screen.md`).
+- **SRC-17** — **Two definition files keyed alike are not copies of each other; compare the bodies
+  before reading one screen's content out of the other's file.** `Loading.zrd` and `escape.zrd`
+  carry the same 24 `loading_c<world><mission>` keys and their `PRIMITIVES` blocks agree entry for
+  entry, which is what "content-identical" was inferred from. Flattening and diffing every pair
+  showed every `LOADING_SCRIPT` to be a superset of the matching `ESC_SCRIPT`: 1422 characters
+  against 788 on `loading_c31`, and 20 authored waits against 7 across the set, the extra beats
+  being the propeller cycle and the mission's device icons (`org/loading-screen.md`).
 
 ## What this project cannot verify itself
 

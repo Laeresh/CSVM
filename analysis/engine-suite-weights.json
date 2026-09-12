@@ -191,6 +191,7 @@
     "launch-direction-cache": 0.003,
     "launch-velocity-decay": 0.019,
     "lens-flare-gates": 1.537,
+    "load-sheet": 0.23,
     "loadout-bind": 0.819,
     "loadout-forrig": 0.433,
     "look-stick": 0.815,

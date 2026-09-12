@@ -91,9 +91,9 @@ are authored artwork, not a runtime choice and not a capture of the player's own
 Multiplayer is the only family whose pictures vary, and they vary by game mode rather than by map:
 the `c` dialogs carry `MP-flagcapture`, `MP-flagreturn`, `MP-shotdown` and `MP-crash`; the `z`
 dialogs carry `MP-gasbag`, `MP-cannon`, `MP-torpedo` and `MP-zepdown`; `d` and `t` carry the same
-three as Instant Action. Campaign dialogs carry no pictures at all, use the `loadframe` background
-with the parchment objectives list, and place their bar at `90,548` with `prog_blkload` over
-`prog_redload`.
+three as Instant Action. Campaign dialogs carry none of those photographs: they use the `loadframe`
+background with the parchment objectives list, place their bar at `90,548` with `prog_blkload` over
+`prog_redload`, and draw the mission's own chart, flags and icons out of the script decoded below.
 
 What the Instant Action letter does select is the text:
 
@@ -130,6 +130,48 @@ Instant Action and multiplayer screens use the `loadframempt2` and `loadframempt
 respectively, both 800x600, with the bar at `564,546` drawing `prog_red` over `prog_blk`. An
 animated propeller sits beside it: a bitmap cycle at `506,549` stepping `prp0` to `prp7`, `prp15` to
 `prp22` and `prp30` to `prp37` at **6.0 fps**.
+
+## The campaign screen is the mission's chart
+
+The 24 `loading_c<world><mission>` dialogs are one screen with one map swapped in. All 24 author the
+same `PRIMITIVES`, `BUTTONS` and background: `loadframe`, a `MAP` at `POSITION [16, 19]`, a
+`MEMENTO` at `[533, 326]` whose `momento_temp` bitmap the runtime replaces, and a `PROGRESS` at
+`[90, 548]` drawing `prog_blkload` over `prog_redload`. Twelve map bitmaps serve the 24 missions
+(`NW-m1MAP`, `HA-m1MAP`, `RM-m1map`, ...), each cropped `CLIP [211, 51]..[784, 551]` bar the four
+Manhattan dialogs' `[211, 30]..[784, 530]`, with a per-mission `WORLD` window. How that crop and
+that window are read is in [`pause-screen.md`](pause-screen.md), which shares this screen's map
+control.
+
+⚠ **A campaign dialog's `LOADING_SCRIPT` is a superset of the `ESC_SCRIPT` its `escape.zrd` twin
+carries, so neither file's copy of a dialog stands for the other's.** The `PRIMITIVES` blocks agree
+entry for entry across all 24, and so do the flag pins and the memento shadow; the loading script
+adds the propeller cycle and the mission's device icons. `loading_c61` (`CM01`) is the smallest
+case: 24 beats against the pause dialog's 20, the four extra being the `Cycle`/`On` pair for the
+propeller and a `Pict`/`On` pair placing `NW-m1pda_icon` at `[106, 419]`.
+
+The script's vocabulary is the briefing's ([`../formats/briefing.md`](../formats/briefing.md)) plus
+one opcode of its own. Censused over the 24 campaign dialogs: `On` 315, `Pict` 180, `Objective` 86,
+`Off` 47, `Spin` 46, `Cycle` 24, `ToBack` 24, `Wait` 20, `Line` 1, and nothing else. There is no
+`PlaySound` and no `WaitForMarker`, so nothing waits on a narration.
+
+- **`Cycle`** is the propeller, and only this screen's script authors one. Every dialog authors the
+  same beat: `SPINNER` at `[435, 535]`, six bitmaps (`prp0`, `prp7`, `prp15`, `prp22`, `prp30`,
+  `prp37`) at **6.0 fps**, turned on by the `On` after it. The position is the dialog's own, not the
+  Instant Action board's `506,549`.
+- **`Objective OBJn index k`** binds a parchment row to entry `k` of the mission's own
+  `objectives.zrd` list, 0-based over the keyed `IDENTITY` rows in priority order
+  ([`../formats/objectives.md`](../formats/objectives.md)). 86 such beats across the 24 dialogs, and
+  a dialog may bind more rows than its mission has objectives, in which case the extra rows have no
+  text to show.
+- **The memento's shadow** is an ordinary `Pict`: `momento_shad` centred on `[661, 454]`, in all 24.
+- **The flag pins** are `OBJPIN1` upward, 71 across the 24 dialogs, each `Pict` naming its own
+  bitmap at its own point. ⚠ 19 of the 24 dialogs place their pins past an authored `Wait` of
+  `0.1` seconds, always after a `Pict`/`Off`/`Spin` group setting up a device form, so a reader that
+  runs the script once and stops draws those charts with no flags at all.
+- **The device icons** are `Pict`s too, at points the dialog authors. Five dialogs place
+  `NW-m1wv_icon` and four place `singledev`, which are the same bitmaps the shared block gives
+  `MYZEP` and `OWNSHIP`. ⚠ Their presence on a chart is not the runtime placing an icon by world
+  position: `FUN_004a1910` binds neither widget, so on this screen that art is authored scenery.
 
 ## The progress bar is a hand-authored milestone table
 
@@ -190,8 +232,25 @@ hangs it over the build, through the campaign boards' own surface (`docs/org/cam
 the chart sheet for a campaign launch, the blackboard with its three centred photographs for
 everything else. An Instant Action launch reads `loading_i1<letter>` and writes its four texts at
 the positions and wrap widths in the table above; the environment digit is not plumbed, since it
-selects nothing bar the `loading_i6a` heading. The multiplayer family has no caller here, and the
-campaign sheet's own content is a separate decode, so that screen still writes two lines of ours.
+selects nothing bar the `loading_i6a` heading. The multiplayer family has no caller here.
+
+**The campaign sheet is the mission's own dialog and nothing of ours.** `UI/Menu/EscapeDialog.cs`
+reads `Loading.zrd` the way it reads `escape.zrd`, `LoadSheet` resolves the launch's dialog key,
+its mission's objectives and the profile's memento, and `UI/MissionMap.cs` draws the chart at its
+source crop with what the script placed on it. A launch takes the dialog its `cm_sequence` position
+names, so the chart, the flags, the icons and the parchment rows are the mission being built.
+The script is run out rather than played, the way the pause sheet's is, which is what releases the
+`Wait` those 19 dialogs place their pins behind.
+
+**The load screen places no ownship and no zeppelin icon**, because its own constructor binds
+neither and the pause screen's is the only one that does. The five charts carrying `NW-m1wv_icon`
+and the four carrying `singledev` get them from their own script.
+
+**A row on the parchment is never marked here.** The screen stands before the mission it lists has
+run, so the objectives list draws its rows and no check.
+
+**Awarding a memento is not built**, so both screens draw `ms_p_initialpinup1`, the picture the
+original's own profile reset seeds.
 
 **The three authored faces meet two of ours.** The extraction ships no menu typeface, so a board
 writes in the one the engine has: `loadListTitle` becomes that face at 17 pixels, which puts its
@@ -208,7 +267,8 @@ nearest dialog, the `d` family's, would state a win condition neither mode has.
 
 **What is drawn from the bar and the propeller is their still art alone.** The unlit strip
 (`prog_blkload`, `prog_blk`) is drawn at its authored position and nothing ever fills it; the
-propeller draws frame `prp0` and never steps. Both are the same blocker: the build is one
+propeller draws frame `prp0` and never steps, on the campaign sheet from its `Cycle` beat's own
+first bitmap and its own `435,535`. Both are the same blocker: the build is one
 synchronous block, so `Launcher.BeginLaunch` shows the board, lets one frame render, and builds on
 the next tick, and nothing can be redrawn during the build at all. A fill or a turning propeller
 needs that build decoupled from the draw, which is its own item; the two pieces this page supplies
