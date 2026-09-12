@@ -225,6 +225,10 @@ public partial class Launcher : Node3D
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
+    // Where a flight left early lands, settled by the launch that started it rather than by the
+    // exit press: the menu's own launch paths write it (MenuReturnDestination.ForLaunch) and a
+    // restart keeps it, since a restarted mission was launched from the same screen.
+    private MenuReturnDestination _exitDestination = MenuReturnDestination.TopLevel;
     // The process's one chapter cinema, so a chapter's film plays once per program run. Entering
     // the campaign plays it; leaving to the main menu and coming back does not. A restart plays the
     // current chapter's film again until that chapter's first mission has been flown. This is a
@@ -1691,6 +1695,7 @@ public partial class Launcher : Node3D
     private void StartSessionFromMenu(LaunchExit launch)
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
+        _exitDestination = MenuReturnDestination.ForLaunch(launch);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
@@ -1767,6 +1772,7 @@ public partial class Launcher : Node3D
     private void StartCampaignFromMenu(CampaignMissionExit mission)
     {
         var (planes, pads, fits, customs) = Unpack(mission.Seats);
+        _exitDestination = MenuReturnDestination.ForLaunch(mission);
         _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
             pads.Count, fits, customs);
         StepSortieSeed();
@@ -1812,13 +1818,15 @@ public partial class Launcher : Node3D
         GD.Print($"rng: master seed {_masterSeed} ({how})");
     }
 
-    // The boards' Exit item: back to the launchscreen when this process launched into it, out of
-    // the game otherwise. The routing Esc used to do, now reachable from a pad.
+    // The boards' Exit item, the pause sheet's among them: back to the screen this flight was
+    // launched from when the process launched into the menu, out of the game otherwise. The
+    // routing Esc used to do, now reachable from a pad. Every way a session ends without a result
+    // (the sheet, the wrap-up board, the scoreboard) arrives here, so one destination serves them.
     private void ExitSession()
     {
         if (_menuDriven && _session is { InSession: true })
         {
-            ReturnToMenu(MenuReturnDestination.TopLevel);
+            ReturnToMenu(_exitDestination);
             return;
         }
         BlankAndQuit();

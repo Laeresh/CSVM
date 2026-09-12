@@ -633,7 +633,8 @@ from flight lands on the screens as they were left; `Tick` runs it only while `S
 ## src/UI/Menu/BuiltIn/BuiltInPresentation.cs
 The Built-in presentation (`CSVM.UI.Menu.BuiltIn`): `LaunchMenu` registered under
 `PresentationId.BuiltIn`. `Activate` builds the launchscreen under the parent node on the first
-call and maps the return destination onto it, the top level being the Mode screen, `CabinReturn`
+call and maps the return destination onto it, the top level being the Mode screen, `InstantAction`
+the wizard's first screen over the setup that flew, `CabinReturn`
 the profile's cabin and `DebriefReturn` the scrapbook on the flown mission; the `--menu=` aid is
 consumed on that first call, so a return from flight lands on Mode with the cursors kept. `Tick`
 runs the menu's frame, `Hide` takes it off screen and `Deactivate` frees the node. `Menu` exposes
@@ -993,14 +994,12 @@ arrives as one jump. The four device reads are injected delegates, so the seat i
 Built-in ignores the pointer; Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs
-Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`
-and `DebriefReturn(profile, missionSeq)`. The host names the destination and the active
-presentation maps it into its own graph at `Activate`, so no presentation-specific screen id
-crosses the seam. A destination names where the player stands and never a store: the two campaign
-returns name a profile, and the store it is re-read from is the presentation's own. The `--menu=`
-aid is not a destination either, reaching the cold start alone, so a return is always one of these
-three. The namespace seam this whole folder is held to, and the two scans that enforce it, are in
-[../menu-presentations.md](../menu-presentations.md).
+Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `CabinReturn(profile)` and `DebriefReturn(profile, missionSeq)`. The host names the destination and the
+active presentation maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam. `ForLaunch(exit)` reads off a launch's own exit the screen it came from, which is
+where a flight left early lands; the exit and not the session's spec, since a spec inherits the command line's `--campaign=` and would call a Free Flight launched afterwards a campaign mission. A
+destination names where the player stands and never a store: the two campaign returns name a profile, the store it is re-read from is the presentation's own, and an Instant Action return names
+nothing, the sortie's setup being the feature's. The `--menu=` aid is not a destination either, reaching the cold start alone, so a return is always one of these four. The namespace seam this whole
+folder is held to, and the two scans that enforce it, are in [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuChapters.cs
 The shared chapter roster: the eight chapter worlds as `MenuChapter(Code, DangerZones)` in code

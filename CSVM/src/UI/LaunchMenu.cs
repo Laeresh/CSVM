@@ -719,6 +719,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         return dirty;
     }
 
+    /// <summary>Opens the wizard's first screen with the Instant Action mode standing, the screen
+    /// an Instant Action sortie returns to. The sortie's own settings are the feature's and are
+    /// left alone, so the preset, the mission, the waves and the wingmen read as they did when FLY
+    /// was pressed; the cursors are this screen's own and survived the flight with it.</summary>
+    public void OpenInstantAction()
+    {
+        _modeIndex = (int)MenuMode.Stunt;
+        _mode = MenuMode.Stunt;
+        _screen = Screen.Environment;
+        Rebuild();
+    }
+
     /// <summary>Opens the campaign on the named profile's cabin, the screen a flown mission
     /// returns to. The profile is re-read from the store, so what the mission just recorded (a
     /// completed objective, an advanced position, a paid reward) is what the cabin shows. An

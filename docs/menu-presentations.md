@@ -402,16 +402,23 @@ when the menu comes back, said semantically; the hierarchy is closed:
 
 | Destination | Raised by | Built-in lands on | Original lands on |
 |---|---|---|---|
-| `TopLevel` | the cold start, the boards' Exit, a failed build, every switch | the Mode screen with its cursors kept | the top level with its list cursors kept and every pick dropped |
-| `CabinReturn(profile)` | leaving a campaign screen for the cabin | the cabin over the named profile, re-read from the presentation's store | the same, through its own campaign graph |
+| `TopLevel` | the cold start, a Free Flight or Dogfight sortie left early, a failed build, every switch | the Mode screen with its cursors kept | the top level with its list cursors kept and every pick dropped |
+| `InstantAction` | an Instant Action sortie left early | the wizard's first screen, over the setup that flew | the Instant Action screen, over the same setup |
+| `CabinReturn(profile)` | leaving a campaign screen for the cabin, and a campaign mission left early | the cabin over the named profile, re-read from the presentation's store | the same, through its own campaign graph |
 | `DebriefReturn(profile, missionSeq)` | a campaign mission's end, won or lost | the scrapbook on the flown mission | the book on the flown mission |
+
+Which of them a flight comes back to is the launch's own business: `MenuReturnDestination.ForLaunch`
+reads it off the exit that started the flight, and `Launcher` holds that answer for every way a
+session ends without a result (the pause sheet's Exit, the wrap-up board, the scoreboard). A
+campaign mission left early lands on the cabin and never the debrief, since an abandoned mission
+was not flown; a mission that ends raises `DebriefReturn` instead.
 
 A destination names where the player stands and never a store or a screen id. The store a profile
 is re-read from is the presentation's own (`user://Profiles`, or the scratch store a suite sets), and
 a destination a graph lacks maps to the nearest one it has, with a logged warning when a named
 profile cannot be read. The `--menu=` aid is not a destination: it reaches the cold start alone (the
 launcher parks it, the factory reads it, the first `Show` consumes it), so a return after a flight is
-always one of the three above and never the aid's screen again.
+always one of the four above and never the aid's screen again.
 
 ## The asset policy
 
@@ -527,7 +534,7 @@ the contract above, not from Original's code. In particular it does not inherit:
 
 What it does inherit, and may rely on: the features and their operations, the seats and their
 semantic commands, the audio service and its narration handoff, the store and the resolution rule,
-the four exits and the three destinations, the debug-join seating of device-less players, and the
+the four exits and the four destinations, the debug-join seating of device-less players, and the
 launcher's whole leg (spec derivation, pad binding, the build, the failed-build return, the
 frame-deferred switch).
 

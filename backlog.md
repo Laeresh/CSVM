@@ -623,7 +623,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   numbers does not change that, and must not be used to try to.
   *Cross-refs:* `PT-120` (the pad sitting that judges the three), `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
-
 - `BL-399` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Track Target's camera behaviour, `L` is reserved, the camera itself is
   undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
   original's `Views 1 → Track Target` binds `L` (free in our flight keymap; our `L` is the
@@ -1318,7 +1317,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Ruled out, do not re-chase:* the clutter fade (`graphics.clutterFarFade=false` does not touch it); collapsed clutter cards writing depth or a dark fragment; C5's fog-volume clutter overlapping the templates fade; the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter paths behind `CameraRenderClutter`, while ordinary scene nodes draw through `FUN_004d4a20`); a per-node, per-chunk, per-material or per-texture cull range (there is none, the chunk gather `FUN_004d4db0` admits on frustum, occluder planes and a 50-ring bucket cap only, so the far plane is the sole range limit); a per-texture lighting term; and decorrelating the dither lattice per stamp.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/textures.md` (the chain, the two selection rules, the bias), `docs/org/weather.md` (the far plane), `docs/formats/gamez.md`, `analysis/item9-depth-bias/CBLOCK-LOD.md` (the `cblock` ground is 256² over a 256 m tile, one texel per metre).
 
-
 - `BL-720` `[Bug]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM24]` **The Dante's
   engine fires moved between the engines because the effect-template pool was shorter than the
   engine bank; the sizing is fixed and the report is owed a look.** *Evidence:* the mechanism is
@@ -1992,7 +1990,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset, so nothing animates the panel per frame.
-
 
 - `BL-842` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **A list's
   scroll thumb is a fixed 11-pixel tile where the original stretches it to the share of the list
@@ -2828,18 +2825,6 @@ usual.
   `CommitsOn` names; check the user's CM01 was a win before blaming the pool. *Cross-refs:*
   [`docs/formats/saved-games.md`](docs/formats/saved-games.md) (`Persist.NNN`),
   `docs/architecture/Session.md` (the log's contract).
-
-- `BL-862` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Exit from a flight returns to where it was
-  launched: the cabin for a campaign mission, the Instant Action screen with its setup for an
-  Instant Action one.** *Evidence:* `Session/Launcher.cs` `ExitSession` routes every menu-driven
-  exit to `MenuReturnDestination.TopLevel`, so leaving a mission early lands on the presentation's
-  top level and the way back to the cabin is the whole campaign walk again. *Fix shape:* two new
-  return destinations beside `DebriefReturn`: a cabin return for the profile (nothing recorded,
-  no attempt, no persist capture, no scrapbook page: an abandoned mission was not flown) and an
-  Instant Action return that reopens the screen with the preset and every dropdown as they were
-  when FLY was pressed; the pause board's Exit picks by `SessionSpec`. *⚠ Traps:* Exit is not a
-  loss; do not route it through the debrief. A CLI launch still quits. *Cross-refs:*
-  `UI/Menu/MenuReturnDestination.cs`, `PT-88` (the result carry this must not touch).
 
 - `BL-868` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM05]` **CM05 (C3/M04): one Brigand under the
   Pandora fails the mission; what wakes the authored instant loss, and is one enough?**

@@ -119,13 +119,14 @@ public partial class GameSession : Node3D
     // The presentation this session's boards take, resolved by the Launcher. The only board that
     // reads it is the pause screen, which the Original presentation composes from escape.zrd.
     private readonly UI.Menu.PresentationId _presentation;
-    // The boards' Exit item, routed by the Launcher (launchscreen or quit).
+    // The boards' Exit item, routed by the Launcher (the screen this flight was launched from, or
+    // quit when nothing launched it).
     private readonly Action _exitSession;
     // The boards' Restart item on an Instant Action or campaign mission: the Launcher frees this
     // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
-    // the named profile's cabin, carrying the result so a page can be opened on it. Null
+    // the named profile's debrief, carrying the result so a page can be opened on it. Null
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
     // return to and simply stays in the flown world).
     private readonly Action<string, CampaignMissionResult>? _campaignMissionEnded;

@@ -206,6 +206,19 @@ vtable slot `+0x30` is the click handler; every handler opens with `FUN_005c2b90
 the other two and they are never drawn or hit even in a campaign, which is why the reference stills
 show four strips. The executable's own gate is live; the data simply does not answer it.
 
+**QUIT's two targets differ by one code, and the code is as far as the decode reaches.**
+`FUN_00419700` (the campaign one) and the untyped block at `0x00419440` (the other) both enter the
+shell state at `DAT_0071d57c`, the `CZGOSState` `FUN_00416a10` builds, and both write
+`DAT_0064b348` on the way: 6 for a campaign, 4 otherwise, where a cold start leaves 1
+(`FUN_00416a10`) and the debrief 2 (`FUN_004194e0`). The state's own entry, `FUN_00416ad0`, reads
+that field for one thing only, tearing the mission down again on 6; which screen each code opens is
+not in the executable's own code and is presumably the shell script's. So the decode establishes
+that the original distinguishes leaving a campaign mission from leaving any other, and not what
+either lands on. This port lands each on the screen its flight was launched from, the campaign
+mission on the cabin and an Instant Action sortie on the Instant Action screen, which is also where
+the wrap-up board's `IAWU_B_CONTINUE` edge goes
+([menu-inventory.md](menu-inventory.md)).
+
 Each of the four is a three-bitmap strip with three faces: `escape_button1` with
 `BtnEscapeNormal`, `escape_button2` with `BtnEscapeRollover` under the pointer and `escape_button3`
 with `BtnEscapeActivate` while held, the label centred at the strip's own `offset [66, 7]` over a

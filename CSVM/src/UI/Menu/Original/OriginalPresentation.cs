@@ -334,6 +334,12 @@ public sealed class OriginalPresentation : IMenuPresentation
                 Log.Warn("ui", $"original presentation: cabin return could not seat '{cabin.Profile}'; the profile screen shows instead");
             }
         }
+        else if (destination is InstantActionReturn)
+        {
+            // The sortie's settings are the feature's, which outlives the flight, so the screen
+            // stands on them again; the roster re-read is the door's own.
+            _shell.OpenInstantAction();
+        }
         else if (destination is DebriefReturn debrief)
         {
             _shell.OpenCampaign();

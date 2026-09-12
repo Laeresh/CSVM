@@ -14,10 +14,12 @@ namespace CSVM.Testing;
 /// Every launch and every return through the presentation boundary, in both presentations, over a
 /// real <see cref="MenuHost"/> and a scratch profile store: Free Flight, Instant Action (an ace and
 /// a squadron), Dogfight (two seats) and a campaign mission each leave as their typed exit with the
-/// host hiding the presentation; a top-level return lands on the top level itself even when the
-/// process started on a <c>--menu=</c> aid; the debrief and cabin returns land on the book and the
-/// cabin; and a presentation fallback before a return lands on Built-in's top level with the
-/// request kept. The two hosts stand for two processes, one started under each presentation.
+/// host hiding the presentation; every launch names the screen it came from as the way back, so an
+/// Instant Action return lands on its own screen with the setup that flew and a campaign mission
+/// names the cabin; a top-level return lands on the top level itself even when the process started
+/// on a <c>--menu=</c> aid; the debrief and cabin returns land on the book and the cabin; and a
+/// presentation fallback before a return lands on Built-in's top level with the request kept. The
+/// two hosts stand for two processes, one started under each presentation.
 /// </summary>
 internal static class MenuLaunchReturnSuites
 {
@@ -35,7 +37,9 @@ internal static class MenuLaunchReturnSuites
         "every launch and return through the boundary in both presentations over a scratch store: "
         + "a Built-in process started on --menu=chapter opens on Chapter once, Free Flight, an ace "
         + "duel, a squadron, a two-seat Dogfight and a campaign mission each leave as their typed "
-        + "exit with the host hiding the screen, every top-level return lands on Mode with the "
+        + "exit with the host hiding the screen, each launch names the screen it came from as its "
+        + "return, the Instant Action one landing back on the wizard over the setup that flew, "
+        + "every top-level return lands on Mode with the "
         + "cursors kept, the debrief and cabin returns land on the book and the cabin, Back on Mode "
         + "quits and Options' apply switches; an Original process started on --menu=free-flight "
         + "opens on Free Flight once and does the same over the decoded layout; and Original "
@@ -229,6 +233,8 @@ internal static class MenuLaunchReturnSuites
             var launch = run.Expect<LaunchExit>();
             ctx.Check(launch is { Mode: MenuMode.Free, Chapter: "C1", InstantAction: null, Seats.Count: 1 },
                 $"Free Flight leaves as one Free LaunchExit for C1 with one seat ({launch?.Chapter}, {launch?.Seats.Count})");
+            ctx.Check(launch != null && MenuReturnDestination.ForLaunch(launch) is TopLevelReturn,
+                $"whose launch origin is the top level, the only screen behind a Free Flight sortie ({Origin(launch)})");
             ctx.Check(!menu.Visible, $"the launchscreen is off screen after the exit");
 
             run.Show(MenuReturnDestination.TopLevel);
@@ -280,6 +286,14 @@ internal static class MenuLaunchReturnSuites
         var ace = run.Expect<LaunchExit>();
         ctx.Check(ace is { Mode: MenuMode.Stunt, Chapter: "C4", InstantAction: { MissionType: "dogfight_ace" } },
             $"an ace duel leaves as one Instant Action LaunchExit with the ace def ({ace?.Chapter}, {ace?.InstantAction?.MissionType})");
+        ctx.Check(ace != null && MenuReturnDestination.ForLaunch(ace) is InstantActionReturn,
+            $"and its launch origin names the Instant Action screen as the way back ({Origin(ace)})");
+        run.Show(MenuReturnDestination.InstantAction);
+        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Sky Haven",
+            $"the Instant Action return lands on the wizard's first screen over the sortie's own environment ({menu.ShownScreen}, {menu.ShownRowText})");
+        run.Press(Accept);
+        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Dogfighting an Ace",
+            $"with the mission it flew still the pick ({menu.ShownRowText})");
         run.Show(MenuReturnDestination.TopLevel);
         ctx.Check(menu.ShownScreen == "Mode", $"the return lands on Mode ({menu.ShownScreen})");
 
@@ -325,6 +339,8 @@ internal static class MenuLaunchReturnSuites
         var dogfight = run.Expect<LaunchExit>();
         ctx.Check(dogfight is { Mode: MenuMode.Versus, Seats.Count: 2 },
             $"Dogfight leaves as one Versus LaunchExit for both seats ({dogfight?.Mode}, {dogfight?.Seats.Count})");
+        ctx.Check(dogfight != null && MenuReturnDestination.ForLaunch(dogfight) is TopLevelReturn,
+            $"whose launch origin is the top level, a Dogfight carrying no Instant Action def ({Origin(dogfight)})");
         run.Show(MenuReturnDestination.TopLevel);
         ctx.Check(menu.ShownScreen == "Mode" && run.Host.Seats.Count == 2 && !setup.Seats[1].Locked,
             $"the return lands on Mode with both seats kept and the picks dropped ({menu.ShownScreen}, {run.Host.Seats.Count})");
@@ -356,6 +372,8 @@ internal static class MenuLaunchReturnSuites
         var mission = run.Expect<CampaignMissionExit>();
         ctx.Check(mission is { Profile: Pilot, Seats.Count: 1 } && mission.MissionSeq == seq,
             $"FLY MISSION leaves as one CampaignMissionExit for the pilot's next mission ({mission?.Profile}, seq {mission?.MissionSeq})");
+        ctx.Check(mission != null && MenuReturnDestination.ForLaunch(mission) is CabinReturn { Profile: Pilot },
+            $"whose launch origin is the cabin the mission was flown from, never the debrief ({Origin(mission)})");
         ctx.Check(menu.Campaign == null, $"the flow is closed behind the exit");
 
         // The director records the flown mission and saves; the returns re-read the profile.
@@ -455,6 +473,12 @@ internal static class MenuLaunchReturnSuites
             var launch = run.Expect<LaunchExit>();
             ctx.Check(launch is { Mode: MenuMode.Stunt } && launch.InstantAction?.MissionType == mission,
                 $"Fly Mission leaves as one Instant Action LaunchExit with the {mission} def ({launch?.InstantAction?.MissionType})");
+            ctx.Check(launch != null && MenuReturnDestination.ForLaunch(launch) is InstantActionReturn,
+                $"and its launch origin names the Instant Action screen as the way back ({Origin(launch)})");
+            run.Show(MenuReturnDestination.InstantAction);
+            var ia = run.Host.Features.Get<InstantActionFeature>();
+            ctx.Check(shell.Screen == OriginalScreen.InstantAction && ia.PresetIndex == preset && ia.MissionType.Key == mission,
+                $"the Instant Action return lands on the screen with the sortie's preset and mission standing ({shell.Screen}, preset {ia.PresetIndex}, {ia.MissionType.Key})");
             run.Show(MenuReturnDestination.TopLevel);
             ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"the return lands on the top level ({shell.Screen})");
         }
@@ -600,6 +624,11 @@ internal static class MenuLaunchReturnSuites
         ctx.Check(ReferenceEquals(before, host.Active) && menu.ShownScreen == "Mode" && host.Requested == PresentationId.Original,
             $"the return re-shows the same Built-in instance on Mode with the request still Original ({menu.ShownScreen}, {host.Requested})");
     }
+
+    // The destination a launch's own exit names, for a check's message; "no exit" where the leg
+    // above recorded none, which that leg's own check has already reported.
+    private static string Origin(MenuExit? exit) =>
+        exit == null ? "no exit" : MenuReturnDestination.ForLaunch(exit).GetType().Name;
 
     // Walks the Built-in cursor down to the named row, through the host's seat.
     private static void WalkTo(Run run, LaunchMenu menu, string text)

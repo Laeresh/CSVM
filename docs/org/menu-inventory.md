@@ -167,10 +167,9 @@ Loadout is L / Y, Presets is P / X.
 `--menu=campaign-cabin` re-enters that aid on the way back rather than the Mode screen. E43 inherits
 this: a semantic return destination has to beat the startup aid, or it cannot.
 
-⚠ **`LaunchMenu.OpenCampaignCabin` has no caller.** It is public, documented in
-`docs/architecture.md` as the campaign's return door, and reached from nothing in `CSVM/src` or
-`CSVM.Tests`: the mission-end path goes through `OpenCampaignScrapbook`, with the cabin behind the
-book. E43 either wires it or deletes it, and that architecture line needs correcting either way.
+`LaunchMenu.OpenCampaignCabin` is the campaign's return door and `OpenInstantAction` the Instant
+Action screen's: a mission or sortie left early comes back through one of them, while a mission that
+ended goes through `OpenCampaignScrapbook` with the cabin behind the book.
 
 ### Hangar transitions
 

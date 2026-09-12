@@ -55,6 +55,9 @@ public sealed class BuiltInPresentation : IMenuPresentation
         _menu.ShowMenu(aid);
         switch (destination)
         {
+            case InstantActionReturn:
+                _menu.OpenInstantAction();
+                break;
             case CabinReturn cabin:
                 _menu.OpenCampaignCabin(cabin.Profile);
                 break;
