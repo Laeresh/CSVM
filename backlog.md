@@ -517,6 +517,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   empty; if it does not, skip `none` cells on the non-swap path. *Cross-refs:* `BL-718`'s closing
   commit (the swap table holds weapon ids, not counts), `docs/formats/vehicle.md`.
 
+- `BL-847` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`docs/formats/destructibles.md` counts an ON_CALL sequence among a wreck's revival sources without the qualifier the runtime now applies.** *Evidence:* the revival paragraph says a revival can arrive from a `RESET_STATE`, an ON_CALL sequence, or another def's script; the runtime treats an ON_CALL sequence the def's own death chain calls through `CALL_SEQUENCE` as part of the death (`AnimRuntime.OwnDeathSequencesOf`), so only an ON_CALL sequence the chain does not call revives. The page's census of defs whose death chain switches `destroyed` back off (fourteen defs in three families) lacks C5's `agyrobus`, whose `destroy_craft` calls `randomdestseq` and one random branch of that switches `destroyed` off. *Fix shape:* qualify the sentence and add the fifteenth def. *Cross-refs:* PLAN-code-review-orch C23 (the runtime change and the census over the 16,114 compiled definitions).
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **M3-deferred, ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -778,6 +780,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-21, PERF-23 and PERF-27.
+
+- `BL-849` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`Collider.Summary` renders through the current culture, so the plane collider census line reads `3,8×3,0×5,6 m` on a German machine.** *Evidence:* the census lines in the three session files now log invariant through `Log`, but this one interpolates a string `Collider.Summary` pre-formatted with the current culture before the log sees it, so the dimensions carry a comma decimal separator on such a machine. Any other pre-built summary string logged the same way has the same fault. *Fix shape:* format the summary with `CultureInfo.InvariantCulture`, and grep the tree for other `ToString()` or `$"{x:0.0}"` summaries built outside a `Log` call. *Cross-refs:* PLAN-code-review-orch A3 and A6.
 
 ## Environment & world
 
@@ -1387,6 +1391,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the easing on the engine's wall clock (the pinned goldens hold under `--det` only if the
   deterministic clock is what the easing reads, so decide that first). *Cross-refs:* `BL-816`'s
   closing commit, `docs/verification.md` DET-11, `docs/formats/camparam.md`.
+
+- `BL-846` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **An aircraft's gun loop culls at its audible distance with no margin, while the turret voice culls at 1.1x as decoded.** *Evidence:* `AiWeaponAudio` culls at the cue's own audible distance, and `docs/formats/sounds.md` says the sound manager culls at the definition's own audible distance; `docs/formats/turrets.md` reads `FUN_00597c20`, the sound manager's own routine, as silencing a voice past 1.1x the RANGE pair's audible distance, which is what `GunVoice` now applies. The same routine plausibly serves the aircraft path. *Fix shape:* read `FUN_00597c20`'s callers for the aircraft loop; if the margin applies, move it into the shared cue reading and correct `sounds.md`, and re-pin the aircraft voice suites. *⚠ Traps:* the turret voice suites now hear at 1.05x and are silent at 1.15x; a shared margin must keep both. *Cross-refs:* PLAN-code-review-orch C26.
 
 ## Cameras & views
 
@@ -2836,6 +2842,14 @@ usual.
   `Log.Info` probe) is the reference for what physics holds. *Cross-refs:* `PT-142` (the flak
   flight the fix this hid still owes), `docs/verification.md`, `CSVM/src/Testing/TestHarness.cs`
   (`WithPrivateWorld`).
+
+- `BL-843` `[Cleanup]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`GD.Print` still stands in every `CSVM/src` file outside the three session files that now log through `Log`.** *Evidence:* about 263 calls remain, 124 of them under `Session/` in nineteen files (`CutsceneController.cs` holds ten, one in `Begin`). Each renders through the current culture and reaches neither the file sink nor the `--log=` filter. *Fix shape:* the same conversion the three session files took: `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), `Log.Error` for `PrintErr`, `Log.Raw` for a multi-line report, one interpolated string per call since `Log` takes a `FormattableString`; grep `CSVM.Tests`, `CSVM/src/Testing`, the root scripts and `analysis/` for every printed prefix first and move any reader in the same change. *⚠ Traps:* a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`BL-849`). *Cross-refs:* PLAN-code-review-orch A3 (the three files and the before/after log diff method).
+
+- `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.
+
+- `BL-845` `[Cleanup]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **Five log calls emit under a `campaign` category the vocabulary does not declare, and the logging page names a method that does not exist.** *Evidence:* `Log.Categories` and `docs/org/logging.md` declare nine closed names; `CampaignDirector.cs` (one site), `CampaignDangerZones.cs` (three) and `CampaignPersistLog.cs` (one) emit under `campaign`. The page documents `Log.Block(text)` where the code has `Log.Raw(text)`. *Fix shape:* either add `campaign` to the vocabulary and the page, or move the five to `core`; correct the method name. *Cross-refs:* PLAN-code-review-orch A3.
+
+- `BL-848` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **About 140 dated clauses remain in `backlog.md` entries that predate the no-dates rule.** *Evidence:* `Select-String '\d{4}-\d\d-\d\d'` over the file; every one is event narration ("landed 2026-08-05", "measured 2026-08-04 from the CAP-07 re-take") of the kind the writing rule sends to the closing commit's message. *Fix shape:* decide whether the old entries are swept (each date dropped, the standing fact kept, the evidence findable through `git log --grep`) or grandfathered until the entry closes. A sweep is mechanical but every clause needs a reading. *Cross-refs:* PLAN-code-review-orch A5 (the one dated clause the review found).
 
 ## Misc
 
