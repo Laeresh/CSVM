@@ -344,8 +344,14 @@ does, since the flight is what the leaf returns to. The rebinding pages hold the
 leaf through its PREFERENCES row. Where the install carries no decoded layout there is nothing to
 compose, so the Original strip is drawn and unbound and Built-in's row is left off.
 
-**Photo mode is not on this screen.** It is this port's own feature and the original authors no
-fifth strip, so it stays on the Built-in board rather than being added to the original's four.
+**Photo mode is a fifth strip the original does not author.** It is this port's own feature, so the
+sheet stands it in the authored plates and label offset the block's own RESUME carries, between
+RESUME and PREFERENCES in the order a cursor walks, and the four authored strips keep their own
+points. Where it stands is read off the block rather than fixed: the campaign block's two columns
+of two leave a 128-pixel channel between them on RESUME's row, which the 132-pixel plate takes with
+two columns of overlap at each neighbour's rounded end, while `ia_escape.zrd`'s three across leave
+no channel and the strip takes the free cell under RESUME instead. The hit test answers the earlier
+row in walk order for a column two strips share. Built-in's board keeps its own Photo Mode row.
 
 **The progress bar in a campaign dialog is not drawn.** Every campaign `escape.zrd` dialog carries a
 `PROGRESS` entry at `[90, 548]` copied from its `Loading.zrd` sibling, and `FUN_004a0d20` binds no

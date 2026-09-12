@@ -20,10 +20,10 @@ public readonly record struct PauseWorldIcon(string Bitmap, float WorldX, float 
 /// <summary>
 /// The pause screen's authored half: the dialog its mission resolves to, the shared block every
 /// dialog in the file borrows, the reveal that places the pins and picks the parchment's rows, and
-/// the labels the four strips carry. <c>InstantAction</c> says which file it was read from, and
-/// <c>Texts</c> holds the words an Instant Action dialog writes on the blackboard, empty for a
-/// campaign one. Built once per sortie, since none of it changes while the sortie runs.
-/// Decode: docs/org/pause-screen.md.
+/// the strips with their labels, in the order a cursor walks them. <c>InstantAction</c> says which
+/// file it was read from, and <c>Texts</c> holds the words an Instant Action dialog writes on the
+/// blackboard, empty for a campaign one. Built once per sortie, since none of it changes while the
+/// sortie runs. Decode: docs/org/pause-screen.md.
 /// </summary>
 public sealed record PauseSheet(
     EscapeState State,
@@ -32,7 +32,8 @@ public sealed record PauseSheet(
     string ObjectivesTitle,
     IReadOnlyList<string> ButtonLabels,
     bool InstantAction,
-    IReadOnlyList<BoardLine> Texts)
+    IReadOnlyList<BoardLine> Texts,
+    IReadOnlyList<EscapeButton?> Strips)
 {
     /// <summary>Reads one dialog and its shared block, runs its script out through
     /// <see cref="EscapeDialog.Settled"/>, and resolves every label through the message
@@ -63,11 +64,16 @@ public sealed record PauseSheet(
             return null;
         }
 
+        var strips = new List<EscapeButton?>();
         var labels = new List<string>();
         foreach (string key in PauseScreens.ButtonKeys)
         {
+            strips.Add(shared.Button(key));
             labels.Add(EscapeDialog.Label(messages, shared.Button(key)?.LabelKey ?? string.Empty));
         }
+
+        strips.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoStrip(shared));
+        labels.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoLabel);
 
         return new PauseSheet(
             state,
@@ -78,7 +84,8 @@ public sealed record PauseSheet(
             instantAction,
             instantAction
                 ? LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages)
-                : Array.Empty<BoardLine>());
+                : Array.Empty<BoardLine>(),
+            strips);
     }
 }
 
@@ -126,8 +133,9 @@ public sealed record PauseReadout(
 /// <summary>
 /// What the Original presentation's pause screen is made of, engine-free: the mission's chart at
 /// its authored crop, the pins and icons the dialog's script places, the objectives parchment, the
-/// profile's memento and the four button strips. Composed the way the load and briefing screens
-/// are, through <see cref="ComposedBoard"/>, and sharing <see cref="MissionMap"/> with both.
+/// profile's memento and the button strips, the four the block authors plus the remake's own photo
+/// strip. Composed the way the load and briefing screens are, through
+/// <see cref="ComposedBoard"/>, and sharing <see cref="MissionMap"/> with both.
 ///
 /// <para>An Instant Action sortie pauses on the same screen over a dialog that carries none of
 /// that: the load screen's blackboard, its three photographs, its four texts and the strips.</para>
@@ -137,37 +145,78 @@ public static class PauseScreens
     /// <summary>RESUME's row.</summary>
     public const int ResumeRow = 0;
 
+    /// <summary>PHOTO MODE's row, the one strip no dialog authors.</summary>
+    public const int PhotoRow = 1;
+
     /// <summary>RESTART's row.</summary>
-    public const int RestartRow = 1;
+    public const int RestartRow = 2;
 
     /// <summary>PREFERENCES' row.</summary>
-    public const int PreferencesRow = 2;
+    public const int PreferencesRow = 3;
 
     /// <summary>QUIT's row.</summary>
-    public const int QuitRow = 3;
+    public const int QuitRow = 4;
 
-    /// <summary>A strip's plate in authored pixels across. All four draw the same three bitmaps,
-    /// which measure 132x28, so one rectangle serves every row (docs/org/pause-screen.md).</summary>
+    /// <summary>A strip's plate in authored pixels across. Every strip draws the same three
+    /// bitmaps, which measure 132x28, so one rectangle serves every row
+    /// (docs/org/pause-screen.md).</summary>
     public const float StripWidth = 132f;
 
     /// <summary>A strip's plate in authored pixels down (docs/org/pause-screen.md).</summary>
     public const float StripHeight = 28f;
 
-    /// <summary>The four strips, in the order the shared <c>BUTTONS</c> block authors them, which
-    /// is also the order a cursor walks them.</summary>
+    /// <summary>What the remake's own strip reads. The authored four are set in title case, so this
+    /// one is too rather than shouting beside them.</summary>
+    public const string PhotoLabel = "Photo Mode";
+
+    // The widget names the shared BUTTONS block authors, and the name the remake's own strip
+    // carries, which no shipped file holds.
+    private const string ResumeKey = "RESUME_MISSION_BTN";
+    private const string PreferencesKey = "CONFIGURE_BTN";
+    private const string QuitKey = "MAINMENU_BTN";
+    private const string PhotoKey = "PHOTO_MODE_BTN";
+
+    /// <summary>The four authored strips, in the order the shared <c>BUTTONS</c> block authors
+    /// them. A sheet's own <see cref="PauseSheet.Strips"/> is this with the remake's photo strip
+    /// standing at <see cref="PhotoRow"/>, which is the order a cursor walks.</summary>
     public static IReadOnlyList<string> ButtonKeys { get; } = new[]
     {
-        "RESUME_MISSION_BTN", "RESTART_MISSION_BTN", "CONFIGURE_BTN", "MAINMENU_BTN",
+        ResumeKey, "RESTART_MISSION_BTN", PreferencesKey, QuitKey,
     };
 
+    /// <summary>The remake's own strip, in the authored plates and label offset the block's own
+    /// RESUME carries, at the one place that block leaves room for a fifth: the channel between two
+    /// columns of strips, or the cell under RESUME where they stand three across. Null where the
+    /// block authors too few strips to stand one against.</summary>
+    public static EscapeButton? PhotoStrip(EscapeShared shared)
+    {
+        ArgumentNullException.ThrowIfNull(shared);
+        if (shared.Button(ResumeKey) is not { } resume
+            || shared.Button(PreferencesKey) is not { } preferences
+            || shared.Button(QuitKey) is not { } quit)
+        {
+            return null;
+        }
+
+        var channel = new BriefingPoint((resume.At.X + preferences.At.X) / 2f, resume.At.Y);
+        var under = new BriefingPoint(resume.At.X, resume.At.Y + (quit.At.Y - preferences.At.Y));
+        var at = Covered(shared, channel) <= Covered(shared, under) ? channel : under;
+        return new EscapeButton(
+            PhotoKey, at, resume.Normal, resume.Rollover, resume.Activate, string.Empty,
+            resume.LabelOffset);
+    }
+
     /// <summary>The strip an authored point lands on, or -1 for a point on none of them. This is
-    /// the pointer's whole hit test: the four plates are the screen's only widgets.</summary>
+    /// the pointer's whole hit test: the plates are the screen's only widgets.
+    /// ⚠ Answers the first row in walk order, not the nearest: the campaign block's channel is four
+    /// pixels narrower than a plate, so the photo strip shares two columns with each neighbour and
+    /// the earlier row owns them.</summary>
     public static int RowAt(PauseSheet sheet, float x, float y)
     {
         ArgumentNullException.ThrowIfNull(sheet);
-        for (int row = 0; row < ButtonKeys.Count; row++)
+        for (int row = 0; row < sheet.Strips.Count; row++)
         {
-            if (sheet.Shared.Button(ButtonKeys[row]) is not { } button)
+            if (sheet.Strips[row] is not { } button)
             {
                 continue;
             }
@@ -283,14 +332,32 @@ public static class PauseScreens
         };
     }
 
+    // How much of the authored plates a strip standing at this point would cover, in square pixels.
+    // The block's own shape is what picks between the two places a fifth strip can stand: two
+    // columns leave the channel between them clear, three across leave the cell under the first.
+    private static float Covered(EscapeShared shared, BriefingPoint at)
+    {
+        float covered = 0f;
+        foreach (var button in shared.Buttons)
+        {
+            float across = Math.Min(at.X + StripWidth, button.At.X + StripWidth)
+                - Math.Max(at.X, button.At.X);
+            float down = Math.Min(at.Y + StripHeight, button.At.Y + StripHeight)
+                - Math.Max(at.Y, button.At.Y);
+            covered += across > 0f && down > 0f ? across * down : 0f;
+        }
+
+        return covered;
+    }
+
     // Each strip is three separate bitmaps rather than one stacked frame, so the state picks the
     // art and the ink together; there is no disabled frame to pick.
     private static IReadOnlyList<BoardPlaque> Plaques(PauseSheet sheet, int focusedRow, bool pressed)
     {
         var plaques = new List<BoardPlaque>();
-        for (int row = 0; row < ButtonKeys.Count; row++)
+        for (int row = 0; row < sheet.Strips.Count; row++)
         {
-            if (sheet.Shared.Button(ButtonKeys[row]) is not { } button)
+            if (sheet.Strips[row] is not { } button)
             {
                 continue;
             }

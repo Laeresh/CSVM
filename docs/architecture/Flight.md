@@ -743,11 +743,11 @@ the same pause on a layer of its own. The Original presentation puts `OriginalPa
 The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
-the screen tests off engine and this node owns the cursor, the pointer and the four actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
+the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
 seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it
 fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the
 objectives follow the running mission. Preferences stands `PausePreferences` over the held world and
-`Reprime`s on its close; photo mode stays on `PauseBoard`. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+`Reprime`s on its close, and photo mode does the same over the frozen world. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/PausePreferences.cs
 The Preferences leaf over a paused mission: an `OriginalShell` of its own opened on the Options

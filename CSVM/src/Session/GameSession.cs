@@ -2287,6 +2287,9 @@ public partial class GameSession : Node3D
             sheet.Restart = Rerun;
             sheet.Exit = _exitSession;
             sheet.Preferences = preferences;
+            // Read at press time, not captured: the owner is whoever paused THIS time, and only
+            // that player drives the cursor that reached this row.
+            sheet.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
             _originalPause = sheet;
             pauseBoard = sheet;
         }
@@ -3894,6 +3897,9 @@ public partial class GameSession : Node3D
         }
         _photoPilot = null;
         RestoreBoards();
+        // The sheet's pointer too, for the reason the options leaf re-primes it: a mouse button
+        // still down as the mode is left reads as a fresh click on the strip it rests over.
+        _originalPause?.Reprime();
         // ⚠ Prime every board reader: MenuInput POLLS raw keys, so the Escape still under the
         // player's finger would read as a fresh press on the board that just returned and dismiss
         // the pause it was meant to reopen (BL-279's mechanism, docs/architecture.md).

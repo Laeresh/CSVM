@@ -55,20 +55,32 @@ internal static class PauseSheetSuites
         ("mp-dangerzone2", 197f, 457f),
     };
 
-    // Where the shared block puts the four strips, in the order a cursor walks them.
+    // Where the Instant Action sheet's strips stand, in the order a cursor walks them. The block
+    // authors three across and one below the third, so the remake's photo strip takes the free cell
+    // under RESUME rather than a channel between columns, which this block has none of.
     private static readonly (float X, float Y)[] Strips =
     {
-        (352f, 510f), (497f, 510f), (642f, 510f), (642f, 550f),
+        (352f, 510f), (352f, 550f), (497f, 510f), (642f, 510f), (642f, 550f),
+    };
+
+    // And where the campaign sheet's stand: two columns of two, whose own channel is where the
+    // photo strip goes, four pixels narrower than the plate it takes.
+    private static readonly (float X, float Y)[] CampaignStrips =
+    {
+        (107f, 528f), (237f, 528f), (127f, 559f), (367f, 528f), (347f, 559f),
     };
 
     /// <summary>The chapter's campaign pause sheets end to end: every dialog resolves, every
     /// bitmap it draws is extracted, and the board follows the pause state it was given.</summary>
     [Suite("pause-sheet",
         "the Original presentation's pause screen against the chapter's own escape.zrd dialogs: "
-        + "each campaign mission's sheet resolves its map, memento, parchment and four strips, "
+        + "each campaign mission's sheet resolves its map, memento, parchment and authored strips, "
         + "every bitmap the composition names exists in the extraction (a lowercasing or naming "
         + "slip draws nothing and is otherwise silent), a real OriginalPauseBoard follows "
-        + "PauseState.Changed with its cursor resting on RESUME, the map is drawn at its authored "
+        + "PauseState.Changed with its cursor resting on RESUME, the five strips stand at the "
+        + "points the block's own geometry gives them with PHOTO MODE in the channel between the "
+        + "two columns, that strip opens photo mode and leaves the halt and the sheet standing, "
+        + "the map is drawn at its authored "
         + "source crop rather than scaled, an OWNSHIP icon placed by world position lands inside "
         + "the map's own screen rectangle and one off the window draws nothing, the parchment's "
         + "marks follow the completed rows across the four filmed poses, a mark follows the row's "
@@ -130,10 +142,11 @@ internal static class PauseSheetSuites
         + "composition is the load screen's blackboard with its three centred photographs and the "
         + "dialog's own four texts, no chart, parchment, memento or world icon reaches it, every "
         + "bitmap it names exists in the extraction, C1's stunt sheet matches the reference still "
-        + "word for word at its authored points, the environment digit is read rather than assumed "
+        + "word for word at its authored points, the remake's photo strip takes the free cell under "
+        + "RESUME on a block that stands three across, the environment digit is read rather than assumed "
         + "(loading_i6a puts its second head 40 px left of every other ace dialog's) and "
         + "CampaignSequence.ChapterNumber inverts every campaign chapter's own folder, and a real "
-        + "OriginalPauseBoard follows PauseState.Changed with a pointer that walks all four strips "
+        + "OriginalPauseBoard follows PauseState.Changed with a pointer that walks all five strips "
         + "and fires the one it was pressed and released on")]
     internal static void InstantActionPauseSheet(TestContext ctx)
     {
@@ -218,7 +231,7 @@ internal static class PauseSheetSuites
         ctx.Same(all, frames, $"every sheet stands on the blackboard the dialog names");
         ctx.Same(all, photographs, $"every sheet centres the load screen's three photographs on their own points");
         ctx.Same(all, texts, $"every sheet writes the four texts its dialog authors and no more");
-        ctx.Same(all, strips, $"every sheet carries the four shared strips at their authored points");
+        ctx.Same(all, strips, $"every sheet carries the five strips at the points its block gives them");
         ctx.Same(all, bare, $"no sheet draws a chart, a parchment, a connector or a memento");
         ctx.Same(all, cursors, $"every sheet authors the glove pointer and its pointing-finger rollover");
     }
@@ -344,11 +357,12 @@ internal static class PauseSheetSuites
             && win.Size == 13f,
             $"the win line stands under the blurb at its own point ({win.X}, {win.Y})");
         ctx.Check(
-            sheet.ButtonLabels.Count == 4 && sheet.ButtonLabels[PauseScreens.ResumeRow] == "Resume"
+            sheet.ButtonLabels.Count == 5 && sheet.ButtonLabels[PauseScreens.ResumeRow] == "Resume"
+            && sheet.ButtonLabels[PauseScreens.PhotoRow] == PauseScreens.PhotoLabel
             && sheet.ButtonLabels[PauseScreens.RestartRow] == "Restart"
             && sheet.ButtonLabels[PauseScreens.PreferencesRow] == "Preferences"
             && sheet.ButtonLabels[PauseScreens.QuitRow] == "Quit",
-            $"the four strips read {string.Join("/", sheet.ButtonLabels)}");
+            $"the five strips read {string.Join("/", sheet.ButtonLabels)}");
         ctx.Check(
             board.Notes.Count == 0 && board.Lines.Count == sheet.Texts.Count,
             $"and the sheet writes no objectives title over a parchment it does not draw");
@@ -423,7 +437,7 @@ internal static class PauseSheetSuites
             pause.TryToggle(0);
             ctx.Check(board.Visible, $"the pause raises the blackboard");
             ctx.Same(PauseScreens.ResumeRow, board.FocusedRow, $"the cursor rests on RESUME");
-            ctx.Same(4, board.Shown?.Plaques.Count ?? 0, $"the raised sheet carries the four strips");
+            ctx.Same(5, board.Shown?.Plaques.Count ?? 0, $"the raised sheet carries the five strips");
             WalkStrips(ctx, board, sheet, pause, report);
         }
         finally
@@ -434,9 +448,9 @@ internal static class PauseSheetSuites
         }
     }
 
-    // BL-883's hit test over this dialog's own strips: the pointer moves the shared cursor onto each
-    // of the four in turn, and a press released on PREFERENCES fires that strip and leaves the sheet
-    // standing, which is the one action of the four that does.
+    // The hit test over this dialog's own strips: the pointer moves the shared cursor onto each of
+    // the five in turn, and a press released on PREFERENCES fires that strip and leaves the sheet
+    // standing, which it and the photo strip are the only two rows to do.
     private static void WalkStrips(
         TestContext ctx,
         Flight.OriginalPauseBoard board,
@@ -457,9 +471,10 @@ internal static class PauseSheetSuites
             walked += board.FocusedRow == row ? 1 : 0;
         }
 
-        ctx.Same(Strips.Length, hit, $"the hit test answers each of the four strips for its own middle");
+        ctx.Same(Strips.Length, hit, $"the hit test answers each of the five strips for its own middle");
         ctx.Same(Strips.Length, walked, $"and the pointer moves the shared cursor onto each in turn");
         ctx.Same(-1, PauseScreens.RowAt(sheet, 400f, 300f), $"a point on the blackboard itself is on no strip");
+        FirePhotoStrip(ctx, board, sheet, pause, at => pointer = at, report);
 
         int fired = 0;
         board.Preferences = () => fired++;
@@ -473,8 +488,7 @@ internal static class PauseSheetSuites
         board._Process(0.0);
         ctx.Check(
             StripArt(board, PauseScreens.PreferencesRow)
-            == sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow])?.Activate
-            && fired == 0,
+            == sheet.Strips[PauseScreens.PreferencesRow]?.Activate && fired == 0,
             $"the press holds PREFERENCES on its activate bitmap and fires nothing while it is down");
         pointer = (atX, atY, false);
         board._Process(0.0);
@@ -484,6 +498,44 @@ internal static class PauseSheetSuites
         pause.ForceResume();
         ctx.Check(!board.Visible, $"the resume takes the blackboard away");
         report.AppendLine($"pointer: walked {walked} strips, fired PREFERENCES {fired} time(s)");
+    }
+
+    // The remake's own strip on either sheet: pressed and released on its own plate it opens photo
+    // mode and leaves the halt and the sheet exactly as they were, the mode being a still frame over
+    // the frozen world rather than a resume, which is what returns a player to the sheet.
+    private static void FirePhotoStrip(
+        TestContext ctx,
+        Flight.OriginalPauseBoard board,
+        PauseSheet sheet,
+        Flight.PauseState pause,
+        System.Action<(float X, float Y, bool Pressed)?> point,
+        StringBuilder report)
+    {
+        if (sheet.Strips[PauseScreens.PhotoRow] is not { } strip)
+        {
+            ctx.Check(false, $"the sheet carries the remake's own photo strip");
+            return;
+        }
+
+        int photos = 0;
+        board.PhotoMode = () => photos++;
+        float onX = strip.At.X + (PauseScreens.StripWidth / 2f);
+        float onY = strip.At.Y + (PauseScreens.StripHeight / 2f);
+        point((onX, onY, false));
+        board._Process(0.0);
+        ctx.Same(
+            PauseScreens.PhotoRow, board.FocusedRow,
+            $"the pointer reaches PHOTO MODE on its own plate ({onX}, {onY})");
+        point((onX, onY, true));
+        board._Process(0.0);
+        ctx.Same(0, photos, $"and fires nothing while the button is down");
+        point((onX, onY, false));
+        board._Process(0.0);
+        ctx.Same(1, photos, $"the release on it opens photo mode");
+        ctx.Check(
+            board.Visible && pause.Paused,
+            $"and the halt and the sheet both stand, so the mode returns to this screen");
+        report.AppendLine($"photo strip at ({strip.At.X}, {strip.At.Y}), fired {photos} time(s)");
     }
 
     // One Instant Action pause sheet by chapter code and mission type, keyed the way a session keys
@@ -607,12 +659,12 @@ internal static class PauseSheetSuites
                     $"the chart is drawn at its authored source crop ({chart.Crop}) and position");
                 ctx.Check(chart.Width == 0f && chart.Height == 0f,
                     $"the chart is cropped rather than stretched to a size of its own");
-                ctx.Same(4, shown.Plaques.Count, $"the sheet carries the four authored strips");
                 CheckWorldIcons(ctx, entry.Sheet, map, report);
             }
 
+            CheckStripPlaces(ctx, entry.Sheet, shown, report);
             board._Process(0.0);
-            DrivePointer(ctx, board, entry.Sheet, report);
+            DrivePointer(ctx, board, entry.Sheet, pause, report);
             pause.ForceResume();
             ctx.Check(!board.Visible, $"the resume takes the board away");
         }
@@ -624,15 +676,48 @@ internal static class PauseSheetSuites
         }
     }
 
-    // The pointer over the raised board: the third strip, which is PREFERENCES and so leaves the
-    // board standing when it fires, driven through the same frame the pad's own step runs in.
-    private static void DrivePointer(
-        TestContext ctx, Flight.OriginalPauseBoard board, PauseSheet sheet, StringBuilder report)
+    // The five strips on the campaign sheet: the four the block authors at their own points and the
+    // photo strip in the channel between the two columns, each drawn in walk order. A plate that
+    // moved would land on its neighbour rather than beside it, which no other check would see.
+    private static void CheckStripPlaces(
+        TestContext ctx, PauseSheet sheet, ComposedBoard? shown, StringBuilder report)
     {
-        var strip = sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow]);
+        if (shown == null)
+        {
+            return;
+        }
+
+        ctx.Same(CampaignStrips.Length, shown.Plaques.Count, $"the sheet carries the five strips");
+        int placed = 0;
+        var places = new List<string>();
+        for (int row = 0; row < CampaignStrips.Length && row < shown.Plaques.Count; row++)
+        {
+            var plaque = shown.Plaques[row];
+            placed += plaque.X == CampaignStrips[row].X && plaque.Y == CampaignStrips[row].Y ? 1 : 0;
+            places.Add($"{sheet.ButtonLabels[row]}({plaque.X}, {plaque.Y})");
+        }
+
+        ctx.Same(CampaignStrips.Length, placed, $"each stands at its own point: {string.Join(" ", places)}");
+        ctx.Same(
+            PauseScreens.PhotoRow,
+            PauseScreens.RowAt(
+                sheet, CampaignStrips[PauseScreens.PhotoRow].X + (PauseScreens.StripWidth / 2f),
+                CampaignStrips[PauseScreens.PhotoRow].Y + (PauseScreens.StripHeight / 2f)),
+            $"and the hit test answers PHOTO MODE for the middle of its own plate");
+        report.AppendLine($"strips: {string.Join(" ", places)}");
+    }
+
+    // The pointer over the raised board: PREFERENCES, which leaves the board standing when it fires,
+    // and the photo strip, which is the other row that does, driven through the same frame the pad's
+    // own step runs in.
+    private static void DrivePointer(
+        TestContext ctx, Flight.OriginalPauseBoard board, PauseSheet sheet, Flight.PauseState pause,
+        StringBuilder report)
+    {
+        var strip = sheet.Strips[PauseScreens.PreferencesRow];
         if (strip == null)
         {
-            ctx.Check(false, $"the shared block authors the third strip");
+            ctx.Check(false, $"the shared block authors the PREFERENCES strip");
             return;
         }
 
@@ -684,6 +769,8 @@ internal static class PauseSheetSuites
             $"the cursor survives the pointer leaving the screen");
         ctx.Check(StripArt(board, PauseScreens.PreferencesRow) == strip.Rollover,
             $"and the focused strip is back on its rollover bitmap with none held");
+
+        FirePhotoStrip(ctx, board, sheet, pause, at => pointer = at, report);
         report.AppendLine(
             $"pointer: strip {PauseScreens.PreferencesRow} at ({onX}, {onY}) focused, "
             + $"fired {fired} time(s), cursor {sheet.State.Cursor?.Bitmap ?? "-"}/"

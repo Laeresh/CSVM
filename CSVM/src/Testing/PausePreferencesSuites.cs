@@ -165,7 +165,7 @@ internal static class PausePreferencesSuites
         board.PointerSource = () => cell.At;
         pause.TryToggle(0);
         ctx.Check(board.Visible && !leaf.Visible, $"the pause raises the sheet with no leaf over it");
-        var strip = sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow]);
+        var strip = sheet.Strips[PauseScreens.PreferencesRow];
         if (strip == null)
         {
             ctx.Check(false, $"the shared block authors the PREFERENCES strip");

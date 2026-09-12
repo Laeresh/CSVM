@@ -309,12 +309,12 @@ sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md)
 ## src/UI/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment, the memento, and the four labelled button strips. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
+objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
 `PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
 pause: `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
-test over the four authored 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
