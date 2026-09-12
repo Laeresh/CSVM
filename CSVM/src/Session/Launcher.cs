@@ -1255,9 +1255,10 @@ public partial class Launcher : Node3D
         // Undoes the menu's black before anything reads the environment: the world's reflections
         // and the cockpit pass's copy of it both take the sky from here (Utils/WorldBackdrop.cs).
         WorldBackdrop.Sky(_env);
-        // The saved difficulty, read at every launch so an Options apply reaches the next flight
-        // in the same process. The flag and --det rules are the spec's (WithSavedDifficulty).
-        _spec = _spec.WithSavedDifficulty(OptionsStore.UserOptions().Load().Difficulty);
+        // The saved gameplay options, read at every launch so an Options apply reaches the next
+        // flight in the same process. The flag and --det rules are the spec's own.
+        var saved = OptionsStore.UserOptions().Load();
+        _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
         float mipBias = Mech3.TextureArchive.MipBias(_interpPath, _spec.Chapter);
@@ -1611,6 +1612,7 @@ public partial class Launcher : Node3D
         options.MenuPresentation = requested.Value;
         options.GraphicsMode = applied.Graphics;
         options.Difficulty = applied.Difficulty;
+        options.NearestAfterKill = applied.NearestAfterKill;
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;

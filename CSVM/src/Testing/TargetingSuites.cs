@@ -285,7 +285,9 @@ internal static class TargetingSuites
         + "(objectives, then ahead/behind/left/right with distance inside a sector), the "
         + "auto-acquire at the head, Next/Previous stepping and wrapping, Nearest as HEAD OF "
         + "CYCLE rather than nearest-in-space, target death dropping to the head and not to the "
-        + "dead entry's neighbour, own respawn preserving a live selection, range/bearing/"
+        + "dead entry's neighbour, the nearest-after-a-kill setting moving that one re-resolve onto "
+        + "the nearest of the cycle while the acquire and a class change keep the head, "
+        + "own respawn preserving a live selection, range/bearing/"
         + "attitude changes never dropping one, Target Nothing STAYING cleared through repeated "
         + "rebuilds, nearest-crosshairs scoring the NOSE cone (not the pipper) with its 2 km cap "
         + "and reaching an ally, and 0x24's attacker queue walked backwards")]
@@ -388,6 +390,26 @@ internal static class TargetingSuites
         sel.Rebuild(afterDeath, null, own, null, Vector3.Zero, basis);
         ctx.Check(ReferenceEquals(sel.Current?.Source, ahead2),
             $"the selected target dying drops to the HEAD of the cycle, never to the dead entry's neighbour (which would have been 'behind')");
+
+        // The remake setting over the same rig, where the head and the nearest disagree: the head
+        // is 400 m ahead and the nearest thing in space is 100 m off the right wing.
+        var nearest = new TargetSelection { NearestAfterKill = true };
+        nearest.Rebuild(full, null, own, null, Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(nearest.Current?.Source, ahead2),
+            $"CONTROL: with the setting on the mission-start acquire still takes the cycle's head, the decoded order");
+        nearest.Next(TargetClass.Enemy);
+        nearest.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(nearest.Current?.Source, ahead1), $"holding the 900 m entry, the one that dies");
+        nearest.Rebuild(afterDeath, null, own, null, Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(nearest.Current?.Source, right)
+                  && !ReferenceEquals(nearest.Current?.Source, sel.Current?.Source),
+            $"…and the kill lands on the NEAREST of the cycle (100 m right), where the setting off landed on the head (400 m ahead)");
+        nearest.Next(TargetClass.Ally);
+        nearest.Rebuild(full, null, own, null, Vector3.Zero, basis);
+        nearest.Next(TargetClass.Enemy);
+        nearest.Rebuild(full, null, own, null, Vector3.Zero, basis);
+        ctx.Check(nearest.ActiveClass == TargetClass.Enemy && ReferenceEquals(nearest.Current?.Source, ahead2),
+            $"…while a class change back still lands on the HEAD of the cycle it changes to, not on the 100 m target, so the setting reaches nothing but the death re-resolve");
 
         // Stickiness: nothing but death, input and the explicit clear moves it.
         sel.Next(TargetClass.Enemy);

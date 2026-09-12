@@ -162,6 +162,56 @@ public class TargetCycleTests
                 AimAssist.PlayerTeam, otherTarget: true));
     }
 
+    /// <summary>The decoded death rule and the setting that departs from it, over the mission the
+    /// setting exists for: a far objective heads the Enemy cycle, so with the setting off every
+    /// kill sends the pilot back to it, and with the setting on the kill lands on the nearest live
+    /// member of the cycle instead. The acquire keeps the objective either way.</summary>
+    [Fact]
+    public void TheNearestAfterKillSettingMovesOnlyTheDeathReResolve()
+    {
+        var objective = new object();
+        var target = new object();
+        var spare = new object();
+
+        // One per-frame pass. The objective 2 km BEHIND sorts ahead of every sector, so it heads
+        // the cycle while the two hostiles stand 150 m and 900 m ahead: head and nearest disagree.
+        // It is filed into the pool by hand because nothing here carries a mission's site record.
+        void Pass(TargetSelection selection, bool targetAlive)
+        {
+            var scan = new AimCandidateSet();
+            if (targetAlive)
+            {
+                scan.AddVehicle(NearAhead, Vector3.Zero, Hostile, live: true, target);
+            }
+
+            scan.AddVehicle(new Vector3(0f, 0f, -900f), Vector3.Zero, Hostile, live: true, spare);
+            selection.Pool.Rebuild(scan, null, AimAssist.PlayerTeam, null);
+            selection.Pool.Add(TargetRef.ForStructure(
+                new AimCandidate
+                {
+                    Position = new Vector3(0f, 0f, 2000f), Velocity = Vector3.Zero,
+                    Team = AimAssist.WorldTeam, Live = true, Source = objective,
+                },
+                TargetClass.Enemy, "promised_land", "Zeppelin", "Destroy", objective: true));
+            selection.Resolve(Vector3.Zero, Basis.Identity);
+        }
+
+        foreach (bool nearestAfterKill in new[] { false, true })
+        {
+            var sel = new TargetSelection { NearestAfterKill = nearestAfterKill };
+            Pass(sel, targetAlive: true);
+            Assert.Same(objective, sel.Current!.Value.Source);
+
+            // Onto the 150 m hostile, the one that dies.
+            sel.Next(TargetClass.Enemy);
+            Pass(sel, targetAlive: true);
+            Assert.Same(target, sel.Current!.Value.Source);
+
+            Pass(sel, targetAlive: false);
+            Assert.Same(nearestAfterKill ? spare : objective, sel.Current!.Value.Source);
+        }
+    }
+
     private static List<object> Sources(IReadOnlyList<TargetRef> cycle)
     {
         var into = new List<object>(cycle.Count);

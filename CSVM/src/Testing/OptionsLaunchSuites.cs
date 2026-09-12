@@ -5,9 +5,10 @@ using CSVM.Utils;
 
 namespace CSVM.Testing;
 
-/// <summary>The saved difficulty at launch, through the real options store: a saved word reaches
-/// the roster policy a plain launch builds, the <c>--difficulty=</c> flag outranks it, a
-/// <c>--det</c> run never reads it, and a word the store refuses leaves the default standing.
+/// <summary>The saved gameplay options at launch, through the real options store: a saved value
+/// reaches the roster policy a plain launch builds, the <c>--difficulty=</c> flag outranks the
+/// saved tier, a <c>--det</c> run never reads either, and a value the store refuses leaves the
+/// default standing.
 /// ⚠ The store is pointed at this suite's own scratch directory and restored in a finally, so
 /// nothing here reads or writes the options saved at this machine's controls.</summary>
 internal static class OptionsLaunchSuites
@@ -57,11 +58,63 @@ internal static class OptionsLaunchSuites
         }
     }
 
+    [Suite("options-targeting-launch",
+        "The saved nearest-after-a-kill setting at launch: with nothing saved the policy carries the "
+        + "decoded head rule, a saved true reaches FlightRosterPolicy.NearestAfterKill, a saved "
+        + "false reaches it as off, a --det run reads no saved option, and a hand-written value of "
+        + "another JSON kind loads as never set so the launch keeps the decoded rule")]
+    internal static void OptionsTargetingLaunch(TestContext ctx)
+    {
+        string dir = Path.Combine(ctx.ScratchDir, "options-targeting-launch");
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        string? previous = OptionsStore.DirectoryOverride;
+        OptionsStore.DirectoryOverride = dir;
+        try
+        {
+            ctx.Check(!LaunchedTargeting(System.Array.Empty<string>()),
+                $"with no options file the launch flies the decoded head rule ({LaunchedTargeting(System.Array.Empty<string>())})");
+
+            OptionsStore.UserOptions().Save(new OptionsDef { NearestAfterKill = true });
+            ctx.Check(LaunchedTargeting(System.Array.Empty<string>()),
+                $"a saved true reaches the roster policy on a plain launch ({LaunchedTargeting(System.Array.Empty<string>())})");
+            ctx.Check(!LaunchedTargeting(new[] { "--det" }),
+                $"a --det run reads no saved option, so a golden shot cannot depend on one machine's file ({LaunchedTargeting(new[] { "--det" })})");
+
+            OptionsStore.UserOptions().Save(new OptionsDef { NearestAfterKill = false });
+            ctx.Check(!LaunchedTargeting(System.Array.Empty<string>()),
+                $"a saved false reaches the policy as off ({LaunchedTargeting(System.Array.Empty<string>())})");
+
+            // A switch has no vocabulary, so what stands in for an unknown word is a value of
+            // another JSON kind: written by hand, it loads as never set.
+            File.WriteAllText(Path.Combine(dir, "options.json"),
+                "{\"version\": 1, \"nearestAfterKill\": \"yes\"}", new System.Text.UTF8Encoding(false));
+            ctx.Check(OptionsStore.UserOptions().Load().NearestAfterKill == null
+                && !LaunchedTargeting(System.Array.Empty<string>()),
+                $"a quoted value loads as never set and the launch keeps the decoded rule ({OptionsStore.UserOptions().Load().NearestAfterKill})");
+        }
+        finally
+        {
+            OptionsStore.DirectoryOverride = previous;
+        }
+    }
+
     // The launch's own read: the spec a command line parses to, the saved word folded in the way
     // Launcher.LaunchSession folds it, then the policy the roster is built from.
     private static int Launched(string[] args)
     {
         var spec = SessionSpec.Parse(args).WithSavedDifficulty(OptionsStore.UserOptions().Load().Difficulty);
         return FlightRosterPolicy.From(spec).Difficulty;
+    }
+
+    // The same read for the targeting setting, the second half of the same fold.
+    private static bool LaunchedTargeting(string[] args)
+    {
+        var spec = SessionSpec.Parse(args).WithSavedNearestAfterKill(OptionsStore.UserOptions().Load().NearestAfterKill);
+        return FlightRosterPolicy.From(spec).NearestAfterKill;
     }
 }

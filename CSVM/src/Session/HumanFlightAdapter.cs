@@ -460,7 +460,7 @@ internal sealed class HumanFlightAdapter
         // The player's target selection: one per human pane, each with its own pool, the cycles
         // are sorted against THIS plane's pose, so they cannot be shared. GameSession binds
         // TargetSubParts later, once the zeppelins exist.
-        controller.Targeting = new TargetSelection();
+        controller.Targeting = new TargetSelection { NearestAfterKill = _policy.NearestAfterKill };
         controller.InitialTarget = _policy.TargetSelect;   // --target=, the scripted twin
 
         // ⚠ Bind on EVERY pane, not only under --debug-markers: it is what TargetHud.OwnTeam reads

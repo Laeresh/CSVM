@@ -215,7 +215,8 @@ set), read as empty when missing or malformed, written atomically. Its word-valu
 not words: `monitorIndex` is a screen index rendered decimal and `resolution` is a canonical
 `1920x1080`, both validated by shape, so a malformed one is dropped the same way an unknown word is.
 The four volume levels (`audioMaster`, `audioMusic`, `audioEffects`, `audioVoice`) are whole numbers
-on `AudioMix`'s 0..100 and are validated by range, dropped the same way again.
+on `AudioMix`'s 0..100 and are validated by range, dropped the same way again. `nearestAfterKill` is
+a switch, a JSON boolean, so a value of any other kind is what gets dropped there.
 Shape is all the store can prove. Whether that screen is plugged in and whether it offers that mode
 are questions for the caller holding an engine, which owns the fallback.
 
@@ -233,7 +234,11 @@ graphics mode that is `GraphicsMode.Resolve`, where the `--graphics=` flag beats
 which beats the `graphics.mode` config key (`docs/cli.md`); for the difficulty it is
 `SessionSpec.WithSavedDifficulty`, applied by `Launcher.LaunchSession` at every launch, where a
 parsed `--difficulty=` flag beats the saved word, a `--det` run reads no saved option, and the
-default is `normal`. For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
+default is `normal`. The nearest-after-a-kill targeting setting (`nearestAfterKill`, a boolean
+rather than a word, so what stands in for an unknown value is a JSON kind the reader drops) takes
+the same rule less the flag in `SessionSpec.WithSavedNearestAfterKill`: no flag names it, a `--det`
+run reads nothing, and never set is off, which is the decoded head rule
+(`docs/org/targeting.md`). For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
 the saved word, which beats the `display.vsync` config key, which beats V-Sync off, and for the
 display mode `DisplayModeSetting.Resolve`, where the saved word beats the borderless default and
 there is no flag or config key above it. The window size is `ResolutionSetting.Resolve`, the same
@@ -282,8 +287,8 @@ page behind its Preferences page's first door (`--menu=game-options` under
 (`--menu=audio`) and the keymap on the CONTROLS page behind the fourth (`--menu=controls`, and
 `--menu=keys` for the KEYS AND BUTTONS page behind its own door). Built-in's one screen carries
 every setting Original spreads over those pages bar the volume levels, its rows in its own stepper
-convention: the difficulty, the presentation and the graphics mode, then the monitor, the window
-size, the display mode and the V-Sync choice. The two presentations read those four through one rule
+convention: the difficulty and the nearest-after-a-kill targeting switch, the presentation and the
+graphics mode, then the monitor, the window size, the display mode and the V-Sync choice. The two presentations read those four through one rule
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
@@ -386,7 +391,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, and the four display settings | save every one of them, then the three-call switch one frame later |
+| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, the four display settings and the nearest-after-a-kill switch | save every one of them, then the three-call switch one frame later |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build

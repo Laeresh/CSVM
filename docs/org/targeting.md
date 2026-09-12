@@ -750,6 +750,20 @@ Non-Aircraft, and `+0x4d` → the Objective companion pair.
 - **The player's own death** was not traced. `FUN_00421500` and `FUN_00469e20` both zero a plane's
   `+0x948`, and whether either runs on the player's respawn is unresolved.
 
+### A remake-only setting: nearest after a kill
+
+The head rule above is the default and the only decoded behaviour. Because the head of
+Enemy/Objective is the nearest objective whenever one exists, every kill in a defence mission sends
+the pilot back to the objective, which is the complaint the remake answers with one setting rather
+than a change. `nearestAfterKill` (off by default, `OptionsStore`, the Next Target row on Original's
+Game Options page and the second row of Built-in's Options screen, reaching the flight through
+`SessionSpec.WithSavedNearestAfterKill` and `FlightRosterPolicy`) replaces the head with the nearest
+live member of the current cycle by distance from the plane, and only on a re-resolve that *lost* a
+selection it held under the same class. The mission-start auto-acquire and every class change keep
+the decoded head either way, since neither had a selection to lose. With the setting off the
+behaviour is the decoded one unchanged. `TargetSelection.NearestAfterKill` is where it stands, and
+the `target-selection` suite pins both sides over one rig where the head and the nearest disagree.
+
 ⚠ **The player and the AI share the field, not the rules.** `+0x948` is one field on the shared
 plane class; `FUN_0041fe10` writes it for an AI actor using rating biases and a standing-target
 hysteresis (`aiPilot.md`), and `FUN_004b5fb0` writes it for the local player using this page's

@@ -38,7 +38,7 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "two rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
+        + "three rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
         + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
@@ -46,11 +46,12 @@ internal static class MenuOriginalSuites
         + "screen and a second seat joined there stays seated, the campaign flight check carries the "
         + "seat strip with two seats and none with one, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
-        + "Original fresh, Built-in's Options route steps the difficulty and both other choices and "
+        + "Original fresh, Built-in's Options route steps the difficulty, the targeting setting on "
+        + "and back off, the two other choices and "
         + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
         + "a wrap onto the last frame cap, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all seven, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all eight, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
@@ -424,10 +425,19 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 9 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its nine rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 10 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its ten rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "Nearest target after a kill: Off",
+            $"the second row is the targeting setting, unsaved showing the decoded Off ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Nearest target after a kill: On",
+            $"Right turns it on ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Nearest target after a kill: Off",
+            $"and Right again turns it back off ({menu.ShownRowText})");
         Press(host, seat, Down);
         string before = menu.ShownRowText;
         Press(host, seat, Right);
@@ -442,7 +452,7 @@ internal static class MenuOriginalSuites
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the eighth row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the ninth row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -455,8 +465,9 @@ internal static class MenuOriginalSuites
             $"Apply leaves through the host as an OptionsApplyExit ({exits.Count}, {exits[^1].GetType().Name})");
         if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
-            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard",
-                $"carrying every stepped choice ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty})");
+            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard"
+                && applied.NearestAfterKill == false,
+                $"carrying every stepped choice, the targeting setting stepped back off among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
                 $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
@@ -534,7 +545,7 @@ internal static class MenuOriginalSuites
     }
 
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose two rows take every choice
+    // Preferences page, its GAME OPTIONS door the decoded page, whose three rows take every choice
     // and whose CANCEL CHANGES drops them; the walk leaves the top level as it found it.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
@@ -549,10 +560,10 @@ internal static class MenuOriginalSuites
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" ? 1 : 0;
+            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" or "Next Target" ? 1 : 0;
         }
 
-        ctx.Check(titles == 3, $"drawing the section's own tab title over the two row titles ({titles} of 3)");
+        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
         Press(host, seat, Accept);
         ctx.Check(shell.OpenGameOption == OriginalShell.DifficultyKey && shell.Rows.Count == 3
             && List(shell, OriginalShell.DifficultyKey) == null,
@@ -569,11 +580,15 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.PresentationChoice == PresentationId.BuiltIn.Value,
             $"and picking the second closes it on the other token ({shell.PresentationChoice})");
+        WalkTo(host, seat, shell, OriginalShell.NearestAfterKillKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.NearestAfterKillChoice == true,
+            $"Accept on the Next Target checkbox under them turns the targeting setting on ({shell.NearestAfterKillChoice})");
         WalkTo(host, seat, shell, OriginalShell.GameOptionsCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.PresentationChoice == PresentationId.Original.Value
-            && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal,
-            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.DifficultyChoice})");
+            && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal && shell.NearestAfterKillChoice == null,
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.DifficultyChoice}, {shell.NearestAfterKillChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,

@@ -27,14 +27,15 @@ internal static class DisplaySettingsSuites
     // Every field OptionsDef carries, with a value the store validates and whether it is a display
     // setting, which is what makes it something no deterministic run may read. The list is compared
     // against the def by reflection, so a field added there and not here fails display-det-guard.
-    // The sample is typed as object rather than as string because a volume level is an int?: the
-    // table names what the store must keep, and the fields it names are no longer all words. The
+    // The sample is typed as object rather than as string because a volume level is an int? and the
+    // targeting switch a bool?: the table names what the store must keep, not a vocabulary. The
     // Master sample is 0 on purpose, the mute a plain int could not tell from "never set".
     private static readonly (string Property, object Sample, bool Display)[] SavedFields =
     {
         ("MenuPresentation", "original", false),
         ("GraphicsMode", GraphicsMode.EnhancedWord, false),
         ("Difficulty", Flight.Difficulty.Word(Flight.Difficulty.Hard), false),
+        ("NearestAfterKill", true, false),
         ("MonitorIndex", "3", true),
         ("Resolution", "1920x1080", true),
         ("DisplayMode", DisplayWords.Borderless, true),

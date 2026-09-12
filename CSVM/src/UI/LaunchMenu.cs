@@ -36,12 +36,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     public const string CampaignRow = "Campaign";
 
     /// <summary>The row that opens the Options screen, the last on the Mode screen. Options hold
-    /// the process-wide choices (the difficulty, the menu presentation, the graphics mode), and
-    /// every presentation exposes them so a player can always get back to Built-in.</summary>
+    /// the process-wide choices (the difficulty, the targeting setting, the menu presentation, the
+    /// graphics mode and the four display settings), and every presentation exposes them so a
+    /// player can always get back to Built-in.</summary>
     public const string OptionsRow = "Options";
 
     /// <summary>The row that opens the rebinding screen, inside Options. It is not beside the
-    /// three steppers as a further choice: those are process-wide and leave through
+    /// steppers as a further choice: those are process-wide and leave through
     /// <c>OptionsApplyExit</c>, while a keymap is per player and saves itself.</summary>
     public const string ControlsRow = "Controls...";
 
@@ -99,11 +100,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // every category page; here they are the tail of the one list this presentation has. TUNE.
     private const int ControlsFooterRows = 3;
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
-    // form the cursor walks top to bottom: the difficulty, the presentation and the graphics mode,
-    // then the four display settings in the order the Original presentation's VIDEO page draws
-    // them, then the two doors. Nine rows fit the band without a window, which is why this screen
-    // has no paging rule of its own.
-    private const int OptionsStepperRows = 7;
+    // form the cursor walks top to bottom: the two gameplay settings, the presentation and the
+    // graphics mode, then the four display settings in the order the Original presentation's VIDEO
+    // page draws them, then the two doors. Ten rows fit the band without a window, which is why
+    // this screen has no paging rule of its own.
+    private const int OptionsStepperRows = 8;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -186,6 +187,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the one the process started under.
     private int _optionsIndex;
     private int _difficultyChoice = Difficulty.Normal;
+    // The targeting setting as saved, null while never set, which the consumer reads as off: a
+    // screen hands back "never set" rather than a choice the player did not make.
+    private bool? _nearestAfterKillChoice;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
     // The four display settings, stepped by the four rows under the graphics one. Each is stored as
@@ -1487,16 +1491,17 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The seven choice rows are steppers; the doors under them have nothing to step.
+                // The eight choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
-                    case 1: TogglePresentationChoice(); return true;
-                    case 2: ToggleGraphicsChoice(); return true;
-                    case 3: StepMonitorChoice(dir); return true;
-                    case 4: StepResolutionChoice(dir); return true;
-                    case 5: StepDisplayModeChoice(dir); return true;
-                    case 6: StepVSyncChoice(dir); return true;
+                    case 1: ToggleNearestAfterKillChoice(); return true;
+                    case 2: TogglePresentationChoice(); return true;
+                    case 3: ToggleGraphicsChoice(); return true;
+                    case 4: StepMonitorChoice(dir); return true;
+                    case 5: StepResolutionChoice(dir); return true;
+                    case 6: StepDisplayModeChoice(dir); return true;
+                    case 7: StepVSyncChoice(dir); return true;
                     default: return false;
                 }
             case Screen.MissionType:
@@ -1578,7 +1583,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                     _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _audioMasterChoice, _audioMusicChoice,
-                        _audioEffectsChoice, _audioVoiceChoice));
+                        _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice));
                 }
 
                 break;
@@ -2477,6 +2482,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _optionsIndex = 0;
         var saved = OptionsStore.UserOptions().Load();
         _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
+        _nearestAfterKillChoice = saved.NearestAfterKill;
         _presentationChoice = saved.MenuPresentation ?? PresentationId.Original.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
         _monitorChoice = saved.MonitorIndex;
@@ -2769,6 +2775,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // A three-way stepper with wrap, Normal / Hard / Hardest in the campaign selector's order.
     private void StepDifficultyChoice(int dir) =>
         _difficultyChoice = ((Difficulty.Clamp(_difficultyChoice) + dir) % 3 + 3) % 3;
+
+    // A two-way toggle. A never-set field steps to on, since off is what its absence already reads
+    // as and a first press has to change something.
+    private void ToggleNearestAfterKillChoice() =>
+        _nearestAfterKillChoice = _nearestAfterKillChoice != true;
+
+    private string NearestAfterKillChoiceLabel() => _nearestAfterKillChoice == true ? "On" : "Off";
 
     private void TogglePresentationChoice() =>
         _presentationChoice = _presentationChoice == PresentationId.Original.Value
@@ -3321,13 +3334,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Options => index switch
             {
                 0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
-                1 => $"Menu presentation: {PresentationChoiceLabel()}",
-                2 => $"Graphics: {GraphicsChoiceLabel()}",
-                3 => $"Monitor: {MonitorChoiceLabel()}",
-                4 => $"Resolution: {ResolutionChoiceLabel()}",
-                5 => $"Display mode: {DisplayModeChoiceLabel()}",
-                6 => $"V-Sync: {VSyncChoiceLabel()}",
-                7 => ControlsRow,
+                1 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
+                2 => $"Menu presentation: {PresentationChoiceLabel()}",
+                3 => $"Graphics: {GraphicsChoiceLabel()}",
+                4 => $"Monitor: {MonitorChoiceLabel()}",
+                5 => $"Resolution: {ResolutionChoiceLabel()}",
+                6 => $"Display mode: {DisplayModeChoiceLabel()}",
+                7 => $"V-Sync: {VSyncChoiceLabel()}",
+                8 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",

@@ -40,9 +40,10 @@ public static class DisplayWords
 }
 
 /// <summary>The process-wide options: the requested menu presentation, the requested graphics
-/// mode, the difficulty setting, the four display settings (the monitor, the window size, the
-/// display mode and the V-Sync choice) and the four volume levels. A missing field means "never
-/// set"; the caller, not this def, decides what that falls back to.
+/// mode, the difficulty setting, the nearest-after-a-kill targeting setting, the four display
+/// settings (the monitor, the window size, the display mode and the V-Sync choice) and the four
+/// volume levels. A missing field means "never set"; the caller, not this def, decides what that
+/// falls back to.
 /// ⚠ A display field added here is read through a <c>SavedWord(bool det)</c> reader and nowhere
 /// else, and that reader returns null under <c>--det</c>: a golden shot is a deterministic run
 /// against the player's own options directory, so a saved size or mode that escaped the drop would
@@ -58,6 +59,12 @@ public sealed class OptionsDef
     /// <summary>The difficulty word (<see cref="Flight.Difficulty.Word"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
     public string? Difficulty { get; set; }
+
+    /// <summary>Whether a target that dies is replaced by the nearest live member of the current
+    /// cycle instead of by the cycle's head (<see cref="Flight.TargetSelection.NearestAfterKill"/>).
+    /// ⚠ Nullable because null is "never set", which the consumer reads as off, the decoded rule.
+    /// A plain <c>bool</c> would make a saved off indistinguishable from an absent field.</summary>
+    public bool? NearestAfterKill { get; set; }
 
     /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
     /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
@@ -199,6 +206,7 @@ public sealed class OptionsStore
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
             Write(w, "difficulty", def.Difficulty);
+            WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             Write(w, "monitorIndex", def.MonitorIndex);
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
@@ -239,6 +247,7 @@ public sealed class OptionsStore
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
+                NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
@@ -351,6 +360,20 @@ public sealed class OptionsStore
         }
     }
 
+    // The boolean sibling of the two writers above, and null for the same reason: a switch the
+    // build knows but the player has never touched is named in the file rather than left out of it.
+    private static void WriteFlag(Utf8JsonWriter w, string name, bool? value)
+    {
+        if (value is { } set)
+        {
+            w.WriteBoolean(name, set);
+        }
+        else
+        {
+            w.WriteNull(name);
+        }
+    }
+
     // Digits alone in range, and no leading zero past a single digit: NumberStyles.None already
     // refuses a sign, whitespace and separators, and refusing "01" as well leaves a value with one
     // spelling, so two files that ask for the same screen or size read the same by eye.
@@ -384,6 +407,14 @@ public sealed class OptionsStore
         && field.TryGetInt32(out int level)
         && level >= AudioMix.MinLevel && level <= AudioMix.MaxLevel
             ? level
+            : null;
+
+    // The boolean read, the same drop-an-unknown-value contract as the reads either side of it: a
+    // switch has neither a vocabulary nor a range, so what stands in for membership is the JSON kind
+    // alone, and anything else (a quoted "true", a number) reads as never set.
+    private static bool? ReadFlag(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var field) && field.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? field.GetBoolean()
             : null;
 
     // The shape-validated read, the same drop-an-unknown-value contract as the vocabulary read

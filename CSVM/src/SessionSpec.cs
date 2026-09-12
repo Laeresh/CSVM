@@ -422,6 +422,11 @@ public sealed record SessionSpec
     /// counts as absent, so the saved tier still applies under a typo.</summary>
     public bool DifficultyExplicit { get; private set; }
 
+    /// <summary>The saved targeting setting (<see cref="WithSavedNearestAfterKill"/>), off by
+    /// default: a target that dies is replaced by the nearest live member of the current cycle
+    /// rather than by the cycle's head. No flag names it, an Options screen is its only source.</summary>
+    public bool NearestAfterKill { get; private set; }
+
     /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist, every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
@@ -1389,6 +1394,14 @@ public sealed record SessionSpec
 
         return this with { Difficulty = saved };
     }
+
+    /// <summary>The saved targeting setting folded in, the difficulty's own rules less the flag:
+    /// nothing on the command line names it, a never-set field leaves the decoded head rule
+    /// standing, and a <c>--det</c> run reads no saved option, since a golden shot must not depend
+    /// on one machine's options file. Applied per launch, so an Options apply reaches the next
+    /// flight without a restart.</summary>
+    public SessionSpec WithSavedNearestAfterKill(bool? saved) =>
+        Det || saved is not { } on ? this : this with { NearestAfterKill = on };
 
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list, one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>

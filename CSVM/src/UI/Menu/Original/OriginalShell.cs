@@ -212,6 +212,9 @@ public sealed partial class OriginalShell
     /// <summary>The Game Options page's menu-presentation dropdown.</summary>
     public const string PresentationKey = "PRESENTATION";
 
+    /// <summary>The Game Options page's next-target checkbox.</summary>
+    public const string NearestAfterKillKey = "NEARESTAFTERKILL";
+
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
@@ -360,6 +363,10 @@ public sealed partial class OriginalShell
     private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
     private int _difficulty = CSVM.Flight.Difficulty.Normal;
+    // The targeting setting as saved, null while never set, which the consumer reads as off. Held
+    // nullable rather than as the checkbox's own 0/1 so a page that never showed it hands back
+    // "never set" instead of writing a choice the player did not make.
+    private bool? _nearestAfterKill;
     // The four display settings as they were saved. A page that shows a setting still has to hand
     // back the ones it does not, or the one writer's save would clear them; carrying them on the
     // shell is what lets either page's apply do that.
@@ -574,6 +581,10 @@ public sealed partial class OriginalShell
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
     /// would apply.</summary>
     public int DifficultyChoice => _difficulty;
+
+    /// <summary>The targeting setting the Game Options page would apply, or null while nothing has
+    /// been saved and no row has been touched.</summary>
+    public bool? NearestAfterKillChoice => _nearestAfterKill;
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;

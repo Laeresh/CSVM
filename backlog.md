@@ -747,20 +747,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the part's name. *Cross-refs:* `docs/org/targeting.md` (the player's cycle, a different list),
   `docs/org/aiPilot.md`, `CSVM/src/Flight/AiGunner.cs`.
 
-- `BL-869` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A setting that re-resolves the target after
-  a kill to the nearest of the cycle by distance, default off.** *Evidence:* the original drops to
-  the head of the current cycle when the target dies, and the head of Enemy/Objective is the
-  nearest objective whenever one exists ([`docs/org/targeting.md`](docs/org/targeting.md),
-  "Lifecycle" and "Nearest Enemy/Objective"); `Flight/TargetSelection.cs:107-133` implements that
-  rule. So in a defence mission every kill sends the player back to the objective and a key press
-  is needed to take the next enemy, which the user finds annoying enough to want an option.
-  *Fix shape:* one option on the Game Options page, off by default, that makes the death re-resolve
-  pick the nearest entry of the current cycle by slant range regardless of the objective-first
-  sector order; the auto-acquire at mission start and the explicit class keys keep the original's
-  order either way. *⚠ Traps:* a deliberate departure behind a setting, never the default: the
-  decode is firm and a player who knows the original notices. *Cross-refs:* `BL-866` (the AI's
-  own ranking, unrelated list), `CSVM/src/Flight/TargetSelection.cs`.
-
 - `BL-877` `[Bug]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A stock fit of two or six pylons is split
   between the wings by a count heuristic that disagrees with the rig, so the Hoplite's ammo screen
   offers a right-wing pylon the aeroplane does not have.** *Evidence:* `HangarFeature.StockWingCounts`

@@ -33,9 +33,22 @@ public sealed class TargetSelection
     private object? _selected;                          // the SOURCE object, never a TargetRef
     private bool _countsLogged;                         // verification breadcrumb: the cycle sizes log once
     private int _emptyRebuilds;                         // rebuilds seen with an empty pool, for that breadcrumb
+    // What separates a LOST selection from never having had one, which is the whole discriminator
+    // NearestAfterKill turns on: the class the last Resolve ran under, and the death hook's own
+    // drop. A class change leaves the two classes different, so it reads as "never had one".
+    private TargetClass? _resolvedClass;
+    private bool _lostToDeath;
 
     /// <summary>The pool this selector cycles over, rebuilt by <see cref="Rebuild"/>.</summary>
     public TargetPool Pool { get; } = new();
+
+    /// <summary>A remake setting, OFF by default: a target that dies is replaced by the NEAREST
+    /// live member of the current cycle by distance instead of by the cycle's head.
+    /// ⚠ The head is the decoded rule and stays the default (docs/org/targeting.md). The head of
+    /// Enemy/Objective is the nearest objective whenever one exists, so with this off every kill in
+    /// a defence mission sends the pilot back to the objective. The mission-start acquire and the
+    /// class keys keep the decoded order whichever way this stands.</summary>
+    public bool NearestAfterKill { get; set; }
 
     /// <summary>Which cycle Next/Previous currently step, or <b>null for cleared</b>. Null is not
     /// "no target yet", it is `Target Nothing`, and it is why the clear STAYS cleared: with every
@@ -116,6 +129,8 @@ public sealed class TargetSelection
         {
             _selected = null;
             Current = null;
+            _resolvedClass = null;
+            _lostToDeath = false;
             return;
         }
 
@@ -126,14 +141,20 @@ public sealed class TargetSelection
         }
 
         Sort(position, basis);
+        bool lost = LostSelection(cls);
         int idx = IndexOfSelected();
         if (idx < 0 && _ordered.Count > 0)
         {
-            idx = 0;    // the re-resolve's head fallback: this is the auto-acquire AND the death switch
+            // The re-resolve's head fallback: this is the auto-acquire AND the death switch. The
+            // setting replaces it with the nearest entry only on a LOST selection, which leaves the
+            // acquire and every class change on the decoded head.
+            idx = NearestAfterKill && lost ? NearestIndex(position) : 0;
         }
 
         Current = idx >= 0 ? _ordered[idx] : null;
         _selected = Current?.Source;
+        _resolvedClass = cls;
+        _lostToDeath = false;
     }
 
     /// <summary>Next Enemy/Objective (<c>0x24</c>), the one action that consults the attacker
@@ -236,6 +257,8 @@ public sealed class TargetSelection
         _selected = null;
         Current = null;
         _ordered.Clear();
+        _resolvedClass = null;
+        _lostToDeath = false;
     }
 
     /// <summary>Point the selection at a named pool entry, matching <see cref="TargetRef.Name"/>
@@ -334,7 +357,33 @@ public sealed class TargetSelection
         {
             _selected = null;
             Current = null;
+            _lostToDeath = true;
         }
+    }
+
+    // Whether this pass LOST a selection rather than never having had one: the entity it held is
+    // gone from the cycle, or the death hook dropped it, under the same class the last pass ran.
+    // A class change and the mission-start acquire both read as "never had one".
+    private bool LostSelection(TargetClass cls) =>
+        (_selected != null || _lostToDeath) && cls == _resolvedClass;
+
+    // The nearest entry of the sorted cycle by distance from the plane, the one thing
+    // NearestAfterKill reads. A tie takes the earlier entry, so the cycle's own order breaks it.
+    private int NearestIndex(Vector3 position)
+    {
+        int best = 0;
+        float bestSq = float.MaxValue;
+        for (int i = 0; i < _ordered.Count; i++)
+        {
+            float d = (_ordered[i].Position - position).LengthSquared();
+            if (d < bestSq)
+            {
+                bestSq = d;
+                best = i;
+            }
+        }
+
+        return best;
     }
 
     private void StepIn(TargetClass cls, int dir)

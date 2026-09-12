@@ -834,7 +834,7 @@ The Game Options page, the shell's partial over the decoded `[@GameOptions@]` se
 table: per option a key, a title, a description, the control kind and how the store field is read and
 written, so a further option is one entry plus its field. Row one is the original's own Difficulty dropdown
 at its authored box over the three campaign tiers; under it the remake-only Menu row, the presentation as a
-dropdown over the registered tokens. The row shape is read off the section's widgets, so a layout that moves
+dropdown over the registered tokens, and under that the remake-only Next Target checkbox, the nearest-after-a-kill targeting switch off by default. The row shape is read off the section's widgets, so a layout that moves
 a row moves ours, and both pages' open list is windowed and drawn from here on `OriginalDropList.cs`'s rule. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
 `Launcher.ApplyOptions` writes the store. This file also holds the shell's shared `ReadSavedOptions`/`AppliedOptions`
 pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO (`OriginalVideo.cs`) and the volume levels on AUDIO (`OriginalAudio.cs`). Rows: [../org/menu-inventory.md](../org/menu-inventory.md).

@@ -300,11 +300,24 @@ public class OriginalShellTests
         shell.Step(Right);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
 
+        // The third row is the remake-only Next Target checkbox: Accept flips it, and a sideways
+        // step is the same flip, so the row is walkable with either gesture.
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.NearestAfterKillKey, shell.FocusedKey);
+        Assert.Null(shell.NearestAfterKillChoice);
+        shell.Step(Accept);
+        Assert.True(shell.NearestAfterKillChoice);
+        shell.Step(Right);
+        Assert.False(shell.NearestAfterKillChoice);
+        shell.Step(Right);
+        Assert.True(shell.NearestAfterKillChoice);
+
         shell.Step(Down);
         Assert.Equal(OriginalShell.GameOptionsAcceptKey, shell.FocusedKey);
         var step = shell.Step(Accept);
         var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
         Assert.Equal(PresentationId.BuiltIn, exit.Presentation);
+        Assert.True(exit.NearestAfterKill);
         // The graphics word rides this page's apply unchanged: it is the VIDEO page's row now, and
         // the apply carries every saved choice whichever page sends it.
         Assert.Equal(GraphicsMode.Default, exit.Graphics);
@@ -774,6 +787,9 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Right);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
+        shell.Step(Down);
+        shell.Step(Right);
+        Assert.True(shell.NearestAfterKillChoice);
 
         shell.Step(Down);
         shell.Step(Down);
@@ -782,6 +798,7 @@ public class OriginalShellTests
         Assert.Equal(OriginalScreen.Options, shell.Screen);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
         Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
+        Assert.Null(shell.NearestAfterKillChoice);
 
         // Back on the open list closes it; the next Back is CANCEL CHANGES.
         shell.OpenGameOptions();
@@ -809,7 +826,7 @@ public class OriginalShellTests
         {
             GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value,
             Difficulty = "hardest", VSync = "120", DisplayMode = DisplayWords.Fullscreen,
-            Resolution = "1920x1080", MonitorIndex = "0",
+            Resolution = "1920x1080", MonitorIndex = "0", NearestAfterKill = true,
         };
         var shell = Shell(out _, () => saved);
         shell.OpenGameOptions();
@@ -817,6 +834,7 @@ public class OriginalShellTests
         Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
         Assert.Equal(CSVM.Flight.Difficulty.Hardest, shell.DifficultyChoice);
+        Assert.True(shell.NearestAfterKillChoice);
         Assert.Equal("BUILT-IN", shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey).Label);
         Assert.Equal("Hardest", shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey).Label);
         shell.OpenVideo();
@@ -835,6 +853,7 @@ public class OriginalShellTests
         saved.GraphicsMode = null;
         saved.MenuPresentation = null;
         saved.Difficulty = null;
+        saved.NearestAfterKill = null;
         saved.VSync = null;
         saved.DisplayMode = null;
         saved.Resolution = null;
@@ -843,6 +862,7 @@ public class OriginalShellTests
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
         Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
+        Assert.Null(shell.NearestAfterKillChoice);
         shell.OpenVideo();
         Assert.Null(shell.VSyncChoice);
         Assert.Equal("Off", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
@@ -977,9 +997,15 @@ public class OriginalShellTests
         Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Menu" && l.X == 130f && l.Y == 340f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select the menu presentation." && l.X == 340f && l.Y == 350f && l.Width == 310f);
-        // The first two authored rows are taken: two titles, two descriptions and the page's own
-        // tab title.
-        Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
+        // The checkbox row takes the narrower title box the authored head-turn row carries, which
+        // is what leaves the box beside the words clear of them.
+        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 400f && l.Width == 112f);
+        Assert.Contains(board.Lines,
+            l => l.Text == "Take the nearest target after a kill instead of the first of the list."
+                && l.X == 340f && l.Y == 410f && l.Width == 310f);
+        // The first three authored rows are taken: three titles, three descriptions and the page's
+        // own tab title.
+        Assert.Equal(7, board.Lines.Count(l => l.Row < 0));
 
         // The box is this page's focus mark, not standing chrome, so exactly one row carries it and
         // it is the focused one.

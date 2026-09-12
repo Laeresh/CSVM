@@ -731,7 +731,7 @@ public class OriginalCoverageTests : IDisposable
         return 1;
     }
 
-    // The Game Options page's four rows share one plate, so no two of them may overlap, and no
+    // The Game Options page's five rows share one plate, so no two of them may overlap, and no
     // control may sit over a title or a description.
     private void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
     {
@@ -741,11 +741,11 @@ public class OriginalCoverageTests : IDisposable
         Assert.Equal(
             new[]
             {
-                OriginalShell.DifficultyKey, OriginalShell.PresentationKey,
+                OriginalShell.DifficultyKey, OriginalShell.PresentationKey, OriginalShell.NearestAfterKillKey,
                 OriginalShell.GameOptionsAcceptKey, OriginalShell.GameOptionsCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "GAME OPTIONS", 4);
+        RowsAreClearOfEachOther(shell, rows, "GAME OPTIONS", 6);
     }
 
     // The AUDIO page's rows, the same rule over its own plate. Its press regions are the widest of

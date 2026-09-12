@@ -153,6 +153,8 @@ internal static class MenuLaunchReturnSuites
 
         WalkTo(run, menu, LaunchMenu.OptionsRow);
         run.Press(Accept);
+        // Two rows down, past the targeting setting, onto the presentation row.
+        run.Press(Down);
         run.Press(Down);
         // The row opens on the saved word, which with no options file is the shipped Original, so
         // it is stepped until it reads Original rather than assumed to start one step short of it.

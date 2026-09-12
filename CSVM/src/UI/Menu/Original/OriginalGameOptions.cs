@@ -10,8 +10,8 @@ namespace CSVM.UI.Menu.Original;
 /// column, a control in the control column, a description in the description column, at the
 /// authored row pitch) and ACCEPT CHANGES and CANCEL CHANGES under them. The options are a table,
 /// so a further one is an entry plus the store field it reads. The first row is the original's own
-/// Difficulty dropdown at its authored place; remake-only is the Menu row under it, its words and
-/// the control it takes. The display settings stand on the VIDEO page instead
+/// Difficulty dropdown at its authored place; remake-only are the Menu row under it and the Next
+/// Target checkbox under that, their words and the controls they take. The display settings stand on the VIDEO page instead
 /// (<see cref="VideoSection"/>). The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
@@ -66,6 +66,10 @@ public sealed partial class OriginalShell
 
     private static readonly string[] PresentationWords = { "ORIGINAL", "BUILT-IN" };
 
+    // The checkbox's two words, in the order its eight-frame strip reads them: index 0 unchecked,
+    // index 1 checked. Only the page with no section draws them, as a text button's label.
+    private static readonly string[] NearestAfterKillWords = { "OFF", "ON" };
+
     // The page's options in their authored row order, each a title, a control, a description and
     // the words of the store field it reads and writes. A screen never saves: the apply exit
     // carries every choice and Launcher.ApplyOptions is the options file's one writer. The
@@ -80,6 +84,11 @@ public sealed partial class OriginalShell
         new(PresentationKey, "Menu", _ => "Select the menu presentation.", OriginalRowKind.Dropdown, PresentationWords,
             s => s._choice == PresentationId.BuiltIn.Value ? 1 : 0,
             (s, i) => s._choice = i == 1 ? PresentationId.BuiltIn.Value : PresentationId.Original.Value),
+        new(NearestAfterKillKey, "Next Target",
+            _ => "Take the nearest target after a kill instead of the first of the list.",
+            OriginalRowKind.Radio, NearestAfterKillWords,
+            s => s._nearestAfterKill == true ? 1 : 0,
+            (s, i) => s._nearestAfterKill = i == 1),
     };
 
     private string? _goOpen;
@@ -111,6 +120,7 @@ public sealed partial class OriginalShell
         _choice = saved?.MenuPresentation ?? PresentationId.Original.Value;
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
         _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
+        _nearestAfterKill = saved?.NearestAfterKill;
         _monitorIndex = saved?.MonitorIndex;
         _resolution = saved?.Resolution;
         _displayMode = saved?.DisplayMode;
@@ -127,7 +137,7 @@ public sealed partial class OriginalShell
     private OptionsApplyExit AppliedOptions() =>
         new(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync,
-            _audioMaster, _audioMusic, _audioEffects, _audioVoice);
+            _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill);
 
     // The rows: an open list's items alone while one is open, else the option controls at their
     // authored rows and the two plaques under them, all one column. Without the section the

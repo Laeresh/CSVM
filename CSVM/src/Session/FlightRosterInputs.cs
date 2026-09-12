@@ -35,6 +35,9 @@ internal sealed class FlightRosterPolicy
     /// armour and health at spawn and nothing else. An Instant Action wave's skill overrides it per
     /// spawn through <see cref="AiSpawn.Difficulty"/>.</summary>
     public int Difficulty { get; init; } = CSVM.Flight.Difficulty.Normal;
+    /// <summary>The saved targeting setting (<see cref="CSVM.Flight.TargetSelection.NearestAfterKill"/>),
+    /// off by default, which is the decoded head rule.</summary>
+    public bool NearestAfterKill { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
     public bool DebugMarkers { get; init; }
@@ -68,6 +71,7 @@ internal sealed class FlightRosterPolicy
         AiAttackSkill = spec.AiAttackSkill,
         AiAttackSkillExplicit = spec.AiAttackSkillExplicit,
         Difficulty = spec.Difficulty,
+        NearestAfterKill = spec.NearestAfterKill,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
         DebugMarkers = spec.DebugMarkers,
