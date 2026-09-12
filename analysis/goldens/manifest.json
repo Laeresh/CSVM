@@ -113,8 +113,8 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "ce737c3a7ae01e381d84554dac10696f",
-      "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen edge arrow and the category/name/clock label in the non-destructive objective's blue, over the run HUD's clock and zone count, the player's ground shadow.",
+      "hash": "6385a033bab1894100b0dcf656b9904b",
+      "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen marker's shaft out to the pane edge under its 20-by-10 head, the category/name/clock label above the anchor in the objective's blue, the run HUD's clock.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {

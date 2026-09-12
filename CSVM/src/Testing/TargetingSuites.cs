@@ -826,8 +826,10 @@ internal static class TargetingSuites
         "by team against the pane's own, skips a crashed one and skips the pane's own " +
         "aircraft; plus the shipped marker's rules — the three decoded colours, the bracket " +
         "gate's gun reach (inside RANGE brackets, past it does not, a target outrunning the " +
-        "round never does, and the hysteresis holds the boundary case), and the label lines " +
-        "an aircraft, an off-screen target and a named objective each compose")]
+        "round never does, and the hysteresis holds the boundary case), the label lines " +
+        "an aircraft, an off-screen target and a named objective each compose, and the " +
+        "off-screen geometry: the 5 % anchor inset, the tip on the pane edge with the shaft " +
+        "between them, the 20-by-10 head, and the label 3 below or 45 above the anchor")]
     internal static void HostileMarkerHud(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -957,6 +959,32 @@ internal static class TargetingSuites
         ctx.Check(lines.Count == 2 && lines[0] == "Zeppelin [Destroy] -"
                   && lines[1] == "Promised Land",
             $"a named objective composes both lines, C1 M04 Zeppelin.png's case, with no wrap width to port ({string.Join(" / ", lines)})");
+
+        // --- The off-screen marker's geometry, the decode's own (docs/org/spyglass.md) -----------
+        // The anchor clamps into a 5 % inset, the arrow's tip clamps to the pane itself, and the
+        // shaft between them is what makes the arrow longer the further out the target is.
+        var pane = new Vector2(2560f, 1440f);
+        var offRight = EdgeMarker.Resolve(new Vector2(9000f, 720f), behind: false, pane);
+        ctx.Check(!offRight.OnScreen
+                  && Mathf.IsEqualApprox(offRight.Anchor.X, pane.X * 0.95f)
+                  && Mathf.IsEqualApprox(offRight.Tip.X, pane.X - 1.001f)
+                  && Mathf.IsEqualApprox(offRight.Anchor.Y, 720f),
+            $"a target far off the right sits its anchor on the 5 % inset ({offRight.Anchor}) and its arrow tip on the pane's own edge ({offRight.Tip}), the two ends of the shaft");
+        var justOut = EdgeMarker.Resolve(new Vector2(2500f, 720f), behind: false, pane);
+        ctx.Check(!justOut.OnScreen && justOut.Tip == new Vector2(2500f, 720f)
+                  && justOut.Tip.DistanceTo(justOut.Anchor) < offRight.Tip.DistanceTo(offRight.Anchor),
+            $"a target only just past the inset keeps its own point as the tip, so the shaft is short ({justOut.Tip.DistanceTo(justOut.Anchor):0} px) where a far one's is long ({offRight.Tip.DistanceTo(offRight.Anchor):0} px)");
+
+        var (headPoint, headLeft, headRight) = TargetHud.ArrowHead(offRight.Tip, offRight.Dir, 1f);
+        ctx.Check(headPoint == offRight.Tip
+                  && Mathf.IsEqualApprox(headPoint.DistanceTo((headLeft + headRight) / 2f), 20f)
+                  && Mathf.IsEqualApprox(headLeft.DistanceTo(headRight), 10f),
+            $"the head is the decoded 20 back along the bearing and 10 across its base, whatever the shaft does");
+
+        var upperLabel = TargetHud.EdgeLabelAnchor(new Vector2(200f, 300f), pane.Y, 1f);
+        var lowerLabel = TargetHud.EdgeLabelAnchor(new Vector2(200f, 1100f), pane.Y, 1f);
+        ctx.Check(upperLabel == new Vector2(200f, 303f) && lowerLabel == new Vector2(200f, 1055f),
+            $"the label anchor keeps the marker's x and drops 3 below it in the pane's upper half ({upperLabel}), lifting 45 above it in the lower ({lowerLabel}), with no back-off along the arrow");
 
         // --- The debug-marker string: identity kept whole, health/armor gated on the source -------
         var healthyRef = TargetRef.ForAircraft(

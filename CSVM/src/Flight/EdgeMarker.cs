@@ -4,26 +4,33 @@ namespace CSVM.Flight;
 
 /// <summary>The off-screen edge marker's placement rules, the one home for what
 /// VersusHud and TargetHud each used to carry privately (docs/architecture.md): a world target's
-/// marker sits at its projected point on screen, else clamps to the margin-inset screen edge with
-/// an outward arrow direction; the edge tag carries a clock-hour bearing. Engine-free, the
-/// caller projects through its own camera and passes the result in, and each HUD keeps its own
-/// arrow, tag and label styling, which legitimately differs.</summary>
+/// marker sits at its projected point on screen, else clamps into the inset screen edge with an
+/// outward arrow direction and a second point on the pane boundary for the arrow to reach; the
+/// edge tag carries a clock-hour bearing. Engine-free, the caller projects through its own camera
+/// and passes the result in, and each HUD keeps its own arrow, tag and label styling.
+/// Decode: <see href="../../docs/org/spyglass.md">org/spyglass.md</see>.</summary>
 public static class EdgeMarker
 {
-    /// <summary>Keep edge markers this far off the screen border (1440p reference pixels,
-    /// callers scale by HudMetrics before passing a margin to <see cref="Resolve"/>).</summary>
-    public const float RefEdgeMargin = 46f;
+    /// <summary>The share of each pane axis the marker anchor is held inside, the original's own
+    /// per-axis 5 percent (docs/org/spyglass.md "Where the anchor is"). A fraction rather than a
+    /// reference-pixel count, so nothing scales it by HudMetrics.</summary>
+    public const float InsetFraction = 0.05f;
+
+    // The arrow's tip clamps to the pane less this at the far corner, the original's own 1.001
+    // device pixels, so a tip never lands on the boundary its viewport rectangle excludes.
+    private const float TipInset = 1.001f;
 
     /// <summary>Resolves a projected target to its marker placement. <paramref name="behind"/> is
     /// the caller's <c>Camera3D.IsPositionBehind</c> answer: the projection of a point behind the
     /// camera is mirrored through centre, so it is forced off screen and its direction flipped
     /// back. A projection landing on centre (dead ahead or dead astern) points down.</summary>
-    public static Placement Resolve(Vector2 projected, bool behind, Vector2 paneSize, float margin)
+    public static Placement Resolve(Vector2 projected, bool behind, Vector2 paneSize)
     {
-        var inner = new Rect2(margin, margin, paneSize.X - 2f * margin, paneSize.Y - 2f * margin);
+        var inset = paneSize * InsetFraction;
+        var inner = new Rect2(inset, paneSize - 2f * inset);
         if (!behind && inner.HasPoint(projected))
         {
-            return new Placement(true, projected, Vector2.Zero);
+            return new Placement(true, projected, Vector2.Zero, projected);
         }
 
         var center = paneSize / 2f;
@@ -34,7 +41,11 @@ public static class EdgeMarker
         }
 
         dir = dir.LengthSquared() < 1f ? Vector2.Down : dir.Normalized();
-        return new Placement(false, EdgePoint(center, dir, margin), dir);
+        var pane = new Rect2(Vector2.Zero, paneSize - new Vector2(TipInset, TipInset));
+        // A target still inside the pane keeps its own point as the tip, which is what shortens
+        // the arrow to almost nothing as it crosses the inset boundary.
+        var tip = !behind && pane.HasPoint(projected) ? projected : ToBoundary(pane, center, dir);
+        return new Placement(false, ToBoundary(inner, center, dir), dir, tip);
     }
 
     /// <summary>Relative bearing of <paramref name="targetPos"/> from the pilot's own heading in
@@ -49,18 +60,29 @@ public static class EdgeMarker
         return h == 0 ? 12 : h;
     }
 
-    // Screen-edge point along `dir` from centre, inset by the margin.
-    private static Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
+    // Walk from `from` along `dir` to the first wall of `rect`. The original steps out from the
+    // rectangle's centre rather than clamping each axis on its own, which is what keeps both
+    // clamped points on the marker's own bearing.
+    private static Vector2 ToBoundary(Rect2 rect, Vector2 from, Vector2 dir)
     {
-        float hx = center.X - margin, hy = center.Y - margin;
-        float tx = Mathf.Abs(dir.X) > 1e-4f ? hx / Mathf.Abs(dir.X) : float.MaxValue;
-        float ty = Mathf.Abs(dir.Y) > 1e-4f ? hy / Mathf.Abs(dir.Y) : float.MaxValue;
-        return center + dir * Mathf.Min(tx, ty);
+        float t = float.MaxValue;
+        if (Mathf.Abs(dir.X) > 1e-4f)
+        {
+            t = Mathf.Min(t, ((dir.X > 0f ? rect.End.X : rect.Position.X) - from.X) / dir.X);
+        }
+
+        if (Mathf.Abs(dir.Y) > 1e-4f)
+        {
+            t = Mathf.Min(t, ((dir.Y > 0f ? rect.End.Y : rect.Position.Y) - from.Y) / dir.Y);
+        }
+
+        return t == float.MaxValue ? from : from + dir * t;
     }
 
-    /// <summary>Where a marker goes. On screen: <see cref="Anchor"/> is the projected point and
-    /// <see cref="Dir"/> is zero. Off screen: <see cref="Anchor"/> sits on the margin-inset pane
-    /// boundary and <see cref="Dir"/> is the normalized outward direction the arrow points
-    /// along.</summary>
-    public readonly record struct Placement(bool OnScreen, Vector2 Anchor, Vector2 Dir);
+    /// <summary>Where a marker goes. On screen: <see cref="Anchor"/> and <see cref="Tip"/> are the
+    /// projected point and <see cref="Dir"/> is zero. Off screen: <see cref="Anchor"/> sits on the
+    /// inset boundary and carries the marker and its label, <see cref="Tip"/> is the same point
+    /// clamped to the pane itself and is where the arrow points, and <see cref="Dir"/> is the
+    /// normalized outward direction from the pane's centre.</summary>
+    public readonly record struct Placement(bool OnScreen, Vector2 Anchor, Vector2 Dir, Vector2 Tip);
 }

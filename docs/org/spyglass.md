@@ -322,9 +322,9 @@ and do not read the footage as evidence that it works.**
 | Range | `fogNear + (fogFar - fogNear) * 0.8`, capped 2000, engaging at 0.875 of that | not applicable |
 | Field of view | `2 * atan(1.1 * R / d)` clamped to 1.5-90 degrees, radius kept as a high-water mark | not applicable |
 | Camera pose | at the player's aircraft, aimed at the target, roll kept only for an aircraft | not applicable |
-| Edge inset | 5% of the viewport per axis, plus half the disc when shown | a flat `EdgeMarker.RefEdgeMargin` of 46 reference pixels, no disc term |
-| Arrow | a shaft from the anchor (or the disc's rim) out to the point clamped to the full viewport, plus a 20 x 10 pixel head at the tip | `TargetHud.DrawArrow` draws only a head, `RefArrowLen` 18 and `RefArrowHalf` 8, at the anchor |
-| Label placement | anchor x unchanged, y offset `+3` in the screen's upper half and `-45` in the lower, `windowBottom + 3` / `windowTop - 45` when the disc is up | backed off along the arrow direction by `RefArrowLen + RefTextGap`, 26 reference pixels, in both axes |
+| Edge inset | 5% of the viewport per axis, plus half the disc when shown | `EdgeMarker.InsetFraction`, the same 5% per axis, with no disc term to add |
+| Arrow | a shaft from the anchor (or the disc's rim) out to the point clamped to the full viewport, plus a 20 x 10 pixel head at the tip | the same shaft and head, `TargetHud.ArrowHead` over `EdgeMarker`'s anchor and tip; the rim push-out waits on the disc |
+| Label placement | anchor x unchanged, y offset `+3` in the screen's upper half and `-45` in the lower, `windowBottom + 3` / `windowTop - 45` when the disc is up | the same `+3` / `-45` rule, `TargetHud.EdgeLabelAnchor`; the disc's own rule waits on the disc |
 | Colour | `Target::GetColor` into all three primitives | the same rule, `TargetHud`'s `color` |
 | Occluders | recorded and restored unchanged, a no-op | nothing |
 

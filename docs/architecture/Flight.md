@@ -577,12 +577,13 @@ aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md).
 
 ## src/Flight/EdgeMarker.cs
 The off-screen edge marker's placement rules, engine-free and pure: `Resolve(projected, behind,
-paneSize, margin)` answers on-screen against edge-clamped as a `Placement` (the margin-inset rect
-test, the behind-the-camera mirror, the degenerate-direction fallback and the clamp to the inset
-boundary), and `ClockHour` is the bearing in hours. Owns `RefEdgeMargin`. The camera stays with
-the callers: `VersusHud` and `TargetHud` project through their own pane and keep
-their own arrow, tag and label styling. `MarkerDraw` draws what this places; off-engine coverage
-is `CSVM.Tests/EdgeMarkerTests.cs`.
+paneSize)` answers on-screen against edge-clamped as a `Placement` (the inset rect test, the
+behind-the-camera mirror, the degenerate-direction fallback, the anchor's clamp to the inset
+boundary and the `Tip`'s to the pane itself, which are the arrow's two ends), and `ClockHour` is
+the bearing in hours. Owns `InsetFraction`, the original's 5 percent of each pane axis
+([../org/spyglass.md](../org/spyglass.md)). The camera stays with the callers: `VersusHud` and
+`TargetHud` project through their own pane and keep their own arrow, tag and label styling.
+`MarkerDraw` draws what this places; off-engine coverage is `CSVM.Tests/EdgeMarkerTests.cs`.
 
 ## src/Flight/StuntRunHud.cs
 The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`: the clock and
@@ -682,8 +683,9 @@ selection from `TargetSelection` (a campaign mission's objective sites included,
 that same selection), a nearest AI-hostile fallback where no selection exists, and
 `--debug-markers`' every-aircraft overlay. Draws the original's bracket box and label block and
 owns the colour table, the label layout, the selected gun's reach gate and the debug identity
-string. Placement and the bearing are `EdgeMarker`'s and the primitives `MarkerDraw`'s; only the
-styling is this HUD's own. The marker's decode is [../org/targeting.md](../org/targeting.md).
+string. Off screen it owns the arrow, `ArrowHead` the decoded head and `EdgeLabelAnchor` the
+label's 3-below / 45-above rule, its shaft spanning `EdgeMarker`'s anchor and tip; placement is
+`EdgeMarker`'s. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own

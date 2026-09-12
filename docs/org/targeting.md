@@ -993,7 +993,7 @@ there.
 | Label content | `<name> [<category>] -` / proper name / `%d o'clock` | the same three lines, off `TargetRef`'s own label halves and display name |
 | Name line's source | the roster block's `title` alone, aeroplane and surface hull alike; an unnamed block shows no name | a campaign spawn takes the block's `title` (`AiSpawn.PilotName`), and where it has none the remake keeps an airframe title the original does not print there. A hull takes the same slot through `SurfaceVehicleRuntime`'s own resolve into `SurfaceVehicle.MarkerName` and prints NOTHING where its block authors none, which is the original exactly |
 | Colour | red hostile, green friendly, blue non-destructive objective | the same, `TargetHud.MarkerColor`, with the four destructive objective categories red and the rest blue |
-| Off screen | edge position plus the same three lines, clamped with a 3 px margin | the same, `EdgeMarker.Resolve` placing the arrow and the same three lines beside it |
+| Off screen | edge position plus the same three lines, clamped with a 3 px margin | the same edge position, `EdgeMarker.Resolve`, with `TargetHud.EdgeLabelAnchor` hanging the three lines off it by the decoded +3 / -45; the per-line 3 px clamp is not ported |
 
 ⚠ **The "no reference to copy" claim once made in `VersusHud`'s module doc was false.** The
 original draws an edge arrow with a stacked tag and clock bearing, which is what CSVM's

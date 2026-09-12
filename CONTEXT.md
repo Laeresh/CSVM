@@ -213,8 +213,8 @@ _Avoid_: loading screen, splash, please-wait
 ## HUD markers
 
 **Edge marker**:
-The off-screen presentation of a marked world target: the marker clamped to the margin-inset
-screen edge, with an arrow pointing outward and a clock-hour bearing.
+The off-screen presentation of a marked world target: the marker clamped into the inset screen
+edge, with an arrow pointing outward to the pane's own edge and a clock-hour bearing.
 _Avoid_: off-screen indicator, edge arrow (that is one styled part of it), waypoint marker
 
 **Clock-hour bearing**:

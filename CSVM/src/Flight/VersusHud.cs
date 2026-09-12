@@ -134,7 +134,7 @@ public sealed partial class VersusHud : Control
     {
         bool behind = _camera.IsPositionBehind(pos);
         Vector2 sp = _camera.UnprojectPosition(pos);
-        var placed = EdgeMarker.Resolve(sp, behind, Size, EdgeMarker.RefEdgeMargin * s);
+        var placed = EdgeMarker.Resolve(sp, behind, Size);
         if (placed.OnScreen)
         {
             DrawTag(font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);

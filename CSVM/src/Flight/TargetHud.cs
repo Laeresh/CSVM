@@ -51,11 +51,17 @@ public sealed partial class TargetHud : Control
 
     // 1440p reference metrics (scaled by HudMetrics, matches VersusHud's calibration).
     private const int RefMarkerFont = 14;
-    private const float RefArrowLen = 18f;
-    private const float RefArrowHalf = 8f;
-    private const float RefTextGap = 8f;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
     private const float RefStaggerStep = 18f;  // --debug-markers: gap between two edge tags on one bearing
+
+    // The off-screen marker's own decoded pixels (docs/org/spyglass.md). The arrowhead sits 20
+    // back along the bearing and 5 to each side (0x006035e4 / 0x006036bc). Its label takes the
+    // same 3-pixel gap a box's label does below the anchor in the pane's upper half (0x006035d0),
+    // and 45 above it in the lower half (0x006082d4), which is three label lines.
+    private const float RefHeadLen = 20f;
+    private const float RefHeadHalf = 5f;
+    private const float RefEdgeLabelUp = 45f;
+    private const float RefShaftWidth = 2f;    // ours: the original draws a 1 px line sprite
 
     // The selected target's marker: the original's own absolute pixel constants (0x00607a0c /
     // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor), read at the 1440p reference and
@@ -309,6 +315,26 @@ public sealed partial class TargetHud : Control
         }
     }
 
+    /// <summary>The arrowhead's three points at <paramref name="tip"/>: the point itself, then the
+    /// two base corners <see cref="RefHeadLen"/> back along <paramref name="dir"/> and
+    /// <see cref="RefHeadHalf"/> to each side, at scale <paramref name="s"/>. Fixed size, so an
+    /// arrow's visible length is its shaft's (docs/org/spyglass.md "The arrow").</summary>
+    public static (Vector2 Point, Vector2 Left, Vector2 Right) ArrowHead(Vector2 tip, Vector2 dir,
+        float s)
+    {
+        var back = tip - dir * (RefHeadLen * s);
+        var perp = new Vector2(-dir.Y, dir.X) * (RefHeadHalf * s);
+        return (tip, back + perp, back - perp);
+    }
+
+    /// <summary>The off-screen label block's anchor: the marker anchor's x untouched, and its y 3
+    /// pixels down in the pane's upper half or 45 up in the lower one, so the block sits clear of
+    /// the marker either way. There is no back-off along the arrow's direction
+    /// (docs/org/spyglass.md "The label anchor").</summary>
+    public static Vector2 EdgeLabelAnchor(Vector2 anchor, float paneHeight, float s) =>
+        new(anchor.X,
+            anchor.Y + (anchor.Y <= paneHeight * 0.5f ? RefLabelGap : -RefEdgeLabelUp) * s);
+
     public override void _Process(double delta)
     {
         // Track the pane (resizable window / splitscreen layout) and repaint every frame.
@@ -440,7 +466,7 @@ public sealed partial class TargetHud : Control
         var color = MarkerColor(target, OwnTeam);
         bool behind = _camera.IsPositionBehind(pos);
         var sp = _camera.UnprojectPosition(pos);
-        var placed = EdgeMarker.Resolve(sp, behind, Size, EdgeMarker.RefEdgeMargin * s);
+        var placed = EdgeMarker.Resolve(sp, behind, Size);
         _labelLines.Clear();
         if (placed.OnScreen)
         {
@@ -458,16 +484,13 @@ public sealed partial class TargetHud : Control
             return true;
         }
 
-        // Off screen: the edge arrow, and the label block stacked off its tail, DrawOpponent's own
-        // geometry, with the tag broken onto its own lines the way HUD.png shows the original's.
-        DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s, color);
+        // Off screen: the edge arrow from the anchor out to the tip, and the label block above or
+        // below the anchor, with the tag broken onto its own lines the way HUD.png shows the
+        // original's.
+        DrawArrow(placed.Tip, placed.Anchor, placed.Dir, s, color);
         LabelLines(target, $"{EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock",
             _labelLines, keepSlots: false);
-        var tail = placed.Anchor - placed.Dir * (RefArrowLen + RefTextGap) * s;
-        // Centred on the tail rather than hung below it: an edge tag has no box to sit under, and
-        // the original clamps its block into the viewport there for the same reason.
-        DrawLabelBlock(font, tail - new Vector2(0f, (_labelLines.Count - 1) * RefLabelPitch * s / 2f),
-            color, s, fontSize);
+        DrawLabelBlock(font, EdgeLabelAnchor(placed.Anchor, Size.Y, s), color, s, fontSize);
         return true;
     }
 
@@ -525,28 +548,32 @@ public sealed partial class TargetHud : Control
     {
         bool behind = _camera.IsPositionBehind(pos);
         Vector2 sp = _camera.UnprojectPosition(pos);
-        var placed = EdgeMarker.Resolve(sp, behind, Size, EdgeMarker.RefEdgeMargin * s);
+        var placed = EdgeMarker.Resolve(sp, behind, Size);
         if (placed.OnScreen)
         {
             DrawTag(font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);
             return;
         }
-        DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s, color);
+        DrawArrow(placed.Tip, placed.Anchor, placed.Dir, s, color);
         // Several planes on one bearing put their tags on the same pixel (--debug-markers marks
         // six at once); step each one along the screen edge so all of them stay readable.
         var along = new Vector2(-placed.Dir.Y, placed.Dir.X) * (stagger * RefStaggerStep * s);
-        DrawTag(font, placed.Anchor - placed.Dir * (RefArrowLen + RefTextGap) * s + along,
+        DrawTag(font, EdgeLabelAnchor(placed.Anchor, Size.Y, s) + along,
             $"{tag}  {EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock", color, fontSize);
     }
 
-    private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s, Color color)
+    // The arrow the original draws: a shaft from the label anchor out to the tip, carrying the
+    // apparent length, and the fixed head on the tip's end. Both take the drop shadow the box and
+    // the tags carry, so the arrow stays readable over sky.
+    private void DrawArrow(Vector2 tip, Vector2 tail, Vector2 dir, float s, Color color)
     {
-        var perp = new Vector2(-dir.Y, dir.X);
-        var b1 = tip - dir * len + perp * half;
-        var b2 = tip - dir * len - perp * half;
+        var (point, left, right) = ArrowHead(tip, dir, s);
         var off = new Vector2(1.5f, 1.5f) * s;
-        DrawColoredPolygon(new[] { tip + off, b1 + off, b2 + off }, Shadow);
-        DrawColoredPolygon(new[] { tip, b1, b2 }, color);
+        float w = Mathf.Max(1f, RefShaftWidth * s);
+        DrawLine(tail + off, point + off, Shadow, w, antialiased: true);
+        DrawColoredPolygon(new[] { point + off, left + off, right + off }, Shadow);
+        DrawLine(tail, point, color, w, antialiased: true);
+        DrawColoredPolygon(new[] { point, left, right }, color);
     }
 
     private void DrawTag(Font font, Vector2 center, string text, Color color, int fontSize)
