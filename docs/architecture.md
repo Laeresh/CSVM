@@ -193,7 +193,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
 - `src/Flight/AiEngineAudio.cs` — an AI aircraft's positional engine loops and the 2000-unit cull.
 - `src/Flight/AiWeaponAudio.cs` — an AI aircraft's positional gun loop and dry cue, culled by each cue's own authored audible distance.
-- `src/Flight/GunVoice.cs` — one mounted gun's leased firing voice, a positional emitter per mount moved to the muzzle each round leaves from.
+- `src/Flight/GunVoice.cs` — one mounted gun's leased firing voice, a positional emitter per mount moved to the world position its caller renews it at.
 - `src/Flight/AudioListeners.cs` — where the session's ears are, the one nearest-human seam every positional flight-audio cull measures from.
 - `src/Flight/WeaponAudioCues.cs` — the weapon-sound selection both audio paths share: a definition name to a resolved cue with its `RANGE` pair.
 - `src/Flight/EngineAudioCurves.cs` — the engine-slot definition choice and curve maths both audio paths share.

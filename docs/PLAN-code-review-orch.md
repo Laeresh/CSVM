@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 26. ☑ A turret voice culls at 1.1x its range, as decoded
 27. ☐ `ADD_OTHER_TARGET` and its remove reach the mode table's points
 28. ☑ The goldens README count and the re-pinned `exercises` fields
-29. ☐ Three stale doc lines after the landings
+29. ☑ Three stale doc lines after the landings
 
 ## Dependency and parallelism notes
 
@@ -913,7 +913,41 @@ count as a word the next re-pin will not break, or drop the number.
 
 **Verify.** `CheckGoldenProse.ps1` clean; no hash changes in the manifest diff.
 
-## C29 ☐ Three stale doc lines after the landings
+## C29 ☑ Three stale doc lines after the landings
+
+**Landed.** `docs/PLAN-public-release.md`'s New York facade entry now states that `BL-538`'s
+landing commit applies the chapter's own mip LOD bias, which moves the band out rather than
+removing it, while `BL-322` has none; the false "neither has a landing commit" is gone.
+`PROJECT_CONTEXT.md`'s "Next" line names the open ids one by one, `BL-750`, `BL-751`, `BL-753` to
+`BL-755`, `BL-757` and `BL-760` to `BL-767`, instead of a range that swept up six closed items.
+`docs/architecture.md`'s `GunVoice` index bullet reads "a positional emitter per mount moved to
+the world position its caller renews it at", which is what the component does and what both the
+`Flight.md` and `Session.md` entries say, rather than naming a muzzle the code never uses.
+
+**Verified.** <pending orchestrator run> `git log --oneline --grep=BL-538` shows `ca525d9f`
+"BL-538: C5 takes its own decoded mip LOD bias, and the cull premise is disproved", the landing
+the corrected plan line now describes; the same query for `BL-322` returns only decode and
+neighbouring-item commits, so that half of the sentence holds. `backlog.md` still defines both
+entries, so neither is closed. For the status list, `backlog.md` defines `BL-750`, `BL-751`,
+`BL-753` to `BL-755`, `BL-757` and `BL-760` to `BL-767` and defines none of `BL-752`, `BL-756`,
+`BL-758`, `BL-759`, `BL-768` or `BL-769`; `git log --oneline main --grep=BL-75 --grep=BL-76`
+names the six closings (`63b16201` for 758, 759 and 769, `04d4e5ad` for 756, `ea32cce2` for 752,
+`e123abf3` retiring 768 with `PLAN-video-preferences`). For the gun voice, `5ad8943f` "Close
+BL-820" records "The position is the hull ORIGIN, not the firepoint", `GunVoice.Renew` sets
+`GlobalPosition` from the caller's world position, `Flight.md` gives the lease as the caller's per
+mount and `Session.md` has `SurfaceGunner` renewing "per tick from the hull origin".
+`CheckDocEntries.ps1`, `CheckItemIds.ps1` and `CheckEncoding.ps1` all clean; `git diff --stat`
+touches only the four owned files.
+
+**What the item's evidence got wrong.** The evidence named three closed ids in the status range;
+six are closed. `BL-752` and `BL-756` closed on `main` after the plan was written, and `BL-768`
+retired with its own plan, which the evidence does not mention. The `docs/architecture.md:196`
+reading is accurate, but the correction the evidence implies ("the hull origin") would be wrong as
+an index bullet: the hull origin is `SurfaceGunner`'s renewal position, while `TurretController`
+renews at its own mount, so the component's own line has to name the caller rather than either
+position.
+
+**Original approach (kept for reference).**
 
 **Goal.** Live prose matches the tree after the range.
 
