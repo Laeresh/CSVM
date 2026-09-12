@@ -17,9 +17,11 @@ flight and confirms on a board.
 These are the defaults, not the whole keymap. The launchscreen's Options screen
 carries a Controls door where each seat rebinds any action here, and the rows
 below are the starting point a new player gets and the set that screen's reset
-returns to. What the game reads while flying is still the shipped set: the menu
-context takes a rebind immediately, and the flight and free-camera contexts are
-edited and saved but not yet loaded at launch.
+returns to. All three contexts read what that screen saved: a seat loads its own
+player's file as it is built, per action, falling back to the row below for
+anything the file does not carry (`Bindings/LaunchBindings.cs`). A `--det` or
+`--run-tests` launch reads no file at all, so a scripted run is a function of the
+committed tree and not of whoever ran it.
 
 Not every row here is a bindable action. The debug overlays and the lab panels
 (`F5`, `F10` through `F18`, `C`, `X`, and the viewer and weapon-lab keys) are
@@ -53,11 +55,11 @@ specified in [`cli.md`](cli.md).
 | `WASD` / numpad `+`/`−` | | weapon lab: swing and zoom the orbit around the held plane (numpad `+` in, `−` out; it reads no stick input while held). With `V` out, the freecam's own controls apply instead |
 | `R` | Y | respawn · restart while a results board is up (the direct route to that board's Restart item) |
 | `F9` | left stick click | auto-land: only does something inside a story mission's `auto` approach sphere, where it starts the same hookup animation the manual approach cone would. The original binds this to `A` (`OriginalScreenshots\Keybinds Other.png`, "Auto-Dock"), which this port's WASD scheme already spends on roll left, so it gets its own free slot instead. The HUD prompt is the original's own wording with whichever of these two controls the seat can use in it, so a pad-only splitscreen player is named the stick click and never the key |
-| `T` | D-pad ↑ | target the next enemy/objective — steps the cycle, and reaches whoever shot you first. Objectives ride this cycle ahead of everything else, so in a stunt run it is also what steps the Danger Zone marker: a zone is an objective and has no key of its own. D-pad up is the pad's one targeting binding: a tap steps this cycle and a hold selects the nearest, split by hold length inside the consumer rather than by two bindings |
-| `Y` | | target the next ally |
-| `U` | | target the next non-aircraft (turret emplacements, zeppelin sub-parts) |
-| `I` | | target whatever is nearest the crosshair — a hard 15° cone about the **nose**, 2 km max, friend or foe. The pad reaches it by holding d-pad up past 250 ms, which is the target-cycle binding above dispatched by hold length, so this action carries no pad default of its own |
-| `O` | | target nothing — clears the selection, and it **stays** cleared until one of the keys above |
+| `T` | D-pad ↑ | target the next enemy/objective — steps the cycle, and reaches whoever shot you first. Objectives ride this cycle ahead of everything else, so in a stunt run it is also what steps the Danger Zone marker: a zone is an objective and has no key of its own. A hostile boat, ship or truck is on this cycle too, not the non-aircraft one: that class holds what a mission flagged, not what fails to fly (`docs/org/targeting.md`). The original binds it to `E` and lays its whole targeting scheme across one run of the top row, `Q W E R T` (`OriginalScreenshots/Keybinds Targeting.png`, decoded in `docs/org/input.md`), all five of which this port's flight keys already spend, so its own run of five starts a row down at `T`. D-pad up is the pad's one targeting binding: a tap steps this cycle and a hold selects the nearest, split by hold length inside the consumer rather than by two bindings. The original gives this action joystick button 3, one of only two targeting actions it puts on a pad at all |
+| `Y` | | target the next ally — the original's `W` |
+| `U` | | target the next non-aircraft (turret emplacements, zeppelin sub-parts) — the original's `R`, and its other pad targeting binding, joystick button 6 |
+| `I` | | target whatever is nearest the crosshair — a hard 15° cone about the **nose**, 2 km max, friend or foe. The original's `Q`. The pad reaches it by holding d-pad up past 250 ms, which is the target-cycle binding above dispatched by hold length, so this action carries no pad default of its own |
+| `O` | | target nothing — clears the selection, and it **stays** cleared until one of the keys above. The original's `T`. Its other six targeting actions, a Previous and a class-restarting Nearest for each of the three classes, sit on the same three letters under Shift and Ctrl and are not bound here (`BL-827`) |
 | `F8` | D-pad ↓ | cycle the views: Cockpit → Nose → Chase → Cockpit, the original's own three-stop walk confirmed at its controls — `--view=cockpit` / `--view=nose` / `--view=chase`. The original's binding for "Cycle Cockpit Views" (`OriginalScreenshots/Keybinds Views 1.png`, which also gives it a joystick button); the D-pad slot is this port's pick of the free buttons, and gives a pad-only seat its way in |
 | `F6` | Back/Select | select the chase view directly, without walking the cycle — `--view=chase` (the default). `F6` and Back are this port's choices: the original's own `F7` is the flyby, the row below |
 | `F7` | | the flyby camera — `--view=flyby`. The view leaves the aeroplane and takes a spot ahead of it and off to one side, holds that spot while the aircraft runs past within a few metres, then re-sites itself a few seconds later. The original's own binding, labelled "Access Chase View" (`OriginalScreenshots/Keybinds Views 1.png`), which its own code settles as camera mode 9 rather than the following chase view. `F8` or `F6` leaves it; so does a respawn. Placement, radii and timing all come from `camparam.json` (`docs/formats/camparam.md`) |

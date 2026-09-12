@@ -1789,20 +1789,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-351` `[Feature]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` **Generalise the targeting HUD: target-cycling keybindings for the
-  original's target classes.** Requested 2026-08-14 alongside M4 H22 (which extends the VS
-  targeting elements to AI enemy planes but picks the target automatically). The original ships
-  several bindings to cycle the tracked target by class: enemies/objectives, allies, and
-  non-aircraft (ground/sea vehicles, turrets, zeppelins). Wanted: the same class-cycling on our
-  targeting HUD — per pane in splitscreen, reusing the VS/H22 drawing elements unchanged, only
-  the selection source generalises. Ground work: pull the original's exact bindings and cycle
-  order from its input config/manual before designing ours; wire through the named-action seam,
-  which is built: a class-cycle action per class in `InputAction`, authored in `DefaultBindings` and
-  rebindable, with the selection source generalising behind it (`CSVM/src/Bindings/`).
-  *How you'd know it worked:* in a session with AI planes, a zeppelin and turrets, the target
-  key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
-  tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
-  bindings when it lands.
+- `BL-827` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Six of the original's eleven targeting actions have no key here: a
+  Previous and a class-restarting Nearest per class.** CSVM ships five of the eleven, one Next per
+  class plus nearest-crosshairs and Target Nothing, on `T`/`Y`/`U`/`I`/`O`. The original ships all
+  eleven, three directions for each of the three classes: `E`/`Shift+E`/`Ctrl+E` for
+  enemies/objectives, `W`/`Shift+W`/`Ctrl+W` for allies, `R`/`Shift+R`/`Ctrl+R` for non-aircraft,
+  authored at `FUN_004936c0` and decoded in `docs/org/targeting.md` ("The controls the eleven ship
+  on"). Both behaviours already exist behind the seam and are exercised by the suites:
+  `TargetSelection.Previous(cls)` steps back, `TargetSelection.Nearest(cls)` returns to the head of
+  a cycle the pilot has walked into. What is missing is six `InputAction` members, six
+  `DefaultBindings` rows and six lines in `FlightController.StepTargeting`.
+  *The decision this waits on:* which six keys. The original's own scheme cannot be copied, twice
+  over: our binding model carries no modifier on a key binding (`BindingControl.Key` is a bare
+  keycode, and adding one touches capture, labels and the store), and its three base letters are
+  spent here on yaw and pitch anyway. Free in the flight context today: `J`, `K`, `M`, `Z`, `Tab`,
+  `F1`, `F2`, the digit row and the punctuation keys. Six of them is a real bite out of a scheme the
+  author flies, so the shape wants a look at the controls rather than a pick from a list.
+  ⚠ *Traps.* (a) A cycle you can only walk forward is the actual complaint to test against: with
+  eight hostiles up, reaching the previous one costs seven presses. Judge whether that bites before
+  spending six keys. (b) Per-class Nearest is the weaker half of the six: `Next` into a class you
+  are not already in already lands on that cycle's head, so the action only adds "back to the head
+  of the class I am already in". (c) The pad has nothing left. The original itself puts only two
+  targeting actions on a joystick (buttons 3 and 6), so pad defaults for these six would be an
+  invention. (d) Do not reach for a modifier without pricing it: `Shift` and `Ctrl` are throttle up
+  and down in flight here, so `Shift+T` would also change the throttle.
+  *Cross-refs:* `docs/controls.md`'s flight table, `CSVM/src/Bindings/`, `docs/org/input.md`'s
+  shipped-defaults table.
 
 - `BL-431` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
   first person, and whether it should is undecided.** The drive itself has landed:
@@ -2343,8 +2355,7 @@ viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw 
 "the camera". Sim state stays global — the mission wind is the worked example
 (`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
 their own system: `BL-537` (the 4-player pool judgement), `BL-296` (per-player ActionMap), `BL-299`
-(MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
-cycling).
+(MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown).
 
 The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 `PLAN-splitscreen-polish` (2026-08-15,

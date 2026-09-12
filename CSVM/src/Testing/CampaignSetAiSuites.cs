@@ -381,7 +381,7 @@ internal static class CampaignSetAiSuites
         report.AppendLine($"turret: {Balmorals[2]} pilot attack gate {gate:0.##} m, rear mount "
             + $"'{rear.Def.Title}' dot {dot:0.000} shots {rear.ShotsFired} gate {rear.Gate}");
         report.AppendLine($"turret: target hp {before:0.##} -> {Combined(player):0.##}, "
-            + $"attackers {player.Targeting.Attackers.Count}");
+            + $"attackers {player.Targeting?.Attackers.Count ?? 0}");
 
         ctx.Check(gate >= 0f && gate < 2f,
             $"the pilot is still gated out of combat by the bomb-run net: attack {gate:0.##} m");

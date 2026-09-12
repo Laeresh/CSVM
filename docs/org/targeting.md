@@ -108,6 +108,34 @@ Note the asymmetry the code makes explicit: **"Nearest" always re-asserts its cl
 the cycle**, while "Next"/"Previous" only reset when the class actually changes. Pressing the same
 class's Next repeatedly walks the list; pressing Nearest returns to its head.
 
+### The controls the eleven ship on
+
+`FUN_004936c0` authors the keybind screen's Targeting page, one
+`FUN_00493630(command, messageId, keyboardA, keyboardB, joystick, mouse)` per row. A keyboard code
+is `DIK | modifiers`, `0x200` for Ctrl and `0x400` for Shift, so one letter per class carries all
+three of that class's directions and the modifier picks the direction:
+
+| Id | Action | Keyboard | Joystick |
+|---|---|---|---|
+| `0x24` | Next Enemy/Objective | `0x012` E | 3 |
+| `0x25` | Previous Enemy/Objective | `0x412` Shift+E | |
+| `0x26` | Nearest Enemy/Objective | `0x212` Ctrl+E | |
+| `0x27` | Next Ally | `0x011` W | |
+| `0x28` | Previous Ally | `0x411` Shift+W | |
+| `0x29` | Nearest Ally | `0x211` Ctrl+W | |
+| `0x2a` | Next Non-Aircraft | `0x013` R | 6 |
+| `0x2b` | Previous Non-Aircraft | `0x413` Shift+R | |
+| `0x2c` | Nearest Non-Aircraft | `0x213` Ctrl+R | |
+| `0x2d` | Select Target Nearest Crosshairs | `0x010` Q | |
+| `0x2e` | Target Nothing | `0x014` T | |
+
+The record shape, the four slots a row can hold and the Japanese-keyboard remap are in
+[`input.md`](input.md), which carries the whole 64-row default table. Two facts about this page
+matter to a port. The five letters are one unbroken run of the top row, `Q W E R T`, which is the
+whole targeting scheme within reach of the hand that is not on the stick. And **only two of the
+eleven carry a joystick button**, Next Enemy on 3 and Next Non-Aircraft on 6, so a pad player of
+the original reaches one direction of two classes and nothing else.
+
 ⚠ **The candidate list lags the class flags by one frame.** A handler sets the flags and
 immediately calls `FUN_004b6490` on the list that last frame's `FUN_004b5fb0` built under the
 *previous* class. The next frame rebuilds under the new class, and because the old selection is no
@@ -132,6 +160,15 @@ Class is decided per candidate in `FUN_004b5cd0`, in this order:
 format comment at `0x00622508` lists them adjacently, and the mission-script verbs
 `ADD_OTHER_TARGET` / `ADD_OBJECTIVE_TARGET` / their `REMOVE_` partners exist at `0x00626704`). The
 field-to-key binding is inference; the offsets and their effect are traced.
+
+⚠ **"Non-Aircraft" names what the mission flagged, not what flies.** The class is decided by
+`+0x4c` alone; step 4's `__RTDynamicCast` admits `TargetVehicle` and `TargetProjectile` and nothing
+else, and `VehicleList` holds the AI ground and sea vehicles beside the aeroplanes (the turret
+section below, and [`aim-assist.md`](aim-assist.md) "The four lists"). So an unflagged hostile boat,
+ship or truck rides the **Enemy** cycle with the aeroplanes and is reached by Next Enemy, while a
+turret or a mission structure is reachable at all only because a mission flagged it. A port that
+reads the class name as a shape test puts hulls on the wrong cycle and leaves the Enemy cycle unable
+to reach half of what is shooting at the player.
 
 **A roster block that flags itself is its own candidate, not a second one.** `objectiveTarget` is a
 field ON the entity, so an aeroplane whose `aiv` block authors slot 37 is offered once, as the
@@ -863,10 +900,10 @@ element draws the triangle, and how it is rotated, is unresolved.
 
 | | Original | CSVM today |
 |---|---|---|
-| Who picks the target | the player, from eleven bound actions | nothing; `VersusHud.NearestHostile` re-picks the nearest live AI hostile every frame |
-| Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | none; there is no selection |
-| Candidate pool | four typed pools, rebuilt and re-sorted every frame | `AimCandidateSet`'s same four lists exist for the gun assist, but the marker walks `ProjectilePool.CollectAircraft` alone |
-| Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | none; a single team gate |
+| Who picks the target | the player, from eleven bound actions | the pilot, from five: `TargetNextEnemy`, `TargetNextAlly`, `TargetNextNonAircraft`, `TargetNearest` and `TargetClear`, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `FlightController.StepTargeting`). The six the original spends on Previous and per-class Nearest are not shipped |
+| Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | the same, in `TargetSelection`, one instance per pane and owned by that pane's `FlightController` |
+| Candidate pool | four typed pools, rebuilt and re-sorted every frame | `TargetPool`, rebuilt every frame off `AimCandidateSet`'s same four lists |
+| Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | the same three, `TargetClass`, with the objective flag on the ref (`TargetRef.Classify`) |
 | Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
 | A turret's candidate set | all four pools (the table above): the whole `VehicleList`, every turret, the `+0x8d` mission structures, and tracked ordnance | `TurretController.AcquireTarget` walks the whole `VehicleList` through `ProjectilePool.CollectVehicleList`, so a hostile hull is a candidate beside the aircraft. The other three pools are not scanned yet |
@@ -875,16 +912,16 @@ element draws the triangle, and how it is rotated, is unresolved.
 | A mission structure's team | the node's own ownership slot for the mission being flown, inherited from the parent chain where it authors none | the same: `SceneBuilder` resolves the slot for the built mission (`GameZ.WorldObjectTeam`, `SceneBuilder.MissionSlot`) and stamps it, and `DestructibleRegistry.Register` reads it onto the pool, so C1/M05's hospital ship is the player's and a zeppelin's zones are the enemy's |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
-| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | not selectable |
-| Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | not applicable |
-| "Nearest" | head of that order, not a global nearest | not applicable |
-| Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | not applicable |
-| Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | no box; a text tag only |
-| Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | one line **above** the projected point (`RefOnScreenLift`) |
-| Label content | `<name> [<category>] -` / proper name / `%d o'clock` | `HostileTag` cuts the node name at the first `_` to get `AI1` |
+| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | a world emplacement and a zeppelin sub-part stand in for that flag (`TargetPool.Offer`), because no curated per-mission list exists yet (`BL-400`); a loose destructible never reaches a cycle |
+| Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
+| "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, reachable through `--target=nearest`; no key is bound to it, the original's three per-class Nearest actions being among the six CSVM does not ship |
+| Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |
+| Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | the same shape and the same gate, scaled through `HudMetrics` rather than fixed in pixels (see below) |
+| Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | the same, `TargetHud.LabelLines` and the flip-above test |
+| Label content | `<name> [<category>] -` / proper name / `%d o'clock` | the same three lines, off `TargetRef`'s own label halves and display name |
 | Name line's source | the roster block's `title` alone, aeroplane and surface hull alike; an unnamed block shows no name | a campaign spawn takes the block's `title` (`AiSpawn.PilotName`), and where it has none the remake keeps an airframe title the original does not print there. A hull takes the same slot through `SurfaceVehicleRuntime`'s own resolve into `SurfaceVehicle.MarkerName` and prints NOTHING where its block authors none, which is the original exactly |
-| Colour | red hostile, green friendly, blue non-destructive objective | HUD red for hostiles, HUD blue for own team under `--debug-markers` |
-| Off screen | edge position plus the same three lines, clamped with a 3 px margin | edge arrow plus a one-line tag (`DrawOpponent`) |
+| Colour | red hostile, green friendly, blue non-destructive objective | the same, `TargetHud.MarkerColor`, with the four destructive objective categories red and the rest blue |
+| Off screen | edge position plus the same three lines, clamped with a 3 px margin | the same, `EdgeMarker.Resolve` placing the arrow and the same three lines beside it |
 
 ⚠ **The "no reference to copy" claim once made in `VersusHud`'s module doc was false.** The
 original draws an edge arrow with a stacked tag and clock bearing, which is what CSVM's

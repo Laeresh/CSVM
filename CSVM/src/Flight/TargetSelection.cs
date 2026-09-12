@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -7,8 +8,8 @@ namespace CSVM.Flight;
 /// and the lifecycle (decoded in docs/org/targeting.md). One instance per pane; it OWNS its
 /// <see cref="TargetPool"/>. The shape follows the original's exactly: an action handler only
 /// mutates state and steps the list that ALREADY exists, while <see cref="Resolve"/> is the
-/// per-frame pass that re-sorts and re-finds. No Godot node dependency, so the suite drives the
-/// whole lifecycle with no tree.
+/// per-frame pass that re-sorts and re-finds. No node dependency and no engine call (the one
+/// breadcrumb logs at DEBUG), so a plain unit test drives the whole lifecycle with no tree.
 /// ⚠ Nothing but death, an explicit clear and the pilot's own input ever changes the selection.
 /// There is no range, line-of-sight or field-of-view gate in the decoded path; adding one would be
 /// a port invention.</summary>
@@ -98,9 +99,8 @@ public sealed class TargetSelection
         if (!_countsLogged && (Pool.Count > 0 || ++_emptyRebuilds >= EmptyPoolReport))
         {
             _countsLogged = true;
-            GD.Print($"target pool: enemy={Pool.Enemy.Count} ally={Pool.Ally.Count} " +
-                     $"nonAircraft={Pool.NonAircraft.Count} class={ActiveClass} " +
-                     $"acquired={(Current is { } t && t.Name.Length > 0 ? t.Name : "-")}");
+            string acquired = Current is { } t && t.Name.Length > 0 ? t.Name : "-";
+            Log.Debug("flight", $"target pool: enemy={Pool.Enemy.Count} ally={Pool.Ally.Count} nonAircraft={Pool.NonAircraft.Count} class={ActiveClass} acquired={acquired}");
         }
     }
 
