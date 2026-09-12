@@ -267,6 +267,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) each presentation maps into its own graph.
 - `src/UI/Menu/MenuChapters.cs` — the shared chapter roster: the eight chapter worlds, which carry Danger Zones, and the per-mode filter.
+- `src/UI/Menu/DisplaySettingRows.cs` — the display settings as rows, shared by both Options screens: a label per store word, the two forgiving reads, the wrap.
 - `src/UI/Menu/MenuLayout.cs` — the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed fields, navigation edges.
 - `src/UI/Menu/ControlsFeature.cs` — the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
 - `src/UI/Menu/PlayerSetupFeature.cs` — the shared player setup: seats claimed by source identity, the roster, the two-stage pick, the gate.

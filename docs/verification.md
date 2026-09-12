@@ -715,6 +715,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   DEBUG, which writes no console line under the default threshold and therefore makes no engine
   call at all.
 
+- **INSTR-60** — **Walk a menu screen to the row's own text or key, never by a counted number of
+  cursor steps: a row added above it silently redirects every later press.** Two suites reached
+  Built-in's Options apply row with four `Down` presses; four display rows landed those presses on
+  the monitor stepper instead, so the walk stepped a setting and asserted on the wrong row. The
+  screens expose their row text, so the walk can name what it is looking for.
+
 - **INSTR-59** — **A positional-audio check must read the node the CULL measures from, not only
   whether the emitter is playing: an audible verdict passes while the two are different nodes, as
   long as the wrong one happens to stand near the listener.** `GunVoice` moved its child

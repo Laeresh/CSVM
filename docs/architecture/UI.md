@@ -657,6 +657,15 @@ hands back the settings it does not show; none of the eleven is defaulted, so a 
 plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Presentations never construct
 sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
+## src/UI/Menu/DisplaySettingRows.cs
+How the four display settings read as rows, shared so Built-in's Options screen and Original's VIDEO
+page cannot disagree about a saved value: one label per `DisplayWords` entry in that order, since a
+row reads and writes the store word by index, plus the two forgiving reads (an unknown word is the
+vocabulary's first value, a size the screen does not offer is the project default) and the wrap a
+sideways step takes. The screens and the sizes themselves are enumerated per machine by
+`Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`, which is why neither is a list here.
+Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
+
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`
 emits, engine-free in the shared namespace. `TryLoad` answers a missing or unreadable file with

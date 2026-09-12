@@ -1362,21 +1362,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*
   `PLAN-audio-preferences` builds the AUDIO page for Original and puts four levels (Master, Music,
   Effects, Voice) in the shared options store, which is where every setting both presentations show
-  already lives. Built-in's Options screen holds three steppers (difficulty, menu presentation,
-  graphics mode) and the Controls door, and its apply hands back every setting it does not show
-  untouched (`CSVM/src/UI/LaunchMenu.cs:181-191,1466-1560,2449-2456`), so once the page lands a
-  player on Built-in can hear the mix and not reach it. Blocked until the four levels exist in the
+  already lives. Built-in's Options screen holds seven steppers (difficulty, menu presentation,
+  graphics mode and the four display settings) and the Controls door, and its apply hands back the
+  four levels untouched, the only settings it does not show, so once the page lands a player on
+  Built-in can hear the mix and not reach it. Blocked until the four levels exist in the
   store, which is the whole of the dependency: nothing else about this item waits on that plan.
   *Fix shape:* four rows on Built-in's Options screen reading and writing the same store fields the
   AUDIO page does, in the screen's own stepper convention, applied through the same
-  `OptionsApplyExit` the three current rows leave by.
+  `OptionsApplyExit` the seven current rows leave by. The four display rows landed on that screen
+  are the worked model: read the store word, step over the row's own values, write the word back.
   *⚠ Traps:* Built-in has no continuous control of any kind, so a 0 to 100 level is a stepper with a
   chosen step rather than a slider, and the step size is a judgement the row has to make rather than
   inherit. Do not add a second writer: `Launcher.ApplyOptions` is the options file's one writer and
   both presentations reach it through the apply exit. Do not re-tune `MusicPlayer.ChannelLevel` on
   the way past; `BL-455` deletes it.
-  *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`, `BL-783` (the same gap
-  for the display settings), `docs/menu-presentations.md`.
+  *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`,
+  `git log --grep=BL-783` (the same gap for the display settings, closed by four rows on this
+  screen), `docs/menu-presentations.md`.
 - `BL-837` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The chase camera's throttle
   transient is authored per real second but is stepped on the sim clock, and the two clocks were
   never measured against each other.** *Evidence:* `BL-816`'s decode has the easing dt as
@@ -1956,27 +1958,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `git log --grep=BL-779` (the box this text stands in, and what it draws today),
   `docs/org/menu-inventory.md`.
 
-- `BL-783` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen shows none of the four display
-  settings, so the monitor, the resolution, the display mode and V-Sync are settable in the Original
-  presentation alone.** *Evidence:* the VIDEO page landed for Original
-  (`CSVM/src/UI/Menu/Original/OriginalVideo.cs`, `PF_B_VIDEO` live) and widened the shared store, so
-  `OptionsDef`, `OptionsStore`'s validation and `OptionsApplyExit` all carry the four settings beside
-  the three vocabulary words. Built-in reads them into `_monitorChoice`, `_resolutionChoice`,
-  `_displayModeChoice` and `_vsyncChoice` purely to hand them back untouched, its own comment saying
-  the screen shows none of them (`CSVM/src/UI/LaunchMenu.cs:189-191,1557-1559`). A player who never
-  leaves Built-in cannot pick the screen the game opens on.
-  *Fix shape:* four rows over the same four settings and the same resolvers the VIDEO page reads
-  through (`CSVM/src/Utils/MonitorSetting.cs`, `ResolutionSetting.cs`, `DisplayModeSetting.cs`,
-  `VSyncSetting.cs`), stepped in Built-in's own convention and applied through the existing exit.
-  *⚠ Traps:* the resolution words are enumerated from the chosen screen rather than shipped as a
-  list, so a monitor change has to re-enumerate them exactly as the VIDEO page's row does, and a
-  fixed list would offer a size the screen cannot hold. The two forgiving reads are the feature and
-  not error paths to reinvent: a saved monitor index no screen answers to shows as the screen the
-  window already stands on, and a saved size the screen no longer offers shows as the project
-  default. Enhanced Graphics is not a fifth row here, Built-in's graphics stepper already being it.
-  *Cross-refs:* `git log --grep=BL-768` (what the VIDEO page settled, and why each row sits where it
-  does), `BL-782` (the same gap for the audio levels), `docs/org/menu-inventory.md`'s Video row.
-
 - `BL-784` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Game Options page drops the original's own Default View and
   Auto Head Turn rows, and neither presentation offers either setting.** *Evidence:* the section
   authors three option rows, Difficulty (`GO_D_DIFFICULTY`), Default View (`GO_T_VIEWTITLE` and
@@ -2003,8 +1984,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Nose. (c) A row does not settle autohead's port decision: its default is off because the original's
   cockpit footage reads that way, and the sub-cap choice behind it is still unjudged at the controls
   under `BL-436`(d).
-  *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` and `BL-783` (the same
-  both-presentations gap for the audio and display settings), `docs/org/menu-inventory.md`,
+  *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` (the same
+  both-presentations gap for the audio levels), `git log --grep=BL-783` (the display settings' half,
+  closed with four rows on Built-in's screen), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
 
 - `BL-809` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **An opened scrap

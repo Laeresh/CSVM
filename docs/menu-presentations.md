@@ -280,7 +280,12 @@ page behind its Preferences page's first door (`--menu=game-options` under
 `--presentation=original`), with the graphics mode on the VIDEO page behind the third
 (`--menu=video`), the four volume levels on the AUDIO page behind the second
 (`--menu=audio`) and the keymap on the CONTROLS page behind the fourth (`--menu=controls`, and
-`--menu=keys` for the KEYS AND BUTTONS page behind its own door). Every option page reads the saved options from the store on entry and leaves
+`--menu=keys` for the KEYS AND BUTTONS page behind its own door). Built-in's one screen carries
+every setting Original spreads over those pages bar the volume levels, its rows in its own stepper
+convention: the difficulty, the presentation and the graphics mode, then the monitor, the window
+size, the display mode and the V-Sync choice. The two presentations read those four through one rule
+set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
+value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
 keeps its one writer. Both presentation choosers offer the
 two shipped tokens alone, so a third presentation extends them as well as the registry (checklist

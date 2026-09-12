@@ -98,6 +98,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     // abandon every staged edit, commit them. The original draws these as persistent buttons on
     // every category page; here they are the tail of the one list this presentation has. TUNE.
     private const int ControlsFooterRows = 3;
+    // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
+    // form the cursor walks top to bottom: the difficulty, the presentation and the graphics mode,
+    // then the four display settings in the order the Original presentation's VIDEO page draws
+    // them, then the two doors. Nine rows fit the band without a window, which is why this screen
+    // has no paging rule of its own.
+    private const int OptionsStepperRows = 7;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -174,18 +180,21 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // The Options screen's cursor and the three choices its stepper rows would apply, seeded from
-    // the saved options when the screen opens so it shows back what was asked for, not what is
-    // active: availability can make Built-in active, and the graphics mode a running process
-    // resolved is the one the process started under.
+    // The Options screen's cursor and the choices its stepper rows would apply, seeded from the
+    // saved options when the screen opens so it shows back what was asked for, not what is active:
+    // availability can make Built-in active, and the graphics mode a running process resolved is
+    // the one the process started under.
     private int _optionsIndex;
     private int _difficultyChoice = Difficulty.Normal;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
-    // The four display settings and the four volume levels as saved. This screen shows none of the
-    // eight and hands them back untouched, so its apply cannot clear a setting the Original
-    // presentation's VIDEO or AUDIO page wrote.
+    // The four display settings, stepped by the four rows under the graphics one. Each is stored as
+    // the word the options file carries, never as a row index, so a screen unplugged or a size the
+    // monitor stopped offering is answered by the resolver's own forgiving read rather than by a
+    // stale position.
     private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice;
+    // The four volume levels as saved. This screen shows none of them and hands them back untouched,
+    // so its apply cannot clear a level the Original presentation's AUDIO page wrote.
     private int? _audioMasterChoice, _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
@@ -1466,12 +1475,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The three choice rows are steppers; the doors under them have nothing to step.
+                // The seven choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
                     case 1: TogglePresentationChoice(); return true;
                     case 2: ToggleGraphicsChoice(); return true;
+                    case 3: StepMonitorChoice(dir); return true;
+                    case 4: StepResolutionChoice(dir); return true;
+                    case 5: StepDisplayModeChoice(dir); return true;
+                    case 6: StepVSyncChoice(dir); return true;
                     default: return false;
                 }
             case Screen.MissionType:
@@ -1535,19 +1548,13 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 break;
             case Screen.Options:
-                if (_optionsIndex == 0)
+                // Accept on a stepper row is the sideways step forwards, so a row is walkable with
+                // one gesture; the two rows past them are the doors this screen leaves by.
+                if (_optionsIndex < OptionsStepperRows)
                 {
-                    StepDifficultyChoice(1);
+                    HandleMoveX(1);
                 }
-                else if (_optionsIndex == 1)
-                {
-                    TogglePresentationChoice();
-                }
-                else if (_optionsIndex == 2)
-                {
-                    ToggleGraphicsChoice();
-                }
-                else if (_optionsIndex == 3)
+                else if (_optionsIndex == OptionsStepperRows)
                 {
                     _screen = Screen.Controls;
                     OpenControls();
@@ -2763,6 +2770,58 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string GraphicsChoiceLabel() =>
         _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
 
+    // The monitor and resolution rows ask the engine on every read rather than holding a list from
+    // when the screen opened, since a monitor can be plugged in while the row stands focused and the
+    // sizes are the standing screen's own. A saved index no screen answers to draws as the screen
+    // the window already stands on, MonitorSetting.Resolve's own forgiving read, so the row cannot
+    // name a screen the apply would not move the window to.
+    private string MonitorChoiceLabel()
+    {
+        var screens = MonitorSetting.Screens();
+        return screens.Labels[MonitorSetting.Resolve(_monitorChoice, screens).Screen];
+    }
+
+    private string ResolutionChoiceLabel()
+    {
+        var sizes = ResolutionSetting.ScreenSizes();
+        return sizes[DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice)];
+    }
+
+    private string DisplayModeChoiceLabel() =>
+        DisplaySettingRows.DisplayModeLabels[DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, _displayModeChoice)];
+
+    private string VSyncChoiceLabel() =>
+        DisplaySettingRows.VSyncLabels[DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, _vsyncChoice)];
+
+    // The four display steppers. Each writes back the word the options file carries rather than the
+    // row's position, since the apply hands the word to the setting's own resolver; a step off a
+    // value the machine no longer offers therefore starts from the forgiving read, not from -1.
+    private void StepMonitorChoice(int dir)
+    {
+        var screens = MonitorSetting.Screens();
+        int at = MonitorSetting.Resolve(_monitorChoice, screens).Screen;
+        _monitorChoice = MonitorSetting.Word(DisplaySettingRows.Step(at, dir, screens.Labels.Count));
+    }
+
+    private void StepResolutionChoice(int dir)
+    {
+        var sizes = ResolutionSetting.ScreenSizes();
+        int at = DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice);
+        _resolutionChoice = sizes[DisplaySettingRows.Step(at, dir, sizes.Count)];
+    }
+
+    private void StepDisplayModeChoice(int dir)
+    {
+        var words = DisplayWords.DisplayModes;
+        _displayModeChoice = words[DisplaySettingRows.Step(DisplaySettingRows.WordIndex(words, _displayModeChoice), dir, words.Count)];
+    }
+
+    private void StepVSyncChoice(int dir)
+    {
+        var words = DisplayWords.VSyncChoices;
+        _vsyncChoice = words[DisplaySettingRows.Step(DisplaySettingRows.WordIndex(words, _vsyncChoice), dir, words.Count)];
+    }
+
     // The graphics row's detail says whether a restart is still owed: the mode is resolved once at
     // launch, so a choice that differs from the running one reaches the world on the next start,
     // and a player who saved it and came back would otherwise read the unchanged world as a
@@ -3185,7 +3244,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => Modes.Length + 3, // + the trailing campaign, hangar and options rows
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
-        Screen.Options => 5, // the three steppers, the controls door, then the apply row
+        Screen.Options => OptionsStepperRows + 2, // + the controls door and the apply row
         Screen.Controls => ControlsHeaderRows + _controls.Actions.Count + ControlsFooterRows,
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
@@ -3246,7 +3305,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
                 1 => $"Menu presentation: {PresentationChoiceLabel()}",
                 2 => $"Graphics: {GraphicsChoiceLabel()}",
-                3 => ControlsRow,
+                3 => $"Monitor: {MonitorChoiceLabel()}",
+                4 => $"Resolution: {ResolutionChoiceLabel()}",
+                5 => $"Display mode: {DisplayModeChoiceLabel()}",
+                6 => $"V-Sync: {VSyncChoiceLabel()}",
+                7 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3554,7 +3617,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
             1 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
             2 => GraphicsDetail(),
-            3 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            3 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            4 => "Select the window size. The list is what the screen the window stands on can hold.",
+            5 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            6 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            7 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

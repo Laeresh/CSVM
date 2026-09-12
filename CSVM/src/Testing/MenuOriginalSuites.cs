@@ -46,9 +46,11 @@ internal static class MenuOriginalSuites
         + "screen and a second seat joined there stays seated, the campaign flight check carries the "
         + "seat strip with two seats and none with one, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
-        + "Original fresh, Built-in's Options route steps the difficulty and both other choices, "
+        + "Original fresh, Built-in's Options route steps the difficulty and both other choices and "
+        + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
+        + "a wrap onto the last frame cap, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying them, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all seven, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "over the V-Sync one whose five words pick a frame cap and the Enhanced Graphics checkbox "
         + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
@@ -405,8 +407,9 @@ internal static class MenuOriginalSuites
 
     // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
     // Hard, Right on the row under it steps the presentation to Original, Right on the next steps
-    // the graphics mode, and the apply row's Accept leaves as the one exit the launcher persists
-    // every choice from.
+    // the graphics mode, the four display rows under those step over the machine's own screens and
+    // sizes, and the apply row's Accept leaves as the one exit the launcher persists every choice
+    // from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -418,8 +421,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 5 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its five rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 9 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its nine rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -434,8 +437,9 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText != beforeGraphics && menu.ShownRowText.StartsWith("Graphics: ", System.StringComparison.Ordinal),
             $"Right steps the graphics row under it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
+        var display = BuiltInDisplayRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the fourth row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the eighth row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -450,9 +454,73 @@ internal static class MenuOriginalSuites
         {
             ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard",
                 $"carrying every stepped choice ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty})");
+            ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
+                && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
+                $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
+            var plan = MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens());
+            ctx.Check(plan.Source == "options.json" && ResolutionSetting.Resolve(applied.Resolution,
+                    ResolutionSetting.ScreenSizes()).Source == "options.json",
+                $"which the launcher's own resolvers take as saved rather than dropping ({plan.Word})");
         }
 
         ctx.Check(!host.Shown, $"and the presentation is hidden for the launcher to act (shown={host.Shown})");
+    }
+
+    // The four display rows, walked from the graphics row: each steps in the store's own words, the
+    // monitor row over the machine's screens (one step wraps within a single-screen list, which is
+    // why its label is checked against the enumeration rather than for a change), the resolution row
+    // over the sizes the standing screen offers, and the mode and pacing rows over their
+    // vocabularies. Returns the four words the apply is then asserted to carry.
+    private static (string? Monitor, string? Resolution, string? DisplayMode, string? VSync) BuiltInDisplayRows(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
+    {
+        var screens = MonitorSetting.Screens();
+        int standing = MonitorSetting.Resolve(null, screens).Screen;
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[standing]}",
+            $"the fourth row is the monitor, an unsaved index showing the screen the window stands on ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        int stepped = DisplaySettingRows.Step(standing, 1, screens.Labels.Count);
+        ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[stepped]}",
+            $"Right steps it to the next screen the engine reports ({menu.ShownRowText})");
+
+        var sizes = ResolutionSetting.ScreenSizes();
+        Press(host, seat, Down);
+        string opened = menu.ShownRowText;
+        ctx.Check(opened == $"Resolution: {sizes[DisplaySettingRows.ResolutionIndex(sizes, null)]}",
+            $"the fifth row is the resolution, an unsaved size showing the project default ({opened})");
+        Press(host, seat, Right);
+        string size = menu.ShownRowText["Resolution: ".Length..];
+        ctx.Check(menu.ShownRowText != opened && Offers(sizes, size),
+            $"Right steps it to another size the standing screen can hold ({opened} -> {menu.ShownRowText})");
+
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "Display mode: Windowed",
+            $"the sixth row is the display mode, unsaved showing the windowed default ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Display mode: Borderless",
+            $"Right steps it one word along the vocabulary ({menu.ShownRowText})");
+
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "V-Sync: On", $"the seventh row is V-Sync, unsaved showing On ({menu.ShownRowText})");
+        Press(host, seat, Left);
+        ctx.Check(menu.ShownRowText == "V-Sync: 144 FPS",
+            $"and Left wraps it onto the last cap rather than stopping ({menu.ShownRowText})");
+
+        return (MonitorSetting.Word(stepped), size, DisplayWords.Borderless, "144");
+    }
+
+    private static bool Offers(IReadOnlyList<string> sizes, string word)
+    {
+        foreach (string size in sizes)
+        {
+            if (size == word)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the

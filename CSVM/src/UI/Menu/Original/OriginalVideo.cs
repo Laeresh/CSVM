@@ -51,18 +51,6 @@ public sealed partial class OriginalShell
 
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
-    // The display-mode row's labels, one per DisplayWords.DisplayModes entry and in that order,
-    // since the row reads and writes the store word by index. The two fullscreen modes read as one
-    // word each because the authored box is 120 wide; which of them keeps the desktop alive beside
-    // the game is what the row's description says.
-    private static readonly string[] DisplayModeWords = { "Windowed", "Borderless", "Fullscreen" };
-
-    // The V-Sync row's labels, one per DisplayWords.VSyncChoices entry and in that order, since the
-    // row reads and writes the store word by index. A word that parses as a number is a cap in
-    // frames per second with V-Sync off, which is why the caps read as rates rather than as bare
-    // numbers on the page.
-    private static readonly string[] VSyncWords = { "On", "Off", "60 FPS", "120 FPS", "144 FPS" };
-
     // The page's settings, in the authored order of the rows they stand on, since the cursor walks
     // the table and a form is read top to bottom. Each is a title, the authored row it stands on, a
     // description, a control and the words of the store field it reads and writes. A screen never
@@ -78,17 +66,17 @@ public sealed partial class OriginalShell
         new(ResolutionKey, "Resolution", "VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC",
             _ => "Select the screen resolution.",
             OriginalRowKind.Dropdown, s => s.ResolutionWords,
-            s => ResolutionIndex(s.ResolutionWords, s._resolution),
+            s => DisplaySettingRows.ResolutionIndex(s.ResolutionWords, s._resolution),
             (s, i) => s._resolution = s.ResolutionWords[i]),
         new(DisplayModeKey, "Display Mode", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
             _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            OriginalRowKind.Dropdown, _ => DisplayModeWords,
-            s => WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode),
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.DisplayModeLabels,
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode),
             (s, i) => s._displayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
         new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            OriginalRowKind.Dropdown, _ => VSyncWords,
-            s => WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync),
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels,
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
@@ -135,35 +123,6 @@ public sealed partial class OriginalShell
     {
         OpenVideo();
         FocusKey(key);
-    }
-
-    // Where a saved word sits among a row's own values, and every word row's default: a word the
-    // vocabulary does not know, or none saved at all, shows as the first value, which each of these
-    // vocabularies orders as the behaviour with no options file.
-    private static int WordIndex(IReadOnlyList<string> words, string? word) => Math.Max(0, IndexOf(words, word));
-
-    // The resolution row's value. Its words are the screen's own sizes rather than a vocabulary, so
-    // the first of them is the smallest the monitor holds and not the behaviour with no options
-    // file; a size this screen does not offer shows as the project default, which every list holds.
-    // That is ResolutionSetting.Resolve's fallback rule, and the row has to agree with it or it
-    // would name a size the window is not standing at.
-    private static int ResolutionIndex(IReadOnlyList<string> words, string? saved)
-    {
-        int at = IndexOf(words, saved);
-        return at >= 0 ? at : Math.Max(0, IndexOf(words, CSVM.Utils.ResolutionSetting.Default));
-    }
-
-    private static int IndexOf(IReadOnlyList<string> words, string? word)
-    {
-        for (int i = 0; i < words.Count; i++)
-        {
-            if (words[i] == word)
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
     // The graphics row's description says whether a restart is still owed. The mode is resolved
@@ -348,8 +307,7 @@ public sealed partial class OriginalShell
             return false;
         }
 
-        int count = option.Words(this).Count;
-        option.Write(this, ((option.Read(this) + direction) % count + count) % count);
+        option.Write(this, DisplaySettingRows.Step(option.Read(this), direction, option.Words(this).Count));
         FocusKey(option.Key);
         return true;
     }
