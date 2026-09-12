@@ -195,11 +195,12 @@ aircraft carries `AiEngineAudio` on `AudioStreamPlayer3D` with its own distance 
 id, which is why a code read is required alongside the log and not instead of it. `BL-545`'s body
 still describes CM02's hookless landing as present behaviour, where `d5caa7cc` says "Closes
 BL-545"; what the entry actually holds is an owed look, which its `[Owed-playtest]` tag already
-says and its prose contradicts. `BL-435` claims the chase view has no look-around at all, where
-`CameraController.PadLook` gives it the right stick; the decoded head-look controller and the
-numpad scheme are what is missing, so the entry overstates and `BL-150` rides the same claim. The
-first two are corrected in `backlog.md` by this item; `BL-435` and `BL-150` are left alone, because
-narrowing them wants the camera read they are about and neither belongs in the release notes.
+says and its prose contradicts. The chase look-around entry claimed the
+view had none at all, where `CameraController.PadLook` gave it the right stick; the decoded
+head-look controller and the numpad scheme were what was missing, so the entry overstated and
+`BL-150` rode the same claim. The first two are corrected in `backlog.md` by this item; the camera
+pair was left alone, because narrowing them wanted the camera read they are about, and both have
+since been settled by the port of the head-look controller onto the chase camera.
 
 One new defect was found and filed as `BL-770`: an exported build launched by double-clicking
 `CSVM.exe` is silent, because `Launcher.MasterVolumeDefault` is `0` and nothing in the payload

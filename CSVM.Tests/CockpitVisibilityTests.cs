@@ -45,10 +45,10 @@ public class CockpitVisibilityTests
     }
 
     [Fact]
-    public void AHeldNumpadViewRestoresTheAircraftEvenWhileCockpitIsSelected()
+    public void AnExternalPoseRestoresTheAircraftEvenWhileCockpitIsSelected()
     {
-        // The held key is an EXTERNAL pose: the selection is untouched (PilotView.Effective), but
-        // the camera is outside the aircraft, so the body must be back for as long as it is down.
+        // A held look-behind is an EXTERNAL pose: the selection is untouched (PilotView.Effective),
+        // but the camera is outside the aircraft, so the body must be back while it is down.
         foreach (var mode in new[] { PilotViewMode.Cockpit, PilotViewMode.Nose })
         {
             var shown = CockpitVisibility.Rules(mode, firstPerson: false);

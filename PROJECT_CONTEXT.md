@@ -202,7 +202,7 @@ The day-to-day subset; `docs/cli.md` is the description of record. **[`docs/cli.
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
 | `--pos=x,y,z` | place the mode's **subject**: the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt` (bypassing the mission spawn list) |
 | `--direction=x,y,z` | which way it faces there, view direction or nose. `--lookat=x,y,z` is the point form (and the `--viewer` orbit pivot). Quote comma args in PowerShell |
-| `--view=1-9` | hold a numpad flight-camera perspective for the run (2 belly, 4/6 flanks, 8 ahead); `--fly`/`--stunt` only. Distance is the shared dynamic chase radius; the layout is disputed (`BL-150`), [`docs/cli.md`](docs/cli.md) |
+| `--view=1-9` | hold a numpad head-look snap direction for the run (2 dead ahead, 4/6 flanks, 8 belly); `--fly`/`--stunt` only. Swings the chase camera around the plane at the shared dynamic radius, or aims the head in first person, [`docs/cli.md`](docs/cli.md) |
 | `--look=x,y` | hold a right-stick look deflection for the run, both in [−1, 1], +x right and +y up: the scripted twin of pushing the look stick, and the only way a headless run aims it. Aims the chase swing and the first-person head alike, so one run compares the two; a live stick beats it while deflected |
 | `--screenshot=<path>` | render a few frames, save PNG, quit, the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | which sim frame the shot lands on (default 15), **a sim coordinate, not a wall-clock delay** / capture N consecutive frames |

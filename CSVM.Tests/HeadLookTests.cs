@@ -168,15 +168,34 @@ public class HeadLookTests
         Assert.Equal(0f, head.TargetElevation, Tol);
     }
 
+    // The chase camera's own floor, the literal the chase placement passes the original's
+    // controller: the same head pans a further quarter turn down there than it can in the cockpit.
     [Fact]
-    public void TheElevationFloorIsAParameterSoTheChaseCallersMinusHalfPiStillFits()
+    public void TheChaseFloorLetsTheSameHeadLookStraightDown()
     {
-        var head = new HeadLook(-Mathf.Pi / 2f);
+        Assert.Equal(0f, HeadLook.FirstPersonElevationFloor);
+        Assert.Equal(-Mathf.Pi / 2f, HeadLook.ChaseElevationFloor, Tol);
+
+        var head = new HeadLook(HeadLook.ChaseElevationFloor);
         for (int i = 0; i < 60; i++)
         {
             head.Step(0.1f, Free(0f, -1f));
         }
-        Assert.Equal(-Mathf.Pi / 2f, head.TargetElevation, Tol);
+        Assert.Equal(HeadLook.ChaseElevationFloor, head.TargetElevation, Tol);
+    }
+
+    // The floor is per frame, not per head: the placing view sets it every step, which is how one
+    // shared head can be floored at level in the cockpit and at straight down on the chase camera.
+    [Fact]
+    public void TheFloorFollowsTheViewThatPlacesTheFrame()
+    {
+        var head = new HeadLook(HeadLook.ChaseElevationFloor);
+        head.Step(0.5f, Free(0f, -1f));
+        Assert.True(head.TargetElevation < -0.9f);
+
+        head.ElevationFloor = HeadLook.FirstPersonElevationFloor;
+        head.Step(0.1f, Free(0f, -1f));
+        Assert.Equal(0f, head.TargetElevation, Tol);
     }
 
     [Fact]

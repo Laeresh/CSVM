@@ -187,9 +187,12 @@ aircraft sits at `dist_max + 10` with the axis fully out.
 
 ## Known limits
 
-⚠ **`thirdp_height`'s units are unknown**, which is why the engine takes only the *radius* from
-this file and leaves the chase offset's *direction* as a hand-picked value. `thirdp_pitch` is no
-help there either: at 0.29° it is far too small to be the offset's own elevation.
+⚠ **`thirdp_height`'s units are unknown**, so CSVM takes only the *radius* from this file.
+`thirdp_pitch` IS the chase offset's own elevation, though: the placement adds it to the head's
+smoothed elevation and builds the direction from that pair (`docs/org/cameraViews.md`, head-look
+controller), so with the head settled the original's camera sits dead astern at 0.29° rather than at
+the 15.7° CSVM's hand-picked pair holds. Correcting that is `BL-885`, since it moves every chase
+shot and wants judging at the controls.
 
 ## Throttle transient
 

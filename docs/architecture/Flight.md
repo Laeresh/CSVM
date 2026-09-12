@@ -205,20 +205,20 @@ distinguishes a value the data states from the built-in fallback. Read `CameraCo
 ## src/Flight/PilotViewMode.cs
 The three views a pilot can SELECT, valued as the engine's own camera modes (Chase 0, Cockpit 6,
 Nose 7), and `PilotView`, the pure rules over them: the cycle key's three-stop order, the
-first-person test the anim data's `PLAYER_1ST_PERSON` condition is answered with, whether a held
-numpad key overrides the camera in this mode at all (`HoldsFixedViews`), the view in force this
-frame, and the `--view=` spelling. Engine-free, so the decisions unit-test without a camera, while
+first-person test the anim data's `PLAYER_1ST_PERSON` condition is answered with, the view in force
+this frame (a held look-behind is an external pose outside first person and a head look-back inside
+it), and the `--view=` spelling. Engine-free, so the decisions unit-test without a camera, while
 `CameraController` holds the state and the `Camera3D` they act on. Decode:
 [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/CameraController.cs
-The flown aircraft's camera: the roll-following chase pose, the numpad fixed views, the look-behind,
-the right-stick look-around, the weapon lab's held-airframe orbit, the three static cameras through
-`Statics`, and the pilot's selected view mode (`PilotViewMode` decides, this class holds the state
-and the camera; `ResetToChase` is what the player's own destroy definition asks for by callback).
-The chase radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s
-authored throttle term (`DistVary` on a speed copy lagging at `DistCatchUp`); `ExternalRadius` bounds
-it and carries the numpad zoom outward from the near bound. Cockpit and Nose mount rigidly at the
+The flown aircraft's camera: the roll-following chase pose and the head that swings it, the
+look-behind, the right-stick look-around, the weapon lab's held-airframe orbit, the three static
+cameras through `Statics`, and the pilot's selected view mode (`PilotViewMode` decides, this class
+holds the state and the camera; `ResetToChase` is the player's own destroy callback). The chase
+radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
+throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound.
+`ChaseSwing` turns the chase offset, its image up and its look-ahead point together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
 authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores the FOV it was built with. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/StaticCameras.cs
@@ -232,9 +232,9 @@ clearance are static and engine-free but for the `IWorldQuery` probe; `CameraCon
 and does the aiming. Decode: [../formats/camparam.md](../formats/camparam.md).
 
 ## src/Flight/HeadLook.cs
-The pilot's head in the two first-person views, decoded from the original's shared look controller.
-It holds the TARGET angles the input sets and the SHOWN angles chasing them exponentially, 3.0/s in
-elevation and 5.0/s in azimuth, and `Step` picks this frame's target before always chasing it, so
+The pilot's head, decoded from the original's shared look controller and shared by every view: it
+aims the two first-person views and swings the chase camera, floored per frame by whoever places
+the frame (level in first person, straight down on the chase camera, the original's own two literals). It holds the TARGET angles the input sets and the SHOWN angles chasing them exponentially, 3.0/s in elevation and 5.0/s in azimuth, and `Step` picks this frame's target before always chasing it, so
 the snap, free-look, the centre key and autohead all reach the eye through one law. The three input
 paths are the original's: a snap direction mapped through `SnapTargets`, free-look integrating the
 targets at a fixed 2 rad/s along the normalised input direction, and the centre key zeroing both.

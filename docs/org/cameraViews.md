@@ -130,12 +130,14 @@ frame; there is no periodic re-frame. The respawn routine `FUN_0047f1f0` clears 
 the camera to mode 6. The friendly semantic name of callback event `0x0f` remains unknown; its gate
 and effect do not.
 
-⚠ **This label collides with CSVM's own numpad chase look-around key set.** The chase camera runs
+⚠ **This label collides with the chase camera's own look-around key set.** The chase camera runs
 the same head-look controller decoded below through
 `FUN_0042c7f0`, driven by the same numpad snap cluster and menu-labelled `F9`-`F12` **External
 Camera** keys, and the menu's `F7` **Access Chase View** binding is exactly this section's
 "Access Chase View", i.e. the flyby (mode 9), not the look-around. CSVM binds `F7` to the flyby for
-that reason; the chase look-around's own binding remains `BL-435`.
+that reason, and the snap cluster, the centre key and the mouse to the one head in every view; the
+four **External Camera** keys are left unbound, since they are not among the controller's own key
+slots and CSVM already spends `F9`-`F12` on debug keys.
 
 ### The in-binary strings expose no view-name tokens
 
@@ -351,8 +353,19 @@ whole, so the transient is never inverted and the blended bounds are never forme
 Decoded from `FUN_0042d010`. Three callers share it: the
 first-person placement `FUN_0042d980` (both Cockpit and Nose, elevation floor `0`, autohead flag
 cleared for Nose); the chase placement `FUN_0042c7f0` (floor `−π/2` via the literal `0xbfc90fdb`,
-autohead off). CSVM's port is `HeadLook` (`src/Flight/HeadLook.cs`), landing the first-person half;
-the chase caller is `BL-435`, filed and not yet built.
+autohead off, at `0042c877`-`0042c87c`). CSVM's port is `HeadLook` (`src/Flight/HeadLook.cs`), one
+instance per pilot, floored per frame by whichever view places it
+(`CameraController.StepHead`), and turned into a chase offset by `CameraController.ChaseSwing`.
+
+⚠ **The chase placement's own elevation is the head's plus the authored `thirdp_pitch`.**
+`FUN_0042c7f0` loads the shown elevation `DAT_0064ef58` at `0042c881`, adds the camparam block's
+`+0x28` at `0042c88d` (the reader converts `thirdp_pitch` degrees to radians on the way in,
+`docs/formats/camparam.md`) and hands that with the shown azimuth `DAT_0064ef5c` to the direction
+builder `FUN_0053f550` at `0042c8a2`. So a settled head leaves the camera dead astern at the
+authored pitch, `0.29°` on every plane but Balmoral's `0.2°`, not at the `15.7°` CSVM's own
+`BaseUp`/`BaseBack` pair sits at. The look-behind arm is the exception that proves the routing: with
+the back flag set the routine never calls `FUN_0042d010` at all and writes the fixed direction
+`(0, 0, 1)` instead.
 
 - **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock (`BL-399`, `BL-432`).
 - **Angles.** `DAT_0064ef60` is elevation above level (`0` = level, `π/2` = straight up, clamped to
@@ -397,7 +410,8 @@ the chase caller is `BL-435`, filed and not yet built.
 | **Death camera** | mode `8`: one spot from the `death_*` fields when the player is destroyed, held while the wreck falls | landed as `StaticCameras`, entered by the player's own destruction |
 | Static-camera terrain clearance | `crash_chord_y`/`crash_elev`, taken by the crash cut, the death camera and the flyby alike | landed as `StaticCameras.LiftClearOfWorld`, taken by all three |
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
-| Head-look controller | snap, free-look, center key, autohead, one shared state machine, three callers (first person + chase) | landed for first person as `HeadLook` (C21-C22); the chase caller is not represented (`BL-435`) |
+| Head-look controller | snap, free-look, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it |
+| Chase base elevation | the head's elevation plus the authored `thirdp_pitch`, i.e. dead astern at `0.29°` with the head settled | a hand-picked `15.7°` from `BaseUp`/`BaseBack` (`BL-885`) |
 
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no
 hardcoded 0.75), both first-person views sitting at it, the interior drawn + head-look + 80° for

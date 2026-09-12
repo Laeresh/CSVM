@@ -1503,40 +1503,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-150` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **plan-sized, not a TUNE. Numpad camera views, the whole scheme needs a rebuild, not a
-  retune.** ⚠ **This IS the chase camera's head-look controller, not nine authored poses, read
-  `BL-435` first.** `PLAN-cockpit-view`'s decode of `FUN_0042c7f0` found the numpad views run the
-  same head-look state machine C21 ported as `HeadLook`, floored at `−π/2` instead of level; the
-  rebuild below should implement that controller, not a table of nine poses. Item (f)'s `+`/`−`
-  distance trim is the same control as `BL-433`'s External Camera Zoom axis, build them together.
+- `BL-150` `[Research]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The numpad camera scheme is the head-look controller,
+  and it is built; what is left is the footage's own limits.** The nine "fixed views" are not
+  authored poses: the chase placement `FUN_0042c7f0` runs the same head-look state machine the
+  cockpit views run, floored at `−π/2` instead of level, and the pad cluster is that controller's
+  own snap input. CSVM builds it that way, one `HeadLook` per pilot swung onto the chase offset by
+  `CameraController.ChaseSwing`, so the entries below are now this scheme's *evidence* rather than
+  its specification. The measurements stand and the reconciliation against them is recorded here.
 
-  Current implementation: `FlightController.cs:286-303` (`Views[]` table, keys
-  Kp1/2/3/4/6/7/8/9 only, **no Kp0**), `:1653-1676` (`ActiveView()`, held key beats the scripted
-  `PinnedView`, first array match wins on multiple keys down), `:1685-1690` (`ApplyFixedView`,
-  instant snap, no smoothing, shares the chase camera's `ViewDist`); `--view=N` is the scripted,
-  machine-verifiable twin. Cockpit testing (2026-07-30) overturned the "layout is settled" claim this
-  whole scheme was built on and found five more open questions:
-  (a) **Layout is wrong, MEASURED 2026-08-04 from the `CAP-07` scripted re-take, all nine keys.**
-  The original's layout, read off nine settled stills (method and confidence below):
+  (a) **Layout, MEASURED 2026-08-04 from the `CAP-07` scripted re-take, all nine keys**, read off
+  nine settled stills (method and confidence below). The snap table's angles, swung by
+  `ChaseSwing`, reproduce every one of the nine:
 
-  | key | camera sits | ours today (`CameraController.cs:53-60`) |
+  | key | camera sits | reproduced by the snap table |
   |---|---|---|
-  | `Kp1` | **ahead + starboard, below** | left + below flank (no fore/aft term) |
-  | `Kp2` | **dead ahead, level** | straight below |
-  | `Kp3` | **ahead + port, below** | right + below flank (no fore/aft term) |
-  | `Kp4` | **starboard flank, level** | left flank |
-  | `Kp5` | **unbound, confirmed, not assumed** | unbound ✓ |
-  | `Kp6` | **port flank, level** | right flank |
-  | `Kp7` | **astern + starboard, below** | left + *above* flank |
-  | `Kp8` | **directly below (belly plan view)** | ahead of the nose, looking back |
-  | `Kp9` | **astern + port, below** | right + *above* flank |
+  | `Kp1` | **ahead + starboard, below** | elevation 45° up, azimuth 135° left ✓ |
+  | `Kp2` | **dead ahead, level** | azimuth 180°, at the rig's own base elevation (`BL-885`) |
+  | `Kp3` | **ahead + port, below** | elevation 45° up, azimuth 135° right ✓ |
+  | `Kp4` | **starboard flank, level** | azimuth 90° left, at the base elevation (`BL-885`) |
+  | `Kp5` | **the centre key, a no-op from base** | `LookCenter`, which recentres the head |
+  | `Kp6` | **port flank, level** | azimuth 90° right, at the base elevation (`BL-885`) |
+  | `Kp7` | **astern + starboard, below** | elevation 45° up, azimuth 45° left ✓ |
+  | `Kp8` | **directly below (belly plan view)** | elevation 90° up, azimuth 0 ✓ |
+  | `Kp9` | **astern + port, below** | elevation 45° up, azimuth 45° right ✓ |
 
-  Three structural corrections, not a symbol shuffle. (i) **The original has no above-the-aircraft
-  view at all**, every non-level position is below; our 7 and 9 are the only above views and both
-  are wrong. (ii) **The four corners carry a fore/aft term our table has none of**: bottom row
-  (1,2,3) is the forward hemisphere, top row (7,9) is aft. Ours splits them above/below the flanks
-  instead, so this is a different *shape* of layout. (iii) **4/6 and 2/8 are both swapped**, 4 shows
-  the starboard side, and 8 is the belly while 2 is the nose-on view.
+  A pilot looking LEFT is what carries the camera to starboard, which is why the labels and the
+  positions read mirrored. The four corners come out below the aircraft and carry the fore/aft term
+  the stills show (bottom row forward, top row aft) with no fore/aft term in the table at all: it
+  falls out of composing a 45° elevation with a 45°/135° azimuth. The three "level" entries are level
+  only up to the chase rig's own base elevation, 15.7° in CSVM against the authored 0.29° the
+  original places at, which is `BL-885` and not this item.
 
   *How it was measured.* Nose-in-image direction plus which surface is visible fixes the quadrant
   analytically: with image-right = `u × d`, the nose projects with horizontal component ∝ sin φ and
@@ -1572,9 +1568,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   omission of `Kp0` from `Views[]` is therefore **correct** and needs no change; the camera set is
   `Kp1`–`Kp9`. (Whether `Kp0`/`Kp.` should drive rudder at all is a separate input question this
   entry does not own.) The underside-front position stands for 7 on its own.
-  (b) **Motion is wrong in kind, not just speed**, ours snaps both ways (`ApplyFixedView` has no
-  smoothing branch at all). **Measured 2026-08-04 from the `CAP-07` scripted re-take, 16 transitions
-  (a press and a release for each of the eight moving keys).**
+  (b) **Motion is an exponential ease, and the decoded rate is what CSVM runs.** **Measured
+  2026-08-04 from the `CAP-07` scripted re-take, 16 transitions (a press and a release for each of
+  the eight moving keys).** The measurement corroborates the decode rather than setting the rate:
+  the head's azimuth smoothing is a decoded **5.0/s** (`docs/org/cameraViews.md`) against the
+  **≈ 5.4/s** in sim seconds fitted below, so the constant no longer waits on an FOV calibration.
   ⚠ **The "ease reads linear" claim this entry carried is WRONG, the ease is exponential.** Sky
   travel was tracked as the cumulative frame-to-frame displacement of matched star points, which is
   a monotone proxy for camera rotation and needs no FOV. Normalised, the profile is heavily
@@ -1587,21 +1585,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   - ⚠ **Those are WALL seconds and the original's clock runs fast (k = 1.390, `FINDINGS.md`).** In
     sim seconds the constant is **≈ 5.4 /s**, 90% in ≈ 0.43 s. Implementing 7.5 would run the ease
     39% quick, the same trap `BL-148` documents for the stall blink.
-  - **The form is exactly the smoothing our chase camera already uses**, `pos += (target − pos)·k·dt`
-    (`CamSmooth` 8 /s, `CamRotSmooth` 7 /s), so (b) is a matter of routing `ApplyFixedView` through
-    that existing law rather than inventing an ease curve. Our hand-picked 8 /s is in the right
-    region but is a *wall*-rate; the measured sim-rate is ≈ 5.4 /s.
+  - **The form is exactly the head's own smoothing**, `shown += (target − shown)·k·dt`, which is the
+    law `HeadLook.Approach` runs at the decoded 5.0/s in azimuth and 3.0/s in elevation. The camera's
+    own offset lerp (`CamSmooth` 8 /s, `CamRotSmooth` 7 /s) then sits on top of it.
   - ⚠ **`k` is a lower bound, the shape is not.** The tracker undercounts the fastest 1–2 frames of
     each slew (see the calibration note in (a)), and undercounting the early, fast part biases `k`
     *down* and makes the curve look *less* front-loaded than it is. The exponential-vs-linear verdict
     therefore only strengthens under the bias; the constant itself wants a re-measure once an FOV
     calibration exists and the rotation can be integrated as an angle rather than a pixel proxy.
-  (c) Distance: resolved, the fixed views take the per-plane shipped distance with the chase
+  (c) Distance: resolved, a snapped chase view takes the per-plane shipped distance with the chase
   camera (`CameraController`).
   (d) **Combined keys ADD as numpad-direction vectors, MEASURED 2026-08-04 from the `CAP-08`
-  scripted combo sweep, 14 staggered combinations.** Ours has no concept of this at all: `ActiveView`
-  is a single-view selector that takes the first array match, so it can only ever return one of the
-  eight positions. That is not a near-miss, the original reaches positions our code cannot express.
+  scripted combo sweep, 14 staggered combinations.** Landed, and not as a rule of its own: the
+  bindings put `Kp7`/`Kp8`/`Kp9` on Look Up and `Kp7`/`Kp4`/`Kp1` on Look Left, so several keys down
+  compose one direction, which is the summed offset this measurement found.
   - **The second key is never ignored.** In all 14 steps the silhouette after adding the second key
     differs from the first key's own settled silhouette at mask IoU **0.096–0.530**, against a
     repeatability floor of **0.833–0.978** measured from the same key held alone in two different
@@ -1649,20 +1646,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   26/28 anchors within 350 ms at sd 27 ms, against 15/28 at sd 54 ms for the press/release alias.
   Both clocks are wall clocks, so the sim-clock factor does not enter.
   (e) **No gamepad binding existed in the original** (a right-stick/right-stick+modifier scheme would
-  be invention) and **5 is unbound, now measured, 2026-08-04, not assumed.** Held for 3.5 s in the
-  `CAP-07` re-take, the frame deviation from its own pre-press baseline is **0.310**, *below* the
-  0.348–0.360 a no-key stretch of the same length scores, and against 2.5–10.5 for every key that
-  does move the camera. Kp5 does nothing. Matches today's deliberate omission
-  (`CameraController.cs:51-61`), so no code change, this line is now evidence.
-  (f) **Numpad + / − trim camera distance slightly**, wholly new, unimplemented; the user already has
-  video evidence for this one.
-  *Fix shape:* a rebuilt `Views` table (the layout in (a)), an eased position/orientation update on
-  top of `CameraController`'s existing per-plane radius, and the +/− trim as a new input. (d) is no
-  longer a state machine to design: replace `ActiveView`'s first-match selector with a **sum of the
-  held keys' numpad offsets**, map the resultant direction onto the (a) layout, and treat a zero
-  resultant as "no fixed view", the existing ease then carries the camera there, and the
-  no-snap-to-base behaviour falls out for free because only the target changes.
-  What remains open is (b)'s constant (wants an FOV calibration) and (f)'s +/− trim.
+  be invention) and **`Kp5` moves the camera nowhere, measured 2026-08-04, not assumed.** Held for
+  3.5 s in the `CAP-07` re-take, the frame deviation from its own pre-press baseline is **0.310**,
+  *below* the 0.348–0.360 a no-key stretch of the same length scores, and against 2.5–10.5 for every
+  key that does move the camera. ⚠ **That is not evidence the key is unbound**: `Kp5` is the
+  controller's centre slot, labelled "Look Forward" in the original's own binding menu, and the
+  camera was already at base when it was held, where recentring is a no-op. CSVM binds it to
+  `LookCenter` for that reason.
+  (f) **Numpad + / − trim camera distance slightly**: landed as the decoded External Camera Zoom
+  axis (`BL-433`), not as a trim of this scheme's own.
+  *What is left:* the pieces the footage cannot settle. (i) The exact azimuths and elevations of the
+  eight blended two-key positions, which mask IoU only bounds; the implementation reaches them by
+  composition and nothing measured contradicts it. (ii) (b)'s fitted constant as an independent
+  check on the decoded 5.0/s, which wants the FOV calibration (a) is missing. (iii) The feel of the
+  whole scheme at the controls, which is what `[Owed-playtest]` is for.
   ⚠ **`CAP-07` took two takes; the first is rejected and must not be re-analysed.** In
   `CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4` the presses overlap: 10 camera transitions for 8 keys in
   20.9 s, with direct position-to-position lerps that never pass through base, so only 6–7 of the 8
@@ -1670,22 +1667,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   take is `CAP-07 scripted Run.mp4`, driven by `analysis/capture-rigs/NumpadViewSweep.ahk`, one key
   held alone at a time with a return to base between, and a `sweep-log.txt` that timestamps every
   press, so key windows are read from the log rather than inferred from motion.
-  **(b) is still open even on the good take.** The ease is now measurable in principle, every move
-  does start from a settled base, but no ease law has been fitted, because a per-frame camera angle
-  needs a field-of-view calibration this clip has not been put through. All nine holds *do* settle:
-  frame-to-frame motion over the last 1.2 s of each is 0.055–0.278 against a 0.090 baseline.
+  All nine holds *do* settle: frame-to-frame motion over the last 1.2 s of each is 0.055–0.278
+  against a 0.090 baseline.
   ⚠ **Traps.** (a) **Only `--view=` is machine-verifiable**, live held-key input cannot be scripted
-  here, so any fix to (b)/(d) is correct-by-construction only until played; do not close this off a
-  passing `--view=` capture alone. (b) **The fix is not a symbol swap.** The corners gain a fore/aft
-  term they do not have today and every above-the-aircraft view disappears, so recode the table from
-  (a) rather than permuting the existing rows. And the table above is quadrants, not degrees, the
-  exact azimuth/elevation still wants an FOV-calibrated solve. (c) Don't retune
-  the chase radius here in isolation, the fixed views and the chase camera share one number in
-  `CameraController` by design; a fix landing only in one place desyncs the two cameras again.
-  (d) The combination law is pinned by six exact predictions but the eight blended positions are
-  only bounded, so **do not quote a blend's azimuth** as if it had been measured, and re-check the
-  implementation against the four cancellations and the two triples, those are the cases with a
-  right answer to check against.
+  here, so the built scheme is correct-by-construction until it is played; do not close this off a
+  passing `--view=` capture alone. (b) The table above is quadrants, not degrees, so the exact
+  azimuth/elevation still wants an FOV-calibrated solve, and the "level" rows are level only up to
+  the chase rig's base elevation (`BL-885`). (c) Don't retune the chase radius here in isolation, a
+  snapped view and the chase camera share one number in `CameraController` by design; a fix landing
+  only in one place desyncs the two cameras again. (d) The combination law is pinned by six exact
+  predictions but the eight blended positions are only bounded, so **do not quote a blend's azimuth**
+  as if it had been measured; the four cancellations and the two triples are the cases with a right
+  answer to check against.
 
 - `BL-266` `[Research]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
   wiring landed.** The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
@@ -1795,46 +1788,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-399` (padlock, the byte's third state), `PLAN-cockpit-view` C21 (`HeadLook`,
   `src/Flight/HeadLook.cs`).
 
-- `BL-435` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The original drives the chase camera through the same head-look controller
-  as the cockpit views; CSVM's chase view has no look-around at all.** `FUN_0042c7f0` (the chase
-  placement dispatcher) calls the identical `FUN_0042d010(0xbfc90fdb, 0)` that
-  `PLAN-cockpit-view` C21 already ported as `HeadLook`, same states, same snap table, same
-  2 rad/s pan, same smoothing rates, with its elevation floor at `−π/2` instead of first person's
-  level floor, so the chase
-  camera can look down as well as up. The original's numpad snap cluster (`Kp1`-`Kp9`) plus
-  `F9`-`F12` **External Camera** keys plus `F7` **Access Chase View** (menu label,
-  `OriginalScreenshots/Keybinds Views 2.png`) are this same mechanism, not a separate feature.
-  ⚠ **This is the mechanism behind `BL-150`'s numpad "fixed views."** `BL-150`'s own `CAP-07`
-  measurement found the numpad views compose as a SUM of each held key's 2-D offset from `Kp5`, with
-  a zero resultant giving the default chase pose, exactly this controller's snap-direction
-  composition, applied to the chase camera's `−π/2`-floored instance rather than a table of nine
-  authored poses. `BL-150`'s rebuild should therefore build look-around (this item), not nine
-  hand-placed camera positions.
-  ⚠ **`F7` conflicts with CSVM's own debug binding.** `docs/controls.md` already records `F7` as
-  unassigned in CSVM's flight scheme specifically because `docs/org/cameraViews.md`'s correction
-  identifies "Access Chase View" as the mode-9 FLYBY, not the following chase, a contradiction
-  between the menu label and the decoded behaviour nobody has settled. Resolve which behaviour the
-  `F7`-labelled binding actually maps to before choosing a CSVM key.
-  ⚠ **This item owns the KEYBOARD/MOUSE half only; the pad is already built and is deliberately
-  not the decoded law.** CSVM splits the look-around by DEVICE, not by view: the right stick aims
-  ABSOLUTELY in both the chase view and the two first-person ones, stick position mapping straight
-  onto one shared envelope (`HeadLook.PadLookYawMaxDeg`/`PadLookPitchMaxDeg`) and releasing back to
-  the settled pose, which is a UX call for this port and not in the original at all. The decoded
-  relative controller above is what the numpad snap cluster, the centre key and the mouse ride, and
-  extending it to the chase camera for THOSE inputs is the work still owed here. Building this must
-  not take the pad off its absolute path, in either view: that is the behaviour the controls were
-  judged on. The pad's own bound is the chase camera's gimbal margin (±60° pitch), which is why the
-  stick cannot reach the straight-up the snap cluster can, and the shared pair must not be widened
-  to close that gap.
-  *Fix shape:* reuse `HeadLook` (`src/Flight/HeadLook.cs`, C21) on the chase camera with
-  `PitchFloor = -π/2` instead of building a second controller, feeding it the snap/centre/mouse
-  paths only; the snap cluster becomes `CameraController`'s numpad table per `BL-150`'s law once
-  that item's rebuild lands.
-  *Cross-refs:* `BL-150` (the fixed-view numpad table this supersedes as a mental model), `BL-433`
-  (the same F9-F12/zoom cluster's `+`/`−` half), `PLAN-cockpit-view` (⚠ table row 2, C21
-  `HeadLook`), `docs/org/cameraViews.md` (the F7/flyby correction), `docs/controls.md` (the
-  device split, and `--look=` as its scripted twin).
-
 - `BL-436` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The cockpit view's whole feel is unjudged at the controls,
   one sitting owes seven separate decisions `PLAN-cockpit-view` made without one.** (a)
   `PlaneBuilder.InteriorScale` (B11) is a declared TUNE, framed static (0.04, "the panel ~0.7 m
@@ -1858,6 +1811,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   judgement call, not a re-decode.
   *Cross-refs:* `PLAN-cockpit-view` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
+
+- `BL-885` `[Fidelity]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **The chase camera's base elevation is authored
+  (`thirdp_pitch`), where CSVM holds a hand-picked 15.7°.** The chase placement builds its direction
+  from the head's shown azimuth and the head's shown elevation PLUS the camparam block's `+0x28`:
+  `FUN_0042c7f0` loads `DAT_0064ef58` at `0042c881`, adds `[ECX + 0x28]` at `0042c88d` and hands the
+  pair to the direction builder `FUN_0053f550` at `0042c8a2`. The reader `FUN_0042f700` puts
+  `thirdp_pitch` there in radians (`0042f81d`-`0042f83b`, the authored degrees × π/180). Shipped that
+  is **0.29°** on every airframe and **0.2°** on Balmoral's block, i.e. the original's settled chase
+  camera sits essentially dead astern, level with the aeroplane. CSVM instead normalises a
+  hand-picked `BaseUp` 4.5 / `BaseBack` 16 pair, which is **15.7°** above the tail, and
+  `CameraController`'s own comment calls the direction hand-picked because
+  `docs/formats/camparam.md` had read 0.29° as too small to be an elevation. It is the elevation.
+  *Fix shape:* take the base elevation off `CamParams` (`thirdp_pitch`, already parsed) and feed it
+  as the resting elevation the head's own angle adds to, so `ChaseSwing` keeps working unchanged;
+  `BaseUp`/`BaseBack` then reduce to "behind the tail" plus that angle. `thirdp_height`'s units are
+  still unknown, so the radius stays where it is (`dist` + `dist_factor`).
+  ⚠ **This moves every pinned golden shot with a chase camera**, so it is a re-pin, and the new pose
+  drops the framing of every flight capture by 15°. Judge it at the controls before re-pinning: a
+  camera level with the aeroplane sees less ground and more sky, and the original's own footage is
+  the reference. ⚠ **Do not read the 15.7° as wrong-by-construction**: it was picked to look right
+  and has never been judged against the authored figure side by side.
+  *Cross-refs:* `BL-150` (its measured "level" rows are level only up to this angle),
+  `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
+  `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
 
 ## HUD & UI
 

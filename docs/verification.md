@@ -247,6 +247,14 @@ one sentence of measured evidence; everything else belongs in the commit that la
   height below ratio 1.642 and the width above it, so 1280x720 pinned a frame 8.3 % short of the
   card's own height and a 32:9 window showed 46 % of it, with no golden able to move.
 
+- **GOLD-16**, **A new degree of freedom on a pinned path keeps every golden only if its neutral
+  value is the EXACT identity, which constrains how the arithmetic is WRITTEN and not just what it
+  computes.** Swinging the chase camera by a head rotation left all 18 shots byte-identical because
+  `new Basis(axis, 0)` is exactly the identity matrix, because the rotation went in ahead of the
+  radius scale so the existing term order survived, and because float addition is commutative to the
+  bit. Moving that scale, or normalising the rotated offset, would have moved every flown shot
+  without changing the feature at all.
+
 ## DET, determinism and randomness
 
 - **DET-2**, **Disable live input during scripted runs.**

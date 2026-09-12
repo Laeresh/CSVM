@@ -378,10 +378,12 @@ public partial class FlightController : Node3D
     /// effect without a stunt run.</summary>
     public bool DebugCompleteStunt;
 
-    /// <summary>The numpad camera view (1–9, 5 unbound) held for the whole run, the scripted twin
-    /// of holding the key, so a capture can frame the belly or a flank of a flying plane. 0 (the
-    /// default) is the chase camera, i.e. exactly today's behaviour. A key held at the controls
-    /// wins over this while it is down.</summary>
+    /// <summary>The numpad snap direction (1–9, 5 unbound) held for the whole run, the scripted
+    /// twin of holding the key, so a capture can frame a flank or the belly of a flying plane. 0
+    /// (the default) leaves the head straight ahead, i.e. exactly today's behaviour. A key held at
+    /// the controls wins over this while it is down, and the head SWINGS to the pinned direction
+    /// rather than cutting to it, since it reaches the camera through the same head as a key does
+    /// (<see cref="HeadLook"/>).</summary>
     public int PinnedView;
 
     /// <summary>The view mode this pilot starts in (<c>--view=cockpit</c>/<c>=nose</c>); Chase, the
@@ -689,6 +691,11 @@ public partial class FlightController : Node3D
     /// <summary>Whether this pilot is in one of the two first-person views, the session's feed for
     /// the anim data's <c>PLAYER_1ST_PERSON</c> condition (id 120).</summary>
     public bool FirstPersonView => PilotView.IsFirstPerson(ViewMode);
+
+    /// <summary>The one head every view of this pilot's aircraft is placed by, or null on an AI rig,
+    /// which has no camera. Read by the suites: the angles it has settled at and the elevation floor
+    /// the last placed frame handed it are what say which view's law ran.</summary>
+    public HeadLook? Head => _cam?.Head;
 
     /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
     /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
@@ -1950,30 +1957,24 @@ public partial class FlightController : Node3D
             // look-behind while SELECTED Cockpit/Nose gets the first-person FOV back on release.
             _cam.RestoreExternalFov();
             bool firstPersonPose = false;
-            int view = _cam.ActiveView();
             var logged = CameraView.Chase;
             if (_cam.FlybyActive)
             {
-                // Above the numpad views on purpose: the flyby is a camera the aeroplane was put
+                // Above every held pose on purpose: the flyby is a camera the aeroplane was put
                 // into, not a pose held over the pilot's selection, so nothing overrides it while
                 // it runs. Sim time, so the pass survives a frame-rate change and a halt freezes it.
                 _cam.FlybyView((float)(clock?.Time ?? 0.0), _renderPose, _model.Speed,
                     World, Body?.ExcludeSelf);
                 logged = CameraView.Flyby;
             }
-            else if (view >= 0)
-            {
-                _cam.FixedView(view, _renderPose);
-                logged = CameraView.Fixed;
-            }
             else if (_cam.FirstPerson)
             {
                 // Rigid at cockpit_camera (wobble inherited), the mode's own FOV, aimed by the
                 // head. Look-back stays IN the cockpit, head to dead astern while held, as the
                 // original does, which is why this arm sits above the look-behind branch below.
-                _cam.Head.Step(simDt, _cam.BackActive(_padActions.Held(InputAction.LookBack))
+                _cam.StepHead(simDt, _cam.BackActive(_padActions.Held(InputAction.LookBack))
                     ? new HeadLookInput(0f, -1f, 0f, 0f, false)
-                    : HeadLookRead());
+                    : HeadLookRead(), HeadLook.FirstPersonElevationFloor);
                 _cam.FirstPersonView(_renderPose);
                 _cam.ApplyFirstPersonFov();
                 firstPersonPose = true;
@@ -1989,6 +1990,10 @@ public partial class FlightController : Node3D
             }
             else
             {
+                // The one head, on the chase camera's own floor, so the snap cluster, the centre
+                // key and the mouse swing this view exactly as they aim the cockpit. The pad is
+                // left out: it keeps the absolute PadLook path below, in both views.
+                _cam.StepHead(simDt, HeadLookRead(includePad: false), HeadLook.ChaseElevationFloor);
                 var (lookX, lookY) = PadLookInput();
                 if (lookX != 0f || lookY != 0f)
                 {
@@ -2002,6 +2007,7 @@ public partial class FlightController : Node3D
                     // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
                     // independent; fed the DRAWN pose, same rule as the rigid views above.
                     _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
+                    logged = _cam.Head.Settled ? CameraView.Chase : CameraView.Look;
                 }
             }
             // Keyed to the pose this frame actually took, not to the selection, a look-behind
@@ -2011,7 +2017,7 @@ public partial class FlightController : Node3D
             ShowPanel(CockpitVisibility.Rules(_cam.ViewMode, firstPersonPose).Interior);
             // After the hide, so the pass shows exactly the frames the interior itself does.
             CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
-            _cam.LogView(logged, _model.Position, _model.Attitude, fixedView: view);
+            _cam.LogView(logged, _model.Position, _model.Attitude);
         }
 
         // heading of the nose: 0 = north (−Z), 90 = east (+X), shared by the compass and the marker
@@ -3980,14 +3986,15 @@ public partial class FlightController : Node3D
     }
 
     // One frame of head-look input, in HeadLook's own conventions. Read here for the same reason
-    // the look-around stick is: the camera never learns about pads, mice or key layouts.
-    private HeadLookInput HeadLookRead()
+    // the look-around stick is: the camera never learns about pads, mice or key layouts. The
+    // chase camera clears `includePad`, since the stick places that view itself (PadLook).
+    private HeadLookInput HeadLookRead(bool includePad = true)
     {
         var (snapX, snapY) = SnapLookInput();
         var (freeRight, freeUp) = FreeLookRead();
-        var (lookX, lookY) = PadLookInput();
-        // The pad aims absolutely here, as it does in the chase view; the mouse stays on the
-        // decoded relative path. `lookY` is the stick's +down, HeadLook wants +up.
+        var (lookX, lookY) = includePad ? PadLookInput() : (0f, 0f);
+        // The pad aims absolutely in first person, matching the chase view's own stick; the mouse
+        // stays on the decoded relative path. `lookY` is the stick's +down, HeadLook wants +up.
         return new HeadLookInput(snapX, snapY, freeRight, freeUp, _actions.Held(InputAction.LookCenter),
             lookX, -lookY);
     }
@@ -4009,12 +4016,20 @@ public partial class FlightController : Node3D
     }
 
     // The snap cluster as a composed direction, the original's own numpad bindings: Kp8 Look Up,
-    // Kp4/Kp6 the flanks, Kp2 Look Back, the corners the four diagonals. Only read in a
-    // first-person mode, where the numpad drives no fixed view (PilotView.HoldsFixedViews).
+    // Kp4/Kp6 the flanks, Kp2 Look Back, the corners the four diagonals. Read in every view the
+    // head places, first person and the chase camera alike, since they share the one head.
     private (float X, float Y) SnapLookInput()
     {
-        return (_actions.Axis(InputAction.LookRight, InputAction.LookLeft),
-                _actions.Axis(InputAction.LookUp, InputAction.LookDown));
+        float x = _actions.Axis(InputAction.LookRight, InputAction.LookLeft);
+        float y = _actions.Axis(InputAction.LookUp, InputAction.LookDown);
+        if (x != 0f || y != 0f || PinnedView < 1 || PinnedView > 9)
+        {
+            return (x, y);
+        }
+        // A scripted --view=<digit> holds that direction for the run, off the pad's own layout:
+        // the digit's column is the left/right component and its row the up/down one. Live keys
+        // beat the pin, the rule PadLookInput follows against PinnedLook.
+        return (((PinnedView - 1) % 3) - 1, ((PinnedView - 1) / 3) - 1);
     }
 
     // Free-look direction: the mouse while its right button is held (the RMB-to-look posture the

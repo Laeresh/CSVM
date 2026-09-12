@@ -2,7 +2,7 @@ using System;
 
 namespace CSVM.Flight;
 
-/// <summary>The view a pilot has SELECTED, as opposed to the numpad views held for as long as a
+/// <summary>The view a pilot has SELECTED, as opposed to the look-behind held for as long as a
 /// key is down. The original's selector accepts exactly these three and nothing else
 /// (<c>FUN_0042c210</c> stores the accepted value, <c>FUN_004414a0</c> falls back to Cockpit for
 /// anything outside the set), docs/org/cameraViews.md, "Only three views are player-selectable".
@@ -46,19 +46,14 @@ public static class PilotView
         _ => PilotViewMode.Cockpit,
     };
 
-    /// <summary>Whether a held numpad 1–9 key is a camera override in this mode. It is not in
-    /// first person: there the numpad IS the head-look snap cluster, which is what the original
-    /// binds it to (<c>OriginalScreenshots/Keybinds Views 2.png</c>, <c>Kp1</c>–<c>Kp9</c> =
-    /// Look Up/Left/Rear … Look Forward … Look Up/Right).</summary>
-    public static bool HoldsFixedViews(PilotViewMode mode) => !IsFirstPerson(mode);
-
-    /// <summary>Which view is actually in force this frame. A held numpad view key and the
-    /// look-behind are camera overrides only where <see cref="HoldsFixedViews"/> says the numpad
-    /// still drives the camera: in first person the numpad is the snap cluster and the look-behind
-    /// is a head look-back that never leaves the cockpit (confirmed at the controls of the
-    /// original). Either way the selection is untouched, so release returns to the same mode.</summary>
-    public static PilotViewMode Effective(PilotViewMode selected, bool heldViewActive, bool backActive = false) =>
-        (backActive || heldViewActive) && HoldsFixedViews(selected) ? PilotViewMode.Chase : selected;
+    /// <summary>Which view is actually in force this frame. The look-behind is a camera override
+    /// outside first person only: in first person it is a head look-back that never leaves the
+    /// cockpit (confirmed at the controls of the original). The numpad never appears here, in any
+    /// mode it is the head-look snap cluster the original binds it to
+    /// (<c>OriginalScreenshots/Keybinds Views 2.png</c>), and a snap swings the view it is in
+    /// rather than replacing it. Either way the selection is untouched.</summary>
+    public static PilotViewMode Effective(PilotViewMode selected, bool backActive = false) =>
+        backActive && !IsFirstPerson(selected) ? PilotViewMode.Chase : selected;
 
     /// <summary>The <c>--view=</c> spelling of a selected mode, or null when the argument names
     /// something else (a numpad digit, <c>back</c>, a typo) and the caller should go on to parse

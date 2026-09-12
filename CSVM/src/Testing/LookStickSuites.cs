@@ -10,17 +10,26 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The suite over the right stick's look-around, flown through a real human rig with
-/// <c>--look=</c> standing in for the stick: the chase camera and the first-person head take the
-/// SAME deflection through one reader and one envelope, so both swing the same angle to the same
-/// side of the aircraft, and both come back to their settled pose when the stick centres. The
-/// stick is read on the camera step rather than through <c>FlightInput</c>, so this is the only
-/// machine-driveable path to it. Envelope and mapping: <see cref="HeadLook"/>.</summary>
+/// <summary>The suite over the look controls, flown through a real human rig with <c>--look=</c>
+/// standing in for the right stick and <c>--view=</c> for a held numpad key: the chase camera and
+/// the first-person head take the SAME deflection through one reader and one envelope, and the
+/// snap cluster swings the chase camera through the same head that aims the cockpit, at the decoded
+/// rate and onto the direction the table names. Both paths are read on the camera step rather than
+/// through <c>FlightInput</c>, so this is the only machine-driveable route to them. Envelope,
+/// rates and snap table: <see cref="HeadLook"/>.</summary>
 internal static class LookStickSuites
 {
     // A partial deflection on purpose: a full one would pass an implementation that clamped
     // everything to the envelope's edge, and a partial one only passes a proportional map.
     private const float StickX = 0.6f;
+
+    // The snap sortie's held key: numpad 4, which the original's own stills put on the aircraft's
+    // starboard flank, level, and which the table reaches as a pure quarter-turn of azimuth.
+    private const int SnapDigit = 4;
+
+    // Read the pan partway, at exactly one azimuth time constant, so the reading is a RATE rather
+    // than the settled angle any smoothing law would eventually reach.
+    private const int PanFrames = 12;
 
     private const float StepDt = 1f / 60f;
 
@@ -43,7 +52,7 @@ internal static class LookStickSuites
     /// <summary>Flies one aircraft per view with the same pinned stick and reads what the camera
     /// did with it.</summary>
     [Suite("look-stick",
-        "the right stick's look-around flown in both views with --look= standing in for the stick: the flag parses, clamps and survives a typo, and one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, each returning to its settled pose when the stick centres")]
+        "the look controls flown in both views with --look= standing in for the right stick and --view= for a held numpad key: the flags parse, clamp and survive a typo, one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, and a snap pans the chase camera through the same head at the decoded azimuth rate onto the table's own direction, every path returning to its settled pose on release")]
     internal static void LookStick(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -131,6 +140,13 @@ internal static class LookStickSuites
             float releasedDeg = SwingDegOf(mode, ctx.Camera, plane, out _);
             report.AppendLine($"{PilotView.Name(mode)}: held {swingDeg:0.##}° side x={sideX:0.###}, " +
                 $"released {releasedDeg:0.##}° (envelope {ExpectedSwingDeg:0.#}°)");
+            if (mode == PilotViewMode.Chase)
+            {
+                // Flown on the back of this sortie rather than in its own: the aeroplane is
+                // already built, already airborne and already settled at the chase pose.
+                SnapSortie(ctx, clock, plane, report);
+            }
+
             return new Swing(swingDeg, sideX, releasedDeg);
         }
         finally
@@ -145,11 +161,59 @@ internal static class LookStickSuites
         }
     }
 
+    // The snap cluster in the chase view: the camera starts settled, a held numpad key pans the
+    // one head at the decoded azimuth rate onto the direction the table names, and releasing it
+    // returns the camera to the pose it held before any look input.
+    private static void SnapSortie(TestContext ctx, GameClock clock, FlightController plane,
+        StringBuilder report)
+    {
+        var settled = OffsetDir(ctx.Camera, plane);
+        ctx.Check(plane.Head is { } floored
+            && Mathf.Abs(floored.ElevationFloor - HeadLook.ChaseElevationFloor) < 1e-6f,
+            $"a chase frame floors the head at the decoded {HeadLook.ChaseElevationFloor:0.0000} rad rather than first person's level floor (read {plane.Head?.ElevationFloor:0.0000})");
+
+        plane.PinnedView = SnapDigit;
+        Step(clock, plane, PanFrames);
+        float panRad = plane.Head?.Azimuth ?? 0f;
+        float expectedRad = (Mathf.Pi / 2f)
+            * (1f - Mathf.Exp(-HeadLook.AzimuthSmoothRate * PanFrames * clock.FrameDt));
+        ctx.Check(Mathf.Abs(panRad - expectedRad) < 0.02f,
+            $"a held numpad {SnapDigit} pans the head at the decoded {HeadLook.AzimuthSmoothRate:0.#}/s: {Mathf.RadToDeg(panRad):0.#}° after one time constant, against {Mathf.RadToDeg(expectedRad):0.#}°");
+
+        Step(clock, plane, SettleFrames);
+        var held = OffsetDir(ctx.Camera, plane);
+        ctx.Check(held.X > 0.9f && Mathf.Abs(held.Z) < 0.05f,
+            $"and settles the camera on the aircraft's starboard flank, the table's entry for that key (dir {Fmt(held)})");
+        ctx.Check(Mathf.Abs(held.Y - settled.Y) < 0.02f,
+            $"at the chase rig's own elevation, a swing about the up axis lifting nothing (held y={held.Y:0.###}, settled y={settled.Y:0.###})");
+
+        plane.PinnedView = 0;
+        Step(clock, plane, SettleFrames);
+        var back = OffsetDir(ctx.Camera, plane);
+        float offDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(back.Dot(settled), -1f, 1f)));
+        ctx.Check(offDeg < ToleranceDeg,
+            $"and releasing it puts the camera back where it sat with no look input at all (read {offDeg:0.##}° off)");
+        report.AppendLine($"chase snap {SnapDigit}: panned {Mathf.RadToDeg(panRad):0.##}° against " +
+            $"{Mathf.RadToDeg(expectedRad):0.##}°, held dir {Fmt(held)}, released {Fmt(back)} " +
+            $"against {Fmt(settled)}");
+    }
+
+    // The camera's offset from the aeroplane, as a unit direction in the PLANE's frame, so the
+    // dynamic radius and the aircraft's own manoeuvring both drop out of every reading.
+    private static Vector3 OffsetDir(Camera3D camera, FlightController plane) =>
+        (plane.GlobalBasis.Inverse() * (camera.GlobalTransform.Origin - plane.WorldPosition))
+        .Normalized();
+
+    private static string Fmt(Vector3 v) => $"({v.X:0.###}, {v.Y:0.###}, {v.Z:0.###})";
+
+    private static void Settle(GameClock clock, FlightController plane) =>
+        Step(clock, plane, SettleFrames);
+
     // The sim step and the camera step, in the order a live frame runs them: the camera reads the
     // drawn pose the sim step just left.
-    private static void Settle(GameClock clock, FlightController plane)
+    private static void Step(GameClock clock, FlightController plane, int frames)
     {
-        for (int i = 0; i < SettleFrames; i++)
+        for (int i = 0; i < frames; i++)
         {
             clock.BeginFrame(StepDt);
             plane._PhysicsProcess(StepDt);

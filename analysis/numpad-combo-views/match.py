@@ -5,9 +5,8 @@ into.  Four hypotheses for what holding A+B does, and each makes a different
 prediction about which reference the combination's silhouette matches:
 
   ignore   AB == A alone            (the second key does nothing while A is down)
-  replace  AB == B alone, or A      (a single-view selector picks one winner;
-                                     our own ActiveView() takes the first array
-                                     match, so it predicts one of the two)
+  replace  AB == B alone, or A      (a single-view selector picks one winner,
+                                     so it predicts one of the two)
   cancel   AB == base               (the two contributions annul)
   blend    AB matches none of them  (a genuine third position)
 

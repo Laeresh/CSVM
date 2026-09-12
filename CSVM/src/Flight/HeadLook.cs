@@ -16,16 +16,16 @@ public readonly record struct HeadLookInput(
     float PadRight = 0f, float PadUp = 0f);
 
 /// <summary>
-/// The pilot's head in a first-person view: where it is being told to look (the TARGET angles,
-/// set by a snap direction, integrated by free-look, or zeroed by the center key) and where it is
-/// actually looking (the SHOWN angles, chasing the targets exponentially at the decoded rates).
-/// Elevation is 0 at level and +π/2 straight up, clamped to <see cref="ElevationFloor"/>..π/2;
-/// azimuth is 0 straight ahead, positive to the left, and CLAMPED to ±π, the head stops at dead
-/// astern and never pans past it, the original's own stop confirmed at its controls. Both bounds
-/// bind the relative paths (snap, free-look, center); the absolute pad aim carries its own
-/// envelope, see <see cref="PadAimTargets"/>. Engine-free apart from <see cref="Mathf"/>, so
-/// every law here unit-tests without a camera; <see cref="CameraController.FirstPersonPose"/>
-/// composes the shown angles into a basis.
+/// The pilot's head, in the two first-person views and on the chase camera alike: where it is
+/// being told to look (the TARGET angles, set by a snap direction, integrated by free-look, or
+/// zeroed by the center key) and where it is actually looking (the SHOWN angles, chasing the
+/// targets exponentially at the decoded rates). Elevation is 0 at level and +π/2 straight up,
+/// clamped to <see cref="ElevationFloor"/>..π/2, the floor the placing view sets; azimuth is 0
+/// straight ahead, positive to the left, and CLAMPED to ±π, the head stops at dead astern and
+/// never pans past it, the original's own stop confirmed at its controls. Both bounds bind the
+/// relative paths (snap, free-look, center); the absolute pad aim carries its own envelope, see
+/// <see cref="PadAimTargets"/>. Engine-free apart from <see cref="Mathf"/>: the shown angles become
+/// a basis in <see cref="CameraController.FirstPersonPose"/> and a chase offset in <see cref="CameraController.ChaseSwing"/>.
 /// </summary>
 public sealed class HeadLook
 {
@@ -45,6 +45,15 @@ public sealed class HeadLook
     /// every caller of the controller.</summary>
     public const float MaxElevation = Mathf.Pi / 2f;
 
+    /// <summary>The elevation floor a first-person frame sets: level. The head never looks below
+    /// the horizon there (docs/org/cameraViews.md, head-look controller).</summary>
+    public const float FirstPersonElevationFloor = 0f;
+
+    /// <summary>The elevation floor a chase-camera frame sets: straight down, the literal
+    /// <c>0xbfc90fdb</c> the chase placement passes the controller, so the view can look below
+    /// level as well as above it (docs/org/cameraViews.md).</summary>
+    public const float ChaseElevationFloor = -Mathf.Pi / 2f;
+
     /// <summary>The snap elevation for a diagonal direction: 45° up (<c>0.7853982</c>).</summary>
     public const float DiagonalElevation = Mathf.Pi / 4f;
 
@@ -62,10 +71,13 @@ public sealed class HeadLook
     private const float ForwardWindowRad = 0.001745f;
     private const float DiagonalWindowRad = 0.001571f;
 
-    /// <summary>The lowest elevation this head may be told to look at. First person passes 0 (the
-    /// original's head never looks below level there); the chase view passes −π/2. A parameter
-    /// rather than a constant because the original's two callers differ only in this.</summary>
-    public HeadLook(float elevationFloor = 0f) => ElevationFloor = elevationFloor;
+    // How near centre counts as at rest, 0.1°: the window Settled reads.
+    private const float SettledWindowRad = 0.001745f;
+
+    /// <summary>The floor this head starts on; the placing view sets it per frame afterwards.
+    /// </summary>
+    public HeadLook(float elevationFloor = FirstPersonElevationFloor) =>
+        ElevationFloor = elevationFloor;
 
     /// <summary>Consulted on any frame with no look input at all, and its answer
     /// becomes the targets directly. It sets elevation past <see cref="ElevationFloor"/> on
@@ -75,8 +87,19 @@ public sealed class HeadLook
     /// parked is the J smooth-look mode, filed, not this.</summary>
     public Func<(float Elevation, float Azimuth)?>? IdleAim { get; set; }
 
-    /// <summary>See the constructor.</summary>
-    public float ElevationFloor { get; }
+    /// <summary>The lowest elevation this head may be told to look at:
+    /// <see cref="FirstPersonElevationFloor"/> in the cockpit and <see cref="ChaseElevationFloor"/>
+    /// on the chase camera. Settable rather than fixed because the original's one head serves both
+    /// placements and they differ only in this, so the view placing the frame sets it before
+    /// <see cref="Step"/> (<see cref="CameraController.StepHead"/>). A lowered target above the new
+    /// floor is left alone; the next input path re-clamps it.</summary>
+    public float ElevationFloor { get; set; }
+
+    /// <summary>Whether the head is at rest, straight ahead and level, to within a tenth of a
+    /// degree. A released head decays toward centre asymptotically and never lands on it exactly,
+    /// so this is a window rather than an equality.</summary>
+    public bool Settled =>
+        Mathf.Abs(Elevation) < SettledWindowRad && Mathf.Abs(Azimuth) < SettledWindowRad;
 
     /// <summary>Where the head is being told to look, above level.</summary>
     public float TargetElevation { get; private set; }

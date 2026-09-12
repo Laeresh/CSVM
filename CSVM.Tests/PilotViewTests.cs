@@ -37,28 +37,15 @@ public sealed class PilotViewTests
         }
     }
 
-    // The held-key override: a numpad view wins for as long as it is down and the selection is
-    // untouched, so releasing it returns to the very same mode.
+    // Nothing held: the selection is what is in force, and it is never rewritten, so releasing a
+    // key returns to the very same mode.
     [Fact]
-    public void A_held_view_key_overrides_the_selection_without_changing_it()
+    public void The_selection_stands_when_nothing_is_held()
     {
-        Assert.Equal(PilotViewMode.Chase, PilotView.Effective(PilotViewMode.Chase, heldViewActive: true));
         foreach (var selected in new[] { PilotViewMode.Chase, PilotViewMode.Cockpit, PilotViewMode.Nose })
         {
-            Assert.Equal(selected, PilotView.Effective(selected, heldViewActive: false));
+            Assert.Equal(selected, PilotView.Effective(selected));
         }
-    }
-
-    // The numpad is the head-look snap cluster in first person, which is what the original binds
-    // it to, so a held view key is not an override there and the mode stands.
-    [Fact]
-    public void A_held_view_key_is_not_an_override_in_a_first_person_mode()
-    {
-        Assert.False(PilotView.HoldsFixedViews(PilotViewMode.Cockpit));
-        Assert.False(PilotView.HoldsFixedViews(PilotViewMode.Nose));
-        Assert.True(PilotView.HoldsFixedViews(PilotViewMode.Chase));
-        Assert.Equal(PilotViewMode.Cockpit, PilotView.Effective(PilotViewMode.Cockpit, heldViewActive: true));
-        Assert.Equal(PilotViewMode.Nose, PilotView.Effective(PilotViewMode.Nose, heldViewActive: true));
     }
 
     // The look-behind overrides the camera only in external modes. In first person it is a head
@@ -67,12 +54,9 @@ public sealed class PilotViewTests
     [Fact]
     public void The_look_behind_overrides_chase_but_stays_in_cockpit_in_first_person()
     {
-        Assert.Equal(PilotViewMode.Chase,
-            PilotView.Effective(PilotViewMode.Chase, heldViewActive: false, backActive: true));
-        Assert.Equal(PilotViewMode.Cockpit,
-            PilotView.Effective(PilotViewMode.Cockpit, heldViewActive: false, backActive: true));
-        Assert.Equal(PilotViewMode.Nose,
-            PilotView.Effective(PilotViewMode.Nose, heldViewActive: false, backActive: true));
+        Assert.Equal(PilotViewMode.Chase, PilotView.Effective(PilotViewMode.Chase, backActive: true));
+        Assert.Equal(PilotViewMode.Cockpit, PilotView.Effective(PilotViewMode.Cockpit, backActive: true));
+        Assert.Equal(PilotViewMode.Nose, PilotView.Effective(PilotViewMode.Nose, backActive: true));
     }
 
     [Fact]

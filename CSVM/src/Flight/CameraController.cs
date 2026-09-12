@@ -14,10 +14,10 @@ public enum CameraView
     /// <summary>The following chase camera, logged under the pad's unbound middle digit.</summary>
     Chase,
 
-    /// <summary>One of the numpad's fixed views, logged under its own pad digit. Which one is the
-    /// index handed alongside, since the pose is a row of the view table rather than a value
-    /// here.</summary>
-    Fixed,
+    /// <summary>The chase camera swung off its settled pose by the pilot's head: the numpad snap
+    /// cluster, the centre key or the mouse. Where it went is in the offset and aim the breadcrumb
+    /// prints beside this name.</summary>
+    Look,
 
     /// <summary>The look-behind view: numpad 0, the right-stick click, or <c>--view=back</c>.</summary>
     Back,
@@ -43,8 +43,8 @@ public enum CameraView
 }
 
 /// <summary>
-/// Drives the flown aircraft's camera: the roll-following chase camera, the numpad fixed views,
-/// the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or Nose)
+/// Drives the flown aircraft's camera: the roll-following chase camera and the head that swings
+/// it, the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or Nose)
 /// and the free orbit used while the debug freeze holds the world still. Steers a
 /// <see cref="Camera3D"/> it does not own, like <see cref="CSVM.UI.OrbitCamera"/> does for the
 /// static viewer.
@@ -83,8 +83,6 @@ public sealed class CameraController
     private const float OrbitZoomRate = 1.6f;   // paused orbit-camera dolly (1/s, exponential)
     private const float OrbitMinDist = 4f, OrbitMaxDist = 150f;
 
-    private const float Diag = 0.70710678f;     // sin/cos 45°, the four diagonal views' components
-
     // The numpad +/- zoom axis: the target moves at 2/s, clamped [0, 1]; the shown trim chases
     // it at 1.5/s. 0 is the pose the view rests at, never a mid-point (docs/org/cameraViews.md).
     private const float ZoomAxisRate = 2f, ZoomSmoothRate = 1.5f;
@@ -113,22 +111,10 @@ public sealed class CameraController
     // ≈ 16.62 m. Only used to normalise that direction against the data's own distance.
     private static readonly float BaseDist = Mathf.Sqrt((BaseBack * BaseBack) + (BaseUp * BaseUp));
 
-    // The numpad's fixed views, keyed by the pad's layout: 2 below the plane, 1/3 45° up-left/right,
-    // 4/6 level flanks, 7/9 45° above those, 8 ahead looking back; 5 is unbound (the chase camera).
-    // `Dir` is the offset direction, `Up` the image up, both in the PLANE's frame (+x right, +y up,
-    // −z nose) so every pose banks and rolls with the aircraft. The belly view uses the nose as up
-    // since the plane's own up is the view axis there.
-    private static readonly (Key Key, int Digit, Vector3 Dir, Vector3 Up)[] Views =
-    {
-        (Key.Kp1, 1, new Vector3(-Diag, -Diag, 0f), Vector3.Up),
-        (Key.Kp2, 2, new Vector3(0f, -1f, 0f), Vector3.Forward),
-        (Key.Kp3, 3, new Vector3(Diag, -Diag, 0f), Vector3.Up),
-        (Key.Kp4, 4, new Vector3(-1f, 0f, 0f), Vector3.Up),
-        (Key.Kp6, 6, new Vector3(1f, 0f, 0f), Vector3.Up),
-        (Key.Kp7, 7, new Vector3(-Diag, Diag, 0f), Vector3.Up),
-        (Key.Kp8, 8, new Vector3(0f, 0f, -1f), Vector3.Up),
-        (Key.Kp9, 9, new Vector3(Diag, Diag, 0f), Vector3.Up),
-    };
+    // The chase rig in the PLANE's frame: the raw offset direction (behind and above) and the
+    // point ahead of the nose the camera aims at. ChaseSwing turns both before either is used.
+    private static readonly Vector3 BaseOffset = new(0f, BaseUp, BaseBack);
+    private static readonly Vector3 LookAhead = new(0f, 0f, -CamLookAhead);
 
     private readonly Camera3D _camera;
 
@@ -136,8 +122,9 @@ public sealed class CameraController
     // never learns about pad devices or window focus.
     private readonly Func<Key, bool> _keyDown;
 
-    // The numpad view held for the whole run (--view=); 0 is the chase camera and
-    // PinnedBackView (--view=back) the look-behind.
+    // The view pinned for the whole run (--view=): 0 is nothing pinned, PinnedBackView
+    // (--view=back) the look-behind and PinnedFlybyView the flyby. A pinned numpad DIGIT is a
+    // held snap direction and is read by the host with the live keys, not here.
     private readonly int _pinnedView;
 
     // This plane's whole resolved camera block (camparam): every authored figure the views read,
@@ -196,11 +183,9 @@ public sealed class CameraController
     }
 
     /// <summary>Which view this pilot has SELECTED, Chase, Cockpit or Nose. State, not a held
-    /// key: it survives until the cycle key or another selection changes it, and a held numpad view
+    /// key: it survives until the cycle key or another selection changes it, and a held look-behind
     /// overrides it for as long as that key is down without changing it (see
-    /// <see cref="PilotView.Effective"/>). Seeded from <c>--view=cockpit</c>/<c>=nose</c>.
-    /// ⚠ Deliberately NOT a row in <see cref="Views"/>: `BL-150` rebuilds that table later and
-    /// must be able to replace it without touching these modes.</summary>
+    /// <see cref="PilotView.Effective"/>). Seeded from <c>--view=cockpit</c>/<c>=nose</c>.</summary>
     public PilotViewMode ViewMode { get; set; }
 
     /// <summary>The crash, death and flyby cameras' shared placement and world clearance. Exposed
@@ -218,11 +203,11 @@ public sealed class CameraController
     /// relative to it (<see cref="CockpitOverlay"/>).</summary>
     public Vector3 EyePosition => _camera.GlobalPosition;
 
-    /// <summary>The pilot's head in the two first-person views: snap, free-look and the center key,
-    /// smoothed to the angles <see cref="FirstPersonView"/> aims with. Built with the first-person
-    /// elevation floor (level), which is the floor the original's own first-person caller passes;
-    /// the host steps it on the SIM clock. Its own state, not the camera's, so it keeps its bearing
-    /// across a held numpad key and reads the same in either first-person view.</summary>
+    /// <summary>The pilot's head: snap, free-look and the center key, smoothed to the angles
+    /// <see cref="FirstPersonView"/> aims with and <see cref="Chase"/> swings by. ONE head for
+    /// every view, as the original has (docs/org/cameraViews.md), so a bearing taken in the cockpit
+    /// is the bearing the chase camera shows; only its elevation floor changes with the view
+    /// placing the frame (<see cref="StepHead"/>). The host steps it on the SIM clock.</summary>
     public HeadLook Head { get; } = new HeadLook();
 
     /// <summary>Whether the SELECTED view is one of the two first-person ones, what the anim
@@ -286,63 +271,29 @@ public sealed class CameraController
 
     /// <summary>The look-behind view is on: numpad 0 held, the run pinned it with
     /// <c>--view=back</c>, or <paramref name="padClick"/>, this player's right-stick
-    /// click, read by the host the same way it reads every other pad button. A held numpad 1–9 key
-    /// still wins (the host checks <see cref="ActiveView"/> first), same rule as the pinned numpad
-    /// views.</summary>
+    /// click, read by the host the same way it reads every other pad button. It beats the snap
+    /// cluster, as the original's own placement does: its look-behind arm never reaches the
+    /// head-look controller.</summary>
     public bool BackActive(bool padClick = false) =>
         _keyDown(Key.Kp0) || _pinnedView == PinnedBackView || padClick;
 
-    /// <summary>Which fixed view the camera should hold this frame, as an index into
-    /// <see cref="Views"/>, or −1 for the chase camera. A held numpad key beats the scripted
-    /// pinned view; with several down the lowest digit wins, which keeps the choice deterministic.
-    /// One keyboard, so in splitscreen this is player 1's, and there is no pad binding.
-    /// ⚠ Always −1 in a first-person mode: the numpad is the head-look snap cluster there
-    /// (<see cref="PilotView.HoldsFixedViews"/>), as it is in the original.</summary>
-    public int ActiveView()
+    /// <summary>One frame of the pilot's head, in the shape the original's own controller takes it
+    /// (<c>FUN_0042d010(floor, autohead)</c>): the view placing the frame hands the elevation floor
+    /// it uses, level in the cockpit and <see cref="HeadLook.ChaseElevationFloor"/> on the chase
+    /// camera, and the one shared head takes the input. ⚠ The look-behind steps no head, in either
+    /// view: the original's own look-behind arm never reaches the controller, so a held look-back
+    /// leaves the head where it was.</summary>
+    public void StepHead(float dt, in HeadLookInput input, float elevationFloor)
     {
-        if (!PilotView.HoldsFixedViews(ViewMode))
-        {
-            return -1;
-        }
-        for (int i = 0; i < Views.Length; i++)
-        {
-            if (_keyDown(Views[i].Key))
-            {
-                return i;
-            }
-        }
-        if (_pinnedView != 0)
-        {
-            for (int i = 0; i < Views.Length; i++)
-            {
-                if (Views[i].Digit == _pinnedView)
-                {
-                    return i;
-                }
-            }
-        }
-        return -1;
-    }
-
-    /// <summary>Snap the camera to one of the fixed perspectives: out along the view's plane-frame
-    /// direction at the chase radius, aimed back at the plane. Offset and basis both ride the
-    /// plane's attitude, so the pose rolls with the aircraft and inverted flight renders upside
-    /// down. Instant, no smoothing, a scripted capture must not depend on catch-up frames.</summary>
-    public void FixedView(int view, in Transform3D renderPose)
-    {
-        var (_, _, dir, up) = Views[view];
-        // Rigid views ride the DRAWN pose, not the raw sim pose, the two differ on the realtime
-        // clock (render interpolation), and mixing them would jitter the plane inside a view
-        // whose whole point is to be bolted to it. Identical on a parent-driven clock.
-        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * EffectiveRadius));
-        _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, up);
+        Head.ElevationFloor = elevationFloor;
+        Head.Step(dt, input);
     }
 
     /// <summary>The look-behind view (numpad 0, or <c>--view=back</c>): ahead of the nose looking
     /// back at the plane. Distance is the speed-driven radius clamped into the authored
     /// <c>[back_dist_min, back_dist_max]</c>, its own pair. ⚠ The zoom axis is deliberately absent
-    /// here; the original applies it only to the forward-facing camera. Rigid and instant, like the
-    /// numpad views, for the same scripted-capture reason.</summary>
+    /// here; the original applies it only to the forward-facing camera. Rigid and instant, so a
+    /// scripted capture never depends on catch-up frames.</summary>
     public void BackView(in Transform3D renderPose)
     {
         float r = Mathf.Clamp(_radius, _camParams.BackDistMin, _camParams.BackDistMax);
@@ -351,21 +302,33 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>Analog look-around: the right stick swings the view around the plane at the same
-    /// dynamic radius the chase camera and numpad views share. <paramref name="stickX"/>/<paramref
-    /// name="stickY"/> arrive pre-curved and dead-zoned, so both at 0 reduces to the ordinary chase
-    /// direction. Rigid and instant like <see cref="FixedView"/>; releasing it lets
-    /// <see cref="Chase"/> resume its catch-up next frame. Not a decode; the envelope is
-    /// <see cref="HeadLook"/>'s, shared with the first-person head (docs/controls.md).</summary>
+    /// <summary>Analog look-around: the right stick swings the view around the plane at the
+    /// dynamic radius every forward-facing external pose shares, through the same
+    /// <see cref="ChaseSwing"/> geometry the head swings it by. Pre-curved and dead-zoned, so both
+    /// axes at 0 reduce to the ordinary chase direction. Rigid and instant, and releasing it lets
+    /// <see cref="Chase"/> resume. ⚠ Its own path, not the head's: the stick aims ABSOLUTELY in
+    /// both views (docs/controls.md) and must keep doing so.</summary>
     public void PadLook(in Transform3D renderPose, float stickX, float stickY)
     {
         float yaw = Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg);
         float pitch = Mathf.DegToRad(-stickY * HeadLook.PadLookPitchMaxDeg);  // stick up = look up
-        var baseDir = new Vector3(0f, BaseUp, BaseBack).Normalized();
-        var dir = new Basis(Vector3.Up, yaw) * (new Basis(Vector3.Right, pitch) * baseDir);
+        var dir = ChaseSwing(pitch, yaw) * new Vector3(0f, BaseUp, BaseBack).Normalized();
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * EffectiveRadius));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
+
+    // Kept beside the two methods that swing by it rather than up with the constructor, the same
+    // SA1204 trade FirstPersonPose below makes.
+#pragma warning disable SA1204
+    /// <summary>The chase rig's swing, in the PLANE's frame: elevation about the plane's right
+    /// axis, then azimuth about its up axis, off the angle pair <see cref="FirstPersonPose"/> aims
+    /// the head with. The offset, the image up and the look-ahead point all turn by it, so the
+    /// camera orbits the aeroplane and keeps its framing, and a settled head returns the identity,
+    /// leaving the settled pose untouched to the last bit. ⚠ Positive azimuth carries the camera to
+    /// STARBOARD: a pilot looking left is what puts the camera on the right.</summary>
+    public static Basis ChaseSwing(float elevation, float azimuth) =>
+        new Basis(Vector3.Up, azimuth) * new Basis(Vector3.Right, elevation);
+#pragma warning restore SA1204
 
     // Kept beside the instance method that calls it, ahead of the property it's declared after
     // in source, rather than up with the constructor, SA1204 would put it before every instance
@@ -526,7 +489,7 @@ public sealed class CameraController
     /// <summary>Advance the numpad +/- zoom axis one frame: the target via <see
     /// cref="ZoomTarget"/>, then the shown trim chasing it at <see cref="ZoomSmoothRate"/> (the
     /// same law <see cref="HeadLook.Approach"/> names). Reads the injected key state directly,
-    /// like <see cref="ActiveView"/> and <see cref="BackActive"/>, so the host polls no pad
+    /// like <see cref="BackActive"/> does, so the host polls no pad
     /// device for it. ⚠ Call only where <see cref="Orbit"/> is not also running this frame, the
     /// weapon lab's held orbit reads the same two keys for its own dolly.</summary>
     public void UpdateZoom(float dt)
@@ -563,18 +526,19 @@ public sealed class CameraController
     }
 
     /// <summary>Chase camera: ride the plane exactly, smoothing only the plane-frame OFFSET
-    /// toward the dynamic radius, then slerp orientation toward a look-at ahead of the nose.
-    /// Smoothing the offset (not world position) matches the original's speed-flat apparent size;
-    /// smoothing the basis lets the horizon roll through inverted flight while keeping fast rolls
-    /// dynamic. ⚠ Takes SIM dt, but the DRAWN pose, riding the plane exactly means a sim/render
+    /// toward the dynamic radius, then slerp orientation toward a look-at ahead of the nose. The
+    /// head's <see cref="ChaseSwing"/> turns the offset and that look-at point together, which is
+    /// how the snap cluster and the mouse swing this camera; a settled head leaves the pose alone.
+    /// ⚠ Takes SIM dt, but the DRAWN pose, riding the plane exactly means a sim/render
     /// pose gap becomes visible plane jitter, which a world-position lerp would instead mask.</summary>
     public void Chase(float dt, Vector3 planePos, Basis attitude)
     {
+        var swing = ChaseSwing(Head.Elevation, Head.Azimuth);
         float tPos = 1f - Mathf.Exp(-CamSmooth * dt);
-        _offset = _offset.Lerp(DesiredOffset(attitude, out var camUp), tPos);
+        _offset = _offset.Lerp(DesiredOffset(attitude, swing, out var camUp), tPos);
         _camera.Position = planePos + _offset;
 
-        var toTarget = planePos - (attitude.Z * CamLookAhead) - _camera.Position;
+        var toTarget = planePos + (attitude * (swing * LookAhead)) - _camera.Position;
         if (toTarget.LengthSquared() < 1e-6f)
             return; // camera sitting on the look target (degenerate), keep last orientation
         // Basis.LookingAt needs the up not parallel to the view direction; the plane's up is ⟂
@@ -611,12 +575,6 @@ public sealed class CameraController
         {
             Statics.ResetFlyby();
         }
-        int view = ActiveView();
-        if (view >= 0)
-        {
-            FixedView(view, renderPose);
-            return;
-        }
         if (FirstPerson)
         {
             // Snap is the settle-immediately path: without this arm a respawn into Cockpit/Nose
@@ -631,9 +589,11 @@ public sealed class CameraController
             BackView(renderPose);
             return;
         }
-        _offset = DesiredOffset(attitude, out var camUp);
+        // The head was just reset, so the swing is the identity and this is the settled pose.
+        var swing = ChaseSwing(Head.Elevation, Head.Azimuth);
+        _offset = DesiredOffset(attitude, swing, out var camUp);
         _camera.Position = planePos + _offset;
-        _camera.LookAt(planePos - (attitude.Z * CamLookAhead), camUp);
+        _camera.LookAt(planePos + (attitude * (swing * LookAhead)), camUp);
     }
 
     /// <summary>On entering the paused screenshot freeze, initialise the orbit angles
@@ -669,10 +629,10 @@ public sealed class CameraController
 
     /// <summary>One line per frame a view other than the chase camera is held, plus one on the
     /// frame it is released, read back off the camera's own transform so it reports where the
-    /// camera ENDED UP rather than the values that were fed to it. <paramref name="fixedView"/> is
-    /// the row of <see cref="Views"/> a <see cref="CameraView.Fixed"/> frame took, and is ignored
-    /// for every other view. Silent (and free) on an ordinary chase-camera flight.</summary>
-    public void LogView(CameraView view, Vector3 planePos, Basis attitude, int fixedView = -1)
+    /// camera ENDED UP rather than the values that were fed to it. A swung chase camera reports
+    /// under <see cref="CameraView.Look"/>, whose offset and aim say where the head took it.
+    /// Silent (and free) on an ordinary chase-camera flight.</summary>
+    public void LogView(CameraView view, Vector3 planePos, Basis attitude)
     {
         if (view == CameraView.Chase && _viewPrev == CameraView.Chase)
         {
@@ -682,16 +642,16 @@ public sealed class CameraController
         var toPlane = attitude.Inverse();
         var offset = toPlane * (_camera.Position - planePos);
         var aim = toPlane * -_camera.Basis.Z;   // the camera's forward axis, in the plane's frame
-        string n = ViewName(view, fixedView);
+        string n = ViewName(view);
         Log.Debug("flight", $"view n={n} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
     }
 
     // The breadcrumb's name for each view, the one place a scripted capture's own spelling is
-    // written: a numpad pose reads back as the pad digit that asked for it and the chase camera as
-    // 0, the unbound middle of the pad, while the rest take the word the CLI and the docs use.
-    private static string ViewName(CameraView view, int fixedView) => view switch
+    // written: the settled chase camera reads back as 0, the unbound middle of the pad, and a head
+    // swinging it as "look", while the rest take the word the CLI and the docs use.
+    private static string ViewName(CameraView view) => view switch
     {
-        CameraView.Fixed => Views[fixedView].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        CameraView.Look => "look",
         CameraView.Back => "back",
         CameraView.PadLook => "padlook",
         CameraView.Cockpit => PilotView.Name(PilotViewMode.Cockpit),
@@ -718,11 +678,10 @@ public sealed class CameraController
 
     // Chase from behind and above the nose in the plane's own frame, so the offset (and the
     // camera) roll fully with the plane, inverted flight shows the world upside down. The
-    // hand-picked direction (BaseBack, BaseUp), normalised and scaled to the dynamic radius.
-    private Vector3 DesiredOffset(Basis attitude, out Vector3 camUp)
+    // hand-picked direction (BaseBack, BaseUp), swung by the head, scaled to the dynamic radius.
+    private Vector3 DesiredOffset(Basis attitude, Basis swing, out Vector3 camUp)
     {
-        var nose = -attitude.Z;
-        camUp = attitude.Y;
-        return ((nose * -BaseBack) + (camUp * BaseUp)) * (EffectiveRadius / BaseDist);
+        camUp = attitude * (swing * Vector3.Up);
+        return (attitude * (swing * BaseOffset)) * (EffectiveRadius / BaseDist);
     }
 }
