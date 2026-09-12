@@ -301,15 +301,29 @@ the data. Measured the hard way in the remake: with the mount in the cast, C1/IA
 reported blocked by their own `turret` body at 0.5 m and by their own hull panels at 19–25 m of a
 150–400 m shot.
 
-What the remake keeps out of the cast is the first **1.5 m** off the gun's own node, and nothing
-else. Excluding a node group instead cannot work on this data, whichever group is chosen:
+What the remake keeps out of the cast depends on what the gun stands on. Every emplacement skips
+the first **1.5 m** off its own node. A gun whose site is a direct child of the world root, which
+is every ground entry (`aagun`, `maagun`, `tcargun`, `t_truck`, `8igun`), also excludes its own
+rig's collider bodies by RID, the same set `PlatformColliderRids` hands the hit ray as the bodies a
+round it fires owns. A ring on a hull or a gun on a balloon gets the skirt alone.
+
+The skirt alone cannot serve a ground gun. An `aagun` rig carries a 12 m by 12 m base, a pyramid
+reaching 3.5 m over the gun's node and the `col_buildings` pad, and probed from a live C1/M02
+session with the turrets woken, aagun32's ray toward targets at sixteen bearings and elevations
+from 6 to 64 degrees struck one of its own bodies at 1.67 m to 5.69 m every time, well past the
+skirt. Five guns, five `Blocked` gates, from the first frame on. The suites that had passed
+on this rule were reading a physics space with two of the three shapes missing, which is the
+harness gap `BL-831` names.
+
+A node-group exclusion is still wrong for anything mounted on a hull, whichever group is chosen:
 excluding a zeppelin entire lets its rings shoot straight through their own hull, excluding only
 the gun's own rig blocks all 14 of them because the panel colliders engulf the ring they carry,
 and excluding the **mounting section** in between leaks just as badly, because a section is a
 modelling group and holds the far side of the same hull. On `piratezep` the section rule left
 **422 of 517** in-arc bearings that cross 120 m or more of the hull's own body clear, and the
 belly rings `ctur1` to `ctur3` fired straight through 162 to 255 m of it. The distance rule leaves
-172, and every ring keeps 54 % to 79 % of its in-arc field of fire.
+172, and every ring keeps 54 % to 79 % of its in-arc field of fire. A ground gun's site holds
+nothing but the gun, so for it the own-rig exclusion is the mount and nothing wider.
 
 The 1.5 m is measured, not decoded: a ring's own bodies engulf it out to about 1 m (`g21` and
 `gun` answer at 0 to 1 m), and the nearest hull skin standing over one answers at 2 m. The

@@ -618,6 +618,7 @@ internal static class AiSuites
             FlightController? friend = null;
             FlightController? zepBait = null;   // its own rig: the zeppelin rings shoot it to bits
             Session.TurretEmplacementRuntime? emplacements = null;   // a Node now: freed below
+            var savedClock = Utils.GameClock.Current;
             try
             {
                 var live = new ProjectilePool(textures, null, null)
@@ -626,6 +627,9 @@ internal static class AiSuites
                 };
                 pool = live;
                 ctx.Host.AddChild(live);
+                // ⚠ Keep the clock stepping (INSTR-49): without it the gunner's 1-2 s line-of-sight
+                // cache never expires and the woken gun rides the one cast it took at wake.
+                Utils.GameClock.Current = new Utils.GameClock { Mode = Utils.GameClock.RunMode.FixedStep };
                 var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
                     (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                     world.Runtime.WorldRoot);
@@ -704,6 +708,7 @@ internal static class AiSuites
                 {
                     for (int i = 0; i < frames; i++)
                     {
+                        Utils.GameClock.Current?.BeginFrame(1f / 60f);
                         runtime.SimStep(1f / 60f);
                         live.SimStep(1f / 60f);
                     }
@@ -783,7 +788,18 @@ internal static class AiSuites
                         $"the same call with the flag cleared stows them again (the b=0 arm)");
                 }
 
-                // The stand-in wakes it — explicit, counted, logged — and it engages.
+                // The stand-in wakes it — explicit, counted, logged — and it engages. ⚠ BORED pinned
+                // to zero first: the windows are seeded by draw order, and a 2-4 s attack window at
+                // a 1.0-1.8 s fire rate can hold one shot before a 3-5 s bored window outlasts the leg.
+                aagun.Def.BoredMin = 0f;
+                aagun.Def.BoredMax = 0f;
+                // The harness's physics space does not always hold the mount's shapes inside one
+                // frame (BL-831), so whether this leg exercised the own-rig exclusion is recorded,
+                // not asserted; turret-own-mount-sightline proves the rule on bodies it builds.
+                var sightSpace = ctx.Host.GetWorld3D().DirectSpaceState;
+                bool mountAnswers = TurretController.WorldBlocksEmplacementLine(
+                    sightSpace, aagun.WorldPosition, targetPos + Vector3.Up * 0.2f);
+                ctx.Note($"aagun32's own mount answers the unexcluded sight-line ray: {mountAnswers}");
                 int woken = runtime.WakeAll();
                 ctx.Same(runtime.Count - 15, woken, $"--wake-turrets stand-in wakes every dormant emplacement");
                 float before = Combined(target);
@@ -792,7 +808,7 @@ internal static class AiSuites
                 ctx.Check(aagun.BarrelWorldDir.Dot(toTarget) > TurretController.FireGateCos,
                     $"the woken gun slewed onto the plane dot={aagun.BarrelWorldDir.Dot(toTarget):0.000}");
                 ctx.Check(aagun.ShotsFired >= 2,
-                    $"…and fires at its FIRE_RATE shots={aagun.ShotsFired}");
+                    $"…and fires at its FIRE_RATE shots={aagun.ShotsFired} gate={aagun.Gate}");
                 ctx.Check(Combined(target) < before,
                     $"…with rounds striking the target moved={before - Combined(target):0.##}");
 
@@ -847,6 +863,7 @@ internal static class AiSuites
             }
             finally
             {
+                Utils.GameClock.Current = savedClock;
                 pool?.Free();
                 target?.Free();
                 friend?.Free();

@@ -591,32 +591,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   numbers does not change that, and must not be used to try to.
   *Cross-refs:* `PT-120` (the pad sitting that judges the three), `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
-- `BL-696` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Original presentation has no way into the rebinding screen, so the
-  keymap is editable in Built-in alone.** *Decided:* the door is built, and it is a fidelity fix
-  rather than a divergence. The author settled it at the controls over `PLAN-M5-polish-13`'s closing
-  sortie: "The original has a binding screen in the Prefences: 'Controls' with multiple sub screens.
-  We even have a greyed out button in our Prefences screen". *Evidence (traced):* `PF_B_CONTROLS` draws disabled
-  (`CSVM/src/UI/Menu/Original/OriginalShell.cs:178`), and the two pages behind it are decoded and
-  unbuilt: `ControlsPrefs` (12 rows, layout only) and `Keys` behind `CP_B_KEYS` (17 rows, the
-  composition of all seven category tabs, with `KB_B_ACCEPTCHANGES` / `KB_B_CANCELCHANGES` returning
-  to `ControlsPrefs`) — `docs/org/menu-inventory.md`:392-394, :482-483. Both were put out of scope of
-  the menu plan because no shared option stood behind them; `ControlsFeature` is now that option, so
-  the reason has expired. The feature, the capture, the staged Accept/Cancel, the steal rule and the
-  persistence are all shared and built, so what is missing is the presentation's screen graph alone.
-  *Fix shape:* the two pages over the extracted artwork, the seven tabs, the two control columns, the
-  three buttons, and `PF_B_CONTROLS` wired live. The Keys page's exit pair is authored the other way
-  round from every other leaf's, `KB_B_CANCELCHANGES` at X=202 left of `KB_B_ACCEPTCHANGES` at X=511
-  on one line at Y=550 (`extracted/rof/menu_layout.json`), which is the order `CAP-51` t=96 shows;
-  take it from the data rather than from the sibling pages.
-  *⚠ Traps:* **The seven tabs are the original's action groups, not this port's three input
-  contexts.** Movement, Throttle, Weapons, Targeting, Views 1, Views 2 and Other have no home for the
-  menu and free-camera actions, which the original does not bind at all, so a faithful tab strip
-  strands two contexts and needs a decision rather than a mapping. **Control A and Control B are
-  positions in a four-slot row, not two fields** (`docs/org/input.md`), and this port holds an
-  unbounded list: Built-in shows four and appends "+N more", while two authored columns would hide
-  bindings, which is the trap `BL-398`'s screen was written against.
-  *Cross-refs:* `BL-296`, `BL-398`, `docs/org/menu-inventory.md`, `docs/org/input.md`,
-  `docs/menu-presentations.md`.
 
 - `BL-399` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
   undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
@@ -2697,6 +2671,29 @@ usual.
   holds a roster position without producing input came to take the seat `AssignPads` fills by
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
+
+- `BL-831` `[Testing]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The suite harness's physics space can miss
+  collision shapes the scene marks enabled, so a suite can pass on geometry the game does not have.**
+  *Evidence:* every suite runs inside one `_Ready` call with no frame or physics step between them.
+  In single-process runs of `world-turrets` an `aagun` site's `col_buildings` pad and the 12-face
+  pyramid shape of `col` answered no ray, overlap or sphere query while `CollisionShape3D.Disabled`
+  was false, `PhysicsServer3D.BodyGetShapeCount` listed them and the body was in the space; the
+  72-face base shape of the same body did answer. In some four-shard runs of the same list all
+  three answered, which is how the ground AA guns' self-blocked sight line surfaced as a
+  shard-only failure (`git log --grep=BL-830`). Node transforms written
+  during a suite never reach the physics server either (`BodyGetState` stays at the build pose
+  while the barrel slews), which the existing `ForceUpdateTransform` in `world-query-reuse` works
+  around one node at a time. The mechanism behind the missing shapes is not found; it is not the
+  physics thread (`run_on_separate_thread` is false) and not the decode cache (the same suite list
+  in one process builds identical node ids and passes). *Fix shape:* find why an enabled shape is
+  absent from the broadphase after a hide-then-show inside one frame (`WorldCollision.Sync`
+  toggling `Disabled` around `TreeEntered` is the suspect), then give `TestContext` one call that
+  brings the physics space in step with the scene before a suite casts, and have `world-turrets`
+  assert the mount is present. *⚠ Traps:* a suite that passes alone and fails sharded is not
+  load flakiness by default; trace the ray. A live session (`--fly` with `--log-file` and a
+  `Log.Info` probe) is the reference for what physics holds. *Cross-refs:* `PT-142` (the flak
+  flight the fix this hid still owes), `docs/verification.md`, `CSVM/src/Testing/TestHarness.cs`
+  (`WithPrivateWorld`).
 
 ## Misc
 

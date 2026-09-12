@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -45,7 +46,8 @@ public class OriginalCoverageTests : IDisposable
     // the inventory's own list and are counted, not driven.
     private static readonly string[] InScopeSections =
     {
-        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "Credits", "InstantAction", "Campaign",
+        "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "ControlsPrefs", "Keys", "Credits",
+        "InstantAction", "Campaign",
         "PassengerCabin", "FlightCheck",
         "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
@@ -74,6 +76,17 @@ public class OriginalCoverageTests : IDisposable
             new[] { OriginalShell.AudioCancelKey, OriginalShell.OptionsBackKey }),
         new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey },
             new[] { OriginalShell.VideoCancelKey, OriginalShell.OptionsBackKey }),
+        new("controls", OriginalScreen.ControlsPrefs, new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey },
+            new[] { OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+        new("controls-accept", OriginalScreen.Options,
+            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.ControlsAcceptKey },
+            new[] { OriginalShell.OptionsBackKey }),
+        new("keys", OriginalScreen.Keys,
+            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.KeysDoorKey },
+            new[] { OriginalShell.KeysCancelKey, OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+        new("keys-accept", OriginalScreen.ControlsPrefs,
+            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.KeysDoorKey, OriginalShell.KeysAcceptKey },
+            new[] { OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("credits", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey }, new[] { OriginalShell.CreditsExitKey }),
         new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
         new("instant-action-exit", OriginalScreen.TopLevel, new[] { "MM_B_INSTANTACTION", OriginalShell.ExitKey }, Array.Empty<string>()),
@@ -158,7 +171,12 @@ public class OriginalCoverageTests : IDisposable
         ["Preferences.PF_B_VIDEO"] = Edge.Driven("video", OriginalShell.VideoDoorKey),
         ["Video.VP_B_ACCEPTCHANGES"] = Edge.Driven("apply-video", OriginalShell.VideoAcceptKey),
         ["Video.VP_B_CANCELCHANGES"] = Edge.Driven("video", OriginalShell.VideoCancelKey),
-        ["Preferences.PF_B_CONTROLS"] = Edge.Disabled("PF_B_CONTROLS", "no shared controls option stands behind the page", "options"),
+        ["Preferences.PF_B_CONTROLS"] = Edge.Driven("controls", OriginalShell.ControlsDoorKey),
+        ["ControlsPrefs.CP_B_ACCEPTCHANGES"] = Edge.Driven("controls-accept", OriginalShell.ControlsAcceptKey),
+        ["ControlsPrefs.CP_B_CANCELCHANGES"] = Edge.Driven("controls", OriginalShell.ControlsCancelKey),
+        ["ControlsPrefs.CP_B_KEYS"] = Edge.Driven("keys", OriginalShell.KeysDoorKey),
+        ["Keys.KB_B_ACCEPTCHANGES"] = Edge.Driven("keys-accept", OriginalShell.KeysAcceptKey),
+        ["Keys.KB_B_CANCELCHANGES"] = Edge.Driven("keys", OriginalShell.KeysCancelKey),
         ["PassengerCabin.PC_B_CHANGEMOMENTO"] = Edge.OutOfScope("MomentoSelection is deferred (BL-463); the cabin page offers no memento row"),
         ["PassengerCabin.PC_B_PREVIOUS"] = Edge.Driven("campaign-previous", "PreviousMissions"),
         ["PassengerCabin.PC_B_PLANEX"] = Edge.Driven("campaign-hangar-door", "PlaneConstruction"),
@@ -358,6 +376,18 @@ public class OriginalCoverageTests : IDisposable
         }
 
         return null;
+    }
+
+    // One seat's three shipped keymaps, each on the identity its own polling site reads.
+    private static BindingProfile ControlsProfile()
+    {
+        var maps = new Dictionary<InputContext, ActionMap>();
+        foreach (var context in Enum.GetValues<InputContext>())
+        {
+            maps[context] = DefaultBindings.MapFor(context, MenuControlsSeats.PadOf(context));
+        }
+
+        return new BindingProfile(maps, readsKeyboard: true);
     }
 
     private static void AssertHome(OriginalShell shell, CampaignFeature campaign, HangarFeature hangar, string way)
@@ -813,8 +843,13 @@ public class OriginalCoverageTests : IDisposable
         hangar = new HangarFeature(strings, PlanePickerRoster.AirframeNode);
         campaign = new CampaignFeature(strings, PlanePickerRoster.AirframeNode);
         var store = profiles;
+        // The rebinding feature with one seat on the shipped keymaps and no save, so the CONTROLS
+        // door is live and the walk edits a copy nothing writes back.
+        var controls = new ControlsFeature();
+        controls.AddSeat(1, ControlsProfile(), new SeatCaptureDevices(MenuControlsSeats.PadOf, Array.Empty<int>), true);
         return new OriginalShell(layout, new FreeFlightFeature(), setup, measure,
-            hangar: hangar, planes: planes, campaign: campaign, profiles: () => store, dataRoot: dataRoot);
+            hangar: hangar, planes: planes, campaign: campaign, profiles: () => store, dataRoot: dataRoot,
+            controls: controls);
     }
 
     private sealed record Journey(

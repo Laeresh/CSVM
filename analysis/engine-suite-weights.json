@@ -271,6 +271,7 @@
     "turret-death-effect-world-anchor": 0.003,
     "turret-death-fire-follows-hull": 1.452,
     "turret-hull-blocks-own-fire": 1.823,
+    "turret-own-mount-sightline": 0.1,
     "turret-self-fire": 2.826,
     "turret-structure-targets": 1.065,
     "turret-vessel-targets": 1.171,
@@ -310,6 +311,7 @@
     "cinema-skip-pad": 0.05,
     "cutscene-clear-ordnance": 2.42,
     "campaign-wingman-removal": 4.43,
-    "ground-shadow": 3.32
+    "ground-shadow": 3.32,
+    "menu-original-controls": 0.1
   }
 }
