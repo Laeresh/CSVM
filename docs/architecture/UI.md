@@ -704,7 +704,8 @@ How the four display settings read as rows, shared so Built-in's Options screen 
 page cannot disagree about a saved value: one label per `DisplayWords` entry in that order, since a
 row reads and writes the store word by index, plus the two forgiving reads (an unknown word is the
 vocabulary's first value, a size the screen does not offer is the project default) and the wrap a
-sideways step takes. The screens and the sizes themselves are enumerated per machine by
+sideways step takes. The size row is the one a display mode can own: under a `Pinned` one it reads
+the screen's own size whatever is saved. The screens and the sizes are enumerated per machine by
 `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`, which is why neither is a list here.
 Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
 
@@ -862,7 +863,7 @@ the cursor walks it. The monitor and Resolution keep the authored Graphics and R
 enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`; the Graphics row's title
 and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
 and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
-Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does, so the Resolution row's sizes window and scroll where they outrun the eight rows that row authors; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
+Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does, so the Resolution row's sizes window and scroll where they outrun the eight rows that row authors, though under borderless, which owns the size, that row shows the screen's own size, draws dead and takes no press while the saved size waits untouched; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalControls.cs
 The two rebinding pages, the shell's partial over the decoded `[@ControlsPrefs@]` and `[@Keys@]`

@@ -503,9 +503,11 @@ public partial class Launcher : Node3D
         if (!_spec.IsScripted)
         {
             MonitorSetting.Apply(MonitorSetting.Resolve(MonitorSetting.SavedWord(_spec.Det), MonitorSetting.Screens()));
-            DisplayModeSetting.Apply(DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det)));
-            ResolutionSetting.Apply(ResolutionSetting.Resolve(
-                ResolutionSetting.SavedWord(_spec.Det), ResolutionSetting.ScreenSizes()));
+            var displayMode = DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det));
+            DisplayModeSetting.Apply(displayMode);
+            ResolutionSetting.Apply(
+                ResolutionSetting.Resolve(ResolutionSetting.SavedWord(_spec.Det), ResolutionSetting.ScreenSizes(), displayMode.Word),
+                GetWindow());
         }
 
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
@@ -1682,7 +1684,9 @@ public partial class Launcher : Node3D
         // mode, the size, then the pacing, which --no-vsync still beats (docs/menu-presentations.md).
         MonitorSetting.Apply(MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens()));
         DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
-        ResolutionSetting.Apply(ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes()));
+        ResolutionSetting.Apply(
+            ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes(), applied.DisplayMode),
+            GetWindow());
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.

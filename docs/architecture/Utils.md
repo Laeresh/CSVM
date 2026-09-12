@@ -215,14 +215,14 @@ is the borderless window, `ExclusiveFullscreen` the exclusive mode. Nothing here
 which keeps `project.godot`'s windowed 1280x720 viewport, so the borderless default never reaches a golden.
 
 ## src/Utils/ResolutionSetting.cs
-The window's size. Godot exposes no video-mode list, only a screen's own size, so `Sizes` builds the
-per-screen `SizeList` as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that
-size, the list's fallback. `Resolve` layers the saved `resolution` over it, so nothing saved runs at the
-screen's own size, which the borderless default fills anyway; a saved size the screen does not offer falls
-back to that size and never to the nearest, since a nearest match would hand the player an aspect ratio
-they did not pick. `Unknown` is the engine-free list, every candidate size over `project.godot`'s 1280x720.
-`SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetSize` is called; it
-skips a window the mode sizes (any but windowed) and re-centres one it resized, a resize growing off-screen.
+The size the game draws at, whose meaning the display mode sets. Godot exposes no video-mode list, only a screen's own
+size, so `Sizes` builds the per-screen `SizeList` as the standard desktop sizes that fit inside `ScreenGetSize` plus that
+size, the list's fallback; `Unknown` is the engine-free list, `SavedWord` the `--det` guard. `Resolve` layers the saved
+`resolution` over the list, a size the screen does not offer falling back to that fallback and never to the nearest, which
+would hand the player an aspect ratio they did not pick; a `Pinned` mode, which borderless is, takes the fallback whatever
+is saved, and both Options screens draw the size row dead under it. `Apply` sizes only a windowed window and re-centres
+it, a resize growing off-screen; Godot's exclusive fullscreen keeps the screen's size on Windows and switches no display
+mode, so the chosen size becomes the render target through `Window.ContentScaleSize`. The log line reports what resulted.
 
 ## src/Utils/MonitorSetting.cs
 The screen the window sits on. `Screens` labels the machine's screens one per index, "Screen 0 (1920x1080)"

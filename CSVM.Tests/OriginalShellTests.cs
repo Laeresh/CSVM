@@ -564,7 +564,8 @@ public class OriginalShellTests
         Assert.Null(shell.VSyncChoice);
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
 
-        shell.Step(Down);
+        // Three steps, not four: the size row is dead under the borderless default, which owns the
+        // size, and a dead row is out of the walk.
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
@@ -746,7 +747,8 @@ public class OriginalShellTests
     {
         var shell = Shell(out _);
         shell.OpenVideo();
-        shell.Step(Down);
+        // The size row is dead under the borderless default, which owns the size, so the walk goes
+        // from the monitor row straight onto Display Mode.
         shell.Step(Down);
         shell.Step(Right);
         Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
@@ -769,7 +771,7 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
-        shell.Step(Down);
+        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
         Assert.Null(shell.Step(Back).Exit);
@@ -1035,6 +1037,8 @@ public class OriginalShellTests
         Assert.Equal((260f, 245f, 70f, 15f), (monitor.X, monitor.Y, monitor.Width, monitor.Height));
         var resolution = shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey);
         Assert.Equal((260f, 290f, 70f, 17f), (resolution.X, resolution.Y, resolution.Width, resolution.Height));
+        // The size row keeps its authored geometry under the borderless default and draws dead.
+        Assert.False(resolution.Enabled);
         var mode = shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey);
         Assert.Equal((260f, 335f, 70f, 17f), (mode.X, mode.Y, mode.Width, mode.Height));
         var vsync = shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey);
@@ -1056,7 +1060,9 @@ public class OriginalShellTests
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the monitor", System.StringComparison.Ordinal)
             && l.X == 340f && l.Y == 245f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Resolution" && l.X == 130f && l.Y == 290f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text == "Select the screen resolution."
+        // The size row's description is the mode's, and nothing saved stands on the borderless
+        // default, which owns the size.
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Borderless runs at", System.StringComparison.Ordinal)
             && l.X == 340f && l.Y == 290f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Display Mode" && l.X == 130f && l.Y == 335f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how the window sits", System.StringComparison.Ordinal)
@@ -1068,21 +1074,20 @@ public class OriginalShellTests
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)
             && l.X == 340f && l.Y == 425f && l.Width == 160f);
         Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
-        // The checkbox draws unchecked and unfocused, the page opening on the monitor row four
-        // above it: the second of its eight frames.
+        // The checkbox draws unchecked and unfocused, the page opening on the monitor row above it:
+        // the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
-        // The box marks the focused dropdown and no other, and it follows the cursor. Four rows down
-        // the cursor stands on the checkbox, which is a plaque strip and takes no box at all, so the
-        // page draws none.
+        // The box marks the focused dropdown and no other, and it follows the cursor past the dead
+        // size row onto the display mode's. Three rows down it stands on the checkbox, a plaque
+        // strip that takes no box at all, so the page draws none.
         Assert.Equal(
             new[] { (260f, 245f, 70f, 15f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
         shell.Step(Down);
         Assert.Equal(
-            new[] { (260f, 290f, 70f, 17f) },
+            new[] { (260f, 335f, 70f, 17f) },
             shell.Compose().Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
-        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
         Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);

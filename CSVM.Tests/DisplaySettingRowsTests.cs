@@ -5,10 +5,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The row rules the two Options screens share for the four display settings: a label per
-/// vocabulary entry, the two forgiving reads (an unknown word reads as the setting's own default,
-/// a size the screen does not offer reads as the screen's own size) and the wrap a sideways step
-/// takes. Engine-free, so the multi-screen and other-screen cases this machine cannot show are
-/// proved by handing the rules a list.</summary>
+/// vocabulary entry, the forgiving reads (an unknown word reads as the setting's own default, a
+/// size the screen does not offer reads as the screen's own size, a size row borderless owns reads
+/// the screen's own whatever is saved) and the wrap a sideways step takes. Engine-free, so the
+/// multi-screen and other-screen cases this machine cannot show are proved by handing the rules a
+/// list.</summary>
 public class DisplaySettingRowsTests
 {
     /// <summary>One label per store word, in that order: a row reads and writes by index, so a
@@ -56,8 +57,8 @@ public class DisplaySettingRowsTests
     {
         var offered = ResolutionSetting.SizesUnder(1920, 1080);
 
-        Assert.Equal(offered.Words.Count - 1, DisplaySettingRows.ResolutionIndex(offered, "1920x1080"));
-        Assert.Equal("1920x1080", offered.Words[DisplaySettingRows.ResolutionIndex(offered, "1920x1080")]);
+        Assert.Equal(offered.Words.Count - 1, DisplaySettingRows.ResolutionIndex(offered, "1920x1080", DisplayWords.Windowed));
+        Assert.Equal("1920x1080", offered.Words[DisplaySettingRows.ResolutionIndex(offered, "1920x1080", DisplayWords.Fullscreen)]);
     }
 
     /// <summary>A size the screen no longer offers reads as the list's own fallback, the screen's
@@ -73,8 +74,41 @@ public class DisplaySettingRowsTests
         var offered = ResolutionSetting.SizesUnder(1600, 900);
 
         Assert.DoesNotContain(saved ?? "", offered.Words);
-        Assert.Equal(offered.Fallback, offered.Words[DisplaySettingRows.ResolutionIndex(offered, saved)]);
+        Assert.Equal(offered.Fallback, offered.Words[DisplaySettingRows.ResolutionIndex(offered, saved, DisplayWords.Windowed)]);
         Assert.Equal("1600x900", offered.Fallback);
+    }
+
+    /// <summary>Borderless owns the size, so the row reads the screen's own whatever is saved and
+    /// whatever the screen offers, and the two modes that leave the size to the player read the
+    /// saved one. A mode the vocabulary does not know, and none saved, both read as borderless,
+    /// which is the mode a launch with no options file runs in.</summary>
+    [Theory]
+    [InlineData(DisplayWords.Borderless, "1600x900")]
+    [InlineData(null, "1600x900")]
+    [InlineData("maximised", "1600x900")]
+    [InlineData(DisplayWords.Windowed, "1280x720")]
+    [InlineData(DisplayWords.Fullscreen, "1280x720")]
+    public void TheDisplayModeDecidesWhetherTheSizeRowReadsTheSavedSize(string? mode, string expected)
+    {
+        var offered = ResolutionSetting.SizesUnder(1600, 900);
+
+        Assert.Equal(expected, offered.Words[DisplaySettingRows.ResolutionIndex(offered, "1280x720", mode)]);
+        Assert.Equal(expected == offered.Fallback, ResolutionSetting.Pinned(mode));
+    }
+
+    /// <summary>The plan the apply takes, which the row above has to agree with: the saved size
+    /// under windowed and under exclusive fullscreen, the screen's own under borderless, and a
+    /// source that names the mode as the layer that won rather than the file.</summary>
+    [Theory]
+    [InlineData(DisplayWords.Windowed, 1280, 720, "options.json")]
+    [InlineData(DisplayWords.Fullscreen, 1280, 720, "options.json")]
+    [InlineData(DisplayWords.Borderless, 1600, 900, DisplayWords.Borderless)]
+    public void TheDisplayModeDecidesTheSizeTheApplyTakes(string mode, int width, int height, string source)
+    {
+        var plan = ResolutionSetting.Resolve("1280x720", ResolutionSetting.SizesUnder(1600, 900), mode);
+
+        Assert.Equal((width, height), (plan.Width, plan.Height));
+        Assert.Equal(source, plan.Source);
     }
 
     /// <summary>The resolution row's words are enumerated from a screen rather than shipped as a
@@ -86,8 +120,8 @@ public class DisplaySettingRowsTests
         var wide = ResolutionSetting.SizesUnder(3840, 2160);
         var small = ResolutionSetting.SizesUnder(1280, 800);
 
-        Assert.Equal("2560x1440", wide.Words[DisplaySettingRows.ResolutionIndex(wide, "2560x1440")]);
-        Assert.Equal(small.Fallback, small.Words[DisplaySettingRows.ResolutionIndex(small, "2560x1440")]);
+        Assert.Equal("2560x1440", wide.Words[DisplaySettingRows.ResolutionIndex(wide, "2560x1440", DisplayWords.Windowed)]);
+        Assert.Equal(small.Fallback, small.Words[DisplaySettingRows.ResolutionIndex(small, "2560x1440", DisplayWords.Windowed)]);
     }
 
     /// <summary>A monitor index no screen answers to reads as the screen the window already stands

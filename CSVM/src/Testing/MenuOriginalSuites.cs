@@ -473,7 +473,7 @@ internal static class MenuOriginalSuites
                 $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
             var plan = MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens());
             ctx.Check(plan.Source == "options.json" && ResolutionSetting.Resolve(applied.Resolution,
-                    ResolutionSetting.ScreenSizes()).Source == "options.json",
+                    ResolutionSetting.ScreenSizes(), applied.DisplayMode).Source == "options.json",
                 $"which the launcher's own resolvers take as saved rather than dropping ({plan.Word})");
         }
 
@@ -483,8 +483,8 @@ internal static class MenuOriginalSuites
     // The four display rows, walked from the graphics row: each steps in the store's own words, the
     // monitor row over the machine's screens (one step wraps within a single-screen list, which is
     // why its label is checked against the enumeration rather than for a change), the resolution row
-    // over the sizes the standing screen offers, and the mode and pacing rows over their
-    // vocabularies. Returns the four words the apply is then asserted to carry.
+    // over the sizes the standing screen offers once the mode leaves borderless, which pins it, and
+    // the mode and pacing rows over their vocabularies. Returns the four words the apply carries.
     private static (string? Monitor, string? Resolution, string? DisplayMode, string? VSync) BuiltInDisplayRows(
         TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
@@ -501,12 +501,13 @@ internal static class MenuOriginalSuites
         var sizes = ResolutionSetting.ScreenSizes();
         Press(host, seat, Down);
         string opened = menu.ShownRowText;
-        ctx.Check(opened == $"Resolution: {sizes.Words[DisplaySettingRows.ResolutionIndex(sizes, null)]}",
-            $"the fifth row is the resolution, an unsaved size showing the screen's own size ({opened})");
+        ctx.Check(opened == $"Resolution: {sizes.Fallback}",
+            $"the fifth row is the resolution, showing the screen's own size ({opened})");
         Press(host, seat, Right);
-        string size = menu.ShownRowText["Resolution: ".Length..];
-        ctx.Check(menu.ShownRowText != opened && Offers(sizes.Words, size),
-            $"Right steps it to another size the standing screen can hold ({opened} -> {menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == opened,
+            $"which the shipped borderless mode pins, so Right steps it nowhere ({menu.ShownRowText})");
+        ctx.Check(menu.ShownDetail.StartsWith("Borderless runs at", System.StringComparison.Ordinal),
+            $"and the row says who owns the size rather than refusing in silence ({menu.ShownDetail})");
 
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Display mode: Borderless",
@@ -514,6 +515,15 @@ internal static class MenuOriginalSuites
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Display mode: Fullscreen",
             $"Right steps it one word along the vocabulary ({menu.ShownRowText})");
+
+        // Back up to the size row, which exclusive fullscreen leaves to the player: the pin above
+        // is the mode's and not the row's, and this mode flies at the size the row names.
+        Press(host, seat, Up);
+        Press(host, seat, Right);
+        string size = menu.ShownRowText["Resolution: ".Length..];
+        ctx.Check(menu.ShownRowText != opened && Offers(sizes.Words, size),
+            $"under Fullscreen the same Right steps it to another size the screen can hold ({opened} -> {menu.ShownRowText})");
+        Press(host, seat, Down);
 
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the seventh row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
@@ -659,14 +669,12 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.MonitorChoice != null
             && OptionsStore.TryParseMonitorIndex(shell.MonitorChoice, out int picked) && picked < shell.MonitorWords.Count,
             $"and a sideways step on it takes a screen this machine has ({shell.MonitorChoice ?? "unset"} of {shell.MonitorWords.Count})");
+        // The size row under the borderless default, which owns the size: it draws dead and the
+        // walk cannot land on it, so the row the walk ends on is what the check names.
         WalkTo(host, seat, shell, OriginalShell.ResolutionKey);
-        Press(host, seat, Right);
-        // The row's own words are this machine's screen sizes, so what it steps to is read back off
-        // the shell rather than named: the claim is that the step lands on a size the screen offers
-        // and not on the screen's own size it opened at.
-        ctx.Check(shell.ResolutionChoice != null && shell.ResolutionChoice != ResolutionSetting.ScreenSizes().Fallback
-            && shell.ResolutionWords.Contains(shell.ResolutionChoice),
-            $"a sideways step on the focused row takes the next size this screen offers ({shell.ResolutionChoice ?? "unset"} of {shell.ResolutionWords.Count})");
+        ctx.Check(shell.ResolutionPinned && Row(shell, OriginalShell.ResolutionKey) is { Enabled: false }
+            && shell.FocusedKey != OriginalShell.ResolutionKey && shell.ResolutionChoice == null,
+            $"borderless leaves the size row dead, out of the walk's reach ({shell.FocusedKey}, {shell.ResolutionChoice ?? "unset"})");
         WalkTo(host, seat, shell, OriginalShell.DisplayModeKey);
         // A list inside the window its own row authors is exactly as tall as its items: no arrows,
         // no thumb and nothing for the pointer to scroll, which is the shape the film shows.
@@ -679,6 +687,15 @@ internal static class MenuOriginalSuites
         Press(host, seat, Right);
         ctx.Check(shell.DisplayModeChoice == DisplayWords.Fullscreen,
             $"a sideways step on the focused row takes the display mode after the borderless default ({shell.DisplayModeChoice ?? "unset"})");
+        // The row's own words are this machine's screen sizes, so what it steps to is read back off
+        // the shell rather than named: the claim is that the step lands on a size the screen offers
+        // and not on the screen's own size the row opened at.
+        WalkTo(host, seat, shell, OriginalShell.ResolutionKey);
+        Press(host, seat, Right);
+        ctx.Check(shell.FocusedKey == OriginalShell.ResolutionKey && shell.ResolutionChoice != null
+            && shell.ResolutionChoice != ResolutionSetting.ScreenSizes().Fallback
+            && shell.ResolutionWords.Contains(shell.ResolutionChoice),
+            $"the size row is live again under fullscreen and steps to the next size this screen offers ({shell.ResolutionChoice ?? "unset"} of {shell.ResolutionWords.Count})");
         WalkTo(host, seat, shell, OriginalShell.VSyncKey);
         Press(host, seat, Accept);
         OpenVideoListWindow(ctx, host, seat, shell);

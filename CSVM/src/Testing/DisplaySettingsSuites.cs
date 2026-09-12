@@ -174,9 +174,11 @@ internal static class DisplaySettingsSuites
         "The resolution setting: the list a screen offers holds that screen's own size as its "
         + "fallback and no size larger than the screen, a saved size the list offers beats the "
         + "fallback, a saved size it does not offer and nothing saved both fall back to the screen's "
-        + "own size rather than to the nearest or to project.godot's, a --det launch reads no saved "
-        + "size while a plain one does, and the VIDEO page opens on the saved size and carries it on "
-        + "what ACCEPT CHANGES applies")]
+        + "own size rather than to the nearest or to project.godot's, windowed and exclusive "
+        + "fullscreen both take the saved size while borderless pins it to the screen's own, a --det "
+        + "launch reads no saved size while a plain one does, and the VIDEO page opens on the saved "
+        + "size and carries it on what ACCEPT CHANGES applies, or draws it dead at the screen's own "
+        + "size under borderless with the saved one still riding out")]
     internal static void DisplayResolution(TestContext ctx)
     {
         var offered = ResolutionSetting.SizesUnder(1920, 1080);
@@ -187,16 +189,25 @@ internal static class DisplaySettingsSuites
         ctx.Check(narrow.Words.Contains("800x600") && narrow.Fallback == "800x600"
             && !narrow.Words.Contains(ResolutionSetting.ProjectSize),
             $"a screen smaller than project.godot's window offers its own size and not that window ({string.Join(" ", narrow.Words)})");
-        var saved = ResolutionSetting.Resolve("1920x1080", offered);
+        var saved = ResolutionSetting.Resolve("1920x1080", offered, DisplayWords.Windowed);
         ctx.Check(saved is { Width: 1920, Height: 1080, Source: "options.json" },
-            $"a saved size the screen offers is the one applied ({Describe(saved)})");
-        var unsupported = ResolutionSetting.Resolve("2560x1440", offered);
+            $"a saved size the screen offers is the one a windowed launch applies ({Describe(saved)})");
+        var exclusive = ResolutionSetting.Resolve("1024x768", offered, DisplayWords.Fullscreen);
+        ctx.Check(exclusive is { Width: 1024, Height: 768, Source: "options.json" },
+            $"and the one an exclusive-fullscreen launch applies, that mode taking the chosen size ({Describe(exclusive)})");
+        var pinned = ResolutionSetting.Resolve("1024x768", offered, DisplayWords.Borderless);
+        ctx.Check(pinned is { Width: 1920, Height: 1080, Source: DisplayWords.Borderless },
+            $"while borderless pins it to the screen's own size whatever is saved ({Describe(pinned)})");
+        ctx.Check(ResolutionSetting.Pinned(null) && ResolutionSetting.Pinned("maximized")
+            && !ResolutionSetting.Pinned(DisplayWords.Windowed) && !ResolutionSetting.Pinned(DisplayWords.Fullscreen),
+            $"as does a file naming no mode at all, or a word the vocabulary does not know");
+        var unsupported = ResolutionSetting.Resolve("2560x1440", offered, DisplayWords.Windowed);
         ctx.Check(unsupported is { Width: 1920, Height: 1080, Source: "default" },
             $"a saved size it does not offer falls back to the screen's own size ({Describe(unsupported)})");
-        var none = ResolutionSetting.Resolve(null, offered);
+        var none = ResolutionSetting.Resolve(null, offered, DisplayWords.Windowed);
         ctx.Check(none.Word == offered.Fallback && none.Source == unsupported.Source,
             $"and nothing saved reads the same way ({Describe(none)})");
-        var blind = ResolutionSetting.Resolve(null, ResolutionSetting.Unknown);
+        var blind = ResolutionSetting.Resolve(null, ResolutionSetting.Unknown, DisplayWords.Windowed);
         ctx.Check(blind is { Width: ResolutionSetting.ProjectWidth, Height: ResolutionSetting.ProjectHeight, Source: "default" },
             $"while a list built with no screen to ask falls back to project.godot's window ({Describe(blind)})");
 
@@ -232,12 +243,14 @@ internal static class DisplaySettingsSuites
         OptionsStore.DirectoryOverride = dir;
         try
         {
-            OptionsStore.UserOptions().Save(new OptionsDef { Resolution = "1024x768" });
+            OptionsStore.UserOptions().Save(new OptionsDef { Resolution = "1024x768", DisplayMode = DisplayWords.Windowed });
             ctx.Check(ResolutionSetting.SavedWord(det: false) == "1024x768",
                 $"a plain launch reads the saved size ({ResolutionSetting.SavedWord(det: false) ?? "unset"})");
             ctx.Check(ResolutionSetting.SavedWord(det: true) == null,
                 $"and a --det launch reads no saved display setting at all ({ResolutionSetting.SavedWord(det: true) ?? "unset"})");
             AppliedSizeRow(ctx, layout);
+            OptionsStore.UserOptions().Save(new OptionsDef { Resolution = "1024x768", DisplayMode = DisplayWords.Borderless });
+            PinnedSizeRow(ctx, layout);
         }
         finally
         {
@@ -478,9 +491,33 @@ internal static class DisplaySettingsSuites
         var applied = Accept(shell);
         ctx.Check(applied?.Resolution == "1024x768",
             $"ACCEPT CHANGES carries it on the apply exit ({applied?.Resolution ?? "no exit"})");
-        var plan = ResolutionSetting.Resolve(applied?.Resolution, ResolutionSetting.ScreenSizes());
+        var plan = ResolutionSetting.Resolve(applied?.Resolution, ResolutionSetting.ScreenSizes(), applied?.DisplayMode);
         ctx.Check(plan is { Width: 1024, Height: 768, Source: "options.json" },
             $"and the apply resolves that size to the pixels the window would take ({Describe(plan)})");
+    }
+
+    // The same row under borderless, which owns the size: the page draws the screen's own size
+    // whatever is saved, the row takes no press, and the saved size still rides out on the exit, so
+    // a pilot who picks Windowed again gets the size they chose rather than the one this mode drew.
+    private static void PinnedSizeRow(TestContext ctx, MenuLayout layout)
+    {
+        var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
+            _ => null, options: () => OptionsStore.UserOptions().Load(), screenSizes: ResolutionSetting.ScreenSizes);
+        shell.OpenVideo();
+        var screen = ResolutionSetting.ScreenSizes();
+        ctx.Check(shell.ResolutionPinned && Label(shell, OriginalShell.ResolutionKey) == screen.Fallback,
+            $"the borderless page draws this screen's own size on the size row ({Label(shell, OriginalShell.ResolutionKey)})");
+        ctx.Check(Row(shell, OriginalShell.ResolutionKey) is { Enabled: false },
+            $"with the row dead, so the cursor walks past it and no press reaches it");
+        shell.Step(new MenuCommands { MoveX = 1 });
+        ctx.Check(Label(shell, OriginalShell.ResolutionKey) == screen.Fallback && shell.ResolutionChoice == "1024x768",
+            $"a sideways step changes nothing and leaves the saved size where it is ({shell.ResolutionChoice ?? "unset"})");
+        var applied = Accept(shell);
+        ctx.Check(applied?.Resolution == "1024x768" && applied?.DisplayMode == DisplayWords.Borderless,
+            $"which rides out unchanged on the apply exit ({applied?.Resolution ?? "no exit"})");
+        var plan = ResolutionSetting.Resolve(applied?.Resolution, screen, applied?.DisplayMode);
+        ctx.Check(plan.Word == screen.Fallback && plan.Source == DisplayWords.Borderless,
+            $"and the apply takes the screen's own size, the mode beating the file ({Describe(plan)})");
     }
 
     // The display-mode row driven: the page opens on the saved word and ACCEPT CHANGES hands it back
@@ -547,17 +584,20 @@ internal static class DisplaySettingsSuites
 
     // What one row of the page draws, found by key rather than by position: the table stands in
     // authored row order, so a row added above shifts every index under it.
-    private static string Label(OriginalShell shell, string key)
+    private static string Label(OriginalShell shell, string key) =>
+        Row(shell, key)?.Label ?? "no such row";
+
+    private static OriginalRow? Row(OriginalShell shell, string key)
     {
         foreach (var row in shell.Rows)
         {
             if (row.Key == key)
             {
-                return row.Label;
+                return row;
             }
         }
 
-        return "no such row";
+        return null;
     }
 
     private static string Describe(MonitorPlan plan) =>

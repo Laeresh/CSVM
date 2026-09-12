@@ -64,10 +64,11 @@ public sealed partial class OriginalShell
             s => CSVM.Utils.MonitorSetting.Resolve(s._monitorIndex, s.Screens).Screen,
             (s, i) => s._monitorIndex = CSVM.Utils.MonitorSetting.Word(i)),
         new(ResolutionKey, "Resolution", "VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC",
-            _ => "Select the screen resolution.",
+            s => s.ResolutionDescription(),
             OriginalRowKind.Dropdown, s => s.ResolutionWords,
-            s => DisplaySettingRows.ResolutionIndex(s.Sizes, s._resolution),
-            (s, i) => s._resolution = s.ResolutionWords[i]),
+            s => DisplaySettingRows.ResolutionIndex(s.Sizes, s._resolution, s._displayMode),
+            (s, i) => s._resolution = s.ResolutionWords[i],
+            s => !s.ResolutionPinned),
         new(DisplayModeKey, "Display Mode", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
             _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.DisplayModeLabels,
@@ -99,6 +100,11 @@ public sealed partial class OriginalShell
     /// like the resolution row's sizes, so a shell with no engine to ask offers the one screen it
     /// can name.</summary>
     public IReadOnlyList<string> MonitorWords => Screens.Labels;
+
+    /// <summary>Whether the display mode standing on the page owns the size, which borderless does:
+    /// the row then reads the screen's own size, takes no press and draws dead. The saved size is
+    /// left where it is, so picking Windowed or Fullscreen again gives the player it back.</summary>
+    public bool ResolutionPinned => CSVM.Utils.ResolutionSetting.Pinned(_displayMode);
 
     // The screen's sizes and the one a saved size it lacks falls back to, read through the reader
     // on every access like the screens below. The row's value falls back through this list's own
@@ -132,6 +138,21 @@ public sealed partial class OriginalShell
         FocusKey(key);
     }
 
+    // The size row's description says what the size does under the mode standing beside it, since
+    // it does something different in each: the window's own size, nothing at all, or the size the
+    // game draws at inside a fullscreen window Godot will not resize.
+    private string ResolutionDescription()
+    {
+        if (ResolutionPinned)
+        {
+            return "Borderless runs at the desktop's size. Pick Windowed or Fullscreen to choose one.";
+        }
+
+        return _displayMode == CSVM.Utils.DisplayWords.Fullscreen
+            ? "Select the size the game draws at, scaled up to fill the screen."
+            : "Select the window size.";
+    }
+
     // The graphics row's description says whether a restart is still owed. The mode is resolved
     // once at launch, so a choice that differs from the running one reaches the world on the next
     // start and nothing on the page can show it sooner; a player who saved it and came back
@@ -156,7 +177,8 @@ public sealed partial class OriginalShell
             for (int i = 0; i < VideoOptions.Length; i++)
             {
                 var fallback = VideoOptions[i];
-                rows.Add(TextButton(fallback.Key, fallback.Words(this)[fallback.Read(this)], OptionsX, OptionsTop + (i * OptionsPitch), true, 0));
+                rows.Add(TextButton(fallback.Key, fallback.Words(this)[fallback.Read(this)], OptionsX,
+                    OptionsTop + (i * OptionsPitch), fallback.Editable(this), 0));
             }
 
             rows.Add(TextButton(VideoAcceptKey, "ACCEPT CHANGES", OptionsX, OptionsTop + (VideoOptions.Length * OptionsPitch), true, 0));
@@ -207,7 +229,8 @@ public sealed partial class OriginalShell
             var place = PlaceVideoRow(screen, option);
             rows.Add(new OriginalRow(option.Key,
                 option.Kind == OriginalRowKind.Dropdown ? option.Words(this)[option.Read(this)] : string.Empty,
-                option.Kind, place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight, true, 0, place.Box));
+                option.Kind, place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight,
+                option.Editable(this), 0, place.Box));
         }
 
         AddStrip(screen, rows, VideoAcceptKey, OriginalRowKind.Button, true, 0);
@@ -338,10 +361,13 @@ public sealed partial class OriginalShell
     }
 
     // A sideways step on a focused setting picks the next value with wrap, as the Game Options
-    // page's rows do. False on anything else, so the step crosses columns.
+    // page's rows do. False on anything else, so the step crosses columns. The Accept and pointer
+    // paths read a row's own Enabled flag; this one reads the option behind it, since a dead row
+    // must not take a value from a key that never presses it.
     private bool StepVideoValue(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
-        if (focus < 0 || focus >= rows.Count || VideoOptionFor(rows[focus].Key) is not { } option)
+        if (focus < 0 || focus >= rows.Count || VideoOptionFor(rows[focus].Key) is not { } option
+            || !option.Editable(this))
         {
             return false;
         }
@@ -466,13 +492,20 @@ public sealed partial class OriginalShell
     // One setting of the page: its title, the authored widgets it composes over (the title, the
     // control and the description), its description (read off the shell, since a row can say
     // something about its saved state), the control it takes, the words of the store field it shows,
-    // and how that field is read and written. The words come off the shell too, the resolution row's
-    // being enumerated per screen rather than a vocabulary the page could hold as an array.
+    // how that field is read and written, and whether the row is live. The words come off the shell
+    // too, the resolution row's being enumerated per screen rather than a vocabulary held as an array.
     private sealed record VideoOption(
         string Key, string Title, string TitleKey, string ControlKey, string DescriptionKey,
         Func<OriginalShell, string> Description, OriginalRowKind Kind,
         Func<OriginalShell, IReadOnlyList<string>> Words,
-        Func<OriginalShell, int> Read, Action<OriginalShell, int> Write);
+        Func<OriginalShell, int> Read, Action<OriginalShell, int> Write,
+        Func<OriginalShell, bool>? Live = null)
+    {
+        // Whether the row takes a press at all. A row another setting owns the value of is dead:
+        // the cursor walks past it, the pointer cannot arm it, and it draws in its disabled frame,
+        // which is what every other unavailable row on these pages already does.
+        public bool Editable(OriginalShell shell) => Live?.Invoke(shell) ?? true;
+    }
 
     // One row's place in authored pixels: the title box, the control's own rectangle and strip, and
     // the description box.
