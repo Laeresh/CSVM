@@ -66,6 +66,11 @@ public partial class FlightController
     /// <see cref="LoadSavedKeymap"/>, never by replacing the reference.</summary>
     public Bindings.ActionMap FlightKeymap => _bindings.Map(Bindings.InputContext.Flight);
 
+    /// <summary>Which side of this seat's hardware produced its last real input, the side its
+    /// control prompts name. Read it rather than inferring the device from a composed line.
+    /// </summary>
+    public Bindings.DeviceSide ActiveDeviceSide => _bindings.Device.Side;
+
     /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
     /// wrote. Anything the file does not carry, or this build cannot read, stays at that action's
     /// shipped default, and under the launch gate no file is read at all
@@ -74,6 +79,16 @@ public partial class FlightController
     public void LoadSavedKeymap() =>
         FlightKeymap.Fill(Bindings.LaunchBindings.Map(
             PlayerIndex + 1, Bindings.InputContext.Flight, default, readsKeyboard: true));
+
+    /// <summary>Puts this seat's control prompts on <paramref name="strings"/> and composes them
+    /// now. A session rig is handed the table through <see cref="Bind"/>; a suite that assembles a
+    /// controller by hand calls this rather than writing the HUD's prompt field, so a later device
+    /// handover recomposes the same wording instead of falling back to the stand-in.</summary>
+    public void UseMessages(Messages? strings)
+    {
+        _strings = strings;
+        ComposeControlPrompts();
+    }
 
     /// <summary>Consumes one complete assembly result before this controller joins the tree. A
     /// second bind or a bind after attachment is a construction error.</summary>
@@ -108,8 +123,7 @@ public partial class FlightController
             LoadSavedKeymap();
         // After the saved keymap, so the prompt names the control this seat will actually fly with
         // rather than the shipped default the constructor put there.
-        _pilotHud.AutoLandPrompt = FlightHud.ComposeAutoLandPrompt(
-            build.Strings, FlightKeymap.Bindings(Bindings.InputAction.AutoLand), UseKeyboard);
+        UseMessages(build.Strings);
         if (build.Team is { } team)
             Team = team;
 

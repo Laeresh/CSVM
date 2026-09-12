@@ -131,8 +131,9 @@ public sealed class FlightHud
     public TargetHud? TargetHud;
 
     /// <summary>The auto-land line this pane draws while the approach table's <c>auto</c> row
-    /// passes, composed once per rig by <see cref="ComposeAutoLandPrompt"/> from the seat's own
-    /// binding. Empty draws no line, which is what an unbound auto-land reads as.</summary>
+    /// passes, from <see cref="ComposeAutoLandPrompt"/> over the seat's own bindings, recomposed
+    /// whenever the seat's active device moves. Empty draws no line, which is what an unbound
+    /// auto-land reads as.</summary>
     public string AutoLandPrompt = AutoLandFallback;
 
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper
@@ -221,15 +222,14 @@ public sealed class FlightHud
     public static float FeetFromWorldY(float y) => y * 3.28084f;
 
     /// <summary>The auto-land prompt for a seat holding <paramref name="bindings"/>: the message
-    /// table's own wording with that seat's control in the <c>%1</c> slot, "Click" for a mouse
-    /// button and "Press" otherwise, and empty when nothing is bound
-    /// (docs/formats/anim-definitions/cutscenes.md).
-    /// ⚠ A false <paramref name="readsKeyboard"/> skips the keyboard and mouse bindings: a pad-only
-    /// splitscreen seat must not be told to press a key that does nothing for it.</summary>
+    /// table's own wording with the control of the seat's active <paramref name="side"/> in the
+    /// <c>%1</c> slot, "Click" for a mouse button and "Press" otherwise, and empty when nothing is
+    /// bound (docs/formats/anim-definitions/cutscenes.md). Which binding a side names, and the
+    /// fallback to the other side, belong to <see cref="ActiveDevice.PromptBinding"/>.</summary>
     public static string ComposeAutoLandPrompt(Messages? strings, IReadOnlyList<Binding> bindings,
-        bool readsKeyboard)
+        bool readsKeyboard, DeviceSide side)
     {
-        if (SelectAutoLandBinding(bindings, readsKeyboard) is not { } binding)
+        if (ActiveDevice.PromptBinding(bindings, side, readsKeyboard) is not { } binding)
         {
             return string.Empty;
         }
@@ -498,36 +498,6 @@ public sealed class FlightHud
 #pragma warning disable SA1201, SA1202
     internal string? DrawnText => _text?.Text;
 #pragma warning restore SA1201, SA1202
-
-    // Which of an action's bindings the prompt names, in the original's own slot order: keyboard,
-    // then pad, then mouse. Keyboard and mouse are the desktop player's alone, so a pad-only seat
-    // skips both.
-    private static Binding? SelectAutoLandBinding(IReadOnlyList<Binding> bindings, bool readsKeyboard)
-    {
-        Binding? pad = null;
-        Binding? mouse = null;
-        for (int i = 0; i < (bindings?.Count ?? 0); i++)
-        {
-            var binding = bindings![i];
-            switch (binding.Control.Kind)
-            {
-                case ControlKind.Key when readsKeyboard:
-                    return binding;
-                case ControlKind.Mouse when readsKeyboard:
-                    mouse ??= binding;
-                    break;
-                case ControlKind.Button:
-                case ControlKind.Axis:
-                case ControlKind.Hat:
-                    pad ??= binding;
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        return pad ?? mouse;
-    }
 
     // Where a round of `weapon` fired from `origin` along `forward` (carrying `inheritVel`, the
     // plane's velocity) sits after travelling `distance` m of path, Ballistics.March, the SAME

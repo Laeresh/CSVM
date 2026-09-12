@@ -40,6 +40,11 @@ public sealed class BindingProfile
         }
     }
 
+    /// <summary>Which side of this seat's hardware produced its last real input, the side every
+    /// control prompt names. Moved by <see cref="ObserveDevice"/>, which whoever polls the seat's
+    /// two halves calls once a tick.</summary>
+    public ActiveDevice Device { get; } = new();
+
     /// <summary>The shipped keymap for a seat flying <paramref name="pad"/>, which may be
     /// <c>default</c> for a seat with no pad.</summary>
     public static BindingProfile Defaults(DeviceId pad, bool readsKeyboard)
@@ -71,4 +76,10 @@ public sealed class BindingProfile
             seat.Poll(state);
         }
     }
+
+    /// <summary>Hands <see cref="Device"/> this tick's keyboard-side and pad-side readings and
+    /// answers whether the side moved. The keyboard gate is read off this seat rather than taken
+    /// from the caller, so a pad-only seat cannot be switched to a key it never reads.</summary>
+    public bool ObserveDevice(ActionSnapshot keyboardSide, ActionSnapshot padSide) =>
+        Device.Observe(keyboardSide, padSide, ReadsKeyboard);
 }

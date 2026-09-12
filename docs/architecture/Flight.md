@@ -1006,7 +1006,7 @@ With the cockpit interior on screen the dials, tape and text block come off (`Se
 panel carrying them; the pipper and marker HUDs stay. The per-frame entry is
 `Draw(in FlightHudState)`, a struct of aircraft STATE, so text, dials and gates compose here and
 assert with no Godot `Control`: `ComputeStallWarning`, `ComputeAgl`, `ComposeTextLines`, and
-`ComposeAutoLandPrompt`, `messages.json`'s own auto-land wording with the seat's control in it.
+`ComposeAutoLandPrompt`, the auto-land wording naming the control of the device the seat last read.
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

@@ -538,6 +538,7 @@ both sit on top of these types.
 - `src/Bindings/InputContext.cs`, which set of controls a seat is reading (flight, menu, camera), because one control means different things per mode.
 - `src/Bindings/DefaultBindings.cs`, the shipped keymap as data, one map per context, reproducing `docs/controls.md`, and the placeholder a pad default uses.
 - `src/Bindings/BindingProfile.cs`, one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
+- `src/Bindings/ActiveDevice.cs`, which side of a seat's hardware produced its last real input, and which of an action's bindings a prompt on that side names.
 - `src/Bindings/BindingStore.cs`, the versioned JSON keymap file, one per player under `user://`, falling back per action to the shipped default.
 - `src/Bindings/LaunchBindings.cs`, where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults.
 

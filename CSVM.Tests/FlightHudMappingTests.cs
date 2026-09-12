@@ -287,7 +287,7 @@ public class FlightHudMappingTests
         var strings = AutoLandMessages();
         var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
         Assert.Equal("Press F9 to autodock",
-            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, readsKeyboard: true));
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, true, DeviceSide.Keyboard));
     }
 
     [Fact]
@@ -296,7 +296,16 @@ public class FlightHudMappingTests
         var strings = AutoLandMessages();
         var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
         Assert.Equal("Press Pad Left Stick to autodock",
-            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, readsKeyboard: false));
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, false, DeviceSide.Pad));
+    }
+
+    [Fact]
+    public void ASeatFlyingOnThePadIsNamedThePadControlThoughItReadsTheKeyboardToo()
+    {
+        var strings = AutoLandMessages();
+        var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
+        Assert.Equal("Press Pad Left Stick to autodock",
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, true, DeviceSide.Pad));
     }
 
     [Fact]
@@ -305,15 +314,16 @@ public class FlightHudMappingTests
         var strings = AutoLandMessages();
         var mouseOnly = new[] { MouseBinding(MouseButton.Middle) };
         Assert.Equal("Click Mouse Middle to autodock",
-            FlightHud.ComposeAutoLandPrompt(strings, mouseOnly, readsKeyboard: true));
+            FlightHud.ComposeAutoLandPrompt(strings, mouseOnly, true, DeviceSide.Keyboard));
     }
 
     [Fact]
     public void AnUnboundActionComposesNoPromptAndAMissingTableStillNamesTheControl()
     {
-        Assert.Equal("", FlightHud.ComposeAutoLandPrompt(AutoLandMessages(), System.Array.Empty<Binding>(), true));
+        Assert.Equal("", FlightHud.ComposeAutoLandPrompt(
+            AutoLandMessages(), System.Array.Empty<Binding>(), true, DeviceSide.Keyboard));
         Assert.Equal("AUTO-LAND AVAILABLE - F9",
-            FlightHud.ComposeAutoLandPrompt(null, new[] { KeyBinding(Key.F9) }, readsKeyboard: true));
+            FlightHud.ComposeAutoLandPrompt(null, new[] { KeyBinding(Key.F9) }, true, DeviceSide.Keyboard));
     }
 
     [Fact]

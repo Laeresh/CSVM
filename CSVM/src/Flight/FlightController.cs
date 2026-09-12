@@ -484,6 +484,10 @@ public partial class FlightController : Node3D
     private readonly SeatDeviceState _seatState;
     private readonly SeatDeviceState _padMutedState;
 
+    // The message table this seat's control prompts take their wording from, null on a rig built
+    // with none (which then reads the prompt's own data-less stand-in).
+    private Messages? _strings;
+
     private ulong _inputFrame = ulong.MaxValue;  // the rendered frame the three readers above hold
     private bool _initialTargetDone;             // --target= has had its one chance
     private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
@@ -2265,6 +2269,18 @@ public partial class FlightController : Node3D
         _keyActions.Current.Store(action, read);
         _padActions.Current.Store(action, read);
     }
+
+    // The tick's two halves as a suite supplies them, so the seat's device memory has something to
+    // follow: a headless run holds down no key and no stick. Each state answers for one side alone,
+    // the split a live poll gets from its own pad-muted reader.
+    internal void ObserveDeviceForTest(IDeviceState keyboardSide, IDeviceState padSide)
+    {
+        PollInput();
+        _keyActions.Poll(keyboardSide);
+        _padActions.Poll(padSide);
+        if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current))
+            ComposeControlPrompts();
+    }
 #pragma warning restore SA1202
 
     // G / gamepad D-pad Right, cycles the gun selector forward through the firable groups (1 → 2 →
@@ -2936,7 +2952,17 @@ public partial class FlightController : Node3D
         _actions.Poll(_seatState);
         _keyActions.Poll(_padMutedState);
         _padActions.Poll(_seatState);
+        // A prompt names the device the seat last took input from, so a handover recomposes it.
+        if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current))
+            ComposeControlPrompts();
     }
+
+    // Every control prompt this pane draws, over the bindings of the side the seat is reading. Run
+    // at construction and again on each handover, rather than per frame: the wording is a string
+    // build over the message table, and it only moves when a binding or the side does.
+    private void ComposeControlPrompts() =>
+        _pilotHud.AutoLandPrompt = FlightHud.ComposeAutoLandPrompt(
+            _strings, FlightKeymap.Bindings(InputAction.AutoLand), UseKeyboard, _bindings.Device.Side);
 
     // The largest-magnitude value of the axis across this player's gamepads (0 when
     // none), idle phantom devices read ~0 and never mask the real stick.

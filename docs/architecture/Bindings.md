@@ -155,8 +155,18 @@ numbers, TUNE from here. Read `BindingStore.cs` next.
 One seat's whole input: an `ActionMap` and a `PlayerActions` per context, and the keyboard gate that
 applies to all of them at once. This is what a polling site is handed and what a rebinding screen
 edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
-because a pause board and the aeroplane behind it are both live on one tick. Where a seat's profile
-comes from is `LaunchBindings.cs`.
+because a pause board and the aeroplane behind it are both live on one tick. It also holds the
+seat's `ActiveDevice`, fed the tick's two halves by whoever polls them, so every prompt on the seat
+names one device. Where a seat's profile comes from is `LaunchBindings.cs`.
+
+## src/Bindings/ActiveDevice.cs
+Which side of a seat's hardware produced its last real input, keyboard and mouse against the pads,
+and which of an action's bindings a prompt on that side names. One side at a time: a press hands the
+line over, a held control does not, and a stick short of `PressTravel` is drift, because the flight
+axes carry no deadzone of their own. A prompt takes the active side's binding and falls back to the
+other side's where that half is unbound, which is how an unbound pad action still reads as a key. A
+seat owns one through `BindingProfile.cs`, read next; `BindingLabels.cs` turns the chosen binding
+into the words.
 
 ## src/Bindings/BindingStore.cs
 The keymap file: versioned JSON, one per player under `user://`, written atomically through a temp

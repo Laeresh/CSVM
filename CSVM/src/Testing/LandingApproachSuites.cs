@@ -3639,9 +3639,7 @@ internal static class LandingApproachSuites
                 Vector3.Forward, ApproachThrottle, ApproachSpeedMps);
             // What FlightControllerBuild.Bind does for a session rig; this suite builds the
             // controller by hand, so the prompt would otherwise stay at its data-less stand-in.
-            rig.PilotHud.AutoLandPrompt = FlightHud.ComposeAutoLandPrompt(
-                Messages.Load(ctx.MessagesPath),
-                rig.FlightKeymap.Bindings(Bindings.InputAction.AutoLand), rig.UseKeyboard);
+            rig.UseMessages(Messages.Load(ctx.MessagesPath));
             return rig;
         }
         finally

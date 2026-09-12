@@ -2209,36 +2209,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `+0x1044`), font `autoland`, both gradient colours `COLORREF 0x0040ffff`, a pale yellow of
   R 255 G 255 B 64, and an unlimited life (`FUN_005c54a0(-1.0)`) that `FUN_005c54f0` hides the
   first frame the approach row stops passing. The remake appends the same wording as one line of
-  `ComposeTextLines` (`CSVM/src/Flight/FlightHud.cs:478`), so it sits in the readout block at the
+  `ComposeTextLines` (`CSVM/src/Flight/FlightHud.cs:479`), so it sits in the readout block at the
   reading box's anchor rather than centred on its own. *Fix shape:* a dedicated label in
   `FlightHud` at the decoded anchor, shown while `AutoLandOffered` holds and hidden the frame it
   drops, the readout block no longer carrying the line. *⚠ Traps:* the y fraction is of the
   viewport, not of `BL-778`'s reading box, so anchor it to the pane, and in splitscreen to each
-  pane's own viewport. *Cross-refs:* `BL-510`'s closing commit (the wording), `BL-778` (the
-  reading box the rest of the HUD anchors to), `BL-853` (which control the line names),
+  pane's own viewport. The line names the control of the device the seat last took input from
+  (`Bindings/ActiveDevice.cs`), so the label reads whatever `ComposeAutoLandPrompt` hands it and
+  is recomposed on a handover rather than built once. *Cross-refs:* `BL-510`'s closing commit (the
+  wording), `BL-778` (the reading box the rest of the HUD anchors to),
   `docs/formats/anim-definitions/cutscenes.md`.
-- `BL-853` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Control
-  prompts name the keyboard binding even while the player flies on a pad; the prompt should
-  follow the device the last input came from, one device at a time, with glyphs later.**
-  *Evidence:* since `BL-510` landed, `SelectAutoLandBinding` (`CSVM/src/Flight/FlightHud.cs:505`)
-  returns the first keyboard binding whenever the seat reads the keyboard, and seat 0 always
-  does, so a pad player reads "Press F9 to autodock" and never sees the stick button; before that
-  commit the line was a fixed string naming both. The order is the original's: `FUN_0045e120`
-  reads the keyboard slots first and consults the joystick slot only when no key is bound and the
-  fly mode is 2, so the original with its shipped `A` binding never names a button either. That
-  is a limitation to leave behind, not a look to keep. *Fix shape:* an input-device tracker on
-  the seat (keyboard or mouse against pad, updated by whichever produced the last non-idle
-  input, with a deadzone so axis noise does not flip it); prompt composition takes the binding
-  for the active device and recomposes on a switch; the auto-dock line is the first consumer,
-  the pause board's hints and any future prompt follow. A later step swaps the control's name
-  for a glyph, so the text template keeps a placeholder a glyph can fill. *⚠ Traps:* a
-  splitscreen seat that reads no keyboard must never be switched to it, which
-  `SelectAutoLandBinding`'s `readsKeyboard` already guards. A device switch must not flicker the
-  line while both are touched at once; take the last discrete press over a held axis.
-  *Playtest after fix:* fly an approach on the pad and read the stick button; touch the keyboard
-  and watch it switch to the key on the next frame. *Cross-refs:* `BL-852` (where the line sits),
-  `BL-510`'s closing commit (the selection order), `CSVM/src/Flight/FlightHud.cs`,
-  `CSVM/src/Bindings/BindingLabels.cs`.
 
 - `BL-857` `[Feature]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **The spyglass: Shift+S toggles a round live
   picture of the selected target at its off-screen marker, and the marker's arrow and text sit
@@ -2294,6 +2274,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   awarding mission, then pause and relaunch to see the same picture on both screens.
   *Cross-refs:* `docs/org/pause-screen.md` (the table and the name rule),
   `docs/org/loading-screen.md`, `CSVM/src/Session/CampaignProfileStore.cs`.
+
+- `BL-878` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The prompts the
+  auto-dock line does not cover still name fixed controls, and every prompt names its control in
+  words where a glyph would read better on a pad.** *Evidence:* the seat remembers which device
+  produced its last real input and the auto-dock line names that device's binding
+  (`CSVM/src/Bindings/ActiveDevice.cs`, `FlightHud.ComposeAutoLandPrompt`), but the crashed line
+  in `ComposeTextLines` is still the fixed string "PRESS R (GAMEPAD Y/A) TO RESPAWN", which names
+  neither the seat's real `Respawn` bindings nor one device at a time, and the pause and results
+  boards carry no control hints at all. *Fix shape:* compose the crashed line the way the
+  auto-dock line is composed, off the seat's `Respawn` bindings and its active device, keeping the
+  message table's `%1` placeholder shape so a glyph can later fill the slot a control name fills
+  today; the glyph step then wants a per-control texture set and a text-with-icon line rather than
+  a string. *⚠ Traps:* the crashed line is the one prompt a player reads while the rest of the HUD
+  is hidden, so it has to survive the crash path's own visibility gating. A pad-only splitscreen
+  seat must never be named a key, which `ActiveDevice.PromptBinding`'s `readsKeyboard` gate
+  already handles. *Cross-refs:* `CSVM/src/Flight/FlightHud.cs`,
+  `CSVM/src/Bindings/ActiveDevice.cs`, `CSVM/src/Bindings/BindingLabels.cs`, `BL-852` (where the
+  auto-dock line sits).
 
 ## Splitscreen
 
