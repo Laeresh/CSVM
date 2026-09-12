@@ -20,29 +20,35 @@ public readonly record struct PauseWorldIcon(string Bitmap, float WorldX, float 
 /// <summary>
 /// The pause screen's authored half: the dialog its mission resolves to, the shared block every
 /// dialog in the file borrows, the reveal that places the pins and picks the parchment's rows, and
-/// the labels the four strips carry. Built once per mission, since none of it changes while the
-/// mission runs. Decode: docs/org/pause-screen.md.
+/// the labels the four strips carry. <c>InstantAction</c> says which file it was read from, and
+/// <c>Texts</c> holds the words an Instant Action dialog writes on the blackboard, empty for a
+/// campaign one. Built once per sortie, since none of it changes while the sortie runs.
+/// Decode: docs/org/pause-screen.md.
 /// </summary>
 public sealed record PauseSheet(
     EscapeState State,
     EscapeShared Shared,
     BriefingReveal Reveal,
     string ObjectivesTitle,
-    IReadOnlyList<string> ButtonLabels)
+    IReadOnlyList<string> ButtonLabels,
+    bool InstantAction,
+    IReadOnlyList<BoardLine> Texts)
 {
     /// <summary>Reads one dialog and its shared block, runs its script out through
     /// <see cref="EscapeDialog.Settled"/>, and resolves every label through the message
-    /// table.</summary>
+    /// table. An Instant Action dialog also takes the four texts its own script writes, which no
+    /// campaign dialog carries.</summary>
     public static PauseSheet? Load(
         string zrdrPath, string messagesPath, string dialogKey, bool instantAction)
     {
         EscapeDialog dialog;
         Messages messages;
+        string file = instantAction
+            ? EscapeDialog.InstantActionFile
+            : EscapeDialog.CampaignFile;
         try
         {
-            dialog = EscapeDialog.Load(
-                zrdrPath,
-                instantAction ? EscapeDialog.InstantActionFile : EscapeDialog.CampaignFile);
+            dialog = EscapeDialog.Load(zrdrPath, file);
             messages = Messages.Load(messagesPath);
         }
         catch (Exception e) when (e is IOException or JsonException)
@@ -68,7 +74,11 @@ public sealed record PauseSheet(
             shared,
             EscapeDialog.Settled(state.Steps),
             EscapeDialog.Label(messages, shared.Objectives?.TitleKey ?? string.Empty),
-            labels);
+            labels,
+            instantAction,
+            instantAction
+                ? LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages)
+                : Array.Empty<BoardLine>());
     }
 }
 
@@ -118,6 +128,9 @@ public sealed record PauseReadout(
 /// its authored crop, the pins and icons the dialog's script places, the objectives parchment, the
 /// profile's memento and the four button strips. Composed the way the load and briefing screens
 /// are, through <see cref="ComposedBoard"/>, and sharing <see cref="MissionMap"/> with both.
+///
+/// <para>An Instant Action sortie pauses on the same screen over a dialog that carries none of
+/// that: the load screen's blackboard, its three photographs, its four texts and the strips.</para>
 /// </summary>
 public static class PauseScreens
 {
@@ -192,7 +205,8 @@ public static class PauseScreens
             pictures.Add(MissionMap.Sheet(map));
         }
 
-        if (sheet.Shared.Objectives is { Background.Length: > 0 } list)
+        bool parchment = ShowsObjectives(sheet);
+        if (parchment && sheet.Shared.Objectives is { Background.Length: > 0 } list)
         {
             pictures.Add(new BoardPicture(
                 new BoardArt(BoardArtLibrary.Rimage, list.Background),
@@ -204,8 +218,8 @@ public static class PauseScreens
         AddWorldIcons(pictures, sheet, readout);
         AddMemento(pictures, sheet, readout);
 
-        var lines = new List<BoardLine>();
-        if (sheet.Shared.Objectives is { } titled && sheet.ObjectivesTitle.Length > 0)
+        var lines = new List<BoardLine>(sheet.Texts);
+        if (parchment && sheet.Shared.Objectives is { } titled && sheet.ObjectivesTitle.Length > 0)
         {
             lines.Add(new BoardLine(
                 sheet.ObjectivesTitle, titled.TitleAt.X, titled.TitleAt.Y, 0f,
@@ -225,11 +239,18 @@ public static class PauseScreens
             overlays: overlays);
     }
 
+    // The parchment is a shared widget every dialog in the file carries, and each dialog's own
+    // script says whether it stands: a campaign dialog turns it on, an Instant Action one authors
+    // an explicit Off and draws the blackboard bare (docs/org/pause-screen.md).
+    private static bool ShowsObjectives(PauseSheet sheet) =>
+        sheet.Reveal.Element("OBJECTIVESLIST")?.Visible ?? false;
+
     // The parchment's rows: one per objective the script revealed, in the order it revealed them,
     // with the mark riding the row rather than a column of its own.
     private static IReadOnlyList<BoardNote> Notes(PauseSheet sheet, PauseReadout readout)
     {
-        if (sheet.Shared.Objectives is not { } list || sheet.Reveal.RevealedObjectives.Count == 0)
+        if (!ShowsObjectives(sheet) || sheet.Shared.Objectives is not { } list
+            || sheet.Reveal.RevealedObjectives.Count == 0)
         {
             return Array.Empty<BoardNote>();
         }

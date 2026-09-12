@@ -1193,6 +1193,37 @@ public partial class Launcher : Node3D
             $"pause aid: {named.ChapterFolder}/{named.MissionFolder} sheet with {completed} objective(s) marked");
     }
 
+    // The Instant Action sortie's own pause sheet with no sortie behind it: the blackboard its
+    // chapter and mission type resolve, which carries no map, memento or parchment and so needs no
+    // readout at all. docs/org/pause-screen.md.
+    private void ShowInstantActionPauseSheet(string chapter, string missionType)
+    {
+        if (UI.LoadScreens.LetterFor(missionType) is not { } letter)
+        {
+            Log.Warn("ui", $"pause aid: '{missionType}' is no Instant Action mission type");
+            return;
+        }
+
+        string key = UI.Menu.EscapeDialog.InstantActionKey(
+            Mech3.CampaignSequence.ChapterNumber(chapter), letter);
+        var sheet = UI.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
+        if (sheet == null)
+        {
+            Log.Warn("ui", $"pause aid: no ia_escape.zrd sheet for {chapter} {missionType} ({key})");
+            return;
+        }
+
+        var pause = new Flight.PauseState();
+        var board = Flight.OriginalPauseBoard.Build(
+            pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet,
+            () => UI.PauseReadout.Empty);
+        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.HudLayers.Board };
+        layer.AddChild(board);
+        AddChild(layer);
+        pause.TryToggle(0);
+        Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
+    }
+
     private UI.PauseReadout PauseAidReadout(UI.PauseSheet sheet, string missionZrdr, int completed)
     {
         var objectives = UI.Menu.BriefingObjectives.Load(
@@ -1474,7 +1505,14 @@ public partial class Launcher : Node3D
         // The pause sheet stands only while a mission is halted, so a shot of it needs the same
         // kind of door. Its arguments name the campaign mission and how many of its objectives
         // have been marked, since that is the whole of what the reference stills differ by.
-        if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
+        if (aid.StartsWith("pauseboard-ia", System.StringComparison.Ordinal))
+        {
+            var parts = aid.Split(':');
+            ShowInstantActionPauseSheet(
+                parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1",
+                parts.Length > 2 && parts[2].Length > 0 ? parts[2] : "stunt_flying");
+        }
+        else if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
         {
             var parts = aid.Split(':');
             ShowPauseSheet(

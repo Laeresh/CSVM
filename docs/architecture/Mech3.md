@@ -622,7 +622,7 @@ whether it flies with a wingman. `PreviousInSameChapter` is the engine's own bac
 last earlier mission of the same world folder, which is what cross-mission persistence is scoped
 by. There is no branch, no predicate and no alternate; the only selection rule is "the next `seq`",
 which is why `Session/CampaignProgression.cs` models a single integer position. The three
-numberings one mission carries, and the folder-number-is-not-the-act rule, are on their own members.
+numberings one mission carries, and the folder-number-is-not-the-act rule, are on their own members; `ChapterNumber` inverts `ChapterFolder`, which is the environment digit an Instant Action pause dialog is keyed by.
 Decode: docs/formats/campaign-sequence.md.
 
 ## src/Mech3/WorldSession.cs

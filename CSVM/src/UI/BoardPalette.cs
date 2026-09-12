@@ -82,6 +82,19 @@ public sealed record BoardPalette(
         LabelActivate: new Color(1f, 0.82f, 0.38f),
         Hint: new Color(0.86f, 0.88f, 0.90f));
 
+    /// <summary>An Instant Action pause: the blackboard's own chalk, with the four escape strips
+    /// keeping the near-black labels their light plates need. Neither palette gives both, since the
+    /// campaign sheet has no chalk on it and the load screen has no strips.</summary>
+    public static readonly BoardPalette EscapeBlackboard = new(
+        Row: Chalk.Row,
+        Focus: Chalk.Focus,
+        Heading: Chalk.Heading,
+        Detail: Chalk.Detail,
+        LabelNormal: Escape.LabelNormal,
+        LabelRollover: Escape.LabelRollover,
+        LabelActivate: Escape.LabelActivate,
+        Hint: Chalk.Hint);
+
     /// <summary>The palette a screen writes in.</summary>
     public static BoardPalette For(CampaignScreen screen) => screen switch
     {

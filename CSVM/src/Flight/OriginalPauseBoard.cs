@@ -8,7 +8,9 @@ namespace CSVM.Flight;
 /// The Original presentation's pause screen: the mission's chart filling the window with its flags
 /// and icons, the objectives parchment, the profile's memento and the four authored button strips,
 /// composed from <c>escape.zrd</c> the way the load and briefing screens are composed from their
-/// own dialogs. Follows <see cref="PauseState.Changed"/> and drives its cursor from the pausing
+/// own dialogs. An Instant Action sortie hands it an <c>ia_escape.zrd</c> sheet instead, which is
+/// the load screen's blackboard under the same four strips, and it writes that in chalk.
+/// Follows <see cref="PauseState.Changed"/> and drives its cursor from the pausing
 /// player's reader alone, which is <see cref="PauseBoard"/>'s contract unchanged; that seat's
 /// pointer shares the cursor, hovering a strip to move it and clicking to fire, the rule every
 /// Original page keeps. The Built-in presentation keeps <see cref="PauseBoard"/>.
@@ -305,7 +307,7 @@ public sealed partial class OriginalPauseBoard : Control
     private void Compose() =>
         _view?.Show(
             PauseScreens.For(_sheet, _readout(), _menu?.Index ?? 0, _held, _pointer),
-            BoardPalette.Escape,
+            _sheet.InstantAction ? BoardPalette.EscapeBlackboard : BoardPalette.Escape,
             string.Empty,
             string.Empty);
 }

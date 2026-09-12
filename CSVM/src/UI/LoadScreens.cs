@@ -156,9 +156,19 @@ public static class LoadScreens
             return new[] { new BoardLine(heading, 70f, 35f, 0f, TitleFace, BoardInk.Heading) };
         }
 
-        var messages = Messages.Load(messagesPath);
+        return DialogTexts(zrdrPath, DialogFile, DialogPrefix + letter, Messages.Load(messagesPath));
+    }
+
+    /// <summary>The words one Instant Action dialog writes, at its own authored positions, wrap
+    /// widths and faces. Taken by file and key so the pause screen's <c>ia_escape.zrd</c> dialog
+    /// draws through the same composition as the load screen's <c>Loading.zrd</c> one: the two
+    /// author the same four texts (docs/org/pause-screen.md).</summary>
+    public static IReadOnlyList<BoardLine> DialogTexts(
+        string zrdrPath, string file, string dialog, Messages messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
         var lines = new List<BoardLine>(4);
-        foreach (var text in Widgets(zrdrPath, DialogPrefix + letter))
+        foreach (var text in Widgets(zrdrPath, file, dialog))
         {
             var at = text.List("at");
             if (at is not { Count: >= 2 } || at[0] is not float x || at[1] is not float y)
@@ -301,12 +311,12 @@ public static class LoadScreens
 
     // Every Text the named dialog's script places, in script order, as its own property dict. An
     // unreadable or absent extraction yields none, since a board must still come up without one.
-    private static IEnumerable<ZrdrDict> Widgets(string zrdrPath, string dialog)
+    private static IEnumerable<ZrdrDict> Widgets(string zrdrPath, string file, string dialog)
     {
         List<object?>? script;
         try
         {
-            script = Script(Zrdr.LoadFile(zrdrPath, DialogFile), dialog);
+            script = Script(Zrdr.LoadFile(zrdrPath, file), dialog);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -327,8 +337,9 @@ public static class LoadScreens
         }
     }
 
-    // A dialog's SCRIPT block. The file is one alternating list: the shared image path, the shared
-    // primitives, then all 81 dialogs by name, so the name is looked up in it directly.
+    // A dialog's beat sheet, under whichever of the three names its own file gives the block. The
+    // file is one alternating list: the shared image path, the shared primitives, then every dialog
+    // by name, so the name is looked up in it directly.
     private static List<object?>? Script(List<object?> root, string dialog)
     {
         if (root.Count == 0 || root[0] is not List<object?> file)
@@ -342,7 +353,8 @@ public static class LoadScreens
                 && name.Equals(dialog, StringComparison.OrdinalIgnoreCase)
                 && file[i + 1] is List<object?> body)
             {
-                return ZrdrDict.FromAlternating(body).List("SCRIPT");
+                var d = ZrdrDict.FromAlternating(body);
+                return d.List("SCRIPT") ?? d.List("ESC_SCRIPT") ?? d.List("LOADING_SCRIPT");
             }
         }
 

@@ -298,12 +298,25 @@ released.
 
 ## Where CSVM differs
 
-`UI/PauseScreens.cs` composes the campaign pause sheet at its authored coordinates and
+`UI/PauseScreens.cs` composes the pause sheet at its authored coordinates and
 `Flight/OriginalPauseBoard.cs` hangs it over the flown world in the Original presentation; the
 Built-in presentation keeps `Flight/PauseBoard.cs`. `UI/Menu/EscapeDialog.cs` reads `escape.zrd`,
 its Instant Action twin and the load screen's `Loading.zrd`, and `UI/MissionMap.cs` is the one map
 drawer this screen shares with the campaign briefing and the load screen, which is where the world
 window and the pin placement live.
+
+**An Instant Action sortie pauses on its own blackboard.** `Session/GameSession.cs` keys the sheet on
+the sortie's chapter, through `Mech3/CampaignSequence.cs`'s `ChapterNumber`, and its mission type's
+own letter, reads it out of `ia_escape.zrd`, and hands `Flight/OriginalPauseBoard.cs` a board written
+in `UI/BoardPalette.cs`'s `EscapeBlackboard`, the load screen's chalk with the near-black label inks
+the strips' light plates need. The four texts are composed through `UI/LoadScreens.cs`'s
+`DialogTexts`, the drawing the load screen already has for these dialogs, so the two screens write
+the same words at the same authored points. The parchment stands or not on the dialog's own script,
+which is what keeps it off this sheet, and with no map, memento or parchment the board asks for no
+readout at all. RESTART reruns the sortie rather than a campaign mission, and PREFERENCES opens the
+same leaf the campaign sheet opens. Free flight and the dogfight are modes of ours that no shipped
+dialog describes, so they keep the Built-in board, the same split the load screen makes. The
+`--menu=pauseboard-ia` door composes one with no sortie behind it.
 
 **The three authored faces meet one of ours.** The extraction ships no menu typeface, so
 `BtnEscapeNormal`, `BtnEscapeRollover` and `BtnEscapeActivate` become one face in three palette

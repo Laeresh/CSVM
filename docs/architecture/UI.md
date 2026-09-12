@@ -276,6 +276,8 @@ The ink a campaign board writes in, one palette per background family, because t
 painted art and the grey the flight check's forms use is invisible on the cabin's dark hangar. The
 flight check and ammo values are their layout rows' own ARGB fields; the rest are chosen to read on
 their background, and [../org/campaign-board.md](../org/campaign-board.md) says which is which.
+`EscapeBlackboard` is the one crossing, the load screen's own chalk under the near-black labels the
+escape strips' light plates need, which an Instant Action pause is the only screen to want both of.
 
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine. Holds no input
@@ -298,7 +300,7 @@ tests off engine; a campaign launch hands it the `LoadSheet` its story position 
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
 one `Loading.zrd` dialog with its mission's objectives and the profile's memento; `LoadScreens`
 composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
-Action blackboard with the four texts its own `loading_i` dialog places. The mission type picks the
+Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
 blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
 mode's name and nothing else. An absent extraction yields the frame and the bar rather than
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
@@ -307,8 +309,8 @@ sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md)
 ## src/UI/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment, the memento, and the four labelled button strips. `PauseSheet` is the
-authored half, read once per mission, and `PauseReadout` the live half, read afresh on every
+objectives parchment, the memento, and the four labelled button strips. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
+`PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
 pause: `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit

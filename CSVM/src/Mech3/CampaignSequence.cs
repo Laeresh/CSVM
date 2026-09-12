@@ -92,6 +92,24 @@ public static class CampaignSequence
         return found;
     }
 
+    /// <summary>The world-folder number a chapter code names, the inverse of
+    /// <see cref="CampaignMission.ChapterFolder"/>, or 0 for a code no chapter world carries. Also
+    /// the environment digit an Instant Action pause dialog is keyed by
+    /// (docs/org/pause-screen.md), which is why it is here rather than on the campaign's own
+    /// row.</summary>
+    public static int ChapterNumber(string chapterCode) => chapterCode.ToLowerInvariant() switch
+    {
+        "c1" => 1,
+        "c1b" => 2,
+        "c1c" => 3,
+        "c2" => 4,
+        "c2b" => 5,
+        "c3" => 6,
+        "c4" => 7,
+        "c5" => 8,
+        _ => 0,
+    };
+
     /// <summary>The world-folder number a story position is stored in, or 0 when the position is
     /// not one of the sequence's own.</summary>
     public static int Chapter(IReadOnlyList<CampaignMission> missions, int seq)

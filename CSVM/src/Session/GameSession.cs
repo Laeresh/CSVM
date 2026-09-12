@@ -3504,14 +3504,19 @@ public partial class GameSession : Node3D
     }
 
     // The Original presentation's pause sheet, or null where it does not apply: the Built-in
-    // presentation, a mode with no campaign mission behind it, or an extraction the sheet cannot be
+    // presentation, a mode the original authors no dialog for, or an extraction the sheet cannot be
     // read out of. Falling back to the Built-in board is what keeps a pause always available.
     private Flight.OriginalPauseBoard? BuildOriginalPauseBoard(
         Flight.PauseState pauseState, AnimRuntime? runtime)
     {
-        if (_presentation != UI.Menu.PresentationId.Original || _campaign is not { } campaign)
+        if (_presentation != UI.Menu.PresentationId.Original)
         {
             return null;
+        }
+
+        if (_campaign is not { } campaign)
+        {
+            return BuildInstantActionPauseBoard(pauseState);
         }
 
         var (chapterNumber, missionNumber) = campaign.Address;
@@ -3528,6 +3533,32 @@ public partial class GameSession : Node3D
         return Flight.OriginalPauseBoard.Build(
             pauseState, MenuInputFor, _dataRoot, sheet,
             () => PauseReadout(sheet, campaign, objectives, pauseState, runtime));
+    }
+
+    // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for the sortie's chapter and
+    // mission type, which carries no map, memento or parchment and so needs no readout. Free flight
+    // and the dogfight are modes of ours that no shipped dialog describes, so they keep the Built-in
+    // board, the same split the load screen makes (docs/org/pause-screen.md).
+    private Flight.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.PauseState pauseState)
+    {
+        if (_iaDirector?.Runtime is not { } ia
+            || UI.LoadScreens.LetterFor(ia.Def.MissionType) is not { } letter)
+        {
+            return null;
+        }
+
+        string key = UI.Menu.EscapeDialog.InstantActionKey(
+            CampaignSequence.ChapterNumber(_spec.Chapter), letter);
+        var sheet = UI.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
+        if (sheet == null)
+        {
+            Log.Warn("ui", $"pause: no ia_escape.zrd sheet for {_spec.Chapter} {ia.Def.MissionType}");
+            return null;
+        }
+
+        Log.Info("ui", $"pause: {_spec.Chapter} {ia.Def.MissionType} draws {sheet.State.Key}");
+        return Flight.OriginalPauseBoard.Build(
+            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.PauseReadout.Empty);
     }
 
     // The parchment's own row order, which is the briefing's: every keyed IDENTITY by priority.

@@ -298,6 +298,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `loadboard[:mission_type]` | the load screen's blackboard, over the menu, writing that mission type's own dialog | out of scope |
 | `loadboard-campaign[:CM]` | the load screen's chart sheet for that campaign mission, `CM01` by default, over the menu | out of scope |
 | `pauseboard[:CM[:done]]` | the Original presentation's pause sheet for that campaign mission, `CM01` by default, with that many of its objectives marked | out of scope |
+| `pauseboard-ia[:chapter[:mission_type]]` | the Original presentation's Instant Action pause blackboard for that chapter's environment and mission type, `C1` and `stunt_flying` by default | out of scope |
 
 ⚠ **`Screen.WaveEdit` has no aid.** It is the only screen enum member with no `--menu=` value, so
 the wave editor is the one Built-in screen that cannot be screenshot without a hand at the controls.

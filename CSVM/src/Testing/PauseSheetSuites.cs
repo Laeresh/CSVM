@@ -9,7 +9,9 @@ namespace CSVM.Testing;
 
 /// <summary>Suites over the Original presentation's pause screen: the real board over a real
 /// <see cref="Flight.PauseState"/>, composed from the chapter's own <c>escape.zrd</c> dialogs, with
-/// every bitmap it names checked against the extraction. Decode: docs/org/pause-screen.md.</summary>
+/// every bitmap it names checked against the extraction. A second suite does the same for the
+/// Instant Action blackboard the sortie's <c>ia_escape.zrd</c> dialog carries.
+/// Decode: docs/org/pause-screen.md.</summary>
 internal static class PauseSheetSuites
 {
     // The filmed mission, whose composition the four CAP-45 stills pin exactly.
@@ -21,6 +23,43 @@ internal static class PauseSheetSuites
     // asked the runtime by priority would check that row two seconds into the mission.
     private const string NumberedChapter = "C3";
     private const string NumberedMission = "M04";
+
+    // The sortie the Instant Action pause still films, as its chapter code and mission type.
+    private const string FilmedEnvironment = "C1";
+    private const string FilmedType = "stunt_flying";
+
+    // The ace dialog whose second head stands 40 px left of every other environment's, which is the
+    // one place the environment digit changes what an Instant Action pause draws.
+    private const string OddAceKey = "loading_i6a";
+    private const float OddAceHeadX = 325f;
+    private const float AceHeadX = 365f;
+
+    // The world-folder digits Instant Action's own environment list offers. C1C (3) is the chapter
+    // it omits, so ia_escape.zrd carries no loading_i3 dialog at all
+    // (docs/formats/instant-action.md).
+    private static readonly int[] Environments = { 1, 2, 4, 5, 6, 7, 8 };
+
+    // The four mission types, in the order the exe's jump table letters them.
+    private static readonly string[] MissionTypes =
+    {
+        "dogfight_ace", "dogfight_squadron", "stunt_flying", "zeppelin_run",
+    };
+
+    // The three photographs every Instant Action dialog's script places, each centred on its own
+    // authored point. They are the load screen's own stills for the family, the same three whatever
+    // the environment and the mission type, and no mission still reaches this screen.
+    private static readonly (string Bitmap, float X, float Y)[] Photographs =
+    {
+        ("MP-shotdown", 197f, 157f),
+        ("MP-crash", 197f, 307f),
+        ("mp-dangerzone2", 197f, 457f),
+    };
+
+    // Where the shared block puts the four strips, in the order a cursor walks them.
+    private static readonly (float X, float Y)[] Strips =
+    {
+        (352f, 510f), (497f, 510f), (642f, 510f), (642f, 550f),
+    };
 
     /// <summary>The chapter's campaign pause sheets end to end: every dialog resolves, every
     /// bitmap it draws is extracted, and the board follows the pause state it was given.</summary>
@@ -79,6 +118,388 @@ internal static class PauseSheetSuites
 
         ctx.WriteArtifact($"test-pause-sheet.txt", report.ToString());
         ctx.Note($"composed {sheets.Count} pause sheets and drove one over a live pause state");
+    }
+
+    /// <summary>The Instant Action pause sheets end to end: every environment and mission type
+    /// resolves its own blackboard dialog, and the composition is the load screen's board under the
+    /// pause screen's four strips.</summary>
+    [Suite("pause-sheet-ia",
+        "the Original presentation's Instant Action pause screen against ia_escape.zrd's 28 "
+        + "loading_i dialogs: each of the seven environments Instant Action offers resolves its own "
+        + "dialog for all four mission types rather than falling back on the file's default, the "
+        + "composition is the load screen's blackboard with its three centred photographs and the "
+        + "dialog's own four texts, no chart, parchment, memento or world icon reaches it, every "
+        + "bitmap it names exists in the extraction, C1's stunt sheet matches the reference still "
+        + "word for word at its authored points, the environment digit is read rather than assumed "
+        + "(loading_i6a puts its second head 40 px left of every other ace dialog's) and "
+        + "CampaignSequence.ChapterNumber inverts every campaign chapter's own folder, and a real "
+        + "OriginalPauseBoard follows PauseState.Changed with a pointer that walks all four strips "
+        + "and fires the one it was pressed and released on")]
+    internal static void InstantActionPauseSheet(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+
+        var report = new StringBuilder();
+        var sheets = new List<(string Key, PauseSheet Sheet)>();
+        foreach (int environment in Environments)
+        {
+            foreach (string type in MissionTypes)
+            {
+                if (LoadScreens.LetterFor(type) is not { } letter)
+                {
+                    ctx.Check(false, $"'{type}' letters an Instant Action dialog");
+                    continue;
+                }
+
+                string key = EscapeDialog.InstantActionKey(environment, letter);
+                var sheet = PauseSheet.Load(ctx.ZrdrPath, ctx.MessagesPath, key, instantAction: true);
+                if (sheet == null)
+                {
+                    ctx.Check(false, $"{key} resolves an ia_escape.zrd dialog");
+                    continue;
+                }
+
+                sheets.Add((key, sheet));
+                report.AppendLine(
+                    $"{key} -> {sheet.State.Key} background={sheet.State.Background} "
+                    + $"texts={sheet.Texts.Count} steps={sheet.State.Steps.Count}");
+            }
+        }
+
+        ctx.Same(
+            Environments.Length * MissionTypes.Length, sheets.Count,
+            $"every environment the game offers resolves a sheet for all four mission types");
+        CheckOwnDialog(ctx, sheets);
+        CheckBlackboard(ctx, sheets, report);
+        CheckBlackboardArt(ctx, sheets, report);
+        CheckFilmedBlackboard(ctx, report);
+        CheckEnvironmentIsRead(ctx, report);
+        DriveBlackboardBoard(ctx, report);
+
+        ctx.WriteArtifact($"test-pause-sheet-ia.txt", report.ToString());
+        ctx.Note($"composed {sheets.Count} Instant Action pause sheets and drove one over a live pause state");
+    }
+
+    // The lookup falls back on the file's own default dialog, which resolves for any key at all, so
+    // a sheet that came back is not yet evidence its environment and letter were understood.
+    private static void CheckOwnDialog(TestContext ctx, List<(string Key, PauseSheet Sheet)> sheets)
+    {
+        int own = 0;
+        foreach (var (key, sheet) in sheets)
+        {
+            own += sheet.State.Key.Equals(key, System.StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        }
+
+        ctx.Same(sheets.Count, own, $"every sheet is its own dialog rather than the file's default");
+    }
+
+    // What every Instant Action sheet composes: the blackboard behind it, the three photographs its
+    // script places, the four texts it writes, the four shared strips, and nothing else. The chart,
+    // the parchment and the memento are the campaign dialog's, and none of them may appear here.
+    private static void CheckBlackboard(
+        TestContext ctx, List<(string Key, PauseSheet Sheet)> sheets, StringBuilder report)
+    {
+        int frames = 0, photographs = 0, texts = 0, strips = 0, bare = 0, cursors = 0;
+        foreach (var (key, sheet) in sheets)
+        {
+            var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
+            frames += board.Backdrop.Count == 1
+                && board.Backdrop[0].Art.Name == "loadframempt2"
+                && board.Backdrop[0].X == 0f && board.Backdrop[0].Y == 0f ? 1 : 0;
+            photographs += Placed(board, report, key) ? 1 : 0;
+            texts += board.Lines.Count == 4 && sheet.Texts.Count == 4 ? 1 : 0;
+            strips += Striped(board) ? 1 : 0;
+            bare += board.Notes.Count == 0 && board.Strokes.Count == 0
+                && sheet.State.Map == null && sheet.State.MementoBitmap.Length == 0 ? 1 : 0;
+            cursors += sheet.State.Cursor is { Bitmap: "daglove", Rollover: "dafinger" } ? 1 : 0;
+        }
+
+        int all = sheets.Count;
+        ctx.Same(all, frames, $"every sheet stands on the blackboard the dialog names");
+        ctx.Same(all, photographs, $"every sheet centres the load screen's three photographs on their own points");
+        ctx.Same(all, texts, $"every sheet writes the four texts its dialog authors and no more");
+        ctx.Same(all, strips, $"every sheet carries the four shared strips at their authored points");
+        ctx.Same(all, bare, $"no sheet draws a chart, a parchment, a connector or a memento");
+        ctx.Same(all, cursors, $"every sheet authors the glove pointer and its pointing-finger rollover");
+    }
+
+    // The three photographs, in script order, each centred and nothing else in the picture list: a
+    // world icon or a memento would be one more entry.
+    private static bool Placed(ComposedBoard board, StringBuilder report, string key)
+    {
+        if (board.Pictures.Count != Photographs.Length)
+        {
+            report.AppendLine($"  {key}: {board.Pictures.Count} pictures, expected {Photographs.Length}");
+            return false;
+        }
+
+        for (int i = 0; i < Photographs.Length; i++)
+        {
+            var picture = board.Pictures[i];
+            if (picture.Art.Name != Photographs[i].Bitmap || picture.X != Photographs[i].X
+                || picture.Y != Photographs[i].Y || !picture.Centered)
+            {
+                report.AppendLine($"  {key}: picture {i} is {picture.Art.Name} at ({picture.X}, {picture.Y})");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool Striped(ComposedBoard board)
+    {
+        if (board.Plaques.Count != Strips.Length)
+        {
+            return false;
+        }
+
+        for (int row = 0; row < Strips.Length; row++)
+        {
+            if (board.Plaques[row].X != Strips[row].X || board.Plaques[row].Y != Strips[row].Y)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Every bitmap the blackboard names, against the extraction's own rimage folder. A name the
+    // extraction does not carry draws nothing and logs nothing, so it is invisible without this.
+    private static void CheckBlackboardArt(
+        TestContext ctx, List<(string Key, PauseSheet Sheet)> sheets, StringBuilder report)
+    {
+        string rimage = Path.Combine(ctx.DataRoot, "extracted", "rimage");
+        var missing = new List<string>();
+        int named = 0;
+        foreach (var (key, sheet) in sheets)
+        {
+            var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
+            foreach (string name in ArtNames(board))
+            {
+                named++;
+                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                {
+                    missing.Add($"{key}:{name}");
+                }
+            }
+
+            foreach (string name in Cursors(sheet))
+            {
+                named++;
+                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                {
+                    missing.Add($"{key}:{name}");
+                }
+            }
+        }
+
+        report.AppendLine($"{named} bitmap references, {missing.Count} missing");
+        foreach (string gap in missing)
+        {
+            report.AppendLine($"  missing {gap}");
+        }
+
+        ctx.Same(0, missing.Count, $"every bitmap the Instant Action pause sheets name is extracted ({named} named)");
+    }
+
+    // C1's stunt blackboard, which the reference still films: the two heads, the blurb and the win
+    // line at their authored points and faces, and the four strips' own labels.
+    private static void CheckFilmedBlackboard(TestContext ctx, StringBuilder report)
+    {
+        if (Blackboard(ctx, FilmedEnvironment, FilmedType) is not { } sheet)
+        {
+            ctx.Check(false, $"{FilmedEnvironment}'s {FilmedType} sheet resolves");
+            return;
+        }
+
+        var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
+        ctx.Same(4, board.Lines.Count, $"the filmed sheet writes four texts");
+        if (board.Lines.Count != 4)
+        {
+            return;
+        }
+
+        var head1 = board.Lines[0];
+        var head2 = board.Lines[1];
+        var blurb = board.Lines[2];
+        var win = board.Lines[3];
+        ctx.Check(
+            head1.Text == "INSTANT ACTION" && head1.X == 70f && head1.Y == 35f && head1.Size == 17f
+            && head1.Ink == BoardInk.Heading && !head1.Bold,
+            $"the first head is INSTANT ACTION at the title face's own point ({head1.X}, {head1.Y})");
+        ctx.Check(
+            head2.Text == "STUNT FLYING" && head2.X == 325f && head2.Y == 35f && head2.Bold
+            && head2.Width == 400f,
+            $"the second head is STUNT FLYING in the dialog's default face ({head2.X}, {head2.Y})");
+        ctx.Check(
+            blurb.Text.StartsWith("Any knucklehead", System.StringComparison.Ordinal)
+            && blurb.Text.EndsWith("real tight spots.", System.StringComparison.Ordinal)
+            && blurb.X == 360f && blurb.Y == 135f && blurb.Width == 400f && blurb.Size == 13f
+            && blurb.Ink == BoardInk.Row,
+            $"the blurb is the stunt run's own, wrapped in the box it authors ({blurb.Width} wide)");
+        ctx.Check(
+            win.Text == "Fly through all the Danger Zones to win!" && win.X == 360f && win.Y == 215f
+            && win.Size == 13f,
+            $"the win line stands under the blurb at its own point ({win.X}, {win.Y})");
+        ctx.Check(
+            sheet.ButtonLabels.Count == 4 && sheet.ButtonLabels[PauseScreens.ResumeRow] == "Resume"
+            && sheet.ButtonLabels[PauseScreens.RestartRow] == "Restart"
+            && sheet.ButtonLabels[PauseScreens.PreferencesRow] == "Preferences"
+            && sheet.ButtonLabels[PauseScreens.QuitRow] == "Quit",
+            $"the four strips read {string.Join("/", sheet.ButtonLabels)}");
+        ctx.Check(
+            board.Notes.Count == 0 && board.Lines.Count == sheet.Texts.Count,
+            $"and the sheet writes no objectives title over a parchment it does not draw");
+        report.AppendLine(
+            $"filmed: '{head1.Text}' at ({head1.X}, {head1.Y}), '{head2.Text}' at ({head2.X}, "
+            + $"{head2.Y}), blurb at ({blurb.X}, {blurb.Y}) wrap {blurb.Width}, '{win.Text}' at "
+            + $"({win.X}, {win.Y}), strips {string.Join("/", sheet.ButtonLabels)}");
+    }
+
+    // The environment digit is the only part of the key a sortie's chapter decides, and it changes
+    // exactly one thing on the shipped data: C3's ace dialog puts its second head 40 px left of
+    // every other environment's. A sheet keyed on a fixed environment writes that head in the wrong
+    // place for a C3 ace sortie, which is what this pins.
+    private static void CheckEnvironmentIsRead(TestContext ctx, StringBuilder report)
+    {
+        var odd = Blackboard(ctx, "C3", "dogfight_ace");
+        var rest = Blackboard(ctx, "C1", "dogfight_ace");
+        if (odd == null || rest == null)
+        {
+            ctx.Check(false, $"both ace sheets resolve");
+            return;
+        }
+
+        ctx.Check(
+            odd.State.Key.Equals(OddAceKey, System.StringComparison.OrdinalIgnoreCase),
+            $"C3's ace sortie resolves the environment 6 dialog ({odd.State.Key})");
+        ctx.Check(
+            odd.Texts.Count == 4 && rest.Texts.Count == 4
+            && odd.Texts[1].Text == rest.Texts[1].Text,
+            $"the two ace dialogs write the same second head");
+        ctx.Check(
+            odd.Texts.Count == 4 && odd.Texts[1].X == OddAceHeadX,
+            $"C3's ace head stands at x={OddAceHeadX} ({(odd.Texts.Count == 4 ? odd.Texts[1].X : -1f)})");
+        ctx.Check(
+            rest.Texts.Count == 4 && rest.Texts[1].X == AceHeadX,
+            $"and every other ace head at x={AceHeadX} ({(rest.Texts.Count == 4 ? rest.Texts[1].X : -1f)})");
+
+        // The inverse the session keys on: a chapter code back to its world-folder digit.
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        int inverted = 0;
+        foreach (var mission in missions)
+        {
+            inverted += CampaignSequence.ChapterNumber(mission.ChapterFolder) == mission.Campaign ? 1 : 0;
+        }
+
+        ctx.Same(missions.Count, inverted, $"ChapterNumber inverts every campaign mission's own chapter folder");
+        ctx.Same(0, CampaignSequence.ChapterNumber("c9"), $"and answers 0 for a code no chapter world carries");
+        report.AppendLine(
+            $"environment: {odd.State.Key} head2 x={odd.Texts[1].X}, {rest.State.Key} x={rest.Texts[1].X}");
+    }
+
+    // The real board over a real pause state, on the blackboard sheet: hidden until the pause, the
+    // cursor on RESUME, and the pointer walking all four strips before firing one.
+    private static void DriveBlackboardBoard(TestContext ctx, StringBuilder report)
+    {
+        if (Blackboard(ctx, FilmedEnvironment, FilmedType) is not { } sheet)
+        {
+            return;
+        }
+
+        var pause = new Flight.PauseState();
+        var board = Flight.OriginalPauseBoard.Build(
+            pause,
+            _ => new MenuInput { Keyboard = false, Pads = System.Array.Empty<int>() },
+            ctx.DataRoot,
+            sheet,
+            () => PauseReadout.Empty);
+        ctx.Host.AddChild(board);
+        try
+        {
+            ctx.Check(!board.Visible && board.Shown == null, $"the board is hidden and composes nothing before a pause");
+            pause.TryToggle(0);
+            ctx.Check(board.Visible, $"the pause raises the blackboard");
+            ctx.Same(PauseScreens.ResumeRow, board.FocusedRow, $"the cursor rests on RESUME");
+            ctx.Same(4, board.Shown?.Plaques.Count ?? 0, $"the raised sheet carries the four strips");
+            WalkStrips(ctx, board, sheet, pause, report);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(board);
+            board.QueueFree();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+        }
+    }
+
+    // BL-883's hit test over this dialog's own strips: the pointer moves the shared cursor onto each
+    // of the four in turn, and a press released on PREFERENCES fires that strip and leaves the sheet
+    // standing, which is the one action of the four that does.
+    private static void WalkStrips(
+        TestContext ctx,
+        Flight.OriginalPauseBoard board,
+        PauseSheet sheet,
+        Flight.PauseState pause,
+        StringBuilder report)
+    {
+        (float X, float Y, bool Pressed)? pointer = null;
+        board.PointerSource = () => pointer;
+        int walked = 0, hit = 0;
+        for (int row = 0; row < Strips.Length; row++)
+        {
+            float onX = Strips[row].X + (PauseScreens.StripWidth / 2f);
+            float onY = Strips[row].Y + (PauseScreens.StripHeight / 2f);
+            hit += PauseScreens.RowAt(sheet, onX, onY) == row ? 1 : 0;
+            pointer = (onX, onY, false);
+            board._Process(0.0);
+            walked += board.FocusedRow == row ? 1 : 0;
+        }
+
+        ctx.Same(Strips.Length, hit, $"the hit test answers each of the four strips for its own middle");
+        ctx.Same(Strips.Length, walked, $"and the pointer moves the shared cursor onto each in turn");
+        ctx.Same(-1, PauseScreens.RowAt(sheet, 400f, 300f), $"a point on the blackboard itself is on no strip");
+
+        int fired = 0;
+        board.Preferences = () => fired++;
+        float atX = Strips[PauseScreens.PreferencesRow].X + (PauseScreens.StripWidth / 2f);
+        float atY = Strips[PauseScreens.PreferencesRow].Y + (PauseScreens.StripHeight / 2f);
+        pointer = (atX, atY, false);
+        board._Process(0.0);
+        ctx.Check(CursorArt(board) == sheet.State.Cursor?.Rollover,
+            $"the dialog's own cursor wears its rollover over a strip ({CursorArt(board)})");
+        pointer = (atX, atY, true);
+        board._Process(0.0);
+        ctx.Check(
+            StripArt(board, PauseScreens.PreferencesRow)
+            == sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow])?.Activate
+            && fired == 0,
+            $"the press holds PREFERENCES on its activate bitmap and fires nothing while it is down");
+        pointer = (atX, atY, false);
+        board._Process(0.0);
+        ctx.Same(1, fired, $"the release on the strip opens the preferences leaf");
+        ctx.Check(board.Visible, $"and the sheet stands, the leaf being the one action that comes back to it");
+
+        pause.ForceResume();
+        ctx.Check(!board.Visible, $"the resume takes the blackboard away");
+        report.AppendLine($"pointer: walked {walked} strips, fired PREFERENCES {fired} time(s)");
+    }
+
+    // One Instant Action pause sheet by chapter code and mission type, keyed the way a session keys
+    // it: the chapter's world-folder digit and the mission type's own letter.
+    private static PauseSheet? Blackboard(TestContext ctx, string chapter, string missionType)
+    {
+        if (LoadScreens.LetterFor(missionType) is not { } letter)
+        {
+            return null;
+        }
+
+        return PauseSheet.Load(
+            ctx.ZrdrPath,
+            ctx.MessagesPath,
+            EscapeDialog.InstantActionKey(CampaignSequence.ChapterNumber(chapter), letter),
+            instantAction: true);
     }
 
     // Every pin the dialog's script authors has to be placed and visible. Seven of the 24 dialogs
