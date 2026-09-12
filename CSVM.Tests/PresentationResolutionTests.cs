@@ -4,17 +4,26 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The resolution contract: fixed precedence force-Built-in → CLI override → saved
-/// request → Built-in default, availability checked only after the request is picked, and the
+/// request → the Original default, availability checked only after the request is picked, and the
 /// requested value never changes because of a fallback.</summary>
 public class PresentationResolutionTests
 {
     [Fact]
-    public void NoInputsResolveToBuiltIn()
+    public void NoInputsResolveToTheDefault()
     {
         var (active, reason) = PresentationResolution.Resolve(false, null, null, Always);
 
-        Assert.Equal(PresentationResolution.BuiltIn, active);
+        Assert.Equal(PresentationResolution.Default, active);
         Assert.Null(reason);
+    }
+
+    [Fact]
+    public void NoInputsFallBackToBuiltIn_WhenTheDefaultIsUnavailable()
+    {
+        var (active, reason) = PresentationResolution.Resolve(false, null, null, Never);
+
+        Assert.Equal(PresentationResolution.BuiltIn, active);
+        Assert.NotNull(reason);
     }
 
     [Fact]
@@ -42,20 +51,29 @@ public class PresentationResolutionTests
     }
 
     [Fact]
-    public void CliOverride_BeatsTheBuiltInDefault()
+    public void CliOverride_BeatsTheDefault()
     {
-        var (active, reason) = PresentationResolution.Resolve(false, "original", null, Always);
+        var (active, reason) = PresentationResolution.Resolve(false, PresentationResolution.BuiltIn, null, Always);
 
-        Assert.Equal("original", active);
+        Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.Null(reason);
     }
 
     [Fact]
-    public void SavedRequest_BeatsTheBuiltInDefault()
+    public void SavedRequest_BeatsTheDefault()
     {
-        var (active, reason) = PresentationResolution.Resolve(false, null, "original", Always);
+        var (active, reason) = PresentationResolution.Resolve(false, null, PresentationResolution.BuiltIn, Always);
 
-        Assert.Equal("original", active);
+        Assert.Equal(PresentationResolution.BuiltIn, active);
+        Assert.Null(reason);
+    }
+
+    [Fact]
+    public void SavedBuiltIn_NeedsNoAvailabilityCheck()
+    {
+        var (active, reason) = PresentationResolution.Resolve(false, null, PresentationResolution.BuiltIn, Never);
+
+        Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.Null(reason);
     }
 
@@ -91,7 +109,7 @@ public class PresentationResolutionTests
     [Fact]
     public void EmptyStringsAreTreatedAsAbsent()
     {
-        Assert.Equal(PresentationResolution.BuiltIn, PresentationResolution.Requested("", ""));
+        Assert.Equal(PresentationResolution.Default, PresentationResolution.Requested("", ""));
     }
 
     private static bool Always(string _) => true;

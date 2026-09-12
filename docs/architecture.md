@@ -396,7 +396,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/AudioMix.cs` — the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs` — the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
-- `src/Utils/DisplayModeSetting.cs` — the window's display mode: the saved word against the shipped windowed default, and the one place the window mode is set.
+- `src/Utils/DisplayModeSetting.cs` — the window's display mode: the saved word against the shipped borderless default, and the one place the window mode is set.
 - `src/Utils/EffectPools.cs` — the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs` — the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.
@@ -414,7 +414,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
 - `src/Utils/ProcessPassCost.cs` — the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
 - `src/Utils/RenderPoses.cs` — the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
-- `src/Utils/ResolutionSetting.cs` — the window size: the sizes a screen can hold, the saved one against the shipped default, and the one place the window size is set.
+- `src/Utils/ResolutionSetting.cs` — the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/Rng.cs` — the session's one master seed and the named subsystem generators every random draw derives from.
 - `src/Utils/ScriptedWindow.cs` — Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.

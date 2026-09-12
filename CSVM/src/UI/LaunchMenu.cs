@@ -2454,7 +2454,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _optionsIndex = 0;
         var saved = OptionsStore.UserOptions().Load();
         _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
-        _presentationChoice = saved.MenuPresentation ?? PresentationId.BuiltIn.Value;
+        _presentationChoice = saved.MenuPresentation ?? PresentationId.Original.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
         _monitorChoice = saved.MonitorIndex;
         _resolutionChoice = saved.Resolution;
