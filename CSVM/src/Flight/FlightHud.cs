@@ -130,6 +130,10 @@ public sealed class FlightHud
     /// <c>--debug-markers</c>. Built for every human pane in every flight session.</summary>
     public TargetHud? TargetHud;
 
+    /// <summary>The original's HUD message stack, where a kill line lands. Built and parented by
+    /// <see cref="Attach"/>, so every human pane has one; the session posts into it.</summary>
+    public HudMessages? MessageStack;
+
     /// <summary>The auto-land line this pane draws while the approach table's <c>auto</c> row
     /// passes, from <see cref="ComposeAutoLandPrompt"/> over the seat's own bindings, recomposed
     /// whenever the seat's active device moves. Empty draws no line, which is what an unbound
@@ -310,6 +314,12 @@ public sealed class FlightHud
             canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
         if (StuntRun != null)
             canvas.AddChild(StuntRun); // stunt run status + banners, drawn on top of the dials
+        MessageStack = new HudMessages
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            FocusMode = Control.FocusModeEnum.None,
+        };
+        canvas.AddChild(MessageStack); // the kill/mission message stack, top centre over the dials
         if (versusHud != null)
             canvas.AddChild(versusHud); // dogfight HUD: status line, kill banner, opponent markers
         if (TargetHud != null)
@@ -530,6 +540,8 @@ public sealed class FlightHud
             StuntRun.Visible = _shown;
         if (TargetHud != null)
             TargetHud.Visible = _shown;
+        if (MessageStack != null)
+            MessageStack.Visible = _shown; // screen-space, so the cockpit panel does not replace it
     }
 
     // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down. With

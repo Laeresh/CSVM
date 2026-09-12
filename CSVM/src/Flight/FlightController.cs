@@ -697,6 +697,10 @@ public partial class FlightController : Node3D
     /// that wants a name falls back to the node's.</summary>
     public PlaneStats? Stats => _model?.Stats;
 
+    /// <summary>This pane's HUD message stack, where the session posts the kill line. Null until
+    /// <c>_Ready</c> has built the HUD, and on every AI rig, which builds none.</summary>
+    public HudMessages? MessageStack => _pilotHud.MessageStack;
+
     /// <summary>The data-driven crash: a per-player <see cref="AnimRuntime"/> bound to this plane's
     /// scoped crash subtree, advancing itself in its own <c>_Process</c>. Plays the compiled crash
     /// def the struck surface selects; see this module's entry in docs/architecture.md. Bound by

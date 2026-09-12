@@ -78,8 +78,8 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "062d68d8f2372ec4b742606171d07ce6",
-      "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier with its handover fireball, the live one targeted with brackets, label and --debug-markers text, gauges, exhaust, ground shadow, world-lit C1; frame-sensitive 78.07 %.",
+      "hash": "604327776003c528506c04aebb0539d1",
+      "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and its top-centre kill line both up, the live one bracketed and labelled, --debug-markers text, gauges, exhaust, shadow, C1; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
     {

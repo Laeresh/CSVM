@@ -41,6 +41,11 @@ public sealed class FlightRoster
     /// <summary>The first AI shooter id. Outside every human player index and the match roster.</summary>
     public const int ShooterIdBase = 100;
 
+    /// <summary>One AI aircraft of this roster has died, with the killer's shooter id where a
+    /// weapon owns the kill. Set by the session so the HUD kill line covers the aircraft spawned
+    /// after the field was built (waves, generators) as well as the mission's own.</summary>
+    public Action<FlightController, int?>? VehicleDowned;
+
     private readonly HumanFlightAdapter? _players;
     private readonly AiFlightAssembler _aiAssembler;
     private readonly FlightWorldBindings _world;
@@ -236,8 +241,12 @@ public sealed class FlightRoster
                 modes.ModeChanged += modeChanged;
                 modes.RollLogged += rollLogged;
             }
-            Action<int, int?> downed = (victim, killer) => Log.Info("flight",
-                $"ai: {controller.Name} downed (shooter id {victim}, killer {killer?.ToString() ?? "none"})");
+            Action<int, int?> downed = (victim, killer) =>
+            {
+                Log.Info("flight",
+                    $"ai: {controller.Name} downed (shooter id {victim}, killer {killer?.ToString() ?? "none"})");
+                VehicleDowned?.Invoke(controller, killer);
+            };
             controller.Downed += downed;
             _ai.Add(controller);
             _aiSubscriptions.Add(controller,

@@ -648,14 +648,24 @@ is the host-fed match clock, `MatchCompleted` fires once on the kill threshold o
 `CSVM.Tests/VersusMatchTests.cs`. Read `VersusHud` and `VersusBoard` for what it feeds.
 
 ## src/Flight/VersusHud.cs
-The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths,
-the leader's tag) in `StuntRunHud`'s run-status slot, a transient kill banner, and one marker per
-living opponent rig, either an on-screen tag or `EdgeMarker`'s arrow and bearing in that
-opponent's own `SplitScreen.PlayerColor`. `Build` binds the match and this pane's own camera;
-`HumanFlightAdapter` attaches the live rig list and `FlightController` feeds the pose each frame.
-Kills arrive on a subscription of their own to the session's broadcast, so every pane hears every
-one. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
+The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths, the
+leader's tag) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
+on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`.
+`Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list
+and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `KillLine`
+words the match's version of it and `HudMessages` shows it, the one message element the original
+has. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
 provenance is in [../org/targeting.md](../org/targeting.md).
+
+## src/Flight/HudMessages.cs
+The original's one centred HUD message element, where a kill line lands: four slots a fifth of the
+way down the pane, newest in slot 0, each carrying its own colour and its own five seconds, a newer
+line pushing the older ones down with their remaining time and a re-post of slot 0 refreshing it
+rather than duplicating it. `KillLine` words one death the way the reading pane sees it (the pane's
+own pilot by name, a wingman with no name at all, any other aeroplane by its title, anything that is
+not an aeroplane destroyed), `SideOf` picks the colour arm from the victim's team, and both are
+static, so a suite asserts the decode with no `Control`. Decode:
+[../org/vehicleDamage.md](../org/vehicleDamage.md) "Death".
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
@@ -1001,12 +1011,12 @@ ground-blow write stay on `FlightController`, which has the live world a source 
 ## src/Flight/FlightHud.cs
 Everything one pane draws for its pilot, in one module the flight node holds privately: the heading
 tape, the cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker, the
-targeting HUD, the `--hud-font-test` overlay and the flight text block, none written from outside.
-With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its
-panel carrying them; the pipper and marker HUDs stay. The per-frame entry is
-`Draw(in FlightHudState)`, a struct of aircraft STATE, so text, dials and gates compose here and
-assert with no Godot `Control`: `ComputeStallWarning`, `ComputeAgl`, `ComposeTextLines`, and
-`ComposeAutoLandPrompt`, the auto-land wording naming the control of the device the seat last read.
+targeting HUD, `HudMessages`' kill and mission line, the `--hud-font-test` overlay and the flight
+text block, none written from outside. With the cockpit interior on screen the dials, tape and text
+block come off (`SetCockpitView`), its panel carrying them; the pipper, marker and message HUDs
+stay. The per-frame entry is `Draw(in FlightHudState)`, a struct of aircraft STATE, so text, dials
+and gates compose and assert here with no Godot `Control` (`ComputeStallWarning`, `ComputeAgl`,
+`ComposeTextLines`, `ComposeAutoLandPrompt` naming the control of the device the seat last read).
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

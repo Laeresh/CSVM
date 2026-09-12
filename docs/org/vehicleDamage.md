@@ -486,6 +486,48 @@ and clears node flag `0x10000000` on `vehicle+0xc`. Ground impact runs the same 
 the struck material's `+0x20`**, falls back to `+0x6d0` when that index is out of range or its slot
 is null, and registers the same callback.
 
+### The kill message
+
+The line is posted only in a single-player game: `FUN_004b82d0` calls `FUN_00440ad0` and takes the
+arm at `0x004b84a4` only when `*DAT_0064f750` is 0, so a `Network` session prints nothing. Which
+line it is comes off the victim, in four cases, all formatted into the same stack:
+
+| victim | message | format |
+| --- | --- | --- |
+| mode class (`+0x67c`) neither 0 (jet) nor 4 (wingman), tested at `0x004b850b` | 180 `MSG_DESTROYED`, taken at `0x004b8529` | `0x0062b168` `"%s %s"` |
+| the player (`DAT_0071c298`) with a `PlayerName` set (`*DAT_0064f724`, read by `FUN_004409f0`) | 169 `MSG_SHOT_DOWN`, `0x004b8552` | `0x0062b170` `"%s %s"` |
+| an aeroplane on the player's own team | 174 `MSG_WINGMAN_SHOT_DOWN`, `0x004b8589` | `0x0062b178` `"%s"` |
+| any other aeroplane | 169 `MSG_SHOT_DOWN`, `0x004b85aa` | `0x0062b17c` `"%s %s"` |
+
+The name in the three `"%s %s"` cases is the victim's own `+0x14` string (the block's slot-20
+`title`, "Medusa Kestrel"), or `[0x00a20110]` where it has none, which formats as an empty string
+and leaves the line with its leading space. `FUN_0059ce40(id)` is the lookup and the ids are
+`extracted/messages.json` rows, not `langui` ones.
+
+The colour is a three-way fork on the victim's team at `0x004b85c9`-`0x004b8621`: a team above 1
+takes `DAT_006eba60`, the player's own team takes `DAT_006eba64`, and anything else falls to
+`FUN_004587d0`'s default `DAT_006eba5c`. ⚠ All three COLORREF globals read 0 in the image and
+nothing in `crimson.exe` writes them, so the shipped colours are not recoverable statically. Only
+the side rule is decoded.
+
+`FUN_00458660` builds the stack with four lines (the `4` at `0x00458698`), slot 0 at `+0x1ead8` on
+a `0x20b8` stride, in the `hudMsgBrief` font (Arial, height -10, width 6, weight 500, shadow on,
+no colour of its own). `FUN_005c55f0` stamps each posted line with 5.0 s (`0x40a00000`) at the text
+object's `+0x10`, and `+0xc` bit 0 is its live flag. `FUN_00458a10` places it: x is 0.5 of the
+display width (`[0x006032e0]`) with the text object's centring flag `+0x1044` set (read at
+`0x005c7e4f`), y is 0.2 of its height (`[0x006034fc]`), and each further slot sits 18 px lower
+(`FUN_00458530`'s `+ 0x12`), all in the original's 480-line display pixels. `FUN_00458350` posts:
+slot 0's line shifts down carrying its own remaining time and colour, an expired slot 0 shifts
+nothing (the `+0xc` test at `0x00458361`), and a line identical to the one already in slot 0 skips
+the shift and refreshes that slot instead (the `strcmp` at `0x00458380`, whose `JZ 0x0045847e`
+jumps past the shift, not past the write). `FUN_004588e0` splits a line longer than 48 characters
+(`0x31` at `0x004588f9`) at its last space, posting the tail first (`0x00458984`) and the head
+second (`0x00458995`) so the pair reads top to bottom.
+
+`Flight/HudMessages.cs` carries all of this, with the 18 px pitch and the font's own 10 px cell
+taken onto `HudMetrics`' 1440p reference by the factor of three between 480 and 1440 lines. Its
+three colours are the remake's HUD palette standing in for the undecodable globals, marked TUNE.
+
 ### What happens to the wreck
 
 ⚠ **Two anim slots, two moments.** The slot at `+0x6d0` is the DESTROY anim and starts the instant

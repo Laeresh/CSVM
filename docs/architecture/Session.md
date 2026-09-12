@@ -416,12 +416,12 @@ default, and every roll prints an `ai voice:` line. [../formats/combat-voice.md]
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending
 player order and `SpawnAi` commits one later mission, wave or generator aircraft; both publish only
-finished controllers, preserve the shared livery and spawn streams, and roll back new world nodes
-and every external registration on failure. It owns the live human and AI membership views and the
-target-source fan-out. `SwapPlayerAirframe` is the third commit path, a mission putting one player
-into a different airframe mid-flight, and `RunSwap` the whole order a cutscene code raises.
-`HumanFlightAdapter.cs` and `AiFlightAssembler.cs` are the two private assembly paths, and the
-swap decode is [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+finished controllers, preserve the shared livery and spawn streams, and roll back new nodes and
+registrations on failure. It owns the live human and AI membership views, the target-source fan-out,
+and `VehicleDowned`, the AI death report the HUD kill line is fed from. `SwapPlayerAirframe` is the
+third commit path, a mission putting one player into a different airframe mid-flight, and `RunSwap`
+the whole order a cutscene code raises. `HumanFlightAdapter.cs` and `AiFlightAssembler.cs` are the
+two private assembly paths; the swap decode is [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts `FlightRoster` accepts: the copied flight policy, the immutable

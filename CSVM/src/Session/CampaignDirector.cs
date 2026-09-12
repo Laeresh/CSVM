@@ -203,6 +203,11 @@ public sealed class CampaignDirector
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
 
+    /// <summary>The flying profile's own name, the original's <c>PlayerName</c>: the subject of
+    /// the HUD kill line when the player is the one shot down. A session with no campaign has
+    /// none, which is the unset case that line already handles.</summary>
+    public string? PilotName => _profile.Name;
+
     /// <summary>The mission's storage address, the ZBD world folder number and its <c>M0n</c>
     /// number. ⚠ Not the act and its position; it is the pair every per-mission dialog key is built
     /// from (docs/formats/campaign-missions.md).</summary>

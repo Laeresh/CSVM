@@ -6,9 +6,10 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>Per-pane Dogfight HUD, <c>--vs</c> only (docs/architecture.md): a status line (time,
-/// this pane's own K/D, the leader), a transient kill banner on every Downed report anywhere in the
-/// match, and an edge-arrow + clock-bearing marker per living opponent in that opponent's identity
-/// colour, the splitscreen answer to the original's radar, in the marker HUDs' visual language.
+/// this pane's own K/D, the leader) and an edge-arrow + clock-bearing marker per living opponent in
+/// that opponent's identity colour, the splitscreen answer to the original's radar, in the marker
+/// HUDs' visual language. A kill goes to <see cref="HudMessages"/>, the one message element the
+/// original has, rather than to a banner of this HUD's own.
 /// The single-target marker this shape came from is <see cref="TargetHud"/>'s, which draws in every
 /// flight session rather than only <c>--vs</c>.
 /// ⚠ Read opponent positions off <see cref="Rigs"/> and project through THIS pane's camera. Never
@@ -26,26 +27,18 @@ public sealed partial class VersusHud : Control
 
     // 1440p reference metrics (scaled by HudMetrics, matches TargetHud's calibration).
     private const int RefStatusFont = 19;
-    private const int RefBannerFont = 24;
     private const int RefMarkerFont = 14;
     private const float RefStatusY = 100f;    // same slot as StuntRunHud's run-status line
-    private const float RefBannerYFrac = 0.30f;
-    private const float BannerDuration = 3f;  // s the banner shows
-    private const float BannerFadeTail = 0.6f; // s of that spent fading out
     private const float RefArrowLen = 18f;
     private const float RefArrowHalf = 8f;
     private const float RefTextGap = 8f;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
-    private static readonly Color HudRed = new(1f, 0.55f, 0.55f);
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
     private VersusMatch? _match;
     private Camera3D _camera = null!;
-    private float _bannerTime;
-    private string _bannerText = "";
-    private Color _bannerColor = HudBlue;
 
     /// <summary>This pane's own world pose, fed every frame by FlightController, opponent clock
     /// bearings read off it, exactly like TargetHud's PlanePos/HeadingDeg.</summary>
@@ -70,31 +63,21 @@ public sealed partial class VersusHud : Control
         };
     }
 
-    /// <summary>A Downed report anywhere in the match: killer named when it was a weapon kill, a
-    /// plain "DOWN" otherwise (terrain/mid-air, no killer to name).</summary>
-    public void OnKill(int? killer, int victim)
-    {
-        _bannerTime = BannerDuration;
-        if (killer is int k)
-        {
-            _bannerText = $"{SplitScreen.PlayerTag(k)} DOWNED {SplitScreen.PlayerTag(victim)}";
-            _bannerColor = SplitScreen.PlayerColor(k);
-        }
-        else
-        {
-            _bannerText = $"{SplitScreen.PlayerTag(victim)} DOWN";
-            _bannerColor = HudRed;
-        }
-    }
+    /// <summary>The line a Downed report anywhere in the match posts to the message stack: killer
+    /// named when it was a weapon kill, a plain "DOWN" otherwise (terrain/mid-air, no killer to
+    /// name). Static, since the stack it lands in belongs to the reading pane, not to this
+    /// one.</summary>
+    public static string KillLine(int? killer, int victim) =>
+        killer is int k
+            ? $"{SplitScreen.PlayerTag(k)} DOWNED {SplitScreen.PlayerTag(victim)}"
+            : $"{SplitScreen.PlayerTag(victim)} DOWN";
 
     public override void _Process(double delta)
     {
         // Track the pane (resizable window / splitscreen layout) and repaint every frame, the
-        // clock and the banner fade both need it.
+        // clock needs it.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        if (_bannerTime > 0f)
-            _bannerTime -= (float)delta;
         QueueRedraw();
     }
 
@@ -110,14 +93,6 @@ public sealed partial class VersusHud : Control
 
         if (_match is { } match)
             DrawCentered(font, new Vector2(cx, RefStatusY * s), StatusLine(match), statusFont, HudBlue);
-
-        if (_bannerTime > 0f)
-        {
-            int bannerFont = Mathf.Max(1, Mathf.RoundToInt(RefBannerFont * s));
-            float alpha = Mathf.Clamp(_bannerTime / BannerFadeTail, 0f, 1f);
-            DrawCentered(font, new Vector2(cx, Size.Y * RefBannerYFrac), _bannerText, bannerFont,
-                new Color(_bannerColor, alpha));
-        }
 
         if (Rigs == null)
             return;

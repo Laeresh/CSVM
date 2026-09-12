@@ -2158,47 +2158,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   own pilot takes the player shape (per-pane, the decoded intent read per viewer) or only seat 0;
   then key on the pane's viewer, pinned in the `ground-shadow` suite over a two-pane session.
   *Cross-refs:* `BL-331` (the shadow's open halves), `docs/verification.md` SRC-12.
-- `BL-850` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The original
-  posts a kill line at the top centre of the flight screen when a vehicle dies, "Medusa Kestrel
-  was shot down", coloured by the victim's side; the remake has no such line outside the `--vs`
-  banner.** *Evidence:* the vehicle death routine `FUN_004b82d0` (`docs/org/vehicleDamage.md`,
-  "Death") builds the line at `0x004b8510`-`0x004b8621` whenever the `Network` key
-  (`*DAT_0064f750`) is zero: an aeroplane victim (`+0x67c` is 0 or 4) that is the player with a
-  `PlayerName` set gets `sprintf("%s %s", PlayerName, msg 169)`; one whose team (`+0x8`) equals the
-  player's gets msg 174 alone, no name; any other aeroplane gets `"%s %s"` over its name (`+0x14`,
-  a library empty string when unset) and msg 169; a non-aeroplane victim gets its name and msg
-  180 regardless of team. The ids are `extracted/messages.json` rows, not `langui.dll`: 169
-  `MSG_SHOT_DOWN` "was shot down", 174 `MSG_WINGMAN_SHOT_DOWN` "Wingman was shot down", 180
-  `MSG_DESTROYED` "was destroyed". Colour is a `COLORREF` pair chosen by the victim's team: above
-  1 takes `DAT_006eba60`, equal to the player's takes `DAT_006eba64`, any other takes
-  `DAT_006eba5c` through `FUN_004587d0`. The line goes to the HUD message stack at
-  `0x006f1ef8+0x1ead8` (`FUN_004588e0`/`FUN_004587d0` into `FUN_00458350`): four lines
-  (`FUN_00458660`), font `hudMsgBrief`, 5.0 s life each (`0x40a00000` into `FUN_005c55f0`),
-  x anchor at half the display width with alignment flag 1 (centred, `0x005c7e4f`), y at 0.2 of
-  the display height, 18 px line pitch (`FUN_00458a10`, `FUN_00458530`); a new line enters slot 0
-  and the older lines shift down carrying their remaining time, a line identical to slot 0 is
-  dropped (`strcmp` at `0x00458380`), and a line over 48 characters is split at its last space
-  into two slots. The same stack carries "Fatal Crash!" (msg 162, `FUN_0048b920`, in the
-  player's `DAT_006eba64` colour) and the mission clock's "Time Expired" (6002) and "Mission
-  LOST!" (137) from the objectives tick (`FUN_0046a490` head, default colour), so it is one HUD
-  element, not a kill-only banner; every other caller is multiplayer (`FUN_00498bf0`,
-  `FUN_00499730`, `FUN_0049a300`, `FUN_0049ab50`, `FUN_0049b970`, `FUN_004995a0`, rows 193 to 214
-  and 7004 to 7077). The remake's `VersusHud` kill banner is `--vs` only and remake-shaped; the single-player
-  and Instant Action HUD has no message line at all. *Fix shape:* one message stack in `FlightHud`
-  with the four-slot, 5 s, top-centre geometry above, fed from the roster's `Downed` events with
-  the four text rules, and the `--vs` banner folded into it. *⚠ Traps:* the three colour globals
-  are zero in the image and no instruction or data pointer in `crimson.exe` writes them, so their
-  shipped values are not decodable statically; the side rule (own side one colour, the other side
-  another) is decoded, the exact colours come from footage or a debugger read of
-  `0x006eba5c`-`0x006eba64` during a mission, so the first cut takes the recalled blue for the
-  player's side and red for the enemy and marks them TUNE. `docs/formats/objectives.md` calls the
-  169 row a `langui` message; it is a `messages.json` row (`docs/formats/missions.md`, "Message
-  table"). The multiplayer kill feed is a different routine (`FUN_00498bf0`, rows 0x1b97 onward)
-  and is out of scope here. *Playtest after fix:* `--fly` an Instant Action mission, shoot an enemy
-  down and read the line at the top centre; let a wingman die for "Wingman was shot down"; get
-  shot down for "<PlayerName> was shot down". *Cross-refs:* `docs/org/vehicleDamage.md` "Death"
-  (the trigger), `docs/formats/missions.md` "Message table" (the id space),
-  `CSVM/src/Flight/VersusHud.cs` (the banner to fold in), `BL-826` (the same `Network` gate).
 - `BL-852` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The
   auto-dock prompt is its own centred line at 0.3 of the screen height in the original, where the
   remake folds it into the speed and altitude text block.** *Evidence:* `FUN_0045e120` formats the

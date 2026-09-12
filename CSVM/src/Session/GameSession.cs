@@ -2406,13 +2406,6 @@ public partial class GameSession : Node3D
                         else
                             match.RegisterDeath(victim);
                     };
-                    // ⚠ Keep the kill banner a SEPARATE subscription from the scoring one: every
-                    // pane's HUD hears every report, so the whole field sees who went down.
-                    pilot.Downed += (victim, killer) =>
-                    {
-                        foreach (var other in _rigs)
-                            other.Controller?.VersusHud?.OnKill(killer, victim);
-                    };
                 }
             match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete — {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
             Log.Info("flight", $"dogfight: {_rigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}");
@@ -2448,6 +2441,40 @@ public partial class GameSession : Node3D
         // The roster shares the session data the human field was built from, so later AI spawns
         // works from here on, at build or at any later sim step.
         _flightRoster = flightRoster;
+
+        // Every death posts one line into every pane's message stack, worded and coloured as that
+        // pane reads it (docs/org/vehicleDamage.md "The kill message"). ⚠ Subscribe the roster hook
+        // too: an aircraft a wave or a generator releases never passes through the _rigs loop.
+        void PostKillLine(FlightController victim, int victimId, int? killer)
+        {
+            foreach (var pane in _rigs)
+            {
+                if (pane.Controller is not { MessageStack: { } stack } viewer)
+                {
+                    continue;
+                }
+                if (_versus is { } m && killer is int k && k >= 0 && k < m.PlayerCount)
+                {
+                    stack.Post(VersusHud.KillLine(killer, victimId),
+                        HudMessages.SideOf(victim.Team, viewer.Team));
+                    continue;
+                }
+                HudMessages.PostKill(stack, weaponMessages, victim, viewer.Team,
+                    ReferenceEquals(victim, viewer), _campaign?.PilotName);
+            }
+        }
+
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is { } human)
+            {
+                human.Downed += (victimId, killer) => PostKillLine(human, victimId, killer);
+            }
+        }
+
+        flightRoster.VehicleDowned += (victim, killer) =>
+            PostKillLine(victim, victim.PlayerIndex, killer);
+
         // The voice dispatcher needs the world's WorldSounds (prewarmed
         // above) and the sound defs. Built before the --ai loop so spawns can register; the
         // players register as damage sources only (WA-HighDmg's broadcast trigger).
