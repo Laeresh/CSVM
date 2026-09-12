@@ -760,8 +760,10 @@ it (Original keeps the focus on the plaque that opened what is being left, a rem
 
 The Instant Action screen is built from what the layout and the script evidence: the widgets at
 their authored positions over `IA_BackGround`, the contents list's 14-row window with its own
-`UpArrow`/`DownArrow`/`Slider` art, a dropdown's box `Width` wide and `ItemHeight` high showing its
-picked value with the `DropDown` arrow strip, the enemy rows on two pages keyed off `IA_B_UP`/
+`UpArrow`/`DownArrow`/`Slider` art in the gutter the background paints for it (a dark bar over
+x 336 to 354 and y 173 to 428, inside `IA_TL_Contents`' own X 76 plus Width 277, so the 16-pixel
+scroll art stands at 337 and the rows stop there), a dropdown's box `Width` wide and `ItemHeight`
+high showing its picked value with the `DropDown` arrow strip, the enemy rows on two pages keyed off `IA_B_UP`/
 `IA_B_DOWN` (the script's mailbox 20002), the ace duel blanking every enemy dropdown in place (the
 script's `0 == WT` branch deactivates them), the wingman plane blanking at zero wingmen, a changed
 militia resetting its aircraft (`AV[BA].QG = 0`), stunt flying clearing the clouds
@@ -776,7 +778,8 @@ so VIEW STORY writes nothing new there (VIEW STORY itself was never pressed); a 
 resets its aircraft to the militia's first; a dropdown opens flush under its box at the box's
 width with the current value and the hovered row both highlighted, draws only as many rows as it
 has items, and scrolls with its own bar once the list outgrows the authored window (the
-pilot-plane list at 21 entries in a 20-row window); a closed box lightens under the pointer; the
+pilot-plane list at 21 entries in a 20-row window), that bar standing INSIDE the panel's right
+edge with the row bands stopping short of it; a closed box lightens under the pointer; the
 ace duel empties the four enemy boxes in place with pale arrows and keeps "[continued ...]" and
 the down button live; at zero wingmen the wingman-plane box blanks while the Wingmen count stays
 live and the radio pair draws exactly as it does with wingmen set, its Wingmen label as dark as

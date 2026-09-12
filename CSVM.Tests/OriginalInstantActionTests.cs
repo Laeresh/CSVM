@@ -74,12 +74,15 @@ public class OriginalInstantActionTests
         Assert.False(Row(shell, OriginalShell.PageUpKey).Enabled);
         Assert.True(Row(shell, OriginalShell.PageDownKey).Enabled);
 
+        // The scroll chrome stands inside the list's right edge, so the 280-wide box gives its
+        // last 16 to the column and the rows run 264.
         var contents = shell.Rows[0];
-        Assert.Equal((70f, 170f, 280f, 20f), (contents.X, contents.Y, contents.Width, contents.Height));
+        Assert.Equal((70f, 170f, 264f, 20f), (contents.X, contents.Y, contents.Width, contents.Height));
         Assert.Equal("Girl Trouble", contents.Label);
         Assert.False(Row(shell, OriginalShell.ContentsUpKey).Enabled);
         Assert.True(Row(shell, OriginalShell.ContentsDownKey).Enabled);
-        Assert.Equal((350f, 359f, 16f, 11f), Rect(Row(shell, OriginalShell.ContentsDownKey)));
+        Assert.Equal((334f, 359f, 16f, 11f), Rect(Row(shell, OriginalShell.ContentsDownKey)));
+        Assert.Equal((334f, 170f, 16f, 11f), Rect(Row(shell, OriginalShell.ContentsUpKey)));
         // Build stands only over a hangar and a store, which this shell has neither of; Weapon
         // Loadout needs nothing beyond the feature.
         Assert.False(Row(shell, OriginalShell.BuildKey).Enabled);

@@ -340,6 +340,8 @@ public sealed partial class OriginalShell
     // An open list's rows: every item keyed <key>:<index> under the box, so a pose or a walk picks
     // a row by index whatever the window shows; the ones outside the authored window unseen and
     // unhit, the window following the focused item, and the list's arrows while there is more.
+    // A scrolling list gives an arrow's width of its own right edge to the chrome, as the contents
+    // window's authored gutter does, so the rows narrow by it rather than the box growing.
     private void BuildOpenList(MenuLayoutWidget open, DropdownList list, List<OriginalRow> rows)
     {
         var box = DropBox(open);
@@ -359,23 +361,24 @@ public sealed partial class OriginalShell
         }
 
         _iaListTop = Math.Clamp(_iaListTop, 0, Math.Max(0, count - window));
+        var up = StripArt(open.Art, 1);
+        var down = StripArt(open.Art, 2);
+        var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
+        var downSize = StripSize(down, FallbackArrowWidth, FallbackArrowHeight);
+        float column = window < count ? upSize.Width : 0f;
         for (int i = 0; i < count; i++)
         {
             bool visible = i >= _iaListTop && i < _iaListTop + window;
             rows.Add(new OriginalRow($"{_iaOpen}:{i}", list.Items[i], OriginalRowKind.ListRow,
-                box.X, box.Y + (box.Height * (i - _iaListTop + 1)), box.Width, box.Height, list.Allowed(i), 0, null, visible));
+                box.X, box.Y + (box.Height * (i - _iaListTop + 1)), box.Width - column, box.Height, list.Allowed(i), 0, null, visible));
         }
 
         if (window < count)
         {
-            var up = StripArt(open.Art, 1);
-            var down = StripArt(open.Art, 2);
-            var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
-            var downSize = StripSize(down, FallbackArrowWidth, FallbackArrowHeight);
             rows.Add(new OriginalRow($"{_iaOpen}:up", string.Empty, OriginalRowKind.Button,
-                box.X + box.Width, box.Y + box.Height, upSize.Width, upSize.Height, _iaListTop > 0, 0, up));
+                box.X + box.Width - upSize.Width, box.Y + box.Height, upSize.Width, upSize.Height, _iaListTop > 0, 0, up));
             rows.Add(new OriginalRow($"{_iaOpen}:down", string.Empty, OriginalRowKind.Button,
-                box.X + box.Width, box.Y + (box.Height * (window + 1)) - downSize.Height, downSize.Width, downSize.Height,
+                box.X + box.Width - downSize.Width, box.Y + (box.Height * (window + 1)) - downSize.Height, downSize.Width, downSize.Height,
                 _iaListTop + window < count, 0, down));
         }
     }
@@ -393,24 +396,25 @@ public sealed partial class OriginalShell
             float x = list.Int("X");
             float y = list.Int("Y");
             float width = list.Int("Width", 277);
-            int top = ContentsTopClamped(window);
-            for (int i = top; i < presets.Count && i < top + window; i++)
-            {
-                rows.Add(new OriginalRow($"{ContentsKey}:{i}", presets[i].Name, OriginalRowKind.ListRow,
-                    x, y + ((i - top) * itemHeight), width, itemHeight, true, 0, null));
-            }
-
-            // The list's own arrows stand on its right edge, the up arrow at the top of the
-            // window and the down arrow at its foot; each is live only while there is more list
-            // that way.
+            // The list's own arrows stand inside its right edge, in the gutter the page's art
+            // paints there, the up arrow at the top of the window and the down arrow at its foot;
+            // each is live only while there is more list that way, and the rows keep off the column.
             var up = StripArt(list.Art, 1);
             var down = StripArt(list.Art, 2);
             var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
             var downSize = StripSize(down, FallbackArrowWidth, FallbackArrowHeight);
+            int top = ContentsTopClamped(window);
+            float column = presets.Count > window ? upSize.Width : 0f;
+            for (int i = top; i < presets.Count && i < top + window; i++)
+            {
+                rows.Add(new OriginalRow($"{ContentsKey}:{i}", presets[i].Name, OriginalRowKind.ListRow,
+                    x, y + ((i - top) * itemHeight), width - column, itemHeight, true, 0, null));
+            }
+
             rows.Add(new OriginalRow(ContentsUpKey, string.Empty, OriginalRowKind.Button,
-                x + width, y, upSize.Width, upSize.Height, top > 0, 0, up));
+                x + width - upSize.Width, y, upSize.Width, upSize.Height, top > 0, 0, up));
             rows.Add(new OriginalRow(ContentsDownKey, string.Empty, OriginalRowKind.Button,
-                x + width, y + (window * itemHeight) - downSize.Height, downSize.Width, downSize.Height,
+                x + width - downSize.Width, y + (window * itemHeight) - downSize.Height, downSize.Width, downSize.Height,
                 top + window < presets.Count, 0, down));
         }
 
@@ -836,8 +840,8 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The contents list's window, its thumb on the track between the two arrows placed by how far
-    // the window has scrolled; null while the presets fit the window.
+    // The contents list's window, its thumb inside the list's right edge on the track between the
+    // two arrows, placed by how far the window has scrolled; null while the presets fit the window.
     private ListWindow? ContentsWindow(MenuLayoutWidget list)
     {
         int window = Math.Max(1, list.Int("TotalDisplayed", 14));
@@ -857,13 +861,13 @@ public sealed partial class OriginalShell
         float trackHeight = height - (2f * arrow.Height);
         int top = ContentsTopClamped(window);
         return new ListWindow(
-            x, y, width + arrow.Width, height,
-            x + width, ListWindow.ThumbYFor(y + arrow.Height, trackHeight, thumb.Height, top, count - window), thumb.Width, thumb.Height,
+            x, y, width, height,
+            x + width - arrow.Width, ListWindow.ThumbYFor(y + arrow.Height, trackHeight, thumb.Height, top, count - window), thumb.Width, thumb.Height,
             y + arrow.Height, trackHeight, count, window, top);
     }
 
     // An open dropdown's list window under its box: the authored TotalDisplayed rows, the arrows
-    // on its right edge and the thumb between them; null while the items fit the window.
+    // inside its right edge and the thumb between them; null while the items fit the window.
     private ListWindow? OpenListWindow(MenuLayoutScreen screen)
     {
         if (_iaOpen == null || screen.Widget(_iaOpen) is not { } widget || DropdownFor(_iaOpen) is not { } list)
@@ -886,8 +890,8 @@ public sealed partial class OriginalShell
         float trackHeight = height - (2f * arrow.Height);
         int first = Math.Clamp(_iaListTop, 0, count - window);
         return new ListWindow(
-            box.X, top, box.Width + arrow.Width, height,
-            box.X + box.Width, ListWindow.ThumbYFor(top + arrow.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
+            box.X, top, box.Width, height,
+            box.X + box.Width - arrow.Width, ListWindow.ThumbYFor(top + arrow.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
             top + arrow.Height, trackHeight, count, window, first);
     }
 
@@ -1019,10 +1023,13 @@ public sealed partial class OriginalShell
             }
         }
 
+        // The paper runs the authored box's full width, the scroll column included: the rows gave
+        // that column up so their bands and their words keep off the chrome, not the panel.
+        float panelWidth = _iaOpen != null && screen.Widget(_iaOpen) is { } opened ? DropBox(opened).Width : width;
         if (top < bottom)
         {
-            panelFills.Add(new BoardFill(left, top, width, bottom - top, ListPaperR, ListPaperG, ListPaperB));
-            panelFills.Add(new BoardFill(left, top, width, bottom - top, 0, 0, 0, 1f, Border: true));
+            panelFills.Add(new BoardFill(left, top, panelWidth, bottom - top, ListPaperR, ListPaperG, ListPaperB));
+            panelFills.Add(new BoardFill(left, top, panelWidth, bottom - top, 0, 0, 0, 1f, Border: true));
         }
 
         // The list carries two bands at once, the picked value's and the row the cursor is on.

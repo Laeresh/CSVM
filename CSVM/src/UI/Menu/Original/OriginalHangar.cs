@@ -1003,7 +1003,8 @@ public sealed partial class OriginalShell
 
     // An open list's rows: every item keyed <key>:<index> under the box, the ones outside the
     // authored window unseen and unhit, the window following the focused item, and the list's own
-    // arrows on its right edge while there is more list that way.
+    // arrows inside its right edge while there is more list that way. A scrolling list gives an
+    // arrow's width of itself to the chrome, the way Instant Action's authored gutter does.
     private bool BuildOpenHangarList(List<OriginalRow> rows)
     {
         if (_hangarOpen == null)
@@ -1035,23 +1036,24 @@ public sealed partial class OriginalShell
         }
 
         _hangarListTop = Math.Clamp(_hangarListTop, 0, Math.Max(0, count - window));
+        var up = StripArt(widget.Art, 3);
+        var down = StripArt(widget.Art, 4);
+        var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
+        var downSize = StripSize(down, FallbackArrowWidth, FallbackArrowHeight);
+        float column = window < count ? upSize.Width : 0f;
         for (int i = 0; i < count; i++)
         {
             bool visible = i >= _hangarListTop && i < _hangarListTop + window;
             rows.Add(new OriginalRow(ListKey(_hangarOpen, i), list.Items[i], OriginalRowKind.ListRow,
-                box.X, box.Y + (box.Height * (i - _hangarListTop + 1)), box.Width, box.Height, true, 0, null, visible));
+                box.X, box.Y + (box.Height * (i - _hangarListTop + 1)), box.Width - column, box.Height, true, 0, null, visible));
         }
 
         if (window < count)
         {
-            var up = StripArt(widget.Art, 3);
-            var down = StripArt(widget.Art, 4);
-            var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
-            var downSize = StripSize(down, FallbackArrowWidth, FallbackArrowHeight);
             rows.Add(new OriginalRow(_hangarOpen + ":up", string.Empty, OriginalRowKind.Button,
-                box.X + box.Width, box.Y + box.Height, upSize.Width, upSize.Height, _hangarListTop > 0, 0, up));
+                box.X + box.Width - upSize.Width, box.Y + box.Height, upSize.Width, upSize.Height, _hangarListTop > 0, 0, up));
             rows.Add(new OriginalRow(_hangarOpen + ":down", string.Empty, OriginalRowKind.Button,
-                box.X + box.Width, box.Y + (box.Height * (window + 1)) - downSize.Height, downSize.Width, downSize.Height,
+                box.X + box.Width - downSize.Width, box.Y + (box.Height * (window + 1)) - downSize.Height, downSize.Width, downSize.Height,
                 _hangarListTop + window < count, 0, down));
         }
 
@@ -1067,7 +1069,7 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The open list's window under its box, the thumb between its two arrows on the right edge;
+    // The open list's window under its box, the thumb between its two arrows inside the right edge;
     // null while the items fit the authored window.
     private ListWindow? OpenHangarListWindow()
     {
@@ -1098,8 +1100,8 @@ public sealed partial class OriginalShell
         float trackHeight = height - upSize.Height - downSize.Height;
         int first = Math.Clamp(_hangarListTop, 0, count - window);
         return new ListWindow(
-            box.X, top, box.Width + upSize.Width, height,
-            box.X + box.Width, ListWindow.ThumbYFor(top + upSize.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
+            box.X, top, box.Width, height,
+            box.X + box.Width - upSize.Width, ListWindow.ThumbYFor(top + upSize.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
             top + upSize.Height, trackHeight, count, window, first);
     }
 
@@ -2028,10 +2030,14 @@ public sealed partial class OriginalShell
             }
         }
 
+        // The paper runs the authored box's full width, the scroll column included: the rows gave
+        // that column up so their bands and their words keep off the chrome, not the panel.
+        string section = _screen == OriginalScreen.HangarInventory ? InventorySection : SectionOf(_screen);
+        float panelWidth = _layout.Screen(section)?.Widget(_hangarOpen) is { } opened ? HubBox(opened).Width : width;
         if (top < bottom)
         {
-            panelFills.Add(new BoardFill(left, top, width, bottom - top, 0xE6, 0xDA, 0xBE, 0.97f));
-            panelFills.Add(new BoardFill(left, top, width, bottom - top, 0, 0, 0, 1f, Border: true));
+            panelFills.Add(new BoardFill(left, top, panelWidth, bottom - top, 0xE6, 0xDA, 0xBE, 0.97f));
+            panelFills.Add(new BoardFill(left, top, panelWidth, bottom - top, 0, 0, 0, 1f, Border: true));
         }
 
         var sheet = DecalArt();
@@ -2074,7 +2080,6 @@ public sealed partial class OriginalShell
                 i == focus ? BoardInk.RowFocused : BoardInk.Row, i));
         }
 
-        string section = _screen == OriginalScreen.HangarInventory ? InventorySection : SectionOf(_screen);
         if (OpenHangarListWindow() is { } window && _layout.Screen(section)?.Widget(_hangarOpen) is { } widget
             && StripArt(widget.Art, 0, 1) is { } thumb)
         {

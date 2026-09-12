@@ -546,6 +546,17 @@ internal static class MenuInstantActionSuites
         }
 
         ctx.Check(contents == 14, $"the contents window shows the layout's fourteen rows ({contents})");
+
+        // The authored list is X 76 Width 277 and the scroll art 16 wide, so the chrome stands at
+        // 337, inside the gutter the page's own background paints, and the rows stop at 261.
+        var upArrow = Row(shell, OriginalShell.ContentsUpKey);
+        var downArrow = Row(shell, OriginalShell.ContentsDownKey);
+        ctx.Check(upArrow is { X: 337f, Y: 175f, Width: 16f } && downArrow is { X: 337f, Width: 16f },
+            $"the contents arrows stand inside the list's right edge ({upArrow?.X}, {downArrow?.X})");
+        ctx.Check(Row(shell, OriginalShell.ContentsKey + ":0") is { X: 76f, Width: 261f },
+            $"and its rows give that column up rather than the authored box growing ({Row(shell, OriginalShell.ContentsKey + ":0")?.Width})");
+        ctx.Check(List(shell, OriginalShell.ContentsKey) is { Window: { X: 76f, Width: 277f, ThumbX: 337f } },
+            $"the thumb rides the same column over the authored window ({List(shell, OriginalShell.ContentsKey)?.Window.ThumbX})");
         ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey) is { Label: "Stock Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
             $"the player plane dropdown stands at its authored line with the first airframe as its stock row ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
         ctx.Check(Row(shell, OriginalShell.MissionKey)?.Label == "Dogfighting an Ace"
@@ -576,6 +587,12 @@ internal static class MenuInstantActionSuites
             $"Accept opens its list with the eleven stock rows first ({shell.OpenDropdown}, {shell.Rows.Count}, {StockRows(shell)} stock)");
         ctx.Check(shell.Rows[0].Label == "Stock Autogyro" && shell.Rows[1].Label == "Stock Hellhound" && shell.FocusedKey == OriginalShell.PlayerPlaneKey + ":1",
             $"named Stock <airframe> with the focus on the current row ({shell.Rows[0].Label}, {shell.Rows[1].Label}, {shell.FocusedKey})");
+
+        // The store's length decides whether the list outruns its authored window of twenty, so
+        // the row width is read against both readings of the same rule rather than one count.
+        bool scrolls = List(shell, OriginalShell.PlayerPlaneKey) is { Window.Scrolls: true };
+        ctx.Check(shell.Rows[0] is { X: 511f } && Math.Abs(shell.Rows[0].Width - (scrolls ? 208f : 224f)) < 0.5f,
+            $"its rows keep off the scroll column only where there is one ({shell.Rows[0].Width}, scrolling={scrolls})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.OpenDropdown == null && ia.PlayerPlane.Name == "Balmoral" && Row(shell, OriginalShell.PlayerPlaneKey)?.Label == "Stock Balmoral",
@@ -1070,6 +1087,21 @@ internal static class MenuInstantActionSuites
             if (row.Key == key)
             {
                 return row;
+            }
+        }
+
+        return null;
+    }
+
+    // The screen's list under that key, or null. Read fresh after every frame, since a window that
+    // moved is a new record.
+    private static OriginalList? List(OriginalShell shell, string key)
+    {
+        foreach (var list in shell.Lists)
+        {
+            if (list.Key == key)
+            {
+                return list;
             }
         }
 
