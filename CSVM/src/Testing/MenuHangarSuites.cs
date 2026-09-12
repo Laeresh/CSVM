@@ -98,8 +98,11 @@ internal static class MenuHangarSuites
         + "note over its export funds and marks nothing, that door's own inventory keeps Export live "
         + "beside the shipped Sell and asks the priced sale question, the hub's PLANE COST is red past "
         + "the wallet and its CURRENT WEIGHT red past the airframe's capacity and both plain otherwise, "
-        + "an open list's focused row is what the two figures price without taking it, and a switch "
-        + "discards an open build")]
+        + "an open list's focused row is what the two figures price without taking it, a tab page's "
+        + "description box follows the shipped figures with the heading that string ends with and the "
+        + "component's own prose flowed inside the authored box, a decal list opens as the page's "
+        + "five-across two-down grid of the sheet's own tiles with its scrollbar counting rows of "
+        + "five, and a switch discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -141,6 +144,7 @@ internal static class MenuHangarSuites
             var setup = host.Features.Get<PlayerSetupFeature>();
             OriginalNameScreen(ctx, host, seat, shell, fit, hangar, scratch);
             OriginalHub(ctx, host, seat, shell, fit, hangar);
+            OriginalTabPageBoxes(ctx, host, seat, shell, fit, hangar);
             OriginalPurchase(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
             OriginalInventory(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
             OriginalWallet(ctx, host, seat, shell, fit, hangar, layout);
@@ -681,6 +685,67 @@ internal static class MenuHangarSuites
         OriginalArmourWings(ctx, host, seat, shell, fit, hangar);
     }
 
+    // The tab pages' two shipped-layout answers: the description box, which follows its figures
+    // with the heading its own info string ends with and the component's prose, and the decal
+    // picker, which opens as the page's five-across grid rather than as a column of rows. Leaves
+    // the screen on the tab it found so the pages after it read the same hub.
+    private static void OriginalTabPageBoxes(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
+    {
+        var here = shell.Screen;
+        var engineTab = Row(shell, "PX_B_ENGINE")!;
+        Click(host, seat, Pointer(fit, engineTab.X + 5f, engineTab.Y + 5f, pressed: true, clicked: true));
+        var board = shell.Compose();
+        int engine = hangar.Scratch.Engine;
+        var line = HangarEconomy.EngineLine(hangar.Scratch.Airframe, engine);
+        string heading = hangar.Strings.Text(1154).Split('\n')[^2];
+        string prose = hangar.Strings.Text(3240 + (hangar.Scratch.Airframe * 6) + engine);
+        ctx.Check(board.Lines.Any(l => l.Text == "COST: $" + line.Cost.ToString(CultureInfo.InvariantCulture))
+            && board.Lines.Any(l => l.Text.StartsWith("TOP SPEED: ", StringComparison.Ordinal))
+            && board.Lines.Any(l => l.Text.StartsWith("NITRO-BOOST: ", StringComparison.Ordinal)),
+            $"the engine box carries the shipped info string's own figure lines");
+        ctx.Check(heading.Length > 0 && board.Lines.Any(l => l.Text == heading),
+            $"with the heading that string ends with over the prose ({heading})");
+        var note = board.Notes.Count == 1 ? board.Notes[0] : null;
+        ctx.Check(note != null && prose.Length > 0 && note.Entries.Count == 1 && note.Entries[0] == prose,
+            $"and the engine's own prose row flowed under it ({note?.Entries.Count}, {prose.Length} chars)");
+        ctx.Check(note != null && note.Y + note.Height <= 334f + 165f && note.Cut,
+            $"inside the authored box, cut where it runs out of room rather than growing it ({note?.Y}, {note?.Height})");
+
+        // The decal picker: fifty tiles as a five-across, two-down grid on the page, wider than
+        // the 87-pixel box it hangs from, its arrows and thumb inside its own right edge.
+        var paintTab = Row(shell, "PX_B_PAINT")!;
+        Click(host, seat, Pointer(fit, paintTab.X + 5f, paintTab.Y + 5f, pressed: true, clicked: true));
+        var closed = Row(shell, "PT_D_DECALS0")!;
+        Click(host, seat, Pointer(fit, closed.X + 5f, closed.Y + 5f, pressed: true, clicked: true));
+        var cells = shell.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).ToList();
+        ctx.Check(cells.Count == 10 && cells.Select(c => c.X).Distinct().Count() == 5 && cells.Select(c => c.Y).Distinct().Count() == 2,
+            $"ten tiles show, five across and two down ({cells.Count} cells)");
+        ctx.Check(cells.TrueForAll(c => Math.Abs(c.Width - 66f) < 0.01f && Math.Abs(c.Height - 66f) < 0.01f),
+            $"each cell the decal sheet's own 66-pixel tile ({cells.FirstOrDefault()?.Width})");
+        ctx.Check(cells[0].X == 407f && cells[0].Y == 375f && cells[4].X == 671f,
+            $"on the page's own rectangle rather than under the box ({cells[0].X}, {cells[0].Y})");
+        var window = GridWindow(shell, "PT_D_DECALS0");
+        ctx.Check(window.Count == 10 && window.Rows == 2,
+            $"the scrollbar counts the grid's ten rows with two showing ({window.Count}, {window.Rows})");
+        ctx.Check(window.ThumbX > cells[4].X && window.ThumbX + window.ThumbWidth <= 406f + 348f
+            && Math.Abs(window.ThumbHeight - (window.TrackHeight * 2f / 10f)) < 1f,
+            $"its thumb inside the grid's right edge and filling the track in proportion ({window.ThumbX}, {window.ThumbHeight})");
+        var overlay = shell.Compose().Overlays.FirstOrDefault(o => o.Fills.Count > 0);
+        ctx.Check(overlay != null && overlay.Lines.Count == 0
+            && overlay.Pictures.Count(p => p.Art.Name.Equals("PX_P_Decals.tga", StringComparison.OrdinalIgnoreCase)) == 10,
+            $"the panel draws ten tiles and no names ({overlay?.Pictures.Count}, {overlay?.Lines.Count})");
+        int top = window.Top;
+        Press(host, seat, new MenuCommands { Pointer = new MenuPointer(fit.X(500f), fit.Y(400f), false, false, 1) });
+        var scrolled = GridWindow(shell, "PT_D_DECALS0");
+        ctx.Check(scrolled.Top == Math.Min(top + 1, scrolled.LastTop),
+            $"a wheel notch moves the window one row of five ({top} -> {scrolled.Top})");
+        Press(host, seat, Back);
+        ctx.Check(shell.OpenHangarDropdown == null, $"Back closes the grid ({shell.OpenHangarDropdown})");
+        var tab = Row(shell, here == OriginalScreen.HangarArmor ? "PX_B_ARMOR" : "PX_B_AIRFRAME")!;
+        Click(host, seat, Pointer(fit, tab.X + 5f, tab.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == here, $"and the hub is left on the tab this page found ({shell.Screen})");
+    }
+
     // The ARMOR tab's two wing boxes, which move together: the screen draws one per wing and a
     // pick on either writes both zone dwords, so the second box redraws with the first.
     private static void OriginalArmourWings(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
@@ -1038,6 +1103,21 @@ internal static class MenuHangarSuites
         }
 
         return null;
+    }
+
+    // The open list's window as the pointer sees it, or a zeroed one where no list is open, which
+    // the checks read rather than branching on a missing list.
+    private static ListWindow GridWindow(OriginalShell shell, string key)
+    {
+        foreach (var list in shell.Lists)
+        {
+            if (list.Key == key)
+            {
+                return list.Window;
+            }
+        }
+
+        return default;
     }
 
     private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false) =>

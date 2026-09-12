@@ -62,6 +62,9 @@ All four screens, id → handler (widget dispatcher unless noted):
 | GUNS | 2250 | `0x0040bf72` | slot title: reads the airframe stat table's +0x1c+slot*4 string id, tail at `0x0040ef84` |
 | GUNS | 2220 | `0x0040bbe6` | titles |
 | GUNS | 2226 | `0x0040b993` | gun description text |
+| ENGINE | 2218 | `0x0040bce1` | engine dropdown labels and count |
+| ENGINE | 2224 | `0x0040bb01` | engine description text |
+| ARMOR | 2225 | `0x0040ba8d` | armour description text |
 | HARDPOINTS | 2244 | `0x0040b81d` | dropdown labels (5 rows: `langui` 1165 "None", 1168 "1 Hardpoint", 1169 "%d Hardpoints") |
 | HARDPOINTS | 2245 | `0x0040ad0f` | get/set a wing's hardpoint count (record +0x34/+0x38) |
 | HARDPOINTS | 2227 | `0x0040bac6` | description text |
@@ -193,6 +196,83 @@ and selects it. The block lives in `PURCHASE.SCRIPT`: `gui_init` calls the probl
 2264 and mails `pur_b_purchase` 10000 (enable) on a clean answer or 10018 (disable) on
 problems, with `pur_t_problems` carrying the text. An overweight or engineless build therefore
 cannot be bought in the original; the button greys out.
+
+## The description box on every tab
+
+Each tab writes one scroll-text box (the `S` widget at 412,334 across 325 by 165, the airframe
+tab's three pixels wider and two taller, the paint tab's shorter at 412,398 by 105) from **one
+shipped format string that already carries the box's heading**, and the three tabs whose subject is
+a picked component then append that component's own
+prose row to it. The heading is therefore never composed: it is the tail of the figures string,
+which is why hardpoints reads `HISTORY` where the other five read `DESCRIPTION`.
+
+| Tab | Figures string | Arguments | Prose |
+|---|---|---|---|
+| AIRFRAME (2223, `0x0040b89b`) | 1153 `IDS_PX_AIRFRAMEINFO` | cost, weight, capacity, agility word, base armour word, turrets | 3040 + airframe |
+| ENGINE (2224, `0x0040bb01`) | 1154 `IDS_PX_ENGINEINFO` | cost, weight, top speed, nitro word | 3240 + airframe×6 + engine id |
+| ARMOR (2225, `0x0040ba8d`) | 1155 `IDS_PX_ARMORINFO` | 20, 5, 20, 5 | inside 1155 |
+| GUNS (2226, `0x0040b993`) | 1156 `IDS_PX_GUNINFO` | cost, weight, calibre, fire rate, range, ammunition | 3330 + gun id |
+| HARDPOINTS (2227, `0x0040bac6`) | 1157 `IDS_PX_HARDPOINTINFO` | 410, 480 | inside 1157, under `HISTORY` |
+| PAINT (`PAINT.SCRIPT`) | 1158 `IDS_PX_PAINTINFO` | none | inside 1158 |
+
+The paint box takes no callback at all: `PAINT.SCRIPT` fills `pt_s_paintdesc` with
+`callback($$NB$$, 1158, PLA.BC)`, the string fetch, so the whole box is that one row.
+
+**The prose blocks and how they are indexed.** `IDS_AIRFRAMEDESCRIPTION` is 3040 to 3050, one row
+per airframe id. `IDS_ENGINEDESCRIPTION` is **3240 to 3305**, 66 rows on the same
+`airframe×6 + engine id` index the engine names take at 3100, so an airframe's six rows are its own
+manufacturer's three displacements and their three nitrous twins; the handler recomputes that index
+at `0x0040bb5c` (`EBX = widget arg + 6×airframe`) before adding 0xca8. `IDS_GUNDESCRIPTION` is 3330
+to 3335 in the gun order 3310 names, the last row being the empty mount's. **A no-pick row shows
+its own string alone, with no figures over it**: engine id 6 jumps to `0x0040bbbb` for 3307
+`IDS_NOENGINEDESCR` and a gun id at or past 5 skips the whole figures block at `0x0040b9a2` for
+3335, both of which read `No Information Available`.
+
+**The figures the tables do not already carry.**
+
+- **TURRETS** is the popcount of the airframe's turret mask (`0x0040b90d`, the mask byte at stat
+  row +0x18) written as a single ASCII digit, or 1165 `None` when the mask is zero.
+- **AGILITY and BASE ARMOR** are `FUN_0040faf0` cases 3 and 2 over a **zeroed 204-byte record
+  carrying nothing but the airframe id** (`0x0040b8b4` clears it, `0x0040b8db` writes the id), so
+  they rate the bare airframe and not the build standing on the screen.
+- **TOP SPEED** is the stat line at `0x0040bb3e`: the engine base table's power rating times the
+  engine id's own double from `0x00619e38`, truncated, in m.p.h.
+- **NITRO-BOOST** is 1167 `Yes` for engine ids 3 to 5 and 1166 `No` below them (`0x0040bb10`).
+- **CALIBER** is `(gun id + 3) × 10` (`0x0040ba4c`).
+- **FIRE RATE** is the gun table's +0x10 column (10, 9, 8, 7, 6 down the calibres) formatted
+  `%1.1f` (`0x0061f34c`) and **halved for a twin mount** (the float 0.5 at `0x006032e0`), so a twin
+  .70 reads 3.0/sec.
+- **AMMO** is the +0x14 column (2800 down to 1200) whole for a twin mount and **halved for a
+  single** one (`0x0040ba28`), so a twin .70 reads 1200 rounds.
+- **RANGE** is the +0x18 column, 1000 ft down every calibre.
+
+⚠ **Every tab has prose, the three with no component included.** Armour, hardpoints and paint carry
+theirs inside their own figures string rather than in a separate row, which is why reading only the
+ENGINE and GUNS captures suggests those three have none.
+
+The remake composes all six in `CSVM/src/UI/Menu/HangarDescriptions.cs`, which splits the filled
+string at its own blank line into figures, heading and prose, so the heading is still the shipped
+string's and never a literal.
+
+## The decal picker is a five-across grid
+
+The three decal dropdowns (`PT_D_DECALS0` to `2`, authored 87 wide by an `ItemHeight` of 73 with
+`TotalDisplayed` 2) open **one grid of tiles over the page**, not a column of rows under the box
+that was pressed. The decode is callbacks 2239 and 2240 in the map above: the picked decal is the
+grid's own `row × 5 + column` and the list's row count is `ceil(50 / 5)`, ten rows of five.
+
+The cell is the **decal sheet's own frame**: `PX_P_DECALS.TGA` is 66 by 3300 over 50 frames, so a
+tile is 66 by 66 and the five columns come to 330 pixels, far wider than the 87-pixel box they hang
+from. The authored 87 by 73 is the closed box with its dropdown arrow and padding around one tile,
+and nothing in the layout describes the open grid, so its rectangle is measured off
+`OriginalScreenshots/CustomPlane Decal Select.png`: the panel's frame runs 406,374 to 753,507 (348
+by 134), the first cell sits one pixel inside it at 407,375, and the 16-pixel scroll column with
+its two arrows and its thumb stands inside the right edge over the last column. The thumb fills its
+track in proportion to the window (two of ten rows), not at the art's own height.
+
+That capture also shows **the window on the grid's last two rows with the picked tile heading it**:
+its nose decal is 40, which is the first cell of row 8. The remake opens a grid on the row its pick
+stands in for that reason, and scrolls by whole rows of five.
 
 ## The four rating words
 

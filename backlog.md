@@ -1894,38 +1894,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   they say. An empty pane is the fallback finding nothing armed, not a missing pane.
   *Cross-refs:* `BL-658`'s landing (`git log --grep=BL-658`), which filled the lower pane.
 
-- `BL-761` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The tab pages'
-  description box carries the figures alone where the original follows them with a DESCRIPTION
-  paragraph.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie,
-  "Description text missing", and `OriginalScreenshots/CustomPlane Engine.png` and
-  `CustomPlane Guns.png` both show COST, WEIGHT and the rest, then a DESCRIPTION heading over the
-  component's own prose. Ours builds the box from the figures and stops
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1431-1488`). The prose is in the shipped table: the
-  engines run 3270 to 3305, six ids per family in engine order, with 3307 as No Information
-  Available, and the guns run 3330 to 3335 in gun order, 3335 being No Gun
-  (`extracted/rof/ui_strings.json`). *Fix shape:* the description list gains the heading and the
-  component's own string, wrapped inside the box the way the figures already are. *⚠ Traps:* the id
-  blocks are ordered per component and are not one contiguous run across kinds, so index them rather
-  than deriving a single base. The box is the authored `S` widget with its own back and border, so a
-  longer body scrolls or wraps inside it and never grows it. Armour, hardpoints and paint show no
-  such prose in the stills; do not invent it.
-
-- `BL-762` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A decal list opens as
-  a one-wide column where the original opens a five-across, two-row grid of tiles.** *Evidence:*
-  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "Decal select has two rows with
-  5 decals each", and `OriginalScreenshots/CustomPlane Decal Select.png` shows exactly that under the
-  three preview boxes, with a scrollbar down its right edge. `PT_D_DECALS0` to `2` author
-  `ItemHeight=73`, `TotalDisplayed=2` and `Width=87` (`extracted/rof/menu_layout.json`, the `Paint`
-  section), which is two rows of the closed box's own width, and the fifty tiles come off the
-  section's `PT_P_DECALS` strip. Our open list stacks one tile and its name per row inside that width
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1788-1794`, the rows built at `:818-838`).
-  *Fix shape:* the decal lists lay their visible window out across five columns and two rows over the
-  page, keeping the tile art already drawn. *⚠ Traps:* the grid is wider than the closed box it hangs
-  from, so the hit rectangles and the arrows move with it, and `ComposeOpenList` derives its panel
-  from the rows' own extents. The other paint lists are colour swatches in a single column, so the
-  change belongs to the decal case alone. *Cross-refs:* `BL-659`'s landing
-  (`git log --grep=BL-659`), the aid that can open these lists.
-
 - `BL-765` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The inventory writes
   the plane's name and its airframe as one line at the airframe's row, leaving the name's own row
   unused.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "The

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
@@ -329,11 +330,124 @@ public class OriginalHangarTests : IDisposable
         Assert.Null(shell.OpenHangarDropdown);
 
         Click(shell, "PT_D_DECALS0");
-        Assert.Equal(2, shell.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
+        Assert.Equal(10, shell.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
         Click(shell, "PT_D_DECALS0:1");
         Assert.Equal(1, hangar.Scratch.NoseDecal);
         Assert.Contains(shell.Compose().Pictures, p => p.Art.Name == "PH_Decals.tga" && p.Frame == 1);
         Assert.Contains(shell.Compose().Pictures, p => p.Art.Name.StartsWith("PX_ICON_5_", StringComparison.Ordinal) && p.Tint != null);
+    }
+
+    /// <summary>The decal picker as the original opens it: a five-across, two-down grid of the
+    /// sheet's own tiles on the page, wider than the 87-pixel box it hangs from, its scroll chrome
+    /// inside its own right edge, and every step a whole row of five.</summary>
+    [Fact]
+    public void TheDecalListOpensAsAFiveAcrossGridWhoseChromeMovesWithIt()
+    {
+        var shell = Shell(out var hangar, out _);
+        OpenHub(shell, "Ace");
+        Click(shell, "PX_B_PAINT");
+        hangar.SetDecal(0, 40);
+
+        Click(shell, "PT_D_DECALS0");
+
+        // Ten of the fifty tiles show, five across and two down, at the sheet's own tile size and
+        // on the page's own rectangle rather than under the box.
+        var cells = shell.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).ToList();
+        Assert.Equal(10, cells.Count);
+        Assert.All(cells, cell => Assert.Equal((66f, 66f), (cell.Width, cell.Height)));
+        Assert.Equal(new[] { 407f, 473f, 539f, 605f, 671f }, cells.Take(5).Select(c => c.X).ToArray());
+        Assert.Equal(new[] { 375f, 441f }, cells.Select(c => c.Y).Distinct().ToArray());
+
+        // The window opens on the row its pick stands in, so decal 40 heads the grid, and the
+        // tiles are drawn over the whole cell with no name beside them.
+        Assert.Equal("PT_D_DECALS0:40", shell.FocusedKey);
+        Assert.Equal(new[] { "PT_D_DECALS0:40", "PT_D_DECALS0:49" }, new[] { cells[0].Key, cells[9].Key });
+        var panel = shell.Compose().Overlays.Single(o => o.Fills.Count > 0);
+        Assert.Equal(10, panel.Pictures.Count(p => p.Art.Name == "PH_Decals.tga"));
+        Assert.Contains(panel.Pictures, p => p.Art.Name == "PH_Decals.tga" && p.Frame == 40 && p.X == 407f && p.Y == 375f);
+        Assert.Empty(panel.Lines);
+
+        // The panel is the grid's own: five tiles plus the scroll column inside a one-pixel frame,
+        // the column as wide as the row's own arrow art (15 in this fixture).
+        var back = panel.Fills[0];
+        Assert.Equal((406f, 374f), (back.X, back.Y));
+        Assert.Equal(((5f * 66f) + 15f + 2f, (2f * 66f) + 2f), (back.Width, back.Height));
+        var up = shell.Rows.Single(r => r.Key == "PT_D_DECALS0:up");
+        var down = shell.Rows.Single(r => r.Key == "PT_D_DECALS0:down");
+        Assert.Equal((737f, 375f), (up.X, up.Y));
+        Assert.Equal((737f, 374f + (2f * 66f) + 1f - up.Height), (down.X, down.Y));
+        Assert.True(up.Enabled);
+        Assert.False(down.Enabled);
+
+        // The scrollbar counts grid rows: ten of them, two showing, the window on the last pair,
+        // and the thumb drawn to the height the window gives it rather than the art's own.
+        var window = shell.Lists.Single(l => l.Key == "PT_D_DECALS0").Window;
+        Assert.Equal((10, 2, 8), (window.Count, window.Rows, window.Top));
+        Assert.Contains(panel.Pictures, p => p.Art.Name == "PH_B_ScrollBar.png" && p.Height == window.ThumbHeight);
+
+        // A wheel notch and an arrow press are both one row of five.
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(500f, 400f, false, false, -1) });
+        Assert.Equal("PT_D_DECALS0:35", shell.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
+        Click(shell, "PT_D_DECALS0:up");
+        Assert.Equal("PT_D_DECALS0:30", shell.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
+        Click(shell, "PT_D_DECALS0:down");
+        Assert.Equal("PT_D_DECALS0:35", shell.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
+
+        // A tile picks the decal its own cell carries.
+        Click(shell, "PT_D_DECALS0:36");
+        Assert.Equal(36, hangar.Scratch.NoseDecal);
+        Assert.Null(shell.OpenHangarDropdown);
+
+        // The colour lists stay one column wide.
+        Click(shell, "PT_D_COLORS0");
+        Assert.Equal(18, shell.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
+        Assert.Single(shell.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Select(r => r.X).Distinct());
+    }
+
+    /// <summary>The tab pages' description box: the component's figures on their own lines, the
+    /// heading the shipped info string ends with, and the component's prose flowed as a note that
+    /// stays inside the authored box. The engine figures are the still's, for the airframe the
+    /// default configuration opens on.</summary>
+    [Fact]
+    public void TheTabPagesDescriptionBoxCarriesTheHeadingAndTheComponentsProse()
+    {
+        var shell = Shell(out _, out _, strings: HangarInfoStrings());
+        OpenHub(shell, "Ace");
+        Click(shell, "PX_B_ENGINE");
+
+        var board = shell.Compose();
+        Assert.Contains(board.Lines, l => l.Text == "COST: $1700" && l.Italic);
+        Assert.Contains(board.Lines, l => l.Text == "WEIGHT: 2000 lbs.");
+        Assert.Contains(board.Lines, l => l.Text == "TOP SPEED: 251 m.p.h.");
+        Assert.Contains(board.Lines, l => l.Text == "NITRO-BOOST: No");
+
+        // The blank line the shipped string carries stands between the figures and the heading,
+        // and the prose is a note because its wrapped height is a font measurement.
+        var heading = board.Lines.Single(l => l.Text == "DESCRIPTION");
+        Assert.Equal(330f + 4f + (5f * 14f), heading.Y);
+        Assert.True(heading.Italic);
+        var note = Assert.Single(board.Notes);
+        Assert.Equal("A Devastator engine.", Assert.Single(note.Entries));
+        Assert.Equal((416f, heading.Y + 14f), (note.X, note.Y));
+        Assert.True(note.Italic && note.Cut);
+        Assert.True(note.Y + note.Height <= 330f + 160f, "the prose stays inside the authored box");
+
+        // Armour names itself off the shipped string and carries its prose inside it.
+        Click(shell, "PX_B_ARMOR");
+        board = shell.Compose();
+        Assert.Contains(board.Lines, l => l.Text == "ABOUT ARMOR");
+        Assert.Contains(board.Lines, l => l.Text == "COST: $20/5 units" && l.Italic);
+        Assert.Contains(board.Lines, l => l.Text == "NOTE: Left and right wings must be balanced!");
+        Assert.Contains(board.Lines, l => l.Text == "DESCRIPTION");
+        Assert.Equal("Aero-armor.", Assert.Single(Assert.Single(board.Notes).Entries));
+
+        // An empty gun slot is its own string, with no figures and no heading over it.
+        Click(shell, "PX_B_GUNS");
+        Click(shell, "GN_D_GUN0");
+        Click(shell, "GN_D_GUN0:" + (HangarFeature.GunCycleRows - 1));
+        board = shell.Compose();
+        Assert.DoesNotContain(board.Lines, l => l.Text == "DESCRIPTION");
+        Assert.Equal("No Information Available", Assert.Single(Assert.Single(board.Notes).Entries));
     }
 
     [Fact]
@@ -618,6 +732,28 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
     }
 
+    // The info rows the boxes are built from, with stand-in prose: the two shipped format strings
+    // the cases read, the Devastator's engine row, the No Gun row and the words the figures take.
+    private static UiStrings HangarInfoStrings() => UiStrings.Parse(JsonSerializer.Serialize(
+        new[]
+        {
+            new { id = 1150, dll = UiStrings.Table, text = "ABOUT ARMOR" },
+            new
+            {
+                id = 1154, dll = UiStrings.Table,
+                text = "COST: $%1!d!\nWEIGHT: %2!d! lbs.\nTOP SPEED: %3!d! m.p.h.\nNITRO-BOOST: %4!s!\n\nDESCRIPTION\n",
+            },
+            new
+            {
+                id = 1155, dll = UiStrings.Table,
+                text = "COST: $%1!d!/%2!d! units\nWEIGHT: %3!d! lbs./%4!d! units\n"
+                    + "NOTE: Left and right wings must be balanced!\n\nDESCRIPTION\nAero-armor.",
+            },
+            new { id = 1166, dll = UiStrings.Table, text = "No" },
+            new { id = 3271, dll = UiStrings.Table, text = "A Devastator engine." },
+            new { id = 3335, dll = UiStrings.Table, text = "No Information Available" },
+        }));
+
     // The fixture's strips: the tabs and buttons four frames each, the checkbox eight, the paper
     // plaque 160x112, the decal sheet fifty 66-pixel tiles, the blueprint and icon sets present,
     // the name dialog's pane smaller than the board and the full-page backgrounds unmeasured.
@@ -647,12 +783,14 @@ public class OriginalHangarTests : IDisposable
 
     // The Instant Action door's Pilot Plane pick is what a default-configuration build inherits, so
     // every shell here states the pick it opens the door from; the Devastator is the suite's.
-    private OriginalShell Shell(out HangarFeature hangar, out PlayerSetupFeature setup, int pilotPlane = HangarFeature.DefaultAirframe)
+    private OriginalShell Shell(
+        out HangarFeature hangar, out PlayerSetupFeature setup,
+        int pilotPlane = HangarFeature.DefaultAirframe, UiStrings? strings = null)
     {
         setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalRosters.Roster(Array.Empty<CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
-        hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+        hangar = new HangarFeature(strings ?? UiStrings.Empty, PlanePickerRoster.AirframeNode);
         var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
         instantAction.SelectPlayerPlane(pilotPlane);
         return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,

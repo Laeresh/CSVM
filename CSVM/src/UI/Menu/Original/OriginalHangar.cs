@@ -97,6 +97,9 @@ public sealed partial class OriginalShell
     /// <summary>The paint tab's pattern dropdown.</summary>
     public const string PatternDropKey = "PT_D_PATTERN";
 
+    /// <summary>The paint tab's nose decal dropdown, the first of its three.</summary>
+    public const string NoseDecalKey = "PT_D_DECALS0";
+
     // The plane picture's authored corner, the four PX_P_PLANE panes' own.
     private const float PlaneX = 16f;
     private const float PlaneY = 44f;
@@ -123,8 +126,23 @@ public sealed partial class OriginalShell
     private const float DescFont = 11f;
     private const float DescLine = 14f;
 
+    // How far inside the description box's own rectangle its text sits, across and down.
+    private const float DescInset = 6f;
+    private const float DescTop = 4f;
+
     // A dropdown's fallback item height where the layout row is missing.
     private const float FallbackHubItemHeight = 15f;
+
+    // Where the decal picker's grid stands on the paint page, as the panel's own top-left corner,
+    // and the tile size the sheet falls back to. Measured off OriginalScreenshots/CustomPlane
+    // Decal Select.png: the five-across window is wider than the box it hangs from, and one grid
+    // serves all three decal boxes, so it is the page's own rectangle and not the box's.
+    private const float DecalGridX = 406f;
+    private const float DecalGridY = 374f;
+    private const float DecalTile = 66f;
+
+    // The grid panel's one-pixel frame, which its tiles and its scroll column stand inside.
+    private const float DecalGridBorder = 1f;
 
     // The funds the wallet-free doors build against, the figure their own cash note shows.
     private const int ExportFunds = 50000;
@@ -138,6 +156,12 @@ public sealed partial class OriginalShell
     // The inventory's own Export label (IDS_PS_B_EXPORT), the only export word the shipped table
     // carries for a button; the wallet-free commit borrows it.
     private const int ExportLabelString = 1139;
+
+    // What the three tabs with no component of their own write on their name row, the shipped
+    // IDS_PX_ARMORNAME set. The other three name the airframe, the engine or the gun instead.
+    private const int ArmourNameString = 1150;
+    private const int HardpointsNameString = 1151;
+    private const int PaintNameString = 1152;
 
     // What the wallet-free inventory calls removing a plane, on the button, over the page and in
     // the confirm. Remake-only, as the hub's export strips are: nothing was paid for a wallet-free
@@ -217,6 +241,23 @@ public sealed partial class OriginalShell
     private bool IsHangarTab => _screen >= OriginalScreen.HangarAirframe && _screen <= OriginalScreen.HangarPaint;
 
     private bool IsHub => IsHangarTab || _screen == OriginalScreen.HangarPurchase;
+
+    /// <summary>Opens one of the showing tab's dropdowns as a press on it would, for a scripted
+    /// pose; false when the key names no list on the tab showing. A grid opens on the row its pick
+    /// stands in, as a press does.</summary>
+    public bool OpenHangarDropdownOn(string key)
+    {
+        if (!IsHangarTab || HangarListFor(key) is not { Items.Count: > 0 } list)
+        {
+            return false;
+        }
+
+        _hangarOpen = key;
+        int current = Math.Max(0, list.Current);
+        _hangarListTop = list.Columns > 1 ? current - (current % list.Columns) : 0;
+        _focus[(int)_screen] = current;
+        return true;
+    }
 
     /// <summary>Opens the hangar from the screen showing: a build over the saved-plane store,
     /// wallet-free from Instant Action's Build Custom Plane and over <paramref name="wallet"/> from
@@ -413,8 +454,13 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The scroll-text box as a panel: its authored back and border colours, the lines inside.
-    private static void ComposeDescription(MenuLayoutWidget widget, IReadOnlyList<string> description, List<BoardFill> fills, List<BoardLine> lines)
+    // The scroll-text box as a panel: its authored back and border colours, the component's
+    // figures on their own lines, the shipped heading a line under them and the prose flowed in
+    // the room that is left. The prose is a note because how many lines it wraps to is a font
+    // measurement, and it is cut rather than dropped where the box is too short for all of it,
+    // the original scrolling its own box past that point.
+    private static void ComposeDescription(
+        MenuLayoutWidget widget, HangarInfo info, List<BoardFill> fills, List<BoardLine> lines, List<BoardNote> notes)
     {
         float x = widget.Int("X");
         float y = widget.Int("Y");
@@ -430,10 +476,28 @@ public sealed partial class OriginalShell
             fills.Add(new BoardFill(x, y, width, height, border.R, border.G, border.B, Border: true));
         }
 
-        for (int i = 0; i < description.Count; i++)
+        int row = 0;
+        foreach (string figure in info.Figures)
         {
-            lines.Add(new BoardLine(description[i], x + 6f, y + 4f + (i * DescLine), width - 12f, DescFont, BoardInk.Row, -1, true));
+            lines.Add(new BoardLine(figure, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
         }
+
+        if (info.Heading.Length > 0)
+        {
+            // The shipped string's own blank line stands between the figures and the heading.
+            row++;
+            lines.Add(new BoardLine(info.Heading, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
+        }
+
+        if (info.Prose.Length == 0)
+        {
+            return;
+        }
+
+        float top = y + DescTop + (row * DescLine);
+        notes.Add(new BoardNote(
+            new[] { info.Prose }, x + DescInset, top, width - (2f * DescInset),
+            Math.Max(0f, y + height - DescTop - top), 0f, DescFont, BoardInk.Row, Italic: true, Cut: true));
     }
 
     private static void PurchaseLine(MenuLayoutScreen page, List<BoardLine> lines, string key, string name, CostWeight line)
@@ -1021,21 +1085,25 @@ public sealed partial class OriginalShell
 
         var box = HubBox(widget);
         int count = list.Items.Count;
-        int window = Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
+        var grid = OpenDecalGrid(widget, list);
+        int window = grid?.Window ?? Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
         int focused = _focus[(int)_screen];
         if (focused >= 0 && focused < count)
         {
-            if (focused < _hangarListTop)
+            // A grid scrolls by whole rows, so the window follows the row the focus stands in.
+            int first = focused - (focused % list.Columns);
+            if (first < _hangarListTop)
             {
-                _hangarListTop = focused;
+                _hangarListTop = first;
             }
-            else if (focused >= _hangarListTop + window)
+            else if (first >= _hangarListTop + window)
             {
-                _hangarListTop = focused - window + 1;
+                _hangarListTop = first - window + list.Columns;
             }
         }
 
         _hangarListTop = Math.Clamp(_hangarListTop, 0, Math.Max(0, count - window));
+        _hangarListTop -= _hangarListTop % list.Columns;
         var up = StripArt(widget.Art, 3);
         var down = StripArt(widget.Art, 4);
         var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
@@ -1044,20 +1112,43 @@ public sealed partial class OriginalShell
         for (int i = 0; i < count; i++)
         {
             bool visible = i >= _hangarListTop && i < _hangarListTop + window;
+            (float X, float Y) at = grid is { } cells
+                ? cells.Cell(i - _hangarListTop)
+                : (box.X, box.Y + (box.Height * (i - _hangarListTop + 1)));
             rows.Add(new OriginalRow(ListKey(_hangarOpen, i), list.Items[i], OriginalRowKind.ListRow,
-                box.X, box.Y + (box.Height * (i - _hangarListTop + 1)), box.Width - column, box.Height, true, 0, null, visible));
+                at.X, at.Y, grid?.Tile ?? (box.Width - column), grid?.Tile ?? box.Height, true, 0, null, visible));
         }
 
         if (window < count)
         {
+            float arrowX = grid?.ScrollX ?? (box.X + box.Width - upSize.Width);
+            float upY = grid is { } head ? head.Y + DecalGridBorder : box.Y + box.Height;
+            float downY = grid is { } foot
+                ? foot.Y + foot.Height - DecalGridBorder - downSize.Height
+                : box.Y + (box.Height * (window + 1)) - downSize.Height;
             rows.Add(new OriginalRow(_hangarOpen + ":up", string.Empty, OriginalRowKind.Button,
-                box.X + box.Width - upSize.Width, box.Y + box.Height, upSize.Width, upSize.Height, _hangarListTop > 0, 0, up));
+                arrowX, upY, upSize.Width, upSize.Height, _hangarListTop > 0, 0, up));
             rows.Add(new OriginalRow(_hangarOpen + ":down", string.Empty, OriginalRowKind.Button,
-                box.X + box.Width - downSize.Width, box.Y + (box.Height * (window + 1)) - downSize.Height, downSize.Width, downSize.Height,
-                _hangarListTop + window < count, 0, down));
+                arrowX, downY, downSize.Width, downSize.Height, _hangarListTop + window < count, 0, down));
         }
 
         return true;
+    }
+
+    // The open list's grid where the list is one, null where its rows are a single column. The
+    // decal picker's own five columns come off the list, its rows off the authored TotalDisplayed,
+    // and its tile off the sheet the paint page carries.
+    private DecalGrid? OpenDecalGrid(MenuLayoutWidget widget, HangarList list)
+    {
+        if (list.Columns <= 1)
+        {
+            return null;
+        }
+
+        var tile = StripSize(DecalArt(), DecalTile, DecalTile);
+        int rows = Math.Max(1, widget.Int("TotalDisplayed", 1));
+        float arrow = StripSize(StripArt(widget.Art, 3), FallbackArrowWidth, FallbackArrowHeight).Width;
+        return new DecalGrid(DecalGridX, DecalGridY, tile.Height, list.Columns, rows, arrow);
     }
 
     // The hangar's lists for the pointer: an open dropdown's list alone while one stands.
@@ -1086,7 +1177,8 @@ public sealed partial class OriginalShell
 
         var box = HubBox(widget);
         int count = list.Items.Count;
-        int window = Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
+        var grid = OpenDecalGrid(widget, list);
+        int window = grid?.Window ?? Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
         if (count <= window)
         {
             return null;
@@ -1095,6 +1187,23 @@ public sealed partial class OriginalShell
         var upSize = StripSize(StripArt(widget.Art, 3), FallbackArrowWidth, FallbackArrowHeight);
         var downSize = StripSize(StripArt(widget.Art, 4), FallbackArrowWidth, FallbackArrowHeight);
         var thumb = StripSize(StripArt(widget.Art, 0, 1), upSize.Width, 11f);
+        if (grid is { } cells)
+        {
+            // A grid's window is measured in grid rows, so a wheel notch and a thumb drag move a
+            // whole row of tiles; the thumb fills the track in proportion, which the still shows.
+            int gridRows = (count + cells.Columns - 1) / cells.Columns;
+            int lastRow = Math.Max(0, gridRows - cells.Rows);
+            float track = cells.TrackHeight(upSize.Height, downSize.Height);
+            // The thumb fills its track in proportion, never past the track's own ends.
+            float thumbHeight = Math.Min(track, Math.Max(thumb.Height, track * cells.Rows / gridRows));
+            float trackTop = cells.TrackTop(upSize.Height);
+            return new ListWindow(
+                cells.X, cells.Y, cells.Width, cells.Height,
+                cells.ScrollX, ListWindow.ThumbYFor(trackTop, track, thumbHeight, _hangarListTop / cells.Columns, lastRow),
+                thumb.Width, thumbHeight,
+                trackTop, track, gridRows, cells.Rows, Math.Clamp(_hangarListTop / cells.Columns, 0, lastRow));
+        }
+
         float top = box.Y + box.Height;
         float height = window * box.Height;
         float trackHeight = height - upSize.Height - downSize.Height;
@@ -1114,11 +1223,13 @@ public sealed partial class OriginalShell
             return;
         }
 
-        _hangarListTop = Math.Clamp(top, 0, window.LastTop);
+        // A grid's window counts rows of tiles, so the top it is given is one of those rows.
+        _hangarListTop = Math.Clamp(top, 0, window.LastTop) * list.Columns;
         int focused = _focus[(int)_screen];
         if (focused >= 0 && focused < list.Items.Count)
         {
-            _focus[(int)_screen] = Math.Clamp(focused, _hangarListTop, _hangarListTop + window.Rows - 1);
+            _focus[(int)_screen] = Math.Clamp(
+                focused, _hangarListTop, _hangarListTop + (window.Rows * list.Columns) - 1);
         }
     }
 
@@ -1236,7 +1347,9 @@ public sealed partial class OriginalShell
                 decals[i] = name.Length == 0 ? i.ToString("00", CultureInfo.InvariantCulture) : name;
             }
 
-            return new HangarList(decals, hangar.Decal(decalSlot), i => hangar.SetDecal(decalSlot, i), Tile: i => i);
+            return new HangarList(
+                decals, hangar.Decal(decalSlot), i => hangar.SetDecal(decalSlot, i), Tile: i => i,
+                Columns: HangarPaintTables.DecalGridColumns);
         }
 
         return null;
@@ -1326,15 +1439,11 @@ public sealed partial class OriginalShell
                     return null;
             }
 
-            if (suffix == "up")
+            if (suffix is "up" or "down")
             {
-                _hangarListTop--;
-                return null;
-            }
-
-            if (suffix == "down")
-            {
-                _hangarListTop++;
+                // An arrow steps one row, which on a grid is a whole row of tiles.
+                int step = HangarListFor(prefix)?.Columns ?? 1;
+                _hangarListTop += suffix == "up" ? -step : step;
                 return null;
             }
 
@@ -1396,8 +1505,11 @@ public sealed partial class OriginalShell
         if (row.Kind == OriginalRowKind.Dropdown && HangarListFor(row.Key) is { } open && open.Items.Count > 0)
         {
             _hangarOpen = row.Key;
-            _hangarListTop = 0;
-            _focus[(int)_screen] = Math.Max(0, open.Current);
+            int current = Math.Max(0, open.Current);
+            // A grid opens on the row its pick stands in, which is where the reference still shows
+            // the picked decal; a text list opens at its head and the window follows the focus.
+            _hangarListTop = open.Columns > 1 ? current - (current % open.Columns) : 0;
+            _focus[(int)_screen] = current;
         }
 
         return null;
@@ -1406,7 +1518,8 @@ public sealed partial class OriginalShell
     // The hangar screens as drawn.
     private void ComposeHangar(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardNote> notes,
+        List<BoardPanel> overlays)
     {
         if (_hangar == null)
         {
@@ -1430,7 +1543,7 @@ public sealed partial class OriginalShell
         }
         else
         {
-            ComposeTabPage(rows, focus, pictures, fills, lines);
+            ComposeTabPage(rows, focus, pictures, fills, lines, notes);
         }
 
         // With a list or the ask up the rows are its own; the page under it is drawn from the
@@ -1643,7 +1756,9 @@ public sealed partial class OriginalShell
 
     // One tab's right page: its title, rules and labels at their authored places, the name line
     // for the focused item and the description box with the decoded figures.
-    private void ComposeTabPage(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> pictures, List<BoardFill> fills, List<BoardLine> lines)
+    private void ComposeTabPage(
+        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> pictures, List<BoardFill> fills,
+        List<BoardLine> lines, List<BoardNote> notes)
     {
         var page = _layout.Screen(SectionOf(_screen));
         if (page == null || _hangar is not { } hangar)
@@ -1668,40 +1783,26 @@ public sealed partial class OriginalShell
         }
 
         var scratch = hangar.Scratch;
-        var bill = hangar.Bill;
         var stats = HangarEconomy.Airframes[scratch.Airframe];
         string name;
-        var description = new List<string>();
+        HangarInfo info;
         switch (_screen)
         {
             case OriginalScreen.HangarAirframe:
                 int airframe = FocusedAirframe();
-                var frame = HangarEconomy.Airframes[airframe];
                 var bare = HangarEconomy.Price(new CustomPlaneDef { Airframe = airframe });
                 name = hangar.AirframeName(airframe);
-                description.Add($"COST: ${frame.Cost}");
-                description.Add($"WEIGHT: {frame.Weight} lbs.");
-                description.Add($"WEIGHT CAPACITY: {frame.Capacity} lbs.");
-                description.Add($"AGILITY: {Rating(bare.AgilityStars)}");
-                description.Add($"BASE ARMOR: {Rating(bare.ArmourStars)}");
+                info = HangarDescriptions.Airframe(
+                    hangar.Strings, airframe, Rating(bare.AgilityStars), Rating(bare.ArmourStars));
                 break;
             case OriginalScreen.HangarEngine:
                 int engine = FocusedItem(rows, focus, EngineDropKey) ?? scratch.Engine;
                 name = engine == CustomPlaneDef.EngineNone ? hangar.Strings.Text(1165, "None") : hangar.EngineName(scratch.Airframe, engine);
-                var line = HangarEconomy.EngineLine(scratch.Airframe, engine);
-                description.Add($"COST: ${line.Cost}");
-                description.Add($"WEIGHT: {line.Weight} lbs.");
-                if (engine != CustomPlaneDef.EngineNone)
-                {
-                    description.Add($"POWER: {HangarEconomy.PowerStat(scratch.Airframe, engine)}");
-                }
-
+                info = HangarDescriptions.Engine(hangar.Strings, scratch.Airframe, engine);
                 break;
             case OriginalScreen.HangarArmor:
-                name = "ABOUT ARMOR";
-                description.Add($"COST: ${HangarEconomy.ArmourStepCost}/{HangarEconomy.ArmourUnitsPerStep} units");
-                description.Add($"WEIGHT: {HangarEconomy.ArmourStepWeight} lbs./{HangarEconomy.ArmourUnitsPerStep} units");
-                description.Add($"TOTAL: ${bill.Armour.Cost}   {bill.Armour.Weight} lbs.");
+                name = hangar.Strings.Text(ArmourNameString, "ABOUT ARMOR");
+                info = HangarDescriptions.Armour(hangar.Strings);
                 break;
             case OriginalScreen.HangarGuns:
                 for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
@@ -1713,20 +1814,19 @@ public sealed partial class OriginalShell
                 }
 
                 int gunSlot = FocusedSlot(rows, focus, "GN_D_GUN") ?? 0;
-                name = hangar.GunCycleName(HangarFeature.GunCycleIndex(scratch.Guns[gunSlot]));
-                description.Add($"COST: ${bill.Guns[gunSlot].Cost}");
-                description.Add($"WEIGHT: {bill.Guns[gunSlot].Weight} lbs.");
+                string gunKey = "GN_D_GUN" + gunSlot.ToString(CultureInfo.InvariantCulture);
+                int gunRow = FocusedItem(rows, focus, gunKey) ?? HangarFeature.GunCycleIndex(scratch.Guns[gunSlot]);
+                var gun = HangarFeature.GunOfCycle(gunRow);
+                name = hangar.GunCycleName(gunRow);
+                info = HangarDescriptions.Gun(hangar.Strings, stats, gun, gunSlot);
                 break;
             case OriginalScreen.HangarHardpoints:
-                int wing = FocusedSlot(rows, focus, "HP_D_POINT") ?? 0;
-                name = hangar.HardpointsLabel(wing == 0 ? scratch.LeftHardpoints : scratch.RightHardpoints);
-                description.Add($"COST: ${HangarEconomy.HardpointCost} each");
-                description.Add($"WEIGHT: {HangarEconomy.HardpointWeight} lbs. each");
-                description.Add($"TOTAL: ${bill.Hardpoints.Cost}   {bill.Hardpoints.Weight} lbs.");
+                name = hangar.Strings.Text(HardpointsNameString, "ABOUT HARDPOINTS");
+                info = HangarDescriptions.Hardpoints(hangar.Strings);
                 break;
             default:
-                name = hangar.PatternLabel(scratch.PaintPattern);
-                description.Add("COST: Free");
+                name = hangar.Strings.Text(PaintNameString, "ABOUT PAINT AND DECALS");
+                info = HangarDescriptions.Paint(hangar.Strings);
                 break;
         }
 
@@ -1739,7 +1839,7 @@ public sealed partial class OriginalShell
             }
             else if (widget.TypeCode == "S")
             {
-                ComposeDescription(widget, description, fills, lines);
+                ComposeDescription(widget, info, fills, lines, notes);
             }
         }
     }
@@ -2031,9 +2131,20 @@ public sealed partial class OriginalShell
         }
 
         // The paper runs the authored box's full width, the scroll column included: the rows gave
-        // that column up so their bands and their words keep off the chrome, not the panel.
+        // that column up so their bands and their words keep off the chrome, not the panel. A grid
+        // stands on its own rectangle instead, the tiles and the chrome inside its frame.
         string section = _screen == OriginalScreen.HangarInventory ? InventorySection : SectionOf(_screen);
-        float panelWidth = _layout.Screen(section)?.Widget(_hangarOpen) is { } opened ? HubBox(opened).Width : width;
+        var opened = _layout.Screen(section)?.Widget(_hangarOpen);
+        var grid = opened == null ? null : OpenDecalGrid(opened, list);
+        float panelWidth = opened != null ? HubBox(opened).Width : width;
+        if (grid is { } panel)
+        {
+            left = panel.X;
+            top = panel.Y;
+            bottom = panel.Y + panel.Height;
+            panelWidth = panel.Width;
+        }
+
         if (top < bottom)
         {
             panelFills.Add(new BoardFill(left, top, panelWidth, bottom - top, 0xE6, 0xDA, 0xBE, 0.97f));
@@ -2059,7 +2170,11 @@ public sealed partial class OriginalShell
             int index = Indexed(item.Key, _hangarOpen + ":") ?? -1;
             if (i == focus)
             {
-                panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f));
+                // A tile keeps its own colours, so the grid marks the row under the focus with the
+                // frame the still draws round the picked decal rather than a wash over the art.
+                panelFills.Add(grid == null
+                    ? new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f)
+                    : new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 1f, Border: true));
             }
 
             if (index >= 0 && list.Swatch?.Invoke(index) is { } swatch)
@@ -2070,7 +2185,15 @@ public sealed partial class OriginalShell
 
             if (index >= 0 && list.Tile?.Invoke(index) is { } tile && sheet != null)
             {
-                var tileSize = StripSize(sheet, 66f, 66f);
+                var tileSize = StripSize(sheet, DecalTile, DecalTile);
+                if (grid != null)
+                {
+                    // In the grid the tile is the whole cell and its name is not written: the
+                    // still shows fifty pictures and no words.
+                    panelPictures.Add(new BoardPicture(sheet, item.X, item.Y, tile));
+                    continue;
+                }
+
                 panelPictures.Add(new BoardPicture(sheet, item.X + 2f, item.Y + ((item.Height - tileSize.Height) / 2f), tile));
                 panelLines.Add(new BoardLine(item.Label, item.X + tileSize.Width + 6f, item.Y + 2f, Math.Max(1f, item.Width - tileSize.Width - 8f), DescFont, BoardInk.Row, i));
                 continue;
@@ -2080,10 +2203,13 @@ public sealed partial class OriginalShell
                 i == focus ? BoardInk.RowFocused : BoardInk.Row, i));
         }
 
-        if (OpenHangarListWindow() is { } window && _layout.Screen(section)?.Widget(_hangarOpen) is { } widget
-            && StripArt(widget.Art, 0, 1) is { } thumb)
+        if (OpenHangarListWindow() is { } window && opened != null && StripArt(opened.Art, 0, 1) is { } thumb)
         {
-            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
+            // The grid's thumb fills its track in proportion, so it is drawn to the height the
+            // window gives it rather than at the art's own.
+            panelPictures.Add(grid == null
+                ? new BoardPicture(thumb, window.ThumbX, window.ThumbY)
+                : new BoardPicture(thumb, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
         }
 
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
@@ -2123,11 +2249,36 @@ public sealed partial class OriginalShell
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
     }
 
+    // The decal picker's open window: the panel's corner on the page, the tile size the sheet
+    // measures, its five columns over the authored TotalDisplayed rows, and the scroll column
+    // inside the panel's right edge. Everything a grid draws and hits comes off this.
+    private readonly record struct DecalGrid(float X, float Y, float Tile, int Columns, int Rows, float Arrow)
+    {
+        internal int Window => Columns * Rows;
+
+        internal float Width => (Columns * Tile) + Arrow + (2f * DecalGridBorder);
+
+        internal float Height => (Rows * Tile) + (2f * DecalGridBorder);
+
+        internal float ScrollX => X + DecalGridBorder + (Columns * Tile);
+
+        internal float TrackTop(float arrowHeight) => Y + DecalGridBorder + arrowHeight;
+
+        internal float TrackHeight(float upHeight, float downHeight) =>
+            Math.Max(1f, (Rows * Tile) - upHeight - downHeight);
+
+        // Where the slot-th visible tile stands, counted across the row first.
+        internal (float X, float Y) Cell(int slot) =>
+            (X + DecalGridBorder + (slot % Columns * Tile), Y + DecalGridBorder + (slot / Columns * Tile));
+    }
+
     // One dropdown's list, its standing pick, what picking one does, the swatch or decal tile a row
     // draws in place of words where the list has one, and what the build would cost and weigh with
-    // a row taken. A list whose rows change nothing priced carries no bill.
+    // a row taken. A list whose rows change nothing priced carries no bill. Columns over one makes
+    // the open list a grid, which the decal picker alone is: its window scrolls a row of Columns
+    // at a time and its flat index is the grid's own row * Columns + column.
     private sealed record HangarList(
         IReadOnlyList<string> Items, int Current, Action<int> Select,
         Func<int, BoardTint?>? Swatch = null, Func<int, int?>? Tile = null,
-        Func<int, HangarBill>? BillWith = null);
+        Func<int, HangarBill>? BillWith = null, int Columns = 1);
 }

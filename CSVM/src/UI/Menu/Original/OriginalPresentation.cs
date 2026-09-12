@@ -102,6 +102,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the hub's paint tab on a Fury in Fortune Hunters colours.</summary>
     public const string PlanePaintAid = "plane-paint";
 
+    /// <summary>The paint aid's argument that leaves the nose decal list standing open, which is
+    /// the five-across grid of tiles over the page rather than a list under its box.</summary>
+    public const string PlanePaintDecalsAid = "decals";
+
     /// <summary>The aid value that opens the hub's construction totals page.</summary>
     public const string PlanePurchaseAid = "plane-purchase";
 
@@ -451,6 +455,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
                     break;
                 case PlanePaintAid:
+                case PlanePaintAid + ":" + PlanePaintDecalsAid:
                     // The same pose as Built-in's paint aid: a Fury in Fortune Hunters colours with
                     // a nose decal chosen, so the two presentations' shots show one plane.
                     _shell.OpenHangarTab(OriginalScreen.HangarPaint, AidPlaneName);
@@ -460,6 +465,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                         paint.AnswerDefaultsAsk(true);
                         paint.SetPattern(4);
                         paint.SetDecal(0, 40);
+                    }
+
+                    if (aid.EndsWith(PlanePaintDecalsAid, StringComparison.Ordinal))
+                    {
+                        _shell.OpenHangarDropdownOn(OriginalShell.NoseDecalKey);
                     }
 
                     break;

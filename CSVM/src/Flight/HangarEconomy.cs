@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace CSVM.Flight;
 
@@ -43,6 +44,10 @@ public readonly record struct AirframeStats(
     int SlotTitle2,
     int SlotTitle3)
 {
+    /// <summary>How many of the four slots are turrets, the figure the AIRFRAME description box
+    /// prints as its TURRETS line.</summary>
+    public int Turrets => BitOperations.PopCount((uint)(TurretMask & 0xF));
+
     /// <summary>Whether gun slot 0-3 is a turret mount.</summary>
     public bool IsTurretSlot(int slot) => (TurretMask & (1 << slot)) != 0;
 
@@ -57,9 +62,13 @@ public readonly record struct AirframeStats(
     };
 }
 
-/// <summary>One gun calibre's decoded price row; the airframe's turret bit for the slot picks
-/// the column pair.</summary>
-public readonly record struct GunStats(int WingCost, int TurretCost, int WingWeight, int TurretWeight);
+/// <summary>One gun calibre's decoded row: the price columns, the airframe's turret bit for the
+/// slot picking the pair, then the three figures the description box shows and nothing prices.
+/// <paramref name="RateBase"/> is halved for a twin mount and <paramref name="Magazine"/> halved
+/// for a single one, which is the arithmetic docs/org/hangar.md records.</summary>
+public readonly record struct GunStats(
+    int WingCost, int TurretCost, int WingWeight, int TurretWeight,
+    int RateBase, int Magazine, int Range);
 
 /// <summary>One airframe's engine base line; the chosen engine id 0-5 then shifts cost and
 /// weight by the shared offset tables. Power is carried for display, not priced.</summary>
@@ -109,14 +118,14 @@ public static class HangarEconomy
         new(2423, 5005, 14675, 2, 120, 19, 0x00, 3061, 3070, 3062, 3069),
     };
 
-    /// <summary>The 5-calibre gun price table, gun ids 0-4 (.30 through .70).</summary>
+    /// <summary>The 5-calibre gun table, gun ids 0-4 (.30 through .70).</summary>
     public static readonly GunStats[] GunTable =
     {
-        new(240, 440, 280, 520),
-        new(320, 530, 380, 620),
-        new(410, 610, 480, 720),
-        new(490, 700, 580, 820),
-        new(580, 780, 680, 920),
+        new(240, 440, 280, 520, 10, 2800, 1000),
+        new(320, 530, 380, 620, 9, 2400, 1000),
+        new(410, 610, 480, 720, 8, 2000, 1000),
+        new(490, 700, 580, 820, 7, 1600, 1000),
+        new(580, 780, 680, 920, 6, 1200, 1000),
     };
 
     /// <summary>Per-airframe engine base lines, airframe ids 0-10.</summary>
@@ -217,6 +226,24 @@ public static class HangarEconomy
         }
 
         return (int)(EngineBases[airframe].Power * EnginePowerFactors[engineId]);
+    }
+
+    /// <summary>The calibre a gun id names in hundredths of an inch, the figure the description
+    /// box prints: ids 0 to 4 are .30 through .70.</summary>
+    public static int Calibre(int gunId) => (gunId + 3) * 10;
+
+    /// <summary>The three unpriced figures one mount's description box shows: rounds a second
+    /// (the table's rate, halved for a twin mount), the magazine (halved for a single one) and the
+    /// range every calibre shares. An empty mount has none.</summary>
+    public static (double Rate, int Ammo, int Range) GunFigures(GunChoice gun)
+    {
+        if (gun.Calibre is not { } calibre)
+        {
+            return default;
+        }
+
+        var row = GunTable[calibre];
+        return (gun.Twin ? row.RateBase / 2.0 : row.RateBase, gun.Twin ? row.Magazine : row.Magazine / 2, row.Range);
     }
 
     /// <summary>What one slot's gun costs and weighs: the calibre's own price row read down its

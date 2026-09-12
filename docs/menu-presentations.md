@@ -477,7 +477,8 @@ standing open, the one leaf list whose sizes can outrun the window its row autho
 the KEYS AND BUTTONS page standing on the one category that outruns its list window, `credits` and
 `credits:about` with the About box standing over it, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
-hub's figures preview and `plane-construction:overweight` on a build past its capacity, `campaign`
+hub's figures preview, `plane-construction:overweight` on a build past its capacity and
+`plane-paint:decals` standing the nose decal picker open as its five-across grid, `campaign`
 and the shared scratch-store campaign poses, `campaign-delete`), and any other value opens that 
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 

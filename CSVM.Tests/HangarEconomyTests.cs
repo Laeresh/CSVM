@@ -1,3 +1,4 @@
+using System.Linq;
 using CSVM.Flight;
 using Xunit;
 
@@ -40,14 +41,48 @@ public class HangarEconomyTests
     }
 
     [Theory]
-    [InlineData(0, 240, 440, 280, 520)]
-    [InlineData(1, 320, 530, 380, 620)]
-    [InlineData(2, 410, 610, 480, 720)]
-    [InlineData(3, 490, 700, 580, 820)]
-    [InlineData(4, 580, 780, 680, 920)]
-    public void GunTable_MatchesTheDecode(int id, int wingCost, int turretCost, int wingWeight, int turretWeight)
+    [InlineData(0, 240, 440, 280, 520, 10, 2800)]
+    [InlineData(1, 320, 530, 380, 620, 9, 2400)]
+    [InlineData(2, 410, 610, 480, 720, 8, 2000)]
+    [InlineData(3, 490, 700, 580, 820, 7, 1600)]
+    [InlineData(4, 580, 780, 680, 920, 6, 1200)]
+    public void GunTable_MatchesTheDecode(
+        int id, int wingCost, int turretCost, int wingWeight, int turretWeight, int rate, int magazine)
     {
-        Assert.Equal(new GunStats(wingCost, turretCost, wingWeight, turretWeight), HangarEconomy.GunTable[id]);
+        // The range column is 1000 ft down every calibre.
+        Assert.Equal(
+            new GunStats(wingCost, turretCost, wingWeight, turretWeight, rate, magazine, 1000),
+            HangarEconomy.GunTable[id]);
+    }
+
+    [Theory]
+    [InlineData(0, false, 10.0, 1400)]
+    [InlineData(0, true, 5.0, 2800)]
+    [InlineData(4, false, 6.0, 600)]
+    [InlineData(4, true, 3.0, 1200)]
+    public void GunFigures_HalveTheRateForATwinAndTheMagazineForASingle(int calibre, bool twin, double rate, int ammo)
+    {
+        var figures = HangarEconomy.GunFigures(new GunChoice(calibre, twin));
+        Assert.Equal(rate, figures.Rate);
+        Assert.Equal(ammo, figures.Ammo);
+        Assert.Equal(1000, figures.Range);
+    }
+
+    [Fact]
+    public void GunFigures_AnEmptyMountHasNone()
+    {
+        Assert.Equal(default, HangarEconomy.GunFigures(default));
+        Assert.Equal(new[] { 30, 40, 50, 60, 70 }, new[] { 0, 1, 2, 3, 4 }.Select(HangarEconomy.Calibre));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(4, 1)]
+    public void AirframeTurrets_CountTheMaskedSlots(int airframe, int turrets)
+    {
+        Assert.Equal(turrets, HangarEconomy.Airframes[airframe].Turrets);
     }
 
     [Theory]

@@ -273,6 +273,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/ControlsFeature.cs` — the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
 - `src/UI/Menu/PlayerSetupFeature.cs` — the shared player setup: seats claimed by source identity, the roster, the two-stage pick, the gate.
 - `src/UI/Menu/HangarFeature.cs` — the shared hangar: one scratch build over a plane store and an optional wallet, and the purchase gate.
+- `src/UI/Menu/HangarDescriptions.cs` — a construction tab's description box: the shipped figures string, the heading it ends with, and the component's own prose.
 - `src/UI/Menu/CampaignFeature.cs` — the campaign as a shared feature: the profile roster, the seated player, the mission, and every write.
 - `src/UI/Menu/CampaignBriefing.cs` — one mission's briefing as the feature holds it: the state, the narration, the note, the reveal's progress.
 - `src/UI/Menu/CampaignWallet.cs` — the seated profile as the hangar's wallet: funds, affordability, availability, the builds, purchase and sale.

@@ -721,6 +721,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   the monitor stepper instead, so the walk stepped a setting and asserted on the wrong row. The
   screens expose their row text, so the walk can name what it is looking for.
 
+- **INSTR-61** — **A pointer check on a scrolled list's chrome can be swallowed by its thumb: the
+  thumb takes a click before any row is hit-tested, so an arrow standing under an oversized thumb
+  rectangle does nothing and reads as a broken arrow.** A decal-grid case's down arrow never fired
+  because the fixture's thumb art measures 128 pixels against a 68-pixel track and covered it;
+  clamping a proportional thumb to its own track put the press back on the arrow.
+
 - **INSTR-59** — **A positional-audio check must read the node the CULL measures from, not only
   whether the emitter is playing: an audible verdict passes while the two are different nodes, as
   long as the wrong one happens to stand near the listener.** `GunVoice` moved its child

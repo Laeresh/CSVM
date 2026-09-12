@@ -887,7 +887,7 @@ public sealed partial class OriginalShell
                 ComposeSeatPlane(focus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case var _ when IsHangarScreen:
-                ComposeHangar(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
+                ComposeHangar(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, notes, overlays);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:

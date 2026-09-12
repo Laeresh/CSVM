@@ -547,7 +547,7 @@ public sealed partial class ComposedBoardView : Control
         var height = Measure(fit, font, note);
         foreach (var line in note.Flow(height))
         {
-            DrawText(fit, font, line);
+            DrawText(fit, Face(font, line), line);
         }
 
         // Over the rows rather than under them: the mark is a brush stroke across the words it

@@ -56,6 +56,11 @@ public sealed class HangarPaintTables
     /// <summary>The decal set is the gapless 00-49 texture series.</summary>
     public const int DecalCount = 50;
 
+    /// <summary>Tiles across one row of the decal picker. The picked decal is the grid's own
+    /// <c>row * 5 + column</c> and the list's row count is <c>ceil(50 / 5)</c>, both decoded
+    /// (docs/org/hangar.md, callbacks 2239 and 2240).</summary>
+    public const int DecalGridColumns = 5;
+
     /// <summary>The tables as a missing file leaves them: no swatches, no patterns, no names.</summary>
     public static readonly HangarPaintTables Empty = new();
 

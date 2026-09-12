@@ -1,4 +1,4 @@
-﻿# UI
+# UI
 
 The launchscreen and splitscreen rig, plus the interactive debug labs (including its `UI/Menu/` subfolder). Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`.
 
@@ -187,10 +187,10 @@ What a composed campaign screen is made of, engine-free: the screen's fixed back
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
 plaques and flowed list widgets, each in draw order. The backdrop is its own layer so a fill can
 sit over the background and stay under the page's pictures, where a selection bar goes. `BoardNote`
-is a widget's entries plus its wrap box, its marks and `BoardCaret` an edit box's cursor on the line
-it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a
-plaque's states, and a plaque whose art leaves part of its frame empty carries its label's own
-baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
+is a widget's entries plus its wrap box, cut at a word where the box has no room for the rest, its
+marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can
+measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
+part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -705,6 +705,15 @@ begins, the per-tab operations clamp and report change, and `Refusal`, `CanCommi
 line, the would-be cost behind the mark on an over-priced row, the name rules, and `Discard`, which
 drops the build and touches nothing saved. Economy and strings: [../org/hangar.md](../org/hangar.md).
 
+## src/UI/Menu/HangarDescriptions.cs
+What one Plane Construction tab's description box holds, engine-free and presentation-neutral: a
+`HangarInfo` of the figure lines, the heading over the prose and the prose itself, one composer per
+tab. Each fills the tab's own shipped figures string from the decoded economy and appends the
+component's prose row where the component has one, then splits the result at the string's own blank
+line, so the heading is the shipped text's and never a literal here. A component with no prose row
+leaves it empty and an unpicked engine or gun slot is prose alone. The string ids, the figure
+arithmetic and which tab reads which block: [../org/hangar.md](../org/hangar.md).
+
 ## src/UI/Menu/CampaignFeature.cs
 The campaign as a shared engine-free feature in the host's feature set: the state and the operations
 both presentations read and write, with neither one's screen shell in it. `Open` opens a campaign
@@ -896,7 +905,7 @@ sections: the PLANE NAME screen, the Plane Construction hub with one of six tab 
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
 the cabin, the door naming the airframe a default build opens on. It owns the plane picture over
 the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost and weight lines reddening on that bill's own two verdicts; the cash note on both doors (the wallet with its mark on a row it cannot cover, else the export door's figure);
-the tab bar with the standing tab latched and its labels on the strips' own baseline, every list under its box, the two name boxes with their
+the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
 caret, the airframe-switch ask, and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs

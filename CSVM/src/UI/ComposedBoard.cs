@@ -256,16 +256,22 @@ public sealed record BoardLine(
 /// <c>SPACING [5]</c> (<c>docs/formats/briefing.md</c>). It is a layer of its own rather than one
 /// <see cref="BoardLine"/> per entry because how tall an entry draws is a font metric, which the
 /// engine-free half does not hold, so where the next entry starts cannot be composed here.
+/// <paramref name="Italic"/> slants every entry, the way a langui row's own <c>[FONTID]</c> tag
+/// slants a line, and <paramref name="Cut"/> keeps as many words of an entry too tall for the room
+/// left as do fit instead of dropping it whole, which is how a box the original gives a scrollbar
+/// shows its opening lines.
 /// </summary>
 public sealed record BoardNote(
     IReadOnlyList<string> Entries, float X, float Y, float Width, float Height, float Spacing,
-    float Size, BoardInk Ink, BoardArt? Mark = null, IReadOnlyList<bool>? Marked = null)
+    float Size, BoardInk Ink, BoardArt? Mark = null, IReadOnlyList<bool>? Marked = null,
+    bool Italic = false, bool Cut = false)
 {
     /// <summary>The entries as placed lines, stacked from the widget's top-left and stopped at its
     /// authored height. <paramref name="height"/> measures one entry wrapped to a width, in
     /// authored pixels; a fixed pitch instead draws a wrapped entry over the one under it.</summary>
     public IReadOnlyList<BoardLine> Flow(Func<string, float, float> height)
     {
+        ArgumentNullException.ThrowIfNull(height);
         var lines = new List<BoardLine>();
         foreach (var (_, line) in Placed(height))
         {
@@ -303,15 +309,51 @@ public sealed record BoardNote(
         float top = Y;
         for (int i = 0; i < Entries.Count; i++)
         {
-            float tall = height(Entries[i], Width);
-            if (top + tall > Y + Height)
+            string entry = Entries[i];
+            float room = Y + Height - top;
+            float tall = height(entry, Width);
+            string text = tall <= room ? entry : Cut ? Fit(entry, room, height) : string.Empty;
+            if (text.Length == 0)
             {
                 break;
             }
 
-            yield return (i, new BoardLine(Entries[i], X, top, Width, Size, Ink));
-            top += tall + Spacing;
+            yield return (i, new BoardLine(text, X, top, Width, Size, Ink, -1, Italic));
+            top += height(text, Width) + Spacing;
+            if (text.Length < entry.Length)
+            {
+                break;
+            }
         }
+    }
+
+    // The longest head of an entry that fits the room left, cut at a word: the last word that
+    // still fits is found by halving, so the measurer is called a handful of times rather than
+    // once per word. Nothing fits under one line's worth of room.
+    private string Fit(string entry, float room, Func<string, float, float> height)
+    {
+        var breaks = new List<int>();
+        for (int i = entry.IndexOf(' ', StringComparison.Ordinal); i > 0; i = entry.IndexOf(' ', i + 1))
+        {
+            breaks.Add(i);
+        }
+
+        int low = 0;
+        int high = breaks.Count;
+        while (low < high)
+        {
+            int mid = (low + high + 1) / 2;
+            if (height(entry[..breaks[mid - 1]], Width) > room)
+            {
+                high = mid - 1;
+            }
+            else
+            {
+                low = mid;
+            }
+        }
+
+        return low == 0 ? string.Empty : entry[..breaks[low - 1]];
     }
 }
 
