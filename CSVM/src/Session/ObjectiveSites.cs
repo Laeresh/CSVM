@@ -167,8 +167,7 @@ public sealed class ObjectiveSites
 
         foreach (var def in script.Objectives)
         {
-            if (def.Travelers is { WherePoint: { } p }
-                && (Holds(def.RemoveObjectiveTarget, key) || Holds(def.AddObjectiveTarget, key)))
+            if (def.Travelers is { WherePoint: { } p } && Edits(def, key))
             {
                 return new Vector3(p[0], p[1], p[2]);
             }
@@ -266,6 +265,13 @@ public sealed class ObjectiveSites
 
         return false;
     }
+
+    // Every list an objective can name a site in, both flags' ADD_ and REMOVE_. A record's flag
+    // picks the cycle its site rides, never where the site stands, so the objective's own point is
+    // the answer for an other-target key exactly as it is for an objective one.
+    private static bool Edits(ObjectiveDef def, string key) =>
+        Holds(def.AddObjectiveTarget, key) || Holds(def.RemoveObjectiveTarget, key)
+        || Holds(def.AddOtherTarget, key) || Holds(def.RemoveOtherTarget, key);
 
     private static bool Holds(IReadOnlyList<ObjectiveTarget> targets, string key)
     {

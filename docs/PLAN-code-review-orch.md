@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 24. ❌ `KeepsTheShot` holds only the episode that raised the ending
 25. ☐ A queued start past the budget still gets its zero-dt advance
 26. ☑ A turret voice culls at 1.1x its range, as decoded
-27. ☐ `ADD_OTHER_TARGET` and its remove reach the mode table's points
+27. ☑ `ADD_OTHER_TARGET` and its remove reach the mode table's points
 28. ☑ The goldens README count and the re-pinned `exercises` fields
 29. ☑ Three stale doc lines after the landings
 
@@ -916,7 +916,31 @@ distance with the cause in the commit.
 
 **Verify.** Both suites green at the new distance and able to fail at 1.0x.
 
-## C27 ☐ `ADD_OTHER_TARGET` and its remove reach the mode table's points
+## C27 ☑ `ADD_OTHER_TARGET` and its remove reach the mode table's points
+
+**Landed.** `ObjectiveSites.PointFor` matches a key on either flag's lists: the four-list test is
+the new private `Edits(def, key)`, and the condition reads `def.Travelers is { WherePoint: { } p }
+&& Edits(def, key)`. The census over the install's 53 `objectives.zrd` files is on
+`docs/org/targeting.md`: 43 other-target clauses (16 `ADD_OTHER_TARGET`, 27 `REMOVE_OTHER_TARGET`)
+in twelve missions (C1/M02, C1/M04, C1B/M03, C1C/M01, C2/M02, C2/M03, C2/M05, C2B/M04, C3/M02,
+C4/M03, C4/M04, C5/M04), Klondike in eight of them, and not one of those 43 objectives carries a
+`TRAVELERS` clause at all. So no shipped other-target site has an objective point to stand on
+today and the match is a guard, not a change of pixel: the nine `TRAVELERS` points in the install
+sit on objectives that name no target at all except C3/M01's `OBJECTIVE5` (the village trucks) and
+`OBJECTIVE9` (`grasshut2`), both on the `objective` half. `ObjectiveSitesTests` gains
+`AnOtherTargetKeyReadsItsObjectivesTravelersPoint`, which builds one objective carrying a
+`TRAVELERS` point beside `ADD_OTHER_TARGET` and asserts `PointFor` returns it; the type summary
+was rewrapped to name the point read and stays at the 12-line cap.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` succeeds with 0 warnings and
+0 errors; `CheckCommentCaps.ps1` reports all comment blocks within cap and `CheckDocEntries.ps1`
+all doc entries within cap and coverage; the `ObjectiveSitesTests` filter passes 29 of 29, and with
+the old two-list condition restored the new unit alone fails, `Expected: (-5458, 120, -5390)` and
+`Actual: null`, which is the node-bounds fallback the item names; `RunTests.ps1 -Suite
+"target-class-cycle,mode-target-table" -SkipUnits -SkipGoldens` passes both suites with engine
+errors clean.
+
+**Original approach (kept for reference).**
 
 **Goal.** A script that adds or removes an `other_target` reaches the same TRAVELERS point the
 objective keys do, as `BL-400`'s commit claims ("script ADD/REMOVE honoured").

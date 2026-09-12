@@ -198,6 +198,16 @@ and the multiplayer modes read it with no director at all: their `objectives.zrd
 mission preamble (`MISSION_TIMER`, `PLAYER_INIT`, `RESTORE_ANIMS`) and not one target directive, so
 the file's own flags are the whole curated list for the whole session.
 
+**The script keys ship, and none of them sits on an objective that authors a point.** The census
+over the install's 53 `objectives.zrd` files finds 43 other-target clauses (16 `ADD_OTHER_TARGET`,
+27 `REMOVE_OTHER_TARGET`) in twelve missions: C1/M02, C1/M04, C1B/M03, C1C/M01, C2/M02, C2/M03,
+C2/M05, C2B/M04, C3/M02, C4/M03, C4/M04 and C5/M04. Klondike (`piratezep/rock_zeppelin`) is the
+repeated one, added or removed in eight of the twelve. Not one of those 43 objectives carries a
+`TRAVELERS` clause at all, so no shipped other-target site has an objective point to stand on and
+the two flags' keys reach the same point rule only as a guard. Nine objectives in the install author
+a `TRAVELERS` point, and two of them name a target: C3/M01's `OBJECTIVE5` (the village trucks) and
+its `OBJECTIVE9` (`grasshut2`), both on the `objective` half.
+
 **A roster block that flags itself is its own candidate, not a second one.** `objectiveTarget` is a
 field ON the entity, so an aeroplane whose `aiv` block authors slot 37 is offered once, as the
 aeroplane, with the flag set: the block's slot-20 name on line 2, its slots 38 and 39 as the two

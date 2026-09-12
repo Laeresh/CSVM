@@ -3,21 +3,22 @@ using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="ObjectiveSites.CollectFlagged"/>'s two site sources: <c>targets.zrd</c>'s own
-/// entries carrying the pass's flag and the graph's matching <c>ADD_</c> edits, each dropped again
-/// once a completed objective's <c>REMOVE_</c> directive names its key; the
-/// <see cref="TargetFlag.OtherTarget"/> pass's curated list, which puts a mission's chosen
-/// structures on the Non-Aircraft cycle while leaving every unflagged entry of the same table off
-/// every cycle; the director-free split both passes make over the
-/// shipped Instant Action and multiplayer tables, where nothing edits either half; and
-/// <see cref="ObjectiveSites.LiveDespiteState"/>, the resolved-node destroyed gate a live
-/// <c>Collect</c> applies beside it. A site is offered from mission start with the graph's store
-/// still empty; a roster block's own flag is NOT collected here, riding the block's aircraft.
+/// entries carrying the pass's flag and the graph's matching <c>ADD_</c> edits, each dropped once
+/// a completed objective's <c>REMOVE_</c> names its key; the <see cref="TargetFlag.OtherTarget"/>
+/// pass's curated list, which puts a mission's chosen structures on the Non-Aircraft cycle while
+/// leaving every unflagged entry off every cycle; the director-free split both passes make over
+/// the shipped Instant Action and multiplayer tables, where nothing edits either half; the
+/// <c>TRAVELERS</c> point <c>PointFor</c> reads for a key on either flag's list; and the
+/// resolved-node destroyed gate <see cref="ObjectiveSites.LiveDespiteState"/>. A site is offered
+/// from mission start with the graph's store still empty; a roster block's own flag is NOT
+/// collected here, riding its aircraft.
 /// </summary>
 public class ObjectiveSitesTests
 {
@@ -170,6 +171,19 @@ public class ObjectiveSitesTests
 
         Assert.Equal(1, objectives);
         Assert.Single(into, key => key == "rfspt1");
+    }
+
+    [Fact]
+    public void AnOtherTargetKeyReadsItsObjectivesTravelersPoint()
+    {
+        // The flag picks the cycle, not the place, so a site an ADD_OTHER_TARGET names has to reach
+        // the same point an ADD_OBJECTIVE_TARGET one does. Matching only the objective keys drops
+        // such a site onto its node bounds, which C3/M01's village shows is kilometres away.
+        var script = Script(
+            "\"OBJECTIVE1\",[\"TRAVELERS\",[\"player\",\"APPROACHING\",[-5458.0,120.0,-5390.0],1100.0],"
+            + "\"ADD_OTHER_TARGET\",[\"t_truck01\"]]");
+
+        Assert.Equal(new Vector3(-5458f, 120f, -5390f), ObjectiveSites.PointFor(script, "t_truck01"));
     }
 
     [Fact]
