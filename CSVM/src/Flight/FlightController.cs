@@ -287,9 +287,9 @@ public partial class FlightController : Node3D
     /// <summary>Appends this pilot's live objective sites to the targeting pool each frame: the
     /// campaign mission's (<c>ObjectiveSites.Collect</c>, bound by <c>GameSession</c>) or a stunt
     /// run's unflown Danger Zones (<see cref="StuntMission.CollectTargets"/>, bound per pane). Null
-    /// in a session with neither. A channel of its own rather than <see cref="TargetSubParts"/>: a
-    /// site carries the mission's <c>objectiveTarget</c> flag and rides the Enemy cycle, while a
-    /// sub-part carries <c>otherTarget</c> and rides the Non-Aircraft one.</summary>
+    /// in a session with neither. A channel of its own rather than <see cref="TargetSubParts"/>:
+    /// a site carries the mission's own flag, onto the Enemy cycle or the Non-Aircraft one, where a
+    /// sub-part is offered under a flag nothing authors for it.</summary>
     public System.Action<List<AimCandidate>>? TargetObjectives;
 
     /// <summary><c>--target=</c>'s spec, or null for an unscripted session. Applied ONCE, on

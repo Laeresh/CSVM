@@ -62,6 +62,44 @@ public class MissionTargetsTests
     }
 
     [Fact]
+    public void TheTwoValuelessFlagKeysAreReadIndependently()
+    {
+        // `objective` picks the Enemy cycle and `other_target` the Non-Aircraft one, so a reader
+        // that folded them together would put every flagged structure on one cycle.
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "targets.json"),
+            "[[[\"nodes\",[\"only_other\"]],[\"other_target\"]],"
+            + "[[\"nodes\",[\"only_objective\"]],[\"objective\"]],"
+            + "[[\"nodes\",[\"both\"]],[\"other_target\"],[\"objective\"]],"
+            + "[[\"nodes\",[\"neither\"]],[\"description\",\"MSG_PLAIN\"]]]");
+        var targets = MissionTargets.Load(dir);
+
+        Assert.True(targets.For("only_other").OtherTarget);
+        Assert.False(targets.For("only_other").Objective);
+        Assert.True(targets.For("only_objective").Objective);
+        Assert.False(targets.For("only_objective").OtherTarget);
+        Assert.True(targets.For("both").OtherTarget && targets.For("both").Objective);
+        Assert.False(targets.For("neither").OtherTarget || targets.For("neither").Objective);
+    }
+
+    [Fact]
+    public void AFlaggedPathEntryKeepsTheFlagOnItsPathKey()
+    {
+        // C3/M01's own `other_target` entry: the curated list's whole answer for that mission is
+        // one nested [piratezep, rock_zeppelin], and the bare child name must carry nothing.
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "targets.json"),
+            "[[[\"nodes\",[[\"probe_hull\",\"probe_bag\"]]],[\"other_target\"],"
+            + "[\"category_label\",\"MSG_PROBE_ZEP\"]]]");
+        var targets = MissionTargets.Load(dir);
+
+        Assert.True(targets.For("probe_hull/probe_bag").OtherTarget);
+        Assert.Equal("MSG_PROBE_ZEP", targets.For("probe_hull/probe_bag").CategoryLabel);
+        Assert.False(targets.For("probe_bag").OtherTarget);
+        Assert.False(targets.For("probe_hull").OtherTarget);
+    }
+
+    [Fact]
     public void AMissionWithNoTargetsFileIsEmptyRatherThanAThrow()
     {
         Assert.Equal(0, MissionTargets.Load(TestData.TempDir()).Count);

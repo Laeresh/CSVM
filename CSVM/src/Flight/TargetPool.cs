@@ -25,7 +25,8 @@ public sealed class TargetPool
     /// <summary>The Ally cycle: the same team, or either side unaffiliated.</summary>
     public IReadOnlyList<TargetRef> Ally => _ally;
 
-    /// <summary>The Non-Aircraft cycle: turret emplacements and zeppelin sub-parts.</summary>
+    /// <summary>The Non-Aircraft cycle: turret emplacements, zeppelin sub-parts, and the structures
+    /// the mission's own <c>targets.zrd</c> flags <c>other_target</c>.</summary>
     public IReadOnlyList<TargetRef> NonAircraft => _nonAircraft;
 
     /// <summary>Everything selectable, across all three cycles.</summary>
@@ -50,9 +51,9 @@ public sealed class TargetPool
     /// <summary>Rebuilds all three cycles through <see cref="TargetRef.Classify"/>, dropping
     /// <paramref name="self"/> by reference. Structures reach it through
     /// <paramref name="subParts"/> and the mission's <c>targets.zrd</c> SITES through
-    /// <paramref name="objectives"/>; a marker-carrying aeroplane arrives on its own vehicle
-    /// candidate, never twice. ⚠ Never walk <see cref="AimCandidateSet.Structures"/>: every crate
-    /// would land on a cycle. ⚠ <paramref name="ownTeam"/> is the <c>FlightController.Team</c> FIELD.</summary>
+    /// <paramref name="objectives"/>, each under its own record's flag; a marker-carrying aeroplane
+    /// arrives on its own vehicle candidate, never twice. ⚠ Never walk
+    /// <see cref="AimCandidateSet.Structures"/>: every crate lands on a cycle. ⚠ <paramref name="ownTeam"/> is the <c>FlightController.Team</c> FIELD.</summary>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
         object? self, IReadOnlyList<AimCandidate>? objectives = null)
     {
@@ -89,7 +90,11 @@ public sealed class TargetPool
 
         foreach (var c in objectives)
         {
-            Offer(c, AimTargetKind.Structure, ownTeam, self, objectiveTarget: true);
+            // The mission's own record decides the cycle, not the channel: a targets.zrd entry is
+            // flagged `objective` (+0x4d, the Enemy cycle) or `other_target` (+0x4c, the
+            // Non-Aircraft one). A Danger Zone arrives here with neither and is an objective.
+            Offer(c, AimTargetKind.Structure, ownTeam, self,
+                objectiveTarget: c.Source is not ObjectiveSite site || site.Objective);
         }
     }
 
@@ -207,12 +212,12 @@ public sealed class TargetPool
                 return TargetRef.ForOrdnance(c, cls, name, round?.Weapon.DisplayName,
                     round == null ? null : TargetRef.Fraction(round.Health, round.HealthMax));
             default:
-                // An objective site is scenery the MISSION named, so its two label lines and its
-                // own name come off the target table rather than off a health model it has none of.
+                // A flagged site is scenery the MISSION named, so its two label lines and its own
+                // name come off the target table rather than off a health model it has none of.
                 if (c.Source is ObjectiveSite site)
                 {
                     return TargetRef.ForStructure(c, cls, name, site.TypeLabel, site.Category,
-                        objective: true, displayName: site.DisplayName);
+                        objective, displayName: site.DisplayName);
                 }
 
                 // A Danger Zone is labelled off the same targets.zrd triple every other objective
@@ -254,8 +259,8 @@ public sealed class TargetPool
             || (kind == AimTargetKind.Vehicle && c.Source is FlightController { ObjectiveTarget: true });
 
         // ⚠ Plumb objectiveTarget, never fake it through otherTarget: that lands an objective site
-        // on the Non-Aircraft cycle instead of the Enemy one. Only otherTarget is stood in for by
-        // what the candidate is, a world emplacement and a sub-part being selectable.
+        // on the Non-Aircraft cycle instead of the Enemy one. A flagged site brings its own
+        // otherTarget; an emplacement and a sub-part stand in for a flag nothing authors for them.
         bool otherTarget = !objective && kind switch
         {
             AimTargetKind.Turret => IsEmplacement(c.Source),

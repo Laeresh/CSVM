@@ -33,17 +33,23 @@ public sealed class ObjectiveSite
 
     /// <summary>Where the site is now, re-read from its source on every rebuild.</summary>
     public Vector3 Position { get; set; }
+
+    /// <summary>Which of the record's two flags this site stands on: true for <c>objective</c>
+    /// (entity <c>+0x4d</c>, the Enemy cycle), false for <c>other_target</c> (<c>+0x4c</c>, the
+    /// Non-Aircraft cycle). ⚠ A key carrying both reads as an objective, which is the order the
+    /// class filter itself tests the two bytes in.</summary>
+    public bool Objective { get; set; }
 }
 
 /// <summary>
-/// The flown campaign mission's objective sites, offered to each player's target pool as
-/// objective-flagged candidates: the original carries an objective as a companion flag on the
-/// Enemy cycle, so the ordinary selection draws one site at a time and d-pad up steps between
-/// them. The set is <c>targets.zrd</c>'s own <c>objective</c> entries, edited by
-/// <c>objectives.zrd</c>'s <c>ADD_/REMOVE_OBJECTIVE_TARGET</c> as objectives complete, with the
-/// labels resolved through <see cref="Messages"/> and <c>SET_HELP_LABEL</c>. Bound to the roster
-/// by <c>GameSession</c>; <see cref="Collect"/> runs once per pane per frame and re-reads each
-/// site's position, which is what keeps a site on a moving node marked where it actually is.
+/// The flown campaign mission's flagged target sites, offered to each player's target pool: the
+/// set is <c>targets.zrd</c>'s own flagged entries, edited by <c>objectives.zrd</c>'s
+/// <c>ADD_/REMOVE_OBJECTIVE_TARGET</c> and <c>ADD_/REMOVE_OTHER_TARGET</c>, with the labels
+/// resolved through <see cref="Messages"/> and <c>SET_HELP_LABEL</c>. The file's two flags pick
+/// the cycle: an <c>objective</c> entry is a companion flag on the Enemy cycle, so the ordinary
+/// selection draws one site at a time, and an <c>other_target</c> entry puts a structure on the
+/// Non-Aircraft cycle. Bound by <c>GameSession</c>; <see cref="Collect"/> runs once per pane per
+/// frame and re-reads each site's position, so a site on a moving node is marked where it is.
 /// ⚠ These are world SITES only. A roster block that flags itself (aiv slot 37) is offered by
 /// <see cref="TargetPool"/> on its own aircraft's candidate instead, so nothing here needs to
 /// know about an aeroplane.</summary>
@@ -81,13 +87,40 @@ public sealed class ObjectiveSites
     {
         foreach (var entry in targets.ByNode)
         {
-            if (entry.Value.Objective && !RemovedByCompletion(script, graph, entry.Key))
+            if (entry.Value.Objective && !RemovedByCompletion(script, graph, entry.Key, other: false))
             {
                 into.Add(entry.Key);
             }
         }
 
         foreach (var key in graph.ObjectiveTargets)
+        {
+            if (!Listed(into, key))
+            {
+                into.Add(key);
+            }
+        }
+    }
+
+    /// <summary>The target keys carrying the other-target flag, the curated per-mission list that
+    /// puts a structure on the Non-Aircraft cycle: <c>targets.zrd</c>'s own <c>other_target</c>
+    /// entries not dropped by a completed objective's <c>REMOVE_OTHER_TARGET</c>, plus everything
+    /// <c>ADD_OTHER_TARGET</c> has added. ⚠ Append to the list <see cref="CollectTargets"/> filled,
+    /// not to a fresh one: a key already on it is an objective, and that flag outranks this
+    /// one.</summary>
+    public static void CollectOtherTargets(ObjectiveScript script, ObjectiveGraph graph,
+        MissionTargets targets, List<string> into)
+    {
+        foreach (var entry in targets.ByNode)
+        {
+            if (entry.Value.OtherTarget && !RemovedByCompletion(script, graph, entry.Key, other: true)
+                && !Listed(into, entry.Key))
+            {
+                into.Add(entry.Key);
+            }
+        }
+
+        foreach (var key in graph.OtherTargets)
         {
             if (!Listed(into, key))
             {
@@ -156,9 +189,10 @@ public sealed class ObjectiveSites
         return merged?.GetCenter() ?? node.GlobalPosition;
     }
 
-    /// <summary>Appends this frame's live sites, each as an objective-flagged candidate the pool
-    /// files on the Enemy cycle. Every site is rebuilt from its live source, so a site under a
-    /// moving node moves with it and a completed site is simply not offered again.</summary>
+    /// <summary>Appends this frame's live sites, each carrying the flag its own record authors, so
+    /// the pool files an <c>objective</c> one on the Enemy cycle and an <c>other_target</c> one on
+    /// the Non-Aircraft cycle. Every site is rebuilt from its live source, so a site under a moving
+    /// node moves with it and a completed site is simply not offered again.</summary>
     public void Collect(List<AimCandidate> into)
     {
         if (_director.Graph is not { } graph)
@@ -168,35 +202,21 @@ public sealed class ObjectiveSites
 
         _live.Clear();
         CollectTargets(_director.Script, graph, _targets, _live);
-        foreach (var node in _live)
+        int objectives = _live.Count;
+        CollectOtherTargets(_director.Script, graph, _targets, _live);
+        for (int i = 0; i < _live.Count; i++)
         {
-            if (Where(node) is not { } at)
-            {
-                continue;
-            }
-
-            var resolved = Resolve(node);
-            into.Add(new AimCandidate
-            {
-                Position = at,
-                // A record naming a mission-structure node stamps its flags onto the object that
-                // node already built and keeps its team; one naming any other node builds its own,
-                // and the original builds those neutral, which is almost every site.
-                Team = (resolved is { } site
-                    ? DestructibleRegistry.MissionStructureTeamOf(site)
-                    : null) ?? AimAssist.NeutralTeam,
-                Live = LiveDespiteState(resolved is { } n ? _runtime?.Destructibles.Resolve(n)?.Status : null),
-                ConeOverride = AimAssist.NoConeOverride,
-                Source = SiteFor(node, graph, at),
-            });
+            Offer(_live[i], graph, objective: i < objectives, into);
         }
     }
 
-    private static bool RemovedByCompletion(ObjectiveScript script, ObjectiveGraph graph, string key)
+    private static bool RemovedByCompletion(ObjectiveScript script, ObjectiveGraph graph, string key,
+        bool other)
     {
         foreach (var def in script.Objectives)
         {
-            if (graph.CompletedOf(def.Number) && Holds(def.RemoveObjectiveTarget, key))
+            if (graph.CompletedOf(def.Number)
+                && Holds(other ? def.RemoveOtherTarget : def.RemoveObjectiveTarget, key))
             {
                 return true;
             }
@@ -255,6 +275,29 @@ public sealed class ObjectiveSites
         }
     }
 
+    private void Offer(string node, ObjectiveGraph graph, bool objective, List<AimCandidate> into)
+    {
+        if (Where(node) is not { } at)
+        {
+            return;
+        }
+
+        var resolved = Resolve(node);
+        into.Add(new AimCandidate
+        {
+            Position = at,
+            // A record naming a mission-structure node stamps its flags onto the object that
+            // node already built and keeps its team; one naming any other node builds its own,
+            // and the original builds those neutral, which is almost every site.
+            Team = (resolved is { } site
+                ? DestructibleRegistry.MissionStructureTeamOf(site)
+                : null) ?? AimAssist.NeutralTeam,
+            Live = LiveDespiteState(resolved is { } n ? _runtime?.Destructibles.Resolve(n)?.Status : null),
+            ConeOverride = AimAssist.NoConeOverride,
+            Source = SiteFor(node, graph, at, objective),
+        });
+    }
+
     // A message key resolves to itself when unknown, which is right for a readout and wrong for a
     // marker; a whitespace-only value is how a mission clears a label, so both read as absent.
     private string Text(string? key) =>
@@ -298,7 +341,7 @@ public sealed class ObjectiveSites
 
     // The strings are re-read every frame because SET_HELP_LABEL rewrites a live site's category;
     // the instance itself survives that, since it is the identity the selection is held by.
-    private ObjectiveSite SiteFor(string key, ObjectiveGraph graph, Vector3 at)
+    private ObjectiveSite SiteFor(string key, ObjectiveGraph graph, Vector3 at, bool objective)
     {
         if (!_sites.TryGetValue(key, out var site))
         {
@@ -323,6 +366,7 @@ public sealed class ObjectiveSites
         site.TypeLabel = typeLabel.Length > 0 ? typeLabel : null;
         site.Category = category.Length > 0 ? category : null;
         site.Position = at;
+        site.Objective = objective;
         return site;
     }
 }

@@ -195,9 +195,9 @@ public sealed class FlightRoster
                 controller.TargetSubParts = source;
     }
 
-    /// <summary>Binds the campaign mission's objective-site feed. Its own channel rather than a
+    /// <summary>Binds the campaign mission's flagged-site feed. Its own channel rather than a
     /// second assignment to <see cref="SetTargetSubParts"/>, which the zeppelin runtime already
-    /// holds; the two feeds carry different mission flags and ride different cycles. Human panes
+    /// holds; a site carries the mission's own flag and the sub-parts carry none. Human panes
     /// only: an AI rig does no targeting of its own. One session has either this or the per-pane
     /// stunt feed, never both, so this assigns rather than defers.</summary>
     public void SetTargetObjectives(Action<List<AimCandidate>> source)

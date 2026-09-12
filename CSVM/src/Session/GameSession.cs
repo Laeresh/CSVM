@@ -2995,11 +2995,13 @@ public partial class GameSession : Node3D
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
                 state.WorldRuntime);
             flightRoster.SetTargetObjectives(into => sites.Collect(into));
-            // Verification breadcrumb: how many sites the mission starts with. A zero here and a
-            // populated objectives readout means the target table, not the graph, is the problem.
+            // Verification breadcrumb: how many sites the mission starts with, split by the flag
+            // that picks their cycle. A zero here and a populated objectives readout means the
+            // target table, not the graph, is the problem.
             var offered = new List<AimCandidate>();
             sites.Collect(offered);
-            GD.Print($"campaign: {offered.Count} objective site(s) on the player's target cycle");
+            int flagged = offered.Count(c => c.Source is ObjectiveSite { Objective: true });
+            GD.Print($"campaign: {flagged} objective site(s) and {offered.Count - flagged} other-target site(s) on the player's target cycles");
         }
 
         if (_rigs.Count > 1)

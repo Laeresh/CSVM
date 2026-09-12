@@ -144,14 +144,14 @@ directives and `SET_HELP_LABEL` read `ObjectiveTarget`s, where a nested list is 
 `parent/child`. Format and decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/Session/ObjectiveSites.cs
-The flown campaign mission's objective sites, offered to each player's `TargetPool` as
-objective-flagged candidates, which is what tells the player where to go. World SITES only:
-`targets.zrd`'s own `objective` entries, minus whichever a completed objective's
-`REMOVE_OBJECTIVE_TARGET` names, plus whatever `ADD_OBJECTIVE_TARGET` adds. A roster block that
-flags itself is not here, because its marker rides its own aeroplane's candidate. A site is keyed
-by `ObjectiveTarget.Key`, re-read every frame so it tracks a moving node, and reads `Live` off its
-resolved node's own `DestructibleRegistry` state (`LiveDespiteState`), leaving the cycle on a
-destroyed part alone. Bound by `GameSession`. Marker decode: [../org/targeting.md](../org/targeting.md).
+The flown campaign mission's flagged target sites, offered to each player's `TargetPool` carrying
+the flag their own record authors. World SITES only, from `targets.zrd` and the script's own
+`ADD_`/`REMOVE_` edits: `CollectTargets` is the `objective` half (the Enemy cycle) and
+`CollectOtherTargets` the `other_target` half (the Non-Aircraft cycle), the curated list admitting
+a mission's chosen structures and no other destructible. A roster block that flags itself is not
+here; its marker rides its own aeroplane. A site is keyed by `ObjectiveTarget.Key`, re-read every
+frame so it tracks a moving node, and reads `Live` off its resolved node's `DestructibleRegistry`
+state. Bound by `GameSession`; marker decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured

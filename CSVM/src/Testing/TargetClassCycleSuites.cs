@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -22,6 +23,13 @@ internal static class TargetClassCycleSuites
     // flies from the first frame and is the one whose parts this suite cycles.
     private const string LiveZep = "piratezep";
 
+    // The mission's own curated target list. Its targets.zrd flags exactly one node
+    // `other_target`, and names these two with no flag at all, which is what separates a mission's
+    // chosen structures from every other destructible standing in the same world.
+    private const string FlaggedSite = "piratezep/rock_zeppelin";
+    private const string UnflaggedTank = "hydrogentank1";
+    private const string UnflaggedPoint = "pzhookpoint";
+
     // The two panes, 4 km apart along the mission's own axis, each with a hostile 300 m off its
     // own nose. Far enough apart that the same two hostiles sort into opposite orders, which is
     // how a shared pick would show itself.
@@ -35,9 +43,11 @@ internal static class TargetClassCycleSuites
         + "ones, and the Non-Aircraft key the live zeppelin's own parts together with the "
         + "chapter's switched-on gun emplacements, every entry of it a structure or a turret and "
         + "never an aeroplane; a class change lands on the head of the cycle it changes to; "
-        + "Target Nothing stays cleared through a rebuild until a class key; and two panes "
+        + "Target Nothing stays cleared through a rebuild until a class key; two panes "
         + "4 km apart auto-acquire different hostiles, one pane's step leaving the other's pick "
-        + "and the other's class alone")]
+        + "and the other's class alone; and the mission's own targets.zrd puts the one node it "
+        + "flags other_target on the Non-Aircraft cycle while the destructibles the same table "
+        + "names with no flag reach no cycle at all")]
     internal static void TargetClassCycle(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -56,6 +66,15 @@ internal static class TargetClassCycleSuites
         {
             throw new SuiteSkippedException($"{Chapter}/{Mission} carries no '{LiveZep}' record");
         }
+
+        // The curated list and the director that edits it: the mission's own story position, so
+        // the script runs against the same world the cycles above are read from.
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath))
+            ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Mission}");
+        var script = ObjectiveScript.Load(missionZrdr);
+        var missionTargets = MissionTargets.Load(missionZrdr, chapterZrdr);
+        var messages = Messages.Load(ctx.MessagesPath);
+        ctx.ExtraPrewarmSoundNames = script.SoundGroupNames();
 
         var report = new StringBuilder();
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -128,6 +147,10 @@ internal static class TargetClassCycleSuites
                 CheckClassChangeLandsOnTheHead(ctx, p1);
                 CheckClearStaysCleared(ctx, p1);
                 CheckPanesAreIndependent(ctx, p1, p2);
+                CheckTheCuratedListPicksTheCycle(ctx, world,
+                    new Curated(mission, script, missionTargets, messages, scan, parts, p1Self,
+                        p1Pose, parts.Count + liveGuns),
+                    report);
                 ctx.Note($"{Chapter}/{Mission}: three class cycles of {p1.Selection.Pool.Enemy.Count}/{p1.Selection.Pool.Ally.Count}/{p1.Selection.Pool.NonAircraft.Count}, each key walking its own");
             }
             finally
@@ -235,6 +258,93 @@ internal static class TargetClassCycleSuites
             $"…and P2 changing class leaves P1 on the cycle P1 chose");
     }
 
+    // The mission's own targets.zrd is the curated list the original's Non-Aircraft cycle walks.
+    // The node it flags `other_target` joins that cycle, the nodes the same table names without a
+    // flag reach none, and its `objective` entries keep the Enemy cycle they already rode.
+    private static void CheckTheCuratedListPicksTheCycle(TestContext ctx, TestWorld world,
+        Curated curated, StringBuilder report)
+    {
+        var flagged = curated.Targets.For(FlaggedSite);
+        var unflagged = curated.Targets.For(UnflaggedTank);
+        ctx.Check(flagged.OtherTarget && !flagged.Objective,
+            $"{Chapter}/{Mission}'s target table flags '{FlaggedSite}' other_target and nothing else");
+        ctx.Check(!unflagged.OtherTarget && !unflagged.Objective && unflagged.Description != null,
+            $"…and names '{UnflaggedTank}' in that same table with no flag at all");
+
+        var director = CampaignDirector.Create(curated.Script, curated.Mission,
+            CampaignProfileDef.NewProfile("Zachary"), null);
+        var listener = curated.Pose;
+        director.Attach(new CampaignDirector.WorldInputs
+        {
+            Runtime = world.Runtime,
+            Sounds = world.Runtime.Sounds,
+            ListenerPosition = () => listener,
+            Rng = new Random(1),
+        });
+        var offered = new List<AimCandidate>();
+        new ObjectiveSites(director, curated.Messages, curated.Targets, world.Runtime)
+            .Collect(offered);
+
+        var selection = new TargetSelection();
+        selection.Rebuild(curated.Scan, curated.Parts, AimAssist.PlayerTeam, curated.Self,
+            curated.Pose, Basis.Identity, offered);
+        var pool = selection.Pool;
+        report.AppendLine($"curated list: {offered.Count} site(s) offered, cycles enemy={pool.Enemy.Count} "
+            + $"ally={pool.Ally.Count} nonAircraft={pool.NonAircraft.Count} over a baseline of {curated.Baseline}");
+
+        ctx.Same(1, Named(pool.NonAircraft, FlaggedSite),
+            $"the one entry the mission flags other_target, '{FlaggedSite}', is on the Non-Aircraft cycle, once");
+        ctx.Same(0, Named(pool.Enemy, FlaggedSite) + Named(pool.Ally, FlaggedSite),
+            $"…and on neither other cycle, which is where the objective flag would have put it");
+        ctx.Check(Find(pool.NonAircraft, FlaggedSite) is
+        { Objective: false, Kind: AimTargetKind.Structure } site
+                  && site.DisplayName.Length > 0 && site.CategoryLine.Length > 0,
+            $"…labelled off the table's own description and category, and not sorting ahead of the sectors");
+        ctx.Same(curated.Baseline + 1, pool.NonAircraft.Count,
+            $"…joining the zeppelin's parts and the world's guns rather than replacing them");
+
+        foreach (string key in new[] { UnflaggedTank, UnflaggedPoint })
+        {
+            ctx.Check(ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(key)) != null,
+                $"'{key}' is a node this world actually builds");
+            ctx.Same(0, Named(pool.NonAircraft, key) + Named(pool.Enemy, key) + Named(pool.Ally, key),
+                $"…and reaches no cycle at all, the table naming it without flagging it");
+        }
+
+        ctx.Check(pool.Enemy.Count(t => t.Objective) > 0,
+            $"the same table's objective entries still ride the Enemy cycle they already rode");
+    }
+
+    private static int Named(IReadOnlyList<TargetRef> cycle, string name) =>
+        cycle.Count(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    private static TargetRef? Find(IReadOnlyList<TargetRef> cycle, string name)
+    {
+        foreach (var target in cycle)
+        {
+            if (string.Equals(target.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return target;
+            }
+        }
+
+        return null;
+    }
+
+    private static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions)
+    {
+        foreach (var mission in missions)
+        {
+            if (string.Equals(mission.ChapterFolder, Chapter, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(mission.MissionFolder, Mission, StringComparison.OrdinalIgnoreCase))
+            {
+                return mission;
+            }
+        }
+
+        return null;
+    }
+
     private static List<object> Sources(IReadOnlyList<TargetRef> cycle)
     {
         var into = new List<object>(cycle.Count);
@@ -258,6 +368,12 @@ internal static class TargetClassCycleSuites
 
     private static void Offer(AimCandidateSet scan, FlightController rig, Vector3 at) =>
         scan.AddVehicle(at, Vector3.Zero, rig.Team, live: true, rig);
+
+    // One call's worth of the mission's curated list, the candidates it is read beside, and the
+    // Non-Aircraft count a flagged site has to EXTEND rather than replace.
+    private readonly record struct Curated(CampaignMission Mission, ObjectiveScript Script,
+        MissionTargets Targets, Messages Messages, AimCandidateSet Scan,
+        IReadOnlyList<AimCandidate> Parts, object Self, Vector3 Pose, int Baseline);
 
     // One pilot's pane: its own selection over the shared candidates, sorted against its own pose.
     // A press and the rebuild that publishes it are separate calls because the original's handler

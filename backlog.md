@@ -638,18 +638,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   other two states), `docs/org/targeting.md` "Track Target", `docs/controls.md`,
   `PLAN-cockpit-view` (`HeadLook`, `src/Flight/HeadLook.cs`).
 
-- `BL-400` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **`Structures` as a selectable Non-Aircraft target — needs a curated
-  `targets.zrd`-equivalent list.** *Evidence:* the player-targeting plan's out-of-scope call (c),
-  2026-08-15: the original's Non-Aircraft cycle walks a curated mission `targets.zrd` list
-  (decoded in `docs/org/targeting.md`), which our `DestructibleRegistry` has no equivalent of —
-  `docs/architecture.md`'s own `DestructibleRegistry` entry calls it an **approximation** of that
-  list, and walking it directly would put every crate and fence in the world on the cycle.
-  `TargetPool.Rebuild` deliberately never reads `AimCandidateSet.Structures` for exactly this
-  reason, so `Structures` staying out of the cycle is a property of the pool, not a gap that leaked
-  in.
-  *Fix shape:* a curated per-mission target list (mirroring `targets.zrd`'s authored entries) feeding
-  `TargetPool` the same way zeppelin sub-parts do today (`subParts` in `Rebuild`).
-  *Cross-refs:* `TargetPool.cs`, `docs/architecture.md`'s `DestructibleRegistry` entry,
+- `BL-828` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **Instant Action and the
+  multiplayer modes never read their own `targets.zrd`, so no mission-flagged structure reaches
+  their Non-Aircraft cycle.** *Evidence:* the curated list is read by `ObjectiveSites`, which takes a
+  `CampaignDirector` and is therefore bound only inside `GameSession`'s campaign block. The shipped
+  tables flag `ap_transmitter` in six `IA1` files and `zep_rearm_node_1`/`_2` in eight `MP3` files
+  (the census in `docs/org/targeting.md`, "The curated list is `targets.zrd`"), so those modes offer
+  a Non-Aircraft cycle of emplacements and zeppelin sub-parts alone where the original also offers
+  the radio tower and the rearm bases.
+  *Fix shape:* a director-free site feed for the two modes, reading `MissionTargets` and offering its
+  flagged entries through the same `FlightController.TargetObjectives` channel the campaign uses.
+  Neither mode ships an `objectives.zrd` that edits the set, so the table's own flags are the whole
+  answer and no graph is needed.
+  *⚠ Traps:* do not widen `TargetPool` to walk `AimCandidateSet.Structures` instead. That puts every
+  crate and fence on the cycle, which is the reason the curated list exists.
+  *Cross-refs:* `ObjectiveSites.CollectOtherTargets`, `GameSession`'s campaign block, `TargetPool.cs`,
   `docs/org/targeting.md`.
 
 - `BL-397` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **A modernized target marker: brackets only PAST range, not under it — the

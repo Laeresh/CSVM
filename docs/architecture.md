@@ -491,7 +491,7 @@ clusters they delegate to.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the contiguous `OBJECTIVEn` blocks, in the typed shape the graph runs.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine, the rotating completion scan, the conditions, the four endings.
 - `src/Session/CampaignHumanField.cs` — the human field's rules, engine-free: what a condition naming one aeroplane asks once two to four humans fly.
-- `src/Session/ObjectiveSites.cs` — the flown campaign mission's objective sites as targeting candidates, rebuilt from their live source every frame.
+- `src/Session/ObjectiveSites.cs` — the flown campaign mission's flagged target sites as targeting candidates, rebuilt from their live source every frame.
 - `src/Session/CampaignDirector.cs` — the engine side of a campaign mission: the graph armed against the built world, the roster spawned and launched off its hooks, the attempt recorded.
 - `src/Session/CampaignDangerZones.cs` — a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule.
 - `src/Session/AirframeSwap.cs` — the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.

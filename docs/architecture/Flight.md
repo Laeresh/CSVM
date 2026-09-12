@@ -80,10 +80,10 @@ The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`
 reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, the original's own
 contract and why a runtime spawn appears and a death disappears with no extra plumbing. It walks
 three of the aim assist's four lists; structures arrive through `subParts` and the mission's
-`targets.zrd` sites through `objectives`, and the two mission flags stay separate so a site lands on
-the Enemy cycle and a sub-part on the Non-Aircraft one; an aeroplane whose roster block flags itself
-carries the marker on its own vehicle candidate, never twice. `TargetSelection` owns the instance.
-Decode: [../org/targeting.md](../org/targeting.md) "The candidate list". Read `TargetSelection.cs`.
+`targets.zrd` sites through `objectives`, each carrying its own record's flag, so an `objective`
+site rides the Enemy cycle and an `other_target` one joins the sub-parts on the Non-Aircraft one.
+An aeroplane whose roster block flags itself carries the marker on its own candidate, never twice.
+Read `TargetSelection.cs`, which owns the instance; decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/TargetSelection.cs
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance

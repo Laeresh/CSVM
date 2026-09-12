@@ -78,8 +78,8 @@ public sealed class TargetSelection
     /// (<c>FUN_004b5fb0</c>). With the selection cleared the pool is left EMPTY rather than built and
     /// discarded, which is the original's own short-circuit and the mechanism behind the sticky
     /// clear.</summary>
-    /// <param name="objectives">The mission's objective-flagged sites, which sort ahead of every
-    /// sector on the Enemy cycle.</param>
+    /// <param name="objectives">The mission's flagged sites: an objective one sorts ahead of every
+    /// sector on the Enemy cycle, and an other-target one joins the Non-Aircraft cycle.</param>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
         object? self, Vector3 position, Basis basis,
         IReadOnlyList<AimCandidate>? objectives = null)

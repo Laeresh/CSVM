@@ -10,13 +10,14 @@ namespace CSVM.Tests;
 /// <summary>
 /// <see cref="ObjectiveSites.CollectTargets"/>'s two site sources: <c>targets.zrd</c>'s own
 /// <c>objective</c> entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits, each dropped again
-/// once a completed objective's own <c>REMOVE_OBJECTIVE_TARGET</c> names its key; and
+/// once a completed objective's own <c>REMOVE_OBJECTIVE_TARGET</c> names its key;
+/// <see cref="ObjectiveSites.CollectOtherTargets"/>'s <c>other_target</c> half, the curated list
+/// that puts a mission's chosen structures on the Non-Aircraft cycle while leaving every unflagged
+/// entry of the same table off every cycle; and
 /// <see cref="ObjectiveSites.LiveDespiteState"/>, the resolved-node destroyed gate a live
 /// <c>Collect</c> applies beside it. A site is offered from mission start with the graph's own
 /// store still empty, which is what reading <see cref="ObjectiveGraph.ObjectiveTargets"/> alone
-/// would miss. A roster block's own flag is NOT collected here at all: it rides the block's
-/// aircraft (<see cref="CSVM.Flight.FlightController.ObjectiveTarget"/>). Pinned off-engine: none
-/// of the types here touch Godot.
+/// would miss. A roster block's own flag is NOT collected here: it rides the block's aircraft.
 /// </summary>
 public class ObjectiveSitesTests
 {
@@ -97,6 +98,91 @@ public class ObjectiveSitesTests
     public void ASiteNotReadDestroyedStaysLive(DestructibleRegistry.State? state)
     {
         Assert.True(ObjectiveSites.LiveDespiteState(state));
+    }
+
+    [Fact]
+    public void AnOtherTargetEntryIsCollectedForTheNonAircraftCycle()
+    {
+        var script = Script("\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[-1.0],\"INACTIVE1\",[\"never\"]]");
+        var graph = new ObjectiveGraph(script, new FakeWorld());
+        var into = new List<string>();
+
+        ObjectiveSites.CollectTargets(script, graph, TargetsWithFlag("g_tower1", "other_target"), into);
+        Assert.Empty(into);
+        ObjectiveSites.CollectOtherTargets(script, graph,
+            TargetsWithFlag("g_tower1", "other_target"), into);
+
+        Assert.Contains("g_tower1", into);
+    }
+
+    [Fact]
+    public void AnUnflaggedTableEntryIsCollectedByNeitherPass()
+    {
+        // The whole point of the curated list: a mission names plenty of nodes it does not flag,
+        // and those reach no cycle. Reading the table's keys alone would put them all on one.
+        var script = Script("\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[-1.0],\"INACTIVE1\",[\"never\"]]");
+        var graph = new ObjectiveGraph(script, new FakeWorld());
+        var targets = Labelled("hydrogentank1");
+        var into = new List<string>();
+
+        ObjectiveSites.CollectTargets(script, graph, targets, into);
+        ObjectiveSites.CollectOtherTargets(script, graph, targets, into);
+
+        Assert.Empty(into);
+    }
+
+    [Fact]
+    public void AnOtherTargetSiteIsDroppedOnceACompletedObjectiveRemovesIt()
+    {
+        var script = Script("\"OBJECTIVE1\",[\"REMOVE_OTHER_TARGET\",[\"trcargo01\"]]");
+        var graph = new ObjectiveGraph(script, new FakeWorld());
+        var targets = TargetsWithFlag("trcargo01", "other_target");
+
+        var before = new List<string>();
+        ObjectiveSites.CollectOtherTargets(script, graph, targets, before);
+        Assert.Contains("trcargo01", before);
+
+        graph.Step(0.1f);
+        Assert.True(graph.CompletedOf(1));
+
+        var after = new List<string>();
+        ObjectiveSites.CollectOtherTargets(script, graph, targets, after);
+        Assert.DoesNotContain("trcargo01", after);
+    }
+
+    [Fact]
+    public void AKeyOnBothFlagsIsOfferedOnceAsAnObjective()
+    {
+        // The class filter tests the objective byte first, so a key carrying both is an objective
+        // and must not be offered a second time on the Non-Aircraft cycle.
+        var script = Script("\"OBJECTIVE1\",[\"ADD_OTHER_TARGET\",[\"rfspt1\"]]");
+        var graph = new ObjectiveGraph(script, new FakeWorld());
+        graph.Step(0.1f);
+        var targets = TargetsWithFlag("rfspt1", "objective");
+
+        var into = new List<string>();
+        ObjectiveSites.CollectTargets(script, graph, targets, into);
+        int objectives = into.Count;
+        ObjectiveSites.CollectOtherTargets(script, graph, targets, into);
+
+        Assert.Equal(1, objectives);
+        Assert.Single(into, key => key == "rfspt1");
+    }
+
+    private static MissionTargets TargetsWithFlag(string node, string flag)
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "targets.json"),
+            "[[[\"nodes\",[\"" + node + "\"]],[\"" + flag + "\",true]]]");
+        return MissionTargets.Load(dir);
+    }
+
+    private static MissionTargets Labelled(string node)
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "targets.json"),
+            "[[[\"nodes\",[\"" + node + "\"]],[\"help_label\",\"MSG_OBJ_DESTROY\"]]]");
+        return MissionTargets.Load(dir);
     }
 
     private static MissionTargets TargetsWithObjectiveFlag(string node)
