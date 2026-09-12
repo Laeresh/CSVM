@@ -249,43 +249,10 @@ public sealed class TemplateStage<TNode>
     // ⚠ Rebuild the maps; a Remove hashes the dead key it is handed.
     public int DropFreed()
     {
-        int dropped = 0;
-        var liveSlots = new List<KeyValuePair<TNode, int>>(_slotOfNode.Count);
-        foreach (var entry in _slotOfNode)
-        {
-            if (_isValid(entry.Key))
-                liveSlots.Add(entry);
-            else
-                dropped++;
-        }
-
-        if (dropped > 0)
-        {
-            _slotOfNode.Clear();
-            foreach (var entry in liveSlots)
-                _slotOfNode[entry.Key] = entry.Value;
-        }
-
+        int dropped = FreedKeys();
+        Rebuild(_slotOfNode);
         foreach (var byAnchor in _callerSlots.Values)
-        {
-            var liveClaims = new List<KeyValuePair<TNode, List<(object Site, int Slot)>>>(byAnchor.Count);
-            int gone = 0;
-            foreach (var claim in byAnchor)
-            {
-                if (_isValid(claim.Key))
-                    liveClaims.Add(claim);
-                else
-                    gone++;
-            }
-
-            if (gone == 0)
-                continue;
-            dropped += gone;
-            byAnchor.Clear();
-            foreach (var claim in liveClaims)
-                byAnchor[claim.Key] = claim.Value;
-        }
-
+            Rebuild(byAnchor);
         // The follow list holds nodes rather than keys, but PlaceOn and the hide half of Reveal
         // both match a stored Root through the identity comparer, so a freed one is the same
         // dereference between the frames FollowSites drops it on.
@@ -295,6 +262,24 @@ public sealed class TemplateStage<TNode>
         // def's WHOLE anchor list. A null anchor is a global instance and stays.
         _hidesPending.RemoveAll(p => p.Anchor is { } gone && !_isValid(gone));
         return dropped;
+
+        // Refills one identity-keyed map from its live entries. Clear hashes nothing, so it is the
+        // only way to retire a dead key; an untouched map is left alone rather than rehashed.
+        void Rebuild<TValue>(Dictionary<TNode, TValue> map)
+        {
+            var live = new List<KeyValuePair<TNode, TValue>>(map.Count);
+            foreach (var entry in map)
+            {
+                if (_isValid(entry.Key))
+                    live.Add(entry);
+            }
+
+            if (live.Count == map.Count)
+                return;
+            map.Clear();
+            foreach (var entry in live)
+                map[entry.Key] = entry.Value;
+        }
     }
 
     /// <summary>Claims a pool slot for a relocating CALL_ANIMATION whose anchor sits in no slot

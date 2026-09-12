@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Judgement calls
 
 11. ☐ One stopwatch bank for the three `--perf` cost meters
-12. ☐ `TemplateStage` freed-key walk shared
+12. ☑ `TemplateStage` freed-key walk shared
 13. ☐ One `Play` delegate and one `Once` for the three cinemas
 14. ☐ `ObjectiveSites` collects both target classes through one method
 15. ☐ `CameraController` reads its tuning through `_camParams` and names its views
@@ -371,7 +371,24 @@ of the ambient statics), else the facades go too. One bracket node taking the ba
 the empty stage prints the same keys (`ai_ms`, `ai_planes`, `proc_ms`, `proc_max_ms`,
 `proc_passes`, `phys_tick_ms`); `docs/architecture/Utils.md` entry rewritten.
 
-## B12 ☐ `TemplateStage` freed-key walk shared
+## B12 ☑ `TemplateStage` freed-key walk shared
+
+**Landed.** `DropFreed` opens with `FreedKeys()` as its count and rebuilds both identity-keyed
+maps through one generic local function, so the walk and the rebuild each exist once. The local
+function skips a map with no dead key rather than rehashing it, which is what the two separate
+`dropped > 0` and `gone == 0` guards did. Public behaviour is unchanged: the same total is
+returned, the follows and the deferred hides are pruned as before, and no caller or suite
+contract moves. `docs/architecture/Mech3.md` describes the pair by what they do, not by their
+shape, so its entry needed no edit.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings;
+`CheckCommentCaps.ps1` reports all blocks within cap; `RunTests.ps1 -UnitFilter
+"FullyQualifiedName~TemplateStage" -SkipEngine -SkipGoldens` 30 passed, 0 failed; the two engine
+suites that read the stale count, `damage-template-freed-anchor` (stale keys after the free: 3)
+and `landings-hookup-airframe`, both PASS with engine errors clean; `RunTests.ps1 -SkipUnits
+-SkipEngine` 23 shots hash-identical.
+
+**Original approach (kept for reference).**
 
 **Goal.** `FreedKeys()` and `DropFreed()` walk the two maps once, and the rebuild block appears
 once.
