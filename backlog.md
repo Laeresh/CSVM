@@ -1871,18 +1871,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the Instant Action palette swallows the dark one, so keep a ground behind coloured text there.
   *Cross-refs:* `BL-703`'s landing (`git log --grep=BL-703`), which added the strip.
 
-- `BL-753` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Plane Construction's
-  tab labels ride high enough on their strips to touch the element above.** *Evidence:* reported
-  at the controls over `PLAN-M5-polish-12`'s closing sortie, "Plane Construction: move the text of
-  the tabs a little bit down so they dont overlap with the element above". The tabs are authored
-  strips carrying their label on the plaque (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:769-772`,
-  drawn through the paper-button arm at `:1676-1679`), so the label's baseline inside the plaque is
-  ours, not the layout's. *Fix shape:* drop the tab label's baseline within its strip. *⚠ Traps:*
-  the strip geometry is decoded; move the text inside it, never the strip. Every other paper
-  button shares the same draw arm, so a change there has to leave OK, Cancel and the export
-  variants where they are. *Cross-refs:* the same screen's PLANE NAME dialog, centred on its own
-  pane by the rule in [`docs/formats/menu-layout.md`](docs/formats/menu-layout.md).
-
 - `BL-754` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The plane
   construction hub writes no line in red: the original reddens PLANE COST when the wallet cannot
   cover the build and CURRENT WEIGHT when the build is over capacity.** *Evidence:* reported at
@@ -1981,33 +1969,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   change belongs to the decal case alone. *Cross-refs:* `BL-659`'s landing
   (`git log --grep=BL-659`), the aid that can open these lists.
 
-- `BL-763` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The wallet-free
-  totals page commits with Purchase Now where the original's reads Export.** *Evidence:* reported at
-  the controls over `PLAN-M5-polish-13`'s closing sortie, "Ready to Export shows Export instead of
-  Buy button in instant action", and `OriginalScreenshots/CustomPlane Export.png` is that page on the
-  wallet-free path (its tab bar reads READY TO EXPORT and CANCEL EXPORT) with Export on the commit
-  button. Ours draws the button from `PUR_B_PURCHASE`'s own resource, `IDS_PUR_B_PURCHASE`,
-  "Purchase Now", on both paths (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:743-748`).
-  *Fix shape:* the wallet-free path swaps the commit's label the way it already swaps the two tab-bar
-  strips (`ExportVariant`, `:777-795`). *⚠ Traps:* the shipped table has no export label for this
-  button, only `IDS_PS_B_EXPORT`, "Export", authored for the inventory's own; reuse that id rather
-  than writing a literal. The campaign path keeps Purchase Now. *Cross-refs:* `BL-764` (the same
-  path's inventory buttons), `BL-651`'s landing (`git log --grep=BL-651`), which drew the export
-  boundary.
-
-- `BL-764` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wallet-free
-  inventory keeps a dead Export button and calls the removal a sale.** *Evidence:* reported at the
-  controls over `PLAN-M5-polish-13`'s closing sortie, "Should not have a export option (its already
-  deactivated) coming from instant action and should be delete instead of sell for instant action".
-  The inventory builds both buttons on both paths and disables Export
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:813-815`), where Instant Action has nothing to export
-  to and a plane that cost nothing is not worth a sale. *Fix shape:* on the wallet-free path the
-  Export row is not built at all and Sell is labelled Delete. *⚠ Traps:* the campaign path keeps both
-  buttons and both words. There is no shipped delete label for this button (the table has
-  `IDS_PS_B_SELL`, "Sell", and `IDS_PS_B_EXPORT`, "Export"), so the word is remake-only, as the tab
-  bar's export variants are. Dropping a row moves the focus order the pad and the aid both walk.
-  *Cross-refs:* `BL-766` (the confirm the same button raises), `BL-763`.
-
 - `BL-765` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The inventory writes
   the plane's name and its airframe as one line at the airframe's row, leaving the name's own row
   unused.** *Evidence:* reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "The
@@ -2020,19 +1981,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   which text is not settled by the keys' names**, and there is no capture of the INVENTORY screen
   under `OriginalScreenshots/`, so the first step is a shot of it; `HA_T_PLANE` is the left row and
   the one with no width, which is the shape of a short label rather than a name. *Cross-refs:*
-  `BL-764` (the same screen's buttons).
-
-- `BL-766` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wallet-free
-  inventory asks the campaign's sale question, which prices a plane that cost nothing.** *Evidence:*
-  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "Confirm dialog should ask 'Are
-  you sure you want to delete it?'". `AskToSell` formats langui 700, "Your %1!s! is worth
-  <B>$%2!d!<b>.  Are you sure you want to sell it?", on both paths
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1058-1071`). *Fix shape:* the wallet-free path asks
-  its own question in the same two-button query box. *⚠ Traps:* the shipped table carries no delete
-  question for a plane (201 is the player and 210 the saved game), so the wording is remake-only.
-  Keep the box's shape: the sell confirm is the `0x4` two-button query with the `?` icon, which
-  `BL-744` settled. *Cross-refs:* `BL-764` (the button that raises it), `BL-744`'s landing
-  (`git log --grep=BL-744`), the icon rule.
+  `BL-764`'s landing (`git log --grep=BL-764`), which settled the same screen's buttons.
 
 - `BL-767` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **A message box's rollover
   frame is drawn for the pad focus, so a button never returns to its normal frame and the pointer's

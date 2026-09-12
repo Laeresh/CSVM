@@ -668,6 +668,14 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   gives Original a Dogfight door under the Free Flight door, a Dogfight screen in the Free Flight
   screen's shape, and Built-in's own join gesture (Start on a free pad) with the seats, picks and
   gate shared through the player-setup feature; all marked remake-only in the census above.
+- **The wallet-free path's own verbs are partly remake-only.** Its totals page commits with
+  Export, which the stills show and the shipped table carries as `IDS_PS_B_EXPORT` (`langui` 1139)
+  for the inventory's own button; there is no export label authored for `PUR_B_PURCHASE`, so the
+  id is borrowed. Its inventory drops the Export row entirely (Instant Action has nowhere to
+  export to, both presentations picking out of the one build store) and calls the removal Delete
+  on the button, over the page and in the confirm, which no shipped string carries for a plane:
+  700 and 1256 both price and name a sale. The confirm keeps the sale confirm's shape, the `0x4`
+  two-button query box with Yes and No.
 - **Original's wallet-free hub entry and its Instant Action loadout screen have no original screen
   behind them.** The original reaches plane construction from the cabin (`PC_B_PLANEX`, to
   `PlaneName`) and from the Instant Action screen's `IA_B_BUILD`, whose edge no layout row states,
@@ -800,7 +808,11 @@ blueprint page with Load Default Configuration drawn checked, and checked it ope
 from Instant Action and a Bloodhawk from the cabin, both complete stock builds, which the decode
 settles as the stock build of whichever plane was current at the door (`hangar.md`, "What Load
 Default Configuration loads"); the standing tab draws raised and pale
-with dark lettering, the other five purple with white, and nothing is gated; the running total is
+with dark lettering, the other five purple with white, and nothing is gated; all six write their
+label on one baseline eight pixels clear of the strip's bottom edge, measured over the six tabs of
+`OriginalScreenshots/CustomPlane Armor.png`, which is where the squat frames' plaque stands (the
+`PX_Tab.png` frame is 36 pixels tall and its rest and rollover frames are opaque over the bottom
+twenty rows alone); the running total is
 the PLANE COST line on the page's top rail beside the plane name, following every pick; a
 dropdown lists flush under its box, the airframe list at eleven rows with no bar, and the decal
 picker is a five-wide thumbnail grid with its own arrows; the Instant Action door wears READY TO

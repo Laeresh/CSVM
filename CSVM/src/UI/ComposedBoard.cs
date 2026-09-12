@@ -210,9 +210,13 @@ public sealed record BoardFill(
 
 /// <summary>One button plaque: its art strip, its authored top-left, the page row it presses, the
 /// strip frame to draw and the label to write over it. <see cref="Label"/> is empty where the art
-/// bakes its own words in, which every screen but the briefing and the paper buttons does.</summary>
+/// bakes its own words in, which every screen but the briefing and the paper buttons does.
+/// <paramref name="LabelBaseline"/> puts the label's baseline that many pixels below the frame's
+/// top instead of centring it in the frame, for a strip whose plaque does not fill its own frame:
+/// 0 keeps the centred placement every other plaque takes.</summary>
 public sealed record BoardPlaque(
-    BoardArt Art, float X, float Y, int Row, int Frame, string Label, BoardInk Ink);
+    BoardArt Art, float X, float Y, int Row, int Frame, string Label, BoardInk Ink,
+    float LabelBaseline = 0f);
 
 /// <summary>One line of board text at an authored position, wrapped to <paramref name="Width"/>
 /// (0 for no wrap). <paramref name="Row"/> is the page row it stands for, or -1 for chrome.

@@ -85,14 +85,18 @@ internal static class MenuHangarSuites
         + "Instant Action screen's Build Custom Plane opens the decoded name screen wallet-free on its "
         + "centred pane, OK on the empty box raises the one-button refusal and puts the cursor back, typed "
         + "frames name the plane and OK opens the Plane Construction hub on the default configuration, "
-        + "the tabs are siblings a click and the keyboard reach out of order, a dropdown steps and picks "
-        + "through the shared feature with the running total following, READY TO PURCHASE and Purchase "
-        + "Now commit the scratch plane into the user's store and the shared roster and return to the "
-        + "Instant Action screen with it in the Pilot Plane list, SELL PLANES opens the inventory whose "
-        + "Sell asks and then removes it again, CANCEL and Back return to the Instant Action screen with "
+        + "the tabs are siblings a click and the keyboard reach out of order with all six labels on one "
+        + "baseline clear of the strips' bottom, a dropdown steps and picks "
+        + "through the shared feature with the running total following, READY TO PURCHASE and the commit "
+        + "(reading Export on this door, centred on its paper plaque) save the scratch plane into the "
+        + "user's store and the shared roster and return to the "
+        + "Instant Action screen with it in the Pilot Plane list, SELL PLANES opens the inventory, which "
+        + "wallet-free builds no Export row and deletes instead of selling, asking the unpriced delete "
+        + "question in the query box, CANCEL and Back return to the Instant Action screen with "
         + "no residue, the cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals "
         + "page with an over-priced row marked yet pickable while the wallet-free door draws the same "
-        + "note over its export funds and marks nothing, and a switch discards an open build")]
+        + "note over its export funds and marks nothing, that door's own inventory keeps Export live "
+        + "beside the shipped Sell and asks the priced sale question, and a switch discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -656,6 +660,12 @@ internal static class MenuHangarSuites
             && board.Lines.Any(l => l.Text == "$50000")
             && Row(shell, OriginalShell.EngineDropKey)?.Label.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal) == false,
             $"the export door's cash note reads $50000 with no mark on a row");
+        // The squat frames' plaque is the bottom twenty rows of a 36-pixel frame, so a label
+        // centred in the frame would stand off the tab and against the page above it.
+        var tabPlaques = board.Plaques.Where(p => p.Label.Length > 0
+            && p.Art.Name.Equals("PX_Tab.png", StringComparison.OrdinalIgnoreCase)).ToList();
+        ctx.Check(tabPlaques.Count == 6 && tabPlaques.TrueForAll(p => Math.Abs(p.LabelBaseline - 28f) < 0.01f),
+            $"all six tab labels take one baseline eight pixels clear of the strip's bottom ({tabPlaques.Count} tabs, {tabPlaques.FirstOrDefault()?.LabelBaseline})");
         Press(host, seat, Down);
         ctx.Check(shell.FocusedKey == "PX_B_AIRFRAME", $"Down from the dropdown lands on the first tab ({shell.FocusedKey})");
         Press(host, seat, Right);
@@ -714,10 +724,15 @@ internal static class MenuHangarSuites
 
         Click(host, seat, Pointer(fit, ready.X + 5f, ready.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarPurchase && Row(shell, OriginalShell.PurchaseNowKey) is { Enabled: true, X: 510f, Y: 465f },
-            $"it opens the totals page with Purchase Now live ({shell.Screen})");
+            $"it opens the totals page with the commit live at its authored place ({shell.Screen})");
+        string exportWord = hangar.Strings.Text(1139, "Export");
+        ctx.Check(Row(shell, OriginalShell.PurchaseNowKey)?.Label == exportWord,
+            $"reading Export off the inventory's own string on the wallet-free door ({Row(shell, OriginalShell.PurchaseNowKey)?.Label})");
         var board = shell.Compose();
         ctx.Check(board.Lines.Any(l => l.Text == "$" + hangar.Bill.Total.Cost) && board.Lines.Any(l => l.Text == hangar.AirframeName(hangar.Scratch.Airframe)),
             $"the page lists the airframe and the total cost");
+        ctx.Check(board.Plaques.Any(p => p.Label == exportWord && p.LabelBaseline == 0f),
+            $"and the paper commit keeps the centred label every plaque but a tab takes");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.HangarArmor, $"Back returns to the tab the hub last showed ({shell.Screen})");
         Click(host, seat, Pointer(fit, ready.X + 5f, ready.Y + 5f, pressed: true, clicked: true));
@@ -750,7 +765,12 @@ internal static class MenuHangarSuites
         Click(host, seat, Pointer(fit, sell.X + 5f, sell.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarInventory && Row(shell, OriginalShell.InventoryPlanesKey) is { X: 138f, Y: 132f, Width: 271f },
             $"it opens the inventory with the plane dropdown at its authored box ({shell.Screen})");
-        ctx.Check(Row(shell, OriginalShell.InventoryExportKey) is { Enabled: true }, $"Export draws live beside Sell, as the screen's own script leaves it");
+        ctx.Check(Row(shell, OriginalShell.InventoryExportKey) == null && Row(shell, OriginalShell.InventorySellKey)?.Label == "Delete",
+            $"the wallet-free page builds no Export row and calls the removal Delete ({Row(shell, OriginalShell.InventorySellKey)?.Label})");
+        var inventory = shell.Compose();
+        ctx.Check(inventory.Lines.Any(l => l.Text == "Delete a Plane")
+            && !inventory.Lines.Any(l => l.Text == hangar.Strings.Text(1256, "Sell or Export a Plane")),
+            $"and its prompt names the one verb it offers rather than the campaign's two");
         int index = IndexOf(hangar.Saved, scratch);
         ctx.Check(index >= 0, $"the inventory lists the scratch plane ({hangar.Saved.Count} saved)");
         var planes = Row(shell, OriginalShell.InventoryPlanesKey)!;
@@ -782,7 +802,10 @@ internal static class MenuHangarSuites
         var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
         Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogYesKey && store.Load(scratch) != null,
-            $"Sell asks first with the two-answer messagebox opening on Yes ({shell.Dialog?.Message})");
+            $"Delete asks first with the two-answer messagebox opening on Yes ({shell.Dialog?.Message})");
+        ctx.Check(shell.Dialog is { Icon: DialogIcon.Query, Answers.Count: 2 } ask
+            && ask.Message.Contains("delete it?", StringComparison.Ordinal) && !ask.Message.Contains('$'),
+            $"asking the delete question in the query box, with no price on a plane that cost nothing ({shell.Dialog?.Message})");
         var yes = Row(shell, OriginalShell.DialogYesKey);
         ctx.Check(yes != null, $"whose Yes stands at the messagebox's left row");
         if (yes == null)
@@ -866,11 +889,39 @@ internal static class MenuHangarSuites
             && board.Lines.Any(l => l.Text.Contains(hangar.Strings.Text(1226, "INSUFFICIENT FUNDS"), StringComparison.Ordinal)),
             $"the totals page keeps the note and names the shortfall in the original's words ({shell.Screen})");
         Press(host, seat, Back);
+        ctx.Check(shell.Screen == OriginalScreen.HangarEngine, $"Back returns to the tab the hub last showed ({shell.Screen})");
+        WalletInventory(ctx, host, seat, shell, fit, hangar);
         Press(host, seat, Back);
-        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen, $"Back twice cancels the build and resumes the cabin ({shell.Screen})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen, $"Back then cancels the build and resumes the cabin ({shell.Screen})");
         var leave = Row(shell, "ReturnToMainMenu")!;
         Click(host, seat, Pointer(fit, leave.X + 5f, leave.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"RETURN TO MAIN MENU leaves for the top level ({shell.Screen})");
+    }
+
+    // The wallet's own inventory: both shipped verbs on their buttons, the shipped prompt naming
+    // both, and the sale question with the plane's value on it. Answered No, since the profile's
+    // aircraft is not this suite's to remove.
+    private static void WalletInventory(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
+    {
+        var sell = Row(shell, OriginalShell.SellPlanesKey)!;
+        Click(host, seat, Pointer(fit, sell.X + 5f, sell.Y + 5f, pressed: true, clicked: true));
+        var board = shell.Compose();
+        ctx.Check(shell.Screen == OriginalScreen.HangarInventory && hangar.Saved.Count > 0
+            && Row(shell, OriginalShell.InventoryExportKey) is { Enabled: true }
+            && Row(shell, OriginalShell.InventorySellKey)?.Label == hangar.Strings.Text(1003, "Sell"),
+            $"the wallet's inventory keeps Export live beside the shipped Sell ({shell.Screen}, {hangar.Saved.Count} owned)");
+        ctx.Check(board.Lines.Any(l => l.Text == hangar.Strings.Text(1256, "Sell or Export a Plane")),
+            $"and the shipped prompt naming both verbs");
+        var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
+        Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Dialog is { Icon: DialogIcon.Query, Answers.Count: 2 } ask && ask.Message.Contains("sell it?", StringComparison.Ordinal)
+            && ask.Message.Contains('$'), $"whose Sell asks the priced sale question ({shell.Dialog?.Message})");
+        var no = Row(shell, OriginalShell.DialogNoKey)!;
+        Click(host, seat, Pointer(fit, no.X + 5f, no.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Dialog == null && hangar.Saved.Count > 0, $"and No keeps the plane ({hangar.Saved.Count} owned)");
+        var done = Row(shell, OriginalShell.InventoryDoneKey)!;
+        Click(host, seat, Pointer(fit, done.X + 5f, done.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.HangarEngine, $"Done returns to the tab ({shell.Screen})");
     }
 
     private static void OriginalSwitch(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, CustomPlaneStore store)

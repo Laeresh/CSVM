@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Flight;
@@ -344,6 +345,8 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(OriginalScreen.HangarPurchase, shell.Screen);
         var purchase = shell.Rows.Single(r => r.Key == OriginalShell.PurchaseNowKey);
         Assert.True(purchase.Enabled);
+        // The wallet-free door commits with Export, over the row's own Purchase Now.
+        Assert.Equal("Export", purchase.Label);
         Assert.False(shell.Rows.Single(r => r.Key == OriginalShell.ReadyKey).Enabled);
         var board = shell.Compose();
         Assert.Contains(board.Lines, l => l.Text == "Airframe 5");
@@ -397,7 +400,7 @@ public class OriginalHangarTests : IDisposable
     }
 
     [Fact]
-    public void SellPlanesOpensTheInventoryWhoseSellRemovesTheSavedPlane()
+    public void SellPlanesOpensTheInventoryWhoseDeleteRemovesTheSavedPlane()
     {
         _store.Save(new CustomPlaneDef { Name = "Old", Airframe = 2, Engine = 1 });
         _store.Save(new CustomPlaneDef { Name = "Spare", Airframe = 3, Engine = 1 });
@@ -406,10 +409,12 @@ public class OriginalHangarTests : IDisposable
 
         Click(shell, OriginalShell.SellPlanesKey);
         Assert.Equal(OriginalScreen.HangarInventory, shell.Screen);
+        // Wallet-free the Export row is not built at all: Instant Action has nowhere to export to,
+        // and the removal is a delete rather than a sale.
         Assert.Equal(
-            new[] { OriginalShell.InventoryPlanesKey, OriginalShell.InventorySellKey, OriginalShell.InventoryExportKey, OriginalShell.InventoryDoneKey },
+            new[] { OriginalShell.InventoryPlanesKey, OriginalShell.InventorySellKey, OriginalShell.InventoryDoneKey },
             shell.Rows.Select(r => r.Key));
-        Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.InventoryExportKey).Enabled);
+        Assert.Equal("Delete", shell.Rows.Single(r => r.Key == OriginalShell.InventorySellKey).Label);
         Assert.Equal("Old", shell.Rows[0].Label);
         Assert.Contains(shell.Compose().Pictures, p => p.Art.Name == "PH_PlaneIcons.png" && p.Frame == 2);
 
@@ -423,6 +428,9 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
         Assert.Contains(shell.Compose().Overlays, o => o.Lines.Any(l => l.Text == shell.Dialog!.Message));
+        // The question is the delete one, with no price on a plane that cost nothing.
+        Assert.Contains("delete it?", shell.Dialog!.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("$", shell.Dialog!.Message, StringComparison.Ordinal);
         // The sell question is HANGAR.SCRIPT's 0x4 mask, so it keeps the query icon.
         Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
         Assert.Equal(
@@ -445,13 +453,21 @@ public class OriginalHangarTests : IDisposable
     }
 
     [Fact]
-    public void ExportAnswersWithTheScreensOwnConfirmationAndKeepsThePlane()
+    public void TheWalletsInventoryKeepsExportWhoseConfirmationKeepsThePlane()
     {
-        _store.Save(new CustomPlaneDef { Name = "Old", Airframe = 2, Engine = 1 });
+        var owned = new CustomPlaneDef { Name = "Old", Airframe = 2, Engine = 1 };
+        _store.Save(owned);
         var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
+        var wallet = new OwningWallet(owned);
+        shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", wallet);
         Click(shell, OriginalShell.SellPlanesKey);
 
+        // Export is the campaign's own verb, so the wallet's page keeps both shipped words.
+        Assert.Equal(
+            new[] { OriginalShell.InventoryPlanesKey, OriginalShell.InventorySellKey, OriginalShell.InventoryExportKey, OriginalShell.InventoryDoneKey },
+            shell.Rows.Select(r => r.Key));
+        Assert.Equal("Sell", shell.Rows.Single(r => r.Key == OriginalShell.InventorySellKey).Label);
+        Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.InventoryExportKey).Enabled);
         Click(shell, OriginalShell.InventoryExportKey);
         Assert.NotNull(shell.Dialog);
         // The export box is the one-button 0x1 mask, so it keeps the notice icon.
@@ -565,5 +581,40 @@ public class OriginalHangarTests : IDisposable
         instantAction.SelectPlayerPlane(pilotPlane);
         return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
             instantAction: instantAction, hangar: hangar, planes: _store);
+    }
+
+    // A wallet that owns the planes it is built over and funds anything, which is all the cabin
+    // door's own page needs: what the wallet decides here is the verbs, not the money.
+    private sealed class OwningWallet : IHangarWallet
+    {
+        private readonly List<CustomPlaneDef> _owned;
+
+        internal OwningWallet(params CustomPlaneDef[] owned) => _owned = owned.ToList();
+
+        public int Funds => 1_000_000;
+
+        public bool HasFreeSlot => true;
+
+        public bool CanAfford(int cost) => true;
+
+        public bool IsAirframeAvailable(int airframe) => true;
+
+        public bool IsSpecial(string planeName) => false;
+
+        public bool CanSell(string planeName) => true;
+
+        public int? OwnedAirframe(string planeName) =>
+            _owned.FirstOrDefault(p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase))?.Airframe;
+
+        public IReadOnlyList<CustomPlaneDef> OwnedBuilds() => _owned.ToList();
+
+        public void Purchase(string planeName, int airframe, int cost) =>
+            _owned.Add(new CustomPlaneDef { Name = planeName, Airframe = airframe });
+
+        public bool Sell(string planeName)
+        {
+            _owned.RemoveAll(p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase));
+            return true;
+        }
     }
 }

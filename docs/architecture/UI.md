@@ -185,12 +185,12 @@ nearest are in [../org/campaign-board.md](../org/campaign-board.md), and bind ev
 ## src/UI/ComposedBoard.cs
 What a composed campaign screen is made of, engine-free: the screen's fixed backdrop, the fills a
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
-plaques and flowed list widgets, each in draw order. The backdrop is a layer of its own so a fill
-can sit over the painted background and stay under the page's pictures, where a selection bar goes.
-`BoardNote` is a widget's entries plus its wrap box and `BoardCaret` an edit box's cursor on the
-line it follows, both placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a
-plaque's states. `BoardArt` names a file and its frame count and the renderer resolves it; one of
-its four libraries is a movie, so a background film reaches the backdrop with no engine type here.
+plaques and flowed list widgets, each in draw order. The backdrop is its own layer so a fill can
+sit over the background and stay under the page's pictures, where a selection bar goes. `BoardNote`
+is a widget's entries plus its wrap box and `BoardCaret` an edit box's cursor on the line it
+follows, both placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a
+plaque's states, and a plaque whose art leaves part of its frame empty carries its label's own
+baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -834,11 +834,11 @@ What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
-the cabin, the door also naming the airframe a default-configuration build opens on. It owns the
-plane picture over the blueprint panes, the running total, the cash note on both doors (the wallet
-with its mark on a row it cannot cover, else the export door's figure), the tab bar with the
-standing tab latched, every list under its box, the two name boxes with their authored caret, and
-the airframe-switch ask; `PaneOrigin` centres a small section pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+the cabin, the door naming the airframe a default build opens on. It owns the plane picture over
+the blueprint panes, the running total, the cash note on both doors (the wallet with its mark on a
+row it cannot cover, else the export door's figure), the tab bar with the standing tab latched and
+its labels on the strips' own baseline, every list under its box, the two name boxes with their
+caret, the airframe-switch ask, and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

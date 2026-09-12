@@ -129,6 +129,23 @@ public sealed partial class OriginalShell
     // The funds the wallet-free doors build against, the figure their own cash note shows.
     private const int ExportFunds = 50000;
 
+    // Where a tab writes its label inside its strip, as pixels up from the strip's bottom edge.
+    // PX_Tab.png's rest and rollover frames are opaque over the bottom twenty rows of a 36-pixel
+    // frame alone, so a label centred in the frame stands off that squat plaque and against the
+    // page above it. The stills' own baseline: docs/org/menu-inventory.md, Part 4.
+    private const float TabLabelLift = 8f;
+
+    // The inventory's own Export label (IDS_PS_B_EXPORT), the only export word the shipped table
+    // carries for a button; the wallet-free commit borrows it.
+    private const int ExportLabelString = 1139;
+
+    // What the wallet-free inventory calls removing a plane, on the button, over the page and in
+    // the confirm. Remake-only, as the hub's export strips are: nothing was paid for a wallet-free
+    // build, so the shipped Sell words all read wrong, and the table carries no delete word.
+    private const string DeleteLabel = "Delete";
+    private const string DeletePrompt = "Delete a Plane";
+    private const string DeleteQuestion = "Are you sure you want to delete it?";
+
     // The defaults ask as a dialog over the page: a panel in the message box's own proportions.
     private const float AskX = 160f;
     private const float AskY = 200f;
@@ -470,16 +487,36 @@ public sealed partial class OriginalShell
     }
 
     // A text row at its authored place in a chosen ink; the hangar's pages author black text the
-    // shared reader would otherwise draw in the heading colour.
-    private static void AddHangarText(MenuLayoutScreen screen, List<BoardLine> lines, string key, float size, BoardInk ink)
+    // shared reader would otherwise draw in the heading colour. A given text stands in for the
+    // row's own, which is how a page whose verbs differ from the shipped ones says so.
+    private static void AddHangarText(MenuLayoutScreen screen, List<BoardLine> lines, string key, float size, BoardInk ink, string? text = null)
     {
-        if (screen.Widget(key) is not { } widget || string.IsNullOrEmpty(widget.Text))
+        if (screen.Widget(key) is not { } widget)
         {
             return;
         }
 
-        lines.Add(new BoardLine(Fill(widget.Text), widget.Int("X"), widget.Int("Y"), widget.Int("Width"), size,
+        string words = text ?? widget.Text ?? string.Empty;
+        if (words.Length == 0)
+        {
+            return;
+        }
+
+        lines.Add(new BoardLine(Fill(words), widget.Int("X"), widget.Int("Y"), widget.Int("Width"), size,
             IsWhite(widget) ? BoardInk.Dialog : ink, -1, false, Justify(widget)));
+    }
+
+    // One built row's label replaced where it stands, so the rows' order (the focus walk) is the
+    // same on both doors.
+    private static void Relabel(List<OriginalRow> rows, string key, string label)
+    {
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Key == key)
+            {
+                rows[i] = rows[i] with { Label = label };
+            }
+        }
     }
 
     // Moves rows built at their authored coordinates onto the section's own pane, every row from
@@ -859,6 +896,12 @@ public sealed partial class OriginalShell
             if (_layout.Screen(PurchaseSection) is { } purchase)
             {
                 AddStrip(purchase, rows, PurchaseNowKey, OriginalRowKind.TextButton, _hangar!.CanCommit, 0);
+                if (_hangar.Wallet == null)
+                {
+                    // The export door commits with Export, as its own still shows; the shipped
+                    // table's only export button label is the inventory's.
+                    Relabel(rows, PurchaseNowKey, _hangar.Strings.Text(ExportLabelString, "Export"));
+                }
             }
         }
         else if (_layout.Screen(SectionOf(_screen)) is { } page)
@@ -933,7 +976,18 @@ public sealed partial class OriginalShell
         }
 
         AddStrip(screen, rows, InventorySellKey, OriginalRowKind.TextButton, _hangar.Saved.Count > 0, 0);
-        AddStrip(screen, rows, InventoryExportKey, OriginalRowKind.TextButton, _hangar.Saved.Count > 0, 0);
+        if (_hangar.Wallet == null)
+        {
+            // Wallet-free the removal is a delete, and there is nowhere to export to: the export
+            // door's own store is the one the sortie pickers already read. So the Export row is
+            // not built at all rather than built dead, and Sell takes the delete word.
+            Relabel(rows, InventorySellKey, DeleteLabel);
+        }
+        else
+        {
+            AddStrip(screen, rows, InventoryExportKey, OriginalRowKind.TextButton, _hangar.Saved.Count > 0, 0);
+        }
+
         AddStrip(screen, rows, InventoryDoneKey, OriginalRowKind.Button, true, 0);
     }
 
@@ -1180,7 +1234,8 @@ public sealed partial class OriginalShell
     // Sell asks first, the sell path's own two-button messagebox (langui 700 over the plane's
     // short airframe name and its value, Yes and No, HANGAR.SCRIPT's 0x4 mask and so the query
     // icon), and a refused sale (a reward aircraft, the two-plane floor) comes back as the
-    // one-button 0x1 box in the feature's words, under the warning.
+    // one-button 0x1 box in the feature's words, under the warning. Wallet-free the same box
+    // asks the delete question instead, since a plane that cost nothing has no sale value.
     private void AskToSell()
     {
         if (_hangar == null || _inventoryIndex < 0 || _inventoryIndex >= _hangar.Saved.Count)
@@ -1189,7 +1244,9 @@ public sealed partial class OriginalShell
         }
 
         var plane = _hangar.Saved[_inventoryIndex];
-        string question = _hangar.Strings.Format(700, _hangar.AirframeShortName(plane.Airframe), HangarEconomy.Price(plane).Total.Cost);
+        string question = _hangar.Wallet == null
+            ? $"This {_hangar.AirframeShortName(plane.Airframe)} will be removed from your hangar.  {DeleteQuestion}"
+            : _hangar.Strings.Format(700, _hangar.AirframeShortName(plane.Airframe), HangarEconomy.Price(plane).Total.Cost);
         if (question.Length == 0)
         {
             question = $"Your {_hangar.AirframeShortName(plane.Airframe)} is worth ${HangarEconomy.Price(plane).Total.Cost}. Are you sure you want to sell it?";
@@ -1744,7 +1801,8 @@ public sealed partial class OriginalShell
 
         AddPane(screen, backdrop, "HA_BACKGROUND");
         AddHangarText(screen, lines, "HA_T_TITLE", HubTitleFont, BoardInk.Heading);
-        AddHangarText(screen, lines, "HA_T_PROMPT", HubLabelFont, BoardInk.Row);
+        AddHangarText(screen, lines, "HA_T_PROMPT", HubLabelFont, BoardInk.Row,
+            hangar.Wallet == null ? DeletePrompt : null);
         if (_inventoryIndex >= 0 && _inventoryIndex < hangar.Saved.Count)
         {
             var plane = hangar.Saved[_inventoryIndex];
@@ -1821,7 +1879,15 @@ public sealed partial class OriginalShell
                 // The standing tab is latched, not gated: it draws its depressed frame (the full
                 // pale tab, against the squat purple one the other five wear) in that frame's own
                 // ink, and stays hittable like any sibling.
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, DepressedFrame(row.Art.Frames), row.Label, BoardInk.LabelActivate));
+                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, DepressedFrame(row.Art.Frames), row.Label,
+                    BoardInk.LabelActivate, row.Height - TabLabelLift));
+                return;
+            case OriginalRowKind.TextButton when row.Art != null && TabOf(row.Key) != null:
+                // A tab standing by: its own state frame, and the tab bar's one label baseline,
+                // which the latched tab above shares.
+                int tabFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
+                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, tabFrame, row.Label,
+                    row.Enabled ? ComposedBoard.PlaqueInk(focused, pressed) : BoardInk.Detail, row.Height - TabLabelLift));
                 return;
             case OriginalRowKind.TextButton when row.Art != null && IsPaperButton(row.Key):
                 int paperFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;

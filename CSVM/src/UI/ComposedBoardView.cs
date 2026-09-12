@@ -441,9 +441,12 @@ public sealed partial class ComposedBoardView : Control
         }
 
         // A one-frame plaque bakes no words in, so the label is drawn over it, centred in the
-        // frame and shadowed the way the original's own outlined face reads.
+        // frame and shadowed the way the original's own outlined face reads. A strip that carries
+        // its own baseline is one whose plaque stands somewhere other than the middle of its frame.
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(13f)));
-        float baseline = at.Y + (span.Y / 2f) + (points * 0.38f);
+        float baseline = plaque.LabelBaseline > 0f
+            ? at.Y + fit.Length(plaque.LabelBaseline)
+            : at.Y + (span.Y / 2f) + (points * 0.38f);
         DrawString(font, new Vector2(at.X + 1f, baseline + 1f), plaque.Label,
             HorizontalAlignment.Center, span.X, points, Colors.Black);
         DrawString(font, new Vector2(at.X, baseline), plaque.Label,
