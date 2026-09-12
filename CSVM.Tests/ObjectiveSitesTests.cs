@@ -10,14 +10,14 @@ namespace CSVM.Tests;
 /// <summary>
 /// <see cref="ObjectiveSites.CollectTargets"/>'s two site sources: <c>targets.zrd</c>'s own
 /// <c>objective</c> entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits, each dropped again
-/// once a completed objective's own <c>REMOVE_OBJECTIVE_TARGET</c> names its key;
+/// once a completed objective's <c>REMOVE_OBJECTIVE_TARGET</c> names its key;
 /// <see cref="ObjectiveSites.CollectOtherTargets"/>'s <c>other_target</c> half, the curated list
 /// that puts a mission's chosen structures on the Non-Aircraft cycle while leaving every unflagged
-/// entry of the same table off every cycle; and
+/// entry of the same table off every cycle; the director-free split both passes make over the
+/// shipped Instant Action and multiplayer tables, where nothing edits either half; and
 /// <see cref="ObjectiveSites.LiveDespiteState"/>, the resolved-node destroyed gate a live
-/// <c>Collect</c> applies beside it. A site is offered from mission start with the graph's own
-/// store still empty, which is what reading <see cref="ObjectiveGraph.ObjectiveTargets"/> alone
-/// would miss. A roster block's own flag is NOT collected here: it rides the block's aircraft.
+/// <c>Collect</c> applies beside it. A site is offered from mission start with the graph's store
+/// still empty; a roster block's own flag is NOT collected here, riding the block's aircraft.
 /// </summary>
 public class ObjectiveSitesTests
 {
@@ -167,6 +167,108 @@ public class ObjectiveSitesTests
 
         Assert.Equal(1, objectives);
         Assert.Single(into, key => key == "rfspt1");
+    }
+
+    [Fact]
+    public void TheDirectorFreeFeedSplitsTheTableOnItsOwnFlagsAlone()
+    {
+        // Instant Action and the multiplayer modes run no director, so both passes take a null
+        // script and graph and the table's own keys are the whole answer.
+        var targets = Flagged(("zep", "objective"), ("rearm", "other_target"), ("crate", null));
+
+        var into = new List<string>();
+        ObjectiveSites.CollectTargets(null, null, targets, into);
+        int objectives = into.Count;
+        ObjectiveSites.CollectOtherTargets(null, null, targets, into);
+
+        Assert.Equal(1, objectives);
+        Assert.Equal(new[] { "zep", "rearm" }, into);
+    }
+
+    [Fact]
+    public void TheDirectorFreeFeedStillOffersAKeyOnBothFlagsOnce()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "targets.json"),
+            "[[[\"nodes\",[\"both\"]],[\"objective\"],[\"other_target\"]]]");
+        var targets = MissionTargets.Load(dir);
+
+        var into = new List<string>();
+        ObjectiveSites.CollectTargets(null, null, targets, into);
+        int objectives = into.Count;
+        ObjectiveSites.CollectOtherTargets(null, null, targets, into);
+
+        Assert.Equal(1, objectives);
+        Assert.Single(into);
+    }
+
+    [ExtractedDataTheory]
+    [InlineData("C1")]
+    [InlineData("C1C")]
+    [InlineData("C2")]
+    [InlineData("C2B")]
+    [InlineData("C3")]
+    [InlineData("C4")]
+    public void AnInstantActionTableOffersTheRadioTowerAndNothingElse(string chapter)
+    {
+        // Every IA1 table names the chapter's zeppelin and its danger zones without a flag, and
+        // flags the radio tower `other_target` alone, so the Non-Aircraft cycle gets one entry.
+        var (objectives, others) = Split(chapter, "IA1");
+
+        Assert.Empty(objectives);
+        Assert.Equal(new[] { "ap_transmitter" }, others);
+    }
+
+    [ExtractedDataTheory]
+    [InlineData("C1")]
+    [InlineData("C1B")]
+    [InlineData("C1C")]
+    [InlineData("C2")]
+    [InlineData("C2B")]
+    [InlineData("C3")]
+    [InlineData("C4")]
+    [InlineData("C5")]
+    public void AZeppelinMatchTableOffersTheTwoRearmBasesBesideTheTwoAirships(string chapter)
+    {
+        // MP3's four flagged entries: the two airships as objectives on the Enemy cycle and the
+        // two rearm bases as other-targets on the Non-Aircraft one.
+        var (objectives, others) = Split(chapter, "MP3");
+
+        Assert.Equal(new[] { "multiplayer1zep", "multiplayer2zep" }, objectives);
+        Assert.Equal(new[] { "zep_rearm_node_1", "zep_rearm_node_2" }, others);
+    }
+
+    // Both passes over a shipped mode table, with no director editing either half.
+    private static (List<string> Objectives, List<string> Others) Split(string chapter, string mission)
+    {
+        var targets = MissionTargets.Load(
+            SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission),
+            SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+        var into = new List<string>();
+        ObjectiveSites.CollectTargets(null, null, targets, into);
+        int objectives = into.Count;
+        ObjectiveSites.CollectOtherTargets(null, null, targets, into);
+        // Sorted: each half is a set of keys, and the table's own record order is not a claim
+        // this test is making.
+        var first = into.GetRange(0, objectives);
+        var second = into.GetRange(objectives, into.Count - objectives);
+        first.Sort(System.StringComparer.OrdinalIgnoreCase);
+        second.Sort(System.StringComparer.OrdinalIgnoreCase);
+        return (first, second);
+    }
+
+    private static MissionTargets Flagged(params (string Node, string? Flag)[] entries)
+    {
+        var dir = TestData.TempDir();
+        var text = new List<string>();
+        foreach (var (node, flag) in entries)
+        {
+            text.Add("[[\"nodes\",[\"" + node + "\"]]"
+                + (flag == null ? "" : ",[\"" + flag + "\"]") + "]");
+        }
+
+        File.WriteAllText(Path.Combine(dir, "targets.json"), "[" + string.Join(",", text) + "]");
+        return MissionTargets.Load(dir);
     }
 
     private static MissionTargets TargetsWithFlag(string node, string flag)

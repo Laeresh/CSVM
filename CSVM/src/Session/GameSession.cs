@@ -3010,6 +3010,23 @@ public partial class GameSession : Node3D
             int flagged = offered.Count(c => c.Source is ObjectiveSite { Objective: true });
             GD.Print($"campaign: {flagged} objective site(s) and {offered.Count - flagged} other-target site(s) on the player's target cycles");
         }
+        else if (_spec.WorldMode && !_spec.EmptyStage && _spec.CampaignProfile == null
+                 && stuntZones == null && state.WorldRuntime != null && _rigs.Count > 0)
+        {
+            // Instant Action and the multiplayer modes: the same site feed with no director behind
+            // it, since their objectives.zrd carries no target directive. ⚠ A stunt run owns this
+            // channel per pane, and a campaign launch whose profile failed flies as it always has.
+            var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
+                MissionTargets.Load(state.MissionZrdrPath,
+                    SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
+                state.WorldRuntime);
+            flightRoster.SetTargetObjectives(into => sites.Collect(into));
+            var modeSites = new List<AimCandidate>();
+            sites.Collect(modeSites);
+            int modeFlagged = modeSites.Count(c => c.Source is ObjectiveSite { Objective: true });
+            GD.Print($"{_spec.Chapter}/{_spec.Mission}: {modeFlagged} objective site(s) and " +
+                     $"{modeSites.Count - modeFlagged} other-target site(s) from the mission's own targets.zrd");
+        }
 
         if (_rigs.Count > 1)
         {

@@ -187,7 +187,16 @@ eleven of the work
 camp's own buildings (`g_tower1`-`3`, `unit01`-`07`, `dock2`), C1B/M03 flags a tanker, a second
 airship and a decoy lighthouse, C1/M02 a cargo train, C2/M05 a cargo zeppelin and C3/M04 a
 shipwreck. ⚠ The count is what a mission AUTHORS, not what it shows: a record whose node the world
-does not build offers nothing.
+does not build offers nothing. Of the six `IA1` tables that flag `ap_transmitter`, only C1's world
+carries a node of that name, so the radio tower is a live site in C1's Instant Action and in no
+other chapter's; both `MP3` rearm bases resolve in all eight.
+
+**Every mode reads its own file, and only the campaign edits it.** Which table a session gets is the
+chapter and mission folder it launches with (`C1/IA1`, `C4/MP3`), so the same mode differs per map.
+The campaign reads it under a director whose script can add and remove either half. Instant Action
+and the multiplayer modes read it with no director at all: their `objectives.zrd` carries the
+mission preamble (`MISSION_TIMER`, `PLAYER_INIT`, `RESTORE_ANIMS`) and not one target directive, so
+the file's own flags are the whole curated list for the whole session.
 
 **A roster block that flags itself is its own candidate, not a second one.** `objectiveTarget` is a
 field ON the entity, so an aeroplane whose `aiv` block authors slot 37 is offered once, as the
@@ -931,7 +940,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 | A mission structure's team | the node's own ownership slot for the mission being flown, inherited from the parent chain where it authors none | the same: `SceneBuilder` resolves the slot for the built mission (`GameZ.WorldObjectTeam`, `SceneBuilder.MissionSlot`) and stamps it, and `DestructibleRegistry.Register` reads it onto the pool, so C1/M05's hospital ship is the player's and a zeppelin's zones are the enemy's |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
-| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in a flown campaign mission: `ObjectiveSites.CollectOtherTargets` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle, while a world emplacement and a zeppelin sub-part stand in for the flag nothing authors for them. A loose destructible never reaches a cycle. ⚠ Instant Action and the multiplayer modes build no campaign director, so their own tables' `other_target` entries are not read (`BL-828`) |
+| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectOtherTargets` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle, while a world emplacement and a zeppelin sub-part stand in for the flag nothing authors for them. A loose destructible never reaches a cycle. Instant Action and the multiplayer modes take the same feed with no director behind it |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
 | "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, reachable through `--target=nearest`; no key is bound to it, the original's three per-class Nearest actions being among the six CSVM does not ship |
 | Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |

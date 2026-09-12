@@ -42,20 +42,20 @@ public sealed class ObjectiveSite
 }
 
 /// <summary>
-/// The flown campaign mission's flagged target sites, offered to each player's target pool: the
-/// set is <c>targets.zrd</c>'s own flagged entries, edited by <c>objectives.zrd</c>'s
-/// <c>ADD_/REMOVE_OBJECTIVE_TARGET</c> and <c>ADD_/REMOVE_OTHER_TARGET</c>, with the labels
-/// resolved through <see cref="Messages"/> and <c>SET_HELP_LABEL</c>. The file's two flags pick
-/// the cycle: an <c>objective</c> entry is a companion flag on the Enemy cycle, so the ordinary
-/// selection draws one site at a time, and an <c>other_target</c> entry puts a structure on the
-/// Non-Aircraft cycle. Bound by <c>GameSession</c>; <see cref="Collect"/> runs once per pane per
-/// frame and re-reads each site's position, so a site on a moving node is marked where it is.
-/// ⚠ These are world SITES only. A roster block that flags itself (aiv slot 37) is offered by
-/// <see cref="TargetPool"/> on its own aircraft's candidate instead, so nothing here needs to
-/// know about an aeroplane.</summary>
+/// The flown mission's flagged target sites, offered to each player's target pool: the set is
+/// <c>targets.zrd</c>'s own flagged entries, edited by <c>objectives.zrd</c>'s
+/// <c>ADD_/REMOVE_OBJECTIVE_TARGET</c> and <c>ADD_/REMOVE_OTHER_TARGET</c> where a director runs
+/// one, with the labels resolved through <see cref="Messages"/> and <c>SET_HELP_LABEL</c>. The
+/// file's two flags pick the cycle: an <c>objective</c> entry is a companion flag on the Enemy
+/// cycle, so the ordinary selection draws one site at a time, and an <c>other_target</c> entry puts
+/// a structure on the Non-Aircraft cycle. Bound by <c>GameSession</c>; <see cref="Collect"/> runs
+/// once per pane per frame and re-reads each site's position, so a site on a moving node is marked
+/// where it is. ⚠ These are world SITES only. A roster block that flags itself (aiv slot 37) is
+/// offered by <see cref="TargetPool"/> on its own aircraft's candidate instead, so nothing here
+/// needs to know about an aeroplane.</summary>
 public sealed class ObjectiveSites
 {
-    private readonly CampaignDirector _director;
+    private readonly CampaignDirector? _director;
     private readonly Messages _messages;
     private readonly MissionTargets _targets;
     private readonly AnimRuntime? _runtime;
@@ -76,13 +76,25 @@ public sealed class ObjectiveSites
         _runtime = runtime;
     }
 
+    /// <summary>Reads a mission's target table with no director behind it: the feed Instant Action
+    /// and the multiplayer modes take. Those modes ship an <c>objectives.zrd</c> that carries the
+    /// mission preamble and no target directive at all, so the table's own <c>objective</c> and
+    /// <c>other_target</c> keys are the whole curated list and nothing edits it while the session
+    /// runs.</summary>
+    public ObjectiveSites(Messages messages, MissionTargets targets, AnimRuntime? runtime)
+    {
+        _messages = messages;
+        _targets = targets;
+        _runtime = runtime;
+    }
+
     /// <summary>The target keys carrying the objective-target flag: <c>targets.zrd</c>'s own
     /// flagged entries not removed by a completed objective's <c>REMOVE_OBJECTIVE_TARGET</c>, plus
-    /// everything <c>ADD_OBJECTIVE_TARGET</c> has added. ⚠ Do not build this from
-    /// <see cref="ObjectiveGraph.ObjectiveTargets"/> alone: that store starts empty, and a mission
-    /// whose sites are only ever removed offers nothing. ⚠ A roster block's own flag (aiv slot 37)
-    /// is NOT here; it rides the block's aircraft (<see cref="FlightController.ObjectiveTarget"/>).</summary>
-    public static void CollectTargets(ObjectiveScript script, ObjectiveGraph graph,
+    /// everything <c>ADD_OBJECTIVE_TARGET</c> has added; a null script and graph are the
+    /// director-free modes, the table alone. ⚠ Do not build this from
+    /// <see cref="ObjectiveGraph.ObjectiveTargets"/> alone: that store starts empty. ⚠ A roster
+    /// block's own flag (aiv slot 37) is NOT here; it rides the block's aircraft.</summary>
+    public static void CollectTargets(ObjectiveScript? script, ObjectiveGraph? graph,
         MissionTargets targets, List<string> into)
     {
         foreach (var entry in targets.ByNode)
@@ -91,6 +103,11 @@ public sealed class ObjectiveSites
             {
                 into.Add(entry.Key);
             }
+        }
+
+        if (graph == null)
+        {
+            return;
         }
 
         foreach (var key in graph.ObjectiveTargets)
@@ -106,9 +123,9 @@ public sealed class ObjectiveSites
     /// puts a structure on the Non-Aircraft cycle: <c>targets.zrd</c>'s own <c>other_target</c>
     /// entries not dropped by a completed objective's <c>REMOVE_OTHER_TARGET</c>, plus everything
     /// <c>ADD_OTHER_TARGET</c> has added. ⚠ Append to the list <see cref="CollectTargets"/> filled,
-    /// not to a fresh one: a key already on it is an objective, and that flag outranks this
-    /// one.</summary>
-    public static void CollectOtherTargets(ObjectiveScript script, ObjectiveGraph graph,
+    /// not to a fresh one: a key already on it is an objective, and that flag outranks this one.
+    /// A null script and graph are the director-free modes: the table alone.</summary>
+    public static void CollectOtherTargets(ObjectiveScript? script, ObjectiveGraph? graph,
         MissionTargets targets, List<string> into)
     {
         foreach (var entry in targets.ByNode)
@@ -118,6 +135,11 @@ public sealed class ObjectiveSites
             {
                 into.Add(entry.Key);
             }
+        }
+
+        if (graph == null)
+        {
+            return;
         }
 
         foreach (var key in graph.OtherTargets)
@@ -141,8 +163,13 @@ public sealed class ObjectiveSites
     /// that target, where the mission gives one, and null to fall back to the world node.
     /// ⚠ Prefer the point over the node. C3/M01's village target names a node standing at the world
     /// origin, 7.9 km from the point its own objective tests, so the node is not the site.</summary>
-    public static Vector3? PointFor(ObjectiveScript script, string key)
+    public static Vector3? PointFor(ObjectiveScript? script, string key)
     {
+        if (script == null)
+        {
+            return null;
+        }
+
         foreach (var def in script.Objectives)
         {
             if (def.Travelers is { WherePoint: { } p }
@@ -195,24 +222,32 @@ public sealed class ObjectiveSites
     /// node moves with it and a completed site is simply not offered again.</summary>
     public void Collect(List<AimCandidate> into)
     {
-        if (_director.Graph is not { } graph)
+        var graph = _director?.Graph;
+        // A campaign session offers nothing until its graph exists, since a directive may already
+        // have edited the set; a director-free mode has no such wait.
+        if (_director != null && graph == null)
         {
             return;
         }
 
         _live.Clear();
-        CollectTargets(_director.Script, graph, _targets, _live);
+        CollectTargets(_director?.Script, graph, _targets, _live);
         int objectives = _live.Count;
-        CollectOtherTargets(_director.Script, graph, _targets, _live);
+        CollectOtherTargets(_director?.Script, graph, _targets, _live);
         for (int i = 0; i < _live.Count; i++)
         {
             Offer(_live[i], graph, objective: i < objectives, into);
         }
     }
 
-    private static bool RemovedByCompletion(ObjectiveScript script, ObjectiveGraph graph, string key,
-        bool other)
+    private static bool RemovedByCompletion(ObjectiveScript? script, ObjectiveGraph? graph,
+        string key, bool other)
     {
+        if (script == null || graph == null)
+        {
+            return false;
+        }
+
         foreach (var def in script.Objectives)
         {
             if (graph.CompletedOf(def.Number)
@@ -275,7 +310,7 @@ public sealed class ObjectiveSites
         }
     }
 
-    private void Offer(string node, ObjectiveGraph graph, bool objective, List<AimCandidate> into)
+    private void Offer(string node, ObjectiveGraph? graph, bool objective, List<AimCandidate> into)
     {
         if (Where(node) is not { } at)
         {
@@ -305,7 +340,7 @@ public sealed class ObjectiveSites
 
     private Vector3? Where(string key)
     {
-        if (PointFor(_director.Script, key) is { } point)
+        if (PointFor(_director?.Script, key) is { } point)
         {
             return point;
         }
@@ -341,7 +376,7 @@ public sealed class ObjectiveSites
 
     // The strings are re-read every frame because SET_HELP_LABEL rewrites a live site's category;
     // the instance itself survives that, since it is the identity the selection is held by.
-    private ObjectiveSite SiteFor(string key, ObjectiveGraph graph, Vector3 at, bool objective)
+    private ObjectiveSite SiteFor(string key, ObjectiveGraph? graph, Vector3 at, bool objective)
     {
         if (!_sites.TryGetValue(key, out var site))
         {
@@ -360,8 +395,8 @@ public sealed class ObjectiveSites
         string name = Text(info.Description);
         string typeLabel = Text(info.CategoryLabel);
         // The script's own SET_HELP_LABEL outranks targets.zrd's authored label.
-        string category = Text(graph.HelpLabels.TryGetValue(key, out var written) ? written
-            : info.HelpLabel);
+        string category = Text(graph != null && graph.HelpLabels.TryGetValue(key, out var written)
+            ? written : info.HelpLabel);
         site.DisplayName = name.Length > 0 ? name : site.Target.Node;
         site.TypeLabel = typeLabel.Length > 0 ? typeLabel : null;
         site.Category = category.Length > 0 ? category : null;

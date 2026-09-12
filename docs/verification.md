@@ -757,7 +757,6 @@ one sentence of measured evidence; everything else belongs in the commit that la
   the thrust magnitude is negated before being multiplied by it (`0x48fe91`, `org/flightModel.md`);
   read as the nose, the shadow skew that `org/shadows.md` decoded came out backwards, putting the
   player's own shadow behind the chase camera instead of ahead of the aircraft where it is drawn.
-
 - **SRC-13** — **A decode row about a field is a decode of the field, not of the path that writes
   it. Read on past the write before treating the field as the whole behaviour.**
   `org/aiControlLaw.md`'s row for the AI evade flag at `obj+0xBA` recorded the set, the alignment
@@ -766,6 +765,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   its own the row supported "the original only sets a flag", the opposite of what the handler does,
   and an entry was filed against the remake on the strength of it. A row that names only a field's
   writers earns a sentence saying what else that writer does.
+- **SRC-14** — **A census over the shipped files counts records, not live things; resolve the record
+  in the world that reads it before saying a mode offers it.** Six `IA1` `targets.zrd` files flag
+  `ap_transmitter` `other_target`, which reads as six chapters whose Instant Action carries a radio
+  tower target. Only C1's gamez has a node of that name, so the other five flag nothing their own
+  world builds, and the same census's sixteen `MP3` rearm bases do resolve in all eight
+  (`org/targeting.md`). The check is one grep of each world's `nodes.json`, and it separates a data
+  author's copied record from a feature the player can reach.
 
 ## What this project cannot verify itself
 

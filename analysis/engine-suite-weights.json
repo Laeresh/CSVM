@@ -200,6 +200,7 @@
     "target-flag": 0.026,
     "stunt-target-cycle": 2.57,
     "target-class-cycle": 2.17,
+    "mode-target-table": 3.49,
     "splitscreen-listeners": 0.006,
     "world-lights-nearest-viewer": 0.002,
     "campaign-persistence": 3.761,
