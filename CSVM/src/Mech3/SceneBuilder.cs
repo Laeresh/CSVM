@@ -994,7 +994,7 @@ void fragment() {
         {
             // A polygon is solid from the side it is seen from and no other, the test the original
             // runs (docs/org/weaponRay.md): the winding is not inconsistent, it is per polygon, and
-            // `world-ground-solid` is the tripwire for a down-wound tile a plane would fall through.
+            // `chapter-census` is the tripwire for a down-wound tile a plane would fall through.
             var shapes = new List<ConcavePolygonShape3D>();
             AddShape(shapes, faces.OneSided, backface: false);
             AddShape(shapes, faces.TwoSided, backface: true);
