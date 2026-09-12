@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ☑ `CameraController` reads its tuning through `_camParams` and names its views
 16. ☑ `CinemaSkips` without the repeated arms and the mirror enum
 17. ☑ The export set out of `SelectionService`
-18. ☐ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
+18. ☑ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
 
 ### Wave C — Spec fixes
 
@@ -688,7 +688,59 @@ key).
 **Verify.** The node lab's export unit tests green; a manual Ctrl+click set export from a
 `--freecam` session produces the same glTF; `docs/architecture/UI.md` entry and cap.
 
-## B18 ☐ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
+## B18 ☑ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
+
+**Landed.** Four one-site corrections, each behaviour-preserving on every path a suite or a shipped
+mission reaches.
+
+`SurfaceVehicleRuntime.MarkerNameOf` tests the miss exactly. `Messages.Get` echoes the key back when
+the table does not carry it, so `text == key` is that answer, and the prefix sniff is gone. The
+comment above the member now states that contract rather than leaving the reader to infer it. The
+two shipped cases both still read as before: C1B/M03's patrol boats resolve their slot-20 key to
+"Patrol boat", and `patrolboat_eg0`, whose template block authors no slot 20 at all, is stopped by
+the guard above the lookup.
+
+`ZeppelinRuntime` resolves the emplacement runtime on the read. A private `Turrets()` answers the
+one `FanTeamsOntoTurrets` was handed, else the one standing beside this runtime under the parent the
+session hangs both from, and `SetTeam` fans through it. The record fan still adopts what its caller
+holds, since that caller has it in hand, but a script team write no longer depends on the fan having
+run first.
+
+`TargetRef.ForHull` is the surface hull's own factory: the same `AimTargetKind.Vehicle` shape
+`ForAircraft` builds, with no health or armour fraction, which is what the hull arm passed before.
+`TargetPool.Describe`'s hull arm calls it and `ForAircraft` keeps its aeroplane callers, so no
+aircraft site moved.
+
+`Messages.Parse` is `internal`. `CSVM/CSVM.csproj` gained one
+`<InternalsVisibleTo Include="CSVM.Tests" />` item, and the one caller,
+`FlightHudMappingTests.AutoLandMessages`, is unchanged. `Parse` moved below the public members,
+which is what SA1202 asks of an internal one. `docs/architecture/Mech3.md` says it is internal and
+why; the other three files' entries state nothing this item changed.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` 0 warnings, 0 errors.
+`CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` all clean.
+`RunTests.ps1 -UnitFilter "FullyQualifiedName~Messages|FullyQualifiedName~Target|FullyQualifiedName~FlightHudMapping"
+-SkipEngine -SkipGoldens`: 157 passed, 0 failed, 0 skipped of 157, which covers the `Messages`
+units, the `TargetRef`/`TargetPool` units and the autodock prompt unit that calls `Parse`. The whole
+unit tier, `RunTests.ps1 -SkipEngine -SkipGoldens`: 4090 passed, 0 failed, 2 skipped of 4092, run
+because the internals grant is assembly-wide.
+`RunTests.ps1 -Suite "campaign-set-ai-zeppelin-net,campaign-set-ai-zeppelin-team,ai-vessel-targets,campaign-surface-vehicles"
+-SkipUnits -SkipGoldens`: 4 passed, 0 failed, engine errors clean; the team arm is C2/M05's
+`campaign-set-ai-zeppelin-team` and the net arm C4/M05's `campaign-set-ai-zeppelin-net`, and
+`campaign-surface-vehicles` is what drives both branches of the marker-name lookup.
+`RunTests.ps1 -SkipUnits -SkipEngine`: 23 shots hash-identical.
+
+**Evidence correction.** Three things the item's evidence did not carry. The `InternalsVisibleTo`
+grant belongs on the engine project, `CSVM/CSVM.csproj`, not on `CSVM.Tests`, since the attribute is
+declared by the assembly that owns the member; no project granted internals before this. Making
+`Parse` internal where it stood raises SA1202, so the member moves as part of the change rather than
+staying put. And `FanTeamsOntoTurrets` keeps its assignment rather than losing it to the lazy
+resolve, because `campaign-set-ai-zeppelin-team` builds its emplacement runtime outside the scene
+tree, where a sibling lookup finds nothing; the hidden order was latent in any case, since
+`GameSession` calls the fan in the same block that builds the emplacements and no suite reaches
+`SetTeam` on a real zeppelin without it.
+
+**Original approach (kept for reference).**
 
 **Goal.** Four one-site corrections with no behaviour change.
 

@@ -145,6 +145,16 @@ public readonly struct TargetRef
         new(candidate, AimTargetKind.Vehicle, cls, objective, name, displayName, typeLabel,
             category, health, armor);
 
+    /// <summary>A surface vehicle's hull, which the original's vehicle pool carries beside the
+    /// aircraft. The same shape <see cref="ForAircraft"/> builds, with no health or armour
+    /// fraction: a ship block authors neither pool.</summary>
+    /// <param name="displayName">The block's own name line; empty draws none, which is what most
+    /// ship blocks author.</param>
+    public static TargetRef ForHull(AimCandidate candidate, TargetClass cls, string name,
+        string? displayName = null, bool objective = false) =>
+        new(candidate, AimTargetKind.Vehicle, cls, objective, name, displayName, null, null,
+            health: null, armor: null);
+
     /// <summary>A mission structure, which covers CSVM's zeppelin sub-parts, destructibles and
     /// objective sites. Health only: <c>DestructibleRegistry.Instance</c> carries
     /// <c>Health</c>/<c>MaxHealth</c> and no armor pool.</summary>

@@ -41,8 +41,8 @@ public sealed partial class ZeppelinRuntime : Node
     private readonly IReadOnlyList<AiNet> _chapterNets;
     private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
 
-    // The emplacements the record team already fans onto, kept so a script team write can fan the
-    // same way; null in a build with no turret runtime, where a hull simply carries no guns.
+    // The emplacements a team write fans onto; null in a build with no turret runtime, where a
+    // hull simply carries no guns.
     private TurretEmplacementRuntime? _turrets;
 
     private AnimRuntime? _runtime;
@@ -156,6 +156,8 @@ public sealed partial class ZeppelinRuntime : Node
     /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved.</summary>
     public int FanTeamsOntoTurrets(TurretEmplacementRuntime turrets)
     {
+        // Adopted here because the caller holds them, not so a later team write can work: that one
+        // finds them for itself, and neither fan depends on the other having run.
         _turrets = turrets;
         int moved = 0;
         foreach (var zep in _live)
@@ -294,7 +296,7 @@ public sealed partial class ZeppelinRuntime : Node
             pools++;
         }
 
-        int guns = _turrets?.SetTeamUnder(zep.Host, team) ?? 0;
+        int guns = Turrets()?.SetTeamUnder(zep.Host, team) ?? 0;
         Log.Info("flight", $"zep: '{zep.Def.Node}' team {team} by the mission script, onto {pools} damage pool(s) and {guns} gun(s)");
         return true;
     }
@@ -638,6 +640,25 @@ public sealed partial class ZeppelinRuntime : Node
     }
 
     private bool Driven(Node3D host) => _transformDriven?.Invoke(host) ?? false;
+
+    // The guns a team write reaches: the emplacement runtime handed over by the record fan, else
+    // the one standing beside this runtime, which is where the session hangs the two. Resolved on
+    // the read so a script write that arrives before the record fan still reaches the guns.
+    private TurretEmplacementRuntime? Turrets()
+    {
+        if (_turrets == null && GetParent() is { } parent)
+        {
+            foreach (var sibling in parent.GetChildren())
+            {
+                if (sibling is TurretEmplacementRuntime found)
+                {
+                    _turrets = found;
+                    break;
+                }
+            }
+        }
+        return _turrets;
+    }
 
     private LiveZeppelin? Find(string node)
     {

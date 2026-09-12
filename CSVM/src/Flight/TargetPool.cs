@@ -188,7 +188,7 @@ public sealed class TargetPool
                 // ⚠ The hull's own block slot 20 alone, and an EMPTY one draws no name line: most
                 // ship blocks author none and the original then labels nothing there (docs/org/
                 // targeting.md). Never the airframe-style fallback the aeroplane arm takes below.
-                return TargetRef.ForAircraft(c, cls, name, hull.MarkerName, objective: objective);
+                return TargetRef.ForHull(c, cls, name, hull.MarkerName, objective: objective);
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;

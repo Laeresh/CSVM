@@ -26,11 +26,6 @@ public sealed class Messages
     public static Messages Load(string path) =>
         File.Exists(path) ? Read(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
 
-    /// <summary>The same table out of JSON already in hand, for a caller with no file: the table's
-    /// own tests, and any consumer handed the document rather than the path.</summary>
-    public static Messages Parse(string json) => Read(JsonDocument.Parse(json));
-
-
     /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
     /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
     /// that follows a placeholder — e.g. the <c>!d!</c> in <c>%2!d!</c> — is consumed (the arg is
@@ -86,6 +81,11 @@ public sealed class Messages
     /// <summary>Resolves <paramref name="key"/> and fills its placeholders in one call —
     /// <c>Fill(Get(key), args)</c>.</summary>
     public string Format(string? key, params string?[] args) => Fill(Get(key), args);
+
+    /// <summary>The same table out of JSON already in hand, for a caller with no file to point at.
+    /// Internal rather than public because every shipped caller holds a path, and only the unit
+    /// project builds a table out of a literal.</summary>
+    internal static Messages Parse(string json) => Read(JsonDocument.Parse(json));
 
     // The one reader both entry points share. Takes the document over so a malformed file leaks
     // nothing on the way back out.

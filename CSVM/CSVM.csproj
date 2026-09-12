@@ -5,4 +5,10 @@
     <Nullable>enable</Nullable>
     <RootNamespace>CSVM</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The unit project reads a member the engine has no shipped caller for, so the member stays
+         off the public surface instead of being published for one test. -->
+    <InternalsVisibleTo Include="CSVM.Tests" />
+  </ItemGroup>
 </Project>

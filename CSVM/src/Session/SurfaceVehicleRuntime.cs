@@ -169,7 +169,8 @@ public sealed partial class SurfaceVehicleRuntime : Node
     // The hull's target-box name, resolved here because this is the seam where the string table
     // and the block meet, the same reason the aircraft spawner resolves its own there
     // (AiFlightAssembler.Assemble). An unresolved key is dropped rather than drawn: the raw
-    // MSG_* spelling on the HUD is worse than the blank line most blocks ask for anyway.
+    // MSG_* spelling on the HUD is worse than the blank line most blocks ask for anyway. A miss
+    // reads as the key echoed back, which is Messages.Get's own contract.
     private string MarkerNameOf(RosterSpawnPlan plan)
     {
         if (plan.Title is not { Length: > 0 } key || Strings is not { } strings)
@@ -177,7 +178,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
             return "";
         }
         string text = strings.Get(key);
-        return text.StartsWith("MSG_", StringComparison.Ordinal) ? "" : text;
+        return text == key ? "" : text;
     }
 
     // The water surface under the authored spot: a downward probe on the world mask, carried on
