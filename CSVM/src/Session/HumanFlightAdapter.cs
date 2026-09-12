@@ -163,7 +163,7 @@ internal sealed class HumanFlightAdapter
             ShippedSkins = swap is { ShippedSkins: true },
         };
         if (verbose && controller.Cockpit != null)
-            GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
+            Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.CustomPlaneBuild.HasNitrous(custom);
         // Every human joins team 1 in an Instant Action mission, splitscreen included — the
@@ -253,16 +253,10 @@ internal sealed class HumanFlightAdapter
                 {
                     int groups = 0;
                     foreach (var _ in controller.Loadout.FirableGuns) { groups++; }
-                    GD.Print($"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} " +
-                             $"hardpoint(s), guns=Space/pad-B rockets=F/pad-A, " +
-                             $"select guns=G/dpad-R rockets=H/dpad-L" +
-                             (_policy.GunSelect != 0 ? $" [gun-select={_policy.GunSelect}]" : "") +
-                             (_policy.InfiniteAmmo ? " (infinite ammo)" : "") +
-                             (_policy.AmmoCap != null ? $" (--ammo={_policy.AmmoCap})" : ""));
+                    Log.Info("flight", $"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} hardpoint(s), guns=Space/pad-B rockets=F/pad-A, select guns=G/dpad-R rockets=H/dpad-L{(_policy.GunSelect != 0 ? $" [gun-select={_policy.GunSelect}]" : "")}{(_policy.InfiniteAmmo ? " (infinite ammo)" : "")}{(_policy.AmmoCap != null ? $" (--ammo={_policy.AmmoCap})" : "")}");
                     if (controller.Ordnance is { } ord)
                     {
-                        GD.Print($"pylon ordnance: {ord.Count} mounted rocket model(s)" +
-                                 (_policy.RocketOverride != null ? $" (--rocket={_policy.RocketOverride})" : ""));
+                        Log.Info("flight", $"pylon ordnance: {ord.Count} mounted rocket model(s){(_policy.RocketOverride != null ? $" (--rocket={_policy.RocketOverride})" : "")}");
                     }
                 }
             }
@@ -273,7 +267,7 @@ internal sealed class HumanFlightAdapter
         }
         else if (verbose)
         {
-            GD.Print($"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
+            Log.Info("flight", $"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
         }
 
         // The carried turret gunners: the vehicle def's thirdp turrets block resolved
@@ -291,19 +285,19 @@ internal sealed class HumanFlightAdapter
                 var descs = new List<string>();
                 foreach (var t in controller.Turrets)
                     descs.Add($"{t.Def.Title} ({t.Weapon.Id}, {t.Firepoints.Length} muzzle(s))");
-                GD.Print($"turrets: {string.Join(", ", descs)}");
+                Log.Info("flight", $"turrets: {string.Join(", ", descs)}");
             }
         }
         if (verbose && controller.Props != null)
-            GD.Print($"props: {controller.Props.Count} spinning blur nodes");
+            Log.Info("flight", $"props: {controller.Props.Count} spinning blur nodes");
         if (verbose && controller.WingLights != null)
-            GD.Print($"wing lights: {controller.WingLights.Count} blinking flares");
+            Log.Info("flight", $"wing lights: {controller.WingLights.Count} blinking flares");
         if (verbose && controller.Surfaces != null)
-            GD.Print($"control surfaces: {controller.Surfaces.Count} deflecting nodes");
+            Log.Info("flight", $"control surfaces: {controller.Surfaces.Count} deflecting nodes");
         if (controller.Collider != null)
         {
             if (verbose)
-                GD.Print($"plane collider: {controller.Collider.Summary}");
+                Log.Info("flight", $"plane collider: {controller.Collider.Summary}");
         }
         else
         {
@@ -314,17 +308,12 @@ internal sealed class HumanFlightAdapter
             var partDescs = new List<string>();
             foreach (var p in stats.DestroyableParts)
                 partDescs.Add($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}");
-            GD.Print($"damage parts: {string.Join(", ", partDescs)} (* = critical)");
+            Log.Info("flight", $"damage parts: {string.Join(", ", partDescs)} (* = critical)");
         }
         if (custom != null)
         {
             // Names what the build reached.
-            GD.Print($"{tag}custom plane: '{custom.Name}' on {planeName}, armour " +
-                     $"{custom.ArmourNose}/{custom.ArmourTail}/{custom.ArmourLeftWing}/" +
-                     $"{custom.ArmourRightWing} units x{Flight.CustomPlaneBuild.ArmourUnitScale}, " +
-                     $"hardpoints {custom.LeftHardpoints}+{custom.RightHardpoints}, " +
-                     $"engine {custom.Engine} thrust={stats.EnginePower:0.###}" +
-                     (controller.Nitro.Installed ? " (nitrous injector)" : ""));
+            Log.Info("flight", $"{tag}custom plane: '{custom.Name}' on {planeName}, armour {custom.ArmourNose}/{custom.ArmourTail}/{custom.ArmourLeftWing}/{custom.ArmourRightWing} units x{Flight.CustomPlaneBuild.ArmourUnitScale}, hardpoints {custom.LeftHardpoints}+{custom.RightHardpoints}, engine {custom.Engine} thrust={stats.EnginePower:0.###}{(controller.Nitro.Installed ? " (nitrous injector)" : "")}");
         }
 
         // Every readout this pane draws for its pilot belongs to the controller's own FlightHud,
@@ -335,7 +324,7 @@ internal sealed class HumanFlightAdapter
         // textures (compassticks2/compasstxt ship in every chapter's archive).
         pilotHud.Compass = CompassTape.Build(_aircraft.Textures);
         if (verbose && pilotHud.Compass != null)
-            GD.Print("compass: heading tape from compassticks2/compasstxt");
+            Log.Info("flight", $"compass: heading tape from compassticks2/compasstxt");
 
         // The cockpit dials (altimeter / speedometer / damage display), rebuilt
         // from the plane's own gauges subtree in planes.zbd + the chapter's
@@ -349,7 +338,7 @@ internal sealed class HumanFlightAdapter
                 gauges.PartFraction = name =>
                     damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
             if (verbose)
-                GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
+                Log.Info("flight", $"gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
         }
 
         // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
@@ -359,7 +348,7 @@ internal sealed class HumanFlightAdapter
         {
             pilotHud.FontTest = new HudFontTest(_aircraft.HudFont, _policy.HudFontTestText);
             if (verbose)
-                GD.Print($"hud-font-test: '{_policy.HudFontTestText}' via 5pointhud font");
+                Log.Info("flight", $"hud-font-test: '{_policy.HudFontTestText}' via 5pointhud font");
         }
 
         // The gun aiming reticle: the ballistic impact point of the selected gun
@@ -369,7 +358,7 @@ internal sealed class HumanFlightAdapter
         {
             pilotHud.Reticle = ImpactReticle.Build(_aircraft.ReticleTex, rig.Camera);
             if (verbose)
-                GD.Print("gun reticle: ballistic impact point via impact_point.png");
+                Log.Info("flight", $"gun reticle: ballistic impact point via impact_point.png");
         }
 
         // Visible damage, phase 1: the object, unconditionally. Phase 2 (the sink and the stops)
@@ -393,11 +382,7 @@ internal sealed class HumanFlightAdapter
             controller.Audio = audio;
             controller.AddChild(audio);
             if (verbose)
-                GD.Print($"audio: engine={stats.EngineSound} " +
-                         $"damaged={stats.DamagedEngineSound ?? "none"} " +
-                         $"whine={stats.WhineSound ?? "none (no def names prop_sound)"} " +
-                         $"rattle={stats.RattleSound}" +
-                         (_human.MixGain < 1f ? $" (per-player mix gain {_human.MixGain:0.00})" : ""));
+                Log.Info("flight", $"audio: engine={stats.EngineSound} damaged={stats.DamagedEngineSound ?? "none"} whine={stats.WhineSound ?? "none (no def names prop_sound)"} rattle={stats.RattleSound}{(_human.MixGain < 1f ? $" (per-player mix gain {_human.MixGain:0.00})" : "")}");
         }
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
         // independent copy of the same zones — own progress, own clock. Never on a swap, which
@@ -443,11 +428,11 @@ internal sealed class HumanFlightAdapter
                 scoreboard.Restart = controller.Rerun;
                 scoreboard.Exit = _human.ExitSession;
                 controller.Scoreboard = scoreboard;
-                GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
+                Log.Info("flight", $"stunt scoreboard: splits + best time (key '{scoreKey}')");
             }
             if (verbose)
             {
-                GD.Print("stunt run HUD: clock + zones cleared + banners; zones ride the target cycle");
+                Log.Info("flight", $"stunt run HUD: clock + zones cleared + banners; zones ride the target cycle");
                 WhatSuffix += $" [stunt: {controller.Stunt.TotalCount} zones]";
             }
         }
@@ -462,7 +447,7 @@ internal sealed class HumanFlightAdapter
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
             controller.VersusHud.Rigs = _human.Rigs;
             if (verbose)
-                GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
+                Log.Info("flight", $"dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
 
         // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
@@ -470,7 +455,7 @@ internal sealed class HumanFlightAdapter
         var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
         pilotHud.TargetHud = targetHud;
         if (verbose)
-            GD.Print("targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
+            Log.Info("flight", $"targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 
         // The player's target selection: one per human pane, each with its own pool — the cycles
         // are sorted against THIS plane's pose, so they cannot be shared. GameSession binds
@@ -489,7 +474,7 @@ internal sealed class HumanFlightAdapter
         {
             targetHud.MarkAll = true;
             if (verbose)
-                GD.Print("--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
+                Log.Info("flight", $"--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
         }
 
         // Every player's start comes from ONE call: a grid start is not decomposable, since no
@@ -509,7 +494,7 @@ internal sealed class HumanFlightAdapter
         {
             controller.Held = true;
             if (verbose)
-                GD.Print($"weapon lab: P{pi + 1} held at the spawn pose (world sim running)");
+                Log.Info("flight", $"weapon lab: P{pi + 1} held at the spawn pose (world sim running)");
         }
         // The throttle-slam exhaust smoke: needs the plane's own exhaust marker
         // nodes plus the live throttle Setup just wrote, so it builds after Setup rather than

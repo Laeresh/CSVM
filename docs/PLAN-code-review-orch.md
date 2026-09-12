@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Two `_Avoid_` terms: "AI roster" and "deviation"
 2. ☑ `<para>` in three XML doc blocks
-3. ☐ `GD.Print` to `Log` in the three session files
+3. ☑ `GD.Print` to `Log` in the three session files
 4. ☑ History and item references out of seven comments
 5. ☑ One banned phrase and two dates in live prose
 6. ☑ A culture-dependent `ToString` and an empty interpolation
@@ -190,7 +190,54 @@ and member caps after the reflow.
 
 **Verify.** `CheckCommentCaps.ps1` clean; `dotnet build` free of new warnings.
 
-## A3 ☐ `GD.Print` to `Log` in the three session files
+## A3 ☑ `GD.Print` to `Log` in the three session files
+
+**Landed.** All 124 calls go through `Log`: `CampaignDirector.cs` 34, `GameSession.cs` 68,
+`HumanFlightAdapter.cs` 22 (the file sits under `CSVM/src/Session/`, not `CSVM/src/Flight/` as the
+evidence below says). Every one keeps its text. 121 became `Log.Info`, which is the shipped console
+threshold, so each line stays on the console exactly where it was and now also reaches the file
+sink; `Log.Debug` was used nowhere, because these are one-shot build-time census lines rather than
+per-frame diagnostics, and `Debug` would have dropped them from a default console. The two
+`GD.PrintErr` calls (the session load failure and the `--dump-tilegrid` refusal) became `Log.Error`,
+which is unsuppressible, so they keep their console place and gain the `ERROR [cat]` tag. The
+multi-line weapon-bench report goes through `Log.Raw`, the one call that writes a formatted block
+verbatim.
+
+Categories come from `Log`'s closed nine-name vocabulary. `HumanFlightAdapter.cs` is entirely the
+human's own rig, so all 22 take its existing `flight`. `CampaignDirector.cs` takes `core`, the
+session spine: the file's own `campaign` string at its one pre-existing `Log.Info` is outside the
+vocabulary `Log.Categories` and `docs/org/logging.md` declare closed, and reusing it 34 more times
+would have multiplied that. `GameSession.cs` spans the whole session, so its lines go by subject
+across the categories it already uses plus three neighbours: `world` 27 (stage, textures, horizon,
+clouds, map edge, colliders, zeppelins, generators), `flight` 22 (rigs, views, panes, matches, the
+damage lab), `core` 10 (clock, campaign handoff, load failure, objective-site census, the `--diag`
+dump), `weapons` 5 (the weapon lab and `--incoming`), `anim` 2 (the anim lab's stage), `sound` 1,
+and the one `Log.Raw` block.
+
+No reader moved. A sweep of `CSVM.Tests`, `CSVM/src/Testing`, the repo-root `*.ps1` and `analysis/`
+for every printed prefix found no suite or script reading one of these lines off stdout: the five
+`PushConsoleSink` suites each filter on a marker none of these lines carry, and `TestHarness`'s
+engine-error screen matches Godot's `ERROR: ` form, which `Log.Error`'s `ERROR [cat]` deliberately
+misses.
+
+Visibility. No line left the console, and none was silently gained: a `--fly --chapter=C1
+--plane=player_fury --screenshot --frames=30` run printed 162 stdout lines before and 162 after,
+the converted ones differing only by their new `[category]` tag. The same run's log file went from
+120 to 148 lines, the 28 new ones being exactly the census this item moved. The conversion also
+fixes a culture bug the `GD.Print` form carried: on a German machine `flight stats` read
+`engine=0,59 torques=(3,3,7,1,2)` and now reads `engine=0.59 torques=(3.3,7.1,2)`, because
+`Log.Format` renders invariantly.
+
+**Verified.** <pending orchestrator run> `Select-String 'GD\.Print'` over the three files returns
+nothing; `CheckCommentCaps.ps1` reports all comment blocks within cap; `CheckEncoding.ps1` reports
+no mojibake; `dotnet build CSVM/CSVM.sln` succeeds with 0 warnings and 0 errors;
+`RunTests.ps1 -SkipEngine -SkipGoldens` PASS with 4090 passed, 0 failed, 2 skipped of 4092;
+`RunTests.ps1 -Filter campaign -SkipUnits -SkipGoldens` PASS with 64 passed, 0 failed, engine
+errors clean; `RunTests.ps1 -Filter flight-telemetry-gate,incoming-fire-cues -SkipUnits
+-SkipGoldens` PASS with 2 passed, 0 failed, the two suites that count lines reaching a console sink
+and the file sink.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every census line in `CampaignDirector.cs`, `GameSession.cs` and `HumanFlightAdapter.cs`
 goes through `Log`, so the file sink and the `--log=` filter see it.

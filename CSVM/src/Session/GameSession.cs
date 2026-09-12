@@ -582,7 +582,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PrintErr($"failed to load session: {e}");
+            Log.Error("core", $"failed to load session: {e}");
             // A failed build: nothing yet owns the archives kept open past the build scope (the
             // AnimLab node in the lab case, ReturnToMenu's teardown otherwise), so dispose them here.
             if (state.AnimLabNode == null)
@@ -667,7 +667,7 @@ public partial class GameSession : Node3D
             if (clockKey.Keycode == Key.P && !_spec.Fly)
             {
                 _clock.Halted = !_clock.Halted;
-                GD.Print(_clock.Halted ? "clock: halted (P resumes, . steps one frame, hold . to run)" : "clock: running");
+                Log.Info("core", $"{(_clock.Halted ? "clock: halted (P resumes, . steps one frame, hold . to run)" : "clock: running")}");
                 return;
             }
             if (clockKey.Keycode == Key.Period)
@@ -715,7 +715,7 @@ public partial class GameSession : Node3D
                 _debugWashesFired++;
                 var colour = _debugWashesFired == 1 ? new Color(1f, 0f, 0f) : new Color(1f, 1f, 1f);
                 _screenFlash.PlayBlend(washViewer - 1, colour, _debugWashesFired == 1 ? 1f : 0.5f, 5f);
-                GD.Print($"--debug-wash: wash {_debugWashesFired} addressed to viewer {washViewer} of {_screenFlash.PaneCount}");
+                Log.Info("flight", $"--debug-wash: wash {_debugWashesFired} addressed to viewer {washViewer} of {_screenFlash.PaneCount}");
             }
         }
         // The startup line goes out on the frame that proves the first one was drawn.
@@ -735,8 +735,7 @@ public partial class GameSession : Node3D
                 _unplacedRecheck = 0.0;
                 if (_unplacedWatch.RestorePlacedEntities() is { Count: > 0 } restored)
                 {
-                    GD.Print($"world: {restored.Count} entit(y/ies) moved off the origin after all, "
-                             + "restored: " + string.Join(", ", restored));
+                    Log.Info("world", $"world: {restored.Count} entit(y/ies) moved off the origin after all, restored: {string.Join(", ", restored)}");
                 }
             }
         }
@@ -871,8 +870,7 @@ public partial class GameSession : Node3D
         }
         if (only.Count == 0)
         {
-            GD.Print($"zep: '{graft.Record}' has no record in {graft.Chapter}/{graft.Mission}'s " +
-                     $"zeppelins.zrd.json — the hull is built but nothing is wired to it");
+            Log.Info("world", $"zep: '{graft.Record}' has no record in {graft.Chapter}/{graft.Mission}'s zeppelins.zrd.json — the hull is built but nothing is wired to it");
             return (only, System.Array.Empty<AiNet>(), null);
         }
         var seat = graft.Pos ?? new Vector3(0f, only[0].Position.Y, 0f);
@@ -882,8 +880,7 @@ public partial class GameSession : Node3D
         var ring = graft.Net != null ? EmptyStage.ResolveNet(graft.Net) : null;
         if (graft.Net != null && ring == null)
         {
-            GD.Print($"zep: net '{graft.Net}' is not the built-in '{EmptyStage.PatrolNetName}' " +
-                     $"ring; '{graft.Record}' station-keeps at its seat instead");
+            Log.Info("world", $"zep: net '{graft.Net}' is not the built-in '{EmptyStage.PatrolNetName}' ring; '{graft.Record}' station-keeps at its seat instead");
         }
         var nets = new List<AiNet>
         {
@@ -898,10 +895,7 @@ public partial class GameSession : Node3D
                 Volumes = ring?.Volumes ?? AiVolumeSet.None,
             },
         };
-        GD.Print($"zep: graft '{graft.Record}' from {graft.Chapter}/{graft.Mission} seated at " +
-                 $"({seat.X:0},{seat.Y:0},{seat.Z:0}), " +
-                 (ring != null ? $"flying the '{EmptyStage.PatrolNetName}' ring, " : "") +
-                 (graft.Team is { } t ? $"team {t}" : "team as the record authors it"));
+        Log.Info("world", $"zep: graft '{graft.Record}' from {graft.Chapter}/{graft.Mission} seated at ({seat.X:0},{seat.Y:0},{seat.Z:0}), {(ring != null ? $"flying the '{EmptyStage.PatrolNetName}' ring, " : "")}{(graft.Team is { } t ? $"team {t}" : "team as the record authors it")}");
         return (only, nets, seat);
     }
 
@@ -916,7 +910,7 @@ public partial class GameSession : Node3D
             return;
         }
 
-        GD.Print($"campaign: {result.Outcome} — handing '{profile}' back to the menu's debrief");
+        Log.Info("core", $"campaign: {result.Outcome} — handing '{profile}' back to the menu's debrief");
         _campaignMissionEnded(profile, result);
     }
 
@@ -943,7 +937,7 @@ public partial class GameSession : Node3D
         if (applied)
         {
             _spawnPicker.ClearDeferredOverride();
-            GD.Print("campaign: --pos= applied at the intro's handoff");
+            Log.Info("core", $"campaign: --pos= applied at the intro's handoff");
         }
     }
 
@@ -1369,8 +1363,7 @@ public partial class GameSession : Node3D
         _unplacedWatch = builder;
         if (builder.HideUnplacedEntities() is { Count: > 0 } unplaced)
         {
-            GD.Print($"world: {unplaced.Count} unplaced entit(y/ies) left at the origin, "
-                     + "switched off: " + string.Join(", ", unplaced));
+            Log.Info("world", $"world: {unplaced.Count} unplaced entit(y/ies) left at the origin, switched off: {string.Join(", ", unplaced)}");
         }
 
         // Map-edge continuation: a rolling window of mirrored terrain tiles that follows the plane
@@ -1388,8 +1381,7 @@ public partial class GameSession : Node3D
             if (_edgeExtender != null)
             {
                 _plane.AddChild(_edgeExtender);
-                GD.Print($"map edge: rolling tile window active — block {_edgeExtender.BlockCells} cell(s), "
-                    + (_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (NOT what the original does)"));
+                Log.Info("world", $"map edge: rolling tile window active — block {_edgeExtender.BlockCells} cell(s), {(_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (NOT what the original does)")}");
             }
 
             // --dump-tilegrid: the census is complete the moment the extender exists (it is built
@@ -1400,8 +1392,7 @@ public partial class GameSession : Node3D
                 string? report = _edgeExtender?.WriteCensus(_spec.Chapter);
                 if (report == null)
                 {
-                    GD.PrintErr($"--dump-tilegrid: {_spec.Chapter} builds no map-edge continuation "
-                        + "(no area/partition grid, or no recognizable ground tiles at all).");
+                    Log.Error("world", $"--dump-tilegrid: {_spec.Chapter} builds no map-edge continuation (no area/partition grid, or no recognizable ground tiles at all).");
                     GetTree().Quit(1);
                     return false;
                 }
@@ -1411,7 +1402,7 @@ public partial class GameSession : Node3D
                 _probeRunner.WriteScratch(name, report);
                 // WriteScratch resolves a relative name under ./.scratch/ and passes an absolute
                 // one straight through, so the flag takes either.
-                GD.Print($"--dump-tilegrid: {_spec.Chapter} census → {name}");
+                Log.Info("world", $"--dump-tilegrid: {_spec.Chapter} census → {name}");
                 GetTree().Quit();
                 return false;
             }
@@ -1429,10 +1420,7 @@ public partial class GameSession : Node3D
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
-                GD.Print($"fogvol clouds: {cloudField.InstanceCount} sprites "
-                         + $"({cloudField.BaseCount} base + {cloudField.ExtensionCount} "
-                         + $"map-edge extension) over {fogVolumes.Count} volume(s) — "
-                         + $"{cloudField.Summary}");
+                Log.Info("world", $"fogvol clouds: {cloudField.InstanceCount} sprites ({cloudField.BaseCount} base + {cloudField.ExtensionCount} map-edge extension) over {fogVolumes.Count} volume(s) — {cloudField.Summary}");
             }
             // ⚠ Read the fvol zone from the data, never assume it: a chapter authoring -1 keeps the
             // default layer and renders below its deck, which is authored and not a bug. One
@@ -1506,8 +1494,7 @@ public partial class GameSession : Node3D
                     var parts = new List<string>();
                     foreach (var d in built)
                         parts.Add($"{d.Node.Name} (zone_id {d.ZoneId})");
-                    GD.Print($"horizon: {built.Count} dome(s) per rig — {string.Join(", ", parts)}"
-                             + (built.Count > 1 ? "; shown by camera weather state" : ""));
+                    Log.Info("world", $"horizon: {built.Count} dome(s) per rig — {string.Join(", ", parts)}{(built.Count > 1 ? "; shown by camera weather state" : "")}");
                 }
             });
             if (_fogStateBeforeWeather is { } heldFog)
@@ -1527,29 +1514,26 @@ public partial class GameSession : Node3D
         state.Colliders = builder.ColliderCount;
         // Read after the domes, since C1's daytime sky layer is a horizon child.
         if (builder.ScrollingModelCount > 0)
-            GD.Print($"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
+            Log.Info("world", $"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
         // The evidence that the authored render flags reached the materials — a night chapter
         // reporting 0 self-lit models means they did not.
-        GD.Print($"model flags: {builder.UnlitModelCount} self-lit (lighting: false), "
-                 + $"{builder.UnfoggedModelCount} unfogged (fog: false)");
+        Log.Info("world", $"model flags: {builder.UnlitModelCount} self-lit (lighting: false), {builder.UnfoggedModelCount} unfogged (fog: false)");
         // The per-polygon second material pass. A declined count above zero means a
         // sprite/facade mesh carried one and it was dropped — never observed in this install.
         if (builder.OverlayPassSurfaceCount > 0 || builder.OverlayPassDeclinedCount > 0)
-            GD.Print($"overlay passes: {builder.OverlayPassSurfaceCount} surface(s) built, "
-                     + $"{builder.OverlayPassDeclinedCount} polygon(s) declined");
+            Log.Info("world", $"overlay passes: {builder.OverlayPassSurfaceCount} surface(s) built, {builder.OverlayPassDeclinedCount} polygon(s) declined");
         // The evidence that SHOW_BACKFACE reached the colliders: a build with collision on that
         // reports no one-sided faces is back to the old blanket two-sided flag.
         if (builder.CollisionSidedness.Count > 0)
         {
             var classes = builder.CollisionSidedness
                 .Select(kv => $"{(kv.Key.Length == 0 ? "default" : kv.Key)} {kv.Value.OneSided}/{kv.Value.OneSided + kv.Value.TwoSided}");
-            GD.Print($"collision sidedness: one-sided faces per class {string.Join(", ", classes)}; "
-                     + $"{builder.CollisionBackToBackPairs} back-to-back pair(s)");
+            Log.Info("world", $"collision sidedness: one-sided faces per class {string.Join(", ", classes)}; {builder.CollisionBackToBackPairs} back-to-back pair(s)");
         }
         // C3's skydome cloud cards, and nothing else in the install: the tripwire if the
         // absent-and-undrawn rule ever reaches a chapter that ships the texture.
         if (builder.UndrawnPolygonCount > 0)
-            GD.Print($"undrawn polygons: {builder.UndrawnPolygonCount} dropped (texture absent from game data)");
+            Log.Info("world", $"undrawn polygons: {builder.UndrawnPolygonCount} dropped (texture absent from game data)");
         state.What = $"chapter {_spec.Chapter} world";
 
         // The animation debugger (--anim-lab): the lab node owns the clock and the
@@ -1582,8 +1566,7 @@ public partial class GameSession : Node3D
             return HorizonScale;
         float fitted = Mathf.Min(HorizonScale, _camera.Far * HorizonFarFraction / radius);
         if (fitted < HorizonScale)
-            GD.Print($"horizon: dome radius {radius:0} m x {HorizonScale:0.##} would reach past the "
-                     + $"{_camera.Far:0} m far plane — scaled {fitted:0.##}x instead");
+            Log.Info("world", $"horizon: dome radius {radius:0} m x {HorizonScale:0.##} would reach past the {_camera.Far:0} m far plane — scaled {fitted:0.##}x instead");
         return fitted;
     }
 
@@ -1610,7 +1593,7 @@ public partial class GameSession : Node3D
         labStage.AddChild(labAnchors);
         session.Root.AddChild(labStage);
         session.Runtime.IndexStage(labStage);
-        GD.Print($"anim-lab: stage — {effectRoots} effect template(s) + player anchor set built + indexed");
+        Log.Info("anim", $"anim-lab: stage — {effectRoots} effect template(s) + player anchor set built + indexed");
 
         // The spawn the mission would place the player at — the camera starts here so
         // the interesting part of the map is in view, and (below) an optional parked
@@ -1686,10 +1669,7 @@ public partial class GameSession : Node3D
         };
         _worldRoot!.AddChild(animLab);
         state.AnimLabNode = animLab;
-        GD.Print($"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60"
-                 + (_spec.PlayAnim != null ? $", playing '{_spec.PlayAnim}'" : "")
-                 + " — freecam (RMB look, WASD/QE move); transport on the button panel,"
-                 + " P pause · . step · R restart · F picker · N node lab; click an object to follow");
+        Log.Info("anim", $"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60{(_spec.PlayAnim != null ? $", playing '{_spec.PlayAnim}'" : "")} — freecam (RMB look, WASD/QE move); transport on the button panel, P pause · . step · R restart · F picker · N node lab; click an object to follow");
         state.What += " + anim lab";
     }
 
@@ -1722,7 +1702,7 @@ public partial class GameSession : Node3D
             StartupProfile.Record("zrdr", mark);
             if (stats.DestroyableParts.Count == 0)
             {
-                GD.Print($"damage lab: '{_spec.PlaneName}' ({stats.DefName}) has no destroyable_parts");
+                Log.Info("flight", $"damage lab: '{_spec.PlaneName}' ({stats.DefName}) has no destroyable_parts");
             }
             else
             {
@@ -1750,9 +1730,7 @@ public partial class GameSession : Node3D
                     StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F5
                 };
                 _worldRoot!.AddChild(_damageLab);
-                GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
-                         $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails"
-                         + (_spec.DamageLab ? "" : " (hidden — F5)"));
+                Log.Info("flight", $"damage lab: {stats.DestroyableParts.Count} part sliders, {visuals.PanelCount} panels, {panelTrails.Count} panel fire trails{(_spec.DamageLab ? "" : " (hidden — F5)")}");
                 state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
             }
         }
@@ -1844,7 +1822,7 @@ public partial class GameSession : Node3D
             // Fire every weapon once per mount and report any that throw, then quit. The report is
             // synchronous, so no world tick is required.
             string report = WeaponBench.Run(_plane, benchLoadout, labWeapons, benchPool).Report;
-            GD.Print(report);
+            Log.Raw(report);
             _probeRunner.WriteScratch("weapon_test.txt", report);
             GetTree().Quit();
             return false;
@@ -1897,10 +1875,7 @@ public partial class GameSession : Node3D
         };
         _worldRoot!.AddChild(_spectator);
         state.What += " + freecam";
-        GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
-                 "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; " +
-                 "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), " +
-                 "N opens the node lab, F5 the damage lab on whatever destructible is selected");
+        Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F5 the damage lab on whatever destructible is selected");
     }
 
     // --fly (and --stunt): builds every rendered rig's aircraft (model, loadout, HUD, audio,
@@ -1975,9 +1950,7 @@ public partial class GameSession : Node3D
                 return cached;
             var loaded = PlaneStats.Load(state.ZrdrPath, plane);
             statsCache[plane] = loaded;
-            GD.Print($"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s " +
-                     $"weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} " +
-                     $"torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
+            Log.Info("flight", $"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
             return loaded;
         }
         // The AI flavour of the same airframe: a different object off the same key, so it needs its
@@ -1992,9 +1965,7 @@ public partial class GameSession : Node3D
                 return cached;
             var loaded = PlaneStats.LoadForAi(state.ZrdrPath, plane, aiDef);
             aiStatsCache[key] = loaded;
-            GD.Print($"ai flight stats [{loaded.DefName} damage:{loaded.AiDefName}]: " +
-                     $"armor={loaded.VehicleArmor:0.#} health={loaded.VehicleHealth:0.#} " +
-                     $"zones={loaded.DestroyableParts.Count} injure_anims={loaded.VehicleInjureAnims.Count}");
+            Log.Info("flight", $"ai flight stats [{loaded.DefName} damage:{loaded.AiDefName}]: armor={loaded.VehicleArmor:0.#} health={loaded.VehicleHealth:0.#} zones={loaded.DestroyableParts.Count} injure_anims={loaded.VehicleInjureAnims.Count}");
             return loaded;
         }
         _aiStatsFor = AiStatsFor;
@@ -2007,10 +1978,7 @@ public partial class GameSession : Node3D
                 return cached;
             var loaded = CamParams.Load(state.ZrdrPath, plane);
             camCache[plane] = loaded;
-            GD.Print($"camera [{loaded.DisplayName ?? plane}]: dist={loaded.Dist:0.##} m" +
-                     (loaded.FromData
-                        ? loaded.DisplayName == null ? " (camparam default — no block of its own)" : ""
-                        : " (no camparam.json — built-in defaults)"));
+            Log.Info("flight", $"camera [{loaded.DisplayName ?? plane}]: dist={loaded.Dist:0.##} m{(loaded.FromData ? loaded.DisplayName == null ? " (camparam default — no block of its own)" : "" : " (no camparam.json — built-in defaults)")}");
             return loaded;
         }
         // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
@@ -2142,7 +2110,7 @@ public partial class GameSession : Node3D
         bool wantStunt = _spec.Stunt || iaStunt;
         if (wantStunt && _spec.EmptyStage)
         {
-            GD.Print("--stunt has no danger zones on the empty stage (no mission, no world) — flying free");
+            Log.Info("flight", $"--stunt has no danger zones on the empty stage (no mission, no world) — flying free");
         }
         else if (wantStunt)
         {
@@ -2150,12 +2118,11 @@ public partial class GameSession : Node3D
             if (stuntZones == null)
                 // Expected for the chapters whose IA1 has no dzones (C1C, C2B) — a data
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
-                GD.Print($"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission} — flying free");
+                Log.Info("flight", $"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission} — flying free");
             else if (_rigs.Count > 1)
                 race = new StuntRace(); // splitscreen: a race, ranked on the shared board
             if (stuntZones != null && iaStunt && !_spec.Stunt)
-                GD.Print($"ia: stunt_flying — {stuntZones.TotalCount} danger zone(s) from " +
-                          $"{_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
+                Log.Info("flight", $"ia: stunt_flying — {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
         // Dogfight (--vs): built here, before the rigs — same reason Race is (HumanFlightAdapter
@@ -2311,13 +2278,12 @@ public partial class GameSession : Node3D
                 RightAligned = true,            // the top-left corner is the flight HUD's
             };
             _worldRoot!.AddChild(_damageLab);
-            GD.Print($"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown " +
-                     "plane's armor+HP" + (_spec.DamageLab ? "" : " (hidden — F5)"));
+            Log.Info("flight", $"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown plane's armor+HP{(_spec.DamageLab ? "" : " (hidden — F5)")}");
             state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
         }
         else if (_spec.DamageLab)
         {
-            GD.Print($"damage lab: '{_spec.PlaneName}' has no destroyable_parts");
+            Log.Info("flight", $"damage lab: '{_spec.PlaneName}' has no destroyable_parts");
         }
 
         // The weapon lab in flight, bound to player 1's held aircraft inside a real chapter world.
@@ -2353,26 +2319,20 @@ public partial class GameSession : Node3D
             // silently leaving the other panes' pilots without a panel they can see.
             if (_rigs.Count > 1)
             {
-                GD.Print($"weapon lab: {_rigs.Count} players — the lab binds P1's aircraft and P1's " +
-                         "pane only; the other panes fly normally");
+                Log.Info("weapons", $"weapon lab: {_rigs.Count} players — the lab binds P1's aircraft and P1's pane only; the other panes fly normally");
             }
-            GD.Print($"weapon lab: '{_spec.PlaneName}' held " +
-                     (_spec.EmptyStage ? "on the empty stage" : $"in {_spec.Chapter}") +
-                     ", firing through the session pool" +
-                     (_spec.WeaponFire ? " (--weapon-fire: trigger held)" : "") +
-                     (_spec.WeaponCycle > 0 ? $" (--weapon-cycle: a weapon every {_spec.WeaponCycle} frames)" : ""));
+            Log.Info("weapons", $"weapon lab: '{_spec.PlaneName}' held {(_spec.EmptyStage ? "on the empty stage" : $"in {_spec.Chapter}")}, firing through the session pool{(_spec.WeaponFire ? " (--weapon-fire: trigger held)" : "")}{(_spec.WeaponCycle > 0 ? $" (--weapon-cycle: a weapon every {_spec.WeaponCycle} frames)" : "")}");
             // The authored impact/destruction effects need the world-effects runtime, which is only
             // built when there IS a world program — say so rather than silently drawing stand-ins.
             if (state.WorldScene == null)
             {
-                GD.Print("weapon lab: no world program on this stage — impacts fall back to the " +
-                         "pool's stand-in burst and rockets fly without their FLYOUT body/trail");
+                Log.Info("weapons", $"weapon lab: no world program on this stage — impacts fall back to the pool's stand-in burst and rockets fly without their FLYOUT body/trail");
             }
             state.What += " + weapon lab";
         }
         else if (_spec.WeaponLab)
         {
-            GD.Print("weapon lab: no flight rig to host it (nothing was built to hold)");
+            Log.Info("weapons", $"weapon lab: no flight rig to host it (nothing was built to hold)");
         }
 
         // The race's shared results board: one ranked row per player, on its own CanvasLayer over
@@ -2394,8 +2354,7 @@ public partial class GameSession : Node3D
             foreach (var rig in _rigs)
                 if (rig.Controller != null)
                     rig.Controller.RestartRace = () => RestartRace(race);
-            GD.Print($"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, " +
-                     "own progress + clock each, shared ranked board");
+            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, own progress + clock each, shared ranked board");
         }
 
         // Dogfight (--vs): the match bookkeeping, fed by every rig's Downed report. A killer inside
@@ -2425,11 +2384,8 @@ public partial class GameSession : Node3D
                             other.Controller?.VersusHud?.OnKill(killer, victim);
                     };
                 }
-            match.MatchCompleted += () => GD.Print("dogfight: match complete — " + string.Join(", ",
-                match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})")));
-            GD.Print($"dogfight: {_rigs.Count} pilots, " +
-                     (match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target") + ", " +
-                     (match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit"));
+            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete — {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
+            Log.Info("flight", $"dogfight: {_rigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}");
 
             // The match's shared results board: same construction as the race board above —
             // one CanvasLayer over the whole window (the match ends for everybody at once), R
@@ -2456,8 +2412,7 @@ public partial class GameSession : Node3D
                     incoming.AddTarget(rig.Controller);
             _worldRoot!.AddChild(incoming);
             _incomingFire = incoming;
-            GD.Print($"--incoming: rounds {incomingPass:0.0} m off every player's track" +
-                     (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
+            Log.Info("weapons", $"--incoming: rounds {incomingPass:0.0} m off every player's track{(_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)")}");
         }
 
         // The roster shares the session data the human field was built from, so later AI spawns
@@ -2671,7 +2626,7 @@ public partial class GameSession : Node3D
             }
             catch (IOException e)
             {
-                GD.Print($"zep: no zeppelins file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
+                Log.Info("world", $"zep: no zeppelins file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
                 zepDefs = new List<ZeppelinDef>();
             }
             IReadOnlyList<AiNet> zepNets;
@@ -2716,8 +2671,7 @@ public partial class GameSession : Node3D
             // assembler. Every pane shares the one runtime; each fills its own list from it.
             var zepTargets = _zeppelins;
             flightRoster.SetTargetSubParts(into => zepTargets.CollectTargetParts(into));
-            GD.Print($"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for " +
-                     $"{_spec.Chapter}/{_spec.Mission}");
+            Log.Info("world", $"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for {_spec.Chapter}/{_spec.Mission}");
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";
         }
 
@@ -2740,7 +2694,7 @@ public partial class GameSession : Node3D
             }
             catch (IOException e)
             {
-                GD.Print($"egen: no generator file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
+                Log.Info("world", $"egen: no generator file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
                 egenDefs = new List<EnemyGeneratorDef>();
             }
             var chapterNets = AiNets.Load(worldBindings.ChapterZrdrPath);
@@ -2766,8 +2720,7 @@ public partial class GameSession : Node3D
                     case GeneratorLaunch.Empty:
                         // The decoded empty launch: a label naming no block builds nothing, and
                         // the runtime counts the launch anyway. Never an airframe in its place.
-                        GD.Print($"egen: '{def.Node}' params '{def.VehicleParams}' names no " +
-                                 "roster block: the launch builds nothing");
+                        Log.Info("world", $"egen: '{def.Node}' params '{def.VehicleParams}' names no roster block: the launch builds nothing");
                         return default;
                     case GeneratorLaunch.Surface:
                         // A hull off a ship generator: never an airframe in its place. With no
@@ -2775,8 +2728,7 @@ public partial class GameSession : Node3D
                         var hull = plan!;
                         if (generatorSurface == null)
                         {
-                            GD.Print($"egen: '{def.Node}' params '{def.VehicleParams}' names the hull " +
-                                     $"'{hull.Def}', which this stage cannot build: the launch builds nothing");
+                            Log.Info("world", $"egen: '{def.Node}' params '{def.VehicleParams}' names the hull '{hull.Def}', which this stage cannot build: the launch builds nothing");
                             return default;
                         }
                         string hullName = EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal);
@@ -2834,8 +2786,7 @@ public partial class GameSession : Node3D
                     foreach (var (host, credit) in wakeupCredits)
                     {
                         int fed = _generators.GrantWaveCapacity(host, credit);
-                        GD.Print($"egen: '{host}' woken by --wake-generators: +{credit} credit " +
-                                 $"(granted {fed}, stand-in for the script's WAKEUP_GENERATOR)");
+                        Log.Info("world", $"egen: '{host}' woken by --wake-generators: +{credit} credit (granted {fed}, stand-in for the script's WAKEUP_GENERATOR)");
                     }
                 }
             }
@@ -2853,8 +2804,7 @@ public partial class GameSession : Node3D
                 var generators = _generators;
                 wr.DestructibleKilled += node => generators.NotifyHostDied(node);
             }
-            GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +
-                     $"{_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
+            Log.Info("world", $"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for {_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
             state.What += $" + {_generators.LiveCount} generator(s)";
         }
 
@@ -3008,7 +2958,7 @@ public partial class GameSession : Node3D
             var offered = new List<AimCandidate>();
             sites.Collect(offered);
             int flagged = offered.Count(c => c.Source is ObjectiveSite { Objective: true });
-            GD.Print($"campaign: {flagged} objective site(s) and {offered.Count - flagged} other-target site(s) on the player's target cycles");
+            Log.Info("core", $"campaign: {flagged} objective site(s) and {offered.Count - flagged} other-target site(s) on the player's target cycles");
         }
         else if (_spec.WorldMode && !_spec.EmptyStage && _spec.CampaignProfile == null
                  && stuntZones == null && state.WorldRuntime != null && _rigs.Count > 0)
@@ -3024,8 +2974,7 @@ public partial class GameSession : Node3D
             var modeSites = new List<AimCandidate>();
             sites.Collect(modeSites);
             int modeFlagged = modeSites.Count(c => c.Source is ObjectiveSite { Objective: true });
-            GD.Print($"{_spec.Chapter}/{_spec.Mission}: {modeFlagged} objective site(s) and " +
-                     $"{modeSites.Count - modeFlagged} other-target site(s) from the mission's own targets.zrd");
+            Log.Info("core", $"{_spec.Chapter}/{_spec.Mission}: {modeFlagged} objective site(s) and {modeSites.Count - modeFlagged} other-target site(s) from the mission's own targets.zrd");
         }
 
         if (_rigs.Count > 1)
@@ -3121,8 +3070,7 @@ public partial class GameSession : Node3D
         }
         else if (_spec.DestroyName != null)
         {
-            GD.Print($"--destroy='{_spec.DestroyName}' ignored: no chapter world " +
-                     "(pair it with --freecam/--fly + --chapter=)");
+            Log.Info("world", $"--destroy='{_spec.DestroyName}' ignored: no chapter world (pair it with --freecam/--fly + --chapter=)");
         }
     }
 
@@ -3130,32 +3078,20 @@ public partial class GameSession : Node3D
     // whole build has finished.
     private void LogBuildSummary(BuildState state, Stopwatch sw)
     {
-        GD.Print($"loaded {state.What}: {state.Gamez.Nodes.Count} gamez nodes, " +
-                 $"{state.MeshInstances} mesh instances, {state.Colliders} colliders, " +
-                 $"{Mech3.SceneBuilder.ClampedSurfaceTotal} uv-clamped + " +
-                 $"{Mech3.SceneBuilder.EdgeClampedSurfaceTotal} edge-clamped surfaces, {sw.ElapsedMilliseconds} ms");
+        Log.Info("world", $"loaded {state.What}: {state.Gamez.Nodes.Count} gamez nodes, {state.MeshInstances} mesh instances, {state.Colliders} colliders, {Mech3.SceneBuilder.ClampedSurfaceTotal} uv-clamped + {Mech3.SceneBuilder.EdgeClampedSurfaceTotal} edge-clamped surfaces, {sw.ElapsedMilliseconds} ms");
         if (_rigs.Count > 1)
             foreach (var rig in _rigs)
-                GD.Print($"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} " +
-                         $"cull 0x{rig.Camera.CullMask:X5}, sky={(rig.Horizon != null ? "own" : "none")} " +
-                         $"deck={(rig.Deck != null ? "own" : "none")} " +
-                         $"whiteout={(rig.Whiteout != null ? "own" : "none")}");
+                Log.Info("flight", $"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} cull 0x{rig.Camera.CullMask:X5}, sky={(rig.Horizon != null ? "own" : "none")} deck={(rig.Deck != null ? "own" : "none")} whiteout={(rig.Whiteout != null ? "own" : "none")}");
         // The authored-mip coverage, said out loud per chapter: a chapter never loads its whole
         // archive, so "installed N" alone cannot show whether a level was missed or simply unused.
         var tex = state.Textures;
         if (tex.AuthoredMipsAvailable > 0)
         {
             string refused = tex.AuthoredMipsRefused > 0 ? $", {tex.AuthoredMipsRefused} REFUSED" : "";
-            GD.Print(Mech3.TextureArchive.Mips == Mech3.TextureArchive.MipSource.Authored
-                ? $"[textures] authored mip levels: {tex.AuthoredMipsInstalled} installed on "
-                  + $"{tex.AuthoredMipTextures} texture(s), of {tex.AuthoredMipsAvailable} this "
-                  + $"archive ships{refused}"
-                : $"[textures] authored mip levels: off (--mips=generated); this archive ships "
-                  + $"{tex.AuthoredMipsAvailable}");
+            Log.Info("world", $"[textures] authored mip levels: {(Mech3.TextureArchive.Mips == Mech3.TextureArchive.MipSource.Authored ? $"{tex.AuthoredMipsInstalled} installed on {tex.AuthoredMipTextures} texture(s), of {tex.AuthoredMipsAvailable} this archive ships{refused}" : $"off (--mips=generated); this archive ships {tex.AuthoredMipsAvailable}")}");
         }
         if (state.Textures.MissingTextures.Count > 0)
-            GD.Print($"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: " +
-                     string.Join(", ", state.Textures.MissingTextures));
+            Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
     }
 
     // The post-build framing pass: subject framing for the static views, the freecam/anim-lab mesh
@@ -3309,8 +3245,7 @@ public partial class GameSession : Node3D
         if (spend > 0f)
             damage.Apply("hull", spend, 0f);
         controller.Visuals?.OnHullDamage(damage.SummaryHealthFraction);
-        GD.Print($"ai damage preset: {controller.Name} hull at " +
-                 $"{damage.SummaryHealthFraction * 100f:0}% ({damage.WholeHealth:0.0}/{damage.WholeHealthMax:0})");
+        Log.Info("flight", $"ai damage preset: {controller.Name} hull at {damage.SummaryHealthFraction * 100f:0}% ({damage.WholeHealth:0.0}/{damage.WholeHealthMax:0})");
     }
 
     // Every player's own position: the flown aircraft where a rig has a bound FlightController,
@@ -3408,8 +3343,7 @@ public partial class GameSession : Node3D
                 VisualLayer = SplitScreen.PlayerVisualLayer(i),
             });
         }
-        GD.Print($"splitscreen: {count} panes sharing one world " +
-                 $"({SplitScreen.LayoutName(count, GetViewport().GetVisibleRect().Size)})");
+        Log.Info("flight", $"splitscreen: {count} panes sharing one world ({SplitScreen.LayoutName(count, GetViewport().GetVisibleRect().Size)})");
     }
 
     // One interior render pass per rig, on that player's own HUD parent, so splitscreen gets a
@@ -3435,7 +3369,7 @@ public partial class GameSession : Node3D
             if (overlay?.Sun != null)
                 _weatherRig?.RegisterExtraLighting(overlay.Sun, overlay.Env);
         }
-        GD.Print($"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
+        Log.Info("flight", $"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
     }
 
     // Gives every rig a cloudlayer deck to anchor under its own camera: rig 0 takes the world's
@@ -3506,7 +3440,7 @@ public partial class GameSession : Node3D
     // rather than in the FlightController that read the button.
     private void RestartRace(StuntRace race)
     {
-        GD.Print("stunt race: rematch — fresh clocks and zones for every pilot");
+        Log.Info("flight", $"stunt race: rematch — fresh clocks and zones for every pilot");
         race.Restart();
         foreach (var rig in _rigs)
             rig.Controller?.Respawn();
@@ -3516,7 +3450,7 @@ public partial class GameSession : Node3D
     // plane back to its own spawn. Mirrors RestartRace exactly.
     private void RestartMatch(VersusMatch match)
     {
-        GD.Print("dogfight: rematch — scores and clock reset for every pilot");
+        Log.Info("flight", $"dogfight: rematch — scores and clock reset for every pilot");
         match.Restart();
         foreach (var rig in _rigs)
             rig.Controller?.Respawn();
@@ -3625,9 +3559,7 @@ public partial class GameSession : Node3D
                 spectator.FollowNode(follow);
             }
         }
-        GD.Print($"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; " +
-                 (follow != null ? $"camera following {follow.Name}" : "camera free at the spawn") +
-                 $" ({AiPlanes.Count} AI aircraft flying)");
+        Log.Info("flight", $"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; {(follow != null ? $"camera following {follow.Name}" : "camera free at the spawn")} ({AiPlanes.Count} AI aircraft flying)");
     }
 
     // A co-op campaign human whose aircraft is lost while the others fly on uses the same
@@ -3643,8 +3575,7 @@ public partial class GameSession : Node3D
 
             SpectateHandoff.Begin(rig, _rigs, _worldRoot!, LockCandidateAircraft,
                 _spectatorCameras, out var follow);
-            GD.Print($"campaign: P{rig.Index + 1}'s pane is spectating" +
-                     (follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera"));
+            Log.Info("core", $"campaign: P{rig.Index + 1}'s pane is spectating{(follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera")}");
             return;
         }
     }
@@ -3702,7 +3633,7 @@ public partial class GameSession : Node3D
         _photoHud = UI.PhotoModeHud.Build(pilot.PadDevices, pilot.UseKeyboard);
         _photoHud.Exit += ExitPhotoMode;
         _worldRoot!.AddChild(_photoHud);
-        GD.Print($"photo mode: P{playerIndex + 1}'s pane, over the frame the board froze");
+        Log.Info("flight", $"photo mode: P{playerIndex + 1}'s pane, over the frame the board froze");
     }
 
     /// <summary>Escape (or pad B) out of photo mode: the board comes back and the pilot's HUD with
@@ -3858,8 +3789,7 @@ public partial class GameSession : Node3D
                         : $"NODE '{spec.WhereNode}' UNRESOLVED";
                 }
 
-                GD.Print($"DIAGREF OBJ{def.Number} id={def.Identity?.Class.ToString() ?? "-"}/{def.Identity?.Priority.ToString() ?? "-"} " +
-                         $"dormant={def.BeginDormant}:{def.DormantUntil} who='{spec.Who}' r={spec.Radius:0} {where}");
+                Log.Info("core", $"DIAGREF OBJ{def.Number} id={def.Identity?.Class.ToString() ?? "-"}/{def.Identity?.Priority.ToString() ?? "-"} dormant={def.BeginDormant}:{def.DormantUntil} who='{spec.Who}' r={spec.Radius:0} {where}");
             }
         }
 
@@ -3892,7 +3822,7 @@ public partial class GameSession : Node3D
             sb.Append($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} ");
         }
 
-        GD.Print(sb.ToString());
+        Log.Info("core", $"{sb}");
     }
 
     // The surface-vehicle runtime, built once on the first roster or generator that can need one
@@ -3961,7 +3891,7 @@ public partial class GameSession : Node3D
         {
             if (accentId != null && _aiVoice == null)
             {
-                GD.Print($"ai voice: accent {accentId} ignored — no voice runtime in this session");
+                Log.Info("sound", $"ai voice: accent {accentId} ignored — no voice runtime in this session");
             }
             return;
         }
