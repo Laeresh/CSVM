@@ -83,9 +83,13 @@ public sealed class FlightModel
     private const float ThrustVRefMach = 0.112f;
     private const float ThrustMachTrim = 1f / 60f;
     private const float ThrustPowMach = 1.41f;
-    // Base of the Mach-dependent divisor: 1.33 × the atmosphere's own scale factor, which for the
-    // dense band (the operative one — see the atmosphere constants) is 0.98842078.
-    private const float ThrustPowBase = 1.33f * 0.98842078f;
+    // Base of the Mach-dependent divisor: 1.33 × the atmosphere's own scale factor, the third output
+    // of the band step beside density and the speed of sound.
+    // ⚠ Take the band's factor, never the dense one everywhere. Above the edge the base falls below
+    // 1, so the divisor shrinks with Mach where below it grows, and holding the dense value there
+    // understates thin-band thrust. docs/org/flightModel.md, "Thrust available".
+    private const float DenseThrustPowBase = 1.33f * 0.98842078f;
+    private const float ThinThrustPowBase = 1.33f * 0.7348f;
 
     // Available thrust is then scaled by the nose's attitude, before the engine-power and
     // reference-area scaling: a climb LOSES thrust (0.6612× straight up) and a dive GAINS it
@@ -357,6 +361,8 @@ public sealed class FlightModel
     private float AirDensitySlugPerFt3 => InDenseBand ? DenseDensitySlugPerFt3 : ThinDensitySlugPerFt3;
 
     private float SpeedOfSoundFps => InDenseBand ? DenseSoundFps : ThinSoundFps;
+
+    private float ThrustPowBase => InDenseBand ? DenseThrustPowBase : ThinThrustPowBase;
 
     /// <summary>How much of the available thrust the nose's attitude leaves: 1 wings-level, 0.6612
     /// pointing straight up, 1.24 pointing straight down. A climb is PENALISED and a dive rewarded.

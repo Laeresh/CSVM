@@ -755,19 +755,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   inside the new arm and closes with it; without one, the ledger row moves from unsupported to an
   exception carrying that reason. Ledger row "the mouse-flying arm's `is_autogyro` roll/yaw
   exchange" in the same page's "Parity ledger".
-- `BL-774` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **The sustained climb plateaus at 204 mph against the original's
-  filmed 163, and the ceiling now shows it.** `--dump-flight`'s sustained climb settles at 204.03 mph
-  on a 56.3° path where the footage reads 163.05 at 55.5°, so CSVM crosses the 2000 m band edge at
-  75.8 m/s where the original crosses at about 61. With no clamp cutting every climb off at 2003 m
-  (`git log --grep=BL-448`), that residual reads as altitude: the apex above the edge is
-  `v_y² / 2g`, so a 24% fast climb reads as a ceiling several hundred feet high. *Lead:* the residual
-  is the same α question as the pitch rate, recorded in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md) "The sustained climb"; the entry angle is free
-  after the first step, so the candidates are the lift-demand lag and the attitude-thrust terms rather
-  than a climb-gravity scale, which the decode already disproved. *⚠ Do not* close the gap with a
-  constant on the ceiling: the height above the edge is bought with the climb and has no term of its
-  own. *How you'd know it worked:* the plateau moves toward 163 mph and `altitude-ceiling` falls
-  toward the ~7,000 ft the original reaches at the controls.
+- `BL-774` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The sustained climb plateaus at 204 mph against the original's
+  filmed 163, and every term that could move a steady climb is now ruled out by arithmetic.**
+  `--dump-flight`'s sustained climb settles at 204.03 mph on a 56.3° path where the footage reads
+  163.05, and the ceiling inherits that error because the apex above the band edge is `v_y² / 2g`.
+  A term-by-term re-read of `FUN_0048c470` → `FUN_0048fc40` → `FUN_0048e580` against
+  `FlightModel.Step` found one difference, the thrust divisor's band factor, and it is thin-band
+  only, so it moves the ceiling rows and not the climb. *What the decode settled:* the entry's two
+  candidates are both incapable. Composing the plant's own force sum leaves a cross-path term of
+  `sin α · [(T − g·nose_y) + rate·t·speed·cos α]`, whose bracket cannot vanish in the climb regime,
+  so **a sustained straight climb has exactly one state and α is zero in it**. The lift-demand lag
+  multiplies a vector that is identically zero there, and the attitude-thrust pair (`0x48fce2`–
+  `0x48fd38`) is byte-exact and validated at `a = 0` and `a = +0.94` by the two neighbouring rows.
+  Throttle, the atmosphere band and `veh_weight` are each ruled out in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) "The sustained climb". *The remaining
+  question, exactly:* what does the original spend in a climb that is not in the force accumulator,
+  given that every write to that force vector is enumerated (the zero-vector initialiser at
+  `0x48fdf9`, drag, thrust, the two lift rows, weight) and that level flight and the 70.7° dive land
+  on their decoded targets with nothing fitted while only `a = −0.83` is 25% fast? The vehicle
+  dispatch is already clean: `FUN_00489ea0` sends aeroplane classes 0 and 4 to `FUN_0048e580` and to
+  nothing else, the three calls after it being player telemetry writers, so a second force term
+  would have to sit outside the vehicle tick. The two next moves are the 35 sites that take the
+  address of the velocity triple (`LEA [obj+0x924]`) and the shipped Dynamics tuner's own `Climb90`
+  rig (`FUN_00491d90`), which is the manoeuvre the original itself calls a sustained climb.
+  *⚠ Do not* close the gap with a constant on the ceiling or by moving 0.24/0.13: the dive side of
+  the same scale lands `terminal-dive` at 356.0 mph against a measured 355.2 with nothing fitted.
+  *How you'd know it worked:* the plateau moves toward 163 mph with `level-top-speed` and
+  `terminal-dive` still on their decoded targets.
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 45 to 51 ms in flight and
   about 124 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
   instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 82

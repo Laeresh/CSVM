@@ -248,6 +248,11 @@ q     = 0.5 · ρ · V_ft/s²          (dynamic pressure, lb/ft²)
 Mach  = V_m/s / (a_ft/s · 0.3048)
 ```
 
+⚠ **The band's factor `k` has a third consumer, not two.** The speed of sound is `(k + 1) · 558`,
+and the thrust curve's `pow` base is `k · 1.33` (`0x41ad0f`), so a port that switches ρ and the
+speed of sound on the band but pins the base to the dense `k` is half a band switch. See
+"Thrust available".
+
 **The dense band is the operative one for the whole flyable envelope, and the live process says so
 directly.** The comparison is `alt_ft ≤ threshold → dense` (`0x41aca4`–`0x41acc4`) against the
 threshold at `0x0071bb3c`, and a running retail process holds **6561.6796875** there, which is
@@ -1678,32 +1683,58 @@ moves 276.66 → 257.74 with no attitude term anywhere near it. That is what "it
 drag and thrust shapes' error" looks like from outside: B12/B13 replaced those shapes, and what the
 constant was compensating went with them.
 
-⚠ **The residual is real and is recorded, not tuned.** 204 against 163 is +25 %, and the *shape*
-differs too: the original undershoots its own plateau by 9 % and climbs back out of it, where the
-model decays monotonically. The along-path balance at the footage's own plateau needs a thrust
-factor of **0.563**, and no attitude in the decoded formula reaches that — 0.6612 is its floor. But
-the probe holds α = 0 (attitude set to the path), and the clip is a **90° pull**: at a 90° nose with
-the measured 56° path the same decoded force path balances to **−3.3 %**, because the attitude scale
-bottoms out *and* the nose-to-path cosine takes another 18 %. The clip's ADI saturates above ≈+30°,
-so its nose angle is **not readable**. ⚠ **No capture can settle this and none is owed** — a
-readable ADI would still only give a frame-derived angle, which cannot confirm a decode
-(`docs/verification.md` DET-12). The open question is what α the original's climb path holds, and it
-is answered in the force path above. Do not close the gap
-by moving 0.24/0.13; they are the binary's, and the dive side of the same scale lands
-`terminal-dive` at 356.0 mph against a measured 355.2 ± 6 with nothing fitted.
+⚠ **The residual is real and is recorded, not tuned.** 204 against 163 is +25 %. The *shape*
+difference is the entry and not the plant: the clip is a 90° pull from 298.9 mph, so its path swings
+past the angle it settles on and the speed undershoots on the way back to it, where the probe sets
+56.3° at entry and decays monotonically onto it. The along-path balance at the footage's own plateau
+needs a thrust factor of **0.563**, and no attitude in the decoded formula reaches that, 0.6612
+being its floor. Do not close the gap by moving 0.24/0.13; they are the binary's, and the dive side
+of the same scale lands `terminal-dive` at 356.0 mph against a measured 355.2 ± 6 with nothing
+fitted. ⚠ **No capture can settle this and none is owed.** The clip's ADI saturates above ≈+30°, and
+a readable one would still only give a frame-derived angle, which cannot confirm a decode
+(`docs/verification.md` DET-12).
+
+⚠ **A sustained straight climb has exactly ONE state in this plant, and its α is zero, so no
+attitude reading owns the residual.** Compose the near-field accelerations with the lag written out.
+Lift is the demand `rate · t · (speed · nose − v) + g_up` projected across the nose, and the world
+weight is that same `g_up` with the sign flipped, so the two gravity halves collapse to the demand's
+own along-nose share and the whole sum is
+
+```
+a = (T − g · nose_y) · nose  −  D · v̂  −  rate · t · v_perp
+```
+
+whose component across the flight path is `sin α · [ (T − g · nose_y) + rate · t · speed · cos α ]`.
+Straight flight needs that zero. Past the wind blend's 5° edge the lag term alone is 45 m/s² at the
+filmed speed, against the 20 m/s² ceiling `nom_gravity` puts on the weight share, so the bracket
+cannot vanish; inside the window the lag is zero and the weathervane closes α with the stick
+neutral. The probe does not hold the nose on the path either way; the plant walks it there, and the
+dump's α column reads 0.00 at every sample. **An instantaneous balance at a 90° nose against a 56°
+path is therefore a transient, not a plateau**: the demand that pair carries turns the path onto the
+nose at about 25 °/s, so it cannot persist for the twenty-four seconds the footage holds its climb.
+
+⚠ **The residual has no home in the force accumulator, and the two neighbouring rows say the
+accumulator is right.** Level flight (`a = 0`) and the 70.7° dive (`a = +0.94`) land on their
+decoded targets with nothing fitted; only the climb at `a = −0.83` is 25 % fast. Each candidate that
+could move a steady climb is ruled out by arithmetic rather than by preference: α by the derivation
+above, the lag rate because it multiplies a vector that is identically zero at α = 0, the throttle
+because it is 1 at the filmed full throttle, the band because the whole climb is below the edge, and
+`veh_weight` because the weight that balances the climb at the filmed speed is 1.375 × the authored
+one and moves `terminal-dive` off its measured 355.2 (weight cancels out of level flight but not out
+of either climb or dive). The open question is what the original spends in a climb that
+`FUN_0048c470` → `FUN_0048fc40` does not contain, given that every write to that force vector is
+enumerated: the zero-vector initialiser at `0x48fdf9`, drag, thrust, the two lift rows and weight.
 
 ⚠ **The throttle-spending candidate is disproven as well.** The lever is a plain linear multiply on
 available thrust and touches no other term ("Part-throttle equilibrium" below), so at the clip's
-full throttle it is a factor of 1 and no throttle law can move a full-throttle climb at all. With
-the atmosphere band settled dense, the α the climb path holds is the only owner left.
+full throttle it is a factor of 1 and no throttle law can move a full-throttle climb at all.
 
 ⚠ **The acceleration-path candidate for this residual is disproven.** The "original spends its lag
 vector as the acceleration" hypothesis is settled in "`lift_accel_rate` is a lag toward a target
 velocity": the near-field composition is the same demand → clamp → force sum this model flies, and
 retiring the remake's extra kinematic chase moved the plateau not at all (204.04 → 204.03), because
-the probe's trajectory holds α = 0, where the chase was a no-op. The residual's one remaining owner
-is the α the original's climb path holds (above); the throttle spending and the atmosphere band
-are both settled and neither carries it.
+a straight climb settles at α = 0, where the chase was a no-op. The throttle spending, the
+atmosphere band and α itself are all settled above, and none of them carries the residual.
 
 ## Thrust available — resolved, `pow` operands recovered
 
@@ -1724,6 +1755,15 @@ to `MSVCRT!_CIpow` (base in `st(1)`, exponent in `st(0)`, pushed in that order a
 
 - **base** = `atm->k · 1.33` — a constant per atmosphere state, **1.3146** on the dense band
 - **exponent** = `Mach · 1.41`
+
+⚠ **The base takes the BAND's `k`, which makes it the atmosphere step's third output.** `atm->k` is
+the same slot the speed of sound is built from (`a = (k + 1) · 558`), so it switches with density
+and sound speed at the 2000 m edge: 1.33 × 0.98842078 = **1.3146** dense, 1.33 × 0.7348 =
+**0.97728** thin. The sign of the exponent's effect flips with it. Below the edge the base exceeds
+1 and the divisor grows with Mach; above it the base is under 1 and the divisor shrinks, so holding
+the dense base everywhere understates thin-band thrust by `(0.97728 / 1.3146)^(1.41·M)`, which is
+10 % at the Bloodhawk's crossing Mach and more the faster the aircraft is. `FlightModel` carries
+both bases and `AtmosphereBandTests` pins the selection.
 
 Every float immediate, all `.rdata`:
 
@@ -2440,8 +2480,9 @@ run it. A passive sample of a live retail process through 200 s of mission fligh
 `liftAOAs` thresholds `_DAT_0071c430`/`_DAT_0071c434` at cos 5° and cos 9°, all three slots BSS
 that read 0.0 until a plane loads (the same shape as the atmosphere threshold, "Atmosphere"). The
 pull is therefore the executable's own and the filmed figure is discarded; the same-tick lift
-read above remains a port-fidelity difference on its own merit. The climb residual of "The sustained climb" is the same α question from
-the other side and moves with whatever settles this one.
+read above remains a port-fidelity difference on its own merit. The climb residual of "The sustained
+climb" is a separate question and not this one: a straight climb settles at α = 0, so no α
+equilibrium reaches it.
 
 ## The resting altitude cap is the atmosphere band edge
 
@@ -2494,8 +2535,8 @@ lines, which is the control that says the instrument can see the ceiling at all.
 **What the plant reaches.** The dense band is bit-identical to the single band the plant carried
 before, so nothing below 2000 m moves: `level-top-speed` 300.46 mph, `terminal-dive` 356.00 mph and
 `zoom-climb` 949 ft are unchanged, and the level equilibrium 12 m under the edge still solves to
-300.46 mph. A 22° full-throttle hold now apexes at **6,878 ft** on the Bloodhawk, and across the
-eleven airframes at 2009 to 2105 m, each one the coast its own crossing rate buys (17.8 to 45.4 m/s).
+300.46 mph. A 22° full-throttle hold now apexes at **6,884 ft** on the Bloodhawk, and across the
+eleven airframes at 2009 to 2106 m, each one the coast its own crossing rate buys (17.8 to 45.4 m/s).
 `FlightConstantInventoryTests` measures the apex against the frictionless `v_y² / 2g` per airframe,
 so a clamp returning would collapse it toward nothing and a band that stopped biting would leave it
 unbounded.
@@ -2503,13 +2544,15 @@ unbounded.
 ⚠ **The autogyro's ceiling sits well above the others, and that is the decode, not a defect.** Its
 wing loading is low enough to keep flying in the thin band (an 18.5 mph dense-band stall becomes
 75.7 mph up there, against a 228 mph `fd_speed`), so a shallow hold climbs a long way past the edge,
-to 5,872 m over a 240 s probe, before it stalls. The original does the same at the controls. Do not
-add a clamp to bound it.
+to 6,290 m over a 240 s probe, before it stalls. It is the one airframe that cruises up there, so it
+is also the one the thin band's own `pow` base moves (see "Thrust available"). The original does the
+same at the controls. Do not add a clamp to bound it.
 
 ⚠ **CSVM crosses the edge faster than the original does, so its apex runs high.** The plant's
 sustained climb plateaus at 204 mph against the filmed 163, a residual recorded under "The sustained
-climb" and open on the same α question as the pitch rate. The ceiling therefore inherits that error,
-and it corrects itself when the climb does. Do not close the gap by putting a constant back.
+climb", where every term that could move a steady climb is ruled out by arithmetic and the owner is
+still unnamed. The ceiling inherits that error and corrects itself when the climb does. Do not close
+the gap by putting a constant back.
 
 ### ⚠ The ceiling is a measurement with no counterpart in the executable — RETIRED (2026-09-06)
 
@@ -3467,7 +3510,8 @@ without a provenance. Five classes are used:
 | `ThrustVRefMach` | 0.112 | decoded | `0x603498` |
 | `ThrustMachTrim` | 1/60 | decoded | `0x603494` |
 | `ThrustPowMach` | 1.41 | decoded | `0x6034a0`, the `_CIpow` exponent |
-| `ThrustPowBase` | 1.33 × 0.98842078 | decoded | `0x6034a4` times the dense band's `k` |
+| `DenseThrustPowBase` | 1.33 × 0.98842078 | decoded | `0x6034a4` times the dense band's `k`, multiplied at `0x41ad0f` |
+| `ThinThrustPowBase` | 1.33 × 0.7348 | decoded | `0x6034a4` times the thin band's `k`, the same multiply |
 | `AttitudeThrustBoth` | 0.24 | decoded | `0x6080dc`, applied at `0x48fd14` |
 | `AttitudeThrustUp` | 0.13 | decoded | `0x6080d8`, the one-sided branch at `0x48fd00` |
 | `LiftGMin` / `LiftGMax` | −5 / 9 | decoded | the lift clamp in `FUN_0041abd0` |

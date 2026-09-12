@@ -58,6 +58,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   root-level `built.Visible = node.Active` had gone measured a third state nobody ships, and the
   census read four placed roots (C1's fuel trucks, `piratezep`, `barracuda`) as changed by the fix
   until the real baseline was put back.
+- **METHOD-29** — **Before blaming a steady-state residual on a state variable, check that the
+  variable has any freedom at steady state.** The flight plant's cross-path acceleration composes to
+  `sin α · [positive]`, so a sustained straight climb has exactly one solution and α is zero in it;
+  the off-path force balance that reads as an explanation of the climb's 25 % speed residual is a
+  transient the plant leaves in under a second (`docs/org/flightModel.md`, "The sustained climb").
 
 ## DIAG — chasing a symptom
 

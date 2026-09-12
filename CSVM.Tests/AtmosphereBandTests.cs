@@ -1,4 +1,6 @@
 using System;
+using CSVM.Flight;
+using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -32,6 +34,20 @@ public class AtmosphereBandTests
     private const float ClMaxStatic = 0.75f;
     private const float ClMaxMach = 0.15f;
     private const float FpsPerMph = 1.4666667f;
+
+    // The thrust curve's own constants, restated rather than read off the plant for the same reason
+    // the band factors above are: the assertion has to be able to disagree with the plant.
+    private const double FeetPerMetre = 3.28084;
+    private const double MetresPerFoot = 0.3048;
+    private const double StandardG = 9.82;
+    private const double MachFloor = 0.1;
+    private const double PowScale = 1.33;
+    private const double PowMach = 1.41;
+    private const double VRefSlope = 0.84;
+    private const double VRefMach = 0.112;
+    private const double MachTrim = 1.0 / 60.0;
+    private const double PolarScale = 0.73;
+    private const double Parasite = 0.12;
 
     [Fact]
     public void TheThresholdIsTwoThousandMetresExpressedInFeet()
@@ -90,6 +106,53 @@ public class AtmosphereBandTests
         Assert.Equal(2.2688e-3, Atmosphere(0.0, 0.0).Rho, 7);
         Assert.Equal(1.3560e-4, Atmosphere(1.0, 0.0).Rho, 8);
         Assert.Equal(1.3560e-4, Atmosphere(3000.0, 0.0).Rho, 8);
+    }
+
+    /// <summary>The band's factor has a third consumer beside density and the speed of sound: it is
+    /// the base of the thrust curve's Mach divisor, 1.33 times the same number. The live plant takes
+    /// the band's own factor at every altitude, so a thin-band aircraft gets the base below 1 that
+    /// makes the divisor shrink with Mach instead of the dense band's 1.31 that makes it grow.</summary>
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(6000.0)]
+    [InlineData(6500.0)]
+    [InlineData(6600.0)]
+    [InlineData(12000.0)]
+    public void TheThrustDivisorTakesTheBandsOwnFactor(double altFt)
+    {
+        var stats = new PlaneStats { VehWeight = FallbackWeightLb, RefArea = FallbackRefAreaFt2, EnginePower = 1f };
+        var m = new FlightModel(stats) { Position = new Vector3(0f, (float)(altFt / FeetPerMetre), 0f) };
+        bool dense = altFt <= ThresholdFt;
+        var atm = Atmosphere(altFt, ThresholdFt);
+        double factor = dense ? DenseSoundFactor : ThinSoundFactor;
+
+        foreach (double speedMs in new[] { 40.0, 90.0, 160.0 })
+        {
+            double want = ThrustAccel(speedMs, atm.Rho, atm.SoundFps, factor);
+            double got = m.ThrustAccelAt((float)speedMs, 1f);
+            Assert.True(Math.Abs(got - want) <= want * 1e-4,
+                $"{altFt:0} ft at {speedMs:0} m/s: thrust accel {got:0.0000} against the "
+                + $"{(dense ? "dense" : "thin")} band's own {want:0.0000} m/s²");
+
+            // The other band's base is the mistake this pins: one factor for every altitude.
+            double other = ThrustAccel(speedMs, atm.Rho, atm.SoundFps,
+                dense ? ThinSoundFactor : DenseSoundFactor);
+            Assert.True(Math.Abs(other - want) > want * 1e-3,
+                $"{altFt:0} ft at {speedMs:0} m/s: the two bases give the same thrust, so this "
+                + "asserts nothing");
+        }
+    }
+
+    /// <summary>Thrust acceleration along the nose, m/s², restated from the decoded curve so the
+    /// assertion above is an independent statement of the arithmetic.</summary>
+    private static double ThrustAccel(double speedMs, double rho, double soundFps, double factor)
+    {
+        double mach = Math.Max(MachFloor, speedMs / (soundFps * MetresPerFoot));
+        double vRefFps = ((VRefSlope * mach) + VRefMach) * soundFps;
+        double qRef = 0.5 * rho * vRefFps * vRefFps;
+        double cRef = PolarScale * (Parasite - (mach * MachTrim));
+        double avail = qRef * cRef / (mach * Math.Pow(PowScale * factor, PowMach * mach));
+        return avail * FallbackRefAreaFt2 * StandardG / FallbackWeightLb;
     }
 
     /// <summary>Density in slug/ft³ and speed of sound in ft/s at an altitude in feet.</summary>
