@@ -1,4 +1,5 @@
 using System.Linq;
+using CSVM.Mech3;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -1076,6 +1077,99 @@ public class OriginalShellTests
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xFF, 0xFF), shell.Inks.LabelNormal);
     }
 
+    /// <summary>ABOUT raises the box the credits screen asks for rather than the shared one: the
+    /// <c>ma_</c> widget set over its own background, centred by that background's own size, with
+    /// the skull the icon row draws at its one authored place and the set's own single OK.</summary>
+    [Fact]
+    public void AboutRaisesTheMaWidgetSetCentredOnItsOwnBackgroundWithTheSkullAndOneOk()
+    {
+        var shell = CreditsShell();
+        var about = shell.Rows.Single(r => r.Key == OriginalShell.CreditsAboutKey);
+        Assert.True(about.Enabled);
+
+        Click(shell, about.X + (about.Width / 2f), about.Y + (about.Height / 2f));
+
+        Assert.NotNull(shell.Dialog);
+        Assert.Equal(DialogIcon.Death, shell.Dialog!.Icon);
+        var box = shell.Compose().Overlays[0];
+        // The fixture's 400x300 About background, so the script's own centring lands it here.
+        Assert.Equal(new[] { "PM_AboutBox.png", "PM_Icons.png", "PM_B_Small.png" }, box.Pictures.Select(p => p.Art.Name));
+        Assert.Equal((200f, 150f), (box.Pictures[0].X, box.Pictures[0].Y));
+        // The icon keeps the mb_ row's place inside the pane and takes the skull frame.
+        Assert.Equal((230f, 210f, 2), (box.Pictures[1].X, box.Pictures[1].Y, box.Pictures[1].Frame));
+        // MA_B_CENTER's own 220,370, not MB_B_CENTER's 170,250.
+        Assert.Equal((420f, 520f), (box.Pictures[2].X, box.Pictures[2].Y));
+        var message = box.Lines[0];
+        Assert.Equal((295f, 225f, 370f), (message.X, message.Y, message.Width));
+        Assert.EndsWith("???", message.Text);
+        Assert.DoesNotContain("<B>", message.Text);
+        Assert.DoesNotContain("[COUR9]", message.Text);
+        Assert.Equal("OK", box.Lines[1].Text);
+
+        Click(shell, box.Pictures[2].X + 10f, box.Pictures[2].Y + 10f);
+        Assert.Null(shell.Dialog);
+    }
+
+    /// <summary>The credits screen's hidden line: the secondary button held inside the authored
+    /// region shows it and letting go there takes it away, the line standing at its own corner in
+    /// its own ink with the stored characters shifted back down.</summary>
+    [Fact]
+    public void TheHiddenCreditsLineStandsWhileTheSecondaryButtonIsHeldInsideItsRegion()
+    {
+        var shell = CreditsShell();
+
+        shell.Step(Pointer(320f, 320f));
+        Assert.DoesNotContain(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
+
+        shell.Step(Pointer(320f, 320f, right: true));
+        var line = Assert.Single(shell.Compose().Lines.Where(l => l.Ink == BoardInk.Secret));
+        Assert.Equal((288f, 308f), (line.X, line.Y));
+        Assert.Equal(Shifted("xl#ghy#ohdg=#ulfk#hl}hqkrhihu"), line.Text);
+
+        shell.Step(Pointer(320f, 320f));
+        Assert.DoesNotContain(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
+
+        // Outside the region the button does nothing at all.
+        shell.Step(Pointer(400f, 400f, right: true));
+        Assert.DoesNotContain(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
+        shell.Step(Pointer(400f, 400f));
+
+        // A hold carried out of the region and let go there leaves the line standing, the script's
+        // own reading: its whole handler is inside the region test.
+        shell.Step(Pointer(320f, 320f, right: true));
+        shell.Step(Pointer(400f, 400f, right: true));
+        shell.Step(Pointer(400f, 400f));
+        Assert.Contains(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
+
+        // The line goes with the screen, its widget being created deactivated every time.
+        shell.Open(OriginalScreen.Credits);
+        Assert.DoesNotContain(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
+    }
+
+    // The characters the script stores, shifted down by three the way its own loop shifts them.
+    private static string Shifted(string cipher) => string.Concat(cipher.Select(c => (char)(c - 3)));
+
+    // The credits screen with a string table behind it, since the About box's words are langui
+    // 1301 filled with the product id and its OK is langui 100.
+    private static OriginalShell CreditsShell()
+    {
+        var setup = new PlayerSetupFeature();
+        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+        setup.Join(new ScriptedMenuSeat());
+        var strings = UiStrings.Parse(
+            """
+            [
+              { "dll": "langui", "id": 100, "text": "OK" },
+              { "dll": "langui", "id": 1301, "text": "[COUR9](c) 2000. Your product identification number is:\n\n<B>%1!s!<b>" }
+            ]
+            """);
+        var shell = new OriginalShell(
+            MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
+            hangar: new HangarFeature(strings, PlanePickerRoster.AirframeNode));
+        shell.Open(OriginalScreen.Credits);
+        return shell;
+    }
+
     // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs. No
     // options reader by default, so the Options screen opens on the defaults and no test can reach
     // the player's own user://options.json.
@@ -1096,6 +1190,8 @@ public class OriginalShellTests
         // The fixture's movie at the shipped files' own picture size, which the layout row scales.
         "PM_Flag.MPG" => (320, 240),
         "PM_B_Paper.png" => (160, 112),
+        // The About box's own background, which the box is centred by.
+        "PM_AboutBox.png" => (400, 300),
         "PP_B_Check8.png" => (16, 128),
         "PP_B_DropUp.png" or "PP_B_DropDown.png" => (15, 56),
         // The section's own slider art and the shipped names a row with no slider widget falls
@@ -1107,8 +1203,8 @@ public class OriginalShellTests
         _ => null,
     };
 
-    private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
-        new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+    private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false, bool right = false) =>
+        new() { Pointer = new MenuPointer(x, y, pressed, clicked, 0, right) };
 
     // One click as the shell reads it: the press arms the row and the release on it fires, so the
     // step that carries the activation is the second one.

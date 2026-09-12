@@ -231,6 +231,8 @@ public class OriginalManifestTests : IDisposable
         _output.WriteLine(report.Degraded ?? "nothing optional is absent");
         Assert.True(report.Complete, report.Reason);
         Assert.Equal(OriginalAssetNeed.Required, manifest.Find("MB_Background.png")!.Need);
+        // The About box draws its own background, so that file is required like the shared box's.
+        Assert.Equal(OriginalAssetNeed.Required, manifest.Find("CR_AboutMessageBox.png")!.Need);
         Assert.Equal(OriginalAssetNeed.Required, manifest.Find("PC_B_ReturnMainMenu.png")!.Need);
         Assert.Equal(OriginalAssetNeed.Optional, manifest.Find("GN_B_ReturnToGame.Png")!.Need);
         Assert.Equal(OriginalAssetNeed.Optional, manifest.Find("CrimFlag.MPG")!.Need);

@@ -59,6 +59,10 @@ public enum BoardInk
     /// <summary>A dialog button's label while it is held: black on the depressed frame's light
     /// plaque, <c>[GLOBALVARS]</c>' <c>DEPRESSED</c>, and no palette either.</summary>
     DialogPressed,
+
+    /// <summary>The credits screen's hidden line, in the yellow its script-created text widget is
+    /// given (<c>0xffffff00</c>). One screen writes it and it takes no palette.</summary>
+    Secret,
 }
 
 /// <summary>Which edge of its <see cref="BoardLine.Width"/> a text widget's words sit against,

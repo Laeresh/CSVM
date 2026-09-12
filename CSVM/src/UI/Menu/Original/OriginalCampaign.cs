@@ -10,9 +10,12 @@ namespace CSVM.UI.Menu.Original;
 public sealed record OriginalDialogAnswer(string Key, string LayoutKey, string Label, Action? Run);
 
 /// <summary>A dialog standing over a campaign screen, the original's <c>messagebox.script</c>
-/// over whatever screen was showing: its words, the icon its message class draws and its one or
-/// two answers. While one stands the rows are its answers alone.</summary>
-public sealed record OriginalDialog(string Message, DialogIcon Icon, IReadOnlyList<OriginalDialogAnswer> Answers);
+/// over whatever screen was showing: its words, the icon its message class draws, its one or two
+/// answers and the widget set it is drawn from (null for the shared <c>mb_</c> box). While one
+/// stands the rows are its answers alone.</summary>
+public sealed record OriginalDialog(
+    string Message, DialogIcon Icon, IReadOnlyList<OriginalDialogAnswer> Answers,
+    CampaignBoards.DialogChrome? Chrome = null);
 
 /// <summary>
 /// The Original campaign, the shell's partial over the shared <see cref="CampaignFeature"/>: the
@@ -402,7 +405,7 @@ public sealed partial class OriginalShell
 
         foreach (var answer in dialog.Answers)
         {
-            var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout);
+            var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout, dialog.Chrome);
             var size = PlaqueSizeOf(art);
             rows.Add(new OriginalRow(answer.Key, answer.Label, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
         }
@@ -426,7 +429,7 @@ public sealed partial class OriginalShell
                 ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.DialogInk(held)));
         }
 
-        return CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout);
+        return CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout, dialog.Chrome);
     }
 
     private bool RosterHas(string name)
@@ -542,10 +545,15 @@ public sealed partial class OriginalShell
     // Every raise names its icon, because MESSAGEBOX.SCRIPT reads the frame off the raising
     // screen's button mask rather than off anything the box itself can see. A default here would
     // be a rule of "one button means the warning", which the original's 0x2 boxes break.
-    private void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
+    private void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers) =>
+        RaiseDialog(null, message, icon, answers);
+
+    // The same raise in another widget set, which the credits screen's About box is drawn from.
+    private void RaiseDialog(
+        CampaignBoards.DialogChrome? chrome, string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
     {
         _focusBeforeDialog = _focus[(int)_screen];
-        _dialog = new OriginalDialog(message, icon, answers);
+        _dialog = new OriginalDialog(message, icon, answers, chrome);
         _hover = -1;
         _pressed = -1;
         _armed = null;

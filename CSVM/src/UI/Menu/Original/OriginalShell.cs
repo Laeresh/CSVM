@@ -598,6 +598,7 @@ public sealed partial class OriginalShell
 
         _drag = null;
         _slider.LetGo();
+        ResetCreditsSecret();
         if (screen is OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video)
         {
             ReadSavedOptions();
@@ -644,6 +645,13 @@ public sealed partial class OriginalShell
             bool pointerMoved = _pointer != (pointer.X, pointer.Y);
             changed |= pointerMoved;
             _pointer = (pointer.X, pointer.Y);
+            // The one screen that reads the secondary button reads it whatever the rows are doing:
+            // its region holds no row, so no hit test can carry it.
+            if (_screen == OriginalScreen.Credits)
+            {
+                changed |= HoldCreditsSecret(pointer);
+            }
+
             // The thumb, the slider and the wheel come before the rows: a held one owns the
             // pointer until it is let go, and a wheel step moves the rows the hit test then reads.
             // The thumb has first refusal and stands down while a slider holds, so neither crosses.
@@ -882,7 +890,7 @@ public sealed partial class OriginalShell
                 ComposeOptions(pictures, lines);
                 break;
             case OriginalScreen.Credits:
-                ComposeCredits(pictures);
+                ComposeCredits(pictures, lines);
                 break;
             case OriginalScreen.GameOptions:
                 ComposeGameOptions(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);

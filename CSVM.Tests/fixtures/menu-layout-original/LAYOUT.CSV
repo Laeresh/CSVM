@@ -152,6 +152,7 @@ KB_L_Controls=L,PP_B_KbBar.png,PP_B_KbUp.png,PP_B_KbDown.png,200,300,0,600,16,12
 
 [@Credits@]
 CR_BackGround=P,PC_Back.jpg,0,0,1,1,0,0,0
+CR_B_About=B,PM_B_About.png,390,550,0,0,,0x1000,1,,,,,,
 CR_B_Exit=B,PC_B_Done.png,650,550,0,0,MainMenu,0x1000,1,,,,,,
 
 [@FlightCheck@]
@@ -181,6 +182,11 @@ MB_T_MESSAGE=T,0,90,72,0,280,140,0xFFFFFFFF,0
 MB_B_CENTER=B,PM_B_Small.png,170,250,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
 MB_B_LEFT=B,PM_B_Small.png,70,250,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
 MB_B_RIGHT=B,PM_B_Small.png,270,250,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
+;The ma_ set the About box is drawn from, on its own invented lines so a box that read the mb_ rows
+;instead would land somewhere else.
+MA_P_BACKGROUND=P,PM_AboutBox.png,0,0,0,1,0,1,0
+MA_T_MESSAGE=T,0,95,75,0,370,230,0xFFFFFFFF,0
+MA_B_CENTER=B,PM_B_Small.png,220,370,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
 
 [@ScrapBook_TOC@]
 SBTOC_T_CHARACTER=T,0,420,60,0,310,24,0xFF000000,1

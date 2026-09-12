@@ -196,11 +196,11 @@ baseline. `BoardArt` names a file and its frame count and the renderer resolves 
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
 into a `ComposedBoard`. Every button slot, background pane and text slot names its `LAYOUT.CSV`
 section and row and reads through `CampaignLayout` with the value the board drew before the layout
-existed as its fallback, so a screen composes the same whether the file is present, absent or
-unreadable; the briefing is the exception, its chrome being `Briefing.zrd`'s own, and a slot marked
-pinned keeps a measured value instead. `SlotOf` and `DialogSlot` answer a plaque's rectangle for a
-pointer to hit-test, `DetailSlot` and `DetailPaned` the description panes, the ammo screen's two
-filled at once. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
+existed as its fallback, so a screen composes the same with or without the file; the briefing's
+chrome is `Briefing.zrd`'s own, and a slot marked pinned keeps a measured value instead. `SlotOf`
+and `DialogSlot` answer a plaque's rectangle for a pointer to hit-test, `DetailSlot` and
+`DetailPaned` the description panes, and `DialogChrome` the messagebox widget set a box draws and
+where its pane lands. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/CampaignLayout.cs
 The decoded menu layout as the campaign boards read it: one widget row's authored geometry and art
@@ -624,11 +624,12 @@ definition persisted data.
 
 ## src/UI/Menu/MenuCommands.cs
 The device-neutral input seam: `MenuCommands` is one frame of one seat's semantic commands
-(auto-repeated cursor steps, edge presses, typed text, an optional window-pixel `MenuPointer`),
-and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A source is not
-synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a future
-HOTAS/HOSAS binding all sit behind this contract, and a presentation never reads a device. The
-implementations are `BuiltIn/BuiltInSeat.cs`, `Original/PointerSeat.cs` and `MenuIdleSource.cs`;
+(auto-repeated cursor steps, edge presses, typed text, an optional window-pixel `MenuPointer` whose
+primary button arrives as a press and an edge and whose secondary as a held state driving no command
+of its own), and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A
+source is not synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a
+future HOTAS/HOSAS binding all sit behind this contract, and a presentation never reads a device.
+The implementations are `BuiltIn/BuiltInSeat.cs`, `Original/PointerSeat.cs` and `MenuIdleSource.cs`;
 the seats themselves are the `PlayerSetupFeature`'s, claimed by source identity.
 
 ## src/UI/Menu/MenuIdleSource.cs
@@ -796,9 +797,9 @@ level's fifth row. The section is three widgets: a full-screen background pane, 
 plaque. The credit names are painted into the background art, so the pane is the whole composition
 and the two buttons are drawn over it by the shell's row loop. DONE and Escape both land on the top
 level, the plaque's own `ScriptToExe` and what `CREDITS.SCRIPT`'s `gui_char` does, so `Back` needs
-no arm here. ABOUT is drawn disabled because its box wants the messagebox's `ma_` widget set, which
-the shared chrome does not compose; its words are decoded.
-The screen and its unbuilt parts: [../org/menu-inventory.md](../org/menu-inventory.md).
+no arm here. ABOUT raises the messagebox in its `ma_` set, centred on its own background and carrying
+langui 1301 over the product id; the script's hidden line shows while the pointer's secondary button
+is held in its region. The screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
@@ -908,11 +909,11 @@ the presentation names no file. The contract is `IMenuAudio.cs` and the table is
 ## src/UI/Menu/Original/PointerSeat.cs
 Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the
 mouse as the frame's `MenuPointer` in window pixels, `Pressed` while the left button is down,
-`Clicked` on the press edge and `Wheel` as the steps turned since the last poll. `Prime` reads the
-button and drains the wheel, which also drains every frame whether or not a pointer is on screen, so
-input from before the menu showed never arrives as one jump. The three device reads are injected
-delegates, so the seat is engine-free and `Launcher` supplies the mouse position,
-`Input.IsMouseButtonPressed` and the wheel it counts in `_Input`, an event rather than a held state.
+`Clicked` on the press edge, `Wheel` as the steps turned since the last poll and `RightPressed`
+while the right button is down. `Prime` reads the primary button and drains the wheel, which also
+drains every frame whether or not a pointer is on screen, so input from before the menu showed never
+arrives as one jump. The four device reads are injected delegates, so the seat is engine-free and
+`Launcher` supplies the mouse position, both button reads and the wheel it counts in `_Input`.
 Built-in ignores the pointer; Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs

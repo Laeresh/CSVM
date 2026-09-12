@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -9,8 +10,9 @@ namespace CSVM.UI.Menu.Original;
 /// pane, ABOUT and the DONE plaque. The credit names are painted into the background art, so the
 /// screen lays out no roster of its own and the pane is the whole composition; the two buttons are
 /// drawn over it by the shell's row loop. DONE and Escape both land on the top level, which is the
-/// plaque's own <c>ScriptToExe</c> and what <c>CREDITS.SCRIPT</c>'s <c>gui_char</c> does.
-/// The screen and its unbuilt parts: <c>docs/org/menu-inventory.md</c>.
+/// plaque's own <c>ScriptToExe</c> and what <c>CREDITS.SCRIPT</c>'s <c>gui_char</c> does. ABOUT
+/// raises the About box, and the script's own hidden line answers a held secondary button.
+/// The screen and its parts: <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -20,7 +22,7 @@ public sealed partial class OriginalShell
     /// <summary>The top level's door onto it.</summary>
     public const string CreditsDoorKey = "MM_B_CREDITS";
 
-    /// <summary>ABOUT, which the original answers with a message box this screen does not raise.</summary>
+    /// <summary>ABOUT, which raises the About box.</summary>
     public const string CreditsAboutKey = "CR_B_About";
 
     /// <summary>The DONE plaque, back to the top level.</summary>
@@ -30,16 +32,64 @@ public sealed partial class OriginalShell
     // row, so a layout that renames the file moves ours with it.
     private const string CreditsBackgroundKey = "CR_BackGround";
 
-    // ⚠ ABOUT is drawn disabled; do not enable it without the box behind it. CREDITS.SCRIPT answers
-    // its press by setting @globals@OR.XR, which switches the messagebox's whole widget set to the
-    // ma_ prefix over CR_AboutMessageBox.png, and the shared chrome composes the mb_ set alone. The
-    // words are decoded and are not what is missing.
+    // The row naming the About box's background, the shipped file it names, and that file's own
+    // size as the fallback when it cannot be measured. The script centres the pane by whatever
+    // size it reads back, so the measured file wins over both.
+    private const string AboutBackgroundKey = "MA_P_BACKGROUND";
+    private const string AboutBoxArt = "CR_AboutMessageBox.png";
+    private const float AboutBoxWidth = 505f;
+    private const float AboutBoxHeight = 416f;
+
+    // The widget set the box is drawn from, which CREDITS.SCRIPT selects by setting @globals@OR.XR
+    // before it runs messagebox.script.
+    private const string AboutPrefix = "MA";
+
+    // The box's words: langui 1301 over the product identification number. The original reads that
+    // number out of the installer's registry key and falls back to this when the key is absent,
+    // which is every machine here, since nothing in this port reads the registry.
+    private const int AboutStringId = 1301;
+    private const string AboutProductId = "???";
+
+    // The hidden line's authored corner and the region the secondary button has to be held inside,
+    // both CREDITS.SCRIPT's own; its test is exclusive on all four edges. The face is the layout's
+    // standard text height, the widget carrying no size of its own.
+    private const float SecretX = 288f;
+    private const float SecretY = 308f;
+    private const float SecretLeft = 287f;
+    private const float SecretRight = 353f;
+    private const float SecretTop = 313f;
+    private const float SecretBottom = 333f;
+    private const float SecretFont = 16f;
+
+    // The line as the script stores it, and the shift its own loop undoes character by character.
+    // ⚠ Do not write the decoded words here; obfuscating them is the whole of the joke.
+    private const string SecretCipher = "xl#ghy#ohdg=#ulfk#hl}hqkrhihu";
+    private const int SecretShift = 3;
+
+    // Whether the hidden line stands, and the secondary button's state last frame, since the
+    // script acts on that button's transitions and not on the state itself.
+    private bool _secretShown;
+    private bool _secretHeld;
+
+    // Each character of the stored line shifted back down, which is the loop CREDITS.SCRIPT runs
+    // on the mail it sends itself at create.
+    private static string SecretLine()
+    {
+        var text = new StringBuilder(SecretCipher.Length);
+        foreach (char c in SecretCipher)
+        {
+            text.Append((char)(c - SecretShift));
+        }
+
+        return text.ToString();
+    }
+
     private void BuildCreditsRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(CreditsSection);
         if (screen?.Widget(CreditsAboutKey) is { } about)
         {
-            rows.Add(Button(about, false));
+            rows.Add(Button(about, true));
         }
 
         if (screen?.Widget(CreditsExitKey) is { } exit)
@@ -48,7 +98,7 @@ public sealed partial class OriginalShell
         }
     }
 
-    private void ComposeCredits(List<BoardPicture> pictures)
+    private void ComposeCredits(List<BoardPicture> pictures, List<BoardLine> lines)
     {
         if (_layout.Screen(CreditsSection)?.Widget(CreditsBackgroundKey) is { Art.Count: > 0 } pane)
         {
@@ -56,17 +106,77 @@ public sealed partial class OriginalShell
                 new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)),
                 pane.Int("X"), pane.Int("Y")));
         }
+
+        if (_secretShown)
+        {
+            lines.Add(new BoardLine(SecretLine(), SecretX, SecretY, 0f, SecretFont, BoardInk.Secret));
+        }
     }
 
-    // Only DONE answers. ABOUT is present as a disabled row, so no press reaches here for it, and
-    // Escape needs no arm because the shell's own Back falls through to the top level.
+    // DONE lands on the top level and ABOUT raises the box. Escape needs no arm because the shell's
+    // own Back falls through to the top level.
     private MenuExit? ActivateCredits(OriginalRow row)
     {
         if (row.Key == CreditsExitKey)
         {
             Open(OriginalScreen.TopLevel);
         }
+        else if (row.Key == CreditsAboutKey)
+        {
+            RaiseDialog(AboutChrome(), AboutMessage(), DialogIcon.Death, Ok());
+        }
 
         return null;
+    }
+
+    // The screen's own rbutton_update: the secondary button's transitions count only while the
+    // pointer stands inside the authored region, so a hold carried out of it before the button
+    // comes up leaves the line standing, which is what the script does.
+    private bool HoldCreditsSecret(MenuPointer pointer)
+    {
+        bool held = pointer.RightPressed;
+        bool edge = held != _secretHeld;
+        _secretHeld = held;
+        bool inside = pointer.X > SecretLeft && pointer.X < SecretRight
+            && pointer.Y > SecretTop && pointer.Y < SecretBottom;
+        if (!edge || !inside || _secretShown == held)
+        {
+            return false;
+        }
+
+        _secretShown = held;
+        return true;
+    }
+
+    // The line goes with the screen: the script creates its widget deactivated every time.
+    private void ResetCreditsSecret()
+    {
+        _secretShown = false;
+        _secretHeld = false;
+    }
+
+    // Where the About box's pane lands, which messagebox.script computes from the pane's own size:
+    // half the board less half the art, floored by its integer division.
+    private CampaignBoards.DialogChrome AboutChrome()
+    {
+        var row = _layout.Screen(CampaignLayout.DialogSection)?.Widget(AboutBackgroundKey);
+        string art = row is { Art.Count: > 0 } ? row.Art[0] : AboutBoxArt;
+        var size = Measure(art);
+        float width = size?.Width ?? AboutBoxWidth;
+        float height = size?.Height ?? AboutBoxHeight;
+        return new CampaignBoards.DialogChrome(
+            AboutPrefix,
+            MathF.Floor((BoardFit.AuthoredWidth - width) / 2f),
+            MathF.Floor((BoardFit.AuthoredHeight - height) / 2f),
+            art);
+    }
+
+    // langui 1301 filled with the product id. Its one placeholder is wrapped in a <B>/<b> pair,
+    // a bold run nothing strips centrally, so the row is cleaned here.
+    private string AboutMessage()
+    {
+        var strings = _campaign?.Strings ?? _hangar?.Strings;
+        string text = strings?.Format(AboutStringId, AboutProductId) ?? string.Empty;
+        return text.Replace("<B>", string.Empty).Replace("<b>", string.Empty);
     }
 }

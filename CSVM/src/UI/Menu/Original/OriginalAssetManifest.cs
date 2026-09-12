@@ -152,10 +152,8 @@ public sealed class OriginalAssetManifest
         ["MessageBox.MP_B_LEFT"] = "the multiplayer error box, which has no local counterpart",
         ["MessageBox.MP_B_CENTER"] = "the multiplayer error box, which has no local counterpart",
         ["MessageBox.MP_B_RIGHT"] = "the multiplayer error box, which has no local counterpart",
-        ["MessageBox.MA_P_BACKGROUND"] = "the About box, whose widget set the shared chrome does not compose",
-        ["MessageBox.MA_B_LEFT"] = "the About box, whose widget set the shared chrome does not compose",
-        ["MessageBox.MA_B_CENTER"] = "the About box, whose widget set the shared chrome does not compose",
-        ["MessageBox.MA_B_RIGHT"] = "the About box, whose widget set the shared chrome does not compose",
+        ["MessageBox.MA_B_LEFT"] = "the About box's unused answers, it being the one-button box",
+        ["MessageBox.MA_B_RIGHT"] = "the About box's unused answers, it being the one-button box",
     };
 
     // Rows of a composed section Original does draw, but whose file it can be missing and still

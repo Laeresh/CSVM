@@ -693,11 +693,12 @@ public sealed record SessionSpec
     /// open on the wizard's step 1, so the FILLED wizard is screenshot-able. −1 = not asked for,
     /// since preset 0 ("Girl Trouble") is a real request unlike a 0 wave or wingman count.</summary>
     public int DebugPreset { get; private set; } = -1;
-    /// <summary><c>--debug-pointer=x,y[,down]</c> (the Original presentation only): stand seat 0's
-    /// pointer at that authored 800x600 point, held down with <c>down</c>, so a plaque's rollover
-    /// and held states are screenshot-able with nobody at the controls. Authored rather than window
-    /// pixels, so a shot lands on the same widget whatever the window. Null = not asked for.</summary>
-    public (float X, float Y, bool Down)? DebugPointer { get; private set; }
+    /// <summary><c>--debug-pointer=x,y[,down][,right]</c> (the Original presentation only): stand
+    /// seat 0's pointer at that authored 800x600 point, its buttons held by the words that follow,
+    /// so a plaque's rollover and held states are screenshot-able with nobody at the controls.
+    /// Authored rather than window pixels, so a shot lands on the same widget whatever the window.
+    /// Null = not asked for.</summary>
+    public (float X, float Y, bool Down, bool Right)? DebugPointer { get; private set; }
     public bool MarkersOverlay { get; private set; }
     public bool WeaponLab { get; private set; }
     public string? WeaponSelect { get; private set; }
@@ -1493,10 +1494,11 @@ public sealed record SessionSpec
 
     /// <summary>Parse <c>--paint-decal=</c>: up to three comma-separated indices (nose / tail /
     /// wing); a missing slot repeats the last one given.</summary>
-    /// <summary>Parse <c>--debug-pointer=</c>: "x,y" or "x,y,down" in authored 800x600 pixels. A
-    /// spec without two numbers stands no pointer at all, since a shot of a half-read one would
-    /// read as an answer about where the pointer goes.</summary>
-    public static (float X, float Y, bool Down)? ParseDebugPointer(string spec)
+    /// <summary>Parse <c>--debug-pointer=</c>: "x,y" in authored 800x600 pixels, then any of the
+    /// words "down" and "right" for a button held. A spec without two numbers stands no pointer at
+    /// all, since a shot of a half-read one would read as an answer about where the pointer
+    /// goes.</summary>
+    public static (float X, float Y, bool Down, bool Right)? ParseDebugPointer(string spec)
     {
         var parts = (spec ?? string.Empty).Split(',', StringSplitOptions.TrimEntries);
         if (parts.Length < 2
@@ -1506,7 +1508,15 @@ public sealed record SessionSpec
             return null;
         }
 
-        return (x, y, parts.Length > 2 && parts[2].Equals("down", StringComparison.OrdinalIgnoreCase));
+        bool down = false;
+        bool right = false;
+        for (int i = 2; i < parts.Length; i++)
+        {
+            down |= parts[i].Equals("down", StringComparison.OrdinalIgnoreCase);
+            right |= parts[i].Equals("right", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return (x, y, down, right);
     }
 
     public static int[] ParsePaintDecals(string spec)

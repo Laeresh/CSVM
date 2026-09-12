@@ -16,8 +16,8 @@ public enum DialogIcon
     /// <summary>The exclamation mark every other mask draws: the notices and the refusals.</summary>
     Warning = 1,
 
-    /// <summary>The skull a set <c>XR</c> draws over the <c>ma_</c> widget prefix. Only the credits
-    /// box asks for it, and no screen we compose raises one.</summary>
+    /// <summary>The skull a set <c>XR</c> draws over the <c>ma_</c> widget prefix. The credits
+    /// screen's About box is the one box that asks for it.</summary>
     Death = 2,
 }
 

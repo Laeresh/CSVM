@@ -1972,39 +1972,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reading off the strip before its look is called wrong. *Cross-refs:* `BL-744`'s landing
   (`git log --grep=BL-744`), the same box's icon.
 
-- `BL-779` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Original's
-  credits screen draws ABOUT disabled, because the box it raises wants a widget set the shared
-  messagebox chrome does not compose.**
-  *Evidence:* `MESSAGEBOX.SCRIPT:11-25` picks the box's widget prefix off two globals, `WR` taking
-  `mp`, else a set `XR` taking `ma`, else `mb`. `CREDITS.SCRIPT:52-61` sets `XR = 1`, so ABOUT's box
-  is the `ma_` set: `MA_P_BACKGROUND` over `CR_AboutMessageBox.png` (505x416), `MA_T_MESSAGE` at
-  96,70 by 375x240 and `MA_B_CENTER` at 224,371 (`extracted/rof/menu_layout.json`).
-  `CampaignBoards.Dialog` composes the `mb_` set alone (`CSVM/src/UI/CampaignBoards.cs:394-419`) off
-  the constants `DialogX = 195` and `DialogY = 150` (`:83-84`), and `DialogSlot` is hard-wired the
-  same way (`:424-435`), so the shell draws ABOUT as a disabled row and the manifest records the
-  four `MA_` rows as not drawn.
-  *Fix shape:* a variant on the dialog composer carrying the widget prefix and the box's origin,
-  defaulting to today's `mb_` set so every campaign caller is unchanged, then that variant through
-  `OriginalDialog`, `RaiseDialog`, `DialogRows` and `ComposeDialog`, and ABOUT enabled with
-  `DialogIcon.Death`. The origin is the script's own centring, `(800 - w) / 2` by `(600 - h) / 2`
-  over the chosen background, which is exactly what 195,150 already is for `MB_Background.png`'s
-  410x300; for the `ma_` box it is 147,92.
-  *⚠ Traps:* **the icon does not take the prefix.** `MESSAGEBOX.SCRIPT:32-34` initialises
-  `mb_p_icon` whatever the variant and only the `mp` box moves it (`:69-72`), so the `ma_` box draws
-  the same strip at the same authored place, frame 2. There is no `MA_P_ICON` row and adding one
-  would be an invention. The words are already decoded, so do not re-run that: `uiData` 2108 at
-  `0x0040a2cb` is langui 1301 over the product id. That row carries a `[COUR9]` tag `UiStrings`
-  strips and a `<B>`/`<b>` pair around its one placeholder that nothing strips centrally, though
-  `OriginalHangar.cs:1077` does it inline for one question string. Without `BL-780` the placeholder
-  reads `???`, which is the original's own answer on a machine with no such key.
-  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu=credits`, press ABOUT, and
-  check the box is the tall parchment rather than the small one, with the skull icon and one OK.
-  *Cross-refs:* `docs/org/menu-inventory.md` (the Credits row, which holds the decode), `BL-780`,
-  `BL-744`'s landing (`git log --grep=BL-744`, the icon rule), `BL-775`'s landing
-  (`git log --grep=BL-775`).
-
-- `BL-780` `[Feature]` `[Blocked: BL-779]` `[S]` `[Next: decide]` `[Impact: low]`
-  `[Evidence: decoded]` **The About box's product identification number would read `???`, because
+- `BL-780` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]`
+  `[Evidence: decoded]` **The About box's product identification number reads `???`, because
   CSVM does not read the registry value the original reads.**
   *Evidence:* `uiData` 2108's handler calls `FUN_004073d0(HKEY_LOCAL_MACHINE, "PID", "???")`, which
   opens `SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`, queries `PID` into a 512-byte static
@@ -2018,31 +1987,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   installed the retail game sees their own id and everyone else sees `???`, and both readings are
   faithful. Do not source the id from anywhere else, since it is the installer's and not the game
   files'.
-  *Cross-refs:* `BL-779` (the box this text stands in), `docs/org/menu-inventory.md`.
-
-- `BL-781` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The credits
-  screen's right-button easter egg cannot be revealed, because the seat seam carries no
-  right-button signal.**
-  *Evidence:* `CREDITS.SCRIPT:25-39` activates a text widget while the right button is held inside
-  the authored rectangle x 287..353 by y 313..333, and deactivates it on release. The widget is
-  created at 288,308 in colour `0xffffff00` (`:14-19`) and its line is built once at create, on the
-  `mail(20001)` the script sends itself, by shifting each character of the obfuscated literal
-  `"xl#ghy#ohdg=#ulfk#hl}hqkrhihu"` down by three (`:63-72`). `MenuPointer` carries `Pressed`,
-  `Clicked` and `Wheel`, all of them the left button (`CSVM/src/UI/Menu/MenuCommands.cs:31`), and
-  `PointerSeat` reads one injected `_pressed` func (`PointerSeat.cs:44-59`).
-  *Fix shape:* a right-button field on `MenuPointer` fed by a second injected read in `PointerSeat`,
-  then a held-inside-the-rectangle test on the credits screen that activates the line.
-  *⚠ Traps:* decode the string at runtime as the script does; a plain-text copy in our source is the
-  same string with the joke removed. It is a HOLD and not a click, so a click edge is the wrong
-  signal. The five test helpers that construct a `MenuPointer` move with the record
-  (`MenuHangarSuites.cs:889`, `MenuInstantActionSuites.cs:1072`, `MenuLaunchReturnSuites.cs:518`,
-  `MenuOriginalCampaignSuites.cs:771`, `MenuOriginalSuites.cs:635`). ⚠ Do not route this as a
-  general secondary-click command; `MenuCommands` is device-neutral by contract and no other screen
-  reads a right button.
-  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu=credits`, hold the right
-  button inside that rectangle, and check a line appears while held and goes on release.
-  *Cross-refs:* `docs/org/menu-inventory.md` (the Credits row), `BL-775`'s landing
-  (`git log --grep=BL-775`).
+  *Cross-refs:* `git log --grep=BL-779` (the box this text stands in, and what it draws today),
+  `docs/org/menu-inventory.md`.
 
 - `BL-783` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen shows none of the four display
   settings, so the monitor, the resolution, the display mode and V-Sync are settable in the Original
@@ -2628,7 +2574,8 @@ usual.
   launch, a cash grant, a gallery reveal, an invincibility flag cleared when the flight ends); the
   pull-down is the existing mission list activated where the script places it. *⚠ Traps:* the
   walkthroughs say right-click the microphone, but the script arms on `button_clicked == mouse.left`
-  inside the region; do not add a right-button read for it (that seam is `BL-781`'s). The words are
+  inside the region; do not add a right-button read for it, `MenuPointer.RightPressed` being the
+  credits line's alone (`git log --grep=BL-781`). The words are
   case-sensitive and the buffer restarts from empty on a miss, so a partial retype starts over.
   Keep the buffer per screen; do not route typed words through `MenuCommands`, which is
   device-neutral by contract. The invincibility is one mission only; a flag that survives the
@@ -2637,8 +2584,8 @@ usual.
   `./RunGame.ps1 --presentation=original --menu=campaign`, click the microphone side, type `idaho`
   and check the mission pull-down appears and New Mission flies the picked row; in the hangar click
   the cash figure, type `gimme` and check it rises by 25000 while under 50000; on Previous Missions click the
-  bottom-left symbol and type `ispy`. *Cross-refs:* `BL-781` (the credits easter egg, the same
-  script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
+  bottom-left symbol and type `ispy`. *Cross-refs:* `git log --grep=BL-781` (the credits line, the
+  same script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
   PlaneConstruction rows), `docs/org/hangar.md`.
 
 - `BL-822` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The scrapbook's

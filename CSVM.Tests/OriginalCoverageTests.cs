@@ -88,6 +88,9 @@ public class OriginalCoverageTests : IDisposable
             new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.KeysDoorKey, OriginalShell.KeysAcceptKey },
             new[] { OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("credits", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey }, new[] { OriginalShell.CreditsExitKey }),
+        new("credits-about", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey, OriginalShell.CreditsAboutKey },
+            new[] { OriginalShell.DialogOkKey, OriginalShell.CreditsExitKey },
+            Expect: new[] { OriginalShell.DialogOkKey }),
         new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
         new("instant-action-exit", OriginalScreen.TopLevel, new[] { "MM_B_INSTANTACTION", OriginalShell.ExitKey }, Array.Empty<string>()),
         new("instant-action-loadout", OriginalScreen.InstantActionLoadout, new[] { "MM_B_INSTANTACTION", OriginalShell.WeaponLoadoutKey },
@@ -323,6 +326,7 @@ public class OriginalCoverageTests : IDisposable
         // widget of its own falls back to.
         "PP_B_SliderSlot.png" or "PF_B_SliderSlot.png" => (171, 3),
         "PP_B_Slider.png" or "PF_B_Slider.png" => (43, 21),
+        "PM_AboutBox.png" => (400, 300),
         "PH_Decals.tga" => (66, 3300),
         "PH_PlaneIcons.png" => (100, 1200),
         _ when art.StartsWith("PH_B_", StringComparison.Ordinal) => (200, 128),

@@ -82,6 +82,10 @@ public static class CampaignBoards
     // measured off the same shots.
     private const float DialogX = 195f;
     private const float DialogY = 150f;
+
+    // The widget set every messagebox row constant names, and the background art that set draws.
+    private const string DefaultPrefix = "MB";
+    private const string DefaultBackground = "MB_Background.png";
     private const float DialogFont = 12f;
     private const float DialogButtonWidth = 62f;
     private const float DialogLabelDrop = 3f;
@@ -392,27 +396,30 @@ public static class CampaignBoards
     /// the <c>0x1</c> box) or the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the
     /// <c>0x4</c> box the delete confirm asks for), each button drawn in the strip frame and label
     /// ink its caller names, which is how a pointer-driven presentation shows which one is under
-    /// the pointer. The icon is its caller's too, since the script reads it off the message class
-    /// and not off the button set drawn here.</summary>
+    /// the pointer. The icon is its caller's too, the script reading it off the message class.
+    /// <paramref name="chrome"/> picks the widget set; null is the shared <c>mb_</c> box.</summary>
     public static BoardPanel Dialog(
-        string message, IReadOnlyList<DialogButton> buttons, DialogIcon icon, CampaignLayout? layout = null)
+        string message, IReadOnlyList<DialogButton> buttons, DialogIcon icon, CampaignLayout? layout = null,
+        DialogChrome? chrome = null)
     {
         layout ??= CampaignLayout.Fallback;
+        var set = chrome ?? DialogChrome.Default;
         const string section = CampaignLayout.DialogSection;
+        // The icon row alone keeps the mb_ prefix, whatever set the rest of the box is drawn from.
         var (iconX, iconY) = layout.At(section, "MB_P_ICON", 36f, 65f);
-        var (messageX, messageY, messageWidth) = layout.Box(section, "MB_T_MESSAGE", 94f, 70f, 282f);
+        var (messageX, messageY, messageWidth) = layout.Box(section, set.Row("MB_T_MESSAGE"), 94f, 70f, 282f);
         var pictures = new List<BoardPicture>
         {
-            new(layout.Art(section, "MB_P_BACKGROUND", Ui("MB_Background.png")), DialogX, DialogY),
-            new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), DialogX + iconX, DialogY + iconY, (int)icon),
+            new(layout.Art(section, set.Row("MB_P_BACKGROUND"), Ui(set.Background)), set.X, set.Y),
+            new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), set.X + iconX, set.Y + iconY, (int)icon),
         };
         var lines = new List<BoardLine>
         {
-            new(message, DialogX + messageX, DialogY + messageY, messageWidth, DialogFont, BoardInk.Dialog),
+            new(message, set.X + messageX, set.Y + messageY, messageWidth, DialogFont, BoardInk.Dialog),
         };
         foreach (var button in buttons)
         {
-            var (art, x, y) = DialogSlot(button.Key, layout);
+            var (art, x, y) = DialogSlot(button.Key, layout, set);
             pictures.Add(new BoardPicture(art, x, y, button.Frame));
             lines.Add(new BoardLine(button.Label, x, y + DialogLabelDrop, DialogButtonWidth, DialogFont,
                 button.Ink, Justify: BoardJustify.Center));
@@ -423,18 +430,22 @@ public static class CampaignBoards
 
     /// <summary>Where one of the messagebox's three buttons sits on the board, and its strip: the
     /// row's own position inside the art offset by where the art lands. The fallbacks are the
-    /// shipped rows' values (<c>74</c>, <c>174</c> and <c>274</c> at <c>254</c>).</summary>
-    public static (BoardArt Art, float X, float Y) DialogSlot(string key, CampaignLayout? layout = null)
+    /// shipped rows' values (<c>74</c>, <c>174</c> and <c>274</c> at <c>254</c>).
+    /// <paramref name="chrome"/> reads the same button in another widget set.</summary>
+    public static (BoardArt Art, float X, float Y) DialogSlot(
+        string key, CampaignLayout? layout = null, DialogChrome? chrome = null)
     {
         layout ??= CampaignLayout.Fallback;
+        var set = chrome ?? DialogChrome.Default;
         float fallbackX = key switch
         {
             DialogLeftKey => 74f,
             DialogRightKey => 274f,
             _ => 174f,
         };
-        var (x, y) = layout.At(CampaignLayout.DialogSection, key, fallbackX, 254f);
-        return (layout.Art(CampaignLayout.DialogSection, key, Ui("MB_B_Buttons.Png", StripFrames)), DialogX + x, DialogY + y);
+        string row = set.Row(key);
+        var (x, y) = layout.At(CampaignLayout.DialogSection, row, fallbackX, 254f);
+        return (layout.Art(CampaignLayout.DialogSection, row, Ui("MB_B_Buttons.Png", StripFrames)), set.X + x, set.Y + y);
     }
 
     /// <summary>Where one of a screen's authored buttons sits and what art it draws, for a page
@@ -659,6 +670,32 @@ public static class CampaignBoards
     /// <summary>One button of a composed messagebox: its layout row, its words, the strip frame to
     /// draw and the ink its label takes.</summary>
     public readonly record struct DialogButton(string Key, string Label, int Frame, BoardInk Ink);
+
+    /// <summary>
+    /// Which messagebox widget set a dialog composes and where that set's background art lands:
+    /// <c>MESSAGEBOX.SCRIPT</c> picks the prefix off two globals, <c>mb_</c> by default and
+    /// <c>ma_</c> over <c>CR_AboutMessageBox.png</c> when a screen sets <c>XR</c>, and centres the
+    /// pane by its own size. <see cref="Background"/> is the fallback art for the set's background
+    /// row. ⚠ The icon takes no prefix: it is <c>mb_p_icon</c> in every set, at that one row's own
+    /// place, so a variant must not read one under its own.
+    /// </summary>
+    public readonly record struct DialogChrome(string Prefix, float X, float Y, string Background)
+    {
+        /// <summary>The shared <c>mb_</c> box at its centred corner, which every campaign dialog
+        /// and every refusal draws.</summary>
+        public static DialogChrome Default { get; } = new(DefaultPrefix, DialogX, DialogY, DefaultBackground);
+
+        /// <summary>One of the messagebox's rows under this set's prefix. The row constants name
+        /// the <c>mb_</c> rows, so a caller hands the shared key over and a variant reads the same
+        /// row in its own set.</summary>
+        public string Row(string key)
+        {
+            ArgumentNullException.ThrowIfNull(key);
+            return key.StartsWith(DefaultPrefix, StringComparison.Ordinal)
+                ? Prefix + key[DefaultPrefix.Length..]
+                : key;
+        }
+    }
 
     // One button: the layout row it is read from (null for the briefing's zrd-authored plaques)
     // and the fallback beside it. Labelled says the row carries a ResID, so the plaque's words are

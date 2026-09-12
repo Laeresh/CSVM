@@ -398,15 +398,20 @@ public class SessionSpecMenuTests
     }
 
     /// <summary>The screenshot aid's pointer, which stands in for seat 0's on the Original
-    /// presentation: two authored numbers, an optional held button, and no pointer at all from a
-    /// spec that spells fewer than two, since a half-read point would shoot the wrong widget.</summary>
+    /// presentation: two authored numbers, then a word per button held, and no pointer at all from
+    /// a spec that spells fewer than two, since a half-read point would shoot the wrong
+    /// widget.</summary>
     [Fact]
-    public void TheDebugPointerTakesTwoAuthoredNumbersAndAnOptionalHeldButton()
+    public void TheDebugPointerTakesTwoAuthoredNumbersAndAWordPerHeldButton()
     {
         Assert.Null(Cli().DebugPointer);
-        Assert.Equal((400f, 454f, false), Cli("--debug-pointer=400,454").DebugPointer);
-        Assert.Equal((400f, 454.5f, true), Cli("--debug-pointer=400,454.5,down").DebugPointer);
-        Assert.Equal((400f, 454f, false), Cli("--debug-pointer=400,454,up").DebugPointer);
+        Assert.Equal((400f, 454f, false, false), Cli("--debug-pointer=400,454").DebugPointer);
+        Assert.Equal((400f, 454.5f, true, false), Cli("--debug-pointer=400,454.5,down").DebugPointer);
+        Assert.Equal((400f, 454f, false, false), Cli("--debug-pointer=400,454,up").DebugPointer);
+        // The secondary button on its own, and both at once: the credits screen's hidden line is
+        // held open by the right button alone, so neither word implies the other.
+        Assert.Equal((320f, 320f, false, true), Cli("--debug-pointer=320,320,right").DebugPointer);
+        Assert.Equal((320f, 320f, true, true), Cli("--debug-pointer=320,320,down,right").DebugPointer);
         Assert.Null(Cli("--debug-pointer=400").DebugPointer);
         Assert.Null(Cli("--debug-pointer=left,454").DebugPointer);
         Assert.Null(Cli("--debug-pointer=").DebugPointer);

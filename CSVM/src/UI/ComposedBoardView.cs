@@ -325,6 +325,7 @@ public sealed partial class ComposedBoardView : Control
         BoardInk.LabelActivate => _palette.LabelActivate,
         BoardInk.Dialog => Colors.White,
         BoardInk.DialogPressed => Colors.Black,
+        BoardInk.Secret => Colors.Yellow,
         _ => _palette.Row,
     };
 

@@ -1353,7 +1353,9 @@ public partial class Launcher : Node3D
         // Seat 0 is player 1, so it navigates on the menu keymap that player saved.
         seatInput.LoadSavedKeymap(1);
         var builtInSeat = new BuiltInSeat(seatInput);
-        var seat = new PointerSeat(builtInSeat, MousePosition, () => Input.IsMouseButtonPressed(MouseButton.Left), TakeMenuWheel);
+        var seat = new PointerSeat(
+            builtInSeat, MousePosition, () => Input.IsMouseButtonPressed(MouseButton.Left), TakeMenuWheel,
+            () => Input.IsMouseButtonPressed(MouseButton.Right));
         var registry = new PresentationRegistry();
         // The factories read the aid when they run, which is inside a Show: the cold start's
         // instance gets it, and the fresh instance a switch creates gets none.

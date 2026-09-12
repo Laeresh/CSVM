@@ -169,6 +169,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   drawing; check an animation by driving frames.** `--menu=campaign-briefing:<s>` advances the reveal
   itself before rendering, so timed shots at 6, 12, 24, 40 and 70 s all read correctly while driving
   5400 frames of the live menu found 5193 stale frames (BL-485).
+- **SHOT-33** — **`--debug-pointer=x,y,down` cannot press a button: it holds one. Whatever a press
+  opens is shot through a `--menu=` aid, not through the pointer.** The aid's press arrives as an
+  edge once and never releases, and a menu row fires on the release on it, so a run aimed at a live
+  plaque shoots the held frame and nothing behind it. Reading that shot as the button doing nothing
+  is the error the aid invites.
 
 ## GOLD — golden images
 

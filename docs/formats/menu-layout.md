@@ -153,9 +153,11 @@ its width and height. Every other row of the section carries `relative = 1` too,
 coordinates on them (`PN_E_NAME` `23, 40`, `PN_B_OK` `74, 130`) are measured from that corner and
 not from the screen's. `PX_PlaneNameBackground.Png` is 264x177, so the dialog lands at `268, 211`.
 
-The messagebox is the same rule read off a screenshot rather than a script: its 410x300
+The messagebox is the same rule, and `MESSAGEBOX.SCRIPT` spells it out: its 410x300
 `MB_Background.png` is authored at `0, 0` and drawn at `195, 150`, and `MB_P_ICON` `36, 65` and
-`MB_T_MESSAGE` `94, 70` sit on the pane. A section's full-page background (`PX_BackGround.jpg`,
+`MB_T_MESSAGE` `94, 70` sit on the pane. That section carries three widget sets under the prefixes
+`mb_`, `mp_` and `ma_`, and the script centres whichever one it picked by that set's own background,
+so the `ma_` set's 505x416 `CR_AboutMessageBox.png` lands at `147, 92`. A section's full-page background (`PX_BackGround.jpg`,
 `PS_BackGround.jpg`) is board-sized and centres onto its own corner, which is why the two rules
 cannot be told apart there.
 

@@ -27,8 +27,11 @@ public interface IMenuInputSource
 /// maps it into its own canvas (the Original presentation through <see cref="BoardFit"/>). A
 /// source with no pointer reports null, not a zeroed position. <paramref name="Wheel"/> is the
 /// wheel's steps this frame, positive toward a list's foot; a presentation turns it into list
-/// steps over whatever list the pointer stands on.</summary>
-public readonly record struct MenuPointer(float X, float Y, bool Pressed, bool Clicked, int Wheel = 0);
+/// steps over whatever list the pointer stands on. <paramref name="RightPressed"/> is the
+/// secondary button as a held state and not an edge, which is all the one screen that reads it
+/// needs; it drives no command of its own.</summary>
+public readonly record struct MenuPointer(
+    float X, float Y, bool Pressed, bool Clicked, int Wheel = 0, bool RightPressed = false);
 
 /// <summary>
 /// One frame of one seat's semantic menu commands, already device-neutral: cursor steps arrive

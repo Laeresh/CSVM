@@ -68,6 +68,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the credits screen behind the top level's fifth row.</summary>
     public const string CreditsAid = "credits";
 
+    /// <summary>The credits aid's argument that leaves the About box standing over the screen.</summary>
+    public const string CreditsAboutAid = "about";
+
     /// <summary>The aid value that opens the Instant Action screen.</summary>
     public const string InstantActionAid = "instant-action";
 
@@ -182,7 +185,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The screenshot aid's pointer (<c>--debug-pointer=</c>) in authored pixels, which
     /// stands in for seat 0's own for the run: a rollover and a held plaque are then shot with
     /// nobody at the controls. Null leaves the mouse alone.</summary>
-    public (float X, float Y, bool Down)? DebugPointer { get; set; }
+    public (float X, float Y, bool Down, bool Right)? DebugPointer { get; set; }
 
     /// <summary>The pad bookkeeping while built, for the suites that read seat 0's claim back.</summary>
     public MenuSeatDevices? Devices => _devices;
@@ -380,6 +383,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case CreditsAid:
                     _shell.Open(OriginalScreen.Credits);
                     break;
+                case CreditsAid + ":" + CreditsAboutAid:
+                    // The screen opens on ABOUT, its first row, so one accept raises the box.
+                    _shell.Open(OriginalScreen.Credits);
+                    _shell.Step(new MenuCommands { Accept = true });
+                    break;
                 case InstantActionAid:
                     _shell.OpenInstantAction();
                     break;
@@ -500,7 +508,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             {
                 bool edge = aid.Down && !_debugPointerDown;
                 _debugPointerDown = aid.Down;
-                commands = commands with { Pointer = new MenuPointer(aid.X, aid.Y, aid.Down, edge) };
+                commands = commands with { Pointer = new MenuPointer(aid.X, aid.Y, aid.Down, edge, 0, aid.Right) };
             }
 
             var step = _shell.StepSeat(i, commands);

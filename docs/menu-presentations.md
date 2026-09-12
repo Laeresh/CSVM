@@ -460,7 +460,8 @@ list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `op
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video` and
 `video:checked` with its Enhanced Graphics box ticked, `controls`, `keys` and `keys:other` with
-the KEYS AND BUTTONS page standing on the one category that outruns its list window, the
+the KEYS AND BUTTONS page standing on the one category that outruns its list window, `credits` and
+`credits:about` with the About box standing over it, the
 `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
 poses, `campaign-delete`), and any other value opens that
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
