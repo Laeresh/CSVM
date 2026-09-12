@@ -189,8 +189,9 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/IaWrapupBoard.cs`, Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat.
 - `src/Flight/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
 - `src/Flight/HaltReason.cs`, why the clock is stopped; the clock advances only when no reason is set.
-- `src/Flight/PauseBoard.cs`, the shared pause board and its Resume · Restart · Exit menu, one whole-window CanvasLayer.
+- `src/Flight/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
 - `src/Flight/OriginalPauseBoard.cs`, the Original presentation's pause screen: the mission's own `escape.zrd` sheet over the held world, on the same seam.
+- `src/Flight/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/Flight/PhysicsConstants.cs`, `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
 - `src/Flight/Weather.cs`, weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs`, own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
@@ -301,6 +302,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalHangar.cs`, the shell's hangar (a `partial`): the name screen, the tabbed hub, the totals page, the inventory.
 - `src/UI/Menu/Original/OriginalCampaign.cs`, the shell's campaign (a `partial`): the nine decoded screens over the shared board component.
 - `src/UI/Menu/Original/OriginalPresentation.cs`, the Original presentation node: the shell drawn through `ComposedBoardView`, seats polled.
+- `src/UI/Menu/Original/OriginalArtSizes.cs`, the art measurer every `OriginalShell` host hands it: one art name answered with its pixel size, cached, a movie's read off its sequence header.
 - `src/UI/Menu/Original/OriginalAvailability.cs`, Original's availability answer before entry: a refusal reason, or the loaded layout.
 - `src/UI/Menu/Original/OriginalAssetManifest.cs`, the required/optional file manifest derived from the layout, the backdrop movies among the optional, and the check over a tree.
 - `src/UI/Menu/Original/OriginalRosters.cs`, the Original sortie screens' chapter labels and the eleven stock airframes with their nodes.

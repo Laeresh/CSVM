@@ -237,6 +237,7 @@
     "ordnance-impact-effects": 0.326,
     "ordnance-launch-axis": 0.543,
     "partition-areas": 0.716,
+    "pause-preferences": 0.25,
     "pause-sheet": 0.27,
     "pause-world-icons": 2.05,
     "perf-hud-layout": 0.009,

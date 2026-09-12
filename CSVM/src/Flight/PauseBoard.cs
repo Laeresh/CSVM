@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.UI;
 using Godot;
 
@@ -38,6 +39,12 @@ public sealed partial class PauseBoard : Control
     /// the menu. The session suspends this board for the duration and brings it back on Escape;
     /// the halt is never dropped, so the world stays the still frame it already is.</summary>
     public Action? PhotoMode { get; set; }
+
+    /// <summary>Open the options over the pause, the same <see cref="PausePreferences"/> leaf the
+    /// Original sheet's PREFERENCES strip opens. ⚠ Null leaves the row off the menu rather than
+    /// offering a row that does nothing, which is why it is read at every fresh pause and set
+    /// before the board sees one.</summary>
+    public Action? Preferences { get; set; }
 
     /// <summary>Builds the (hidden) board and subscribes to the shared pause state. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes on <see cref="PauseState.Changed"/> and
@@ -85,6 +92,9 @@ public sealed partial class PauseBoard : Control
             case BoardMenuItem.Photo:
                 PhotoMode?.Invoke();    // the halt stays: photo mode is a still frame, not a resume
                 break;
+            case BoardMenuItem.Preferences:
+                Preferences?.Invoke();  // and so is the options leaf, which stands over this board
+                break;
             case BoardMenuItem.Restart:
                 _state.ForceResume();   // the rerun runs against a live clock, not a held one
                 Restart?.Invoke();
@@ -111,13 +121,21 @@ public sealed partial class PauseBoard : Control
         body.AddChild(ResultsBoard.Centered(ResultsBoard.Label($"{ownerTag} paused", (int)(ContextFont * s), ownerColor)));
 
         // A fresh menu each pause: the cursor starts on Resume, so a stray confirm on a board that
-        // just appeared cannot restart or leave the session. The owner's own reader drives it.
-        var menu = new BoardMenu(
-            dismissable: true,
+        // just appeared cannot restart or leave the session. The owner's own reader drives it, and
+        // the options row stands only where a leaf was built for it to open.
+        var rows = new List<(BoardMenuItem Item, string Label)>
+        {
             (BoardMenuItem.Resume, "Resume"),
             (BoardMenuItem.Photo, "Photo Mode"),
-            (BoardMenuItem.Restart, "Restart"),
-            (BoardMenuItem.Exit, _exitLabel));
+        };
+        if (Preferences != null)
+        {
+            rows.Add((BoardMenuItem.Preferences, "Preferences"));
+        }
+
+        rows.Add((BoardMenuItem.Restart, "Restart"));
+        rows.Add((BoardMenuItem.Exit, _exitLabel));
+        var menu = new BoardMenu(dismissable: true, rows.ToArray());
         menu.Activated += OnActivated;
         menu.Dismissed += () => _state.ForceResume();
         _host = BoardMenuHost.Build(menu, _inputFor(owner), s);

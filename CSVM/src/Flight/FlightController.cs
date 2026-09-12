@@ -834,6 +834,12 @@ public partial class FlightController : Node3D
     /// this node decides nothing about the mode itself.</summary>
     public bool InPhotoMode { get; private set; }
 
+    /// <summary>The options leaf stands over this session's pause: this node's pause key is silent
+    /// for the duration, so Escape means "leave the page" and nothing else. Driven by
+    /// <c>GameSession</c> through <see cref="BeginPauseLeaf"/>/<see cref="EndPauseLeaf"/>, the same
+    /// shape as <see cref="InPhotoMode"/>; this node decides nothing about the leaf itself.</summary>
+    public bool InPauseLeaf { get; private set; }
+
     /// <summary>The flight model's world position, the plane as a SIM value, not a node transform
     /// (the node lags it by the render interpolation). What another plane's aim assist aims at.</summary>
     public Vector3 WorldPosition => _model.Position;
@@ -1416,6 +1422,20 @@ public partial class FlightController : Node3D
         InPhotoMode = false;
         // The bare action, not PauseTogglePressed: that still reads the gates, and the point
         // is to record what the hands are doing regardless of them.
+        PollInput();
+        _pausePrev = _actions.Held(InputAction.Pause);
+    }
+
+    /// <summary>Enter the options leaf over the pause: the pause key goes silent for the duration.</summary>
+    public void BeginPauseLeaf() => InPauseLeaf = true;
+
+    /// <summary>Leave the options leaf, seeding the pause key's edge flag from the CURRENT device
+    /// state for the reason <see cref="EndPhotoMode"/> does: the page is left with Escape, and that
+    /// same Escape still under the player's finger would otherwise read as a fresh press and resume
+    /// the mission the leaf was opened from.</summary>
+    public void EndPauseLeaf()
+    {
+        InPauseLeaf = false;
         PollInput();
         _pausePrev = _actions.Held(InputAction.Pause);
     }
@@ -3023,10 +3043,11 @@ public partial class FlightController : Node3D
     // P, Esc or gamepad Start, edge-detected so one press toggles once, gated on AllowPause
     // (false for AI rigs and the suites' bare test rigs). Esc opens the pause board rather than
     // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
-    // ⚠ Silent in photo mode: Escape is what LEAVES that mode, and this reads Escape too, so one
-    // press would both close the mode and unpause the session behind it (BL-429).
+    // ⚠ Silent in photo mode and under the pause's options leaf: Escape is what LEAVES both, and
+    // this reads Escape too, so one press would both close the screen and unpause the session
+    // behind it (BL-429).
     private bool PauseTogglePressed() =>
-        AllowPause && !InPhotoMode && _actions.Held(InputAction.Pause);
+        AllowPause && !InPhotoMode && !InPauseLeaf && _actions.Held(InputAction.Pause);
 
     // One frame of the pause key, and the halt it mirrors into the shared clock. Polled from
     // _Process, not the sim step: a halted sim takes no steps and could never resume itself.

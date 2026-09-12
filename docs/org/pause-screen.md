@@ -318,9 +318,18 @@ a click fires the row the pad would have fired. That is the rule every Original 
 strip while the keyboard's selection rests on another. Only a seat holding a mouse points at all,
 which is seat 0, so a pad player's pause is the pad's alone and the OS cursor is left as it was.
 
-**Preferences has no target in flight.** The original opens its own preferences dialog over the
-paused mission; this port's options live in the menu presentations and no in-flight leaf stands
-behind the strip, so the strip is drawn and its action is unbound.
+**Preferences opens the Original options over the held world.** The original opens its own
+preferences dialog over the paused mission, and this port stands `Flight/PausePreferences.cs`
+there: the Original presentation's Options screen with the Game Options, AUDIO, VIDEO and
+rebinding pages behind its doors, hosted over the pause rather than over the menu. The halt is
+untouched while it stands, so the world stays held beneath it, and every door out (a page's
+ACCEPT CHANGES, Back, or RETURN TO MAIN MENU) closes the leaf back onto the sheet with what it
+applied already in force. An accepted page writes the options file and applies the display and mix
+settings through the same route the menu takes, without the presentation teardown a menu-side apply
+does, since the flight is what the leaf returns to. The rebinding pages hold the menu's own
+`ControlsFeature`, so an in-flight rebind edits the one keymap. Built-in's board reaches the same
+leaf through its PREFERENCES row. Where the install carries no decoded layout there is nothing to
+compose, so the Original strip is drawn and unbound and Built-in's row is left off.
 
 **Photo mode is not on this screen.** It is this port's own feature and the original authors no
 fifth strip, so it stays on the Built-in board rather than being added to the original's four.

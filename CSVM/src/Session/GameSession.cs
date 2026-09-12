@@ -275,6 +275,12 @@ public partial class GameSession : Node3D
     // The Original presentation's pause sheet while it is the board in use. Its parchment carries
     // the objectives, so the corner readout is not built beside it.
     private Flight.OriginalPauseBoard? _originalPause;
+    // The pause board in use, whichever presentation composed it, and the options leaf that stands
+    // over it while PREFERENCES is open. The leaf is the Launcher's to build (only it holds the
+    // decoded layout and the options writer); null leaves both boards without that door.
+    private Control? _pauseBoard;
+    private Flight.PausePreferences? _pauseOptions;
+    private Func<Flight.PausePreferences?>? _pauseOptionsFactory;
     // Photo mode's three pieces, all null unless it is engaged: the hint/exit reader, the camera
     // holding the pane, and whose pane it is.
     private UI.PhotoModeHud? _photoHud;
@@ -349,6 +355,7 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
+        _pauseOptionsFactory = ctx.PauseOptions;
         _campaignMissionEnded = ctx.CampaignMissionEnded;
         _music = ctx.Music;
     }
@@ -2264,11 +2271,19 @@ public partial class GameSession : Node3D
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. The whole-window board covers every pane; single player uses the same path.
         var pauseState = _pauseState!;
+        // Built before the boards so each of them knows whether it has a PREFERENCES door at all:
+        // the Original sheet draws its strip either way and leaves the press a no-op, Built-in's
+        // menu leaves the row off rather than offering one that does nothing.
+        var pauseOptions = _pauseOptionsFactory?.Invoke();
+        Action? preferences = pauseOptions == null
+            ? null
+            : () => OpenPauseOptions(pauseState.OwnerPlayerIndex);
         Control pauseBoard;
         if (BuildOriginalPauseBoard(pauseState, state.WorldRuntime) is { } sheet)
         {
             sheet.Restart = Rerun;
             sheet.Exit = _exitSession;
+            sheet.Preferences = preferences;
             _originalPause = sheet;
             pauseBoard = sheet;
         }
@@ -2277,6 +2292,7 @@ public partial class GameSession : Node3D
             var builtIn = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
             builtIn.Restart = Rerun;
             builtIn.Exit = _exitSession;
+            builtIn.Preferences = preferences;
             // Read at press time, not captured: the owner is whoever paused THIS time, and only that
             // player drives the cursor that reached this row.
             builtIn.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
@@ -2284,9 +2300,19 @@ public partial class GameSession : Node3D
         }
 
         _boards.Add(pauseBoard);
+        _pauseBoard = pauseBoard;
         var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.HudLayers.Board };
         pauseLayer.AddChild(pauseBoard);
         _worldRoot!.AddChild(pauseLayer);
+        if (pauseOptions != null)
+        {
+            _pauseOptions = pauseOptions;
+            pauseOptions.Closed += ClosePauseOptions;
+            _boards.Add(pauseOptions);
+            var optionsLayer = new CanvasLayer { Name = "pause_options", Layer = UI.HudLayers.Board };
+            optionsLayer.AddChild(pauseOptions);
+            _worldRoot!.AddChild(optionsLayer);
+        }
         // The per-pane stunt scoreboards are built with their rigs (HumanFlightAdapter), so they
         // are collected here rather than at a construction site of their own.
         foreach (var rig in _rigs)
@@ -3839,6 +3865,58 @@ public partial class GameSession : Node3D
         // the pause it was meant to reopen (BL-279's mechanism, docs/architecture.md).
         foreach (var rig in _rigs)
             MenuInputFor(rig.Index).Prime();
+    }
+
+    /// <summary>PREFERENCES on either pause board: the sheet steps aside and the options leaf stands
+    /// over the held world in its place. The halt is never dropped, so the mission stays the still
+    /// frame the pause made of it, and every rig's pause key goes silent for the duration.</summary>
+    private void OpenPauseOptions(int owner)
+    {
+        if (_pauseOptions is not { Visible: false } leaf || _pauseBoard == null)
+        {
+            return;
+        }
+
+        // Hide AND stop processing, SuspendBoards' own rule: a board left processing still polls
+        // the owner's reader, so the keys driving the leaf would drive the menu under it too.
+        _pauseBoard.Visible = false;
+        _pauseBoard.ProcessMode = ProcessModeEnum.Disabled;
+        var pollers = new List<UI.MenuInput>();
+        foreach (var rig in _rigs)
+        {
+            rig.Controller?.BeginPauseLeaf();
+            pollers.Add(MenuInputFor(rig.Index));
+        }
+
+        if (pollers.Count == 0)
+        {
+            pollers.Add(MenuInputFor(0));
+        }
+
+        leaf.Open(pollers, owner);
+    }
+
+    /// <summary>The leaf's own door out, by RETURN TO MAIN MENU, Back or an accepted page: the sheet
+    /// comes back over the world it never resumed, with its pointer and every board reader
+    /// re-primed.</summary>
+    private void ClosePauseOptions()
+    {
+        if (_pauseBoard == null)
+        {
+            return;
+        }
+
+        _pauseBoard.ProcessMode = ProcessModeEnum.Inherit;
+        _pauseBoard.Visible = _pauseState?.Paused ?? false;
+        _originalPause?.Reprime();
+        // ⚠ Prime every board reader and re-seed every pause edge, ExitPhotoMode's own hazard: the
+        // Escape that left the leaf is still under the player's finger, and would otherwise dismiss
+        // the sheet that just came back or resume the mission behind it (BL-279, BL-429).
+        foreach (var rig in _rigs)
+        {
+            rig.Controller?.EndPauseLeaf();
+            MenuInputFor(rig.Index).Prime();
+        }
     }
 
     // ⚠ Suspending a board is hide AND stop processing, not hide alone. A board left processing

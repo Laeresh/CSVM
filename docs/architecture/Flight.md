@@ -714,22 +714,32 @@ from a menu. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`. Read `PauseBo
 ## src/Flight/PauseBoard.cs
 The shared pause overlay, whole-window because pausing stops the game for everybody at once. Built
 once by `GameSession` on the shared board layer and wired to `PauseState.Changed` rather than a
-completion event, it shows the pausing player's tag in their own colour and a Resume, Restart and
-Exit menu driven by that player alone, since `PauseState` lets only the owner resume. A fresh menu
-each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. It shares
-`ResultsBoard`'s chrome but not its shell. A campaign session's objectives readout rides the same
-pause on a layer of its own, since it belongs to the flown mission rather than to every mode. The
-Original presentation puts `OriginalPauseBoard` in its place; read that next.
+completion event, it shows the pausing player's tag in their own colour and a Resume, Photo Mode,
+Preferences, Restart and Exit menu driven by that player alone, since `PauseState` lets only the
+owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A
+fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. It
+shares `ResultsBoard`'s chrome but not its shell, and a campaign session's objectives readout rides
+the same pause on a layer of its own. The Original presentation puts `OriginalPauseBoard` in its place.
 
 ## src/Flight/OriginalPauseBoard.cs
 The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
 the screen tests off engine and this node owns the cursor, the pointer and the four actions. That
-seat's pointer shares the cursor: a hover moves it, a press holds the strip and the release on it
-fires, and the OS pointer gives way to the dialog's own while the sheet stands. Its readout is a
-delegate, since the objectives and the icons follow the running mission. Preferences is drawn and
-unbound, photo mode stays on `PauseBoard`. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it
+fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the
+objectives follow the running mission. Preferences stands `PausePreferences` over the held world and
+`Reprime`s on its close; photo mode stays on `PauseBoard`. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+
+## src/Flight/PausePreferences.cs
+The Preferences leaf over a paused mission: an `OriginalShell` of its own opened on the Options
+screen, hosted over the held world on the board layer and drawn through `ComposedBoardView`, so its
+display rows are the `DisplaySettingRows` both Options screens draw. Either pause board's
+PREFERENCES opens it, the pausing player's reader drives it with that seat's mouse as its pointer,
+and every door out closes it back onto the sheet; an `OptionsApplyExit` reaches the Launcher's
+options writer first, so what it applied is already in force. The halt is never touched here. Its
+`FreeFlightFeature` and `PlayerSetupFeature` are throwaways and its `ControlsFeature` the menu's
+own; `Build` answers null with no decoded layout. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for

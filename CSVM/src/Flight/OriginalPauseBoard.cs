@@ -43,9 +43,11 @@ public sealed partial class OriginalPauseBoard : Control
     /// <summary>Leave the session, chosen from QUIT.</summary>
     public Action? Exit { get; set; }
 
-    /// <summary>Open the options, chosen from PREFERENCES. ⚠ Leave it null while no in-flight
-    /// options leaf exists; the strip is authored and drawn either way, and a null action makes the
-    /// press a no-op rather than a crash.</summary>
+    /// <summary>Open the options over the pause, chosen from PREFERENCES: the session hides this
+    /// sheet, stands <see cref="PausePreferences"/> over the held world and calls
+    /// <see cref="Reprime"/> when it closes. ⚠ Null where the install carries no decoded layout for
+    /// the leaf to compose from; the strip is authored and drawn either way, and a null action makes
+    /// the press a no-op rather than a crash.</summary>
     public Action? Preferences { get; set; }
 
     /// <summary>The pointer in the board's authored 800x600 space and whether its button is down,
@@ -101,6 +103,22 @@ public sealed partial class OriginalPauseBoard : Control
     {
         _state.Changed -= OnChanged;
         GiveCursorBack();
+    }
+
+    /// <summary>Re-reads the pointer's button and drops any strip a press had taken hold of, the
+    /// session's call when a screen that stood over this sheet closes. ⚠ Without it the button
+    /// still down from the leaf's own last click reads as a fresh press on the strip the pointer
+    /// happens to be over, which fires that strip the instant the sheet comes back.</summary>
+    public void Reprime()
+    {
+        _pointer = null;
+        _armed = -1;
+        _held = false;
+        _wasPressed = PointerSource()?.Pressed ?? false;
+        if (Visible)
+        {
+            Compose();
+        }
     }
 
     /// <inheritdoc/>

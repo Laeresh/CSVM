@@ -1286,6 +1286,7 @@ public partial class Launcher : Node3D
             Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
+            PauseOptions = BuildPauseOptions,
             CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
                 : null,
@@ -1593,12 +1594,10 @@ public partial class Launcher : Node3D
         return steps;
     }
 
-    // The Options route's apply, the one writer of the options file: persist every choice the
-    // screen took, then end the active presentation (discarding every feature's transient state),
-    // re-select with the saved request in place of any session override, and show the selected
-    // presentation at its top level. The force flag still wins, since it is the recovery path.
-    // ⚠ The graphics word is saved and nothing more. GraphicsMode resolves once at launch, so the
-    // choice reaches the world on the next start; do not rebuild the world here.
+    // The Options route's apply from the menu: persist and apply every choice, then end the active
+    // presentation (discarding every feature's transient state), re-select with the saved request in
+    // place of any session override, and show the selected presentation at its top level. The force
+    // flag still wins, since it is the recovery path.
     private void ApplyOptions(OptionsApplyExit applied)
     {
         if (_menuHost == null)
@@ -1606,6 +1605,21 @@ public partial class Launcher : Node3D
             return;
         }
 
+        PersistOptions(applied);
+        var requested = applied.Presentation;
+        _menuHost.Deactivate();
+        string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
+        string why = reason == null ? "" : $" reason={reason}";
+        Log.Info("ui", $"menu presentation switch requested={requested} active={_menuHost.Selected}{why}");
+        ShowMenu(MenuReturnDestination.TopLevel);
+    }
+
+    // The options file's one writer, shared by the menu's apply above and by the pause leaf's:
+    // every choice the screen took saved, then the display settings and the mix applied now.
+    // ⚠ The graphics word is saved and nothing more. GraphicsMode resolves once at launch, so the
+    // choice reaches the world on the next start; do not rebuild the world here.
+    private void PersistOptions(OptionsApplyExit applied)
+    {
         var requested = applied.Presentation;
         var store = OptionsStore.UserOptions();
         var options = store.Load();
@@ -1633,11 +1647,21 @@ public partial class Launcher : Node3D
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
         Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
-        _menuHost.Deactivate();
-        string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
-        string why = reason == null ? "" : $" reason={reason}";
-        Log.Info("ui", $"menu presentation switch requested={requested} active={_menuHost.Selected}{why}");
-        ShowMenu(MenuReturnDestination.TopLevel);
+    }
+
+    // The in-flight Preferences leaf both pause boards open: the decoded layout the Original
+    // presentation composes from, the host's own rebinding feature so a rebind over the pause edits
+    // the keymap the menu edits and saves through the one writer, the menu's audio service for its
+    // cues, and PersistOptions as the apply. ⚠ No presentation switch and no ShowMenu: the flight
+    // returns to the sheet over its own world, so a saved presentation word reaches the shell at the
+    // next start rather than tearing down what the pause stands on. Null where no layout reads.
+    private Flight.PausePreferences? BuildPauseOptions()
+    {
+        OriginalAvailable(PresentationId.Original);
+        var controls = _menuHost != null && _menuHost.Features.TryGet<ControlsFeature>(out var feature)
+            ? feature
+            : null;
+        return Flight.PausePreferences.Build(_dataRoot, _originalLayout, controls, PersistOptions, _menuAudio);
     }
 
     // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
@@ -2097,6 +2121,12 @@ public sealed class LauncherContext
     /// opposition lives in the world, so putting it back means rebuilding the world, which only
     /// the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }
+
+    /// <summary>Builds the in-flight Preferences leaf either pause board opens over the held world,
+    /// or answers null where the install carries no decoded menu layout for it to compose from. A
+    /// factory rather than the node, since the session parents it and only the Launcher holds the
+    /// layout, the shared rebinding feature, the menu's audio and the options file's writer.</summary>
+    public System.Func<Flight.PausePreferences?>? PauseOptions { get; init; }
 
     /// <summary>A campaign mission ended, won or lost: the Launcher frees this session a frame later
     /// and shows the menu at the debrief of the named profile's flown mission, carrying the result

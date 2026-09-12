@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Session;
@@ -159,7 +158,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     private readonly string _dataRoot;
     private readonly MenuLayout _layout;
     private readonly MenuInput _player1;
-    private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly OriginalArtSizes _sizes;
     // Consumed by the first Activate: an aid names a screen a shot wants, never where a return lands.
     private string _aid;
     private int _debugJoin;
@@ -197,6 +196,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         _aid = aid ?? string.Empty;
         _player1 = player1 ?? throw new ArgumentNullException(nameof(player1));
         _debugJoin = debugJoin;
+        _sizes = new OriginalArtSizes(_dataRoot, "original presentation");
     }
 
     public PresentationId Id => PresentationId.Original;
@@ -283,7 +283,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_shell == null)
         {
             _devices = new MenuSeatDevices(_player1, setup);
-            _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), setup, Measure, _devices.FlightPads,
+            _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), setup, _sizes.Measure, _devices.FlightPads,
                 instantAction: host.Features.Get<InstantActionFeature>(),
                 hangar: host.Features.TryGet<HangarFeature>(out var hangar) ? hangar : null,
                 planes: CustomPlaneStore.UserPlanes(),
@@ -690,28 +690,6 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
-    // A movie's picture size, which its sequence header carries and no bitmap loader can read.
-    // Opened for the header alone and dropped; the surface the board draws from opens it again,
-    // once, and that copy is the one that decodes.
-    private static (int Width, int Height)? MovieSize(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        try
-        {
-            var movie = CSVM.Video.MpegMovie.FromFile(path);
-            return (movie.Width, movie.Height);
-        }
-        catch (Exception e)
-            when (e is IOException or InvalidDataException or ArgumentException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
     // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the
     // page can only be put in from outside: Accept on the opening focus stands the Difficulty
     // dropdown's list open.
@@ -913,36 +891,5 @@ public sealed class OriginalPresentation : IMenuPresentation
                 : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
         }
-    }
-
-    // The strip's pixel size, which the layout does not carry and the hit rectangles need. Read
-    // once per name; a file that is not there measures as null and the row keeps a fallback size.
-    private (int Width, int Height)? Measure(string art)
-    {
-        if (_sizes.TryGetValue(art, out var cached))
-        {
-            return cached;
-        }
-
-        (int Width, int Height)? size = null;
-        string path = OriginalAvailability.ArtPath(_dataRoot, art);
-        if (OriginalAvailability.IsMovie(art))
-        {
-            size = MovieSize(path);
-        }
-        else if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
-        {
-            size = (image.GetWidth(), image.GetHeight());
-        }
-
-        if (size == null)
-        {
-            // Once per name, since the answer is cached: the row keeps its fallback rectangle and
-            // the screen draws, which is what an optional file's absence degrades to.
-            Log.Info("ui", $"original presentation: {art} does not read at {path}; the row it sizes keeps its fallback rectangle");
-        }
-
-        _sizes[art] = size;
-        return size;
     }
 }

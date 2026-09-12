@@ -325,8 +325,8 @@ apart here. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 ## src/UI/BoardMenuItem.cs
 The rows a board menu can offer: Resume, Photo, Restart, Preferences and Exit. The board owning the
 menu decides which it carries and what each does; Resume appears only on a pause board, Preferences
-only on the Original one, and Exit's label follows whether the session can return to the
-launchscreen or only quit.
+only where a `PausePreferences` leaf stands behind it, and Exit's label follows whether the session
+can return to the launchscreen or only quit.
 
 ## src/UI/CursorRow.cs
 One centred list row with its cursor marker, shared by every menu that has one: the launchscreen's
@@ -949,7 +949,17 @@ return destination onto it and applies the `--menu=` aid on the first show. `Tic
 while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer into the
 authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends the
 preview on every door out and on `Hide`, drives the briefing's reveal, and runs the board's movies on the step the host was given,
-`DebugPointer` standing in for seat 0's pointer when the screenshot aid asks. `Measure` reads a strip's size off its file once and a movie's off its sequence header; `PaletteFor` is the inks.
+`DebugPointer` standing in for seat 0's pointer when the screenshot aid asks. The shell's art sizes come from `OriginalArtSizes`; `PaletteFor` is the inks.
+
+## src/UI/Menu/Original/OriginalArtSizes.cs
+The art measurer every host of `OriginalShell` hands it, since the layout carries a widget's
+position and its art name but not that art's size, and a name that does not measure leaves the row
+on a fallback rectangle, which is the rectangle the pointer then hits. One name answered with the
+file's pixel size, cached per name over one extraction root: a bitmap through `Image.LoadFromFile`,
+a movie off its sequence header, which no bitmap loader can read. A file that is not there measures
+as null once and is logged once, under the host's own name, so the presentation and the in-flight
+`PausePreferences` leaf are told apart in the log. Both hosts hold their own instance, so the cache
+follows the screen that is standing rather than being shared across a teardown.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses
