@@ -629,11 +629,11 @@ Decode: docs/formats/campaign-sequence.md.
 Builds one chapter world and binds its `AnimProgram`, the world+anim half of a session build:
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights, and stops before
 the per-view steps the caller drives. `Options` is the whole seam: the shared `DecodeCache`, the
-emitter factory a suite substitutes, the clutter debug switches, the extra sound-group prewarm
-names, the callback and trigger hosts, and the cutscene gate that builds `camera1`, the letterbox
-bars, the composition frames and the `AircraftStage`. It stands up the staged props a definition
-reparents onto placed content, and `ResolveLibraryRoot` is the lazy pool behind a mission or death
-call naming a library root, keyed on the anchor and the authored event. Read `WorldBuilder.cs`.
+emitter factory a suite substitutes, the session ambience its emitters read, the clutter debug
+switches, the sound-group prewarm names, the callback and trigger hosts, and the cutscene gate
+building `camera1`, the letterbox bars, the composition frames and the `AircraftStage`. It stands
+up the staged props a definition reparents onto placed content, and `ResolveLibraryRoot` is the
+lazy pool behind a call naming a library root, keyed on anchor and event. Read `WorldBuilder.cs`.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a hangar or chuteman drop, or a wing-walk

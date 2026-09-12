@@ -430,6 +430,7 @@ public sealed partial class Puffer : Node3D
     private EffectAmbience _ambience = EffectAmbience.Still;
     private Particle[] _particles = Array.Empty<Particle>();
     private int _liveCount;
+    private int _drawnCount;
 
     // The frame's draw payloads and their sort keys, pooled alongside _particles so the
     // back-to-front reorder allocates nothing on the frame path. Sized on first use and regrown
@@ -465,6 +466,24 @@ public sealed partial class Puffer : Node3D
     /// <summary>Live particle count, diagnostics only (the <c>--debug-anim</c> puffer census, which
     /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
     public int LiveCount => _liveCount;
+
+    /// <summary>How many of the live particles the last <c>_Process</c> actually WROTE, which is
+    /// what the distance fade decides and <see cref="LiveCount"/> deliberately does not: the fade is
+    /// a draw rule, so a culled particle keeps living. Diagnostics, for a suite reading a real
+    /// emitter over a real world rather than a fake renderer.</summary>
+    internal int DrawnCount => _drawnCount;
+
+    /// <summary>The authored state this emitter was built from, so a suite can say which rule
+    /// applies to which emitter (an unauthored <c>FADE_RANGE</c> never culls, whatever the camera
+    /// says). Read-only in intent; nothing may write through it.</summary>
+    internal PufferState State => _state;
+
+    /// <summary>The ambience handed in at construction, so a suite can ask WHICH instance an
+    /// emitter reads rather than only what that instance says this frame. The wiring is what breaks
+    /// silently: an emitter left on <see cref="EffectAmbience.Still"/> reads zero wind and no
+    /// camera, and a camera-less emitter runs neither the distance fade nor either cull, which is
+    /// indistinguishable from a becalmed mission until something measures the identity.</summary>
+    internal EffectAmbience Ambience => _ambience;
 
     /// <summary>Builds an emitter for <paramref name="state"/>, loading its texture frames into an
     /// atlas; null if a frame is missing. <paramref name="activeDuration"/> is the burst duration
@@ -548,6 +567,7 @@ public sealed partial class Puffer : Node3D
         _sustaining = false;
         SetActive(false);
         _liveCount = 0;
+        _drawnCount = 0;
         _renderer?.Show(0);
         Visible = false;
     }
@@ -697,6 +717,7 @@ public sealed partial class Puffer : Node3D
         }
 
         _renderer.Show(drawn);
+        _drawnCount = drawn;
 
         if (_liveCount == 0 && !_emitting && !_trailing && !_sustaining)
         {

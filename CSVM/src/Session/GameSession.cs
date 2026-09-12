@@ -1150,6 +1150,10 @@ public partial class GameSession : Node3D
                 InterpPath = state.InterpPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 EffectsParent = _worldRoot!,
+                // The one instance the weather rig publishes to and the player's own effects read.
+                // Without it the world's emitters hold the camera-less still-air null object, which
+                // runs neither the authored distance fade nor either of its culls.
+                Ambience = _ambience,
                 // The PLAYER_RANGE fallback for a runtime with no PlayerPositions wired: player 1's
                 // camera, resolved per call because none of those cameras exist yet here.
                 PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam

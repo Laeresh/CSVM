@@ -246,7 +246,8 @@ public sealed class WorldSession
             AutoStart = o.AutoStart,
             Seed = o.RuntimeSeed,
             Setup = missionSetup,
-            EmitterFactory = o.EmitterFactory ?? new Anim.PufferEmitterFactory(textures, o.EffectsParent),
+            EmitterFactory = o.EmitterFactory
+                ?? new Anim.PufferEmitterFactory(textures, o.EffectsParent, o.Ambience),
             // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the caller so a
             // teardown drops the previous world's lights.
             Lights = lights,
@@ -744,6 +745,14 @@ public sealed class WorldSession
         /// never auto-retired. ⚠ Read once, here, a post-<see cref="Build"/> swap would miss the
         /// bootstrap, where most <c>PUFFER_STATE</c>s fire.</summary>
         public Anim.IEmitterFactory? EmitterFactory { get; init; }
+
+        /// <summary>The wind and pane camera poses every <c>PUFFER_STATE</c> emitter this build
+        /// makes reads per frame. Must be the instance the weather rig publishes to, the one the
+        /// player's own effects share, so the world's emitters take the same wind and fade.
+        /// ⚠ Null (the default) is the still-air null object, which carries no camera, and a
+        /// camera-less emitter runs neither the fade nor either cull: correct only for a caller
+        /// with no session behind it. Unread when <see cref="EmitterFactory"/> brings its own.</summary>
+        public Effects.EffectAmbience? Ambience { get; init; }
 
         /// <summary>The mission's combat-voice clip defs (<see cref="CombatVoice.SessionPrewarmNames"/>),
         /// prewarmed with the animation program's own sound names so a pilot's line still decodes

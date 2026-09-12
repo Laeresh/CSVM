@@ -84,6 +84,126 @@ internal static class PufferSuites
         }
     }
 
+    // The wiring the world's emitters hang on, over a real built world: WHICH EffectAmbience
+    // instance they read. An emitter left on the still-air null object reads zero wind and no
+    // camera, and a camera-less emitter runs neither the distance fade nor either cull, so a
+    // 300 m plume draws across the map with nothing failing anywhere. Identity is the only thing
+    // that can see that, which is why the first check is a reference comparison.
+    [Suite("world-emitter-ambience",
+        "the world's own PUFFER_STATE emitters read the session's ambience, so a world plume takes "
+        + "the mission wind and its authored FADE_RANGE culls it once a camera is published")]
+    internal static void WorldEmitterAmbience(TestContext ctx)
+    {
+        // C5, whose bootstrap stands up the torch and train plumes, authored FADE_RANGE 300/500:
+        // the tightest band a re-armed far cull has to act on, and the chapter the defect was
+        // measured in.
+        const string chapter = "C5";
+        const float dt = 1f / 60f;
+        var wind = new Vector3(0f, 0f, 12f);
+        // One instance per session, exactly as GameSession holds one and WeatherRig.Tick writes it.
+        var session = new EffectAmbience();
+        session.SetWind(wind);
+        ctx.Ambience = session;
+        // ⚠ Detach the harness clock for the whole suite: it is a FixedStep clock nothing steps, so
+        // FrameDt is 0, no particle would age and every count below would read the same.
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            // ⚠ Private, never the shared cache: this world is built with an ambience of the
+            // suite's own, and a cached one would hand it to every later suite on this chapter.
+            ctx.WithPrivateWorld(chapter, collision: false, world =>
+            {
+                var emitters = new List<Puffer>();
+                foreach (var child in world.Stage.GetChildren())
+                {
+                    if (child is Puffer puffer)
+                        emitters.Add(puffer);
+                }
+                ctx.Check(emitters.Count > 0,
+                    $"{chapter}'s bootstrap builds world emitters built={emitters.Count}");
+                if (emitters.Count == 0)
+                    return;
+
+                int onSession = 0, onStill = 0;
+                foreach (var puffer in emitters)
+                {
+                    if (ReferenceEquals(puffer.Ambience, session))
+                        onSession++;
+                    if (ReferenceEquals(puffer.Ambience, EffectAmbience.Still))
+                        onStill++;
+                }
+                ctx.Same(emitters.Count, onSession,
+                    $"world emitters reading the SESSION's ambience instance");
+                ctx.Same(0, onStill, $"world emitters left on the still-air null object");
+                var control = Puffer.CreateWith(
+                    FadeTestState("no_ambience_control", 0f, 0f, 300f, 400f),
+                    new RecordingEmitterRenderer());
+                ctx.Check(ReferenceEquals(control.Ambience, EffectAmbience.Still),
+                    $"ABLE-TO-FAIL CONTROL: an emitter built with no ambience reads Still, so the count above is a verdict");
+                control.Free();
+
+                // The wind half: the rig's published gust reaches those emitters, and a particle
+                // over that same instance is carried by it (the integrator itself is puffer-wind's).
+                ctx.Check(emitters[0].Ambience.Wind.IsEqualApprox(wind),
+                    $"the wind published on the session reaches the world's emitters wind={emitters[0].Ambience.Wind}");
+                var carried = RunWindParticle(ctx,
+                    WindTestState("world_wind", Vector3.Zero, Vector3.Zero, 3f, 1f), session, 120, dt);
+                ctx.Check(carried.Z > 5f,
+                    $"a particle over that instance is carried downwind z={carried.Z:0.000}");
+                var becalmed = RunWindParticle(ctx,
+                    WindTestState("world_wind_control", Vector3.Zero, Vector3.Zero, 3f, 1f),
+                    EffectAmbience.Still, 120, dt);
+                ctx.Check(becalmed.Length() < 1e-5f,
+                    $"ABLE-TO-FAIL CONTROL: the same particle on the still-air object never moves drift={becalmed.Length():0.000000}");
+
+                // The fade half, on the built emitters themselves: one second of world time with no
+                // camera published, where every live particle is written, then the same emitters
+                // with a camera 60 km away, past every authored band in the install.
+                for (int i = 0; i < 60; i++)
+                {
+                    world.Runtime.Advance(dt);
+                    foreach (var puffer in emitters)
+                        puffer._Process(dt);
+                }
+                int live = 0, drawn = 0;
+                foreach (var puffer in emitters)
+                {
+                    live += puffer.LiveCount;
+                    drawn += puffer.DrawnCount;
+                }
+                ctx.Check(live > 0, $"the bootstrap's emitters are actually emitting live={live}");
+                ctx.Same(live, drawn,
+                    $"with no camera published every live particle is written (the no-camera-no-fade rule)");
+
+                session.SetCamera(new Vector3(0f, 60000f, 0f), Vector3.Down);
+                foreach (var puffer in emitters)
+                    puffer._Process(dt);
+                int bandedLive = 0, bandedDrawn = 0, openLive = 0, openDrawn = 0;
+                foreach (var puffer in emitters)
+                {
+                    bool banded = puffer.State.FarFadeEnd != float.MaxValue;
+                    bandedLive += banded ? puffer.LiveCount : 0;
+                    bandedDrawn += banded ? puffer.DrawnCount : 0;
+                    openLive += banded ? 0 : puffer.LiveCount;
+                    openDrawn += banded ? 0 : puffer.DrawnCount;
+                }
+                ctx.Check(bandedLive > 0,
+                    $"{chapter}'s FADE_RANGE emitters hold particles to cull live={bandedLive}");
+                ctx.Same(0, bandedDrawn,
+                    $"60 km past its authored FADE_RANGE not one of their particles is written");
+                ctx.Same(openLive, openDrawn,
+                    $"and an emitter authoring no far band still draws, so the camera alone culls nothing");
+                ctx.Note($"{chapter} world emitters: {emitters.Count} built, {live} live, {bandedLive} under an authored far band");
+            });
+        }
+        finally
+        {
+            GameClock.Current = clock;
+            ctx.Ambience = null;
+        }
+    }
+
     // ---- the emitter's own modes, with no GPU ---------------------------------------------------
 
     // Every Puffer emission path through the collapsed Emit/Stop pair, plus Burst, over a

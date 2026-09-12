@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Utils;
@@ -749,6 +750,14 @@ public sealed class TestContext
     /// property held first, is never silently reused in its place.</summary>
     public IEmitterFactory? EmitterFactory { get; set; }
 
+    /// <summary>The ambience the next world this builds hands its real emitter factory, what a game
+    /// session gives from its own instance (<see cref="WorldSession.Options.Ambience"/>). Null (the
+    /// default) leaves the option null, so a suite that never touches this gets still air and no
+    /// camera, the state every other emitter suite reads. Mutable for the reason
+    /// <see cref="EmitterFactory"/> is, and used with <see cref="WithPrivateWorld"/> for the same
+    /// one: a cached world would hand this suite's ambience to every later suite on the chapter.</summary>
+    public EffectAmbience? Ambience { get; set; }
+
     /// <summary>Extra sound-group names to prewarm for the next world this builds, a mission's own
     /// vocabulary the anim program never sees (<c>ObjectiveScript.SoundGroupNames()</c>). Mutable,
     /// the same reason <see cref="EmitterFactory"/> is: a suite sets it right before its own
@@ -913,6 +922,7 @@ public sealed class TestContext
                 child.Free();
         }
         EmitterFactory = null;
+        Ambience = null;
         ExtraPrewarmSoundNames = null;
         CutsceneRoots = false;
         WorldBuildPhases = default;
@@ -999,6 +1009,7 @@ public sealed class TestContext
                     Collision = collision,
                     RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                     EmitterFactory = EmitterFactory,
+                    Ambience = Ambience,
                     ExtraPrewarmNames = ExtraPrewarmSoundNames,
                     CutsceneRoots = CutsceneRoots,
                     LandingTriggers = CutsceneRoots,

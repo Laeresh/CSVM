@@ -15,8 +15,8 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "6410c3bdaf263124994aeaf0da892f0d",
-      "exercises": "UV scroll on the falls sheet, the mist puffer, and the alpha-textured spray under the zone's world light; frame-sensitive 1.28 % at 120 vs 121.",
+      "hash": "e33e04b7099dd7369c72039e4f6300c5",
+      "exercises": "UV scroll on the falls sheet, the mist puffer carried on the mission wind and drawn farthest-first, and the alpha-textured spray under the zone's world light; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
@@ -36,29 +36,29 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "17506a01a8986c59cab882be47dcf22c",
-      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, the harbour wake spray the boat start anims emit, alpha sprites lit like the rest, and two mesh point lights that author no fade band; near-static, 51 px at 120 vs 121.",
+      "hash": "fbe54bfca3169be36629522418c3e4c0",
+      "exercises": "C2's solid 3D city blocks, backlot geometry, daylight fog, the boat anims' harbour wake spray with its far puffs culled, alpha sprites lit like the rest, and two mesh point lights that author no fade band; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "b09ef309b5dcb43e2d5db87096c5efc8",
-      "exercises": "coastline, surf edge and open water at close range, the blended surf sheets taking the world light with the water, and the distant spray and smoke puffs sunk into the zone's own fog; static, 9 px at 120 vs 360.",
+      "hash": "d930eb85fd9d64edbc57b00d72176773",
+      "exercises": "coastline, surf edge and open water at close range, the blended surf sheets taking the world light with the water, and the distant spray and smoke puffs culled past their authored far band; static, 9 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "fc6ee6823180574ae49e604d3ac92f31",
-      "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models, with a stack plume fogged at its own distance; frame-sensitive 3.74 %, the largest of the freecam set.",
+      "hash": "aeb0d1b4b7f02d6760ceb56f2fa50eae",
+      "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models, with a stack plume culled past its authored far band and its near puffs on the mission wind; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "ffa175d2387e7d9c431d50246178fb6b",
-      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, moon and stars, the -0.8 mip LOD bias on the ground, and torch puffs sunk into the black fog; a beacon toggle is the only motion.",
+      "hash": "99514a866b2e92fde7aa6a1c92e054c8",
+      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, moon and stars, the -0.8 mip LOD bias, and torch puffs culled past their authored far band; a beacon toggle is the only motion.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {
@@ -78,7 +78,7 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "604327776003c528506c04aebb0539d1",
+      "hash": "906905491bb4394158a7fc61d990858b",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and its top-centre kill line both up, the live one bracketed and labelled, --debug-markers text, gauges, exhaust, shadow, C1; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -106,8 +106,8 @@
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "acee986d666a885af47c84a697c36303",
-      "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal, over C1 ground and cutouts under one world light.",
+      "hash": "a0d87025f8727f3f525cb7b309f4363a",
+      "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer, on the mission wind, as the visible signal, over C1 ground and cutouts under one world light.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
@@ -120,7 +120,7 @@
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "1bd2f03a6607be87690c7498eab5f755",
+      "hash": "83bb20908e0a027e05def27ae6a9e460",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light, a point light on its fade band and ground shadows; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

@@ -17,14 +17,14 @@ farthest-first against pane 0. The distance fade, the accumulator, the pools and
 unauthored-interval constants carry their own constraint. Keys and decode: [../formats/effects.md](../formats/effects.md), [../org/puffer.md](../org/puffer.md).
 
 ## src/Effects/WorldWind.cs
-Two types delivering the mission's authored wind to every puffer that reads it. `WorldWind` is the
-gust model, a static base vector plus a horizontal random-walk gust stepped once per frame off its
-own `Rng.Wind` stream, authored in `weather.zrd`'s `WIND` block (schema:
+Two types delivering the mission's authored wind to every puffer. `WorldWind` is the gust model, a
+static base vector plus a horizontal random-walk gust stepped once per frame off its own `Rng.Wind`
+stream, authored in `weather.zrd`'s `WIND` block (schema:
 [../formats/weather.md](../formats/weather.md); decode: [../org/weather.md](../org/weather.md)).
-`EffectAmbience` is the seam holding the per-frame world state a `Puffer` reads but does not own,
-the wind and every pane's camera pose, handed in at construction rather than reached for.
-`GameSession` owns the one instance and `Session/WeatherRig.Tick` writes it once per frame;
-`EffectAmbience.Still` is the null object every unwired puffer reads. Read `Puffer.cs` next.
+`EffectAmbience` is the seam holding the per-frame state a `Puffer` reads, the wind and every
+pane's camera pose. `GameSession` owns the one instance and `WeatherRig.Tick` writes it per frame;
+the world build takes that same instance by option, so its emitters fade and cull like the player's
+own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffer.cs` next.
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam. `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`

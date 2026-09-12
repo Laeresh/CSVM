@@ -790,6 +790,15 @@ one sentence of measured evidence; everything else belongs in the commit that la
   that way read the aeroplane 31 m from where it started after four seconds at 100 m/s, and the
   camera it was measuring looked correct against a subject that had never flown.
 
+- **INSTR-63**, **A per-session seam that defaults to a null object hides a missing production
+  wiring, so assert WHICH INSTANCE a built subsystem reads, not only what that instance reports.**
+  Every world `PUFFER_STATE` emitter read `EffectAmbience.Still` while the weather rig published to
+  the session's own instance: nothing threw, nothing logged, every puffer suite passed against a
+  fake renderer, and the only symptom was authored 300 and 500 m plumes drawing at 4 to 5 km in a
+  capture. The check that holds it is a suite over a built world comparing by `ReferenceEquals`
+  against the session's instance, with a control that reads the null object so the assertion can
+  fail.
+
 ## SRC, sources and documents
 
 - **SRC-3**, **Use design documents for intent; retail evidence decides shipped details.**
