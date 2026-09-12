@@ -166,6 +166,7 @@ public sealed class SurfaceVehicle
         if (_pool is { Status: DestructibleRegistry.State.Destroyed })
         {
             IsDestroyed = true;
+            Gunner?.Silence();
             Destroyed?.Invoke(this);
             return;
         }

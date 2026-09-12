@@ -86,6 +86,57 @@ the voice in the head-relative mode, so the cue is flat even though its definiti
 a `RANGE`. The play site is the fire routine's out-of-ammo arm and is not owner-gated, so a
 non-player aircraft running dry sounds it flat as well.
 
+## The vehicle gun's voice is renewed per tick, and the renewal is ahead of the refire timer
+
+The keyed loop above is started from the fire DECISION, never from the shot routine, and the refire
+timer sits between the two. `FUN_004b6820` plays no firing sound at all: its only audio call is the
+dry-trigger arm. Every vehicle's loop comes from whichever routine set its trigger byte.
+
+- The player's own gun: `FUN_004881e0`, in both of its arms (the selected group and the held
+  trigger), at a `ttl` of 0 each time.
+- Every other vehicle, an AI aeroplane and a `mode ship` hull alike: the AI fire decision
+  `FUN_0041f420`, which a patrol boat and a turret truck reach from the per-frame update
+  `FUN_0041c270` ([`aiPilot.md`](aiPilot.md), "What a `mode ship` vehicle runs").
+
+In `FUN_0041f420` the play sits between the slot's range window and its refire timer:
+
+| Address | Step |
+|---|---|
+| `0x0041f604` | the slot's rounds `+0x08` must be above zero |
+| `0x0041f68a`, `0x0041f69b` | squared separation inside the slot's own `[+0x18, +0x1c]` window |
+| `0x0041f6d2` | the slot's looped-sound handle `+0x20`; null skips this play and nothing else |
+| `0x0041f6ea`, `0x0041f6ee`, `0x0041f6f5` | the key is the slot's own `+0x24`, the position the VEHICLE origin `+0x204`, and the `ttl` the literal zero pushed here |
+| `0x0041f6fd` | the keyed 3D loop `FUN_0045e470` |
+| `0x0041f749` | only now the refire test, game time against the slot's `+0x10` |
+| `0x0041f75b` | and only inside that arm the trigger byte `+0x2c`, which is what makes a round leave |
+
+So the lease is **zero, renewed every tick that selects the gun**, which is the aircraft slot's
+reading exactly, and the renewal is **ahead of the refire timer**. A gun whose authored refire
+interval is 0.3 s therefore sounds continuously while it holds a target inside its window rather
+than in 0.3 s bursts. The renewal is ahead of the shot routine's aim-quality gate as well, so a
+mount still slewing onto the lead is already sounding. What ends it is always the same event, a pass
+that does not reach the play: an ammo, class or range gate above it closing, the target being
+dropped, or the update not calling the decision at all, which it does only while a mount reports a
+firing solution.
+
+⚠ **A zero lease is one tick of life, not none.** `FUN_0045e470` stamps the expiry as the sound
+clock plus the `ttl`, and the release `FUN_0045e360` drops the handle only once that expiry is
+STRICTLY below the sound clock, so a voice renewed this tick survives this tick's release pass and
+dies on the next one. A build that reads the zero as "stop at once" silences every gun in the
+install.
+
+⚠ **A hull's voice is its weapon's, never a `SOUNDS.CANNON` lease.** The turret fire routine
+`FUN_004aabb0` keys its slot on the turret entry's `SOUNDS.CANNON` at a 0.5 s lease
+([`../formats/turrets.md`](../formats/turrets.md)); this path reads no turret entry at all. Both
+shipped surface defs carry one `wep_29`, whose `LOOPED_SOUND_NAME` is `snd_turretgun`, and
+`t_truck`'s `ai.zrd` emplacement entry is a second, static gun on the same model which authors no
+`SOUNDS` block.
+
+The second play in the same block (`0x0041f741`) is the `cannon_sound` one: the vehicle def's
+`+0x180` at a 0.1 s lease, keyed on the vehicle's own `+0x274` rather than the slot's, and gated on
+the weapon's `CANNON` flag. No shipped vehicle def authors `cannon_sound`, so it never fires here
+either.
+
 ## The two barrels are muzzle-flash / assist, not a rate doubler
 
 Each gun group still has two barrel slots:

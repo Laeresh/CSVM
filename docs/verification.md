@@ -698,6 +698,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   DEBUG, which writes no console line under the default threshold and therefore makes no engine
   call at all.
 
+- **INSTR-59** — **A positional-audio check must read the node the CULL measures from, not only
+  whether the emitter is playing: an audible verdict passes while the two are different nodes, as
+  long as the wrong one happens to stand near the listener.** `GunVoice` moved its child
+  `AudioStreamPlayer3D` to the muzzle and left the node its own cull reads at its parent's
+  position; every turret assertion passed, and the split only showed when a surface hull hung the
+  same component on the world sound node kilometres from where it was firing and came out silent.
+
 - **INSTR-58** — **Compare two runs of a cutscene on a node that episode alone drives, never on
   `camera1`: the cutscene camera is one shared node, and a definition outside the episode takes it
   over on its own schedule.** Reading CM02's capture at 1x and at a held 4x off `camera1` showed

@@ -54,6 +54,7 @@
     "turret-vessel-targets": 3.25,
     "ai-vessel-targets": 3.19,
     "surface-vehicle-guns": 2.66,
+    "surface-gun-voices": 3.33,
     "turret-structure-targets": 1.5,
     "turret-hull-blocks-own-fire": 4.7,
     "turret-moving-hull-blocks-own-fire": 10.3,

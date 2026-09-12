@@ -255,7 +255,7 @@ internal static class TurretVoiceSuites
                     && Mathf.IsEqualApprox(carriedVoice.Emitter().RangeMax, cue.RangeMax),
                     $"…on the same cue and the same authored cull as a world ring");
                 CheckPlayers(ctx, carriedVoice);
-                ctx.Note($"voices: {rings.Count} piratezep rings ({belly.Count} belly), {carried.Length} carried on {CarriedPlane}, {trucks.Count} truck(s) and {cannons.Count} twin cannon(s) silent; ring cue {TurretCue} cull {cue.RangeMax:0} m, lease {GunVoice.LeaseSeconds:0.0} s");
+                ctx.Note($"voices: {rings.Count} piratezep rings ({belly.Count} belly), {carried.Length} carried on {CarriedPlane}, {trucks.Count} truck(s) and {cannons.Count} twin cannon(s) silent; ring cue {TurretCue} cull {cue.RangeMax:0} m, lease {TurretController.VoiceLeaseSeconds:0.0} s");
             });
         }
         finally
@@ -269,22 +269,11 @@ internal static class TurretVoiceSuites
         }
     }
 
-    // Steps until one more round leaves this gun, and stops on that frame: every lease check below
-    // is timed from the shot that renewed it, not from wherever the previous check happened to end.
-    private static bool StepToShot(TurretController gun, Action<int> step)
-    {
-        int fired = gun.ShotsFired;
-        for (int i = 0; i < ShotBudgetFrames && gun.ShotsFired == fired; i++)
-        {
-            step(1);
-        }
-        return gun.ShotsFired > fired;
-    }
-
-    // One voice's live players. The pitch guard is the D31 trap made a check: CAP-09 measured no
-    // Doppler on the original's world emitters, and Godot's 3D player would take a shift from its
-    // own tracking mode without a line of ours asking for one.
-    private static void CheckPlayers(TestContext ctx, GunVoice voice)
+    /// <summary>One voice's live players. The pitch guard is the D31 trap made a check: CAP-09
+    /// measured no Doppler on the original's world emitters, and Godot's 3D player would take a
+    /// shift from its own tracking mode without a line of ours asking for one. Internal so the
+    /// hull's own voice suite reads the same three properties rather than its own copy.</summary>
+    internal static void CheckPlayers(TestContext ctx, GunVoice voice)
     {
         var players = voice.GetChildren().OfType<AudioStreamPlayer3D>().ToList();
         ctx.Same(1, players.Count, $"the voice holds exactly one positional player");
@@ -295,6 +284,18 @@ internal static class TurretVoiceSuites
                 && player.Bus.ToString() == AudioBuses.Effects,
                 $"…on the {AudioBuses.Effects} bus at pitch {player.PitchScale:0.000} with Doppler {player.DopplerTracking}");
         }
+    }
+
+    // Steps until one more round leaves this gun, and stops on that frame: every lease check below
+    // is timed from the shot that renewed it, not from wherever the previous check happened to end.
+    private static bool StepToShot(TurretController gun, Action<int> step)
+    {
+        int fired = gun.ShotsFired;
+        for (int i = 0; i < ShotBudgetFrames && gun.ShotsFired == fired; i++)
+        {
+            step(1);
+        }
+        return gun.ShotsFired > fired;
     }
 
     // A parked aeroplane on the player's team: a target for a ring forced hostile, and a rig with

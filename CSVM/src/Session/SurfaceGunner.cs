@@ -32,6 +32,13 @@ internal sealed class SurfaceGunner
     /// rating is unread.</summary>
     public const float DeadEyeAngleDeg = 4f;
 
+    /// <summary>How long one renewal keeps the hull's firing voice sounding, seconds: the general
+    /// vehicle fire path's own literal, which is ZERO, renewed on every tick that selects the gun
+    /// (docs/org/weaponFire.md, "The vehicle gun's voice is renewed per tick"). ⚠ Not the turret
+    /// path's <see cref="TurretController.VoiceLeaseSeconds"/>: that one is renewed per round and
+    /// has to bridge a refire interval, this one never does.</summary>
+    public const float VoiceLeaseSeconds = 0f;
+
     private readonly SurfaceVehicle _vessel;
     private readonly ProjectilePool _pool;
     private readonly WeaponDef _weapon;
@@ -42,6 +49,7 @@ internal sealed class SurfaceGunner
     private readonly Node3D _firepoint;
     private readonly Transform3D _turretRest;
     private readonly Transform3D _gunRest;
+    private readonly GunVoice? _voice;
     private readonly RandomNumberGenerator _rng;
     private readonly AimCandidateSet _scan = new();
     private readonly List<RankedTargetCandidate> _ranked = new();
@@ -57,7 +65,7 @@ internal sealed class SurfaceGunner
 
     private SurfaceGunner(SurfaceVehicle vessel, ProjectilePool pool, WeaponDef weapon,
         AiWeaponSlot slot, float activationRange, Node3D turretNode, Node3D gunNode,
-        Node3D firepoint)
+        Node3D firepoint, GunVoiceHome? voices)
     {
         _vessel = vessel;
         _pool = pool;
@@ -69,6 +77,10 @@ internal sealed class SurfaceGunner
         _firepoint = firepoint;
         _turretRest = turretNode.Transform;
         _gunRest = gunNode.Transform;
+        // The armed weapon record's own looped cue, which on both shipped surface defs is wep_29's
+        // snd_turretgun. ⚠ Never the vehicle def's cannon_sound: no shipped def authors one, so
+        // that slot is null install-wide (docs/org/weaponFire.md).
+        _voice = GunVoice.Attach(voices, weapon.LoopedSoundName, vessel.Name, VoiceLeaseSeconds);
         _rng = Rng.Stream(Rng.Weapons);
         Ammo = slot.Rounds;
     }
@@ -95,13 +107,19 @@ internal sealed class SurfaceGunner
     /// <summary>The two nodes the mount poses, for the suite's rotated-from-rest reading.</summary>
     public (Node3D Turret, Node3D Gun) MountNodes => (_turretNode, _gunNode);
 
+    /// <summary>This hull's firing voice, or null when the session built no sound archive or the
+    /// weapon authors no looped cue. Exposed for the same reason
+    /// <see cref="TurretController.Voice"/> is: audio cannot be screenshot-verified.</summary>
+    internal GunVoice? Voice => _voice;
+
     /// <summary>Builds the gunner for <paramref name="vessel"/>, or null when this hull is not an
     /// armed one. Every reason to decline is a missing input, never a policy: no pool or catalogue
     /// wired, no authored <c>weapons</c> block, an unknown weapon id, or no mount chain in the
     /// model. ⚠ The node lookup is recursive by name (<c>FUN_004761c0</c>): on both shipped defs
     /// the chain sits under <c>healthy</c>, so a direct-child lookup silences every boat.</summary>
     public static SurfaceGunner? Build(SurfaceVehicle vessel, ProjectilePool? pool,
-        WeaponDefs? weapons, IReadOnlyList<AiWeaponSlot> fit, float activationRange)
+        WeaponDefs? weapons, IReadOnlyList<AiWeaponSlot> fit, float activationRange,
+        GunVoiceHome? voices = null)
     {
         if (pool == null || weapons == null || fit.Count == 0)
         {
@@ -123,7 +141,8 @@ internal sealed class SurfaceGunner
             GD.Print($"surface: '{vessel.Name}' unarmed: model carries no turret/gun/firepoint chain");
             return null;
         }
-        return new SurfaceGunner(vessel, pool, weapon, slot, activationRange, turret, gun, firepoint);
+        return new SurfaceGunner(vessel, pool, weapon, slot, activationRange, turret, gun,
+            firepoint, voices);
     }
 
     /// <summary>One sim step: age the clocks, hold or re-acquire the target, aim the mount, and
@@ -132,6 +151,9 @@ internal sealed class SurfaceGunner
     {
         _fireIn -= dt;
         _holdLeft -= dt;
+        // Ahead of every gate, the way a turret gunner's is: the voice must run its lease down on
+        // the ticks this gun does not renew it, or a hull that stops shooting holds the loop.
+        _voice?.Tick(dt);
         if (!Acquire(out var targetPos, out var targetVel))
         {
             return; // nothing ranks: the mount holds where it is, the way an idle turret does
@@ -152,26 +174,36 @@ internal sealed class SurfaceGunner
 
         var rawLocal = (basis.Transposed() * aimWorld).Normalized();
         AimAt(basis, rawLocal, dt);
+        // The engine gates on the separation itself against the slot's authored window, both ends
+        // squared at parse time.
+        float sep2 = muzzle.DistanceSquaredTo(targetPos);
+        if (sep2 < _slot.MinRangeM * _slot.MinRangeM || sep2 > _slot.MaxRangeM * _slot.MaxRangeM
+            || Ammo <= 0)
+        {
+            return;
+        }
+        // ⚠ Renew here, never beside the shot, and from the hull origin, never the firepoint: the
+        // fire decision renews the loop ahead of both the refire timer and the aim gate below
+        // (docs/org/weaponFire.md).
+        _voice?.Renew(_vessel.Position);
         // The residual is measured against the RAW lead, so the angle the elevation guards gave
         // away is charged to the shot exactly as an aeroplane's traverse clamp is.
         if (SurfaceGunMount.AimQuality(_aimLocal, rawLocal) < AiGunner.AimQualityCos)
         {
             return;
         }
-        // The engine gates on the separation itself against the slot's authored window, both ends
-        // squared at parse time.
-        float sep2 = muzzle.DistanceSquaredTo(targetPos);
-        if (sep2 < _slot.MinRangeM * _slot.MinRangeM || sep2 > _slot.MaxRangeM * _slot.MaxRangeM)
-        {
-            return;
-        }
-        if (_fireIn > 0f || Ammo <= 0)
+        if (_fireIn > 0f)
         {
             return;
         }
 
         Fire(basis);
     }
+
+    /// <summary>Silences the gun at once, for a hull whose death sequence owns everything audible
+    /// from here on. Needed because a destroyed hull is no longer stepped at all, so the lease has
+    /// nothing left to run it down.</summary>
+    public void Silence() => _voice?.Stop();
 
     // A recursive find-by-name under a subtree, the shape FUN_004761c0 takes: the whole subtree,
     // not the immediate children.

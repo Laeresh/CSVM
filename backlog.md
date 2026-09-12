@@ -1309,21 +1309,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-820` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A patrol boat and a turret truck still fire silently: the `mode ship` gun has no voice.**
-  *Evidence:* both shipped surface defs carry `weapons [[wep_29, 9000, 0.3, 1.0, 500.0]]`, and
-  `wep_29`'s `LOOPED_SOUND_NAME` is `snd_turretgun` (`3D`, `LOOPED`, `RANGE [30, 400]`), which is the
-  only shipped use of that cue. A hull fires through the general vehicle routine `FUN_004b6820`, not
-  the turret one, so its loop is the armed weapon record's own slot at vehicle `+0x950` rather than a
-  `SOUNDS.CANNON` lease (`docs/org/weaponFire.md`). `SurfaceGunner.Fire` plays nothing at all.
-  *Fix shape:* hand `SurfaceGunner` a `GunVoice` on the weapon's `LOOPED_SOUND_NAME`, hung where the
-  emplacement voices hang and positioned at the hull's `firepoint`. *⚠ Traps:* the lease is NOT the
-  turret's 0.5 s. `weaponFire.md` reads the aircraft slot's lease as 0, renewed every tick the
-  trigger is held, and `SurfaceGunner.Step` returns early at each gate, so where in `FUN_004b6820`
-  the renewal sits relative to the refire timer has to be decoded before a lease value is chosen;
-  0.3 s refire means the wrong answer is audible either way. Do not reach for `SOUNDS.CANNON` here:
-  the `ai.zrd` `MSG_TUR_TRUCK` entry is a different, static emplacement on the same model, and it
-  authors no `SOUNDS` block at all. *Cross-refs:* `BL-793`'s closing commit,
-  `docs/formats/turrets.md`'s `SOUNDS` section, the `turret-gun-voices` suite.
 - `BL-815` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original plays the dry-trigger cue flat, from no position at all, while an AI aircraft's in CSVM is a world emitter.**
   *Evidence:* `NO_AMMO_WARNING` resolves once at `wep.ini` load into a global (`FUN_005ad630` at
   `005ad71e`) and is played by `FUN_005ac560`, which calls the general play entry with no position

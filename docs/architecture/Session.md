@@ -286,8 +286,8 @@ at its authored spot, its height read off the water, indexed on the world runtim
 definitions anchor on it and register its destructible pool. `GameSession` builds one lazily for
 the roster phase and the generator block; `SessionSimulation` steps it after the generators that
 may launch another hull. `CollectVehicles` offers every hull to the aim assist's vehicle list
-([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons` arm its gun and `Strings`
-names it, resolving slot 20 into `MarkerName`. Read `SurfaceVehicle.cs` next.
+([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons`/`Voices` arm and voice its
+gun and `Strings` names it, resolving slot 20 into `MarkerName`. Read `SurfaceVehicle.cs` next.
 
 ## src/Session/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path
@@ -303,11 +303,11 @@ from here for a woken, undestroyed hull; `SurfaceVehicleRuntime.cs` is how one i
 One hull's gun ([../org/aiPilot.md](../org/aiPilot.md) "What a `mode ship` vehicle runs"): the
 acquisition, mount and fire decision a patrol boat runs, built from the def's own `weapons` tuple
 and the model's `turret` > `gun` > `firepoint` chain, or not built when any input is missing. It
-sweeps the pool's three candidate lists under the team gate, ranks with the non-`jet` scorer, holds
-a target for a hardcoded 20 s, aims through `Flight/SurfaceGunMount` and fires on the authored
-window, interval and magazine. No pursue gate and no quick draw, neither reaching a hull; the def's
-dwell fields are pursuit timers and unread. Rounds leave as a world emplacement's do, and
-non-aircraft candidates are dropped, so a boat does not shoot a boat. Suite: `surface-vehicle-guns`.
+sweeps the pool's three candidate lists under the team gate, ranks with the non-`jet` scorer, holds a
+target for a hardcoded 20 s, aims through `Flight/SurfaceGunMount` and fires on the authored window,
+interval and magazine, dropping non-aircraft candidates so a boat does not shoot a boat. No pursue
+gate and no quick draw, neither reaching a hull. Its `GunVoice` is renewed per tick from the hull
+origin ([../org/weaponFire.md](../org/weaponFire.md)). Suites: `surface-vehicle-guns`, `surface-gun-voices`.
 
 ## src/Session/CutsceneController.cs
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the

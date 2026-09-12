@@ -62,6 +62,10 @@ public sealed partial class SurfaceVehicleRuntime : Node
     /// with the same effect as <see cref="Projectiles"/>.</summary>
     public WeaponDefs? Weapons { get; set; }
 
+    /// <summary>Where a hull's firing voice hangs and what it resolves its cue through. Null leaves
+    /// every hull's gun silent, which is what a muted or soundless session gets.</summary>
+    public GunVoiceHome? Voices { get; set; }
+
     /// <summary>The string table a block's slot-20 title resolves through into
     /// <see cref="SurfaceVehicle.MarkerName"/>. Null leaves every hull unnamed, which is the
     /// shipped case for all but four blocks anyway.</summary>
@@ -119,7 +123,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
         // for every vehicle it parses, so a boat is armed by the same path an aeroplane is
         // (docs/org/aiPilot.md "What a mode ship vehicle runs").
         vessel.Gunner = SurfaceGunner.Build(vessel, Projectiles, Weapons,
-            _defs.WeaponsOf(plan.Def), _defs.ActivationOf(plan.Def) ?? DefaultActivationM);
+            _defs.WeaponsOf(plan.Def), _defs.ActivationOf(plan.Def) ?? DefaultActivationM, Voices);
         _vessels.Add(vessel);
         _byName[name] = vessel;
         GD.Print($"surface: '{name}' ({plan.Def}, {plan.Mode}) built at ({position.X:0},{waterY:0.##},{position.Z:0}){waterNote}" +

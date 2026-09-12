@@ -46,6 +46,13 @@ public sealed class TurretController
     /// platform speed past this discards the estimate for the frame.</summary>
     public const float MaxPlatformSpeed = 447f;
 
+    /// <summary>How long one round keeps this gunner's voice sounding, seconds: the turret fire
+    /// path's own literal, renewed per round. A mount whose fire interval is shorter than this
+    /// never falls silent between shots (docs/formats/turrets.md, "Projectile cadence and cannon
+    /// audio have separate lifetimes"). ⚠ Not a shared constant: the general vehicle path renews
+    /// per tick on a lease of zero instead (docs/org/weaponFire.md).</summary>
+    public const float VoiceLeaseSeconds = 0.5f;
+
     /// <summary>How much of an emplacement's line-of-sight ray, off its own muzzle, is not tested:
     /// the body the gun stands in, which the original never counts as its own cover. Past it the
     /// same hull DOES block. Clear of the mount's own bodies, which engulf a ring out to about
@@ -102,7 +109,8 @@ public sealed class TurretController
         // The fire routine's own gate: the entry's SOUNDS.CANNON, and only while the mount's weapon
         // carries the CANNON flag. Five shipped entries author no SOUNDS at all and three calibres
         // are not cannon, so a silent mount here is the data's answer (docs/formats/turrets.md).
-        Voice = weapon.IsCannon ? GunVoice.Attach(voices, def.CannonSound, label) : null;
+        Voice = weapon.IsCannon
+            ? GunVoice.Attach(voices, def.CannonSound, label, VoiceLeaseSeconds) : null;
         Ammo = def.Ammo;
         Attacking = true;
         _windowLeft = RandRange(def.AttackMin, def.AttackMax);
@@ -583,7 +591,7 @@ public sealed class TurretController
         // ⚠ The voice is renewed, never restarted per round: restarting chaingun.wav at each
         // projectile keeps the ballistic rate but turns an audible firing spell into isolated shots
         // (docs/formats/turrets.md).
-        Voice?.Shot(fp.GlobalPosition);
+        Voice?.Renew(fp.GlobalPosition);
         Ammo--;
         ShotsFired++;
         _fireIn = RandRange(Def.FireRateMin, Def.FireRateMax);

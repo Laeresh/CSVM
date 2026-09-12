@@ -18,21 +18,15 @@ public sealed record GunVoiceHome(Node3D Node, SoundArchive? Archive,
 
 /// <summary>
 /// One mounted gun's firing voice: a single <see cref="AudioStreamPlayer3D"/> carrying the mount's
-/// own cue, moved to the muzzle each round leaves from and held sounding by a lease that shot
-/// renews, so a firing spell is one continuous burst rather than a string of isolated clips. The
-/// cue is selected through <see cref="WeaponAudioCues"/>, the seam <see cref="AiWeaponAudio"/> and
-/// the pilot's own <see cref="FlightAudio"/> read too, and the cull is the cue's own authored
-/// audible distance. ⚠ One voice per mount, never one per owner: the original mints a sound slot
-/// per turret, so a zeppelin's rings each hold their own (docs/formats/turrets.md).
+/// own cue, moved to where it fires from and held sounding by a lease each renewal resets, so a
+/// firing spell is one continuous burst rather than a string of isolated clips. The cue is selected
+/// through <see cref="WeaponAudioCues"/>, the seam <see cref="AiWeaponAudio"/> and the pilot's own
+/// <see cref="FlightAudio"/> read too, and the cull is the cue's own authored audible distance.
+/// ⚠ One voice per mount, never one per owner: the original mints a sound slot per turret, so a
+/// zeppelin's rings each hold their own (docs/formats/turrets.md).
 /// </summary>
 public sealed partial class GunVoice : Node3D
 {
-    /// <summary>How long one shot keeps the voice sounding, seconds: the turret fire path's own
-    /// literal, renewed on every round. A mount whose fire interval is shorter than this never
-    /// falls silent between shots (docs/formats/turrets.md, "Projectile cadence and cannon
-    /// audio have separate lifetimes").</summary>
-    public const float LeaseSeconds = 0.5f;
-
     private const float SilenceThreshold = 0.002f;
 
     private readonly Func<IReadOnlyList<Vector3>>? _listeners;
@@ -40,19 +34,27 @@ public sealed partial class GunVoice : Node3D
     private readonly string _cue;
     private readonly float _cullSq;
     private readonly string _label;
+    private readonly float _lease;
 
     private float _leaseLeft;
+    private bool _leased;
+    // The one step of grace every lease gets, which is what the original's own ordering gives it:
+    // the renewal stamps an expiry of now + lease and the release pass drops the voice only once
+    // the sound clock is PAST it, so a zero lease survives the frame it was renewed in.
+    private bool _renewedThisStep;
     // Null until the voice's first shot, so THAT shot always logs its verdict. A turret cue is
     // audible to 200 m and a gun engages further out than that, so a state seeded `culled` would
     // leave the common case with no line at all (INSTR-45).
     private bool? _culled;
 
-    private GunVoice(WeaponSoundCue cue, Func<IReadOnlyList<Vector3>>? listeners, string label)
+    private GunVoice(WeaponSoundCue cue, Func<IReadOnlyList<Vector3>>? listeners, string label,
+        float lease)
     {
         _cue = cue.Name;
         _cullSq = cue.RangeMax * cue.RangeMax;
         _listeners = listeners;
         _label = label;
+        _lease = lease;
         Name = "GunVoice";
         // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance
         // curve the way WorldSounds and AiWeaponAudio map every other 3D emitter.
@@ -68,15 +70,22 @@ public sealed partial class GunVoice : Node3D
         AddChild(_player);
     }
 
+    /// <summary>How long one renewal keeps this voice sounding, seconds. ⚠ Per mount, not one
+    /// constant: the two fire paths carry different literals, and each owns its own
+    /// (docs/formats/turrets.md, docs/org/weaponFire.md).</summary>
+    public float LeaseSeconds => _lease;
+
     /// <summary>Whether the voice is sounding, read off the live player rather than off a flag this
     /// component keeps, which could agree with itself while the stream is stopped.</summary>
     internal bool Sounding => _player.Playing;
 
     /// <summary>Builds the voice for a mount whose cue is <paramref name="sndName"/>, or null when
     /// the session has no archive, the mount authors no cue, or the definition is not positional.
-    /// <paramref name="label"/> names the mount in this path's log lines. Declining is always said
-    /// out loud: no line at all is the one case indistinguishable from never having tried.</summary>
-    public static GunVoice? Attach(GunVoiceHome? home, string? sndName, string label)
+    /// <paramref name="label"/> names the mount in this path's log lines and
+    /// <paramref name="leaseSeconds"/> is its own fire path's lease. Declining is always said out
+    /// loud: no line at all is the one case indistinguishable from never having tried.</summary>
+    public static GunVoice? Attach(GunVoiceHome? home, string? sndName, string label,
+        float leaseSeconds)
     {
         if (home == null || string.IsNullOrEmpty(sndName))
         {
@@ -87,19 +96,25 @@ public sealed partial class GunVoice : Node3D
             Log.Info("sound", $"gun voice {label}: {sndName} did not resolve as a positional cue, so this mount is silent");
             return null;
         }
-        var voice = new GunVoice(cue, home.Listeners, label);
+        var voice = new GunVoice(cue, home.Listeners, label, leaseSeconds);
         home.Node.AddChild(voice);
-        Log.Info("sound", $"gun voice {label}: loop={cue.Name} cull={cue.RangeMax:0} m lease={LeaseSeconds:0.0} s");
+        Log.Info("sound", $"gun voice {label}: loop={cue.Name} cull={cue.RangeMax:0} m lease={leaseSeconds:0.00} s");
         return voice;
     }
 
-    /// <summary>One round left <paramref name="muzzleWorldPos"/>: the voice moves there and renews
-    /// its lease, which starts the loop again if the previous lease had run out. The position is
-    /// the firing muzzle's, which is what the original's turret path hands its sound slot.</summary>
-    public void Shot(Vector3 muzzleWorldPos)
+    /// <summary>The gun is firing, from <paramref name="worldPos"/>: the voice moves there and
+    /// renews its lease, which starts the loop again if the previous lease had run out. What
+    /// renews it is the caller's own decoded event, a round leaving for a turret and a pass of the
+    /// fire decision for a hull.</summary>
+    public void Renew(Vector3 worldPos)
     {
-        _player.GlobalPosition = muzzleWorldPos;
-        _leaseLeft = LeaseSeconds;
+        // ⚠ The NODE moves, not the player under it: the cull reads this node's own world position
+        // (see Sound), so moving only the player would measure every world gun's distance from the
+        // world sound node it hangs under instead of from the gun.
+        GlobalPosition = worldPos;
+        _leaseLeft = _lease;
+        _leased = true;
+        _renewedThisStep = true;
         Sound();
     }
 
@@ -108,13 +123,20 @@ public sealed partial class GunVoice : Node3D
     /// shooting goes quiet within the lease instead of holding the loop for good.</summary>
     public void Tick(float dt)
     {
-        if (_leaseLeft <= 0f)
+        if (!_leased)
         {
+            return;
+        }
+        if (_renewedThisStep)
+        {
+            _renewedThisStep = false;
+            Sound();
             return;
         }
         _leaseLeft -= dt;
         if (_leaseLeft <= 0f)
         {
+            _leased = false;
             _player.Stop();
             return;
         }
@@ -126,6 +148,8 @@ public sealed partial class GunVoice : Node3D
     public void Stop()
     {
         _leaseLeft = 0f;
+        _leased = false;
+        _renewedThisStep = false;
         _player.Stop();
     }
 

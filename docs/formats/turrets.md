@@ -164,8 +164,15 @@ The lease call is guarded on `SOUNDS.CANNON` being present AND on the entry's we
 `SOUNDS` block at all (`MSG_TUR_AAA` on `aagun**`, `MSG_TUR_THUG`, `MSG_TUR_TRAIN`, `MSG_TUR_TRUCK`,
 `MSG_TUR_8_INCH`), and six more name `snd_chaingun` over a weapon that is not a cannon (`wep_27` on
 `MSG_TUR_NOSE`, `MSG_TUR_HEAVY`, `MSG_TUR_MAIN`, `MSG_TUR_BALLOON_TOP` and `MSG_TUR_ZEP_CANNON`,
-`wep_06` on the other `MSG_TUR_NOSE`). A turret truck and a zeppelin's twin cannon therefore fire
-with no gun voice, and a build that gives them one is louder than the original.
+`wep_06` on the other `MSG_TUR_NOSE`). A turret truck's emplacement and a zeppelin's twin cannon
+therefore fire with no gun voice, and a build that gives those mounts one is louder than the
+original.
+
+⚠ **That silence is the EMPLACEMENT's, and a turret truck carries a second gun that is not silent.**
+The `t_truck` vehicle def arms one `wep_29` of its own, fired through the general vehicle path rather
+than this one, and that path's voice is the weapon's `LOOPED_SOUND_NAME` (`snd_turretgun`) on a lease
+of zero renewed every tick ([../org/weaponFire.md](../org/weaponFire.md)). The two guns sit on the
+same model and answer to different routines, so neither reading tells you anything about the other.
 
 ⚠ **`PITCH` is authored at top level on 37 entries, not the raw count of 38**: the train turret
 (`MSG_TUR_TRAIN`) nests its one `PITCH [20,80]` **inside its `WEAPON` block**, where the turret

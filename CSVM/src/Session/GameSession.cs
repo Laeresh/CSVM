@@ -2220,6 +2220,13 @@ public partial class GameSession : Node3D
             // else uses. Without both, hulls build unarmed (docs/org/aiPilot.md).
             surfaceVehicleRuntime.Projectiles = projectiles;
             surfaceVehicleRuntime.Weapons = weaponDefs;
+            // A hull's gun voice hangs on the world's own sound node, the same home a world
+            // emplacement's takes and for the same reason: the animation runtime memoizes the
+            // lookups inside the subtree a hull is built from.
+            surfaceVehicleRuntime.Voices = state.WorldRuntime?.Sounds is { } hullVoiceHome
+                ? new GunVoiceHome(hullVoiceHome, state.Sounds, state.SoundDefs,
+                    PlayerPositionsSnapshot)
+                : null;
         }
         var worldBindings = new FlightWorldBindings
         {
