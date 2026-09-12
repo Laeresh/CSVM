@@ -350,8 +350,10 @@ RESUME and PREFERENCES in the order a cursor walks, and the four authored strips
 points. Where it stands is read off the block rather than fixed: the campaign block's two columns
 of two leave a 128-pixel channel between them on RESUME's row, which the 132-pixel plate takes with
 two columns of overlap at each neighbour's rounded end, while `ia_escape.zrd`'s three across leave
-no channel and the strip takes the free cell under RESUME instead. The hit test answers the earlier
-row in walk order for a column two strips share. Built-in's board keeps its own Photo Mode row.
+no channel (their midpoint is RESTART's own point) and the strip takes the free cell under RESTART
+instead, level with MAINMENU. The rule is which of the two candidate points covers less authored
+plate. The hit test answers the earlier row in walk order for a column two strips share. Built-in's
+board keeps its own Photo Mode row.
 
 **The progress bar in a campaign dialog is not drawn.** Every campaign `escape.zrd` dialog carries a
 `PROGRESS` entry at `[90, 548]` copied from its `Loading.zrd` sibling, and `FUN_004a0d20` binds no

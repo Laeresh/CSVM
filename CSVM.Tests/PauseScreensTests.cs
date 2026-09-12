@@ -218,8 +218,8 @@ public class PauseScreensTests
 
     /// <summary>The remake's own strip has no authored point, so it takes the one the block leaves:
     /// the campaign block's two columns leave the channel between them, while the Instant Action
-    /// block stands three across and leaves the cell under RESUME. Both wear RESUME's own plates and
-    /// label offset, which is what makes the fifth strip read as one of the four.</summary>
+    /// block stands three across and leaves the cell under RESTART. Both wear RESUME's own plates
+    /// and label offset, which is what makes the fifth strip read as one of the four.</summary>
     [ExtractedDataFact]
     public void ThePhotoStripTakesThePlaceItsOwnBlockLeavesFree()
     {
@@ -230,7 +230,7 @@ public class PauseScreensTests
         var onChart = campaign.Strips[PauseScreens.PhotoRow]!;
         var onBoard = instantAction.Strips[PauseScreens.PhotoRow]!;
         Assert.Equal(new BriefingPoint(237f, 528f), onChart.At);
-        Assert.Equal(new BriefingPoint(352f, 550f), onBoard.At);
+        Assert.Equal(new BriefingPoint(497f, 550f), onBoard.At);
         Assert.Equal(
             ("escape_button1", "escape_button2", "escape_button3"),
             (onChart.Normal, onChart.Rollover, onChart.Activate));

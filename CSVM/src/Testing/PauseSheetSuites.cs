@@ -57,10 +57,10 @@ internal static class PauseSheetSuites
 
     // Where the Instant Action sheet's strips stand, in the order a cursor walks them. The block
     // authors three across and one below the third, so the remake's photo strip takes the free cell
-    // under RESUME rather than a channel between columns, which this block has none of.
+    // under RESTART rather than a channel between columns, which this block has none of.
     private static readonly (float X, float Y)[] Strips =
     {
-        (352f, 510f), (352f, 550f), (497f, 510f), (642f, 510f), (642f, 550f),
+        (352f, 510f), (497f, 550f), (497f, 510f), (642f, 510f), (642f, 550f),
     };
 
     // And where the campaign sheet's stand: two columns of two, whose own channel is where the
@@ -143,7 +143,7 @@ internal static class PauseSheetSuites
         + "dialog's own four texts, no chart, parchment, memento or world icon reaches it, every "
         + "bitmap it names exists in the extraction, C1's stunt sheet matches the reference still "
         + "word for word at its authored points, the remake's photo strip takes the free cell under "
-        + "RESUME on a block that stands three across, the environment digit is read rather than assumed "
+        + "RESTART on a block that stands three across, the environment digit is read rather than assumed "
         + "(loading_i6a puts its second head 40 px left of every other ace dialog's) and "
         + "CampaignSequence.ChapterNumber inverts every campaign chapter's own folder, and a real "
         + "OriginalPauseBoard follows PauseState.Changed with a pointer that walks all five strips "

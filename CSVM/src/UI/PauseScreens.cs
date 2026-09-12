@@ -172,6 +172,7 @@ public static class PauseScreens
     // The widget names the shared BUTTONS block authors, and the name the remake's own strip
     // carries, which no shipped file holds.
     private const string ResumeKey = "RESUME_MISSION_BTN";
+    private const string RestartKey = "RESTART_MISSION_BTN";
     private const string PreferencesKey = "CONFIGURE_BTN";
     private const string QuitKey = "MAINMENU_BTN";
     private const string PhotoKey = "PHOTO_MODE_BTN";
@@ -181,17 +182,18 @@ public static class PauseScreens
     /// standing at <see cref="PhotoRow"/>, which is the order a cursor walks.</summary>
     public static IReadOnlyList<string> ButtonKeys { get; } = new[]
     {
-        ResumeKey, "RESTART_MISSION_BTN", PreferencesKey, QuitKey,
+        ResumeKey, RestartKey, PreferencesKey, QuitKey,
     };
 
     /// <summary>The remake's own strip, in the authored plates and label offset the block's own
     /// RESUME carries, at the one place that block leaves room for a fifth: the channel between two
-    /// columns of strips, or the cell under RESUME where they stand three across. Null where the
+    /// columns of strips, or the cell under RESTART where they stand three across. Null where the
     /// block authors too few strips to stand one against.</summary>
     public static EscapeButton? PhotoStrip(EscapeShared shared)
     {
         ArgumentNullException.ThrowIfNull(shared);
         if (shared.Button(ResumeKey) is not { } resume
+            || shared.Button(RestartKey) is not { } restart
             || shared.Button(PreferencesKey) is not { } preferences
             || shared.Button(QuitKey) is not { } quit)
         {
@@ -199,7 +201,7 @@ public static class PauseScreens
         }
 
         var channel = new BriefingPoint((resume.At.X + preferences.At.X) / 2f, resume.At.Y);
-        var under = new BriefingPoint(resume.At.X, resume.At.Y + (quit.At.Y - preferences.At.Y));
+        var under = new BriefingPoint(restart.At.X, resume.At.Y + (quit.At.Y - preferences.At.Y));
         var at = Covered(shared, channel) <= Covered(shared, under) ? channel : under;
         return new EscapeButton(
             PhotoKey, at, resume.Normal, resume.Rollover, resume.Activate, string.Empty,
@@ -334,7 +336,7 @@ public static class PauseScreens
 
     // How much of the authored plates a strip standing at this point would cover, in square pixels.
     // The block's own shape is what picks between the two places a fifth strip can stand: two
-    // columns leave the channel between them clear, three across leave the cell under the first.
+    // columns leave the channel between them clear, three across leave the cell under the second.
     private static float Covered(EscapeShared shared, BriefingPoint at)
     {
         float covered = 0f;
