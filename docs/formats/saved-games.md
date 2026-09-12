@@ -260,6 +260,14 @@ CSVM-side stand-in, not this decode. Reconciling the two would migrate every exi
 profile, so the two numbering schemes are deliberately separate and neither is derived from the
 other.
 
+**A cell names a pylon only against the fit the aircraft flies.** The original has no pylons at all,
+so which mount a wing's Nth cell is belongs to CSVM's rig ([markers.md](markers.md): odd pylons to
+port, even to starboard, outboard to inboard as the number rises). `Loadout.PylonForCell` walks the
+wing's pylons that the fit actually hangs: a four-pylon stock fit is 1 and 5 to port with 2 and 6 to
+starboard, because a stock fit takes `PylonFillOrder`'s prefix, while the same airframe built two
+pylons a wing in the hangar hangs 1 and 3 against 2 and 4. A cell past what its wing hangs is
+dropped.
+
 One asymmetry in `FUN_00443de0` is traced but not confirmed in play: the pilot's pylon results are
 stored for the `wep_%02d` path, while the wingman's go to `FUN_00444300`, which formats
 `wep_%2d`. Ids `0` to `4` resolve to weapon numbers 5 to 9, which that format renders with a

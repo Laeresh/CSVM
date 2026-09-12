@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Session;
 using Xunit;
@@ -38,11 +40,10 @@ public class CampaignLoadoutTests
     }
 
     [Fact]
-    public void AnOrdnanceCellBindsItsTableRowsWeaponOnItsOwnWingsPylon()
+    public void AnOrdnanceCellCarriesItsTableRowsWeaponOnItsOwnWingsCell()
     {
-        // Cell 0 is the left wing's first pylon and cell 4 the right wing's first, and the wings
-        // interleave across the centreline: those are pylons 1 and 2, and the left wing's second
-        // cell is pylon 3. The stored value is the table index plus one.
+        // Cell 0 is the left wing's first pylon and cell 4 the right wing's first; a cell travels as
+        // a cell, since which pylon it is depends on the fit. The stored value is the row plus one.
         var ordnance = new int[8];
         ordnance[0] = 3;
         ordnance[1] = 2;
@@ -51,22 +52,74 @@ public class CampaignLoadoutTests
 
         var fit = CampaignLoadout.For(plane, Stock);
 
-        Assert.Equal(Stock.Options.PylonOrdnance[2].Id, fit.PylonFor(1));
-        Assert.Equal(Stock.Options.PylonOrdnance[1].Id, fit.PylonFor(3));
-        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.PylonFor(2));
+        Assert.Equal(Stock.Options.PylonOrdnance[2].Id, fit.WingCellFor(0));
+        Assert.Equal(Stock.Options.PylonOrdnance[1].Id, fit.WingCellFor(1));
+        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.WingCellFor(4));
+        Assert.Null(fit.WingCellFor(5));
+    }
+
+    /// <summary>The reported case: a campaign Devastator with all four of its pylons set to flak
+    /// carries flak on all four in the air. A four-pylon stock fit hangs pylons 1, 5, 2 and 6, so
+    /// the left wing's second cell is pylon 5, and resolving it as pylon 3 instead dropped the pick
+    /// and left that pylon on the base fit's high explosive.</summary>
+    [Fact]
+    public void EveryPylonAFourPylonStockFitHangsCarriesItsOwnCellsOrdnance()
+    {
+        var plane = new OwnedPlane { Name = "Gypsy Magic", Ordnance = new[] { 3, 3, 0, 0, 3, 3, 0, 0 } };
+        var stockFit = Stock.For("pdevastator")!;
+
+        var applied = CampaignLoadout.For(plane, Stock).ApplyTo(stockFit);
+
+        Assert.Equal(new[] { 1, 5, 2, 6 }, Pylons(stockFit));
+        Assert.Equal(new[] { "wep_07", "wep_07", "wep_07", "wep_07" }, applied.Hardpoints!.Stock);
+    }
+
+    /// <summary>The same four picks on the same airframe built two pylons a wing in the hangar,
+    /// which hangs 1 and 3 to port with 2 and 4 to starboard: a different pylon set, the same four
+    /// cells, and every one of them carried.</summary>
+    [Fact]
+    public void ATwoAWingHangarBuildCarriesTheSameFourCells()
+    {
+        var plane = new OwnedPlane { Name = "Gypsy Magic", Ordnance = new[] { 3, 3, 0, 0, 3, 3, 0, 0 } };
+        var build = new CustomPlaneDef { Name = "Gypsy Magic", LeftHardpoints = 2, RightHardpoints = 2 };
+        var built = CustomPlaneBuild.LoadoutFor(build, Stock.For("pdevastator")!);
+
+        var applied = CampaignLoadout.For(plane, Stock).ApplyTo(built);
+
+        Assert.Equal(new[] { 1, 2, 3, 4 }, Pylons(built));
+        Assert.Equal(new[] { 1, 2, 3, 4 }, Pylons(applied));
+        Assert.All(Carried(applied), id => Assert.Equal("wep_07", id));
+    }
+
+    /// <summary>A cell the fit has no pylon for is dropped rather than landing on another wing's
+    /// pylon: a Fury hangs three, so its right wing's second cell names nothing.</summary>
+    [Fact]
+    public void ACellBeyondWhatTheWingHangsIsDropped()
+    {
+        var plane = new OwnedPlane { Name = "Gypsy Magic", Ordnance = new[] { 3, 3, 0, 0, 3, 3, 0, 0 } };
+        var stockFit = Stock.For("pfury")!;
+
+        var applied = CampaignLoadout.For(plane, Stock).ApplyTo(stockFit);
+
+        // pylon1 and pylon5 are the port pair and pylon2 the lone starboard one.
+        Assert.Equal(new[] { 1, 5, 2 }, Pylons(stockFit));
+        Assert.Equal(new[] { "wep_07", "wep_07", "wep_07" }, applied.Hardpoints!.Stock);
     }
 
     [Fact]
     public void AnUnsetCellLeavesThePylonAtItsBaseFit()
     {
         var plane = new OwnedPlane { Name = "Gypsy Magic" };
+        var stockFit = Stock.For("pdevastator")!;
 
         var fit = CampaignLoadout.For(plane, Stock);
 
-        for (int pylon = 1; pylon <= LoadoutChoice.MaxPylon; pylon++)
+        for (int cell = 0; cell < LoadoutChoice.OrdnanceCells; cell++)
         {
-            Assert.Null(fit.PylonFor(pylon));
+            Assert.Null(fit.WingCellFor(cell));
         }
+
+        Assert.Equal(stockFit.Hardpoints!.Stock, fit.ApplyTo(stockFit).Hardpoints!.Stock);
     }
 
     [Fact]
@@ -78,7 +131,7 @@ public class CampaignLoadoutTests
 
         var fit = CampaignLoadout.For(plane, null);
 
-        Assert.Null(fit.PylonFor(1));
+        Assert.Null(fit.WingCellFor(0));
         Assert.Equal("ap", fit.GunAmmoFor(1));
     }
 
@@ -92,7 +145,7 @@ public class CampaignLoadoutTests
         // Every gun slot reads slug, the stock ammunition, and no pylon is picked at all, so
         // laying this over an airframe's own fit changes nothing about it.
         Assert.Equal("slug", fit.GunAmmoFor(1));
-        Assert.Null(fit.PylonFor(1));
+        Assert.Null(fit.WingCellFor(0));
     }
 
     /// <summary>An exported plane's own stored picks read the same way the profile record's do, so
@@ -108,8 +161,8 @@ public class CampaignLoadoutTests
 
         Assert.Equal("ap", fit.GunAmmoFor(1));
         Assert.Equal(LoadoutChoice.None, fit.GunAmmoFor(2));
-        Assert.Equal(Stock.Options.PylonOrdnance[2].Id, fit.PylonFor(1));
-        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.PylonFor(2));
+        Assert.Equal(Stock.Options.PylonOrdnance[2].Id, fit.WingCellFor(0));
+        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.WingCellFor(4));
     }
 
     /// <summary>A plane the campaign never exported picks nothing at all, so laying its fit over an
@@ -132,4 +185,16 @@ public class CampaignLoadoutTests
         Assert.Equal("Gypsy Magic", profile.Planes[profile.SelectedPlane].Name);
         Assert.Equal("The Knave", profile.Planes[profile.WingmanPlane].Name);
     }
+
+    // The physical pylons a fit hangs, in the array's own fill order: an entry left empty holds its
+    // index open and hangs nothing, which is what keeps the later entries on their own wing.
+    private static int[] Pylons(LoadoutDef def) =>
+        Occupied(def).Select(i => Loadout.PylonFillOrder[i]).ToArray();
+
+    private static string[] Carried(LoadoutDef def) =>
+        Occupied(def).Select(i => def.Hardpoints!.Stock[i]).ToArray();
+
+    private static IEnumerable<int> Occupied(LoadoutDef def) =>
+        Enumerable.Range(0, def.Hardpoints?.Count ?? 0)
+            .Where(i => def.Hardpoints!.Stock[i] != LoadoutChoice.None);
 }

@@ -30,6 +30,8 @@ public sealed class LoadoutOptions
 /// base it was not built against, a custom plane's saved fit as much as a stock one, with a
 /// pick for a slot the base lacks simply dropped.
 ///
+/// <para>Ordnance rides two keyings: a physical pylon (<see cref="SetPylon"/>), and a saved
+/// record's wing cell (<see cref="SetWingCell"/>), which names a pylon only against a fit.</para>
 /// <para>A null entry means "as the base authored it", which is what makes reset-to-stock a clear
 /// rather than a rebuild. <see cref="None"/> is a different thing: an explicit empty mount.</para>
 /// </summary>
@@ -45,8 +47,14 @@ public sealed class LoadoutChoice
     /// <summary>Pylons 1–8, <see cref="Loadout.PylonFillOrder"/>'s length.</summary>
     public const int MaxPylon = 8;
 
+    /// <summary>A saved record's ordnance cells, four a wing (docs/formats/saved-games.md). A cell
+    /// is a wing and an ordinal, which names a physical pylon only once a fit is known, so those
+    /// picks ride <see cref="SetWingCell"/> rather than <see cref="SetPylon"/>.</summary>
+    public const int OrdnanceCells = 8;
+
     private readonly string?[] _gunAmmo = new string?[MaxGunSlot];
     private readonly string?[] _pylons = new string?[MaxPylon];
+    private readonly string?[] _cells = new string?[OrdnanceCells];
 
     /// <summary>Whether nothing has been picked, so applying this would return the base unchanged.</summary>
     public bool IsStock
@@ -64,6 +72,14 @@ public sealed class LoadoutChoice
             foreach (var p in _pylons)
             {
                 if (p != null)
+                {
+                    return false;
+                }
+            }
+
+            foreach (var c in _cells)
+            {
+                if (c != null)
                 {
                     return false;
                 }
@@ -102,11 +118,29 @@ public sealed class LoadoutChoice
         }
     }
 
+    /// <summary>The weapon picked for ordnance cell <paramref name="cell"/> (0-based, cells 0-3 the
+    /// left wing and 4-7 the right), null for none picked. Out of range reads null.</summary>
+    public string? WingCellFor(int cell) => cell >= 0 && cell < OrdnanceCells ? _cells[cell] : null;
+
+    /// <summary>Picks the weapon a saved record's ordnance cell carries: the cell is the Nth pylon
+    /// of its wing, and which pylon that is depends on what the aircraft hangs, so this pick is
+    /// resolved against the base fit in <see cref="ApplyTo"/> (<see cref="Loadout.PylonForCell"/>)
+    /// rather than against a pylon number here. A <see cref="SetPylon"/> pick for the pylon a cell
+    /// lands on wins, since it names the mount outright.</summary>
+    public void SetWingCell(int cell, string? weaponId)
+    {
+        if (cell >= 0 && cell < OrdnanceCells)
+        {
+            _cells[cell] = weaponId;
+        }
+    }
+
     /// <summary>Drops every pick, so the next <see cref="ApplyTo"/> returns the base's own fit.</summary>
     public void ResetToStock()
     {
         Array.Clear(_gunAmmo);
         Array.Clear(_pylons);
+        Array.Clear(_cells);
     }
 
     /// <summary>This choice laid over <paramref name="stock"/>, as a new def, the base is never
@@ -158,6 +192,18 @@ public sealed class LoadoutChoice
 
     private HardpointSpec ApplyPylons(HardpointSpec hardpoints)
     {
+        // A record's cells name a wing and an ordinal, so they become pylon numbers here, where the
+        // fit that decides which pylons each wing carries is in hand.
+        var ofCell = new string?[MaxPylon + 1];
+        for (int cell = 0; cell < OrdnanceCells; cell++)
+        {
+            int pylon = _cells[cell] != null ? Loadout.PylonForCell(cell, hardpoints) : 0;
+            if (pylon > 0 && pylon <= MaxPylon)
+            {
+                ofCell[pylon] = _cells[cell];
+            }
+        }
+
         var stock = new string[hardpoints.Count];
         for (int i = 0; i < stock.Length; i++)
         {
@@ -165,7 +211,9 @@ public sealed class LoadoutChoice
             // sentinel instead of shortening the array, because dropping one would slide every
             // later pylon onto a different wing.
             int pylon = i < Loadout.PylonFillOrder.Length ? Loadout.PylonFillOrder[i] : 0;
-            stock[i] = PylonFor(pylon) ?? (i < hardpoints.Stock.Length ? hardpoints.Stock[i] : None);
+            stock[i] = PylonFor(pylon)
+                ?? (pylon > 0 && pylon <= MaxPylon ? ofCell[pylon] : null)
+                ?? (i < hardpoints.Stock.Length ? hardpoints.Stock[i] : None);
         }
 
         return new HardpointSpec { Count = hardpoints.Count, Stock = stock, Rounds = hardpoints.Rounds };

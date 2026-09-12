@@ -83,6 +83,47 @@ public class LoadoutChoiceTests
         Assert.Equal(new[] { "wep_06", "wep_14", "wep_06", "wep_06" }, applied.Hardpoints!.Stock);
     }
 
+    /// <summary>A saved record's wing cell lands on the pylon that wing actually hangs: the
+    /// Devastator's four-pylon fit puts 1 and 5 to port, so the left wing's second cell is pylon 5.
+    /// Reading the cell as the wing array's second entry named pylon 3, which this fit does not
+    /// hang, and the pick was dropped.</summary>
+    [Fact]
+    public void AWingCellLandsOnThePylonThatWingHangs()
+    {
+        var choice = new LoadoutChoice();
+        choice.SetWingCell(1, "wep_14");
+        var applied = choice.ApplyTo(Devastator());
+
+        Assert.Equal(new[] { "wep_06", "wep_14", "wep_06", "wep_06" }, applied.Hardpoints!.Stock);
+    }
+
+    /// <summary>A cell for a wing that hangs no such pylon is dropped, the way a pylon pick for a
+    /// mount the base lacks is: the two-pylon fit's pair is 1 and 5, both to port, so its right
+    /// wing has no first pylon to carry the fifth cell.</summary>
+    [Fact]
+    public void AWingCellTheFitHasNoPylonForIsDropped()
+    {
+        var stock = Devastator();
+        stock.Hardpoints = new HardpointSpec { Count = 2, Stock = new[] { "wep_06", "wep_06" } };
+        var choice = new LoadoutChoice();
+        choice.SetWingCell(1, "wep_14");
+        choice.SetWingCell(4, "wep_07");
+
+        Assert.Equal(new[] { "wep_06", "wep_14" }, choice.ApplyTo(stock).Hardpoints!.Stock);
+    }
+
+    /// <summary>A pylon pick names its mount outright, so it wins over the cell that resolves onto
+    /// the same pylon.</summary>
+    [Fact]
+    public void APylonPickWinsOverAWingCellOnTheSamePylon()
+    {
+        var choice = new LoadoutChoice();
+        choice.SetWingCell(1, "wep_14");
+        choice.SetPylon(5, "wep_07");
+
+        Assert.Equal("wep_07", choice.ApplyTo(Devastator()).Hardpoints!.Stock[1]);
+    }
+
     /// <summary>A None pylon keeps its entry as the sentinel rather than shortening the array:
     /// dropping it would slide every later pylon onto the other wing.</summary>
     [Fact]
@@ -190,6 +231,13 @@ public class LoadoutChoiceTests
         Assert.True(choice.IsStock);
         Assert.Null(choice.GunAmmoFor(1));
         Assert.Null(choice.PylonFor(5));
+
+        // A record's cells are picks too, so a fit carrying only those is not stock either.
+        choice.SetWingCell(0, "wep_07");
+        Assert.False(choice.IsStock);
+        choice.ResetToStock();
+        Assert.True(choice.IsStock);
+        Assert.Null(choice.WingCellFor(0));
     }
 
     /// <summary>The Devastator as stock_loadouts.json authors it: three gun slots and four

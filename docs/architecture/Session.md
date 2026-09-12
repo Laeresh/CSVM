@@ -242,14 +242,14 @@ than the compiled twin. The prohibitions on the cut and on the replay path sit o
 bind. Decode: [../formats/saved-games.md](../formats/saved-games.md).
 
 ## src/Session/CampaignLoadout.cs
-The bridge between a campaign profile's stored picks and a flying aircraft's fit: one
-`OwnedPlane`'s ammunition and ordnance arrays as the `LoadoutChoice` a launch hands the session,
-which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are
-the campaign screens' own rather than the original's undecoded per-pylon ordnance id, so an unset
-pylon is left to the base rather than written back. `PylonRow` is the one decoder of the stored
-one-based ordnance value, and every screen reading the field goes through it. The same reading
-serves an exported `CustomPlaneDef`'s own picks, which is how a campaign plane flown from the
-Instant Action picker carries its fit. Screens: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+The bridge between a campaign profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s
+ammunition and ordnance arrays as the `LoadoutChoice` a launch hands the session, which
+`Loadout.Bind` lays over the aircraft's base fit. Engine-free, and both encodings are the campaign
+screens' own rather than the original's undecoded per-pylon ordnance id, so an unset pylon is left to
+the base. `PylonRow` is the one decoder of the stored one-based value; a cell travels as a cell (a
+wing and an ordinal), never a pylon number, since which pylon a wing's second cell is depends on what
+the aircraft hangs. The same reading serves an exported `CustomPlaneDef`, which is how a campaign
+plane flown from Instant Action carries its fit. [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/Session/AirframeSwap.cs
 The three `CALLBACK` codes that hand the player a different airframe in mid mission, and what each

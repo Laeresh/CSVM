@@ -276,14 +276,32 @@ public sealed class Loadout
         }
     }
 
-    /// <summary>The physical pylon a saved record's ordnance cell names: cells 0-3 are the left
-    /// wing and 4-7 the right, each half bounded by that wing's hardpoint count
-    /// (docs/formats/saved-games.md). Out of range answers 0, which no pylon carries.</summary>
-    public static int PylonForCell(int cell) =>
-        cell >= 0 && cell < LeftWingPylons.Length ? LeftWingPylons[cell]
-        : cell >= LeftWingPylons.Length && cell < LeftWingPylons.Length + RightWingPylons.Length
-            ? RightWingPylons[cell - LeftWingPylons.Length]
-            : 0;
+    /// <summary>The physical pylon a saved record's ordnance cell names on <paramref name="fit"/>:
+    /// cells 0-3 are the left wing and 4-7 the right, each naming that wing's own pylons outboard
+    /// to inboard and bounded by what the wing carries (docs/formats/saved-games.md). 0, which no
+    /// pylon carries, for a cell past them.
+    /// ⚠ Resolve against the FIT, never <see cref="LeftWingPylons"/> alone: a four-pylon stock fit
+    /// hangs 1 and 5 to port where a two-a-wing build hangs 1 and 3.</summary>
+    public static int PylonForCell(int cell, HardpointSpec? fit)
+    {
+        int half = LeftWingPylons.Length;
+        if (cell < 0 || cell >= half + RightWingPylons.Length || fit == null)
+        {
+            return 0;
+        }
+
+        int want = cell < half ? cell : cell - half;
+        int seen = 0;
+        foreach (int pylon in cell < half ? LeftWingPylons : RightWingPylons)
+        {
+            if (Hangs(fit, pylon) && seen++ == want)
+            {
+                return pylon;
+            }
+        }
+
+        return 0;
+    }
 
     /// <summary>Binds an authored loadout to a built plane and the weapon catalogue. Throws if a
     /// named marker is absent on the model or a resolved <c>wep_*</c> id is missing.</summary>
@@ -536,6 +554,21 @@ public sealed class Loadout
         }
 
         return Bind(def, plane, weapons);
+    }
+
+    // Whether a fit hangs this pylon at all: its fill-order entry is inside the count and is not
+    // the empty sentinel, which holds an index open and carries nothing.
+    private static bool Hangs(HardpointSpec fit, int pylon)
+    {
+        for (int i = 0; i < fit.Count && i < PylonFillOrder.Length && i < fit.Stock.Length; i++)
+        {
+            if (PylonFillOrder[i] == pylon)
+            {
+                return !string.Equals(fit.Stock[i], LoadoutChoice.None, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return false;
     }
 
     // The hardpoint list read in physical mount order: list positions sorted by pylon number.

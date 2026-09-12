@@ -78,6 +78,7 @@ internal static class CombatSuites
             }
 
             CustomBuildBind(ctx, planesGamez, textures, weapons, stock);
+            CampaignFitBind(ctx, planesGamez, textures, weapons, stock);
             AiLoadoutBind(ctx, planesGamez, textures, weapons);
         }
         finally
@@ -114,6 +115,48 @@ internal static class CombatSuites
         finally
         {
             plane?.Free();
+        }
+    }
+
+    // A campaign record's ordnance cells reaching the pylons, against real geometry: four cells set
+    // to flak flown on the airframe's own four-pylon fit and on the same airframe built two pylons a
+    // wing. The two hang DIFFERENT pylons (1,5,2,6 against 1,3,2,4) for the same four cells, which
+    // is why a cell is resolved against the fit; when it was not, the fit's second pylon on each
+    // wing flew the stock high explosive while the flight check showed the flak.
+    internal static void CampaignFitBind(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        WeaponDefs weapons, StockLoadouts stock)
+    {
+        var record = new OwnedPlane
+        {
+            Name = "Gypsy Magic",
+            Airframe = 5,
+            Ordnance = new[] { 3, 3, 0, 0, 3, 3, 0, 0 },
+        };
+        var fit = CampaignLoadout.For(record, stock);
+        var stockFit = stock.For("pdevastator")!;
+        var build = new CustomPlaneDef { Name = "Gypsy Magic", LeftHardpoints = 2, RightHardpoints = 2 };
+        Census(fit.ApplyTo(stockFit), "the Devastator's own four-pylon fit");
+        Census(fit.ApplyTo(CustomPlaneBuild.LoadoutFor(build, stockFit)), "a two-a-wing Devastator build");
+
+        void Census(LoadoutDef def, string what)
+        {
+            Node3D? plane = null;
+            try
+            {
+                plane = new PlaneBuilder(planesGamez, textures).Build(def.Model);
+                var bound = Loadout.Bind(def, plane, weapons).Hardpoints.OrderBy(h => h.Index).ToList();
+                string census = string.Join(" ", bound.Select(h =>
+                    $"pylon{h.Index}@{h.Pylon.Position.X:+0.00;-0.00}={h.Weapon.Id}"));
+                ctx.Note($"{what} carries {census}");
+                ctx.Same(4, bound.Count, $"{what} hangs the record's four pylons");
+                ctx.Check(bound.All(h => h.Weapon.Id == "wep_07"),
+                    $"{what}: every pylon carries the flak its own cell names ({census})");
+                ctx.Same(2, bound.Count(h => h.Pylon.Position.X < 0f), $"{what} hangs two to port");
+            }
+            finally
+            {
+                plane?.Free();
+            }
         }
     }
 

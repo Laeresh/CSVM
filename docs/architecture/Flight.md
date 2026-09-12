@@ -29,12 +29,12 @@ stock names, and runs it through the same `Bind`, so there is exactly one bind p
 ## src/Flight/LoadoutChoice.cs
 One pilot's edits to a fit, and the rosters the Ammo Selection screen offers. `LoadoutOptions` holds
 the two dropdowns parsed from the same file's `selectable` block, authored in the original's own
-order and neither derived nor sorted. `LoadoutChoice` keys its picks by slot identity, gun slots 1 to
-4 and pylons 1 to 8, rather than by position in a def's arrays, and `ApplyTo` lays them over a base
-handed in rather than looked up, so a custom plane's saved fit takes the same path and a pick for a
-slot the base lacks is simply dropped. `None` is an explicit empty mount while a null entry is no
-choice at all, which is what makes reset-to-stock a clear rather than a rebuild.
-`Session/CampaignLoadout.cs` fills one from a profile. Read `Loadout.cs` for the bind it feeds.
+order and neither derived nor sorted. `LoadoutChoice` keys its picks by slot identity rather than by
+position in a def's arrays, and `ApplyTo` lays them over a base handed in rather than looked up, so a
+custom plane's saved fit takes the same path and a pick for a slot the base lacks is dropped. Guns
+are slots 1 to 4; ordnance is either a physical pylon, which the loadout screens read off the fit, or
+a saved record's wing cell, which names a pylon only against a fit (`Loadout.PylonForCell`). `None`
+is an explicit empty mount, a null entry no choice at all. Fills: `Session/CampaignLoadout.cs`.
 
 ## src/Flight/WeaponBench.cs
 The world-less "do all 48 weapons mount and fire without throwing" pass check behind `--weapon-test`

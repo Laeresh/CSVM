@@ -732,20 +732,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
 
-- `BL-859` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A custom-built plane's flak lands on one wing in
-  flight while the flight check shows it on both.** *Evidence:* reported at the controls: the campaign
-  Devastator built in the hangar (Gypsy Magic) with all four pylons set to flak one at a time
-  fires flak from one wing and HE from the other, the flight check's rocket rows reading flak on
-  every pylon (rows 1, 2, 5 and 6, with 2 and 6 firing HE). The stock Jumping Jane with the same
-  picks fires flak from all four. The page reads the stored ordnance array through
-  `CampaignLoadout.PylonRow` and is right; the in-flight fit reaches the aircraft through
-  `CustomPlaneBuild.LoadoutFor` and `Loadout.Bind`, and the custom build's per-wing counts
-  (`LeftHardpoints`/`RightHardpoints`) are what the stock path does not have. *Fix shape:* bind a
-  custom build's ordnance array over its own wing split the way the flight check's
-  `ResolveHardpoints` does, and pin a four-pylon custom fit in the loadout suite against the eight
-  stored rows. *⚠ Traps:* not the page and not the commit; the array on disk is right.
-  *Cross-refs:* `docs/org/hangar.md` (the build record), `CSVM/src/Session/CampaignLoadout.cs`.
-
 - `BL-866` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Allied AI and turret gunners engage a destroyed
   zeppelin's surviving parts and non-enemy buildings while the live enemies go unfought.**
   *Evidence:* reported at the controls from CM04 (C3/M03) on: wingmen, allied aircraft and the
@@ -774,6 +760,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   order either way. *⚠ Traps:* a deliberate departure behind a setting, never the default: the
   decode is firm and a player who knows the original notices. *Cross-refs:* `BL-866` (the AI's
   own ranking, unrelated list), `CSVM/src/Flight/TargetSelection.cs`.
+
+- `BL-877` `[Bug]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A stock fit of two or six pylons is split
+  between the wings by a count heuristic that disagrees with the rig, so the Hoplite's ammo screen
+  offers a right-wing pylon the aeroplane does not have.** *Evidence:* `HangarFeature.StockWingCounts`
+  groups a fit's pylons as 1-4 against 5-8, while the rig pairs them across the centreline, odd to
+  port and even to starboard ([`docs/formats/markers.md`](docs/formats/markers.md), "Pylons"). The two
+  agree for counts 1, 3, 4, 5, 7 and 8, and disagree for the Hoplite's 2 (the heuristic says 1/1,
+  the rig hangs pylons 1 and 5, both port) and the Firebrand's 6 (3/3 against 4/2). The counts are
+  what the flight check and the ammo screen bound their per-wing cells by, so on those two airframes
+  a stock-fit plane shows a cell whose pylon `Loadout.PylonForCell` cannot find, and the pick is
+  dropped. *Fix shape:* derive the counts from the same wing split the cell join uses, one function
+  in `Loadout`, or decide the heuristic is what the screens should keep showing. *⚠ Traps:* the same
+  counts seed a fresh hangar build (`LoadStockWeapons`), so changing them moves the Hoplite's
+  default build to 2/0 and the Firebrand's to 4/2; the total, and therefore the price, is unchanged.
+  The original's own Hoplite special-plane template is 1/1, which says nothing about a stock fit.
+  *Cross-refs:* `docs/formats/saved-games.md` ("A cell names a pylon only against the fit"),
+  `CSVM/src/UI/Menu/HangarFeature.cs`.
 
 ## Flight model & collision physics
 

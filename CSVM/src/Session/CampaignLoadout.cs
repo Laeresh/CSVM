@@ -74,14 +74,15 @@ public static class CampaignLoadout
             return fit;
         }
 
-        // A cell names its wing's pylon, not pylon cell+1: the two halves interleave across the
-        // centreline, so cell 1 is the left wing's second pylon and that is pylon 3.
-        for (int cell = 0; cell < LoadoutChoice.MaxPylon && cell < ordnancePicks.Count; cell++)
+        // A cell is a wing and an ordinal ("the left wing's second pylon"), and which pylon that is
+        // depends on what the aircraft hangs, so the cell travels as a cell for the fit to resolve
+        // (LoadoutChoice.SetWingCell).
+        for (int cell = 0; cell < LoadoutChoice.OrdnanceCells && cell < ordnancePicks.Count; cell++)
         {
             int row = ordnancePicks[cell] - 1;
             if (row >= 0 && row < table.Count)
             {
-                fit.SetPylon(Loadout.PylonForCell(cell), table[row].Id);
+                fit.SetWingCell(cell, table[row].Id);
             }
         }
 
