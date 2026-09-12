@@ -28,13 +28,13 @@ the wind and every pane's camera pose, handed in at construction rather than rea
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam. `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`
-re-sizes it on demand, `Write` per particle, `Show` publishes the frame), reaching the three
-emitter modes without a GPU via `RecordingEmitterRenderer`. `MultiMeshEmitterRenderer` draws them
-as MultiMeshes of camera-billboarded quads and owns the shader: quad-rim fade, flipbook column from
-per-instance custom data, the soft-particle depth fade, and `csky_srgb_to_linear` on the `COLORS`
-ramp. Blend arrives per atlas column from `Puffer.Create`, keeping this seam free of
-`TextureArchive`; a column set spanning both draws one MultiMesh per blend, each in write order and
-depth-sorted on its cloud's AABB centre. Read `Puffer.cs` for the CPU half.
+re-sizes it, `Write` per particle, `Show` publishes the frame), reaching the three emitter modes
+without a GPU via `RecordingEmitterRenderer`. `MultiMeshEmitterRenderer` draws them as MultiMeshes
+of camera-billboarded quads and owns the shader: quad-rim fade, flipbook column from per-instance
+custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, and the
+mission's distance fog off the sky's globals. Blend arrives per atlas column from `Puffer.Create`,
+keeping this seam free of `TextureArchive`; a column set spanning both draws one MultiMesh per
+blend, each in write order and depth-sorted on its cloud's AABB centre. Read `Puffer.cs` next.
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table scattered through

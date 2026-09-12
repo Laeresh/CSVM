@@ -1533,7 +1533,8 @@ internal static class PufferSuites
     // the bit) is a unit; what needs an engine is that the shipped textures still carry the values
     // the census read, and that a flipbook crossing the flag routes its particles per frame.
     [Suite("puffer-blend-flag",
-        "a puffer's blend is its texture's own additive bit, read per frame, over the chapter's shipped archive")]
+        "a puffer's blend is its texture's own additive bit, read per frame, over the chapter's "
+        + "shipped archive, and each blend's fog comes from the sky rather than from the material")]
     internal static void PufferBlendFlag(TestContext ctx)
     {
         string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
@@ -1572,6 +1573,7 @@ internal static class PufferSuites
         }
 
         PufferBlendRouting(ctx, textures);
+        PufferFogFollowsSky(ctx);
     }
 
     [Suite("puffer-draw-order",
@@ -1792,6 +1794,56 @@ internal static class PufferSuites
             renderer.Show(0);
             ctx.Same(0, renderer.DrawnCounts.Mixed + renderer.DrawnCounts.Additive,
                 $"an empty frame publishes nothing in either list");
+        }
+        finally
+        {
+            owner.QueueFree();
+        }
+    }
+
+    // CSVM draws a puff far past the distance the original culled it at, so a far one has to sink
+    // into the same fog the hill behind it takes. The values are the sky's own global uniforms and
+    // the material declares none, which is what keeps one fog distance across the whole world.
+    // That the globals exist is not asserted here: Godot refuses to compile a shader naming an
+    // unregistered global, so a missing one reaches the harness as an engine error instead.
+    private static void PufferFogFollowsSky(TestContext ctx)
+    {
+        var image = Image.CreateEmpty(2, 1, false, Image.Format.Rgba8);
+        image.Fill(Colors.White);
+        // A column set spanning both blends, so one Attach builds both lists and each blend's own
+        // fog target is read off the shader it was compiled with.
+        var renderer = new MultiMeshEmitterRenderer(ImageTexture.CreateFromImage(image), 2,
+            new[] { true, false }, softParticles: false);
+        var owner = new Node3D();
+        ctx.Host.AddChild(owner);
+        try
+        {
+            renderer.Attach(owner, 4, cullMargin: 1f);
+            int lists = 0;
+            foreach (var child in owner.GetChildren())
+            {
+                if (child is not MultiMeshInstance3D mmi
+                    || mmi.MaterialOverride is not ShaderMaterial mat || mat.Shader == null)
+                    continue;
+                lists++;
+                string code = mat.Shader.Code;
+                bool additive = code.Contains("blend_add");
+                string blend = additive ? "additive" : "mixed";
+                ctx.Check(code.Contains("#include \"res://shaders/csky_atmosphere.gdshaderinc\""),
+                    $"the {blend} list takes its fog colour and range from the sky's own globals");
+                ctx.Check(code.Contains("csky_fog_amount(fog_world, CAMERA_POSITION_WORLD)"),
+                    $"the {blend} list fogs by the sky's own amount at the fragment's world position");
+                ctx.Check(
+                    code.Contains(additive ? "mix(ALBEDO, vec3(0.0)" : "mix(ALBEDO, csky_fog_color"),
+                    $"the {blend} list leaves the right value at full fog");
+                foreach (var entry in mat.Shader.GetShaderUniformList())
+                {
+                    string name = entry.AsGodotDictionary()["name"].AsString();
+                    ctx.Check(!name.Contains("fog"),
+                        $"the {blend} list declares no fog parameter of its own, found {name}");
+                }
+            }
+            ctx.Same(2, lists, $"a split column set builds one draw list per blend to check");
         }
         finally
         {

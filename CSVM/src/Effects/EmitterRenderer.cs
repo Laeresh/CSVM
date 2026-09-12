@@ -49,6 +49,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
         #include "res://shaders/csky_srgb.gdshaderinc"
+        #include "res://shaders/csky_atmosphere.gdshaderinc"
 
         uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
         uniform float frame_count = 1.0;
@@ -91,6 +92,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // modulate every fullbright pass linearises (csky_srgb.gdshaderinc); multiplied in
             // raw it draws two shades too pale. White, the ramp-less case, is a fixed point.
             ALBEDO = t.rgb * csky_srgb_to_linear(v_color.rgb);
+            // The mission's own distance fog, the cylinder every world surface takes. FOG_TARGET is
+            // what this blend leaves at full fog: the sky's colour where the quad replaces the
+            // background, nothing where it only adds to one already fogged (org/puffer.md).
+            vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+            ALBEDO = mix(ALBEDO, FOG_TARGET, csky_fog_amount(fog_world, CAMERA_POSITION_WORLD));
             ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
         }
         """;
@@ -194,8 +200,12 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     {
         if (!ShaderVariants.TryGetValue((mix, soft), out var shader))
         {
+            // A mixed quad stands in for the background, so full fog leaves the sky's fog colour,
+            // the world's own answer. An additive one only brightens a background that already
+            // carries that colour, so full fog leaves nothing to add.
             var code = ShaderCode
                 .Replace("BLEND_MODE", mix ? "blend_mix" : "blend_add")
+                .Replace("FOG_TARGET", mix ? "csky_fog_color" : "vec3(0.0)")
                 .Replace("SOFT_EXPR", soft ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
             ShaderVariants[(mix, soft)] = shader = new Shader { Code = code };
         }

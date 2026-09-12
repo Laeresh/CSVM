@@ -43,22 +43,22 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "39d12b1d919bb0bbc36d97484a8aeee0",
-      "exercises": "coastline, surf edge and open water at close range, the blended surf sheets taking the world light with the water; static, 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
+      "hash": "b09ef309b5dcb43e2d5db87096c5efc8",
+      "exercises": "coastline, surf edge and open water at close range, the blended surf sheets taking the world light with the water, and the distant spray and smoke puffs sunk into the zone's own fog; static, 9 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "6cae7d234436874bccd6981b1cd36dce",
-      "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
+      "hash": "fc6ee6823180574ae49e604d3ac92f31",
+      "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models, with a stack plume fogged at its own distance; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "f6db3166cb3ddd0696fb8497c7bdecb3",
-      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons blinking on their authored periods, lit window skins, moon and stars, and the chapter's -0.8 mip LOD bias on the ground; a beacon toggle is the only motion.",
+      "hash": "ffa175d2387e7d9c431d50246178fb6b",
+      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, moon and stars, the -0.8 mip LOD bias on the ground, and torch puffs sunk into the black fog; a beacon toggle is the only motion.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {

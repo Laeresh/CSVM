@@ -1368,20 +1368,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`spin_props_anim`/`stop_props_anim`), `docs/org/vehicleDamage.md` (the mask), `BL-406` (the
   choke itself), `BL-285` (the engine loop's start/stop inputs).
 
-- `BL-856` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Puffers take no fog, so a distant emitter
-  stands at full contrast against a fogged hill.** *Evidence:* the puffer shader
-  (`Effects/EmitterRenderer.cs:50`) is `fog_disabled` and mixes no fog of its own, where the cloud
-  field (`Effects/FogVolumeClutter.cs:250-256`) mixes `csky_fog_color` by `csky_fog_amount`. The
-  original never needed to: it culls its puffers far nearer than the fog distance. CSVM draws them
-  to its own longer distance on purpose and that distance stays, so the fog is CSVM's own
-  correction for a departure it keeps. *Fix shape:* the cloud field's fog mix in the puffer
-  shader's fragment, for every emitter (world-placed stacks and fires, gun smoke, trails,
-  fireballs alike: one shader, one distance); re-pin the goldens the far emitters touch.
-  *⚠ Traps:* do not shorten the puffer draw distance to match the original's cull; that is the
-  departure the user chose to keep. Additive columns mix toward the fog colour like the rest, the
-  blend bit does not exempt them. *Cross-refs:* [`docs/org/puffer.md`](docs/org/puffer.md),
-  `BL-380` (per-instance fog uniforms, a different zone problem).
-
 - `BL-867` `[Tuning]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
   original's.** *Evidence:* reported at the controls against mission recordings: the pale wisps
   each chapter's `speed_cue.zrd` emits ahead of the player (`Flight/SpeedCue.cs`, three authored
@@ -1395,6 +1381,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`BL-118`'s note under the cloud items): judge the wisps by altitude and by their position
   ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
   (the cue's data), `docs/org/puffer.md`.
+- `BL-876` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A world emitter reads still air and no camera, so
+  its authored wind and its whole distance fade are dead.** *Evidence:* `Mech3/WorldSession.cs:249`
+  builds the world's own `PufferEmitterFactory(textures, o.EffectsParent)` with no ambience
+  argument, and the factory defaults that to `EffectAmbience.Still`
+  (`Mech3/Anim/PufferEmitterFactory.cs:27`); no production caller sets
+  `WorldSession.Options.EmitterFactory`, so every anim-driven `PUFFER_STATE` emitter in the gamez
+  gets the null object while `WeatherRig.Tick` publishes the wind and the pane cameras onto
+  `GameSession`'s own instance. `Puffer._Process` gates the whole camera-distance rule on
+  `viewers.Count > 0`, so with none published the fade, the far cull and the near cull all skip.
+  Measured in a C5 freecam capture with a temporary log line: the emitters report `viewers=0` and
+  a second instance hash than the rig publishes to, and `train_puffer1`/`torch_puffer*`
+  (`FADE_RANGE 300, 500`) draw at 4-5 km. *Fix shape:* hand the session's `EffectAmbience` to that
+  factory, the way `WorldEffectsFactory` already does for the world-effects and crash runtimes, and
+  pin it with a suite that asserts a world emitter's ambience is the session's rather than `Still`.
+  *⚠ Traps:* this re-arms both culls at once, so the fix re-pins every golden carrying a world
+  plume (`c3-island`, `c4-snow`, `c5-city-night` are the known three) by REMOVING far puffs, not by
+  fogging them; and it gives those emitters the mission wind for the first time, which moves the
+  same shots a second way. The fade also stays skipped for one frame at session start, which is a
+  separate, accepted seam recorded in `docs/org/puffer.md`. *Cross-refs:*
+  [`docs/org/puffer.md`](docs/org/puffer.md) (the fog row records the same measurement),
+  `BL-339` (the most-favourable-pane rule the fade runs under).
 
 ## Audio
 
