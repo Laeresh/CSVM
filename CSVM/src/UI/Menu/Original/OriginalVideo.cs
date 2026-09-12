@@ -78,17 +78,17 @@ public sealed partial class OriginalShell
         new(ResolutionKey, "Resolution", "VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC",
             _ => "Select the screen resolution.",
             OriginalRowKind.Dropdown, s => s.ResolutionWords,
-            s => ResolutionIndex(s.ResolutionWords, s._resolution),
+            s => ResolutionIndex(s.Sizes, s._resolution),
             (s, i) => s._resolution = s.ResolutionWords[i]),
         new(DisplayModeKey, "Display Mode", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
             _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
             OriginalRowKind.Dropdown, _ => DisplayModeWords,
-            s => WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode),
+            s => WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode, CSVM.Utils.DisplayModeSetting.Default),
             (s, i) => s._displayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
         new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
             OriginalRowKind.Dropdown, _ => VSyncWords,
-            s => WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync),
+            s => WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync, CSVM.Utils.VSyncSetting.Default),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
@@ -104,13 +104,18 @@ public sealed partial class OriginalShell
     /// <summary>The sizes the resolution row offers, which is what the window's own screen can
     /// hold. Every other row's words are a fixed vocabulary; this one's are enumerated per screen,
     /// so a shell with no screen to ask offers every candidate size instead.</summary>
-    public IReadOnlyList<string> ResolutionWords =>
-        _screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.AllSizes;
+    public IReadOnlyList<string> ResolutionWords => Sizes.Words;
 
     /// <summary>The screens the monitor row offers, one label per screen in index order. Enumerated
     /// like the resolution row's sizes, so a shell with no engine to ask offers the one screen it
     /// can name.</summary>
     public IReadOnlyList<string> MonitorWords => Screens.Labels;
+
+    // The screen's sizes and the one a saved size it lacks falls back to, read through the reader
+    // on every access like the screens below. The row's value falls back through this list's own
+    // fallback, the same word ResolutionSetting.Resolve lands on, so the row cannot name a size the
+    // window would not be standing at.
+    private CSVM.Utils.SizeList Sizes => _screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.Unknown;
 
     // The machine's screens and the one a saved index that names none falls back to. Read through
     // the reader on every access, since a monitor can be plugged in while the page stands open. The
@@ -137,21 +142,21 @@ public sealed partial class OriginalShell
         FocusKey(key);
     }
 
-    // Where a saved word sits among a row's own values, and every word row's default: a word the
-    // vocabulary does not know, or none saved at all, shows as the first value, which each of these
-    // vocabularies orders as the behaviour with no options file.
-    private static int WordIndex(IReadOnlyList<string> words, string? word) => Math.Max(0, IndexOf(words, word));
+    // Where a saved word sits among a row's own values: a word the vocabulary does not know, or
+    // none saved at all, shows as the setting's own default, the behaviour with no options file,
+    // which is not the first value of either vocabulary.
+    private static int WordIndex(IReadOnlyList<string> words, string? word, string fallback)
+    {
+        int at = IndexOf(words, word);
+        return at >= 0 ? at : Math.Max(0, IndexOf(words, fallback));
+    }
 
     // The resolution row's value. Its words are the screen's own sizes rather than a vocabulary, so
-    // the first of them is the smallest the monitor holds and not the behaviour with no options
-    // file; a size this screen does not offer shows as the project default, which every list holds.
-    // That is ResolutionSetting.Resolve's fallback rule, and the row has to agree with it or it
-    // would name a size the window is not standing at.
-    private static int ResolutionIndex(IReadOnlyList<string> words, string? saved)
-    {
-        int at = IndexOf(words, saved);
-        return at >= 0 ? at : Math.Max(0, IndexOf(words, CSVM.Utils.ResolutionSetting.Default));
-    }
+    // a size this screen does not offer, or none saved at all, shows as the list's own fallback,
+    // the screen's size. That is ResolutionSetting.Resolve's fallback rule, and the row has to
+    // agree with it or it would name a size the window is not standing at.
+    private static int ResolutionIndex(CSVM.Utils.SizeList sizes, string? saved) =>
+        WordIndex(sizes.Words, saved, sizes.Fallback);
 
     private static int IndexOf(IReadOnlyList<string> words, string? word)
     {

@@ -335,7 +335,7 @@ public sealed partial class OriginalShell
     private readonly BoardArt _activePointer;
     private readonly BoardArt _passivePointer;
     private readonly Func<CSVM.Utils.OptionsDef>? _options;
-    private readonly Func<IReadOnlyList<string>>? _screenSizes;
+    private readonly Func<CSVM.Utils.SizeList>? _screenSizes;
     private readonly Func<CSVM.Utils.ScreenList>? _screens;
     private readonly ControlsFeature? _controls;
     private readonly SliderControl _slider = new();
@@ -396,9 +396,10 @@ public sealed partial class OriginalShell
         // Reads the saved options the Options screen shows back; null opens it on the defaults,
         // which is what an engine-free test wants. The shell never writes them.
         Func<CSVM.Utils.OptionsDef>? options = null,
-        // Reads the sizes the window's own screen can hold, the resolution row's words; null offers
-        // every candidate size, there being no screen to ask without an engine.
-        Func<IReadOnlyList<string>>? screenSizes = null,
+        // Reads the sizes the window's own screen can hold, the resolution row's words and the size
+        // a saved one the screen lacks falls back to; null offers every candidate size, there being
+        // no screen to ask without an engine.
+        Func<CSVM.Utils.SizeList>? screenSizes = null,
         // Reads the screens the machine has, the monitor row's words and the screen a saved index
         // that names none falls back to; null offers the one screen an engine-free caller can.
         Func<CSVM.Utils.ScreenList>? screens = null,

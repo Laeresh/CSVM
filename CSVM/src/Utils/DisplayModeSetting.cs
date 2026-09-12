@@ -10,26 +10,28 @@ public readonly record struct DisplayModePlan(DisplayServer.WindowMode Mode, str
 /// The window's display mode: a bordered window, a borderless one filling the screen, or exclusive
 /// fullscreen. The words are <see cref="DisplayWords.DisplayModes"/> and the sources layer the way
 /// <see cref="VSyncSetting"/>'s do with one layer fewer, there being no config key: the saved word,
-/// then windowed, which is what <c>project.godot</c> ships. <see cref="Apply"/> is the only place
-/// <see cref="DisplayServer.WindowSetMode"/> is called.
+/// then borderless. <see cref="Apply"/> is the only place <see cref="DisplayServer.WindowSetMode"/>
+/// is called.
 /// ⚠ Nothing here touches focus. The startup path owns it (an interactive session asks for it once,
 /// a scripted one hides the window), and a mode change that cleared <c>no_focus</c> again or asked
 /// for the foreground would hand a scripted run's focus back. See docs/verification.md's SHELL-13.
 /// </summary>
 public static class DisplayModeSetting
 {
-    /// <summary>The mode a launch with no saved word runs in, the one <c>project.godot</c>'s
-    /// windowed 1280x720 already gives it.</summary>
-    public const string Default = DisplayWords.Windowed;
+    /// <summary>The mode a launch with no saved word runs in: the borderless window filling the
+    /// screen, which fills it at the screen's own size and leaves the desktop reachable beneath.
+    /// <c>project.godot</c> ships windowed 1280x720, and a scripted run, which never applies this
+    /// setting, keeps that window.</summary>
+    public const string Default = DisplayWords.Borderless;
 
     /// <summary>The mode the two sources resolve to: <paramref name="savedWord"/> when the
-    /// vocabulary knows it, else windowed. A word this vocabulary does not know reads as never set
+    /// vocabulary knows it, else borderless. A word this vocabulary does not know reads as never set
     /// and falls through, the same contract <see cref="OptionsStore"/> validates the field
     /// under.</summary>
     public static DisplayModePlan Resolve(string? savedWord) =>
         TryParseWord(savedWord, out var mode)
             ? new DisplayModePlan(mode, savedWord!, "options.json")
-            : new DisplayModePlan(DisplayServer.WindowMode.Windowed, Default, "default");
+            : new DisplayModePlan(DisplayServer.WindowMode.Fullscreen, Default, "default");
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>.
     /// ⚠ A deterministic run reads no saved display setting: options.json is one machine's state

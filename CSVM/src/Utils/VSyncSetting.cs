@@ -14,13 +14,21 @@ public readonly record struct VSyncPlan(bool Enabled, int MaxFps, string Source)
 /// words are <see cref="DisplayWords.VSyncChoices"/> and the ones that parse as integers are caps
 /// in frames per second. The sources layer the way <see cref="GraphicsMode"/> layers its own:
 /// <c>--no-vsync</c>, then the saved <c>vsync</c> option, then the <c>display.vsync</c> config key,
-/// then V-Sync on. <see cref="Apply"/> is the only place the two engine calls are made.
+/// then V-Sync off. <see cref="Apply"/> is the only place the two engine calls are made.
 /// </summary>
 public static class VSyncSetting
 {
-    /// <summary>The config key under the saved option. Its default is on, which is also the
-    /// setting's default, so a machine with neither file paces on the screen.</summary>
+    /// <summary>The config key under the saved option: true turns V-Sync on for a machine whose
+    /// options file does not say, false is what its absence reads as.</summary>
     public const string Key = "display.vsync";
+
+    /// <summary>The config key's value where the file does not carry it, which is also the
+    /// setting's own default, so a machine with neither file runs uncapped and unpaced.</summary>
+    public const bool ConfigDefault = false;
+
+    /// <summary>The word a launch with nothing saved runs under, off with no cap, the same pacing
+    /// <see cref="Resolve"/> lands on with no saved word and the config key at its default.</summary>
+    public const string Default = DisplayWords.VSyncOff;
 
     /// <summary>The <see cref="VSyncPlan.MaxFps"/> of a loop under no cap, Godot's own spelling of
     /// "as fast as it renders".</summary>
@@ -28,10 +36,9 @@ public static class VSyncSetting
 
     /// <summary>The pacing the three sources resolve to, highest first: <paramref name="flagOff"/>
     /// (<c>--no-vsync</c>), then <paramref name="savedWord"/>, then <paramref name="configOn"/>,
-    /// then on. A saved word this vocabulary does not know reads as never set and falls through,
+    /// then off. A saved word this vocabulary does not know reads as never set and falls through,
     /// the same contract <see cref="OptionsStore"/> validates the field under. A config key reading
-    /// on is reported as the default, since a file that sets it true is not distinguishable from a
-    /// file that leaves it alone.</summary>
+    /// on is reported under the key's name, since on is the one value a file has to set.</summary>
     public static VSyncPlan Resolve(bool flagOff, string? savedWord, bool configOn)
     {
         if (flagOff)
@@ -44,7 +51,7 @@ public static class VSyncSetting
             return new VSyncPlan(savedOn, savedCap, "options.json");
         }
 
-        return configOn ? new VSyncPlan(true, Uncapped, "default") : new VSyncPlan(false, Uncapped, Key);
+        return configOn ? new VSyncPlan(true, Uncapped, Key) : new VSyncPlan(false, Uncapped, "default");
     }
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>.

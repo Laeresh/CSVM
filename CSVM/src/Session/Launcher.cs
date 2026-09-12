@@ -475,7 +475,7 @@ public partial class Launcher : Node3D
         // The pacing's three sources and both engine calls are VSyncSetting's; --no-vsync uncaps
         // the loop so frame/fps/script report work done rather than a refresh cap. The config read
         // stays unconditional so it self-registers, see Utils/Config.cs's entry.
-        bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, true);
+        bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault);
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, VSyncSetting.SavedWord(_spec.Det), vsyncOnByConfig));
 
         // The saved screen, then the mode, then the size, for a session someone is at only: a
@@ -1468,7 +1468,7 @@ public partial class Launcher : Node3D
         MonitorSetting.Apply(MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens()));
         DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
         ResolutionSetting.Apply(ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes()));
-        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, true)));
+        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);

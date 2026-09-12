@@ -198,31 +198,31 @@ itself is written up as a divergence in `docs/architecture/Root.md`.
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
 runs to without it, since a cap only means anything with V-Sync off. `Resolve` layers the sources
 the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the `display.vsync`
-config key, then on; a word outside `DisplayWords.VSyncChoices` reads as never set. `SavedWord`
-holds the `--det` guard, so a deterministic run reads no saved display setting. `Apply` is the one
-place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are called, used by `Launcher`'s
-startup and by its Options apply, and it logs the source that won. The cap is a render rate and
-reaches no simulation. Read `Session/Launcher.cs` next for both call sites.
+config key (true turns it on), then off and uncapped; a word outside `DisplayWords.VSyncChoices`
+reads as never set, and `Default` is the word a never-set VIDEO row shows. `SavedWord` holds the
+`--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
+called, by `Launcher`'s startup and its Options apply, and logs the source that won. The cap is a
+render rate and reaches no simulation. Read `Session/Launcher.cs` next for both call sites.
 
 ## src/Utils/DisplayModeSetting.cs
 The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
 the screen, or exclusive fullscreen. `Resolve` layers the way `VSyncSetting` does with one layer fewer,
-there being no config key: the saved `displayMode` word, then windowed, which is what `project.godot`
-ships; an unknown word reads as never set. `SavedWord` holds the `--det` guard. `Apply` is the one place
-`DisplayServer.WindowSetMode` is called and skips it when the window already stands in that mode. Godot's
-names invert the reading: `Fullscreen` is the borderless window, `ExclusiveFullscreen` the exclusive mode.
-Nothing here touches focus, which `Launcher._Ready` owns (`../verification.md`'s SHELL-13); that startup
-call is skipped for a scripted run, whose hidden window is captured against the pinned viewport.
+there being no config key: the saved `displayMode` word, then borderless; an unknown word reads as never
+set. `SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetMode` is called
+and skips it when the window already stands in that mode. Godot's names invert the reading: `Fullscreen`
+is the borderless window, `ExclusiveFullscreen` the exclusive mode. Nothing here touches focus, which
+`Launcher._Ready` owns (`../verification.md`'s SHELL-13); that startup call is skipped for a scripted run,
+which keeps `project.godot`'s windowed 1280x720 viewport, so the borderless default never reaches a golden.
 
 ## src/Utils/ResolutionSetting.cs
 The window's size. Godot exposes no video-mode list, only a screen's own size, so `Sizes` builds the
-per-screen list as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that size
-and the project default, both always offerable. `Resolve` layers the saved `resolution` over the 1280x720
-`project.godot` ships. A saved size the screen does not offer falls back to that default and never to the
-nearest offered one, since every other option here falls through to its own default and a nearest match
-would hand the player an aspect ratio they did not pick. `SavedWord` holds the `--det` guard. `Apply` is
-the one place `DisplayServer.WindowSetSize` is called; it skips a window that is not windowed, whose size
-the mode owns, and re-centres one it resized, a resize otherwise growing off the screen's bottom-right.
+per-screen `SizeList` as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that
+size, the list's fallback. `Resolve` layers the saved `resolution` over it, so nothing saved runs at the
+screen's own size, which the borderless default fills anyway; a saved size the screen does not offer falls
+back to that size and never to the nearest, since a nearest match would hand the player an aspect ratio
+they did not pick. `Unknown` is the engine-free list, every candidate size over `project.godot`'s 1280x720.
+`SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetSize` is called; it
+skips a window the mode sizes (any but windowed) and re-centres one it resized, a resize growing off-screen.
 
 ## src/Utils/MonitorSetting.cs
 The screen the window sits on. `Screens` labels the machine's screens one per index, "Screen 0 (1920x1080)"
@@ -280,7 +280,7 @@ un-silence a scripted run. The `audio-levels-launch` suite drives that whole lad
 
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
-request → Built-in default, with the caller's availability check applied only after the request is
-picked. `Resolve` never rewrites what `Requested` would answer, so a fallback cannot alter
-`OptionsStore`'s saved value. Presentation names are plain strings; no presentation contract type
-lives here.
+request → the Original default, with the caller's availability check applied only after the request
+is picked, so a machine without the extracted menu data lands on Built-in with a reason. `Resolve`
+never rewrites what `Requested` would answer, so a fallback cannot alter `OptionsStore`'s saved
+value. Presentation names are plain strings; no presentation contract type lives here.
