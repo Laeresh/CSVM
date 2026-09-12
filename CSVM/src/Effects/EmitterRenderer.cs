@@ -236,6 +236,10 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 // billboarding moves verts off the MultiMesh's computed AABB, pad culling; the
                 // margin covers the largest tuned size any spawn path could produce
                 ExtraCullMargin = cullMargin,
+                // ⚠ Do not switch this to node-origin sorting; a trail emitter's node sits at the
+                // world origin. Godot's default, pinned because the between-emitter half of the
+                // original's depth sort rides on it (docs/org/textures.md)
+                SortingUseAabbCenter = true,
             };
             parent.AddChild(layer._mmi);
             return layer;

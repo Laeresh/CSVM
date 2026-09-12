@@ -313,6 +313,7 @@ Everything here is a known, deliberate divergence, not a gap waiting to be close
 | **Particle pools with a ceiling**, and pooled copies of each effect template | See the ⚠ below, INVENTED on both counts. A continuous emitter's pool doubles on demand up to `ContinuousPoolMax`, so only the ceiling is the divergence, not the starting size |
 | **The `COLORS` ramp linearised in the shader** | Not a divergence but a translation: the ramp's bytes are DX7 framebuffer values (the smoke screen's `53,74,37`), and Godot's linear pipeline needs `csky_srgb_to_linear` on them to put the same byte back on screen, as every fullbright pass already does. Multiplied in raw, that ramp draws `109,126,92` against the reference's `50,68,35`, two shades too pale on every ramped puffer |
 | **One alpha per particle across the panes** | The original evaluates the fade per particle per DRAW, so each splitscreen pane gets its own distances. Ours is one `MultiMesh` per emitter shared by every pane with the alpha written once per frame, so since `BL-339` the bands are run against EVERY pane's camera and the particle takes the most favourable answer: drawn if any pane should see it, at that pane's alpha. A pane can therefore see a puff its own camera would have faded further; per-pane alpha would take one MultiMesh per pane. Identical to the original wherever there is one viewer, which is every capture, freecam shot and single-player session. Relatedly, an emitter drawing on the very first frame of a session can beat the camera publish by one frame and draw unfaded, one frame of full alpha at session start, left alone rather than deferred |
+| **One draw ORDER across the panes, taken from pane 0** | The same seam, one field further on: the instance buffer carries one order, so the back-to-front sort runs against the first pane's camera and every pane draws that order. Deliberately pane 0 rather than a most-favourable rule, because there is no favourable order, only a different one per viewer. A pane looking along a different axis can therefore see a nearer puff painted under a farther one. Exact wherever there is one viewer, and a per-pane order would take one MultiMesh per pane, the same price as per-pane alpha. With no camera published at all the order is the emitter's own, unsorted, which is the session's first frame and every unwired lab |
 | ~~`puffer.fireRiseScale` / `fireLifetimeScale`~~ | **DELETED 2026-08-10.** The one invented multiplier this system carried, and it is gone, see below |
 
 ⚠ **Every pool size in this system is INVENTED, not decoded.** The particle pools (the trail
@@ -389,9 +390,15 @@ flares, the impact rings and the HUD hilites.
 because those sit at ground level where it would zero every fresh puff against the terrain behind
 it. Wiring it back into blend would put the decoded rule back out.
 
-⚠ **The ordering delta is ours, not the engine's.** Each of our emitters is one `MultiMesh` with
-`depth_draw_never` and no per-particle sort, so mixed sprites paint in instance-index order and an
-old near-black puff can cover a young bright flame. The original sorts its transparent polygons
-farthest-first across the whole frame (`FUN_005a6160` → `FUN_005a5fa0`, key proportional to
-distance, comparator `LAB_005a5f00`), so it has no such exposure. See
-[`textures.md`](textures.md), "The transparent list is depth-sorted".
+**The draw order is the original's, in two halves.** `Puffer._Process` writes each frame's
+particles to the renderer farthest-first on view depth, so an old near-black puff behind a young
+bright flame no longer covers it; between emitters and against the world's transparent surfaces the
+order is Godot's own per-camera transparent-object sort. What remains is granularity: Godot sorts
+objects where the original sorts polygons, and one order serves every pane. The decode, the three
+sort passes and both residuals are in [`textures.md`](textures.md), "The transparent list is
+depth-sorted".
+
+⚠ **A uniform-colour spray is order-invariant, so it cannot show an ordering change.** Alpha-mixing
+quads that carry the same RGB and the same alpha gives the same pixel in any order, which is why the
+waterfall and speed-cue goldens do not move for this and why the refuel tanks move only on the
+frames where two flipbook columns are alive at once.

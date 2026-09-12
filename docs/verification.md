@@ -227,6 +227,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   can photograph the frame a presentation switch passes through. Hash-identical shots prove such a
   change moved no settled pixel, never that it fixed the transition; settle that from the frame
   order in code and from a suite that reads the state across it.
+- **GOLD-14**, **A blend-ORDER change is invisible wherever the overlapping quads share a colour
+  and an alpha, so judge one by the shots that CAN move and never by a count of unmoved ones.**
+  Alpha-mixing identical colours is a convex combination of identical colours, so the pixel is
+  order-independent. Sorting every particle back-to-front left `c1-waterfall` and `c1-stunt-marker`
+  bit-identical, both single-column sprays, and moved the five shots carrying two live flipbook
+  columns by 0.007 % to 0.712 % of pixels; two of three frames of the scene the item was filed on
+  read byte-identical for the same reason.
 
 ## DET, determinism and randomness
 

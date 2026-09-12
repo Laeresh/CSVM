@@ -235,6 +235,7 @@
     "plane-shader-reuse": 0.252,
     "player-destroy-choreography": 1.737,
     "puffer-distance-fade": 0.005,
+    "puffer-draw-order": 0.013,
     "puffer-fire-column": 0.035,
     "puffer-idle-process-gate": 0.005,
     "puffer-modes": 0.019,

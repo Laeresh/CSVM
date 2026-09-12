@@ -1574,6 +1574,195 @@ internal static class PufferSuites
         PufferBlendRouting(ctx, textures);
     }
 
+    [Suite("puffer-draw-order",
+        "the frame's particles reach the renderer farthest-first against pane 0, so a young bright "
+        + "sprite paints over an old dark one at the same site")]
+    internal static void PufferDrawOrder(TestContext ctx)
+    {
+        // ⚠ Detach the harness clock for the whole suite. It is a FixedStep clock nothing steps, so
+        // FrameDt is 0, no particle would age and every flipbook column would read 0.
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferDrawOrderRow(ctx);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    // A flipbook whose column rises with age, so the written column says how old each particle is:
+    // column 0 is the young bright frame, the last column the dying dark one.
+    private static void PufferDrawOrderRow(TestContext ctx)
+    {
+        var state = new PufferState
+        {
+            Name = "order_puffer",
+            Number = 1,
+            TimeInterval = 1f / 60f,
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 1f,
+            LifetimeMax = 1f,
+            TextureSequence = new[] { (0f, "fire_f01"), (0.05f, "fire_f06") },
+        };
+        var camera = new Vector3(0f, 0f, 0f);
+        var forward = Vector3.Forward;   // down −Z
+        var amb = new EffectAmbience();
+        amb.SetCamera(camera, forward);
+
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true, ambience: amb);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            // Emitted AWAY from the camera, one particle a step, so the spawn order is
+            // near-to-far and the decode's order is its exact reverse. Sorting the wrong way, or
+            // not at all, therefore fails rather than passing on a coincidence.
+            const float step = 1f / 60f;
+            for (int i = 1; i <= 6; i++)
+            {
+                puffer.Emit(new Vector3(0f, 0f, -50f * i), Basis.Identity, step);
+                puffer._Process(step);
+            }
+
+            var written = gpu.LastFrame;
+            ctx.Check(written.Count >= 5,
+                $"the run laid a row of particles down the view axis count={written.Count}");
+            if (written.Count < 5)
+                return;
+
+            var depths = new List<float>(written.Count);
+            foreach (var p in written)
+                depths.Add(forward.Dot(p.Position - camera));
+            bool descending = true;
+            for (int i = 1; i < depths.Count; i++)
+                if (depths[i] > depths[i - 1] + 1e-3f)
+                    descending = false;
+            ctx.Check(descending,
+                $"every particle is written no nearer than the one before it, over {depths.Count} written");
+            ctx.Check(depths[0] > depths[depths.Count - 1],
+                $"the first written is the farthest ({depths[0]:0} m) and the last the nearest ({depths[depths.Count - 1]:0} m)");
+
+            // Here the oldest puff is the NEAREST, so its dark dying column paints last and that is
+            // the rule rather than the defect: depth decides, never age or spawn order.
+            ctx.Check(written[0].Frame < written[written.Count - 1].Frame,
+                $"with the old puff nearest, the young column ({written[0].Frame}) is written first and the dark one ({written[written.Count - 1].Frame}) last");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+
+        PufferDrawOrderDarkBehind(ctx, state, camera, forward);
+        PufferDrawOrderWithoutCamera(ctx, state);
+        PufferDrawOrderSorting(ctx);
+    }
+
+    // The filed symptom's own geometry: an old dark puff sitting BEHIND a young bright one. The
+    // emitter writes the old one first anyway, so this direction is a control on the sort's sign
+    // rather than on its existence, and an ascending or reversed key breaks it.
+    private static void PufferDrawOrderDarkBehind(TestContext ctx, PufferState state,
+        Vector3 camera, Vector3 forward)
+    {
+        var amb = new EffectAmbience();
+        amb.SetCamera(camera, forward);
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true, ambience: amb);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float step = 1f / 60f;
+            for (int i = 6; i >= 1; i--)
+            {
+                puffer.Emit(new Vector3(0f, 0f, -50f * i), Basis.Identity, step);
+                puffer._Process(step);
+            }
+
+            var written = gpu.LastFrame;
+            ctx.Check(written.Count >= 5, $"the reversed run drew its row too count={written.Count}");
+            if (written.Count < 5)
+                return;
+            float first = forward.Dot(written[0].Position - camera);
+            float last = forward.Dot(written[written.Count - 1].Position - camera);
+            ctx.Check(first > last,
+                $"the old dark puff behind is written first ({first:0} m) and the young bright one in front last ({last:0} m)");
+            ctx.Check(written[0].Frame > written[written.Count - 1].Frame,
+                $"so the dark column ({written[0].Frame}) no longer paints over the bright one ({written[written.Count - 1].Frame})");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // No published camera means no depth to sort on, which is the session's first frame and every
+    // unwired lab. The order is then the emitter's own, unchanged, rather than an invented one.
+    private static void PufferDrawOrderWithoutCamera(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float step = 1f / 60f;
+            for (int i = 1; i <= 4; i++)
+            {
+                puffer.Emit(new Vector3(0f, 0f, -50f * i), Basis.Identity, step);
+                puffer._Process(step);
+            }
+
+            var written = gpu.LastFrame;
+            ctx.Check(written.Count >= 3, $"the unwired emitter still draws count={written.Count}");
+            if (written.Count < 3)
+                return;
+            bool spawnOrder = true;
+            for (int i = 1; i < written.Count; i++)
+                if (written[i].Position.Z > written[i - 1].Position.Z)
+                    spawnOrder = false;
+            ctx.Check(spawnOrder,
+                $"with no camera published the write order is the emitter's own spawn order, near to far");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // The between-emitter half is Godot's own transparent-object depth sort, and it only tracks
+    // the particles if the instance sorts on its AABB centre: a trail or sustain emitter pins its
+    // node at the world origin. Set explicitly, so a Godot default change trips this.
+    private static void PufferDrawOrderSorting(TestContext ctx)
+    {
+        var image = Image.CreateEmpty(2, 1, false, Image.Format.Rgba8);
+        image.Fill(Colors.White);
+        var renderer = new MultiMeshEmitterRenderer(ImageTexture.CreateFromImage(image), 1,
+            new[] { false }, softParticles: false);
+        var owner = new Node3D();
+        ctx.Host.AddChild(owner);
+        try
+        {
+            renderer.Attach(owner, 4, cullMargin: 1f);
+            int lists = 0;
+            foreach (var child in owner.GetChildren())
+            {
+                if (child is MultiMeshInstance3D mmi)
+                {
+                    ctx.Check(mmi.SortingUseAabbCenter,
+                        $"the particle list depth-sorts on its cloud's AABB centre, not on its node's origin");
+                    lists++;
+                }
+            }
+            ctx.Same(1, lists, $"the uniform-blend column set builds exactly one draw list");
+        }
+        finally
+        {
+            owner.QueueFree();
+        }
+    }
+
     // Blend is per FRAME, so a flipbook whose columns disagree draws two lists and each particle
     // goes to the one its current column names. No shipped puffer mixes flagged and unflagged
     // frames, so the split is built here out of two real textures that do disagree.

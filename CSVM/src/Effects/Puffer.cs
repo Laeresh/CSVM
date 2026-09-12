@@ -383,6 +383,12 @@ public sealed partial class Puffer : Node3D
     // engine accumulates `dt` unconditionally.
     private const float TeleportGuardMeters = 200f;
 
+    // The view depth a particle at or behind the eye plane sorts at, so it draws first. The
+    // original's key is `ftol(0.01 / minRHW)`, integer hundreds of metres, and such a quad takes
+    // the sentinel 999 instead; 99,900 m is that sentinel in depth. Unreachable while the near
+    // cull is on, which drops those particles before the sort sees them. See docs/org/textures.md.
+    private const float BehindEyeSortDepth = 99_900f;
+
     // Baked atlases per archive, keyed by the frame list: a state many emitters share (a crash
     // rig builds 28 lgpuffers ahead) bakes and measures its frames once. Keyed by the archive so
     // a chapter change can never serve another chapter's frames.
@@ -424,6 +430,12 @@ public sealed partial class Puffer : Node3D
     private EffectAmbience _ambience = EffectAmbience.Still;
     private Particle[] _particles = Array.Empty<Particle>();
     private int _liveCount;
+
+    // The frame's draw payloads and their sort keys, pooled alongside _particles so the
+    // back-to-front reorder allocates nothing on the frame path. Sized on first use and regrown
+    // with the particle pool, never shrunk.
+    private float[] _drawKeys = Array.Empty<float>();
+    private DrawItem[] _drawItems = Array.Empty<DrawItem>();
 
     private bool _emitting;
     private float _sinceStart;
@@ -618,6 +630,16 @@ public sealed partial class Puffer : Node3D
         // node's translation); trail and sustain force the transform to identity and store world
         // positions. Every mode leaves the basis at identity, so one addition covers all three.
         var nodeOrigin = GlobalPosition;
+        // The original depth-sorts the frame's whole transparent list, so the draw order belongs
+        // to the camera and not to the order particles sit in. Pane 0 supplies the one order every
+        // pane draws, a deliberate seam; see docs/org/textures.md and docs/org/puffer.md.
+        bool sorting = viewers.Count > 0;
+        var sortView = sorting ? viewers[0] : default;
+        if (_drawItems.Length < _particles.Length)
+        {
+            _drawKeys = new float[_particles.Length];
+            _drawItems = new DrawItem[_particles.Length];
+        }
         int drawn = 0;
         for (int i = 0; i < _liveCount; i++)
         {
@@ -642,19 +664,38 @@ public sealed partial class Puffer : Node3D
 
             // A negative-age particle is still drawn on the frame it's born, pinned to ramp stop 0
             //, see docs/org/puffer.md. Distance gate before any draw work: discarded means unwritten.
+            var world = nodeOrigin + p.Pos;
             float distAlpha = 1f;
-            if (fading && !NearestViewerAlpha(nodeOrigin + p.Pos, viewers, out distAlpha))
+            if (fading && !NearestViewerAlpha(world, viewers, out distAlpha))
                 continue;
 
             float lifeFrac = p.Age > 0f ? p.Age / p.Life : 0f;
             float size = p.BaseSize * Mathf.Lerp(1f, _state.GrowthFactor, lifeFrac);
+            // The key is negated view depth, so an ascending sort is the decode's farthest-first.
+            float depth = sorting ? sortView.Forward.Dot(world - sortView.Position) : 0f;
+            _drawKeys[drawn] = depth > 0f ? -depth : -BehindEyeSortDepth;
             // ⚠ The distance alpha MULTIPLIES the COLORS ramp's alpha or the fade envelope's; it
             // replaces neither. Getting that precedence wrong makes every ramped puffer invisible.
-            _renderer.Write(drawn++, p.Pos, size,
-                flipbook ? FrameFor(lifeFrac) : p.Frame,
-                (hasRamp ? 1f : FadeFor(lifeFrac)) * distAlpha,
-                hasRamp ? RampColor(lifeFrac) : Colors.White);
+            _drawItems[drawn++] = new DrawItem
+            {
+                Pos = p.Pos,
+                Size = size,
+                Frame = flipbook ? FrameFor(lifeFrac) : p.Frame,
+                Alpha = (hasRamp ? 1f : FadeFor(lifeFrac)) * distAlpha,
+                Color = hasRamp ? RampColor(lifeFrac) : Colors.White,
+            };
         }
+
+        // Array.Sort is unstable, which is the original's own exposure on two equal depths: its
+        // final pass runs an unstable sort over each equal-key, equal-texture run.
+        if (sorting && drawn > 1)
+            Array.Sort(_drawKeys, _drawItems, 0, drawn);
+        for (int i = 0; i < drawn; i++)
+        {
+            ref var item = ref _drawItems[i];
+            _renderer.Write(i, item.Pos, item.Size, item.Frame, item.Alpha, item.Color);
+        }
+
         _renderer.Show(drawn);
 
         if (_liveCount == 0 && !_emitting && !_trailing && !_sustaining)
@@ -1106,5 +1147,14 @@ public sealed partial class Puffer : Node3D
         public Vector3 Pos, Vel;
         public float BaseSize, Age, Life;
         public float Frame; // static-TEXTURES pool: the randomly picked atlas column
+    }
+
+    // One particle's finished draw payload, buffered so the frame can be reordered before it
+    // reaches the renderer. Position stays in the node's frame, the same value Write took before.
+    private struct DrawItem
+    {
+        public Vector3 Pos;
+        public float Size, Frame, Alpha;
+        public Color Color;
     }
 }

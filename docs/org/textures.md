@@ -179,17 +179,40 @@ The engine's rule, whole:
 
 ## The transparent list is depth-sorted
 
-`FUN_005a6160` fills an index array in reverse, calls `FUN_005a5fa0` to sort it, then draws in the
-sorted order. The per-polygon key is built at `005a5fc2`–`005a6003`: `ftol(C / minRHW)` where
-`minRHW` is the smallest reciprocal depth across the quad's vertices, so the key is proportional to
-distance; polygons at or behind the eye get the sentinel `999`. The comparator `LAB_005a5f00`
-returns `key[b] - key[a]`, so the order is **farthest first**. Equal-depth runs are then regrouped
-by texture (`LAB_005a5f30` on `+0x08`) and by texture-and-depth (`LAB_005a5f60`) to keep state
-changes down. The per-polygon minimum is computed at enqueue, `005a4b42`–`005a4b54`. Setting
-`DAT_009be6ec` skips the depth sort and leaves only the state grouping.
+`FUN_005a6160` fills an index array in reverse submission order (`005a61f5`–`005a620b`, writing
+`count - 1 - i`), calls `FUN_005a5fa0` to sort it, then draws in the sorted order. The queued
+records are `0x1c` bytes: the texture object at `+0x08`, the quad's smallest reciprocal depth at
+`+0x10` (computed at enqueue, `005a4b42`–`005a4b54`), and the sort key written into `+0x14`.
+
+The sort runs three passes, and their **precedence** is what the rule turns on:
+
+| Pass | Comparator | Field | Effect |
+|---|---|---|---|
+| 1 | `LAB_005a5f00` | `+0x14` | `key[b] - key[a]`, so descending: **farthest first** |
+| 2 | `LAB_005a5f30` | `+0x08` | each equal-KEY run re-sorted by texture pointer, ascending |
+| 3 | `LAB_005a5f60` | `+0x10` | each equal-key-and-texture run re-sorted by `minRHW` bits, ascending |
+
+The key is built at `005a5fc2`–`005a6003`. `minRHW` is compared against `0.0` (`0x006032c8`), and a
+quad at or behind the eye takes the sentinel `0x3e7` = **999** (`005a5ff2`); otherwise the key is
+`ftol(0.01 / minRHW)` with the `0.01` at `0x006032d8`. Since `minRHW` is the reciprocal of the
+quad's FARTHEST vertex depth, that is `trunc(0.01 × depth)`: **an integer bucket 100 units wide**,
+and the sentinel is the bucket a polygon 99,900 units out would occupy, well past any level's far
+clip. Pass 3's integer subtraction of two positive IEEE-754 floats is a valid float compare, so
+within one bucket and one texture the order is exact depth, farthest first. Setting `DAT_009be6ec`
+(written by the one-line setter at `005a5f90`) skips passes 1 and 2 and leaves pass 3 alone.
 
 So the original **does** sort its transparent polygons back to front, across the whole frame rather
-than within one emitter. It does not draw them in submission order.
+than within one emitter, and it does not draw them in submission order. Two consequences:
+
+- **There is no notion of emitter or object.** A gamez alpha polygon and a particle sprite are
+  interleaved by the same key, so "order between emitters" and "order against world transparent
+  geometry" are the same question as "order within an emitter".
+- ⚠ **Pass 2 outranks exact depth, so inside one 100-unit bucket TEXTURE decides.** Two overlapping
+  sprites of different textures at nearly the same distance are ordered by texture pointer, which
+  is heap-allocation order and not readable from a static binary. That pass exists to hold texture
+  binds down (its own equal-key grouping), and it is the one part of the rule a remake drawing a
+  packed atlas has nothing to buy with: one texture per emitter makes every particle share pass 2's
+  key, leaving passes 1 and 3, which are both depth, farthest first.
 
 ## The two rasteriser dispatch entries
 
@@ -367,6 +390,35 @@ which is the tripwire if that ever stops being true.
 The alpha-weighted luminance of the sprite a particle dies on decides one thing only, and it is not
 blend: the soft-particle depth fade, a render nicety with no counterpart in the original
 ([puffer.md](puffer.md)).
+
+### The depth order, and where ours stops being the original's
+
+The order is ported in two halves that meet at the draw call.
+
+Within an emitter, `Puffer._Process` buffers the frame's finished draw payloads and writes them to
+the renderer sorted on view depth against pane 0's camera, farthest first, which is the rule's
+passes 1 and 3 collapsed (the atlas makes pass 2's key uniform). The behind-eye sentinel is
+reproduced as a 99,900 m depth, and is unreachable while the near cull is on, since that discards
+an at-or-behind-eye particle before the sort sees it. The sort is `Array.Sort`, unstable, matching
+pass 3's own exposure on two equal depths.
+
+Between emitters, and against the world's transparent geometry, the sort is **Godot's**: its
+transparent pass orders objects back to front per camera, on each instance's AABB centre. That is
+per-pane and therefore right in splitscreen, and it is measured rather than assumed: switching
+`MultiMeshEmitterRenderer`'s lists to node-origin sorting moves 8 of the 18 pinned goldens,
+including three no particle-order change touches, because a trail or sustain emitter parks its own
+node at the world origin.
+
+Two divergences remain, both of granularity rather than direction:
+
+- **Godot sorts objects, the original sorts polygons.** Two emitters whose clouds interpenetrate
+  draw one wholly before the other, where the original would interleave their sprites. The same
+  holds for a particle cloud against an alpha-blended gamez surface.
+- **One order serves every pane.** The instance buffer is written once per frame, so the
+  within-emitter order is pane 0's. This is the same seam as the shared alpha
+  ([puffer.md](puffer.md), "One alpha per particle across the panes") and has the same answer:
+  identical to the original wherever there is one viewer, which is every capture, freecam shot and
+  single-player session. A per-pane order would take one `MultiMesh` per pane.
 
 `TextureArchive.MipBias` reads the chapter's `adjust.gw` line and `Launcher` writes it to the
 `csky_mip_bias` global that `SceneBuilder`'s `texture()` calls pass as their LOD bias, so C5

@@ -78,7 +78,7 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "820430363161806540b3e9edbdfe4280",
+      "hash": "062d68d8f2372ec4b742606171d07ce6",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier with its handover fireball, the live one targeted with brackets, label and --debug-markers text, gauges, exhaust, ground shadow, world-lit C1; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -92,21 +92,21 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "9ce9d75dcc51684ef935443f21071f94",
+      "hash": "57b457a7f72886972f2a2aff731c271a",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery, the player's ground shadow; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "cb115ac2d7479d1ac678d430f461f809",
+      "hash": "50b782785c5a9c52ecb57866532020d4",
       "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, distance puffers on the texture-flag blend, ranged tumble, vector-form pieces, flydirt delta, pooled repeat calls, over world-lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "0213e52532a0a1a266498d12febf3f83",
+      "hash": "acee986d666a885af47c84a697c36303",
       "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal, over C1 ground and cutouts under one world light.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
@@ -120,7 +120,7 @@
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "c9b370fabcf96b3e5cb18799a2fb440a",
+      "hash": "1bd2f03a6607be87690c7498eab5f755",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light, a point light on its fade band and ground shadows; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

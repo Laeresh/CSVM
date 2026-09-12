@@ -521,6 +521,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   commit (the swap table holds weapon ids, not counts), `docs/formats/vehicle.md`.
 
 - `BL-847` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`docs/formats/destructibles.md` counts an ON_CALL sequence among a wreck's revival sources without the qualifier the runtime now applies.** *Evidence:* the revival paragraph says a revival can arrive from a `RESET_STATE`, an ON_CALL sequence, or another def's script; the runtime treats an ON_CALL sequence the def's own death chain calls through `CALL_SEQUENCE` as part of the death (`AnimRuntime.OwnDeathSequencesOf`), so only an ON_CALL sequence the chain does not call revives. The page's census of defs whose death chain switches `destroyed` back off (fourteen defs in three families) lacks C5's `agyrobus`, whose `destroy_craft` calls `randomdestseq` and one random branch of that switches `destroyed` off. *Fix shape:* qualify the sentence and add the fifteenth def. *Cross-refs:* PLAN-code-review-orch C23 (the runtime change and the census over the 16,114 compiled definitions).
+- `BL-873` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` **C1's refuel-tank debris draws near-black and reads as a
+  hole punched through the flame.** *Evidence:* `--freecam --chapter=C1 --destroy=refuel
+  --frames=120` and `=240` put faceted shards over the left tank's fire column, each a flat dark
+  grey to black polygon set with straight edges and a notch, moving and re-orienting between the two
+  frames, so they are launched debris rather than the tank's own swapped mesh. They are opaque
+  geometry in front of a bright particle plume, so the DRAW is right and the shade is what is wrong:
+  at that brightness the shard subtracts the flame behind it instead of being lit by it. A texture
+  census cannot name the sheet, four candidates (`frieght_tr01`, `exp_yel01`, `zep_cable01`,
+  `damage2`) sitting inside the chromaticity tolerance at a third of the reference brightness, which
+  is itself the finding: whatever it is, it draws at about 37 % of its own colour. *Fix shape:* find
+  what lights a debris piece launched by a `DAMAGE_SEQUENCE` death (the debris path through
+  `AnimRuntime` and `WorldEffectsFactory`) and compare it against the same mesh before the kill; the
+  candidates are a lost vertex-colour pass, an ambient that never reaches world debris (`BL-683` is
+  the aircraft-side version of that), or a genuinely dark authored sheet drawn unlit. *⚠ Traps:* do
+  not chase this as a transparency-ordering question. The particle depth sort is landed and does not
+  touch these: the shards keep their exact pixels across it, and they are hard-edged opaque facets
+  rather than sprites. Judge it against footage of a tank kill in the original before changing a
+  light, since a dark shard may be what the original draws. *Cross-refs:* the crops in the
+  particle-order closing commit (`git log -S BehindEyeSortDepth`); `BL-683`.
 
 ## Weapons & combat
 
@@ -1157,6 +1176,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tree lines and C2's Eiffel replica, where the erosion this rule was written to prevent would show
   first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
   install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
+  The sort those cards would join is Godot's own per-camera transparent-object pass, already
+  carrying every particle emitter, and it costs nothing per object; what it does NOT do is order two
+  interpenetrating objects' polygons against each other, which is the risk named above and is
+  unchanged by the particle work ([`docs/org/textures.md`](docs/org/textures.md), "The depth order,
+  and where ours stops being the original's").
 
 - `BL-683` `[Bug]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: trace]` **The faithful path's aircraft ambient cannot be driven by the mission, because
   `AmbientLightEnergy` never reaches the shader.** *Evidence (traced and measured):* the faithful
@@ -1275,36 +1299,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is the original's (`FUN_004cf2c0`, midpoint of the node's active bounding box) and is correct.
   *Cross-refs:* `BL-656`'s closing commit, `PT-111`, `docs/org/targeting.md` "Where a mission
   structure is".
-
-- `BL-829` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Our particle sprites draw in emitter and instance
-  order; the original depth-sorts every transparent polygon in the frame.** This is what produces
-  dark-over-fire at C1's refuel tanks, where an old near-black `fire_f06` puff paints over a young
-  bright flame from the same emitter. The blend half of that report is settled and landed (the
-  texture's own additive bit, [`docs/org/textures.md`](docs/org/textures.md)); ordering is the half
-  that is left, and it is the half that produces the symptom.
-  **The rule, decoded:** `FUN_005a6160` fills an index array over the frame's queued transparent
-  polygons, `FUN_005a5fa0` sorts it, and only then does it draw. The key is built at
-  `005a5fc2`-`005a6003` as `ftol(C / minRHW)` over the quad's smallest reciprocal depth, so it is
-  proportional to distance, and a polygon at or behind the eye takes the sentinel `999`. The
-  comparator `LAB_005a5f00` returns `key[b] - key[a]`, so the order is farthest first. Equal-depth
-  runs are then regrouped by texture (`LAB_005a5f30`) and by texture-and-depth (`LAB_005a5f60`) to
-  hold state changes down, and setting `DAT_009be6ec` skips the depth sort while keeping that
-  grouping. Details in [`docs/org/textures.md`](docs/org/textures.md), "The transparent list is
-  depth-sorted".
-  **Ours:** one `MultiMesh` per emitter with `depth_draw_never` and no per-particle sort, so
-  particles paint in instance order, which is the order `Puffer._Process` happens to write them in,
-  and emitters paint in scene-tree order.
-  *⚠ Traps:* sorting WITHIN an emitter is not the original's rule and does not reproduce it, since
-  the sort spans every transparent polygon in the frame, emitters and gamez alike. A MultiMesh
-  draws in instance order, so honouring the rule means writing each frame's particles back-to-front
-  per camera, and one MultiMesh is shared by every splitscreen pane
-  ([`docs/org/puffer.md`](docs/org/puffer.md), "One alpha per particle across the panes"), so a
-  per-camera order needs one mesh per pane or a different structure. Turning depth write back on is
-  not the original's behaviour either: it sorts, it does not z-test its transparent queue. Measure
-  cost before committing to a per-frame sort; a crash rig can hold hundreds of live particles.
-  *Cross-refs:* `PT-141` judges the landed blend rule at the controls and sees this ordering at the
-  same time; `BL-508` (the alpha-cutout scope) would move thousands of foliage and railing cards
-  into the same transparent pass, so the two decisions share a sort.
 
 - `BL-293` `[Tuning]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Rocket impact rings: the fixed-axis upper ring is faithful but reads
   poorly, parked** (PT-35). Faithfulness versus feels-good, decide later: the original
