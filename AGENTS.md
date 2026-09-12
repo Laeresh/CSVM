@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first — it has the project description,
+Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first, it has the project description,
 architecture decisions, repo layout, the Godot project + CLI reference, coding conventions, and
 the "Current status" pointer. This file holds only what's specific to agent tooling that isn't
 Claude Code (see [`CLAUDE.md`](CLAUDE.md) for that).
