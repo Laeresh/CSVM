@@ -5,8 +5,11 @@ namespace CSVM.UI.Menu;
 
 /// <summary>One line of the briefing's parchment note: the mission objective a flag pin stands
 /// for. The text carries its own numbering ("1) Find the main treasure site."), so a renderer
-/// numbers nothing itself.</summary>
-public sealed record BriefingObjective(int Priority, string Key, string Text);
+/// numbers nothing itself. <c>Number</c> is the <c>OBJECTIVEn</c> block the line was read from,
+/// which is what the objectives runtime answers about; <c>Priority</c> is the note's own row order
+/// and nothing else. ⚠ The two are different numbers on most missions, so a screen that asks the
+/// runtime about a row asks by <c>Number</c>.</summary>
+public sealed record BriefingObjective(int Number, int Priority, string Key, string Text);
 
 /// <summary>
 /// The objectives note a briefing state binds its flag pins to, read from the mission's own
@@ -48,7 +51,7 @@ public static class BriefingObjectives
                 continue;
             }
 
-            Collect(body, messages, found);
+            Collect(BlockNumber(name), body, messages, found);
         }
 
         // File position breaks a priority tie, so the order is the reader's own where the data
@@ -65,10 +68,25 @@ public static class BriefingObjectives
         return lines;
     }
 
+    // The block's own 1-based number, as the runtime numbers it; 0 for a name whose suffix is not
+    // a number, which no completion can match.
+    private static int BlockNumber(string name) =>
+        int.TryParse(
+            name.Substring("OBJECTIVE".Length),
+            System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out int number)
+            ? number
+            : 0;
+
     // ⚠ Every IDENTITY in the block, not the block's IDENTITY: C4/M05's OBJECTIVE23 authors two,
     // and a keyed view of the block keeps only the last, losing that mission's third note line.
+    // Both lines carry the block's number, since one completion marks both.
     private static void Collect(
-        List<object?> body, Messages messages, List<(int Priority, int At, BriefingObjective Line)> found)
+        int number,
+        List<object?> body,
+        Messages messages,
+        List<(int Priority, int At, BriefingObjective Line)> found)
     {
         for (int i = 0; i + 1 < body.Count; i++)
         {
@@ -83,7 +101,7 @@ public static class BriefingObjectives
                 && value[2] is string key && key.Length > 0)
             {
                 found.Add(((int)priority, found.Count,
-                    new BriefingObjective((int)priority, key, messages.Get(key))));
+                    new BriefingObjective(number, (int)priority, key, messages.Get(key))));
             }
         }
     }

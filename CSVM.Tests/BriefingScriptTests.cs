@@ -250,6 +250,18 @@ public class BriefingObjectivesTests
         Assert.Equal(new[] { 1, 2 }, Priorities(lines));
     }
 
+    /// <summary>⚠ A line's number is its <c>OBJECTIVEn</c> block, never its priority: the two are
+    /// inverted here, and a screen that asks the objectives runtime by priority marks the wrong
+    /// row.</summary>
+    [Fact]
+    public void EachLineCarriesTheNumberOfTheBlockItWasReadFrom()
+    {
+        var lines = BriefingObjectives.Load(Reader(), new Messages());
+
+        Assert.Equal(new[] { 2, 1 }, Numbers(lines));
+        Assert.Equal(new[] { 1, 2 }, Priorities(lines));
+    }
+
     /// <summary>Without a message table the screen shows the raw key rather than crashing or
     /// going blank.</summary>
     [Fact]
@@ -281,6 +293,7 @@ public class BriefingObjectivesTests
         var lines = BriefingObjectives.Load(reader, new Messages());
 
         Assert.Equal(new[] { "MSG_A", "MSG_C" }, Keys(lines));
+        Assert.Equal(new[] { 23, 23 }, Numbers(lines));
     }
 
     /// <summary>A bare flag between two blocks shifts the reader's pairs, so a walk that steps by
@@ -330,6 +343,17 @@ public class BriefingObjectivesTests
         }
 
         return keys;
+    }
+
+    private static int[] Numbers(IReadOnlyList<BriefingObjective> lines)
+    {
+        var numbers = new int[lines.Count];
+        for (int i = 0; i < lines.Count; i++)
+        {
+            numbers[i] = lines[i].Number;
+        }
+
+        return numbers;
     }
 
     private static int[] Priorities(IReadOnlyList<BriefingObjective> lines)

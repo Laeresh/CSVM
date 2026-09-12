@@ -306,12 +306,12 @@ sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md)
 ## src/UI/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment with a mark on each completed row, the profile's memento, and the four button
-strips with their labels resolved. `PauseSheet` is the authored half, read once per mission, and
-`PauseReadout` the live half, read afresh on every pause. The chart, its pins and an icon placed by
-world position all go through `MissionMap`, which the briefing shares. An unreadable extraction
-builds no sheet, which is what leaves the pause to the Built-in board rather than to nothing.
-Decode: [../org/pause-screen.md](../org/pause-screen.md).
+objectives parchment, the profile's memento, and the four button strips with their labels resolved.
+`PauseSheet` is the authored half, read once per mission, and `PauseReadout` the live half, read
+afresh on every pause; its `Rows` marks a note line by the runtime's answer for that line's own
+objective number. The chart, its pins and an icon by world position go through `MissionMap`, which
+the briefing shares. An unreadable extraction builds no sheet, which leaves the pause to the
+Built-in board rather than to nothing. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
@@ -767,10 +767,12 @@ truncated toward zero, both of which the type's own members say. [../org/pause-s
 ## src/UI/Menu/BriefingObjectives.cs
 The briefing's parchment note, read from a mission's own `objectives.zrd`: every `IDENTITY`
 carrying a message key, ordered by priority ascending, which is the list an `Objective id index`
-opcode indexes 0-based. Takes the reader rather than a path, so it resolves without an extraction,
-and leaves an unresolved key visible as its raw `MSG_*` symbol rather than inventing English. Why
-keyless entries are not lines, and why file order is not the order, are recorded on the type
-itself. Decode: [../formats/objectives.md](../formats/objectives.md).
+opcode indexes 0-based. Each line also carries the `OBJECTIVEn` block it was read from, the number
+the objectives runtime answers about, since priority is the note's row order and nothing more.
+Takes the reader rather than a path, so it resolves without an extraction, and leaves an unresolved
+key visible as its raw `MSG_*` symbol rather than inventing English. Why keyless entries are not
+lines, and why file order is not the order, are recorded on the type itself.
+Decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/UI/Menu/CampaignBriefing.cs
 One mission's briefing as the campaign feature holds it: the `cm_sequence` entry, the

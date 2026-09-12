@@ -492,6 +492,14 @@ one sentence of measured evidence; everything else belongs in the commit that la
   handed it over. A wildcard reader (`t_truck**`) collides with no compiled per-instance name,
   which is why the neighbouring objects carried and hid the hole.
 
+- **WORLD-40**, **An objective's display priority and its `OBJECTIVEn` number are two numberings of
+  one mission, and most missions author them differently, so a readout keyed on the wrong one still
+  passes every pin taken on a mission where the two coincide.** CM05's parchment rows are
+  `OBJECTIVE15` at priority 1 and `OBJECTIVE14` at priority 2, while `OBJECTIVE1` is a conditionless
+  two-second wake, so a mark keyed on priority checks the first row two seconds into the mission.
+  CM01, whose numberings agree, marks correctly either way, which is why its pin held. Pin a rule
+  that reads one of the two numberings on a mission where they disagree.
+
 ## SHELL, Windows, PowerShell, and processes
 
 - **SHELL-2**, **Identify stray Godot processes by worktree and probe flag.**

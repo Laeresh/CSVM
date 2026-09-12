@@ -3528,12 +3528,8 @@ public partial class GameSession : Node3D
         Flight.PauseState pauseState,
         AnimRuntime? runtime)
     {
-        var rows = new List<UI.PauseObjective>(objectives.Count);
-        foreach (var objective in objectives)
-        {
-            rows.Add(new UI.PauseObjective(
-                objective.Text, campaign.Graph?.CompletedOf(objective.Priority) ?? false));
-        }
+        var graph = campaign.Graph;
+        var rows = UI.PauseReadout.Rows(objectives, n => graph?.CompletedOf(n) ?? false);
 
         var icons = new List<UI.PauseWorldIcon>();
         if (sheet.Shared.OwnShip.Length > 0 && RigOf(pauseState.OwnerPlayerIndex)?.Controller is { } own)

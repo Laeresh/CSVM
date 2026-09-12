@@ -248,6 +248,11 @@ matches (`FUN_004ad240`). Consequences, all decoded:
   priority of 0 is skipped. So the mask is indexed by the numbers a mission authors, not by row
   position, and the campaign's reward table matches its objective-bit column against them
   ([saved-games.md](saved-games.md), "The mission-result array").
+- **It is not the objective's `OBJECTIVEn` number.** The original never needs that number here,
+  since the completing objective carries its own priority into the match, and most missions author
+  the two differently: `C3/M04`'s priority 1 row is `OBJECTIVE15`, and its `OBJECTIVE1` is a
+  conditionless two-second wake. An engine whose runtime answers "is objective n complete" therefore
+  marks a row by the number of the block the row was read from, never by the row's priority.
 - The `MSG_key` third argument is display text only; the mission parser never reads it. An
   `IDENTITY` without it (authored, for example `["SECONDARY", 11]`) produces a row with empty
   text that still tracks completion.

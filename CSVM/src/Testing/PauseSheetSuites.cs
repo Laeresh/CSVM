@@ -16,6 +16,12 @@ internal static class PauseSheetSuites
     private const string FilmedChapter = "C3";
     private const string FilmedMission = "M01";
 
+    // The mission whose note rows are numbered against their priorities: its priority 1 row is
+    // OBJECTIVE15, while OBJECTIVE1 is a conditionless two-second wake objective. A parchment that
+    // asked the runtime by priority would check that row two seconds into the mission.
+    private const string NumberedChapter = "C3";
+    private const string NumberedMission = "M04";
+
     /// <summary>The chapter's campaign pause sheets end to end: every dialog resolves, every
     /// bitmap it draws is extracted, and the board follows the pause state it was given.</summary>
     [Suite("pause-sheet",
@@ -26,8 +32,10 @@ internal static class PauseSheetSuites
         + "PauseState.Changed with its cursor resting on RESUME, the map is drawn at its authored "
         + "source crop rather than scaled, an OWNSHIP icon placed by world position lands inside "
         + "the map's own screen rectangle and one off the window draws nothing, the parchment's "
-        + "marks follow the completed rows across the four filmed poses, and C3/M01's own sheet "
-        + "matches the reference stills flag for flag")]
+        + "marks follow the completed rows across the four filmed poses, a mark follows the row's "
+        + "own OBJECTIVEn number rather than its briefing priority (C3/M04's priority 1 row is "
+        + "OBJECTIVE15, and its two-second wake objective must not check it), and C3/M01's own "
+        + "sheet matches the reference stills flag for flag")]
     internal static void PauseSheetScreen(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -65,6 +73,7 @@ internal static class PauseSheetSuites
         ctx.Check(filmed >= 0, $"{FilmedChapter}/{FilmedMission}, the filmed mission, is in the sequence");
         DriveBoard(ctx, sheets[filmed < 0 ? 0 : filmed], report);
         CheckFilmedPoses(ctx, sheets, filmed, report);
+        CheckNumberedMarks(ctx, sheets, report);
 
         ctx.WriteArtifact($"test-pause-sheet.txt", report.ToString());
         ctx.Note($"composed {sheets.Count} pause sheets and drove one over a live pause state");
@@ -258,6 +267,85 @@ internal static class PauseSheetSuites
         }
     }
 
+    // The marks against the live objectives runtime, on the mission where the note's row order and
+    // the script's numbering disagree: the rows are OBJECTIVE15 then OBJECTIVE14, so a mark taken
+    // from a row's priority would check row one when OBJECTIVE1's two-second wake completes.
+    private static void CheckNumberedMarks(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, StringBuilder report)
+    {
+        int at = sheets.FindIndex(s =>
+            s.Mission.ChapterFolder.Equals(NumberedChapter, System.StringComparison.OrdinalIgnoreCase)
+            && s.Mission.MissionFolder.Equals(NumberedMission, System.StringComparison.OrdinalIgnoreCase));
+        if (at < 0)
+        {
+            ctx.Check(false, $"{NumberedChapter}/{NumberedMission} is in the sequence");
+            return;
+        }
+
+        var entry = sheets[at];
+        var reader = Zrdr.LoadFile(
+            SessionPaths.MissionZrdr(
+                ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder),
+            "objectives.json");
+        var note = BriefingObjectives.Load(reader, Messages.Load(ctx.MessagesPath));
+        ctx.Check(
+            note.Count == 2 && note[0].Priority == 1 && note[0].Number == 15
+            && note[1].Priority == 2 && note[1].Number == 14,
+            $"the note's two rows are OBJECTIVE15 at priority 1 and OBJECTIVE14 at priority 2");
+
+        int rowOne = 0;
+        foreach (int index in entry.Sheet.Reveal.RevealedObjectives)
+        {
+            rowOne += index == 0 ? 1 : 0;
+        }
+
+        ctx.Check(rowOne > 0, $"the sheet's own script reveals the priority 1 row ({rowOne} time(s))");
+
+        var graph = new Session.ObjectiveGraph(Session.ObjectiveScript.Parse(reader), new NoWorld());
+        for (float t = 0f; t < 3f; t += 0.1f)
+        {
+            graph.Step(0.1f);
+        }
+
+        var open = PauseReadout.Rows(note, graph.CompletedOf);
+        float wakeAt = graph.Elapsed;
+        ctx.Check(graph.CompletedOf(1), $"OBJECTIVE1, the conditionless two-second wake, has completed");
+        ctx.Check(!graph.CompletedOf(15), $"OBJECTIVE15, which the priority 1 row stands for, has not");
+        ctx.Check(!open[0].Completed && !open[1].Completed, $"so neither parchment row reads done");
+        ctx.Same(0, Marks(entry.Sheet, open), $"and the composed parchment carries no mark");
+
+        graph.Wake(15);
+        graph.Step(0.1f);
+        var done = PauseReadout.Rows(note, graph.CompletedOf);
+        ctx.Check(graph.CompletedOf(15), $"a wake completes the conditionless OBJECTIVE15");
+        ctx.Check(done[0].Completed && !done[1].Completed, $"which marks the priority 1 row and only it");
+        ctx.Same(rowOne, Marks(entry.Sheet, done), $"and the composed parchment marks that row");
+        report.AppendLine(
+            $"{NumberedChapter}/{NumberedMission} rows: "
+            + $"O{note[0].Number}/p{note[0].Priority}, O{note[1].Number}/p{note[1].Priority}; "
+            + $"at {wakeAt:0.0} s O1 alone is done and the parchment marks {Marks(entry.Sheet, open)}, "
+            + $"with O15 done it marks {Marks(entry.Sheet, done)}");
+    }
+
+    private static int Marks(PauseSheet sheet, IReadOnlyList<PauseObjective> rows)
+    {
+        var board = PauseScreens.For(
+            sheet,
+            new PauseReadout(rows, string.Empty, System.Array.Empty<PauseWorldIcon>()),
+            0,
+            false);
+        int marked = 0;
+        foreach (var note in board.Notes)
+        {
+            foreach (bool flag in note.Marked ?? System.Array.Empty<bool>())
+            {
+                marked += flag ? 1 : 0;
+            }
+        }
+
+        return marked;
+    }
+
     // The mission's own objectives in the order its dialog's script indexes them, with the first
     // few marked so the parchment's marks are exercised.
     private static PauseReadout Readout(
@@ -329,6 +417,80 @@ internal static class PauseSheetSuites
             {
                 yield return mark.Name;
             }
+        }
+    }
+
+    // The objectives runtime's world seam with no world behind it: the families a session cannot
+    // answer report null, exactly as the live adapter does, and every world-touching action is a
+    // no-op. Enough to run a mission's own script for its timing and its chaining.
+    private sealed class NoWorld : Session.IObjectiveWorld
+    {
+        public bool? NodeInactive(IReadOnlyList<string> path) => null;
+
+        public int AnimState(string anim) => 0;
+
+        public int? GroupLiveCount(int group, string? generator) => null;
+
+        public void WidenGroupEngagement(int group)
+        {
+        }
+
+        public bool? TravelersMet(Session.TravelersSpec spec) => null;
+
+        public void WakeupEnemies(IReadOnlyList<string> names)
+        {
+        }
+
+        public void WakeupTurrets(IReadOnlyList<string> patterns)
+        {
+        }
+
+        public void WakeupZepTurrets(IReadOnlyList<string> nodes)
+        {
+        }
+
+        public void WakeupGenerator(string name, int count)
+        {
+        }
+
+        public void WakeAnim(string anim, string? node)
+        {
+        }
+
+        public void PlaySoundGroup(string group)
+        {
+        }
+
+        public void StopQueuedSounds(IReadOnlyList<string> names)
+        {
+        }
+
+        public void WarpVehicle(string vehicle, IReadOnlyList<Session.WarpPoint> points)
+        {
+        }
+
+        public void SetAiTeam(IReadOnlyList<(string Name, int Team)> entries)
+        {
+        }
+
+        public void SetAiNet(IReadOnlyList<(string Name, string Net)> entries)
+        {
+        }
+
+        public void SetAiAttackRadius(IReadOnlyList<(string Name, float Radius)> entries)
+        {
+        }
+
+        public void CompletedZepcannons(IReadOnlyList<(string Zeppelin, int Flag)> entries)
+        {
+        }
+
+        public void CompletedStoppoint(IReadOnlyList<(string Net, int Stop, int Flag)> entries)
+        {
+        }
+
+        public void StartTaxi(IReadOnlyList<string> names)
+        {
         }
     }
 }

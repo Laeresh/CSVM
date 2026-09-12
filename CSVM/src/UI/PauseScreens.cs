@@ -82,6 +82,23 @@ public sealed record PauseReadout(
     /// <summary>A readout with nothing in it, for a dialog that carries no map or parchment.</summary>
     public static PauseReadout Empty { get; } = new(
         Array.Empty<PauseObjective>(), string.Empty, Array.Empty<PauseWorldIcon>());
+
+    /// <summary>The parchment's rows for one mission's note, each marked by what
+    /// <paramref name="completed"/> answers for that row's own <c>OBJECTIVEn</c> number.
+    /// ⚠ Ask by the number, never by the row's priority: priority is the note's row order, and a
+    /// mission whose priorities are not its objective numbers then marks a row on an unrelated
+    /// objective's completion (docs/formats/objectives.md).</summary>
+    public static IReadOnlyList<PauseObjective> Rows(
+        IReadOnlyList<BriefingObjective> note, Func<int, bool> completed)
+    {
+        var rows = new List<PauseObjective>(note.Count);
+        foreach (var objective in note)
+        {
+            rows.Add(new PauseObjective(objective.Text, completed(objective.Number)));
+        }
+
+        return rows;
+    }
 }
 
 /// <summary>
