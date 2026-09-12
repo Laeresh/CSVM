@@ -386,7 +386,7 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **WORLD-33** — **An upward ray reports open air under a one-sided collider, so read a column
   DOWNWARD from above instead.** World colliders honour the polygon's own `SHOW_BACKFACE` and 64 %
   of the install's collision faces clear it: across all eight chapters a downward ray answers in
-  1,376 of 1,376 partition cells and an upward one in 24 (`world-ground-solid`).
+  1,376 of 1,376 partition cells and an upward one in 24 (`chapter-census`).
 - **WORLD-34** — **A coplanar base/overlay texture pair can resemble a day/night or LOD variant
   set; compare UV scale and vertex colour before assuming duality.** C5's flagged `cblock1/2/3`
   overlay differs from its unflagged `cblock4/5/6` base only in resolution and brightness, sharing
@@ -403,7 +403,7 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **WORLD-37** — **A hull the mission's `.gw` switched off has its colliders disabled by design, so
   "the ray found nothing" reports the switch rather than a missing collision mesh.** Both
   multiplayer zeppelins are switched off by every mission script but `mp3.gw`; over the eight `MP3`
-  worlds that keep them, all 48 belly rings meet hull 12.8 m straight up (`zeppelin-belly-hull`).
+  worlds that keep them, all 48 belly rings meet hull 12.8 m straight up.
 
 ## SHELL — Windows, PowerShell, and processes
 
@@ -555,7 +555,7 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **INSTR-31** — **A cache or fixture that hands a suite the WRONG subject is invisible to any
   assertion that holds on both subjects; prove the key with an identity test, never with the
   catalog.** Keying `DecodeCache`'s chapter document on its file name (every chapter's is
-  `gamez.zip`) resolved all eight chapters to C1 while `collision-visibility` still reported PASS.
+  `gamez.zip`) resolved all eight chapters to C1 while `chapter-census` still reported PASS.
 - **INSTR-32** — **A `--campaign=` probe's first seconds of sim belong to the intro cutscene, which
   holds the mission clock, so give a campaign probe a minute of sim or read the `cutscene:` lines
   first.** On C5/M04 with `--wake-generators` a 900-frame run logged the credit and nothing after it,
@@ -575,7 +575,7 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **INSTR-37** — **`Node3D.Scale` does not read back axis for axis off a basis carrying real
   rotation, so compare sorted magnitudes or the whole basis, and never assert
   `Scale.X == authored.X` on anything that also rotates.** An authored `(1, 0.25, 1)` on a rotated
-  hook arm reads back as `(1, 1, 0.25)` across `landings-hookup-airframe`'s six airframes.
+  hook arm reads back as `(1, 1, 0.25)` on every airframe `landings-hookup-airframe` drives.
 - **INSTR-38** — **A fault that needs a hash collision fires on a minority of runs, so re-running a
   suite measures the collision rate and not the fault; assert the stale state directly.** In
   `landings-hookup-airframe` the `landings` filter threw `ObjectDisposedException` on 1 run in 14

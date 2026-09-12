@@ -26,7 +26,7 @@ public static class SuiteCatalog
         "damage-stages",
         "damage-hd",
         "effect-template-mesh",
-        "collision-visibility",
+        "chapter-census",
         "target-selection",
         "campaign-objectives",
         "music-states",

@@ -156,13 +156,14 @@ internal static class LandingApproachSuites
     // does; this is far enough that no bounds reading of the hangar could land inside it.
     private const float AwayM = 2000f;
 
-    // What a landings suite does with the built world: the harness owns the build, the suite owns
-    // the drive. The mission's own zrdr path comes with it, for the readers that are not the
-    // objective script.
+    // One airframe per shape of the extend-hook fork: the Balmoral's branch is the only one that
+    // folds a wing, the pirate fighter's swings doors as well as arms, and the Brigand's is the
+    // longest plain arm swing (the Fury shares it, the Warhawk, Peacemaker and autogyro are shorter
+    // ones of the same shape). Each drive costs a full episode, so the shape is what is covered,
+    // not the archive.
     private static readonly string[] HookupPlanes =
     {
-        "player_balmoral", "player_pfighter", "player_warhawk",
-        "player_brigand", "player_fury", "player_peacemaker", "player_autogyro",
+        "player_balmoral", "player_pfighter", "player_brigand",
     };
 
     // The piratezep crane's own two inward-swinging side parts.
@@ -172,6 +173,9 @@ internal static class LandingApproachSuites
     // `from` puts that node on the park's own list (AnimRuntime.SeedFromExtend).
     private static readonly string[] MotionChannels = { "rotate", "scale", "translate" };
 
+    // What a landings suite does with the built world: the harness owns the build, the suite owns
+    // the drive. The mission's own zrdr path comes with it, for the readers that are not the
+    // objective script.
     private delegate void MissionDrive(TestContext ctx, TestWorld world, CampaignDirector director,
         ObjectiveScript script, string missionZrdr, StringBuilder report);
 
@@ -300,7 +304,7 @@ internal static class LandingApproachSuites
     internal static void CampaignCoopApproachRow(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-campaign-coop-approach-row", DriveCoopApproachRow);
 
-    /// <summary>Drives the hookup on seven airframes and reads what it did to each: the flown
+    /// <summary>Drives the hookup on three airframes and reads what it did to each: the flown
     /// aircraft's own subtree is in the runtime's node table, so the definition's per-airframe
     /// branches are decidable, and the episode ends with that airframe's docking hook extended, its
     /// authored mount offset applied, and its wings folded where the airframe authors a fold.
@@ -308,7 +312,8 @@ internal static class LandingApproachSuites
     // The hookup plays with no hook, the aeroplane too high and the wings unfolded when the
     // flown airframe's own subtree is not in the runtime's node table.
     [Suite("landings-hookup-airframe",
-        "the zeppelin hookup on seven airframes over the first story mission's BUILT world, "
+        "the zeppelin hookup on three airframes, one per shape of the extend-hook fork, over "
+        + "the first story mission's BUILT world, "
         + "every value read from the aircraft archive's own definitions: the flown aircraft is "
         + "in the animation runtime's node table so the hookup's per-airframe branches can read "
         + "its active bit, it carries its own docking-hook group built retracted, and the "

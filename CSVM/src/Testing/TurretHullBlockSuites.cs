@@ -13,9 +13,8 @@ namespace CSVM.Testing;
 /// envelope against the shipped emplacement sight-line rule to find the first direction the hull
 /// blocks, then parks a hostile plane there and reads whether the ring holds fire across several
 /// of the cached line-of-sight's 1-2 s windows.
-/// ⚠ First-direction, so it cannot see a shot ACROSS the hull: that is
-/// <c>turret-moving-hull-blocks-own-fire</c>'s deepest-crossing sweep
-/// (docs/verification.md INSTR-48).</summary>
+/// ⚠ First-direction, so it cannot see a shot ACROSS the hull; only a deepest-crossing sweep
+/// over the flying hull can (docs/verification.md INSTR-48).</summary>
 internal static class TurretHullBlockSuites
 {
     private const float Dt = 1f / 60f;

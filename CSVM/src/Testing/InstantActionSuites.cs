@@ -531,9 +531,9 @@ internal static class InstantActionSuites
             textures.Dispose();
         }
 
-        // ⚠ Keep this read-only against the shared cached world: registering a pool or leaving a node
-        // switched on here is handed to every later C1 suite, measured once as an inflated
-        // destructible-census. What it measures is the decoded activation restoring C1/IA1's objective.
+        // ⚠ Keep this read-only against the shared cached world: a pool registered or a node left
+        // switched on here reaches every later C1 suite, and once inflated chapter-census's counts.
+        // What it measures is the decoded activation restoring C1/IA1's objective.
         ctx.WithWorld("C1", collision: true, mission: "IA1", world =>
         {
             var runtime = world.Session.Runtime;

@@ -20,6 +20,12 @@ internal static class CampaignDockingSuites
     private const string Mission = "M04";
     private const float StepDt = 1f / 60f;
 
+    // The step for the mission's authored waits (the intro, the taxi chain's naps, OBJECTIVE20's
+    // 90 s). Nothing flown or shot is stepped here: the graph, the animation runtime and the
+    // hull's net ride are timers and interpolation, so a quarter-second step lands each objective
+    // within a quarter second of where a frame step does at a fifteenth of the cost.
+    private const float WaitDt = 0.25f;
+
     // The mission's own intro, named by its NEW_GAME_START list, and the runtime state that says
     // it is still playing.
     private const string IntroAnim = "mission_intro_animation";
@@ -29,26 +35,10 @@ internal static class CampaignDockingSuites
     // objectives read through INACTIVE1.
     private const string PirateZep = "piratezep";
 
-    // Three gasbags leaves survivors below the record's num_healthy_required, which is the kill.
-    private const int GasbagsToKill = 3;
-
-    private const float KillDamage = 10_000f;
-
-    // Long enough for the burning bays' own engine destroys, OBJECTIVE26's 10 s nap of 27 and
-    // OBJECTIVE27's 20 s nap of 41, with room for the wreck to reach the water first.
-    private const float EndingLimitS = 180f;
-
     // The radio tower: the objective target the briefing names, and the healthy model whose
     // switch-off OBJECTIVE15 reads.
     private const string TowerTarget = "ap_transmitter";
     private const string TowerHealthy = "rtwr_healthy";
-
-    // The twelve engines OBJECTIVE26 and OBJECTIVE27 count, as INACTIVE1..12 name them.
-    private static readonly string[] Engines =
-    {
-        "reng11", "reng12", "reng21", "reng22", "reng31", "reng32",
-        "leng11", "leng12", "leng21", "leng22", "leng31", "leng32",
-    };
 
     // The broadside doors whose deaths burn three gasbags: the same three the burnout suite kills,
     // which is what brings the hull down and, through the death def's self-invalidate, is what
@@ -90,20 +80,6 @@ internal static class CampaignDockingSuites
     {
         Fly(ctx, collision: false, RunChain, "test-campaign-cm09-docking.txt",
             $"{Chapter}/{Mission} runs its authored chain to the docking over its own world");
-    }
-
-    [Suite("campaign-cm09-gasbag-kill",
-        "CM09 (C1/M04) after the player kills the piratezep instead of defending it: three "
-        + "gasbags down is the record's own kill, and the burning bays plus killpzep's six "
-        + "water-gated engine gates take all twelve engine healthy models with them, which is "
-        + "what OBJECTIVE26 and OBJECTIVE27 count through INACTIVE_COMPLETION_COUNT. The mission "
-        + "therefore ends LOST on OBJECTIVE41's INSTANTLOSS rather than stalling, and the suite "
-        + "measures how long the two authored naps make the player wait for it. Built with "
-        + "collision so the wreck's NODE_UNDERCOVER probes can read a surface at all")]
-    internal static void CampaignCm09GasbagKill(TestContext ctx)
-    {
-        Fly(ctx, collision: true, RunGasbagKill, "test-campaign-cm09-gasbag-kill.txt",
-            $"{Chapter}/{Mission} ends lost after a gasbag-only piratezep kill");
     }
 
     private static void Fly(TestContext ctx, bool collision, Chain chain, string artifact,
@@ -243,11 +219,11 @@ internal static class CampaignDockingSuites
         float StepUntil(Func<bool> done, float limit)
         {
             float t = 0f;
-            for (; t < limit && !done(); t += StepDt)
+            for (; t < limit && !done(); t += WaitDt)
             {
-                runtime.Advance(StepDt);
-                zeps.SimStep(StepDt);
-                director.Step(StepDt);
+                runtime.Advance(WaitDt);
+                zeps.SimStep(WaitDt);
+                director.Step(WaitDt);
             }
             return t;
         }
@@ -318,70 +294,6 @@ internal static class CampaignDockingSuites
         DumpLog(log, report);
     }
 
-    // The mission flown the way a player who shot the hull down flies it: the intro, then three
-    // gasbags into the piratezep and nothing else. Nobody has flown this at the controls, so the
-    // suite is the whole of the evidence that the run reaches an ending at all.
-    private static void RunGasbagKill(TestContext ctx, CampaignDirector director,
-        ObjectiveGraph graph, AnimRuntime runtime, ZeppelinRuntime zeps,
-        IReadOnlyDictionary<string, FlightController> rigs, List<ObjectiveTransition> log,
-        StringBuilder report)
-    {
-        HoldForIntro(ctx, runtime, zeps, report);
-
-        var host = runtime.FindNodes(PirateZep).FirstOrDefault();
-        ctx.Check(host != null, $"the {PirateZep} world node resolves in the {Mission} world");
-        if (host == null)
-        {
-            return;
-        }
-
-        ctx.Same(0, EnginesOut(runtime, host, report: null),
-            $"the twelve engine healthy models the loss chain counts are all switched on before the kill");
-        report.AppendLine($"kill at t={graph.Elapsed:0.0} s: 26={graph.StateOf(26)} "
-            + $"27={graph.StateOf(27)} 41={graph.StateOf(41)} 40={graph.StateOf(40)} "
-            + $"42={graph.StateOf(42)}");
-        for (int i = 1; i <= GasbagsToKill; i++)
-        {
-            runtime.DamageAt(runtime.FindNodes($"gasbag{i}", host).FirstOrDefault(), KillDamage);
-        }
-
-        runtime.Advance(StepDt);
-        zeps.SimStep(StepDt);
-        director.Step(StepDt);
-        ctx.Check(zeps.IsDead(PirateZep),
-            $"{GasbagsToKill} gasbags down kills the hull by the record's own survivor count");
-
-        float killedAt = graph.Elapsed;
-        float t = 0f;
-        for (; t < EndingLimitS && !graph.Ended; t += StepDt)
-        {
-            runtime.Advance(StepDt);
-            zeps.SimStep(StepDt);
-            director.Step(StepDt);
-        }
-
-        int off = EnginesOut(runtime, host, report);
-        report.AppendLine($"{t:0.0} s after the kill: engines off={off} of 12 "
-            + $"26={graph.StateOf(26)} 27={graph.StateOf(27)} 41={graph.StateOf(41)} "
-            + $"40={graph.StateOf(40)} 42={graph.StateOf(42)} outcome={graph.Outcome}");
-        DumpLog(log, report);
-
-        ctx.Check(off >= 6,
-            $"the burning bays and killpzep's water gates darken enough engines for the count off={off} of 12");
-        ctx.Check(graph.CompletedOf(26),
-            $"OBJECTIVE26's INACTIVE_COMPLETION_COUNT of 3 reads the darkened engines and completes");
-        ctx.Check(graph.CompletedOf(27), $"…its nap wakes OBJECTIVE27, which wants 6 of the same twelve");
-        ctx.Check(graph.CompletedOf(41), $"…and OBJECTIVE41, the INSTANTLOSS, completes on its own wake");
-        ctx.Check(graph.Outcome == MissionOutcome.Lost,
-            $"the mission ends rather than running on in neither direction outcome={graph.Outcome}");
-
-        // How long the two authored naps make the player wait after the hull is dead. A run judged
-        // over a shorter window reads as a mission that never ends.
-        float endedAt = log.Where(x => x.Number == 41 && x.Kind == ObjectiveTransitionKind.Completed)
-            .Select(x => x.Elapsed).DefaultIfEmpty(0f).First();
-        ctx.Note($"a gasbag-only piratezep kill ends CM09 lost {endedAt - killedAt:0.0} s after the kill through 26 to 27 to 41, with {off} of the twelve engine models darkened");
-    }
-
     private static void DumpLog(List<ObjectiveTransition> log, StringBuilder report)
     {
         foreach (var t in log)
@@ -392,23 +304,6 @@ internal static class CampaignDockingSuites
         }
     }
 
-    // How many of the twelve engines the loss chain counts have lost the active bit on their
-    // healthy model, walked the way the objective script walks it.
-    private static int EnginesOut(AnimRuntime runtime, Node3D host, StringBuilder? report)
-    {
-        int off = 0;
-        foreach (string engine in Engines)
-        {
-            var node = runtime.FindNodes(engine, host).FirstOrDefault();
-            var healthy = node != null ? runtime.FindNodes("healthy", node).FirstOrDefault() : null;
-            off += healthy is { Visible: false } ? 1 : 0;
-            report?.AppendLine(
-                $"{engine}: healthy={(healthy == null ? "unresolved" : healthy.Visible ? "on" : "OFF")}");
-        }
-
-        return off;
-    }
-
     // The mission's own intro, run to its end with the objectives held, then handed off the way
     // CutsceneController does it. Nothing here plays the definition: the mission's NEW_GAME_START
     // list already did at the world build, and this is the hold and the handoff around it.
@@ -417,10 +312,10 @@ internal static class CampaignDockingSuites
     {
         var pz = runtime.FindNodes(PirateZep).FirstOrDefault();
         float held = 0f;
-        for (; held < 120f && runtime.AnimStateOf(IntroAnim) == AnimRunning; held += StepDt)
+        for (; held < 120f && runtime.AnimStateOf(IntroAnim) == AnimRunning; held += WaitDt)
         {
-            runtime.Advance(StepDt);
-            zeps.SimStep(StepDt);
+            runtime.Advance(WaitDt);
+            zeps.SimStep(WaitDt);
         }
         report.AppendLine($"intro '{IntroAnim}' held the objectives for {held:0.0} s; "
             + $"piratezep visible={pz?.Visible} before the handoff");

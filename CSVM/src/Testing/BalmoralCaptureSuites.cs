@@ -42,7 +42,7 @@ internal static class BalmoralCaptureSuites
     // budget clears both several times over.
     private const float DriveBudgetS = 15f;
 
-    // The widest half-angle a shot can frame, IntroWingmanSuites' own reading: an authored FOV
+    // The widest half-angle a shot can frame: an authored FOV
     // narrower than this puts a posed prop off screen at any of them.
     private const float FrustumHalfAngleDeg = 60f;
 

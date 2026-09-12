@@ -172,7 +172,7 @@ death slot, across 128 sequences. Three of those families carry no other destroy
 the block (`litemast*`, `sboxes*`, `tugandbarge0*`), so the `dbase` rule cannot be dropped, only
 kept out of the baseline. The one sequence-side activation that is not a death is the Barracuda's
 `sub_movement`, which raises `dbase` with the hull as the submarine surfaces; it carries no
-`HEALTH` and drives no pool, so the rule never reaches it. Regression: the `destructible-census`
+`HEALTH` and drives no pool, so the rule never reaches it. Regression: the `chapter-census`
 suite asserts both cannons boot standing, and `called-death-chain` asserts the bridge does.
 
 ⚠ The same swap read backwards is a revival, and a def's own death choreography is never one. A

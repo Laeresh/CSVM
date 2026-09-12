@@ -18,6 +18,11 @@ internal static class ZeppelinCannonBurnoutSuites
     private const string Hull = "hk_zep";
     private const float Dt = 1f / 60f;
 
+    // The step for the authored burn chains once the last real round has landed: nothing there is
+    // a projectile or a flight model, only definition timers and the switches they throw, which
+    // land within a quarter second of a frame-stepped run at a fifteenth of the cost.
+    private const float WaitDt = 0.25f;
+
     // The doors the suite kills, each with the gasbag its death burns and that gasbag's finisher.
     private static readonly (string Door, string Burn, string Finisher)[] Doors =
     {
@@ -153,19 +158,27 @@ internal static class ZeppelinCannonBurnoutSuites
 
                 // The chain: door death (+1 s) burn (+6 s) finisher, three finishers satisfy the
                 // hull's death (min 3 of 4), which sinks the hull and switches lkgasbag05's
-                // panelleft1 off, the primary's INACTIVE1 read.
+                // panelleft1 off, the primary's INACTIVE1 read. Stepped to the last link plus 2 s.
                 bool primaryDone = false;
                 float doneAt = -1f;
-                for (int i = 0; i < 60 * 90; i++)
+                float settledAt = -1f;
+                for (int i = 0; i < 90f / WaitDt; i++)
                 {
-                    clock += Dt;
-                    runtime.Advance(Dt);
-                    graph.Step(Dt);
+                    clock += WaitDt;
+                    runtime.Advance(WaitDt);
+                    graph.Step(WaitDt);
                     if (!primaryDone && done.Contains(primary))
                     {
                         primaryDone = true;
-                        doneAt = i * Dt;
+                        doneAt = clock;
                     }
+                    if (settledAt < 0f && primaryDone && started.Contains("lockleargoesdown")
+                        && hullY - hull.GlobalPosition.Y > 5f)
+                    {
+                        settledAt = clock;
+                    }
+                    if (settledAt >= 0f && clock >= settledAt + 2f)
+                        break;
                 }
                 foreach (var (door, burn, finisher) in Doors)
                 {
@@ -230,12 +243,25 @@ internal static class ZeppelinCannonBurnoutSuites
             {
                 runtime.DamageAt(cannon, pool.MaxHealth + 1f);
                 var panels = runtime.FindNodes("panels", bag).FirstOrDefault();
-                float offAt = -1f;
-                for (int i = 1; i <= 60 * 60; i++)
+                var ringPools = DanteRing.Select(ring =>
                 {
-                    runtime.Advance(Dt);
+                    var node = runtime.FindNodes(ring, dante).FirstOrDefault();
+                    return node != null ? runtime.Destructibles.PoolsOn(node).FirstOrDefault() : null;
+                }).ToList();
+                float offAt = -1f;
+                float settledAt = -1f;
+                // Stepped until everything the checks below read has landed plus a margin; the
+                // 60 s ceiling is for a chain that never gets there.
+                for (int i = 1; i <= 60f / WaitDt; i++)
+                {
+                    runtime.Advance(WaitDt);
                     if (offAt < 0f && panels is { Visible: false })
-                        offAt = i * Dt;
+                        offAt = i * WaitDt;
+                    if (settledAt < 0f && offAt >= 0f && started.Contains("finish_dtzepgasbag1")
+                        && ringPools.All(p => p is { Status: DestructibleRegistry.State.Destroyed }))
+                        settledAt = i * WaitDt;
+                    if (settledAt >= 0f && i * WaitDt >= settledAt + 2f)
+                        break;
                 }
                 foreach (var name in new[] { "dtzepleft_gasbag1", "dtzepright_gasbag1", "finish_dtzepgasbag1" })
                     ctx.Check(started.Contains(name), $"{name} started");
