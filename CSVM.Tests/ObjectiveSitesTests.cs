@@ -8,12 +8,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="ObjectiveSites.CollectTargets"/>'s two site sources: <c>targets.zrd</c>'s own
-/// <c>objective</c> entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits, each dropped again
-/// once a completed objective's <c>REMOVE_OBJECTIVE_TARGET</c> names its key;
-/// <see cref="ObjectiveSites.CollectOtherTargets"/>'s <c>other_target</c> half, the curated list
-/// that puts a mission's chosen structures on the Non-Aircraft cycle while leaving every unflagged
-/// entry of the same table off every cycle; the director-free split both passes make over the
+/// <see cref="ObjectiveSites.CollectFlagged"/>'s two site sources: <c>targets.zrd</c>'s own
+/// entries carrying the pass's flag and the graph's matching <c>ADD_</c> edits, each dropped again
+/// once a completed objective's <c>REMOVE_</c> directive names its key; the
+/// <see cref="TargetFlag.OtherTarget"/> pass's curated list, which puts a mission's chosen
+/// structures on the Non-Aircraft cycle while leaving every unflagged entry of the same table off
+/// every cycle; the director-free split both passes make over the
 /// shipped Instant Action and multiplayer tables, where nothing edits either half; and
 /// <see cref="ObjectiveSites.LiveDespiteState"/>, the resolved-node destroyed gate a live
 /// <c>Collect</c> applies beside it. A site is offered from mission start with the graph's store
@@ -29,7 +29,8 @@ public class ObjectiveSitesTests
         var into = new List<string>();
 
         Assert.Empty(graph.ObjectiveTargets);
-        ObjectiveSites.CollectTargets(script, graph, TargetsWithObjectiveFlag("rfspt1"), into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph,
+            TargetsWithObjectiveFlag("rfspt1"), into);
 
         Assert.Contains("rfspt1", into);
     }
@@ -42,7 +43,7 @@ public class ObjectiveSitesTests
         var targets = TargetsWithObjectiveFlag("rfspt1");
 
         var before = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, targets, before);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph, targets, before);
         Assert.Contains("rfspt1", before);
 
         // OBJECTIVE1 is conditionless, so it completes on the first tick, the way a shipped
@@ -51,7 +52,7 @@ public class ObjectiveSitesTests
         Assert.True(graph.CompletedOf(1));
 
         var after = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, targets, after);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph, targets, after);
         Assert.DoesNotContain("rfspt1", after);
     }
 
@@ -65,7 +66,7 @@ public class ObjectiveSitesTests
 
         graph.Step(0.1f);
         var into = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, new MissionTargets(), into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph, new MissionTargets(), into);
         Assert.Contains("caboose_polys", into);
     }
 
@@ -77,7 +78,8 @@ public class ObjectiveSitesTests
         graph.Step(0.1f);
 
         var into = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, TargetsWithObjectiveFlag("rfspt1"), into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph,
+            TargetsWithObjectiveFlag("rfspt1"), into);
 
         Assert.Single(into, key => key == "rfspt1");
     }
@@ -107,9 +109,10 @@ public class ObjectiveSitesTests
         var graph = new ObjectiveGraph(script, new FakeWorld());
         var into = new List<string>();
 
-        ObjectiveSites.CollectTargets(script, graph, TargetsWithFlag("g_tower1", "other_target"), into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph,
+            TargetsWithFlag("g_tower1", "other_target"), into);
         Assert.Empty(into);
-        ObjectiveSites.CollectOtherTargets(script, graph,
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, script, graph,
             TargetsWithFlag("g_tower1", "other_target"), into);
 
         Assert.Contains("g_tower1", into);
@@ -125,8 +128,8 @@ public class ObjectiveSitesTests
         var targets = Labelled("hydrogentank1");
         var into = new List<string>();
 
-        ObjectiveSites.CollectTargets(script, graph, targets, into);
-        ObjectiveSites.CollectOtherTargets(script, graph, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, script, graph, targets, into);
 
         Assert.Empty(into);
     }
@@ -139,14 +142,14 @@ public class ObjectiveSitesTests
         var targets = TargetsWithFlag("trcargo01", "other_target");
 
         var before = new List<string>();
-        ObjectiveSites.CollectOtherTargets(script, graph, targets, before);
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, script, graph, targets, before);
         Assert.Contains("trcargo01", before);
 
         graph.Step(0.1f);
         Assert.True(graph.CompletedOf(1));
 
         var after = new List<string>();
-        ObjectiveSites.CollectOtherTargets(script, graph, targets, after);
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, script, graph, targets, after);
         Assert.DoesNotContain("trcargo01", after);
     }
 
@@ -161,9 +164,9 @@ public class ObjectiveSitesTests
         var targets = TargetsWithFlag("rfspt1", "objective");
 
         var into = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, script, graph, targets, into);
         int objectives = into.Count;
-        ObjectiveSites.CollectOtherTargets(script, graph, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, script, graph, targets, into);
 
         Assert.Equal(1, objectives);
         Assert.Single(into, key => key == "rfspt1");
@@ -177,9 +180,9 @@ public class ObjectiveSitesTests
         var targets = Flagged(("zep", "objective"), ("rearm", "other_target"), ("crate", null));
 
         var into = new List<string>();
-        ObjectiveSites.CollectTargets(null, null, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, null, null, targets, into);
         int objectives = into.Count;
-        ObjectiveSites.CollectOtherTargets(null, null, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, null, null, targets, into);
 
         Assert.Equal(1, objectives);
         Assert.Equal(new[] { "zep", "rearm" }, into);
@@ -194,9 +197,9 @@ public class ObjectiveSitesTests
         var targets = MissionTargets.Load(dir);
 
         var into = new List<string>();
-        ObjectiveSites.CollectTargets(null, null, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, null, null, targets, into);
         int objectives = into.Count;
-        ObjectiveSites.CollectOtherTargets(null, null, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, null, null, targets, into);
 
         Assert.Equal(1, objectives);
         Assert.Single(into);
@@ -245,9 +248,9 @@ public class ObjectiveSitesTests
             SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission),
             SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
         var into = new List<string>();
-        ObjectiveSites.CollectTargets(null, null, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.Objective, null, null, targets, into);
         int objectives = into.Count;
-        ObjectiveSites.CollectOtherTargets(null, null, targets, into);
+        ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, null, null, targets, into);
         // Sorted: each half is a set of keys, and the table's own record order is not a claim
         // this test is making.
         var first = into.GetRange(0, objectives);

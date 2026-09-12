@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ One stopwatch bank for the three `--perf` cost meters
 12. ☑ `TemplateStage` freed-key walk shared
 13. ☑ One `Play` delegate and one `Once` for the three cinemas
-14. ☐ `ObjectiveSites` collects both target classes through one method
+14. ☑ `ObjectiveSites` collects both target classes through one method
 15. ☑ `CameraController` reads its tuning through `_camParams` and names its views
 16. ☑ `CinemaSkips` without the repeated arms and the mirror enum
 17. ☑ The export set out of `SelectionService`
@@ -469,7 +469,35 @@ the three types take it. Method group at the `Launcher` site.
 **Verify.** `BootSequenceTests`, the cinema unit tests and the `cinema-skip-pad` suite green;
 `docs/architecture/UI.md` entries adjusted.
 
-## B14 ☐ `ObjectiveSites` collects both target classes through one method
+## B14 ☑ `ObjectiveSites` collects both target classes through one method
+
+**Landed.** `CollectTargets` and `CollectOtherTargets` are one
+`CollectFlagged(TargetFlag flag, script, graph, targets, into)`. A new public `TargetFlag` enum
+(`Objective`, `OtherTarget`) opens the file, and a private static `Sources` table keyed by it holds
+the three things the two passes differed in: the `MissionTarget` flag the table entry carries, the
+graph store that flag's `ADD_` directive fills, and the removal list a completed objective drops a
+key through. `RemovedByCompletion` takes that row instead of a `bool other`. The objective pass now
+runs the same `Listed` guard the other-target pass always ran, which can skip nothing: `Collect`
+clears the list first and `targets.ByNode` keys are unique, so the pass only ever sees keys it added
+itself. Callers name the flag: `Collect` (both passes), `CampaignMarkerSuites.NamesOf` and the unit
+tests. `docs/architecture/Session.md`'s entry names `CollectFlagged` and `TargetFlag`.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings 0 errors.
+`.\CheckCommentCaps.ps1` and `.\CheckDocEntries.ps1` both clean.
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~ObjectiveSites" -SkipEngine -SkipGoldens`:
+28 passed, 0 failed, 0 skipped of 28.
+`.\RunTests.ps1 -Suite "target-class-cycle,mode-target-table" -SkipUnits -SkipGoldens`: 2 passed,
+0 failed, engine errors clean; `target-class-cycle` notes C3/M01's three cycles as 2/2/45.
+`.\RunTests.ps1 -SkipUnits -SkipEngine`: 23 shots hash-identical.
+
+**Evidence correction.** The item's `46` for `target-class-cycle` on C3/M01 is not a number the
+suite prints: its note reads three cycles of 2/2/45, and its membership check builds the expected
+Non-Aircraft count from the world (`parts.Count + liveGuns`), not from this file. `-Suite` takes
+one string, so the two suites go in as `-Suite "target-class-cycle,mode-target-table"`.
+`docs/org/targeting.md:943` still names `ObjectiveSites.CollectOtherTargets`; it is outside this
+item's file ownership and left untouched.
+
+**Original approach (kept for reference).**
 
 **Goal.** One method collects a flagged class of targets, and its name says which flag.
 

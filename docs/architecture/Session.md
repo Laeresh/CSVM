@@ -145,9 +145,9 @@ directives and `SET_HELP_LABEL` read `ObjectiveTarget`s, where a nested list is 
 
 ## src/Session/ObjectiveSites.cs
 The flown mission's flagged target sites, offered to each player's `TargetPool` carrying the flag
-their own record authors: `CollectTargets` is `targets.zrd`'s `objective` half (the Enemy cycle) and
-`CollectOtherTargets` its `other_target` half (the Non-Aircraft cycle), the curated list admitting a
-mission's chosen structures and no other destructible. A campaign director's script edits both with
+their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `targets.zrd`'s
+`objective` half (the Enemy cycle) and then its `other_target` half (the Non-Aircraft cycle), the
+curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
 take, their table unedited. World SITES only, keyed by `ObjectiveTarget.Key`, re-read every frame so
 a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state; a roster block

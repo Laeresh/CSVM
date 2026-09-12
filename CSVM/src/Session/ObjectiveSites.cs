@@ -6,6 +6,20 @@ using Godot;
 
 namespace CSVM.Session;
 
+/// <summary>Which of a target record's two flags a collection pass reads: <c>objective</c>
+/// (entity <c>+0x4d</c>), whose sites ride the Enemy cycle, or <c>other_target</c>
+/// (<c>+0x4c</c>), whose sites ride the Non-Aircraft cycle.</summary>
+public enum TargetFlag
+{
+    /// <summary>The <c>objective</c> flag: a companion on the Enemy cycle, so the ordinary
+    /// selection draws one flagged site at a time.</summary>
+    Objective,
+
+    /// <summary>The <c>other_target</c> flag: the curated structures a mission puts on the
+    /// Non-Aircraft cycle.</summary>
+    OtherTarget,
+}
+
 /// <summary>One live objective site as the targeting path sees it: the world node the mission
 /// flagged, the two label lines its marker prints, and where the site is this frame. ONE instance
 /// per site for as long as the mission flags it, because the selection is held by source identity
@@ -55,6 +69,17 @@ public sealed class ObjectiveSite
 /// needs to know about an aeroplane.</summary>
 public sealed class ObjectiveSites
 {
+    // One row per flag: the record's own flag, the graph store that flag's ADD_ directive fills,
+    // and the removal list a completed objective drops such a key through. The two classes differ
+    // in nothing else, so one pass serves both.
+    private static readonly Dictionary<TargetFlag, FlagSource> Sources = new()
+    {
+        [TargetFlag.Objective] = new(t => t.Objective, g => g.ObjectiveTargets,
+            d => d.RemoveObjectiveTarget),
+        [TargetFlag.OtherTarget] = new(t => t.OtherTarget, g => g.OtherTargets,
+            d => d.RemoveOtherTarget),
+    };
+
     private readonly CampaignDirector? _director;
     private readonly Messages _messages;
     private readonly MissionTargets _targets;
@@ -88,49 +113,19 @@ public sealed class ObjectiveSites
         _runtime = runtime;
     }
 
-    /// <summary>The target keys carrying the objective-target flag: <c>targets.zrd</c>'s own
-    /// flagged entries not removed by a completed objective's <c>REMOVE_OBJECTIVE_TARGET</c>, plus
-    /// everything <c>ADD_OBJECTIVE_TARGET</c> has added; a null script and graph are the
-    /// director-free modes, the table alone. ⚠ Do not build this from
-    /// <see cref="ObjectiveGraph.ObjectiveTargets"/> alone: that store starts empty. ⚠ A roster
-    /// block's own flag (aiv slot 37) is NOT here; it rides the block's aircraft.</summary>
-    public static void CollectTargets(ObjectiveScript? script, ObjectiveGraph? graph,
-        MissionTargets targets, List<string> into)
+    /// <summary>The target keys carrying one flag: <c>targets.zrd</c>'s own entries carrying it,
+    /// less those a completed objective's <c>REMOVE_</c> directive names, plus everything the
+    /// matching <c>ADD_</c> has added. A null script and graph are the director-free modes, the
+    /// table alone. ⚠ Append both classes to ONE list, the objectives first: a key carrying both
+    /// flags is an objective, and this pass skips what the earlier one took. ⚠ Do not build a
+    /// class from <see cref="ObjectiveGraph.ObjectiveTargets"/> alone: that store starts empty.</summary>
+    public static void CollectFlagged(TargetFlag flag, ObjectiveScript? script,
+        ObjectiveGraph? graph, MissionTargets targets, List<string> into)
     {
+        var source = Sources[flag];
         foreach (var entry in targets.ByNode)
         {
-            if (entry.Value.Objective && !RemovedByCompletion(script, graph, entry.Key, other: false))
-            {
-                into.Add(entry.Key);
-            }
-        }
-
-        if (graph == null)
-        {
-            return;
-        }
-
-        foreach (var key in graph.ObjectiveTargets)
-        {
-            if (!Listed(into, key))
-            {
-                into.Add(key);
-            }
-        }
-    }
-
-    /// <summary>The target keys carrying the other-target flag, the curated per-mission list that
-    /// puts a structure on the Non-Aircraft cycle: <c>targets.zrd</c>'s own <c>other_target</c>
-    /// entries not dropped by a completed objective's <c>REMOVE_OTHER_TARGET</c>, plus everything
-    /// <c>ADD_OTHER_TARGET</c> has added. ⚠ Append to the list <see cref="CollectTargets"/> filled,
-    /// not to a fresh one: a key already on it is an objective, and that flag outranks this one.
-    /// A null script and graph are the director-free modes: the table alone.</summary>
-    public static void CollectOtherTargets(ObjectiveScript? script, ObjectiveGraph? graph,
-        MissionTargets targets, List<string> into)
-    {
-        foreach (var entry in targets.ByNode)
-        {
-            if (entry.Value.OtherTarget && !RemovedByCompletion(script, graph, entry.Key, other: true)
+            if (source.Flagged(entry.Value) && !RemovedByCompletion(script, graph, entry.Key, source)
                 && !Listed(into, entry.Key))
             {
                 into.Add(entry.Key);
@@ -142,7 +137,7 @@ public sealed class ObjectiveSites
             return;
         }
 
-        foreach (var key in graph.OtherTargets)
+        foreach (var key in source.Added(graph))
         {
             if (!Listed(into, key))
             {
@@ -231,9 +226,9 @@ public sealed class ObjectiveSites
         }
 
         _live.Clear();
-        CollectTargets(_director?.Script, graph, _targets, _live);
+        CollectFlagged(TargetFlag.Objective, _director?.Script, graph, _targets, _live);
         int objectives = _live.Count;
-        CollectOtherTargets(_director?.Script, graph, _targets, _live);
+        CollectFlagged(TargetFlag.OtherTarget, _director?.Script, graph, _targets, _live);
         for (int i = 0; i < _live.Count; i++)
         {
             Offer(_live[i], graph, objective: i < objectives, into);
@@ -241,7 +236,7 @@ public sealed class ObjectiveSites
     }
 
     private static bool RemovedByCompletion(ObjectiveScript? script, ObjectiveGraph? graph,
-        string key, bool other)
+        string key, FlagSource source)
     {
         if (script == null || graph == null)
         {
@@ -250,8 +245,7 @@ public sealed class ObjectiveSites
 
         foreach (var def in script.Objectives)
         {
-            if (graph.CompletedOf(def.Number)
-                && Holds(other ? def.RemoveOtherTarget : def.RemoveObjectiveTarget, key))
+            if (graph.CompletedOf(def.Number) && Holds(source.Removed(def), key))
             {
                 return true;
             }
@@ -404,4 +398,10 @@ public sealed class ObjectiveSites
         site.Objective = objective;
         return site;
     }
+
+    // What a collection pass reads for the flag it was handed, one row of `Sources`.
+    private readonly record struct FlagSource(
+        Func<MissionTarget, bool> Flagged,
+        Func<ObjectiveGraph, IReadOnlyCollection<string>> Added,
+        Func<ObjectiveDef, IReadOnlyList<ObjectiveTarget>> Removed);
 }
