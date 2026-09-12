@@ -214,6 +214,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   before and after and sweeps every golden; original mode stays byte-identical on both.** The dump
   catches a text change the goldens' camera poses never frame, and the goldens catch a runtime
   effect, a light or a tonemap curve, that the shader text cannot show.
+- **GOLD-13** — **Every pinned shot is a settled frame, so a defect that lives on one transition
+  frame is invisible to the whole set.** The three menu shots stand on a presentation that has
+  finished standing up, and no `--menu=` aid can press an Options apply, so nothing in the goldens
+  can photograph the frame a presentation switch passes through. Hash-identical shots prove such a
+  change moved no settled pixel, never that it fixed the transition; settle that from the frame
+  order in code and from a suite that reads the state across it.
 
 ## DET — determinism and randomness
 

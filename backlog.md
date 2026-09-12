@@ -1882,21 +1882,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   they say. An empty pane is the fallback finding nothing armed, not a missing pane.
   *Cross-refs:* `BL-658`'s landing (`git log --grep=BL-658`), which filled the lower pane.
 
-- `BL-757` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Switching the menu
-  presentation shows Godot's procedural sky between the old menu and the new one.** *Evidence:*
-  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "On switching from built-in to
-  Original and vice versa i can see the godot skybox too. Can we replace the skybox with black?".
-  `ApplyOptions` deactivates the running presentation, re-selects and shows the new one over three
-  statements (`CSVM/src/Session/Launcher.cs:1326-1330`), and the persistent `WorldEnvironment`
-  behind the menu is still on `BGMode.Sky` with its `ProceduralSkyMaterial` (`:1093-1098`), so any
-  frame with no opaque menu backdrop over it draws that sky. *Fix shape:* the environment is blacked
-  while the menu owns the screen, the way `BlankAndQuit` blacks it on the way out
-  (`CSVM/src/Session/Launcher.cs:1529-1538`), and the mission sky is put back when a session starts.
-  *⚠ Traps:* the environment is process-lifetime and feeds the glossy water's specular
-  (`UseMissionSky`, `:1129-1134`), so a blank has to be undone on a launch rather than left standing.
-  ⚠ **No headless run may pay for it**, the rule `BlankAndQuit` already carries.
-  *Cross-refs:* `BL-710`'s landing (`git log --grep=BL-710`), the same sky at the quit exits.
-
 - `BL-760` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **PLANE COST and CURRENT
   WEIGHT do not follow the row the cursor is on in an open list.** *Evidence:* reported at the
   controls over `PLAN-M5-polish-13`'s closing sortie, "Weight and Plane Cost is previewed on hover of

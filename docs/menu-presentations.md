@@ -87,6 +87,13 @@ A switch is three host calls in order: `Deactivate()` (ends the instance and cal
 `Show(TopLevel)`. `Launcher.ApplyOptions` performs them one frame after the
 `OptionsApplyExit` that asked for them, after saving every choice it carries.
 
+The frame in between belongs to no presentation: the host hides the outgoing one as it hands the
+exit to the sink, and the incoming one does not stand up until the apply runs. Nothing opaque is
+over the persistent `WorldEnvironment` on that frame, so `Launcher.ShowMenu` blacks its background
+through `Utils/WorldBackdrop.cs` and a launch puts the sky back. A presentation still draws its own
+opaque backdrop: the black is what the switch's own frame, and the held frame after a quit, fall
+back to.
+
 ## The shared features
 
 `MenuFeatureSet` (`CSVM/src/UI/Menu/MenuFeatureSet.cs`) holds one instance of each feature, fetched

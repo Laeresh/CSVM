@@ -6,6 +6,7 @@ using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
+using CSVM.Utils;
 
 namespace CSVM.Testing;
 
@@ -75,6 +76,123 @@ internal static class MenuLaunchReturnSuites
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    [Suite("menu-backdrop",
+        "the persistent environment's background over a presentation switch and a launch, on the "
+        + "launcher's own WorldEnvironment: a run that shows no menu leaves it on the sky, the "
+        + "menu's first show blacks it, the frame between the Options apply's exit and the switch "
+        + "it asks for carries no presentation and stays black, the switch's three host calls "
+        + "stand Original up over the same black, and a launch puts the sky back with the "
+        + "material the rig built still on it")]
+    internal static void MenuBackdrop(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        var env = LiveEnvironment(ctx);
+        ctx.Check(env != null, $"the launcher's own WorldEnvironment is in the tree beside the test host");
+        if (layout == null || env == null)
+        {
+            return;
+        }
+
+        var sky = env.Sky;
+        ctx.Check(env.BackgroundMode == Godot.Environment.BGMode.Sky,
+            $"a run that shows no menu leaves the sky standing, so no scripted run pays for the black ({env.BackgroundMode})");
+
+        string root = Path.Combine(ctx.ScratchDir, "menu-backdrop");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        var store = new CampaignProfileStore(Path.Combine(root, "Profiles"));
+        var run = new Run(ctx, string.Empty, layout, store);
+        try
+        {
+            Switch(ctx, run, env, sky);
+        }
+        finally
+        {
+            run.Host.Deactivate();
+            // The environment is the process's, not this suite's: every later suite and every
+            // world built after this one reads it.
+            WorldBackdrop.Sky(env);
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    // The switch as the launcher performs it, with the background read at every step: ShowMenu
+    // blacks and shows, the apply exit arrives at the end of one frame, and ApplyOptions runs at
+    // the top of the next, which is the frame that used to draw the procedural sky.
+    private static void Switch(TestContext ctx, Run run, Godot.Environment env, Godot.Sky? sky)
+    {
+        var host = run.Host;
+        host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: null);
+        WorldBackdrop.Black(env);
+        run.Show(MenuReturnDestination.TopLevel);
+        var menu = (host.Active as BuiltInPresentation)?.Menu;
+        ctx.Check(menu is { Visible: true } && WorldBackdrop.IsBlack(env),
+            $"the menu's first show leaves the background flat black ({env.BackgroundMode}, {env.BackgroundColor})");
+        if (menu == null)
+        {
+            return;
+        }
+
+        WalkTo(run, menu, LaunchMenu.OptionsRow);
+        run.Press(Accept);
+        run.Press(Down);
+        run.Press(Right);
+        ctx.Check(menu.ShownRowText.EndsWith("Original", StringComparison.Ordinal),
+            $"Right on the presentation row asks for Original ({menu.ShownRowText})");
+        run.Press(Down);
+        run.Press(Down);
+        run.Press(Down);
+        run.Press(Accept);
+        var applied = run.Expect<OptionsApplyExit>();
+        ctx.Check(applied?.Presentation == PresentationId.Original, $"the apply carries the request ({applied?.Presentation})");
+        ctx.Check(!host.Shown && !menu.Visible && WorldBackdrop.IsBlack(env),
+            $"the frame the exit lands on has no presentation on screen and is still black ({env.BackgroundMode})");
+
+        host.Deactivate();
+        ctx.Check(host.Active == null && WorldBackdrop.IsBlack(env),
+            $"the switch's first call frees the old presentation over the same black ({env.BackgroundMode})");
+        host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: applied?.Presentation.Value);
+        WorldBackdrop.Black(env);
+        run.Show(MenuReturnDestination.TopLevel);
+        ctx.Check(host.Selected == PresentationId.Original && (host.Active as OriginalPresentation)?.Shell != null,
+            $"and the last stands Original up ({host.Selected})");
+        ctx.Check(WorldBackdrop.IsBlack(env), $"with the background black across every frame of the switch ({env.BackgroundMode})");
+
+        WorldBackdrop.Sky(env);
+        ctx.Check(env.BackgroundMode == Godot.Environment.BGMode.Sky && env.Sky?.GetInstanceId() == sky?.GetInstanceId(),
+            $"a launch takes the sky back with the material the rig built ({env.BackgroundMode})");
+    }
+
+    // The launcher's process-lifetime environment: the WorldEnvironment its lighting rig adds
+    // beside the node the suites are hosted under, which is the object the menu path blacks.
+    private static Godot.Environment? LiveEnvironment(TestContext ctx)
+    {
+        if (ctx.Host.GetParent() is not { } launcher)
+        {
+            return null;
+        }
+
+        foreach (var child in launcher.GetChildren())
+        {
+            if (child is Godot.WorldEnvironment world)
+            {
+                return world.Environment;
+            }
+        }
+
+        return null;
     }
 
     // A process started under Built-in with --menu=chapter: the factory reads the aid while it is

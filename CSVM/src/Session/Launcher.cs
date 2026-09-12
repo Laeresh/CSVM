@@ -1123,6 +1123,9 @@ public partial class Launcher : Node3D
     // CLI launch leaves the log to tell the story, exactly as the single-root class did).
     private bool LaunchSession()
     {
+        // Undoes the menu's black before anything reads the environment: the world's reflections
+        // and the cockpit pass's copy of it both take the sky from here (Utils/WorldBackdrop.cs).
+        WorldBackdrop.Sky(_env);
         // The saved difficulty, read at every launch so an Options apply reaches the next flight
         // in the same process. The flag and --det rules are the spec's (WithSavedDifficulty).
         _spec = _spec.WithSavedDifficulty(OptionsStore.UserOptions().Load().Difficulty);
@@ -1308,6 +1311,10 @@ public partial class Launcher : Node3D
     // first Show reads it, and it is consumed here so a return shows the destination itself.
     private void ShowMenu(MenuReturnDestination destination)
     {
+        // A presentation is hidden a frame before the switch that replaces it, and nothing opaque
+        // stands over the environment in between, so the menu owns a black background from its
+        // first show until a launch takes it back (Utils/WorldBackdrop.cs).
+        WorldBackdrop.Black(_env);
         _menuHost ??= BuildMenuHost();
         string aid = _menuAid ?? string.Empty;
         _menuHost.Show(destination);
@@ -1672,7 +1679,7 @@ public partial class Launcher : Node3D
         BlankAndQuit();
     }
 
-    /// <summary>The three quits reached from a frame that is still drawing: blanks the persistent
+    /// <summary>The three quits reached from a frame that is still drawing: blacks the persistent
     /// <c>WorldEnvironment</c>'s background, then ends the frame. <c>Quit()</c> ends the frame
     /// rather than the process, so one more frame is drawn and that image is held on screen for
     /// the whole shutdown, and the menu host hides its opaque backdrop one call before the exit
@@ -1680,12 +1687,7 @@ public partial class Launcher : Node3D
     /// ⚠ Every probe exit keeps the bare <c>Quit()</c>: no headless run may pay for this.</summary>
     private void BlankAndQuit()
     {
-        if (_env is { } env)
-        {
-            env.BackgroundMode = Godot.Environment.BGMode.Color;
-            env.BackgroundColor = Colors.Black;
-        }
-
+        WorldBackdrop.Black(_env);
         GetTree().Quit();
     }
 

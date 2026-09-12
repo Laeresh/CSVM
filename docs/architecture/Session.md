@@ -38,7 +38,7 @@ menu as one `MenuHost` built on the first show, the presentation resolution, the
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`),
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
 extraction it shows `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
-`BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on.
+`BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on, and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch.
 
 ## src/Session/LiveryResolver.cs
 Resolves which livery each player flies: the shipped paint catalog and the per-pattern

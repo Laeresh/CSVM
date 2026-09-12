@@ -273,3 +273,13 @@ request → Built-in default, with the caller's availability check applied only 
 picked. `Resolve` never rewrites what `Requested` would answer, so a fallback cannot alter
 `OptionsStore`'s saved value. Presentation names are plain strings; no presentation contract type
 lives here.
+
+## src/Utils/WorldBackdrop.cs
+The background of the process's one `WorldEnvironment`, which is a `ProceduralSkyMaterial` as the
+lighting rig builds it and belongs to no menu and no mission. `Black` writes flat black and `Sky`
+puts the sky back, leaving the sky material in place either way, and `IsBlack` is what a suite asks
+of a frame. `Session/Launcher.cs` owns every call: black on each menu show and at the quits that
+still draw a frame, the sky at each launch, before a world or the cockpit pass's copy of the
+environment can read it. A menu frame with no presentation on screen is what this exists for: the
+apply's switch runs a frame after the exit that asked for it, and the presentation is already
+hidden. Read `Session/Launcher.cs` next for the three sites.
