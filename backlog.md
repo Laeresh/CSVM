@@ -1845,28 +1845,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the Instant Action palette swallows the dark one, so keep a ground behind coloured text there.
   *Cross-refs:* `BL-703`'s landing (`git log --grep=BL-703`), which added the strip.
 
-- `BL-754` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The plane
-  construction hub writes no line in red: the original reddens PLANE COST when the wallet cannot
-  cover the build and CURRENT WEIGHT when the build is over capacity.** *Evidence:* reported at
-  the controls over `PLAN-M5-polish-12`'s closing sortie, "colour Current Weight: xxx lbs. red if
-  overweight", and both halves are in `PLANECONSTRUCTION.SCRIPT`'s mailbox arms. Arm 12001 sets
-  `px_t_planecost`'s colour to the authored one when callback 2213 reports the build affordable
-  (and unconditionally on the export and multiplayer doors) and to `0xffff0000` otherwise; arm
-  12002 does the same for `px_t_currentweight` off callback 2214's capacity answer. `CAP-50.mkv`
-  shows the weight line red over capacity. Ours writes both in the page's own ink whatever the
-  bill says (`CSVM/src/UI/Menu/Original/OriginalHangar.cs`, `ComposeHubChrome`), while the cash
-  figure already takes the problems ink once the build outruns the wallet and Built-in colours
-  the same totals line through `TotalsOverweight` (`CSVM/src/UI/HangarFlow.cs`). *Fix shape:* the
-  board has no red ink to reach for, so this needs one added to `BoardInk` and to each
-  `PaletteFor`, or a narrower way for a hub line to carry a literal colour; then redden the two
-  lines off `HangarBill`'s own verdict (`PurchaseVerdict.Overweight` and the affordable check
-  `HangarEconomy.Price` already reports). *⚠ Traps:* the red is a literal in the script, not a
-  layout colour, so it is the same on every screen and must not be read off a colour tail; the
-  cash figure's own over-budget mark is a remake addition and is not this. The pending case
-  before an airframe is chosen has no weight and must stay plain. *Cross-refs:* `docs/org/hangar.md`,
-  `docs/org/menu-inventory.md` Part 4, `BL-655`'s landing (`git log --grep=BL-655`), which added
-  the cash note.
-
 - `BL-755` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ammo screen's two
   description panes trade the cursor's words instead of each holding its own subject.** *Evidence:*
   reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "the description can be
@@ -1881,20 +1859,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and their y is pinned four pixels over the shipped row, so do not move them while changing what
   they say. An empty pane is the fallback finding nothing armed, not a missing pane.
   *Cross-refs:* `BL-658`'s landing (`git log --grep=BL-658`), which filled the lower pane.
-
-- `BL-760` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **PLANE COST and CURRENT
-  WEIGHT do not follow the row the cursor is on in an open list.** *Evidence:* reported at the
-  controls over `PLAN-M5-polish-13`'s closing sortie, "Weight and Plane Cost is previewed on hover of
-  combo box rows (updates on hover)". The right page already previews: the description box and the
-  name line read the focused list row (`FocusedItem` and `FocusedAirframe`,
-  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:1386-1398`, `:1505-1513`), and so does the blueprint.
-  The hub's two figures do not, both reading `hangar.Bill`, the committed scratch's price
-  (`:1303-1306`, `:1333-1339`). *Fix shape:* the chrome prices the build as it would stand with the
-  focused row taken, which every list already has as a `CostWith…` delegate the unaffordable mark
-  uses (`:332-346`). *⚠ Traps:* a preview must not commit, and leaving the list without a pick has to
-  put both figures back. The cash note takes the problems ink off the same bill, so a previewed
-  figure moves that colour too; decide whether the mark previews with it.
-  *Cross-refs:* `BL-754` (the same weight line's ink).
 
 - `BL-761` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The tab pages'
   description box carries the figures alone where the original follows them with a DESCRIPTION

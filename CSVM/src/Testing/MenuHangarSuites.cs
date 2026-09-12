@@ -96,7 +96,10 @@ internal static class MenuHangarSuites
         + "no residue, the cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals "
         + "page with an over-priced row marked yet pickable while the wallet-free door draws the same "
         + "note over its export funds and marks nothing, that door's own inventory keeps Export live "
-        + "beside the shipped Sell and asks the priced sale question, and a switch discards an open build")]
+        + "beside the shipped Sell and asks the priced sale question, the hub's PLANE COST is red past "
+        + "the wallet and its CURRENT WEIGHT red past the airframe's capacity and both plain otherwise, "
+        + "an open list's focused row is what the two figures price without taking it, and a switch "
+        + "discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -140,7 +143,7 @@ internal static class MenuHangarSuites
             OriginalHub(ctx, host, seat, shell, fit, hangar);
             OriginalPurchase(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
             OriginalInventory(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
-            OriginalWallet(ctx, host, seat, shell, fit, hangar);
+            OriginalWallet(ctx, host, seat, shell, fit, hangar, layout);
             OriginalSwitch(ctx, host, seat, shell, fit, hangar, store);
         }
         finally
@@ -830,7 +833,7 @@ internal static class MenuHangarSuites
 
     // The cabin's PLANE CONSTRUCTION over the aid profile's wallet: the cash note on a tab and on
     // the totals page, an over-priced engine row marked in the open list and still picked.
-    private static void OriginalWallet(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
+    private static void OriginalWallet(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, MenuLayout layout)
     {
         shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true));
         ctx.Check(shell.ShowCabin(CampaignAidProfiles.Pilot), $"the aid profile seats on the cabin ({shell.Screen})");
@@ -858,6 +861,11 @@ internal static class MenuHangarSuites
             $"the airframe tab draws the cash note with the profile's funds ({figure})");
         ctx.Check(wallet.Funds < hangar.Bill.Total.Cost && Row(shell, OriginalShell.AirframeDropKey)?.Label.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal) == true,
             $"the airframe box is marked over a build the wallet cannot cover ({Row(shell, OriginalShell.AirframeDropKey)?.Label})");
+        // The script's own two arms: the cost line red past the wallet, the weight line in the
+        // page's ink while the build is inside its capacity.
+        ctx.Check(HubFigure(layout, board, "PX_T_PLANECOST")?.Ink == BoardInk.Alarm
+            && HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink == BoardInk.Dialog,
+            $"and the cost line is red where the weight line is not ({HubFigure(layout, board, "PX_T_PLANECOST")?.Ink}, {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink})");
         var engineTab = Row(shell, "PX_B_ENGINE")!;
         Click(host, seat, Pointer(fit, engineTab.X + 5f, engineTab.Y + 5f, pressed: true, clicked: true));
         board = shell.Compose();
@@ -879,9 +887,20 @@ internal static class MenuHangarSuites
             && cheapest.Label.StartsWith(HangarFeature.UnaffordableMark, StringComparison.Ordinal),
             $"the open list marks the over-priced rows ({shell.OpenHangarDropdown}, {shell.FocusedKey}, {cheapest?.Label})");
         Press(host, seat, Up);
+        // The hub prices the row under the cursor as though it were taken, which is what the
+        // description box and the blueprint already preview, and takes nothing.
+        var previewed = hangar.BillWithEngine(engine);
+        board = shell.Compose();
+        ctx.Check(hangar.Scratch.Engine != engine
+            && HubFigure(layout, board, "PX_T_PLANECOST")?.Text.Contains("$" + previewed.Total.Cost.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true
+            && HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Text.Contains(previewed.Total.Weight.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true,
+            $"the focused row's build is what the two figures read while the list stands ({HubFigure(layout, board, "PX_T_PLANECOST")?.Text}, {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Text})");
         Press(host, seat, Accept);
         ctx.Check(shell.OpenHangarDropdown == null && hangar.Scratch.Engine == engine,
             $"a marked row still takes the pick ({hangar.Scratch.Engine}, {shell.FocusedKey})");
+        board = shell.Compose();
+        ctx.Check(HubFigure(layout, board, "PX_T_PLANECOST")?.Text.Contains("$" + hangar.Bill.Total.Cost.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true,
+            $"and the closed box leaves the figures on the build that stands ({HubFigure(layout, board, "PX_T_PLANECOST")?.Text})");
         var ready = Row(shell, OriginalShell.ReadyKey)!;
         Click(host, seat, Pointer(fit, ready.X + 5f, ready.Y + 5f, pressed: true, clicked: true));
         board = shell.Compose();
@@ -890,12 +909,56 @@ internal static class MenuHangarSuites
             $"the totals page keeps the note and names the shortfall in the original's words ({shell.Screen})");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.HangarEngine, $"Back returns to the tab the hub last showed ({shell.Screen})");
+        OriginalOverweight(ctx, shell, hangar, layout);
         WalletInventory(ctx, host, seat, shell, fit, hangar);
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen, $"Back then cancels the build and resumes the cabin ({shell.Screen})");
         var leave = Row(shell, "ReturnToMainMenu")!;
         Click(host, seat, Pointer(fit, leave.X + 5f, leave.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"RETURN TO MAIN MENU leaves for the top level ({shell.Screen})");
+    }
+
+    // The weight line's own arm, over the picks that reach it: the lightest airframe under every
+    // armour press and every hardpoint is past its capacity, so the line takes the red literal,
+    // and the ink goes back with the presses. The build is dropped with the rest at the cancel.
+    private static void OriginalOverweight(TestContext ctx, OriginalShell shell, HangarFeature hangar, MenuLayout layout)
+    {
+        hangar.PickAirframe(0);
+        hangar.AnswerDefaultsAsk(true);
+        for (int zone = 0; zone < 4; zone++)
+        {
+            hangar.SetArmour(zone, CustomPlaneDef.MaxArmourUnits);
+        }
+
+        hangar.SetHardpoints(0, CustomPlaneDef.MaxHardpointsPerWing);
+        hangar.SetHardpoints(1, CustomPlaneDef.MaxHardpointsPerWing);
+        var board = shell.Compose();
+        ctx.Check(hangar.Bill.Verdict == PurchaseVerdict.Overweight && HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink == BoardInk.Alarm,
+            $"the weight line is red over capacity ({hangar.Bill.Total.Weight} of {hangar.Bill.Capacity} lbs., {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink})");
+        for (int zone = 0; zone < 4; zone++)
+        {
+            hangar.SetArmour(zone, 0);
+        }
+
+        hangar.SetHardpoints(0, 0);
+        hangar.SetHardpoints(1, 0);
+        board = shell.Compose();
+        ctx.Check(hangar.Bill.Verdict != PurchaseVerdict.Overweight && HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink == BoardInk.Dialog,
+            $"and back in the page's ink under it ({hangar.Bill.Total.Weight} of {hangar.Bill.Capacity} lbs., {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Ink})");
+    }
+
+    // A hub figure by the authored box it stands in, which is what tells the cost line from the
+    // cash note without this suite restating the shipped words.
+    private static BoardLine? HubFigure(MenuLayout layout, ComposedBoard board, string key)
+    {
+        if (layout.Screen(OriginalShell.PlaneConstructionSection)?.Widget(key) is not { } widget)
+        {
+            return null;
+        }
+
+        float x = widget.Int("X");
+        float y = widget.Int("Y");
+        return board.Lines.FirstOrDefault(l => l.X == x && l.Y == y);
     }
 
     // The wallet's own inventory: both shipped verbs on their buttons, the shipped prompt naming

@@ -86,6 +86,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Plane Construction hub on its airframe tab.</summary>
     public const string PlaneConstructionAid = "plane-construction";
 
+    /// <summary>The Plane Construction aid's argument that leaves its airframe list standing open
+    /// with a row other than the standing pick under the cursor, so the shot shows the hub's
+    /// figures previewing that row.</summary>
+    public const string PlaneConstructionOpenAid = "open";
+
+    /// <summary>The Plane Construction aid's argument that builds past the airframe's weight
+    /// capacity, so the shot shows the reddened CURRENT WEIGHT.</summary>
+    public const string PlaneConstructionOverweightAid = "overweight";
+
     /// <summary>The aid value that opens the hub's paint tab on a Fury in Fortune Hunters colours.</summary>
     public const string PlanePaintAid = "plane-paint";
 
@@ -404,6 +413,32 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case PlaneConstructionAid:
                     _shell.OpenHangarTab(OriginalScreen.HangarAirframe, AidPlaneName);
+                    break;
+                case PlaneConstructionAid + ":" + PlaneConstructionOpenAid:
+                    // The airframe list open on a row that is not the standing pick, the pose the
+                    // hub's previewed figures need, reached by the keyboard walk a pilot has.
+                    _shell.OpenHangarTab(OriginalScreen.HangarAirframe, AidPlaneName);
+                    _shell.Step(new MenuCommands { Accept = true });
+                    _shell.Step(new MenuCommands { MoveY = 1 });
+                    break;
+                case PlaneConstructionAid + ":" + PlaneConstructionOverweightAid:
+                    // A build past its airframe's capacity: the lightest airframe carrying every
+                    // armour press and every hardpoint, which is the state the weight line reddens
+                    // on and which no default build reaches.
+                    _shell.OpenHangarTab(OriginalScreen.HangarHardpoints, AidPlaneName);
+                    if (host.Features.TryGet<HangarFeature>(out var heavy) && heavy.IsOpen)
+                    {
+                        heavy.PickAirframe(0);
+                        heavy.AnswerDefaultsAsk(true);
+                        for (int zone = 0; zone < 4; zone++)
+                        {
+                            heavy.SetArmour(zone, CustomPlaneDef.MaxArmourUnits);
+                        }
+
+                        heavy.SetHardpoints(0, CustomPlaneDef.MaxHardpointsPerWing);
+                        heavy.SetHardpoints(1, CustomPlaneDef.MaxHardpointsPerWing);
+                    }
+
                     break;
                 case PlanePaintAid:
                     // The same pose as Built-in's paint aid: a Fury in Fortune Hunters colours with

@@ -63,6 +63,12 @@ public enum BoardInk
     /// <summary>The credits screen's hidden line, in the yellow its script-created text widget is
     /// given (<c>0xffffff00</c>). One screen writes it and it takes no palette.</summary>
     Secret,
+
+    /// <summary>A figure the build behind it fails a check on, the plane cost past the wallet and
+    /// the current weight past the airframe's capacity. Pure red whatever screen it stands on,
+    /// which is what the plane-construction script's own <c>0xffff0000</c> says
+    /// (<c>docs/org/hangar.md</c>, "The two red figures"), so it takes no palette.</summary>
+    Alarm,
 }
 
 /// <summary>Which edge of its <see cref="BoardLine.Width"/> a text widget's words sit against,

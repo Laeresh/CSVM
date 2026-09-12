@@ -373,6 +373,16 @@ public sealed partial class OriginalShell
     private static bool IsPaperButton(string key) =>
         key is PurchaseNowKey or InventorySellKey or InventoryExportKey or AskOkKey or AskCancelKey;
 
+    // A list whose rows move the bill: the wallet mark on the rows the funds could not cover, and
+    // the same pricing kept on the list so the hub can show what a row under the cursor would cost
+    // and weigh without taking it.
+    private static HangarList PricedList(
+        HangarFeature hangar, string[] items, int current, Action<int> select, Func<int, HangarBill> billWith)
+    {
+        MarkUnaffordable(hangar, items, i => billWith(i).Total.Cost);
+        return new HangarList(items, current, select, BillWith: billWith);
+    }
+
     // The wallet mark on every priced row the funds could not cover after that pick, baked into
     // the item texts so the closed box, the open list and the focus read the same row.
     private static void MarkUnaffordable(HangarFeature hangar, string[] items, Func<int, int> costWith)
@@ -1129,8 +1139,8 @@ public sealed partial class OriginalShell
                     names[i] = hangar.AirframeName(i);
                 }
 
-                MarkUnaffordable(hangar, names, hangar.CostWithAirframe);
-                return new HangarList(names, hangar.AirframeChosen ? scratch.Airframe : -1, i => hangar.PickAirframe(i));
+                return PricedList(hangar, names, hangar.AirframeChosen ? scratch.Airframe : -1,
+                    i => hangar.PickAirframe(i), hangar.BillWithAirframe);
             case EngineDropKey:
                 var engines = new string[CustomPlaneDef.EngineNone + 1];
                 for (int i = 0; i < engines.Length; i++)
@@ -1138,8 +1148,7 @@ public sealed partial class OriginalShell
                     engines[i] = i == CustomPlaneDef.EngineNone ? hangar.Strings.Text(1165, "None") : hangar.EngineName(scratch.Airframe, i);
                 }
 
-                MarkUnaffordable(hangar, engines, hangar.CostWithEngine);
-                return new HangarList(engines, scratch.Engine, i => hangar.SetEngine(i));
+                return PricedList(hangar, engines, scratch.Engine, i => hangar.SetEngine(i), hangar.BillWithEngine);
             case PatternDropKey:
                 var patterns = hangar.WearablePatterns();
                 var labels = new string[patterns.Count];
@@ -1168,8 +1177,8 @@ public sealed partial class OriginalShell
                 units[i] = hangar.ArmourLabel(i);
             }
 
-            MarkUnaffordable(hangar, units, i => hangar.CostWithArmour(zone, i));
-            return new HangarList(units, hangar.ArmourUnits(zone), i => hangar.SetArmour(zone, i));
+            return PricedList(hangar, units, hangar.ArmourUnits(zone), i => hangar.SetArmour(zone, i),
+                i => hangar.BillWithArmour(zone, i));
         }
 
         if (Indexed(key, "GN_D_GUN") is { } slot && slot < CustomPlaneDef.GunSlots)
@@ -1180,8 +1189,8 @@ public sealed partial class OriginalShell
                 guns[i] = hangar.GunCycleName(i);
             }
 
-            MarkUnaffordable(hangar, guns, i => hangar.CostWithGun(slot, i));
-            return new HangarList(guns, HangarFeature.GunCycleIndex(scratch.Guns[slot]), i => hangar.SetGun(slot, i));
+            return PricedList(hangar, guns, HangarFeature.GunCycleIndex(scratch.Guns[slot]), i => hangar.SetGun(slot, i),
+                i => hangar.BillWithGun(slot, i));
         }
 
         if (Indexed(key, "HP_D_POINT") is { } wing && wing < 2)
@@ -1192,8 +1201,8 @@ public sealed partial class OriginalShell
                 counts[i] = hangar.HardpointsLabel(i);
             }
 
-            MarkUnaffordable(hangar, counts, i => hangar.CostWithHardpoints(wing, i));
-            return new HangarList(counts, wing == 0 ? scratch.LeftHardpoints : scratch.RightHardpoints, i => hangar.SetHardpoints(wing, i));
+            return PricedList(hangar, counts, wing == 0 ? scratch.LeftHardpoints : scratch.RightHardpoints,
+                i => hangar.SetHardpoints(wing, i), i => hangar.BillWithHardpoints(wing, i));
         }
 
         var tables = HangarPaintTables.Default;
@@ -1412,7 +1421,7 @@ public sealed partial class OriginalShell
                 return;
         }
 
-        ComposeHubChrome(backdrop, pictures, lines);
+        ComposeHubChrome(rows, focus, backdrop, pictures, lines);
         if (_screen == OriginalScreen.HangarPurchase)
         {
             ComposePurchasePage(lines);
@@ -1488,8 +1497,11 @@ public sealed partial class OriginalShell
     }
 
     // The hub's own frame: the page background, the plane on the blueprint, the name and cost
-    // over it, the cash note over a wallet, and the airframe figures under the picture.
-    private void ComposeHubChrome(List<BoardPicture> backdrop, List<BoardPicture> pictures, List<BoardLine> lines)
+    // over it, the cash note over a wallet, and the airframe figures under the picture. Every
+    // figure stands on the build the row under the cursor would make, which is the same build the
+    // blueprint already previews.
+    private void ComposeHubChrome(
+        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures, List<BoardLine> lines)
     {
         var hub = _layout.Screen(PlaneConstructionSection);
         if (hub == null || _hangar is not { } hangar)
@@ -1500,29 +1512,34 @@ public sealed partial class OriginalShell
         AddPane(hub, backdrop, "PX_P_BACKGROUND");
         ComposePlanePicture(pictures);
 
-        var scratch = hangar.Scratch;
-        var bill = hangar.Bill;
+        var bill = HubBill(rows, focus);
+        int? standing = HubAirframe();
+        // The two figures the script arms off its own checks: the cost red past the wallet, the
+        // weight red past the capacity, one literal red on every screen and none on a wallet-free
+        // door, which checks no funds (docs/org/hangar.md, "The two red figures").
+        bool overFunds = hangar.Unaffordable(bill.Total.Cost);
+        bool overWeight = standing != null && bill.Verdict == PurchaseVerdict.Overweight;
         AddHangarText(hub, lines, "PX_T_PLANENAME", HubLabelFont, BoardInk.Dialog);
         if (hub.Widget("PX_T_PLANECOST") is { } cost)
         {
-            lines.Add(new BoardLine(Fill(cost.Text ?? "PLANE COST:  $%1!d!", bill.Total.Cost), cost.Int("X"), cost.Int("Y"), 0f, HubLabelFont, BoardInk.Dialog));
+            lines.Add(new BoardLine(Fill(cost.Text ?? "PLANE COST:  $%1!d!", bill.Total.Cost), cost.Int("X"), cost.Int("Y"), 0f,
+                HubLabelFont, overFunds ? BoardInk.Alarm : BoardInk.Dialog));
         }
 
         // The cash note's two authored rows, on every tab and the totals page and on both doors,
         // the wallet-free build wearing the export door's own funds. The figure takes the problems
-        // ink once a funded build outruns it; wallet-free nothing is checked, so nothing is marked.
+        // ink off the same answer the cost line reddens on, so the pair never disagree on screen.
         AddHangarText(hub, lines, "PX_T_CASHTITLE", HubTextFont, BoardInk.Row);
         if (hub.Widget("PX_T_CASH") is { } cash)
         {
             int funds = hangar.Wallet?.Funds ?? ExportFunds;
-            bool overFunds = hangar.Wallet != null && hangar.TotalUnaffordable();
             lines.Add(new BoardLine("$" + funds.ToString(CultureInfo.InvariantCulture), cash.Int("X"), cash.Int("Y"),
                 cash.Int("Width"), HubLabelFont, overFunds ? BoardInk.Heading : BoardInk.Row, -1, false, Justify(cash)));
         }
 
         if (hub.Widget("PX_T_AIRFRAME") is { } airframe)
         {
-            string name = hangar.AirframeChosen ? hangar.AirframeName(scratch.Airframe) : string.Empty;
+            string name = standing is { } chosen ? hangar.AirframeName(chosen) : string.Empty;
             lines.Add(new BoardLine(Fill(airframe.Text ?? "AIRFRAME: %1!s!", name), airframe.Int("X"), airframe.Int("Y"),
                 airframe.Int("Width"), HubTextFont, BoardInk.Dialog));
         }
@@ -1535,10 +1552,11 @@ public sealed partial class OriginalShell
 
         if (hub.Widget("PX_T_CURRENTWEIGHT") is { } weight)
         {
-            string text = hangar.AirframeChosen
+            string text = standing != null
                 ? Fill(weight.Text ?? "CURRENT WEIGHT: %1!d! lbs.", bill.Total.Weight)
                 : Fill(weight.Text ?? "CURRENT WEIGHT: %1!d! lbs.", "Pending").Replace("Pending lbs.", "Pending");
-            lines.Add(new BoardLine(text, weight.Int("X"), weight.Int("Y"), weight.Int("Width"), HubTextFont, BoardInk.Dialog));
+            lines.Add(new BoardLine(text, weight.Int("X"), weight.Int("Y"), weight.Int("Width"), HubTextFont,
+                overWeight ? BoardInk.Alarm : BoardInk.Dialog));
         }
 
         if (hub.Widget("PX_T_AGILITY") is { } agility)
@@ -1586,7 +1604,12 @@ public sealed partial class OriginalShell
 
     // The airframe the airframe tab previews: the focused list item while the list is open, else
     // the standing pick, else the first row.
-    private int FocusedAirframe()
+    private int FocusedAirframe() => HubAirframe() ?? 0;
+
+    // The airframe the hub's figures stand on: the row under the cursor in the open airframe list,
+    // else the pick already taken, and null before a pilot has chosen one, which is what leaves
+    // the weight line pending and both figures plain.
+    private int? HubAirframe()
     {
         var hangar = _hangar!;
         if (_screen == OriginalScreen.HangarAirframe && _hangarOpen == AirframeDropKey)
@@ -1598,7 +1621,22 @@ public sealed partial class OriginalShell
             }
         }
 
-        return hangar.AirframeChosen ? hangar.Scratch.Airframe : 0;
+        return hangar.AirframeChosen ? hangar.Scratch.Airframe : null;
+    }
+
+    // The build the hub's figures price: the scratch plane as it stands, or as it would stand with
+    // the row under the cursor in an open list taken. Nothing is written, so leaving a list without
+    // a pick puts every figure back.
+    private HangarBill HubBill(IReadOnlyList<OriginalRow> rows, int focus)
+    {
+        var hangar = _hangar!;
+        if (_hangarOpen is { } key && HangarListFor(key) is { BillWith: { } billWith }
+            && FocusedItem(rows, focus, key) is { } row)
+        {
+            return billWith(row);
+        }
+
+        return hangar.Bill;
     }
 
     // One tab's right page: its title, rules and labels at their authored places, the name line
@@ -2080,9 +2118,11 @@ public sealed partial class OriginalShell
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
     }
 
-    // One dropdown's list, its standing pick, what picking one does, and the swatch or decal tile
-    // a row draws in place of words where the list has one.
+    // One dropdown's list, its standing pick, what picking one does, the swatch or decal tile a row
+    // draws in place of words where the list has one, and what the build would cost and weigh with
+    // a row taken. A list whose rows change nothing priced carries no bill.
     private sealed record HangarList(
         IReadOnlyList<string> Items, int Current, Action<int> Select,
-        Func<int, BoardTint?>? Swatch = null, Func<int, int?>? Tile = null);
+        Func<int, BoardTint?>? Swatch = null, Func<int, int?>? Tile = null,
+        Func<int, HangarBill>? BillWith = null);
 }

@@ -469,8 +469,9 @@ list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `op
 `video:checked` with its Enhanced Graphics box ticked, `controls`, `keys` and `keys:other` with
 the KEYS AND BUTTONS page standing on the one category that outruns its list window, `credits` and
 `credits:about` with the About box standing over it, the
-`plane-*` hangar poses, `campaign` and the shared scratch-store campaign
-poses, `campaign-delete`), and any other value opens that
+`plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
+hub's figures preview and `plane-construction:overweight` on a build past its capacity, `campaign`
+and the shared scratch-store campaign poses, `campaign-delete`), and any other value opens that 
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 
 A new presentation's aids follow the same rules: they select a screen of its own graph, they never

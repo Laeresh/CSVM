@@ -379,6 +379,46 @@ Purchase button, which the export door never reaches.
 cannot cover (`HangarFeature.UnaffordableMark`) and Built-in's wallet line beside the totals are
 remake additions, and by that decode they are never a gate: every marked row stays pickable.
 
+### The two red figures
+
+`PLANECONSTRUCTION.SCRIPT` colours two of the header's figures off its own checks, and the colour
+is a literal in the script rather than anything in `LAYOUT.CSV`'s colour tail. The hub captures the
+authored colours of both widgets at build time (`YMA = RNA.HD` for `px_t_planecost`, `ZMA = VNA.HD`
+for `px_t_currentweight`) and its mailbox writes one or the other back:
+
+| Arm | Check | Colour |
+|---|---|---|
+| 12001 | `callback(2213, RMA, RNA.BC)` at `0x0040add0` | the captured authored colour when it answers true **or** `fMultiPlayerConstruction` / `fIAConstruction` is set, else `0xffff0000` |
+| 12002 | `callback(2214, TNA.BC, UNA.BC, VNA.BC)` at `0x0040ae33` | the captured colour when it answers true, else `0xffff0000` |
+
+**2213 answers "the wallet covers this build".** It totals the record through `FUN_00405680` into
+`0x0064cba0`, writes the `langui` 1036 cost line, then compares that total against `nPlayerCash`
+(`0x0064b788`) and returns the `SETLE` at `0x0040ae26`: true while cost is at most the funds.
+
+**2214 answers "this build is inside its capacity".** It writes the airframe line (`langui`
+3000 + airframe), the capacity line off the stat table's `+0x08` (`0x00619bb8` indexed by the
+airframe's 11-dword stride) and the weight line, then compares the total weight (`0x0064cbb4`,
+`FUN_00405550`) against that capacity at `0x0040af15`: true while the weight is at most the
+capacity. A dword at `0x00647ba4`, written by the set-airframe callback at `0x0040d2a9`, swaps the
+weight line for `langui` 1032's own `CURRENT WEIGHT: Pending` and makes 2214 answer true whatever
+the weight (`0x0040af1d`), so a pending weight line is never red.
+
+Both figures therefore carry the same opaque red on every screen the hub hosts, and the wallet-free
+doors take the authored colour unconditionally, which is the funds gate's own rule: nothing on that
+path checks a price. Arm 12001 also runs from `gui_continue` and from the `gimme` cheat's `+25000`,
+so the cost line is re-inked whenever the hub is resumed or the purse changes. `CAP-50` shows the
+weight line red over capacity.
+
+The remake draws both through `BoardInk.Alarm`, which is pure red on every board and takes no
+palette, the way `BoardInk.Dialog` is white on every board: a palette entry would be a screen colour
+where the script has a literal. Two remake additions stand beside them and are not this. The cash
+figure's own mark (the note going to the problems ink over a build the wallet cannot cover) is ours,
+as is the preview: Original's hub prices the row under the cursor in an open list as though it were
+taken, so PLANE COST, CURRENT WEIGHT, WEIGHT CAPACITY and the AIRFRAME line follow the focused row
+the way the description box and the blueprint already do. The cash mark previews with them, off the
+one previewed bill, so the note and the cost line can never disagree on screen. Nothing is written
+by a preview, so leaving a list without a pick restores every figure.
+
 ### The sell price is the full build cost
 
 Both the confirmation prompt and the credit compute it the same way, and neither applies a

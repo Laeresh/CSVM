@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Flight;
@@ -508,6 +509,77 @@ public class OriginalHangarTests : IDisposable
     }
 
     [Fact]
+    public void TheHubReddensThePlaneCostPastTheWalletAndTheWeightPastTheCapacity()
+    {
+        var shell = Shell(out var hangar, out _);
+        shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", new TightWallet(1_000_000));
+        var board = shell.Compose();
+        Assert.Equal(BoardInk.Dialog, Figure(board, "PLANE COST").Ink);
+        Assert.Equal(BoardInk.Dialog, Figure(board, "CURRENT WEIGHT").Ink);
+
+        // The same build over funds that cannot cover it: the cost line alone reddens, since the
+        // weight is unchanged by what the wallet holds.
+        shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", new TightWallet(1));
+        board = shell.Compose();
+        Assert.Equal(BoardInk.Alarm, Figure(board, "PLANE COST").Ink);
+        Assert.Equal(BoardInk.Dialog, Figure(board, "CURRENT WEIGHT").Ink);
+
+        for (int zone = 0; zone < 4; zone++)
+        {
+            hangar.SetArmour(zone, CustomPlaneDef.MaxArmourUnits);
+        }
+
+        hangar.SetHardpoints(0, CustomPlaneDef.MaxHardpointsPerWing);
+        hangar.SetHardpoints(1, CustomPlaneDef.MaxHardpointsPerWing);
+        Assert.Equal(PurchaseVerdict.Overweight, hangar.Bill.Verdict);
+        board = shell.Compose();
+        Assert.Equal(BoardInk.Alarm, Figure(board, "CURRENT WEIGHT").Ink);
+    }
+
+    [Fact]
+    public void TheHubLeavesBothFiguresPlainBeforeAnAirframeIsChosen()
+    {
+        var shell = Shell(out var hangar, out _);
+        OpenName(shell, "Ace");
+        shell.Step(Down);
+        shell.Step(Accept);
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.False(hangar.AirframeChosen);
+
+        var board = shell.Compose();
+        Assert.EndsWith("Pending", Figure(board, "CURRENT WEIGHT").Text, StringComparison.Ordinal);
+        Assert.Equal(BoardInk.Dialog, Figure(board, "CURRENT WEIGHT").Ink);
+        Assert.Equal(BoardInk.Dialog, Figure(board, "PLANE COST").Ink);
+    }
+
+    [Fact]
+    public void TheHubFiguresFollowTheFocusedRowAndComeBackWhenTheListCloses()
+    {
+        var shell = Shell(out var hangar, out _);
+        OpenHub(shell, "Ace");
+        Click(shell, "PX_B_ENGINE");
+        var committed = hangar.Bill;
+        Click(shell, OriginalShell.EngineDropKey);
+        Assert.Equal(OriginalShell.EngineDropKey, shell.OpenHangarDropdown);
+        shell.Step(Down);
+        int row = int.Parse(shell.FocusedKey[(OriginalShell.EngineDropKey.Length + 1)..], CultureInfo.InvariantCulture);
+        var preview = hangar.BillWithEngine(row);
+        Assert.NotEqual(committed.Total.Cost, preview.Total.Cost);
+
+        var board = shell.Compose();
+        Assert.Contains("$" + preview.Total.Cost, Figure(board, "PLANE COST").Text, StringComparison.Ordinal);
+        Assert.Contains(preview.Total.Weight.ToString(CultureInfo.InvariantCulture), Figure(board, "CURRENT WEIGHT").Text, StringComparison.Ordinal);
+        Assert.Equal(committed.Total.Cost, hangar.Bill.Total.Cost);
+
+        // Back closes the list without taking the row, so both figures are the standing build's again.
+        shell.Step(Back);
+        board = shell.Compose();
+        Assert.Contains("$" + committed.Total.Cost, Figure(board, "PLANE COST").Text, StringComparison.Ordinal);
+        Assert.Contains(committed.Total.Weight.ToString(CultureInfo.InvariantCulture), Figure(board, "CURRENT WEIGHT").Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DiscardingTheFeatureMidBuildLeavesNothingBehind()
     {
         var shell = Shell(out var hangar, out _);
@@ -518,6 +590,10 @@ public class OriginalHangarTests : IDisposable
         Assert.Empty(_store.List());
         Assert.Equal(string.Empty, hangar.Scratch.Name);
     }
+
+    // One of the hub's figure lines by the words it opens with, the layout's own text around them.
+    private static BoardLine Figure(ComposedBoard board, string label) =>
+        board.Lines.Single(l => l.Text.StartsWith(label, StringComparison.Ordinal));
 
     private static void Click(OriginalShell shell, string key)
     {
@@ -581,6 +657,35 @@ public class OriginalHangarTests : IDisposable
         instantAction.SelectPlayerPlane(pilotPlane);
         return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
             instantAction: instantAction, hangar: hangar, planes: _store);
+    }
+
+    // A wallet with a stated purse and no aircraft, for the pages whose subject is the money: what
+    // it can cover is what its funds cover, which is the check the cost line's ink reads.
+    private sealed class TightWallet : IHangarWallet
+    {
+        internal TightWallet(int funds) => Funds = funds;
+
+        public int Funds { get; }
+
+        public bool HasFreeSlot => true;
+
+        public bool CanAfford(int cost) => cost <= Funds;
+
+        public bool IsAirframeAvailable(int airframe) => true;
+
+        public bool IsSpecial(string planeName) => false;
+
+        public bool CanSell(string planeName) => true;
+
+        public int? OwnedAirframe(string planeName) => null;
+
+        public IReadOnlyList<CustomPlaneDef> OwnedBuilds() => Array.Empty<CustomPlaneDef>();
+
+        public void Purchase(string planeName, int airframe, int cost)
+        {
+        }
+
+        public bool Sell(string planeName) => false;
     }
 
     // A wallet that owns the planes it is built over and funds anything, which is all the cabin

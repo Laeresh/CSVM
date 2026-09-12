@@ -814,56 +814,80 @@ public sealed class HangarFeature : IMenuFeature
     /// (callback 2264), and hiding what cannot be afforded yet hides what is being saved toward.</summary>
     public bool Unaffordable(int cost) => Wallet is { } wallet && !wallet.CanAfford(cost);
 
-    /// <summary>Whether the build as it stands is beyond the wallet.</summary>
-    public bool TotalUnaffordable() => Unaffordable(Bill.Total.Cost);
-
     /// <summary>The build's total cost were <paramref name="airframe"/> picked, every other pick
     /// kept: what the wallet would have to cover after that row.</summary>
-    public int CostWithAirframe(int airframe)
-    {
-        int keep = Scratch.Airframe;
-        Scratch.Airframe = airframe;
-        int cost = Bill.Total.Cost;
-        Scratch.Airframe = keep;
-        return cost;
-    }
+    public int CostWithAirframe(int airframe) => BillWithAirframe(airframe).Total.Cost;
 
     /// <summary>The build's total cost were <paramref name="engine"/> picked.</summary>
-    public int CostWithEngine(int engine)
-    {
-        int keep = Scratch.Engine;
-        Scratch.Engine = engine;
-        int cost = Bill.Total.Cost;
-        Scratch.Engine = keep;
-        return cost;
-    }
+    public int CostWithEngine(int engine) => BillWithEngine(engine).Total.Cost;
 
     /// <summary>The build's total cost were zone <paramref name="zone"/> at <paramref name="units"/>.
     /// A wing row prices both wings, since picking on either moves the other.</summary>
-    public int CostWithArmour(int zone, int units)
-    {
-        int next = Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits);
-        int steps = zone is 0 or 1
-            ? next - ArmourUnits(zone)
-            : (next - Scratch.ArmourLeftWing) + (next - Scratch.ArmourRightWing);
-        return Bill.Total.Cost + (steps * HangarEconomy.ArmourStepCost);
-    }
+    public int CostWithArmour(int zone, int units) => BillWithArmour(zone, units).Total.Cost;
 
     /// <summary>The build's total cost were slot <paramref name="slot"/> on cycle row <paramref name="cycleRow"/>.</summary>
-    public int CostWithGun(int slot, int cycleRow)
-    {
-        var keep = Scratch.Guns[slot];
-        Scratch.Guns[slot] = GunOfCycle(cycleRow);
-        int cost = Bill.Total.Cost;
-        Scratch.Guns[slot] = keep;
-        return cost;
-    }
+    public int CostWithGun(int slot, int cycleRow) => BillWithGun(slot, cycleRow).Total.Cost;
 
     /// <summary>The build's total cost were wing <paramref name="wing"/> carrying <paramref name="count"/> hardpoints.</summary>
-    public int CostWithHardpoints(int wing, int count)
+    public int CostWithHardpoints(int wing, int count) => BillWithHardpoints(wing, count).Total.Cost;
+
+    /// <summary>The whole bill the build would carry were <paramref name="airframe"/> picked, every
+    /// other pick kept: the cost the wallet mark reads, and the weight and capacity a screen
+    /// previewing the row needs. ⚠ Prices a copy of the scratch plane, never the scratch plane
+    /// itself, so asking what a row would cost can never become the pick.</summary>
+    public HangarBill BillWithAirframe(int airframe)
     {
-        int current = wing == 0 ? Scratch.LeftHardpoints : Scratch.RightHardpoints;
-        return Bill.Total.Cost + ((Math.Clamp(count, 0, CustomPlaneDef.MaxHardpointsPerWing) - current) * HangarEconomy.HardpointCost);
+        var preview = Preview();
+        preview.Airframe = airframe;
+        return HangarEconomy.Price(preview);
+    }
+
+    /// <summary>The whole bill the build would carry were <paramref name="engine"/> picked.</summary>
+    public HangarBill BillWithEngine(int engine)
+    {
+        var preview = Preview();
+        preview.Engine = Math.Clamp(engine, 0, CustomPlaneDef.EngineNone);
+        return HangarEconomy.Price(preview);
+    }
+
+    /// <summary>The whole bill the build would carry were zone <paramref name="zone"/> at
+    /// <paramref name="units"/>, a wing row moving both wings the way a pick on either does.</summary>
+    public HangarBill BillWithArmour(int zone, int units)
+    {
+        var preview = Preview();
+        SetZoneUnits(preview, zone, Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits));
+        return HangarEconomy.Price(preview);
+    }
+
+    /// <summary>The whole bill the build would carry were slot <paramref name="slot"/> on cycle row
+    /// <paramref name="cycleRow"/>.</summary>
+    public HangarBill BillWithGun(int slot, int cycleRow)
+    {
+        var preview = Preview();
+        if (slot >= 0 && slot < CustomPlaneDef.GunSlots)
+        {
+            preview.Guns[slot] = GunOfCycle(cycleRow);
+        }
+
+        return HangarEconomy.Price(preview);
+    }
+
+    /// <summary>The whole bill the build would carry were wing <paramref name="wing"/> carrying
+    /// <paramref name="count"/> hardpoints.</summary>
+    public HangarBill BillWithHardpoints(int wing, int count)
+    {
+        var preview = Preview();
+        int next = Math.Clamp(count, 0, CustomPlaneDef.MaxHardpointsPerWing);
+        if (wing == 0)
+        {
+            preview.LeftHardpoints = next;
+        }
+        else
+        {
+            preview.RightHardpoints = next;
+        }
+
+        return HangarEconomy.Price(preview);
     }
 
     /// <summary>Drops the open build: the scratch plane, its store and wallet, the roster, the ask
@@ -878,6 +902,31 @@ public sealed class HangarFeature : IMenuFeature
         BuiltPlaneName = null;
         Message = string.Empty;
         StartNewPlane();
+    }
+
+    // The scratch plane as the economy sees it, copied: everything Price reads and nothing else,
+    // since paint and the name are free and unpriced. ⚠ Do not price a would-be pick by writing it
+    // into Scratch and writing it back; a preview that threw mid-price would leave it taken.
+    private CustomPlaneDef Preview()
+    {
+        var copy = new CustomPlaneDef
+        {
+            Airframe = Scratch.Airframe,
+            Engine = Scratch.Engine,
+            ArmourNose = Scratch.ArmourNose,
+            ArmourTail = Scratch.ArmourTail,
+            ArmourLeftWing = Scratch.ArmourLeftWing,
+            ArmourRightWing = Scratch.ArmourRightWing,
+            LeftHardpoints = Scratch.LeftHardpoints,
+            RightHardpoints = Scratch.RightHardpoints,
+        };
+
+        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
+        {
+            copy.Guns[slot] = Scratch.Guns[slot];
+        }
+
+        return copy;
     }
 
     // The roster and the taken-name set together, since a wallet's roster is ownership while the

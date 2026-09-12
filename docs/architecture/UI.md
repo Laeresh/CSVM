@@ -846,9 +846,8 @@ The Original hangar, the shell's partial over the shared `HangarFeature` and the
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
 the cabin, the door naming the airframe a default build opens on. It owns the plane picture over
-the blueprint panes, the running total, the cash note on both doors (the wallet with its mark on a
-row it cannot cover, else the export door's figure), the tab bar with the standing tab latched and
-its labels on the strips' own baseline, every list under its box, the two name boxes with their
+the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost and weight lines reddening on that bill's own two verdicts; the cash note on both doors (the wallet with its mark on a row it cannot cover, else the export door's figure);
+the tab bar with the standing tab latched and its labels on the strips' own baseline, every list under its box, the two name boxes with their
 caret, the airframe-switch ask, and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
