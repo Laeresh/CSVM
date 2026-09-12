@@ -732,7 +732,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
 
-- `BL-866` `[Bug]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: feel]` **Allied AI and turret gunners engage a destroyed
+- `BL-866` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Allied AI and turret gunners engage a destroyed
   zeppelin's surviving parts and non-enemy buildings while the live enemies go unfought.**
   *Evidence:* reported at the controls from CM04 (C3/M03) on: wingmen, allied aircraft and the
   Pandora's guns lock on the destroyed cargo zeppelin's engines and on buildings, leaving the
@@ -755,16 +755,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`-200.0` on eleven aeroplane defs, added to turret and structure candidates only). Both are
   negative against a MINIMISED rank, so both attract, and an aeroplane authoring both ranks an
   equidistant structure about 100 m AHEAD of an equidistant enemy aeroplane.
-  *Question for the user, one call between two faithful readings:* the executable ranks structures
-  slightly ahead of aircraft, so is the fix (a) **faithful to the decode**, port `target_bias` and
-  `struct_bias` as they ship, which leaves allies picking structures and makes the reported
-  symptom slightly stronger, or (b) **faithful to your recall of play**, add an aircraft-first
-  preference or a dead-parent gate the original does not have, behind no setting, as a deliberate
-  departure? A third possibility worth your judgement before either: the remaining unported gate
-  is the attack volume, a cylinder with an altitude band (`+0x328`, `+0x32c`-`+0x330`) where CSVM
-  scores a 2,000 m sphere, and a band would drop the low structures without touching the ranking.
+  *The user's decision, between the two faithful readings:* the default is faithful to the recall
+  of play, an **aircraft-first preference** as a deliberate departure: an ally ranks live enemy
+  aircraft ahead of every turret and structure candidate, and fights a structure only when no
+  aircraft is in reach. The decoded picker, `target_bias` and `struct_bias` ported as they ship
+  and no class preference, is landed as well and sits behind a command line flag (name the
+  implementer's call, documented in `docs/cli.md`), so a comparison against the original has the
+  original's arithmetic to run. *Fix shape:* port both biases into `AiTargetRanking` first, since
+  the flag needs them; then the preference over the ranked list, applied in both pickers
+  (`SelectRankedTarget` and `TurretController.AcquireTarget`) so wingmen and the Pandora's guns
+  agree; a suite over a dead zeppelin's live engines beside one enemy aeroplane, asserting the
+  aeroplane under the default and the nearer engine under the flag. Not part of this item: the
+  remaining unported gate, the attack volume, a cylinder with an altitude band (`+0x328`,
+  `+0x32c`-`+0x330`) where CSVM scores a 2,000 m sphere; a band would drop the low structures
+  without touching the ranking and stands as its own possible port.
   *⚠ Traps:* do not special-case zeppelin engines. Do not "fix" the sign of either bias to make
   structures unattractive; the shipped values are negative and that is the decoded arithmetic.
+  Do not add a dead-parent gate; the preference alone is the departure chosen.
   *Cross-refs:* `docs/org/targeting.md` (the player's cycle, a different list),
   `docs/org/aiPilot.md`, `docs/formats/vehicle.md` (`target_bias`/`struct_bias`),
   `CSVM/src/Flight/AiTargetRanking.cs`, `CSVM/src/Flight/AiGunner.cs`.
@@ -785,6 +792,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   The original's own Hoplite special-plane template is 1/1, which says nothing about a stock fit.
   *Cross-refs:* `docs/formats/saved-games.md` ("A cell names a pylon only against the fit"),
   `CSVM/src/UI/Menu/HangarFeature.cs`.
+
+- `BL-887` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Leaving the pause sheet with gamepad B, or skipping a cutscene with it, fires one burst of the guns.** *Evidence:* user at the controls, both cases. `DefaultBindings.cs:107` binds B to `FireGuns` and `:163` binds the same button to `MenuBack`; `OriginalPauseBoard.cs:96` dismisses the sheet on `PadBack` and `GameSession.cs:664` skips a cutscene on any pad button. The gun read, `FlightController.cs:2246`, is a level read of `FireGuns` with no edge and no latch, so the B still down on the frame flight regains input fires. The rocket trigger has exactly this guard, `RocketTriggerLatch`, armed at both re-entry points (`FlightController.cs:804` when Inert clears, `:3057` when the halt clears), and the guns never got one. *Fix shape:* the user's steer: not a second trigger-specific copy but one consumed-input latch for flight's re-entry, armed at those two points for whatever input confirmed the skip or the resume (B, A, Space, Enter, or any key a cutscene takes) and swallowing each such action until it is released, the rocket latch folding into it. Pin beside the rocket case in the flight input handoff suite: B held across a pause resume and across a skip fires nothing, and the next real press fires. *⚠ Traps:* arm before reading, not on a reading taken inside the input handler (the rocket latch's own warning); `--fire`'s auto-fire must stay unlatched. *Cross-refs:* `CSVM/src/Flight/RocketTriggerLatch.cs`, `CSVM/src/Testing/FlightInputHandoffSuites.cs`, `BL-429` (Escape's double duty in photo mode, the same shape).
 
 ## Flight model & collision physics
 
@@ -2199,6 +2208,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-883` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The Original pause sheet takes pad and keyboard only; the original's dialog is mouse-driven.** *Evidence:* user at the controls: the pause menu has no mouse controls. `OriginalPauseBoard.cs:61` sets `MouseFilter` to ignore and `:96` drives the strips through `BoardMenu.Handle(Move, Accept, PadBack)` alone; `escape.zrd`'s dialogs author a `CURSOR` (`daglove`, rollover `dafinger`), so the original points and clicks. The Original menus already keep the rule the sheet wants (`OriginalShell.cs:194`: hovering a live row moves the shared focus, keyboard, pad and pointer share one cursor). *Fix shape:* give the four strips hit rectangles in the board's 800x600 space, the pointer's hover moving the focus and its click firing the row, the rollover frame following the pointer as the message box does (`BL-767`); the pointer is the paused seat's, mapped the way the shell maps seat 0's. Pin in `pause-sheet` (a pointer over RESTART focuses it, a click fires it). *⚠ Traps:* the flight's own pointer capture must release while the sheet stands and re-capture on resume. *Cross-refs:* `BL-821`, `BL-767` (the rollover rule), `CSVM/src/Flight/OriginalPauseBoard.cs`.
 
 - `BL-884` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **PREFERENCES on the Original pause sheet does nothing: no in-flight options leaf exists to open.** *Evidence:* user at the controls. `OriginalPauseBoard.cs:32` documents the action as null until an in-flight leaf exists, so the strip is drawn and the press is a no-op. The original's `CONFIGURE_BTN` (`FUN_004a1620`, `docs/org/pause-screen.md`) opens its preferences over the paused mission. *Fix shape:* host the Original Preferences leaf (video, audio, controls) over the pause, the world held paused beneath it, its exit returning to the sheet with the settings applied in flight (display rows through the same `DisplaySettingRows` both Options screens use); Built-in's board gets the same door. Larger than the rest of the chapter 1 sitting's items, so it is queued after them, not beside them. *⚠ Traps:* a display change mid-flight re-enumerates the viewport the flight is drawing into; `BL-783`'s Monitor row is still owed a two-screen look. *Cross-refs:* `BL-821`, `BL-783`, `BL-823` (the leaves), `CSVM/src/Flight/OriginalPauseBoard.cs`.
+
+- `BL-888` `[Feature]` `[S]` `[Next: decide]` `[Impact: high]` `[Evidence: data]` **Photo Mode cannot be reached from the Original pause sheet.** *Evidence:* user at the controls. `escape.zrd` authors four strips (RESUME, RESTART, PREFERENCES, QUIT) and the sheet draws those; the remake's Photo Mode row lives on the Built-in `PauseBoard` only (`PauseBoard.cs:118`), so a session on the Original presentation has no door into the mode. *Decision owed, three placements:* (a) a remake-only fifth strip on the parchment under QUIT, in the same widget chain and art as the four authored ones, the most visible and the least faithful; (b) the sheet stays as authored and a small remake-only hint line names a key that opens the mode while the sheet stands; (c) a row on the in-flight Preferences leaf `BL-884` builds, one level down where the original keeps everything not on the four strips, which waits on that item. *⚠ Traps:* the mode's exit seeds the pause key's edge (`FlightController.cs:1414`), so whichever door is chosen returns to the sheet, not to flight. *Cross-refs:* `BL-821`, `BL-884`, `BL-429`, `CSVM/src/Flight/OriginalPauseBoard.cs`, `docs/org/pause-screen.md`.
+
+- `BL-889` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The objectives parchment's rows draw upright on the pause sheet and the campaign load screen where the original sets them in italic.** *Evidence:* user at the controls on the pause sheet, and orch-4's CM01 load screen side-by-side (`BL-814`). `fonts.zrd` gives `ObjList` as Andy Bold at 14, italic (`docs/formats/objectives.md`); `PauseScreens.cs:209` and `LoadScreens.cs:267` build the rows' `BoardNote` with `EscapeObjectivesList.RowFont` and leave `Italic` at its default, while `ComposedBoardView.cs:34` already draws a synthetic oblique of the board's face for every line that asks. The same upright rows are also wider than the original's, so some stock objectives wrap to three lines where the original wraps to two; the user's read is that the size is fine and the line count is the visible gap. *Fix shape:* pass `Italic: true` on both `BoardNote`s, then take the smallest further departure that brings every stock row to the original's line count (a size step, or a narrower measure), pinned in `pause-sheet` by row line count over CM01 and CM05. *⚠ Traps:* the slant is a shear of the same outlines, so it narrows nothing on its own; measure the wrap after the flag, not before. Do not touch the title line, which the original sets upright. *Cross-refs:* `BL-821`, `BL-814`, `CSVM/src/UI/PauseScreens.cs`, `CSVM/src/UI/LoadScreens.cs`, `CSVM/src/UI/ComposedBoardView.cs`.
 
 ## Splitscreen
 

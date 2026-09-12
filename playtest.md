@@ -860,23 +860,6 @@ is a judgement on our own remake.
   key that moves the view from rest, or a zoom that runs past ten metres mints a new `BL`.
   *Blocks:* nothing.
 
-### Any mission with a docking approach · the auto-dock prompt on a pad and on the keyboard
-
-```powershell
-./RunGame.ps1
-```
-
-- `PT-144` `[Own]` **The auto-dock line names the stick button while you fly on the pad and the key
-  the moment you touch the keyboard.** The seat now remembers which device produced its last real
-  input and composes every control prompt from that device's binding, falling back to the other
-  device where the active one is unbound (`git log --grep=BL-853`). The suites supply the tick's
-  two halves, because a headless run holds down no key and no stick, so nothing has judged the
-  live hardware path. Fly a mission with a docking row (CM01's is the first) on a pad, into the
-  approach. *Look for:* the prompt reading the stick button while you fly on the pad, switching to
-  `F9` on the next frame once you touch a key, and staying put rather than flickering while you
-  hold the stick and a key at once. A prompt that stays on the key throughout, one that flickers,
-  or one that switches when an idle stick merely drifts, mints a new `BL`. *Blocks:* nothing.
-
 ### Any campaign mission · enemy skill under the difficulty offset
 
 ```powershell
