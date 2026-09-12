@@ -2166,27 +2166,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   own pilot takes the player shape (per-pane, the decoded intent read per viewer) or only seat 0;
   then key on the pane's viewer, pinned in the `ground-shadow` suite over a two-pane session.
   *Cross-refs:* `BL-331` (the shadow's open halves), `docs/verification.md` SRC-12.
-- `BL-852` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The
-  auto-dock prompt is its own centred line at 0.3 of the screen height in the original, where the
-  remake folds it into the speed and altitude text block.** *Evidence:* `FUN_0045e120` formats the
-  wording (`docs/formats/anim-definitions/cutscenes.md`, "The prompt's own wording") into a
-  dedicated text object at `0x00719110`: x is half the viewport width and y is 0.3 of its height
-  (`0x0045e21d`-`0x0045e24a`, the `0x3e99999a` constant, both doubled under the high-resolution
-  flag `FUN_00440bb0`), alignment 1 so the text centres on that x (`FUN_0045d8f0` sets
-  `+0x1044`), font `autoland`, both gradient colours `COLORREF 0x0040ffff`, a pale yellow of
-  R 255 G 255 B 64, and an unlimited life (`FUN_005c54a0(-1.0)`) that `FUN_005c54f0` hides the
-  first frame the approach row stops passing. The remake appends the same wording as one line of
-  `ComposeTextLines` (`CSVM/src/Flight/FlightHud.cs:479`), so it sits in the readout block at the
-  reading box's anchor rather than centred on its own. *Fix shape:* a dedicated label in
-  `FlightHud` at the decoded anchor, shown while `AutoLandOffered` holds and hidden the frame it
-  drops, the readout block no longer carrying the line. *⚠ Traps:* the y fraction is of the
-  viewport, not of `BL-778`'s reading box, so anchor it to the pane, and in splitscreen to each
-  pane's own viewport. The line names the control of the device the seat last took input from
-  (`Bindings/ActiveDevice.cs`), so the label reads whatever `ComposeAutoLandPrompt` hands it and
-  is recomposed on a handover rather than built once. *Cross-refs:* `BL-510`'s closing commit (the
-  wording), `BL-778` (the reading box the rest of the HUD anchors to),
-  `docs/formats/anim-definitions/cutscenes.md`.
-
 - `BL-857` `[Feature]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **The spyglass: Shift+S toggles a round live
   picture of the selected target at its off-screen marker, and the marker's arrow and text sit
   differently from ours.** *Evidence:* the mission recordings under `OriginalScreenshots/Videos/`
@@ -2256,9 +2235,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a string. *⚠ Traps:* the crashed line is the one prompt a player reads while the rest of the HUD
   is hidden, so it has to survive the crash path's own visibility gating. A pad-only splitscreen
   seat must never be named a key, which `ActiveDevice.PromptBinding`'s `readsKeyboard` gate
-  already handles. *Cross-refs:* `CSVM/src/Flight/FlightHud.cs`,
-  `CSVM/src/Bindings/ActiveDevice.cs`, `CSVM/src/Bindings/BindingLabels.cs`, `BL-852` (where the
-  auto-dock line sits).
+  already handles. The auto-dock line is the one prompt that is not a readout-block line at all: it
+  stands on its own centred control (`CSVM/src/Flight/AutoDockLine.cs`), so a prompt moved onto that
+  footing follows it rather than `ComposeTextLines`. *Cross-refs:* `CSVM/src/Flight/FlightHud.cs`,
+  `CSVM/src/Bindings/ActiveDevice.cs`, `CSVM/src/Bindings/BindingLabels.cs`.
 
 ## Splitscreen
 

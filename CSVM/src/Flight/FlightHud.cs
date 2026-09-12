@@ -100,7 +100,8 @@ public struct FlightHudState
 
 /// <summary>Everything one pane draws for its pilot: the heading tape, the cockpit dials and their
 /// two weapon gauges, the gun pipper, the stunt and targeting marker HUDs, the font-test overlay,
-/// and the flight text block. Fed one <see cref="FlightHudState"/> per rendered frame; nothing
+/// the message stack, the auto-dock prompt and the flight text block. Fed one
+/// <see cref="FlightHudState"/> per rendered frame; nothing
 /// outside this class writes any of those readouts. Constraints and the draw order: this module's
 /// entry in docs/architecture.md.</summary>
 public sealed class FlightHud
@@ -134,10 +135,15 @@ public sealed class FlightHud
     /// <see cref="Attach"/>, so every human pane has one; the session posts into it.</summary>
     public HudMessages? MessageStack;
 
+    /// <summary>The original's auto-dock prompt, the centred line of its own the offer stands on.
+    /// Built and parented by <see cref="Attach"/>, so every human pane has one; this feeds it the
+    /// wording each frame.</summary>
+    public AutoDockLine? AutoDock;
+
     /// <summary>The auto-land line this pane draws while the approach table's <c>auto</c> row
     /// passes, from <see cref="ComposeAutoLandPrompt"/> over the seat's own bindings, recomposed
     /// whenever the seat's active device moves. Empty draws no line, which is what an unbound
-    /// auto-land reads as.</summary>
+    /// auto-land reads as. <see cref="AutoDock"/> is where it lands, never the text block.</summary>
     public string AutoLandPrompt = AutoLandFallback;
 
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper
@@ -216,6 +222,13 @@ public sealed class FlightHud
     /// (FlightHudMappingTests) can assert the gate directly.</summary>
     public static bool ComputeStallWarning(in FlightHudState state) =>
         !state.Crashed && !state.Halted && !state.Held && state.StallWarned;
+
+    /// <summary>Whether the auto-dock prompt should stand this frame: the approach table's offer,
+    /// gated off while the plane is crashed, halted or pinned by the weapon lab, none of which can
+    /// answer the offer. Whether there is WORDING to draw is <see cref="AutoLandPrompt"/>'s. Static
+    /// so CSVM.Tests can assert the gate directly.</summary>
+    public static bool ShowsAutoLandPrompt(in FlightHudState state) =>
+        !state.Held && !state.Crashed && !state.Halted && state.AutoLandOffered;
 
     /// <summary>The speedometer's mph conversion. Static so CSVM.Tests can assert it as a number
     /// rather than through a formatted string.</summary>
@@ -320,6 +333,12 @@ public sealed class FlightHud
             FocusMode = Control.FocusModeEnum.None,
         };
         canvas.AddChild(MessageStack); // the kill/mission message stack, top centre over the dials
+        AutoDock = new AutoDockLine
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            FocusMode = Control.FocusModeEnum.None,
+        };
+        canvas.AddChild(AutoDock); // the auto-dock prompt, centred below the message stack
         if (versusHud != null)
             canvas.AddChild(versusHud); // dogfight HUD: status line, kill banner, opponent markers
         if (TargetHud != null)
@@ -379,6 +398,10 @@ public sealed class FlightHud
         UpdateWeaponGauges(in state);
         // Points the gun pipper at 0.5 s of the selected group's flight, on the nose axis.
         UpdateReticle(in state);
+        if (AutoDock != null)
+        {
+            AutoDock.Line = ShowsAutoLandPrompt(in state) ? AutoLandPrompt : string.Empty;
+        }
         UpdateTextBlock(in state, mph, ft);
     }
 
@@ -465,8 +488,9 @@ public sealed class FlightHud
     }
 
     /// <summary>The flight text block's lines in the shipped order: speed/altitude/throttle, then
-    /// whichever of the stall, auto-land prompt, damage flash, damage summary, stunt status and
-    /// paused/crashed lines apply. Returns the reused instance list, valid until the next call.
+    /// whichever of the stall, damage flash, damage summary, stunt status and paused/crashed lines
+    /// apply. The auto-dock prompt is NOT one of them; it is its own centred line
+    /// (<see cref="AutoDock"/>). Returns the reused instance list, valid until the next call.
     /// Public so CSVM.Tests can assert the ordering with no text Control in the process, off the
     /// numbers <see cref="MphFromSpeedMps"/> and <see cref="FeetFromWorldY"/> already expose.</summary>
     public List<string> ComposeTextLines(in FlightHudState state, float mph, float ft, bool wide)
@@ -485,9 +509,6 @@ public sealed class FlightHud
         }
         if (!state.Held && state.Stalled)
             _textLines.Add("⚠ STALLED - SPEED UP");
-        if (!state.Held && !state.Crashed && !state.Halted && state.AutoLandOffered
-            && AutoLandPrompt is { Length: > 0 } autoLand)
-            _textLines.Add(autoLand);
         if (AdvanceDamageFlash(state.WallDt, state.Halted, state.Crashed) is { } flashLine)
             _textLines.Add(flashLine);
         if (state.DamageSummary is { Length: > 0 } dmgSummary)
@@ -542,6 +563,8 @@ public sealed class FlightHud
             TargetHud.Visible = _shown;
         if (MessageStack != null)
             MessageStack.Visible = _shown; // screen-space, so the cockpit panel does not replace it
+        if (AutoDock != null)
+            AutoDock.Visible = _shown;     // a message, not an instrument: the panel carries no twin
     }
 
     // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down. With

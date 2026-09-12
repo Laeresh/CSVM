@@ -549,6 +549,29 @@ Both ids live in the **message table**, not in `langui.dll`: `0xb5` is `MSG_PRES
 wording is the **mouse** one rather than a pad one. The id-to-row mapping is
 [`../missions.md`](../missions.md#message-table)'s.
 
+##### The prompt's own placement
+
+The prompt is a **text object of its own** at `0x00719110`, not a line of the speed and altitude
+readout. `FUN_0045d8f0`, the landings rig's setup, gives it the `autoland` font
+(`FUN_00530700("autoland")` into `FUN_005c7430` at `0x0045d9cc`-`0x0045d9da`; in
+`fonts.zrd.json` that face is Arial, height -16, weight 700, **shadow false**, with no colour of
+its own), sets the centring flag at the object's `+0x1044` to 1 (`0x0045d9f2`), writes both of its
+gradient colours at `+0x104c` and `+0x1050` to `COLORREF 0x0040ffff` (`0x0045da03` and
+`0x0045da08`), a pale yellow of R 255 G 255 B 64 that leaves the line flat rather than graded, and
+hides the object (`FUN_005c54f0`, `0x0045da18`).
+
+`FUN_0045e120` then places it once per offered frame. `FUN_00460a40` fills the viewport rect,
+whose third and fourth ints are its width and height; both are **doubled** while the
+high-resolution flag `FUN_00440bb0` (`*DAT_0064f748`) is nonzero (`0x0045e207`-`0x0045e219`). The
+object's x at `+0x14` takes `width × 0.5` (`0x006032e0`, `0x0045e221`) and its y at `+0x18`
+`height × 0.3` (`0x006034ac`, holding `0x3e99999a`, `0x0045e235`), both through `ftol`, so the
+line centres on the middle of the screen three tenths of the way down. `FUN_005c54a0(-1.0)`
+(`0x0045e24f`) shows it with **no lifetime**: a negative argument clears the object's hidden bit
+without setting the expiry bit at `+0xc`, so the line stands until something hides it. That
+something is the same routine: the approach test sets `DAT_00719109` per passing frame and
+`FUN_0045e120` consumes it (`0x0045e136`), so the first frame the `auto` row stops passing takes
+the `FUN_005c54f0` path at `0x0045e26b` and the line goes.
+
 #### Arming is the mission script's job
 
 The gate node is what a mission opens and closes. C3/M01 lists `disable_dropoff` in

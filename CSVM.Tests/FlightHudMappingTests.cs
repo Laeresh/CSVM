@@ -252,31 +252,32 @@ public class FlightHudMappingTests
     }
 
     [Fact]
-    public void AutoLandOfferedAppendsThePromptUnlessHeldCrashedOrHalted()
+    public void AutoLandOfferedStandsUnlessHeldCrashedOrHalted()
     {
-        var hud = new FlightHud { AutoLandPrompt = "Press F9 to autodock" };
         var offered = new FlightHudState { AutoLandOffered = true };
-        Assert.Contains("Press F9 to autodock",
-            hud.ComposeTextLines(in offered, mph: 0f, ft: 0f, wide: false));
+        Assert.True(FlightHud.ShowsAutoLandPrompt(in offered));
 
         var held = new FlightHudState { AutoLandOffered = true, Held = true };
         var crashed = new FlightHudState { AutoLandOffered = true, Crashed = true };
         var halted = new FlightHudState { AutoLandOffered = true, Halted = true };
-        foreach (var state in new[] { held, crashed, halted })
+        foreach (var state in new[] { held, crashed, halted, new FlightHudState() })
         {
-            Assert.DoesNotContain("Press F9 to autodock",
-                hud.ComposeTextLines(in state, mph: 0f, ft: 0f, wide: false));
+            Assert.False(FlightHud.ShowsAutoLandPrompt(in state));
         }
     }
 
     [Fact]
-    public void AnUnboundAutoLandDrawsNoPromptLineAtAll()
+    public void TheTextBlockNeverCarriesTheAutoLandPrompt()
     {
-        var hud = new FlightHud { AutoLandPrompt = "" };
+        var hud = new FlightHud { AutoLandPrompt = "Press F9 to autodock" };
         var offered = new FlightHudState { AutoLandOffered = true };
-        int offeredLines = hud.ComposeTextLines(in offered, mph: 0f, ft: 0f, wide: false).Count;
+        // The return is the reused instance list, so the offered lines are copied before the
+        // second compose overwrites them.
+        var lines = new List<string>(hud.ComposeTextLines(in offered, mph: 0f, ft: 0f, wide: false));
+        Assert.DoesNotContain("Press F9 to autodock", lines);
+
         var quiet = new FlightHudState();
-        Assert.Equal(hud.ComposeTextLines(in quiet, mph: 0f, ft: 0f, wide: false).Count, offeredLines);
+        Assert.Equal(hud.ComposeTextLines(in quiet, mph: 0f, ft: 0f, wide: false).Count, lines.Count);
     }
 
     // ---- the auto-land prompt's wording, off the message table and the seat's own bindings ----
