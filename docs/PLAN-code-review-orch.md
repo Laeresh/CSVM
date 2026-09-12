@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Spec fixes
 
 21. ☑ `New-ItemId.ps1` gets its BOM and loses its em dashes
-22. ☐ `SetNet` reports a missing net as no move
+22. ☑ `SetNet` reports a missing net as no move
 23. ☐ A death choreography is only the def's death sequence
 24. ❌ `KeepsTheShot` holds only the episode that raised the ending
 25. ☐ A queued start past the budget still gets its zero-dt advance
@@ -735,7 +735,32 @@ keep it pure ASCII, which is the stronger rule in `CLAUDE.md`). Land before A7.
 **Verify.** `Format-Hex` shows `EF BB BF` or no byte over 0x7F; `.\New-ItemId.ps1 -Kind BL`
 mints the next id and the counter file advances by one.
 
-## C22 ☐ `SetNet` reports a missing net as no move
+## C22 ☑ `SetNet` reports a missing net as no move
+
+**Landed.** `ZeppelinRuntime.SetNet` returns `false` when the chapter carries no net of that name,
+and its existing line about the kept route is now a `Log.Warn` under the runtime's own `flight`
+category (every other line in that file logs there; a `core` line from the airship runtime would
+be the odd one out). `CampaignDirector.SetAiNet` no longer counts that clause in `moved`, and it
+does not add the name to `unmatched` either: the runtime knows the airship, so the `Gap` line
+"name no aircraft, hull or zeppelin this mission built" would be false. `MotionFor(name)` is what
+separates the two, and the report then reads the clause as no move.
+
+`CampaignZeppelinCommandSuites.CheckRefusals` asserted the old return, so that check and the
+suite's own description carry the new reading instead. That
+assertion is the item's pin: no unit can construct a `ZeppelinRuntime`, which is a Godot `Node`
+whose constructor calls `GD.Print`, and `CSVM.Tests` runs with no engine loaded (`TestHostLogSink`
+records that a real `GD.Print` kills the test host with an `AccessViolationException`). So the
+pin lives in the in-engine suite that already drives C4/M05, and no `CSVM.Tests` file was added.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean (0 warnings, 0
+errors); `CheckCommentCaps.ps1` and `CheckDocEntries.ps1` both clean; `RunTests.ps1 -Suite
+"campaign-set-ai-zeppelin-net,campaign-set-ai-zeppelin-team,campaign-set-ai-net" -SkipUnits
+-SkipGoldens` 3 passed of 3, engine errors clean. Able to fail: with the branch's `return false`
+put back to `return true`, `campaign-set-ai-zeppelin-net` FAILs in 4.42s and the run exits 1;
+restored, it passes again. `docs/architecture/Session.md`'s `ZeppelinRuntime.cs` entry names
+`SetNet` only by its seat rule and states no missing-net contract, so it needed no change.
+
+**Original approach (kept for reference).**
 
 **Goal.** A `SET_AI_NET` naming a net the chapter does not carry is reported as not applied.
 

@@ -1758,6 +1758,12 @@ public sealed class CampaignDirector
                         moved++;
                         continue;
                     }
+                    // The runtime knows this airship and has warned that the chapter carries no
+                    // such net: no move, but not a name this session failed to build either.
+                    if (_in.Zeppelins?.MotionFor(name) != null)
+                    {
+                        continue;
+                    }
                     unmatched.Add(name);
                     continue;
                 }

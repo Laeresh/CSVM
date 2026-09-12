@@ -246,9 +246,9 @@ public sealed partial class ZeppelinRuntime : Node
     /// <summary>The zeppelin arm of <c>SET_AI_NET</c> (<c>FUN_004bd7a0</c>): a fresh follower on the
     /// named net, seated from where the hull stands, so a reassignment captures the new route
     /// instead of restarting it at node 0. ⚠ Offer the seat no heading: the nose-aligned edge pick
-    /// is the aeroplane AI's, and a zeppelin is not a vehicle in the original. A net this chapter
-    /// does not carry leaves the airship on its route. Returns whether the name is a zeppelin of
-    /// this mission, so a caller can report a name that addressed nothing.</summary>
+    /// is the aeroplane AI's, and a zeppelin is not a vehicle in the original. Returns whether the
+    /// airship moved: a net this chapter does not carry leaves it on its route and reads as no
+    /// move, as does a name that is no zeppelin of this mission.</summary>
     public bool SetNet(string node, string netName)
     {
         if (Find(node) is not { } zep)
@@ -258,8 +258,8 @@ public sealed partial class ZeppelinRuntime : Node
 
         if (AiNets.ByName(_chapterNets, netName) is not { } net)
         {
-            Log.Info("flight", $"zep: '{zep.Def.Node}' SET_AI_NET '{netName}' is not a net this chapter carries, so it keeps '{zep.Motion.Follower.Net.Name}'");
-            return true;
+            Log.Warn("flight", $"zep: '{zep.Def.Node}' SET_AI_NET '{netName}' is not a net this chapter carries, so it keeps '{zep.Motion.Follower.Net.Name}'");
+            return false;
         }
 
         // The hull's live pose, not the record's seat and not the motion's own field: while a
