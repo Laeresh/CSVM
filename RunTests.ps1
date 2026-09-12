@@ -282,10 +282,11 @@ $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 $EngineTimeoutSec = 300
-# Shards for the FULL catalog when -Shards is not given. Measured on the development machine; the
-# sweep behind the number is in PLAN-fast-verification's B13. The watchdog above is per
-# launch, so it is not a budget the shard count may be tuned against.
-$DefaultEngineShards = 4
+# Shards for the FULL catalog when -Shards is not given. Measured on the development machine (8
+# cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
+# every shard within 8 s of the others, and 8 was slower per shard from contention. The watchdog
+# above is per launch, so it is not a budget the shard count may be tuned against.
+$DefaultEngineShards = 6
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
 # tree named by CSVM_DATA_ROOT -- the same env var the engine and the unit tests read for

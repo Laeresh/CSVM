@@ -383,7 +383,7 @@ public sealed partial class TargetHud : Control
 
         // The shipped marker, drawn in BOTH modes unlike the hostile tracker below: --debug-markers
         // replaces that tracker but not this, so brackets, label and debug string draw in one frame
-        // (the c1-targeting-hud golden).
+        // (the c1-flight-kill golden).
         bool selected = Selected is { } target && DrawSelected(font, target, s, markerFont);
 
         // --debug-markers: every live aircraft at once, red hostile / blue own side, each with
