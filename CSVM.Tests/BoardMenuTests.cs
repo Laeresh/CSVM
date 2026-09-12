@@ -134,6 +134,22 @@ public class BoardMenuTests
         Assert.Equal(0, menu.Index);
     }
 
+    /// <summary>A pointer's hit test moves the shared cursor onto the row it lands on, and a miss
+    /// (-1) or a row already under the cursor leaves it exactly where the other devices left it.
+    /// </summary>
+    [Fact]
+    public void APointerMovesTheCursorOnlyOntoARowThatExists()
+    {
+        var menu = Pause();
+
+        Assert.True(menu.MoveTo(2));
+        Assert.Equal(2, menu.Index);
+        Assert.False(menu.MoveTo(2));
+        Assert.False(menu.MoveTo(-1));
+        Assert.False(menu.MoveTo(4));
+        Assert.Equal(2, menu.Index);
+    }
+
     [Fact]
     public void AnEmptyMenuIsRejected()
     {

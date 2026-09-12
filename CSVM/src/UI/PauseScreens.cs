@@ -121,6 +121,13 @@ public static class PauseScreens
     /// <summary>QUIT's row.</summary>
     public const int QuitRow = 3;
 
+    /// <summary>A strip's plate in authored pixels across. All four draw the same three bitmaps,
+    /// which measure 132x28, so one rectangle serves every row (docs/org/pause-screen.md).</summary>
+    public const float StripWidth = 132f;
+
+    /// <summary>A strip's plate in authored pixels down (docs/org/pause-screen.md).</summary>
+    public const float StripHeight = 28f;
+
     /// <summary>The four strips, in the order the shared <c>BUTTONS</c> block authors them, which
     /// is also the order a cursor walks them.</summary>
     public static IReadOnlyList<string> ButtonKeys { get; } = new[]
@@ -128,11 +135,36 @@ public static class PauseScreens
         "RESUME_MISSION_BTN", "RESTART_MISSION_BTN", "CONFIGURE_BTN", "MAINMENU_BTN",
     };
 
+    /// <summary>The strip an authored point lands on, or -1 for a point on none of them. This is
+    /// the pointer's whole hit test: the four plates are the screen's only widgets.</summary>
+    public static int RowAt(PauseSheet sheet, float x, float y)
+    {
+        ArgumentNullException.ThrowIfNull(sheet);
+        for (int row = 0; row < ButtonKeys.Count; row++)
+        {
+            if (sheet.Shared.Button(ButtonKeys[row]) is not { } button)
+            {
+                continue;
+            }
+
+            if (x >= button.At.X && x < button.At.X + StripWidth
+                && y >= button.At.Y && y < button.At.Y + StripHeight)
+            {
+                return row;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>Composes the screen for one pause. <paramref name="focusedRow"/> is the strip the
     /// cursor stands on and <paramref name="pressed"/> whether it is held, which is what picks
-    /// between the three authored strip bitmaps and their three label inks.</summary>
+    /// between the three authored strip bitmaps and their three label inks.
+    /// <paramref name="pointer"/> is the pointer in authored pixels, or null for a screen nobody is
+    /// pointing at, and draws the dialog's own cursor over everything else.</summary>
     public static ComposedBoard For(
-        PauseSheet sheet, PauseReadout readout, int focusedRow, bool pressed)
+        PauseSheet sheet, PauseReadout readout, int focusedRow, bool pressed,
+        (float X, float Y)? pointer = null)
     {
         var backdrop = new List<BoardPicture>();
         if (sheet.State.Background.Length > 0)
@@ -168,13 +200,17 @@ public static class PauseScreens
                 EscapeObjectivesList.TitleFont, BoardInk.Heading));
         }
 
+        var overlays = new List<BoardPanel>();
+        AddCursor(overlays, sheet, pointer);
+
         return new ComposedBoard(
             pictures,
             MissionMap.Strokes(sheet.Reveal),
             lines,
             Plaques(sheet, focusedRow, pressed),
             Notes(sheet, readout),
-            backdrop);
+            backdrop,
+            overlays: overlays);
     }
 
     // The parchment's rows: one per objective the script revealed, in the order it revealed them,
@@ -241,6 +277,34 @@ public static class PauseScreens
         }
 
         return plaques;
+    }
+
+    // The dialog's own pointer, over everything else the screen draws: the rollover bitmap while it
+    // stands on a strip and the plain one everywhere else, which is the only rollover the original's
+    // cursor has. A dialog that authors no cursor draws none and leaves the pointer to its host.
+    private static void AddCursor(
+        List<BoardPanel> into, PauseSheet sheet, (float X, float Y)? pointer)
+    {
+        if (sheet.State.Cursor is not { } cursor || pointer is not { } at)
+        {
+            return;
+        }
+
+        string bitmap = RowAt(sheet, at.X, at.Y) >= 0 ? cursor.Rollover : cursor.Bitmap;
+        if (bitmap.Length == 0)
+        {
+            return;
+        }
+
+        into.Add(new BoardPanel(
+            Array.Empty<BoardFill>(),
+            new[]
+            {
+                new BoardPicture(
+                    new BoardArt(BoardArtLibrary.Rimage, bitmap), at.X, at.Y,
+                    Centered: cursor.Centered),
+            },
+            Array.Empty<BoardLine>()));
     }
 
     private static void AddWorldIcons(

@@ -34,8 +34,10 @@ internal static class PauseSheetSuites
         + "the map's own screen rectangle and one off the window draws nothing, the parchment's "
         + "marks follow the completed rows across the four filmed poses, a mark follows the row's "
         + "own OBJECTIVEn number rather than its briefing priority (C3/M04's priority 1 row is "
-        + "OBJECTIVE15, and its two-second wake objective must not check it), and C3/M01's own "
-        + "sheet matches the reference stills flag for flag")]
+        + "OBJECTIVE15, and its two-second wake objective must not check it), C3/M01's own "
+        + "sheet matches the reference stills flag for flag, and a pointer over a strip moves the "
+        + "shared cursor onto it and fires it on the release while a press let go elsewhere fires "
+        + "nothing")]
     internal static void PauseSheetScreen(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -131,6 +133,17 @@ internal static class PauseSheetSuites
                     missing.Add($"{mission.MissionFolder}:{name}");
                 }
             }
+
+            // The dialog's own pointer is drawn only under a live pointer, so it reaches no
+            // composition here; both its bitmaps still have to be in the extraction.
+            foreach (string name in Cursors(sheet))
+            {
+                named++;
+                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                {
+                    missing.Add($"{mission.MissionFolder}:{name}");
+                }
+            }
         }
 
         report.AppendLine($"{named} bitmap references, {missing.Count} missing");
@@ -178,6 +191,7 @@ internal static class PauseSheetSuites
             }
 
             board._Process(0.0);
+            DrivePointer(ctx, board, entry.Sheet, report);
             pause.ForceResume();
             ctx.Check(!board.Visible, $"the resume takes the board away");
         }
@@ -185,6 +199,108 @@ internal static class PauseSheetSuites
         {
             ctx.Host.RemoveChild(board);
             board.QueueFree();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+        }
+    }
+
+    // The pointer over the raised board: the third strip, which is PREFERENCES and so leaves the
+    // board standing when it fires, driven through the same frame the pad's own step runs in.
+    private static void DrivePointer(
+        TestContext ctx, Flight.OriginalPauseBoard board, PauseSheet sheet, StringBuilder report)
+    {
+        var strip = sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow]);
+        if (strip == null)
+        {
+            ctx.Check(false, $"the shared block authors the third strip");
+            return;
+        }
+
+        (float X, float Y, bool Pressed)? pointer = null;
+        int fired = 0;
+        board.PointerSource = () => pointer;
+        board.Preferences = () => fired++;
+        float onX = strip.At.X + (PauseScreens.StripWidth / 2f);
+        float onY = strip.At.Y + (PauseScreens.StripHeight / 2f);
+        int before = board.FocusedRow;
+
+        pointer = (onX, onY, false);
+        board._Process(0.0);
+        ctx.Same(PauseScreens.PreferencesRow, board.FocusedRow,
+            $"a pointer on the third strip moves the shared cursor onto it (from {before})");
+        ctx.Check(StripArt(board, PauseScreens.PreferencesRow) == strip.Rollover,
+            $"and that strip wears the rollover bitmap ({StripArt(board, PauseScreens.PreferencesRow)})");
+        ctx.Check(CursorArt(board) == sheet.State.Cursor?.Rollover,
+            $"and the dialog's own cursor wears its rollover ({CursorArt(board)})");
+
+        pointer = (onX, onY, true);
+        board._Process(0.0);
+        ctx.Check(StripArt(board, PauseScreens.PreferencesRow) == strip.Activate && fired == 0,
+            $"the press holds the strip on its activate bitmap and fires nothing while it is down");
+
+        pointer = (onX, onY, false);
+        board._Process(0.0);
+        ctx.Same(1, fired, $"the release on the strip fires that strip's action");
+
+        pointer = (400f, 300f, false);
+        board._Process(0.0);
+        ctx.Same(PauseScreens.PreferencesRow, board.FocusedRow,
+            $"a pointer on no strip leaves the cursor where it stands");
+        ctx.Check(CursorArt(board) == sheet.State.Cursor?.Bitmap,
+            $"and the cursor goes back to its plain bitmap ({CursorArt(board)})");
+
+        pointer = (onX, onY, true);
+        board._Process(0.0);
+        pointer = (400f, 300f, true);
+        board._Process(0.0);
+        pointer = (400f, 300f, false);
+        board._Process(0.0);
+        ctx.Same(1, fired, $"a press released off the strip it took hold of fires nothing");
+
+        // The pad's own path with no pointer at all: the cursor stays put and no strip is held.
+        pointer = null;
+        board._Process(0.0);
+        ctx.Same(PauseScreens.PreferencesRow, board.FocusedRow,
+            $"the cursor survives the pointer leaving the screen");
+        ctx.Check(StripArt(board, PauseScreens.PreferencesRow) == strip.Rollover,
+            $"and the focused strip is back on its rollover bitmap with none held");
+        report.AppendLine(
+            $"pointer: strip {PauseScreens.PreferencesRow} at ({onX}, {onY}) focused, "
+            + $"fired {fired} time(s), cursor {sheet.State.Cursor?.Bitmap ?? "-"}/"
+            + $"{sheet.State.Cursor?.Rollover ?? "-"}");
+    }
+
+    private static string? StripArt(Flight.OriginalPauseBoard board, int row) =>
+        board.Shown is { } shown && row < shown.Plaques.Count ? shown.Plaques[row].Art.Name : null;
+
+    private static string? CursorArt(Flight.OriginalPauseBoard board)
+    {
+        if (board.Shown is not { } shown)
+        {
+            return null;
+        }
+
+        foreach (var panel in shown.Overlays)
+        {
+            foreach (var picture in panel.Pictures)
+            {
+                return picture.Art.Name;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> Cursors(PauseSheet sheet)
+    {
+        if (sheet.State.Cursor is not { } cursor)
+        {
+            yield break;
+        }
+
+        yield return cursor.Bitmap;
+        if (cursor.Rollover != cursor.Bitmap)
+        {
+            yield return cursor.Rollover;
         }
     }
 

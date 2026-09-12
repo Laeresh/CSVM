@@ -9,8 +9,10 @@ namespace CSVM.Flight;
 /// and icons, the objectives parchment, the profile's memento and the four authored button strips,
 /// composed from <c>escape.zrd</c> the way the load and briefing screens are composed from their
 /// own dialogs. Follows <see cref="PauseState.Changed"/> and drives its cursor from the pausing
-/// player's reader alone, which is <see cref="PauseBoard"/>'s contract unchanged; the Built-in
-/// presentation keeps that board. Decode: docs/org/pause-screen.md.
+/// player's reader alone, which is <see cref="PauseBoard"/>'s contract unchanged; that seat's
+/// pointer shares the cursor, hovering a strip to move it and clicking to fire, the rule every
+/// Original page keeps. The Built-in presentation keeps <see cref="PauseBoard"/>.
+/// Decode: docs/org/pause-screen.md.
 /// </summary>
 public sealed partial class OriginalPauseBoard : Control
 {
@@ -23,6 +25,18 @@ public sealed partial class OriginalPauseBoard : Control
     private BoardMenu? _menu;
     private MenuInput? _input;
 
+    // The pointer as the sheet last saw it, in authored pixels, null while nobody is pointing at
+    // it; the strip a press took hold of, -1 for none; and whether that strip is drawing held.
+    private (float X, float Y)? _pointer;
+    private int _armed = -1;
+    private bool _held;
+    private bool _wasPressed;
+
+    // What the mouse mode was when the sheet went up, so the resume puts back what the flight was
+    // using rather than assuming it was visible.
+    private Input.MouseModeEnum _mouseMode = Input.MouseModeEnum.Visible;
+    private bool _tookCursor;
+
     /// <summary>Rerun the running mission in place, chosen from RESTART.</summary>
     public Action? Restart { get; set; }
 
@@ -33,6 +47,11 @@ public sealed partial class OriginalPauseBoard : Control
     /// options leaf exists; the strip is authored and drawn either way, and a null action makes the
     /// press a no-op rather than a crash.</summary>
     public Action? Preferences { get; set; }
+
+    /// <summary>The pointer in the board's authored 800x600 space and whether its button is down,
+    /// or null for no pointer this frame. Defaults to the pausing seat's mouse through the same fit
+    /// the view draws at; a suite replaces it to move the pointer by hand.</summary>
+    public Func<(float X, float Y, bool Pressed)?> PointerSource { get; set; } = () => null;
 
     /// <summary>The screen as last composed, for a suite that reads what is drawn rather than a
     /// screenshot of it.</summary>
@@ -62,6 +81,7 @@ public sealed partial class OriginalPauseBoard : Control
             FocusMode = FocusModeEnum.None,
             Visible = false,
         };
+        board.PointerSource = board.SeatPointer;
         board.SetAnchorsPreset(LayoutPreset.FullRect);
         state.Changed += board.OnChanged;
         return board;
@@ -77,7 +97,11 @@ public sealed partial class OriginalPauseBoard : Control
     }
 
     /// <inheritdoc/>
-    public override void _ExitTree() => _state.Changed -= OnChanged;
+    public override void _ExitTree()
+    {
+        _state.Changed -= OnChanged;
+        GiveCursorBack();
+    }
 
     /// <inheritdoc/>
     public override void _Process(double delta)
@@ -93,7 +117,13 @@ public sealed partial class OriginalPauseBoard : Control
 
         // PadBack only: Escape and Start already reach the pause toggle through FlightController,
         // so reading the combined back here would act twice.
-        if (_menu.Handle(_input.Move, _input.Accept, _input.PadBack) && Visible)
+        bool changed = _menu.Handle(_input.Move, _input.Accept, _input.PadBack);
+        if (Visible)
+        {
+            changed |= StepPointer();
+        }
+
+        if (changed && Visible)
         {
             Compose();
         }
@@ -104,6 +134,11 @@ public sealed partial class OriginalPauseBoard : Control
         if (_state.Paused)
         {
             Populate();
+            TakeCursor();
+        }
+        else
+        {
+            GiveCursorBack();
         }
 
         Visible = _state.Paused;
@@ -130,7 +165,8 @@ public sealed partial class OriginalPauseBoard : Control
     }
 
     // A fresh menu each pause, so the cursor starts on RESUME and a stray confirm on a board that
-    // just appeared cannot restart or leave the session. The owner's own reader drives it.
+    // just appeared cannot restart or leave the session. The owner's own reader drives it, and the
+    // pointer's button is read once here so one already down is not a fresh click on the next frame.
     private void Populate()
     {
         var menu = new BoardMenu(
@@ -144,14 +180,113 @@ public sealed partial class OriginalPauseBoard : Control
         _menu = menu;
         _input = _inputFor(_state.OwnerPlayerIndex);
         _input.Prime();
+        _pointer = null;
+        _armed = -1;
+        _held = false;
+        _wasPressed = PointerSource()?.Pressed ?? false;
         Compose();
     }
 
-    // The held frame is never composed from here: a confirm is an edge and the action it runs takes
-    // the board away in the same frame, so the cursor's row wears the rollover strip instead.
+    // One frame of the pointer over the four strips: standing on one moves the shared cursor there,
+    // a press takes hold of the strip it lands on, and that strip fires when the button comes up
+    // still on it, so a press released anywhere else fires nothing. Answers whether to repaint.
+    private bool StepPointer()
+    {
+        if (PointerSource() is not { } at)
+        {
+            bool had = _pointer != null || _held;
+            _pointer = null;
+            _armed = -1;
+            _held = false;
+            return had;
+        }
+
+        bool changed = _pointer != (at.X, at.Y);
+        _pointer = (at.X, at.Y);
+        int over = PauseScreens.RowAt(_sheet, at.X, at.Y);
+        if (over >= 0)
+        {
+            changed |= _menu!.MoveTo(over);
+        }
+
+        bool clicked = at.Pressed && !_wasPressed;
+        bool released = !at.Pressed && _wasPressed;
+        _wasPressed = at.Pressed;
+        if (clicked && over >= 0)
+        {
+            _armed = over;
+        }
+
+        bool held = _armed >= 0 && at.Pressed && over == _armed;
+        changed |= held != _held;
+        _held = held;
+        if (!released)
+        {
+            return changed;
+        }
+
+        bool fires = _armed >= 0 && over == _armed;
+        _armed = -1;
+        if (!fires)
+        {
+            return changed;
+        }
+
+        // The hover already moved the cursor onto this strip, so the shared confirm fires the row
+        // under the pointer and the pad and the pointer reach the actions through one path.
+        _menu!.Handle(0, accept: true, back: false);
+        return true;
+    }
+
+    // The pausing seat's mouse in authored pixels. Only a seat that reads the keyboard holds one
+    // (MenuInput's rule for seat 0), so a pad player's pause is driven by the pad alone.
+    private (float X, float Y, bool Pressed)? SeatPointer()
+    {
+        if (_input is not { Keyboard: true } || !IsInsideTree())
+        {
+            return null;
+        }
+
+        var size = GetViewportRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        var at = GetViewport().GetMousePosition();
+        return (
+            (at.X - fit.OriginX) / fit.Scale,
+            (at.Y - fit.OriginY) / fit.Scale,
+            Input.IsMouseButtonPressed(MouseButton.Left));
+    }
+
+    // The dialog authors its own pointer, so the OS one goes away while the sheet stands. Taken
+    // only where the seat has a mouse to point with and the dialog a cursor to draw in its place.
+    private void TakeCursor()
+    {
+        if (_tookCursor || _sheet.State.Cursor == null || _input is not { Keyboard: true })
+        {
+            return;
+        }
+
+        _mouseMode = Input.MouseMode;
+        Input.MouseMode = Input.MouseModeEnum.Hidden;
+        _tookCursor = true;
+    }
+
+    private void GiveCursorBack()
+    {
+        if (!_tookCursor)
+        {
+            return;
+        }
+
+        Input.MouseMode = _mouseMode;
+        _tookCursor = false;
+    }
+
+    // A pad confirm is an edge and the action it runs takes the board away in the same frame, so
+    // the cursor's row wears the rollover strip; the held frame is the pointer's alone, drawn while
+    // its button is down on the strip it took hold of.
     private void Compose() =>
         _view?.Show(
-            PauseScreens.For(_sheet, _readout(), _menu?.Index ?? 0, pressed: false),
+            PauseScreens.For(_sheet, _readout(), _menu?.Index ?? 0, _held, _pointer),
             BoardPalette.Escape,
             string.Empty,
             string.Empty);

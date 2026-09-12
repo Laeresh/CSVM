@@ -187,6 +187,44 @@ public class PauseScreensTests
         Assert.Equal(BoardInk.LabelActivate, board.Plaques[PauseScreens.RestartRow].Ink);
     }
 
+    /// <summary>The four strips are the screen's only widgets, each a 132x28 plate on its authored
+    /// corner, and a point on none of them answers -1 rather than the nearest row.</summary>
+    [ExtractedDataFact]
+    public void EachStripIsHitOnItsOwnAuthoredPlate()
+    {
+        var sheet = Sheet();
+
+        Assert.Equal(PauseScreens.ResumeRow, PauseScreens.RowAt(sheet, 107f, 528f));
+        Assert.Equal(PauseScreens.ResumeRow, PauseScreens.RowAt(sheet, 238f, 555f));
+        Assert.Equal(PauseScreens.RestartRow, PauseScreens.RowAt(sheet, 193f, 573f));
+        Assert.Equal(PauseScreens.PreferencesRow, PauseScreens.RowAt(sheet, 433f, 542f));
+        Assert.Equal(PauseScreens.QuitRow, PauseScreens.RowAt(sheet, 413f, 573f));
+
+        // Just off each far edge, and the clear board above the strips.
+        Assert.Equal(-1, PauseScreens.RowAt(sheet, 239f, 528f));
+        Assert.Equal(-1, PauseScreens.RowAt(sheet, 107f, 556f));
+        Assert.Equal(-1, PauseScreens.RowAt(sheet, 400f, 300f));
+    }
+
+    /// <summary>Every campaign dialog authors the pointer the screen is driven with, and the
+    /// composition draws it over everything else: the rollover bitmap on a strip, the plain one
+    /// off it, and nothing at all where nobody is pointing.</summary>
+    [ExtractedDataFact]
+    public void TheDialogsOwnCursorFollowsThePointerAndWearsItsRolloverOnAStrip()
+    {
+        var sheet = Sheet();
+        Assert.Equal(new EscapeCursor("daglove", "dafinger", false), sheet.State.Cursor);
+
+        var away = PauseScreens.For(sheet, PauseReadout.Empty, 0, false, (400f, 300f));
+        var onStrip = PauseScreens.For(sheet, PauseReadout.Empty, 0, false, (413f, 573f));
+        var none = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
+
+        var plain = Assert.Single(Assert.Single(away.Overlays).Pictures);
+        Assert.Equal(("daglove", 400f, 300f, false), (plain.Art.Name, plain.X, plain.Y, plain.Centered));
+        Assert.Equal("dafinger", Assert.Single(Assert.Single(onStrip.Overlays).Pictures).Art.Name);
+        Assert.Empty(none.Overlays);
+    }
+
     /// <summary>The parchment's rows are the objectives the script reveals, in reveal order, and a
     /// completed row takes the mark with its colour unchanged.</summary>
     [ExtractedDataFact]

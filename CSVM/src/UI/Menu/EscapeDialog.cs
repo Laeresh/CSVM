@@ -99,6 +99,12 @@ public sealed record EscapeButton(
     string LabelKey,
     BriefingPoint LabelOffset);
 
+/// <summary>The dialog's own pointer: the bitmap it wears, the bitmap it wears while it stands on
+/// a live widget, and whether its middle rather than its corner lands on the pointer's point. Every
+/// campaign dialog authors the same pair, which is the evidence that the screen is pointed at.
+/// Decode: docs/org/pause-screen.md.</summary>
+public sealed record EscapeCursor(string Bitmap, string Rollover, bool Centered);
+
 /// <summary>The definition file's <c>LOADINGDIALOG</c> block: what every dialog in the file shares.
 /// The two icons carry no position because the screen gives them one from a world position through
 /// the mission dialog's own map window.</summary>
@@ -135,6 +141,7 @@ public sealed record EscapeState(
     EscapeMap? Map,
     string MementoBitmap,
     BriefingPoint MementoAt,
+    EscapeCursor? Cursor,
     IReadOnlyList<BriefingStep> Steps);
 
 /// <summary>
@@ -352,9 +359,24 @@ public sealed class EscapeDialog
             primitives?.Dict("MAP") is { } map ? ParseMap(map) : null,
             memento?.Str("BITMAP") ?? string.Empty,
             Point(memento, "POSITION"),
+            ParseCursor(d.Dict("CURSOR")),
             script == null
                 ? Array.Empty<BriefingStep>()
                 : BriefingDialog.ParseScript(script));
+    }
+
+    // A cursor with no bitmap is no cursor at all, so the screen keeps whatever pointer it was
+    // shown with; a block that names no rollover wears its one bitmap over a live widget too.
+    private static EscapeCursor? ParseCursor(ZrdrDict? cursor)
+    {
+        if (cursor?.Str("BITMAP") is not { Length: > 0 } bitmap)
+        {
+            return null;
+        }
+
+        string rollover = cursor.Dict("ROLLOVER")?.Str("BITMAP") ?? string.Empty;
+        return new EscapeCursor(
+            bitmap, rollover.Length > 0 ? rollover : bitmap, cursor.Float("CENTER") != 0f);
     }
 
     private static EscapeMap ParseMap(ZrdrDict map) => new(

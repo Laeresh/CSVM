@@ -61,6 +61,20 @@ public sealed class BoardMenu
         return moved;
     }
 
+    /// <summary>Puts the cursor on one row and answers whether it moved, for a board whose pointer
+    /// shares this cursor with the pad and the keyboard. A row outside the list is refused, so a
+    /// hit test that answers -1 leaves the cursor where the other devices left it.</summary>
+    public bool MoveTo(int index)
+    {
+        if (index < 0 || index >= _items.Length || index == Index)
+        {
+            return false;
+        }
+
+        Index = index;
+        return true;
+    }
+
     /// <summary>Puts the cursor back on the first row, for a board that reuses one menu across
     /// several appearances rather than rebuilding it.</summary>
     public void Reset() => Index = 0;

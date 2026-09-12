@@ -224,6 +224,13 @@ Each of the four is a three-bitmap strip with three faces: `escape_button1` with
 with `BtnEscapeActivate` while held, the label centred at the strip's own `offset [66, 7]` over a
 132x28 plate. There is no disabled frame, so a strip with nothing behind it is still drawn live.
 
+**The screen is pointed at, and says so in its own data.** Every dialog in `escape.zrd` carries a
+`CURSOR` block of the same shape, `BITMAP [daglove]` with `CENTER [0]` and a `ROLLOVER` naming
+`BITMAP [dafinger]`, so the pointer wears the glove bitmap by its top-left corner and swaps to the
+pointing finger over a live widget. Both are 40x40 in the rimage set. That is the evidence that the
+four strips are mouse targets and not a pad list: the rollover frame the strips author has a device
+that can be over one strip without the cursor having walked there.
+
 ## The memento is the profile's own image name
 
 `FUN_0041a820` copies the 0x104-byte string at `DAT_0064b684` into a scratch buffer and truncates it
@@ -291,6 +298,14 @@ window and the pin placement live.
 `BtnEscapeNormal`, `BtnEscapeRollover` and `BtnEscapeActivate` become one face in three palette
 inks rather than three faces, which is the same mapping every other composed board takes
 ([`campaign-board.md`](campaign-board.md)).
+
+**One cursor serves all three devices.** The authored pointer is drawn, the glove over the sheet and
+the finger over a strip, and the OS pointer is hidden while the sheet stands; but a hover moves the
+shared cursor onto the strip it lands on rather than lighting a rollover the keyboard cannot see, so
+a click fires the row the pad would have fired. That is the rule every Original page keeps
+([`../architecture/UI.md`](../architecture/UI.md)), and it costs the original's ability to hover one
+strip while the keyboard's selection rests on another. Only a seat holding a mouse points at all,
+which is seat 0, so a pad player's pause is the pad's alone and the OS cursor is left as it was.
 
 **Preferences has no target in flight.** The original opens its own preferences dialog over the
 paused mission; this port's options live in the menu presentations and no in-flight leaf stands

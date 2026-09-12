@@ -284,7 +284,8 @@ stops a pad steering a menu it does not own, and the return says whether the hig
 board repaints only when it has to. It opens on the first item, so a board orders its rows with the
 harmless one first and a stray confirm on a menu that just appeared cannot destroy a run. A results
 board is not dismissable, since dismissing it would leave the player in a halted world with no way
-back. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
+back. `MoveTo` is how a board's pointer puts the cursor on the row under it, refusing a row outside
+the list so a miss leaves the cursor alone. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
 
 ## src/UI/LoadBoard.cs
 The load screen drawn over the whole window while a session builds: `LoadScreens`' composition
@@ -309,9 +310,9 @@ mission's chart at its authored source crop, the pins and icons its dialog's scr
 objectives parchment, the profile's memento, and the four button strips with their labels resolved.
 `PauseSheet` is the authored half, read once per mission, and `PauseReadout` the live half, read
 afresh on every pause; its `Rows` marks a note line by the runtime's answer for that line's own
-objective number. The chart, its pins and an icon by world position go through `MissionMap`, which
-the briefing shares. An unreadable extraction builds no sheet, which leaves the pause to the
-Built-in board rather than to nothing. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+objective number. `RowAt` is the pointer's whole hit test, the four authored 132x28 plates, and a
+pointer also draws the dialog's own cursor. The chart and its icons go through `MissionMap`, and an
+unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
@@ -757,10 +758,10 @@ Opcodes: [../formats/briefing.md](../formats/briefing.md). `ParseScript` is shar
 ## src/UI/Menu/EscapeDialog.cs
 The reader behind the pause screen and the campaign load screen: one dialog's chart sheet with its
 source crop and world window, its memento slot and its beat sheet, plus the block every dialog
-borrows, which is the objectives parchment, the two icons the pause screen places by world position
-and the four button strips. `escape.zrd`, `ia_escape.zrd` and `Loading.zrd` read through it, and
-`Settled` runs a beat sheet out to the still either screen draws. `EscapeMap.TryProject` is the
-world window: world X across, negated world Z down, false rather than a clamp for a position off it.
+borrows, which is the objectives parchment, the two icons the pause screen places by world position,
+the four button strips and the cursor the screen is pointed at with. `escape.zrd`, `ia_escape.zrd`
+and `Loading.zrd` read through it, and `Settled` runs a beat sheet out to the still either screen
+draws. `EscapeMap.TryProject` is the world window: world X across, negated world Z down, false rather than a clamp for a position off it.
 ⚠ The `CLIP` is a rectangle in the bitmap and not on the screen, and every `WORLD` bound is
 truncated toward zero, both of which the type's own members say. [../org/pause-screen.md](../org/pause-screen.md).
 
