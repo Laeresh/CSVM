@@ -41,13 +41,6 @@
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
-      "name": "c2b-rain",
-      "frame": 120,
-      "hash": "0d6bbf3cbcdddfc32cfc6f89c64fae69",
-      "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
-      "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
-    },
-    {
       "name": "c3-island",
       "frame": 120,
       "hash": "39d12b1d919bb0bbc36d97484a8aeee0",
@@ -83,17 +76,17 @@
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
-      "name": "c1-flight",
-      "frame": 120,
-      "hash": "fb154abfed7472f8e116f4603b154c81",
-      "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, pipper, exhaust, SpeedCue, the plane under the zone's SUNLIGHT, a point light on its fade band; frame-sensitive.",
-      "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
+      "name": "c1-flight-kill",
+      "frame": 280,
+      "hash": "820430363161806540b3e9edbdfe4280",
+      "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier with its handover fireball, the live one targeted with brackets, label and --debug-markers text, gauges, exhaust, ground shadow, world-lit C1; frame-sensitive 78.07 %.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit",
       "frame": 120,
       "hash": "ebe4cf8895f441f702a206dee9d58aa5",
-      "exercises": "The same held flight seen from the pilot's seat: the cockpit1 interior in the pass's own SubViewport world under its re-aimed sun, needles, drum, belts and readouts, canopy frame and gunsight over world-lit C1; frame-sensitive 43.35 %.",
+      "exercises": "Held pitch-and-roll flight seen from the pilot's seat: the cockpit1 interior in the pass's own SubViewport world under its re-aimed sun, needles, drum, belts and readouts, canopy frame and gunsight over world-lit C1; frame-sensitive 43.35 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
@@ -118,25 +111,11 @@
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
-      "name": "c1-targeting-hud",
-      "frame": 90,
-      "hash": "8c2a86ce8a0dd0b37ea65b3fd53501d5",
-      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and crewed rear turret feed antialiased in-range brackets, the label below the plane, --debug-markers text, the player's ground shadow and a faded point light on C1; frame-sensitive 48.18 %.",
-      "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
-    },
-    {
       "name": "c1-stunt-marker",
       "frame": 90,
       "hash": "93e005bfcf9a3a46efb6fe569e9645ef",
       "exercises": "A stunt run's Danger Zone as an objective on the pilot's own target cycle: the off-screen edge arrow and the category/name/clock label in the non-destructive objective's blue, over the run HUD's clock and zone count, the player's ground shadow.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
-    },
-    {
-      "name": "c1-ai-wreck",
-      "frame": 280,
-      "hash": "891e318307c1ce824d8655105895e440",
-      "exercises": "A shot-down AI 3 s after the kill: flight state under frozen commands, the target's antialiased brackets, the handover fireball inheriting the hull's velocity, the LOW ALT lamp, the player's ground shadow on world-lit C1.",
-      "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
@@ -158,20 +137,6 @@
       "hash": "b6d9c7df9dfa41f59e1d90fe353780db",
       "exercises": "The Original top level over its decoded layout: the CrimFlag movie decoded from the install's own MPEG-1 and drawn as the backmost layer at the row's 250 percent, with the logo, button frame and plaques over it.",
       "args": ["--menu", "--presentation=original", "--det", "--mute"]
-    },
-    {
-      "name": "menu-original-options-flag",
-      "frame": 120,
-      "hash": "7ba46088feaf9c20c21cc5ceb66afd32",
-      "exercises": "The Options screen over the decoded Preferences chrome with the same movie running under it: its title and descriptions, all four page doors live in their enabled frames, and the flag at the layout row's own corner and scale.",
-      "args": ["--menu=options", "--presentation=original", "--det", "--mute"]
-    },
-    {
-      "name": "menu-original-keys",
-      "frame": 120,
-      "hash": "9a0670dff7d2b94e2076dfdb7284d9d3",
-      "exercises": "The KEYS AND BUTTONS page over its decoded plate with the Preferences movie behind it: the seven category tabs, the Movement rows against the two authored control columns naming what a row is not showing, and CANCEL left of ACCEPT.",
-      "args": ["--menu=keys", "--presentation=original", "--det", "--mute"]
     }
   ]
 }

@@ -1,3 +1,5 @@
+using System;
+using System.Diagnostics;
 using System.IO;
 using CSVM.Session;
 
@@ -5,8 +7,11 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// The scratch profile store the campaign screenshot aids read, shared by both presentations so
-/// their shots show one player: under <c>%TEMP%\CSVM\menu-aid-profiles</c>, emptied on every open,
-/// and seeded with two profiles for the filled-roster shot. A progressed store additionally flies
+/// their shots show one player: under <c>%TEMP%\CSVM\menu-aid-profiles\&lt;pid&gt;</c>, emptied on
+/// every open, and seeded with two profiles for the filled-roster shot. The process id is in the
+/// path because the engine stage runs several Godot processes at once and two menu suites opening
+/// one shared directory deleted each other's files mid-suite; a sibling directory whose process is
+/// gone is swept on open so the tree does not grow. A progressed store additionally flies
 /// the first three missions, which is what puts rows on the previous-missions list and moves the
 /// cabin's Next Mission off the campaign's first entry. Nothing here can reach <c>user://Profiles</c>.
 /// </summary>
@@ -41,8 +46,10 @@ public static class CampaignAidProfiles
     // records a clean run: bits 0 to 12, the range the shipped rows' own gates use.
     private const int CompletedMask = 0x1fff;
 
-    /// <summary>The store's directory.</summary>
-    public static string Directory => Path.Combine(Path.GetTempPath(), "CSVM", "menu-aid-profiles");
+    /// <summary>The store's directory, one per process.</summary>
+    public static string Directory => Path.Combine(Root, Environment.ProcessId.ToString());
+
+    private static string Root => Path.Combine(Path.GetTempPath(), "CSVM", "menu-aid-profiles");
 
     /// <summary>The build store the scratch-store aids open the campaign over, a subdirectory of
     /// <see cref="Directory"/> emptied with it: the export aid's write lands here and never in
@@ -61,6 +68,8 @@ public static class CampaignAidProfiles
             {
                 System.IO.Directory.Delete(dir, recursive: true);
             }
+
+            SweepDeadSiblings();
         }
         catch (IOException)
         {
@@ -87,5 +96,43 @@ public static class CampaignAidProfiles
         store.Save(first);
         store.Save(CampaignProfileDef.NewProfile(SecondPilot));
         return store;
+    }
+
+    // Only a directory whose owning process has exited is removed: a live sibling is another
+    // shard's store, mid-suite.
+    private static void SweepDeadSiblings()
+    {
+        if (!System.IO.Directory.Exists(Root))
+        {
+            return;
+        }
+
+        foreach (string sibling in System.IO.Directory.GetDirectories(Root))
+        {
+            if (!int.TryParse(Path.GetFileName(sibling), out int pid) || pid == Environment.ProcessId)
+            {
+                continue;
+            }
+
+            bool alive;
+            try
+            {
+                using var owner = Process.GetProcessById(pid);
+                alive = !owner.HasExited;
+            }
+            catch (ArgumentException)
+            {
+                alive = false;
+            }
+            catch (InvalidOperationException)
+            {
+                alive = false;
+            }
+
+            if (!alive)
+            {
+                System.IO.Directory.Delete(sibling, recursive: true);
+            }
+        }
     }
 }
