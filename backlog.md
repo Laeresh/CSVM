@@ -465,7 +465,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Barracuda's hangar; that is a hint about where the weak point is, not proof the hull is immune.
   *⚠ Traps:* the report is a question prompted by that voice line, not a memory of the original's
   hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
-  voice line is flavour and this closes. *Cross-refs:*
+  voice line is flavour and this closes. A second report from the controls: three flak rockets
+  on the hull killed it, which reads too easy if the hull takes hits at all and right if only
+  the hangar does, so the count is the same question and not a second item. *Cross-refs:*
+  `CAP-57` (the original filmed taking three flak rockets on the hull).
 
 - `BL-561` `[Research]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
   original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes
@@ -710,6 +713,72 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Balmoral reach the Pandora and watch the rings. *Cross-refs:* `BL-714` (the same rings,
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
+
+- `BL-858` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Skipping a mission intro with pad A fires a
+  rocket the moment flight comes back.** *Evidence:* reported at the controls on main at
+  `abd9d718`, campaign intro, pad A as the skip. `Flight/RocketTriggerLatch.cs` exists for exactly
+  this press: it arms when input returns after a cutscene skip or a pause Resume and swallows the
+  still-held trigger. Pad A is the guarded button, so either the intro's return path never calls
+  `ArmIfHeld`, or the latch is armed and released before the trigger's first read. *Fix shape:*
+  trace the intro's hand-back (`Session/CutsceneController.cs`, the episode's end) to the arming
+  call, and pin the intro case in the latch's suite beside the pause case. *⚠ Traps:* the latch's
+  own unit tests pass; the hole is in who calls it, not in its state machine. *Cross-refs:* `PT-93`
+  (the skipper flight), `BL-871` (the same release-after-skip leak on the menu side).
+
+- `BL-859` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A custom-built plane's flak lands on one wing in
+  flight while the flight check shows it on both.** *Evidence:* reported at the controls: the campaign
+  Devastator built in the hangar (Gypsy Magic) with all four pylons set to flak one at a time
+  fires flak from one wing and HE from the other, the flight check's rocket rows reading flak on
+  every pylon (rows 1, 2, 5 and 6, with 2 and 6 firing HE). The stock Jumping Jane with the same
+  picks fires flak from all four. The page reads the stored ordnance array through
+  `CampaignLoadout.PylonRow` and is right; the in-flight fit reaches the aircraft through
+  `CustomPlaneBuild.LoadoutFor` and `Loadout.Bind`, and the custom build's per-wing counts
+  (`LeftHardpoints`/`RightHardpoints`) are what the stock path does not have. *Fix shape:* bind a
+  custom build's ordnance array over its own wing split the way the flight check's
+  `ResolveHardpoints` does, and pin a four-pylon custom fit in the loadout suite against the eight
+  stored rows. *⚠ Traps:* not the page and not the commit; the array on disk is right.
+  *Cross-refs:* `docs/org/hangar.md` (the build record), `CSVM/src/Session/CampaignLoadout.cs`.
+
+- `BL-861` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[CM03]` **CM03 (C3/M02): the AA guns hold on a
+  "blocked" sight line with nothing between them and the player.** *Evidence:* reported at the
+  controls on main after `BL-830` landed: the F15 targeting overlay names `blocked` as the gate on
+  every gun at the site while the player circles in clear air, so the guns track and never fire.
+  `BL-830` excluded a ground emplacement's own rig from its cover cast at CM07's fort; this site
+  still reads cover where the eye sees none. *Fix shape:* fly CM03 with `--debug-targets` and a
+  `Log.Info` probe on `TurretController`'s cover cast naming what it strikes, then extend the
+  exclusion to whatever it names (the site's own building, a neighbouring gun's rig) if that is
+  its own structure, or fix the cast if it is air. *⚠ Traps:* `BL-831`, the suite harness can miss
+  enabled shapes, so settle it in a live session, not a suite. *Cross-refs:* `BL-830` (the fix
+  that did not reach this site), `PT-142` (CM07's owed flight), `CSVM/src/Flight/TurretController.cs`.
+
+- `BL-866` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Allied AI and turret gunners engage a destroyed
+  zeppelin's surviving parts and non-enemy buildings while the live enemies go unfought.**
+  *Evidence:* reported at the controls from CM04 (C3/M03) on: wingmen, allied aircraft and the
+  Pandora's guns lock on the destroyed cargo zeppelin's engines and on buildings, leaving the
+  enemy aircraft to the player. The user's recall of the original is that its allies fight the
+  aircraft. In the data a zeppelin's engines are their own destructibles and stay `healthy` after
+  the hull dies (`extracted/C3/M04/zrdr/objectives.zrd.json`'s `INACTIVE` conditions list them
+  one by one), so a ranking that asks only "is this a live destructible" keeps them. *Fix shape:*
+  decode the original's AI target ranking for two gates, whether a dead vehicle's parts stay
+  candidates and whether a structure needs an enemy team to be ranked at all, then apply both to
+  `AiGunner`'s re-acquire and the turret's selection. One item: both are the same selection
+  algorithm. *⚠ Traps:* do not special-case zeppelin engines; the gate is the vehicle's death, not
+  the part's name. *Cross-refs:* `docs/org/targeting.md` (the player's cycle, a different list),
+  `docs/org/aiPilot.md`, `CSVM/src/Flight/AiGunner.cs`.
+
+- `BL-869` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A setting that re-resolves the target after
+  a kill to the nearest of the cycle by distance, default off.** *Evidence:* the original drops to
+  the head of the current cycle when the target dies, and the head of Enemy/Objective is the
+  nearest objective whenever one exists ([`docs/org/targeting.md`](docs/org/targeting.md),
+  "Lifecycle" and "Nearest Enemy/Objective"); `Flight/TargetSelection.cs:107-133` implements that
+  rule. So in a defence mission every kill sends the player back to the objective and a key press
+  is needed to take the next enemy, which the user finds annoying enough to want an option.
+  *Fix shape:* one option on the Game Options page, off by default, that makes the death re-resolve
+  pick the nearest entry of the current cycle by slant range regardless of the objective-first
+  sector order; the auto-acquire at mission start and the explicit class keys keep the original's
+  order either way. *⚠ Traps:* a deliberate departure behind a setting, never the default: the
+  decode is firm and a player who knows the original notices. *Cross-refs:* `BL-866` (the AI's
+  own ranking, unrelated list), `CSVM/src/Flight/TargetSelection.cs`.
 
 ## Flight model & collision physics
 
@@ -1276,6 +1345,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`spin_props_anim`/`stop_props_anim`), `docs/org/vehicleDamage.md` (the mask), `BL-406` (the
   choke itself), `BL-285` (the engine loop's start/stop inputs).
 
+- `BL-856` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Puffers take no fog, so a distant emitter
+  stands at full contrast against a fogged hill.** *Evidence:* the puffer shader
+  (`Effects/EmitterRenderer.cs:50`) is `fog_disabled` and mixes no fog of its own, where the cloud
+  field (`Effects/FogVolumeClutter.cs:250-256`) mixes `csky_fog_color` by `csky_fog_amount`. The
+  original never needed to: it culls its puffers far nearer than the fog distance. CSVM draws them
+  to its own longer distance on purpose and that distance stays, so the fog is CSVM's own
+  correction for a departure it keeps. *Fix shape:* the cloud field's fog mix in the puffer
+  shader's fragment, for every emitter (world-placed stacks and fires, gun smoke, trails,
+  fireballs alike: one shader, one distance); re-pin the goldens the far emitters touch.
+  *⚠ Traps:* do not shorten the puffer draw distance to match the original's cull; that is the
+  departure the user chose to keep. Additive columns mix toward the fog colour like the rest, the
+  blend bit does not exempt them. *Cross-refs:* [`docs/org/puffer.md`](docs/org/puffer.md),
+  `BL-380` (per-instance fog uniforms, a different zone problem).
+
+- `BL-867` `[Tuning]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
+  original's.** *Evidence:* reported at the controls against mission recordings: the pale wisps
+  each chapter's `speed_cue.zrd` emits ahead of the player (`Flight/SpeedCue.cs`, three authored
+  `cuepufferN` states selected by altitude) are far more prominent than in the footage; size reads
+  right, opacity does not. The alpha comes from the authored state, so a halved constant would be
+  a departure from data; CSVM's own contribution is the puffer's judged sprite-size stand-in
+  (`Puffer.SizeScaleDefault`) and the blend the texture header names. *Fix shape:* a montage of
+  the cue beside a mission recording at matched altitude first, the user judges it, then move the
+  constant the montage names: the blend or the size stand-in before the authored alpha, a
+  cue-only alpha factor last. *⚠ Traps:* three cloud populations share textures
+  (`BL-118`'s note under the cloud items): judge the wisps by altitude and by their position
+  ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
+  (the cue's data), `docs/org/puffer.md`.
+
 ## Audio
 
 - `BL-815` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original plays the dry-trigger cue flat, from no position at all, while an AI aircraft's in CSVM is a world emitter.**
@@ -1751,6 +1848,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   judgement call, not a re-decode.
   *Cross-refs:* `PLAN-cockpit-view` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
+
+- `BL-855` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A cutscene on a wide window crops the picture
+  top and bottom and loses its letterbox bars.** *Evidence:* two shot pairs at 1920x1080 and
+  3840x1080 (`--campaign=<profile>:0` and `:3`, `--frames=120 --screenshot`): at 32:9 the CM01
+  zeppelin stands 1.8 times taller in the frame than at 16:9, about 55 % of the 16:9 picture's
+  vertical extent is shown, and no bar is drawn; the Balmoral docking shot shows only the middle
+  of the airship. `Session/CutsceneController.cs` `FrameBars` fits the camera so the authored 5:3
+  card exactly covers the pane (`FramingFovDeg`): the card's height on a 4:3 pane, its width on
+  anything wider, so the vertical angle shrinks as the window widens and the bars, glued to
+  `camera1` at their authored size, fall outside the frame. The 16:9 case is already slightly
+  width-fit. *Fix shape:* fit the card's height on every aspect, so the vertical picture is the
+  original's 4:3 one on any monitor, and scale the bars' X so they cover whatever width remains;
+  one method, one rule, and the `campaign-intro-fill` golden re-pins. Flight and cockpit views are
+  right already and untouched (`CameraController.HorizontalToVerticalFovDeg`, vertical held).
+  *⚠ Traps:* not a pillarbox: the wide camera's extra world left and right is kept. Height-fit
+  applies at 16:9 too, which changes that picture a little on purpose. *Cross-refs:* `BL-452`'s
+  closing commit (why the card became the frame), `PT-93`,
+  [`docs/formats/anim-definitions/cutscenes.md`](docs/formats/anim-definitions/cutscenes.md).
 
 ## HUD & UI
 
@@ -2426,6 +2541,67 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `BL-510`'s closing commit (the selection order), `CSVM/src/Flight/FlightHud.cs`,
   `CSVM/src/Bindings/BindingLabels.cs`.
 
+- `BL-857` `[Feature]` `[L]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **The spyglass: Shift+S toggles a round live
+  picture of the selected target at its off-screen marker, and the marker's arrow and text sit
+  differently from ours.** *Evidence:* the mission recordings under `OriginalScreenshots/Videos/`
+  show an off-screen target's marker carrying a round window with a live render toward the
+  target, the camera standing at the player's aircraft, so an occluded target shows the terrain
+  in front of it; it works for every marked class (aircraft, objectives, structures), the text
+  sits further in from the edge than ours and the arrow is longer. The user's recall: it toggles
+  on Shift+S and is drawn only while the target is inside a range. The strings decode has
+  `MSG_CAM2_TOG` "Toggle Spyglass" as a camera command, camera 2, on `0x41f` Shift+S
+  ([`docs/formats/strings.md`](docs/formats/strings.md) "Views", `docs/org/input.md`), and every
+  chapter ships the engine roots `spyglass` and `sgwin` (`docs/formats/gamez.md`), the window
+  and its render target. *Fix shape:* decode first: the range gate and its constant, what camera
+  2 looks from and at, the window's size and placement on the marker, and the arrow and text
+  offsets; then a `SubViewport` render per human into a round mask at the marker, toggled by a
+  new `InputAction`, plus the marker geometry corrections. *⚠ Traps:* the edge marker's placement
+  law (`Flight/EdgeMarker.cs`) stays engine-free; the window is a layer over it, not a rewrite.
+  The range is decoded, never read off footage. *Cross-refs:* `docs/org/targeting.md`
+  (`FUN_0049d940`, the off-screen case), `CONTEXT.md` "Edge marker", `BL-181`.
+
+- `BL-864` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Plane Construction's open lists draw an X at the
+  start of every row that the original does not draw.** *Evidence:* reported at the controls on
+  the Original presentation's campaign Plane Construction screen: each row of an open combo list
+  is prefixed with an X. The reference captures (`OriginalScreenshots\Campaign CAP-40 Plane
+  Construction*.png`, `CAP-50.mkv` t=118 to 140) show bare rows. *Fix shape:* find the glyph in
+  the shared list drawer the hangar's combos use and drop it for this screen; check the other
+  campaign combos (ammo page, Instant Action) are not drawing it too. *Cross-refs:*
+  `docs/org/hangar.md`, `BL-750` (the same list's arrows and thumb).
+
+- `BL-865` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Plane Construction's defaults ask fires on every
+  airframe change, is drawn as the wrong box, and lacks its third answer.** *Evidence:* reported
+  at the controls against `OriginalScreenshots\Plane Construction Default Values Dialog.png`: the
+  original asks (langui 206) only when the airframe is changed after the record was edited away
+  from its defaults (engine, armour, guns), CSVM asks on every airframe change; the text is right
+  but the box is a different dialog altogether, and the original offers Yes, No and Cancel where
+  CSVM offers two. *Fix shape:* gate the ask on a changed-since test against the stock template
+  (the decode's "as opened" copy, `docs/org/hangar.md` "What Load Default Configuration loads"),
+  draw it as the three-button `MESSAGEBOX.SCRIPT` box the screenshot shows, and wire Cancel to
+  leave the airframe as it was. *⚠ Traps:* what each of the three answers does to the record is
+  not on the screenshot; `CAP-53` films it. *Cross-refs:* `CAP-53`, `docs/org/hangar.md`.
+
+- `BL-871` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Skipping a campaign movie with a click or a pad
+  press fires the hidden board's item under the pointer or in focus.** *Evidence:* reported at the
+  controls: with the pointer resting where RETURN TO MAIN MENU sits, the click that ends the
+  campaign's movie also returns the player to the main menu; a pad press does the same to the
+  focused item. The cinema takes the press (`UI/CinemaSkips.cs`, `CinemaPress.LeftMouse`), the
+  board underneath is hidden during the film and fires on the release, which nothing tells it was
+  the tail of a press it never saw. *Fix shape:* the press that ends a cinema is consumed through
+  its release: the board ignores a release with no press of its own, the way
+  `Flight/RocketTriggerLatch.cs` swallows the still-held trigger in flight; pin it in the cinema
+  hand-off suite with a press during the film and a release after. *Cross-refs:* `BL-858` (the
+  flight-side twin), `UI/CinemaHandoff.cs`.
+
+- `BL-872` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The campaign roster's name box starts the
+  campaign on a single click when a row is selected.** *Evidence:* reported at the controls: with
+  a roster row already selected, one click into the name box starts. The decode of the profile
+  screen (`docs/org/menu-inventory.md`, `CampaignScreen.Roster`; `docs/formats/campaign-screens.md`)
+  has four starts: `CM_B_START`, Enter in the box, and a second click on the filled roster row;
+  a click into the box itself is not one. *Fix shape:* the name box's click focuses the box and
+  nothing else; pin in the campaign menu suite. *Cross-refs:* `CAP-52` (f) (the keyboard walk on
+  this screen).
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2919,6 +3095,56 @@ usual.
   v3 writer. *⚠ Traps:* not a path fault, and a worktree shares the main checkout's `user://`.
   *Cross-refs:* `BL-662` (the v3 store), `BL-675`'s closing commit.
 
+- `BL-860` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM02]` **The persist log carries trucks, guns and
+  towers between a chapter's missions but not the suspension bridge, so CM02 (C3/M05) opens
+  with the bridge CM01 dropped standing again.** *Evidence:* the user's profile
+  (`user://Profiles/<name>/profile.json`, `persistLog`) holds 39 chapter-6 objects captured at
+  story positions 0, 2 and 3 (`t_truck**`, `aagun**`, `g_tower*`, `u_camp*`, `unit**`) and no
+  bridge entry, while `extracted/C3/zrdr/susp_bridge.zrd.json` carries `PERSIST_LOG ON`.
+  `Session/CampaignPersistLog.cs` `Capture` walks the destructibles the hit path damages
+  (`DestructibleRegistry.Resolve`); the bridge dies through an animation chain (a rope burns, the
+  deck falls: `cam_anim/susp_bridge-rope1burn-rope1.json`, `bridge_truck01-bridge_destroy01.json`),
+  so it is never in that pool at capture time. *Fix shape:* capture every `PERSIST_LOG` def's
+  state off the animation runtime (the def's completion), not only the hit pool, and re-apply
+  through the same `CarryState`; pin with a headless CM01 that fires the bridge chain and a CM02
+  build that reads it dropped. *⚠ Traps:* the capture commits only on the outcomes
+  `CommitsOn` names; check the user's CM01 was a win before blaming the pool. *Cross-refs:*
+  [`docs/formats/saved-games.md`](docs/formats/saved-games.md) (`Persist.NNN`),
+  `docs/architecture/Session.md` (the log's contract).
+
+- `BL-862` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Exit from a flight returns to where it was
+  launched: the cabin for a campaign mission, the Instant Action screen with its setup for an
+  Instant Action one.** *Evidence:* `Session/Launcher.cs` `ExitSession` routes every menu-driven
+  exit to `MenuReturnDestination.TopLevel`, so leaving a mission early lands on the presentation's
+  top level and the way back to the cabin is the whole campaign walk again. *Fix shape:* two new
+  return destinations beside `DebriefReturn`: a cabin return for the profile (nothing recorded,
+  no attempt, no persist capture, no scrapbook page: an abandoned mission was not flown) and an
+  Instant Action return that reopens the screen with the preset and every dropdown as they were
+  when FLY was pressed; the pause board's Exit picks by `SessionSpec`. *⚠ Traps:* Exit is not a
+  loss; do not route it through the debrief. A CLI launch still quits. *Cross-refs:*
+  `UI/Menu/MenuReturnDestination.cs`, `PT-88` (the result carry this must not touch).
+
+- `BL-863` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Respawn (R, pad Y) works while alive in a
+  campaign or Instant Action flight, a free repair and restock.** *Evidence:*
+  `Flight/FlightController.cs:3608-3612` calls `Respawn()` whenever either device holds
+  `InputAction.Respawn`, alive or crashed; the crashed branch at `:1634-1647` already reads it
+  only with a life left. *Fix shape:* in campaign and Instant Action, read the live-flight
+  respawn only while `Crashed` with a respawn available (a life left, or `--no-crash-loss`); free
+  flight and the stunt runs keep the live respawn, where R is "put me back at the spawn" and not a
+  cheat. Y stays unassigned while alive until a feature wants it. *Cross-refs:* `PT-93` (c),
+  `AircraftLifecycle`, `docs/controls.md`.
+
+- `BL-868` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM05]` **CM05 (C3/M04): one Brigand under the
+  Pandora fails the mission; what wakes the authored instant loss, and is one enough?**
+  *Evidence:* reported at the controls as a question. `extracted/C3/M04/zrdr/objectives.zrd.json`
+  authors `OBJECTIVE10` as `INSTANTLOSS`, `BEGIN_DORMANT`, napped by the zeppelin-damage
+  objective's completion (`NAP_OBJECTIVE_WHEN_I_COMPLETE 10, 45.0`); whatever wakes it is the
+  loss condition. *Fix shape:* read the objective graph for the waker and its condition (a
+  Brigand reaching a stop point at the Pandora, a count, a timer) and answer whether one Brigand
+  under the hull is the authored loss. Answered yes, this closes as an answer; answered no, or if
+  CSVM wakes it on a condition the data does not author, it becomes a Bug on the objective
+  runtime. *Cross-refs:* `BL-523` (CM05's patrol cycle), `docs/formats/objectives.md`.
+
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
@@ -2963,6 +3189,15 @@ usual.
 - `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.
 
 - `BL-845` `[Cleanup]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **Five log calls emit under a `campaign` category the vocabulary does not declare, and the logging page names a method that does not exist.** *Evidence:* `Log.Categories` and `docs/org/logging.md` declare nine closed names; `CampaignDirector.cs` (one site), `CampaignDangerZones.cs` (three) and `CampaignPersistLog.cs` (one) emit under `campaign`. The page documents `Log.Block(text)` where the code has `Log.Raw(text)`. *Fix shape:* either add `campaign` to the vocabulary and the page, or move the five to `core`; correct the method name. *Cross-refs:* PLAN-code-review-orch A3.
+
+- `BL-870` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **F16 toggles the all-aircraft markers HUD;
+  the node-name labels lose their key.** *Evidence:* `docs/controls.md` has F16 on the node-name
+  labels (`--debug-names`), and the markers HUD (`--debug-markers`, every live aircraft's
+  identity, range, health and AI mode on the targeting HUD) is reachable by launch flag only,
+  which is the one a flight test wants under the thumb. *Fix shape:* rebind F16 to toggle the
+  markers HUD, drop the labels' key and leave them on their flag (a viewer tool, not a flight
+  one); update `docs/controls.md` and `docs/cli.md`. *Cross-refs:* `BL-861` (a flight that wants
+  it), `CSVM/src/Bindings/DefaultBindings.cs`.
 
 - `BL-848` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **About 140 dated clauses remain in `backlog.md` entries that predate the no-dates rule.** *Evidence:* `Select-String '\d{4}-\d\d-\d\d'` over the file; every one is event narration ("landed 2026-08-05", "measured 2026-08-04 from the CAP-07 re-take") of the kind the writing rule sends to the closing commit's message. *Fix shape:* decide whether the old entries are swept (each date dropped, the standing fact kept, the evidence findable through `git log --grep`) or grandfathered until the entry closes. A sweep is mechanical but every clause needs a reading. *Cross-refs:* PLAN-code-review-orch A5 (the one dated clause the review found).
 
