@@ -470,8 +470,10 @@ the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in'
 (`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
 list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
-`audio:mixed` with its four sliders at four distinct levels, `video` and
-`video:checked` with its Enhanced Graphics box ticked, `controls`, `keys` and `keys:other` with
+`audio:mixed` with its four sliders at four distinct levels, `video`,
+`video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list
+standing open, the one leaf list whose sizes can outrun the window its row authors,
+`controls`, `keys` and `keys:other` with
 the KEYS AND BUTTONS page standing on the one category that outruns its list window, `credits` and
 `credits:about` with the About box standing over it, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the

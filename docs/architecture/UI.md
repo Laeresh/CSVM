@@ -746,10 +746,20 @@ The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free 
 Flight, player-setup, Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer
 injected. It owns the top level composed from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options
 screen over the decoded Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the other
-screens are its ten partials, below. `Step` applies one seat's frame, `Compose` is the screen as a `ComposedBoard` whose
+screens are its own partials, below. `Step` applies one seat's frame, `Compose` is the screen as a `ComposedBoard` whose
 backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here, `OriginalSlider` among them.
 A pointer press arms a row and only the release still on it activates (`ArmedKey`); the pointer's bitmap answers an
 enter or leave (`PointerLive`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalDropList.cs
+The one rule every open dropdown of the Original shell follows, a partial of it: a page hands over its key, its items,
+the box the list hangs under and the layout widget behind it, and takes back the windowed rows, the `ListWindow` for the
+pointer and the write that scrolls it. The window is the widget's authored `TotalDisplayed` clamped to the item count,
+so a short list is exactly as tall as its items and carries no chrome. Every item is a row keyed `<key>:<index>`, the
+ones outside the window built but hidden, since the rows are the hit-test surface and a dropped row would let a pointer
+hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right edge and
+hangs the thumb between them. The Instant Action screen, the loadout screen and the two option pages come through here;
+`OriginalHangar.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -766,7 +776,7 @@ table: per option a key, a title, a description, the control kind and how the st
 written, so a further option is one entry plus its field. Row one is the original's own Difficulty dropdown
 at its authored box over the three campaign tiers; under it the remake-only Menu row, the presentation as a
 dropdown over the registered tokens. The row shape is read off the section's widgets, so a layout that moves
-a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
+a row moves ours, and both pages' open list is windowed and drawn from here on `OriginalDropList.cs`'s rule. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
 `Launcher.ApplyOptions` writes the store. This file also holds the shell's shared `ReadSavedOptions`/`AppliedOptions`
 pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO (`OriginalVideo.cs`) and the volume levels on AUDIO (`OriginalAudio.cs`). Rows: [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -788,7 +798,7 @@ the cursor walks it. The monitor and Resolution keep the authored Graphics and R
 enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`; the Graphics row's title
 and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
 and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
-Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
+Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does, so the Resolution row's sizes window and scroll where they outrun the eight rows that row authors; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalControls.cs
 The two rebinding pages, the shell's partial over the decoded `[@ControlsPrefs@]` and `[@Keys@]`
@@ -836,7 +846,7 @@ section and the shared `InstantActionFeature`. Its rows are the section's own wi
 layout keys: the contents list in its authored window with its arrows and thumb, the dropdowns at
 their authored boxes, the enemy rows on two pages under both paging buttons, the radio pair and the
 buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an
-open list bands its picked row and the row under the pointer, and a closed box redraws its outline
+open list is windowed by `OriginalDropList.cs`, bands its picked row and the row under the pointer, and a closed box redraws its outline
 in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat.
 Build opens the wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
 

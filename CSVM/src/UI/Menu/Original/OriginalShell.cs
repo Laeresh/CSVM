@@ -502,6 +502,12 @@ public sealed partial class OriginalShell
                 case OriginalScreen.Keys:
                     KeysLists(lists);
                     break;
+                case OriginalScreen.GameOptions:
+                    GameOptionsLists(lists);
+                    break;
+                case OriginalScreen.Video:
+                    VideoLists(lists);
+                    break;
                 case OriginalScreen.SeatPlane:
                 case var _ when IsCampaignScreen:
                     CampaignLists(lists);
@@ -735,7 +741,8 @@ public sealed partial class OriginalShell
                 focus = EnsureFocus(rows);
             }
             else if (pointer.Clicked && over < 0
-                && (CloseInstantActionDropdown() || CloseHangarDropdown() || CloseCampaignCombo() || CloseGameOptionsDropdown()))
+                && (CloseInstantActionDropdown() || CloseHangarDropdown() || CloseCampaignCombo()
+                    || CloseGameOptionsDropdown() || CloseVideoDropdown()))
             {
                 // A click off an open list closes it and picks nothing.
                 changed = true;

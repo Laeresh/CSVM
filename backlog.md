@@ -2099,27 +2099,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   map and parchment on the load screen), `BL-802`'s closing commit (the check), `CAP-45`,
   `docs/formats/objectives.md`, `docs/org/menu-inventory.md`.
 
-- `BL-823` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The three
-  Preferences leaves draw an open dropdown at its full item count, ignoring the window their own
-  layout row authors, so a list longer than the window has neither a window nor a way to scroll.**
-  *Evidence:* every `D` row carries `TotalDisplayed` (`extracted/rof/menu_layout.json`):
-  `GO_D_DIFFICULTY` 4, `AP_D_SQuality` 4, `VP_D_Device` 4, `VP_D_Display` 8. The Instant Action
-  screen, the hangar, the campaign screens and the sortie screen all read it
-  (`OriginalInstantAction.cs`'s `OpenListRows` clamps it to the item count and hangs the arrows and
-  the thumb off `ListWindow`), but `OriginalGameOptions.cs` and `OriginalVideo.cs` build one row per
-  word and `ComposeOptionList` draws a panel as tall as the rows it was given. The original's own
-  content never reached a window (three difficulty tiers, two sound qualities), which is why the
-  film shows no bar on a leaf; ours does, the Resolution row offering every standard size the
-  screen holds, up to thirteen against the authored eight, and the Monitor row one per screen.
-  *Fix shape:* the option pages take the Instant Action screen's window rule and its arrows and
-  thumb, so a short list stays exactly as tall as its items and a long one windows and scrolls.
-  *⚠ Traps:* the rows are the shell's hit-test surface, so a windowed row outside the window has to
-  be built and hidden rather than dropped, the way `AddOpenListRows` does it, or a pointer hits a
-  row it cannot see. *Cross-refs:* the Instant Action page's own bar, landed
-  (`git log --grep=BL-807`), which is the shape to copy;
-  `docs/org/menu-inventory.md` Part 4, `CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`,
-  `CSVM/src/UI/Menu/Original/OriginalVideo.cs`.
-
 - `BL-825` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: footage]` **Whether the
   build stamp stays in the corner of the Original menu, where the original draws no text at all.**
   *Evidence:* `BuildStamp.cs` writes `v<version>` in the bottom-right corner whenever the menu is

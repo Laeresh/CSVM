@@ -51,7 +51,10 @@ internal static class MenuOriginalSuites
         + "a wrap onto the last frame cap, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
         + "carrying all seven, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
-        + "over the V-Sync one whose five words pick a frame cap and the Enhanced Graphics checkbox "
+        + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
+        + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
+        + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
+        + "and picking a frame cap, and the Enhanced Graphics checkbox "
         + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
         + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "
@@ -544,8 +547,9 @@ internal static class MenuOriginalSuites
 
         ctx.Check(titles == 3, $"drawing the section's own tab title over the two row titles ({titles} of 3)");
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenGameOption == OriginalShell.DifficultyKey && shell.Rows.Count == 3,
-            $"Accept opens the dropdown over the three campaign tiers ({shell.OpenGameOption}, {shell.Rows.Count})");
+        ctx.Check(shell.OpenGameOption == OriginalShell.DifficultyKey && shell.Rows.Count == 3
+            && List(shell, OriginalShell.DifficultyKey) == null,
+            $"Accept opens the dropdown over the three campaign tiers, inside its window and with no bar ({shell.OpenGameOption}, {shell.Rows.Count})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.DifficultyChoice == CSVM.Flight.Difficulty.Hard && shell.FocusedKey == OriginalShell.DifficultyKey,
@@ -642,13 +646,22 @@ internal static class MenuOriginalSuites
             && shell.ResolutionWords.Contains(shell.ResolutionChoice),
             $"a sideways step on the focused row takes the next size this screen offers ({shell.ResolutionChoice ?? "unset"} of {shell.ResolutionWords.Count})");
         WalkTo(host, seat, shell, OriginalShell.DisplayModeKey);
+        // A list inside the window its own row authors is exactly as tall as its items: no arrows,
+        // no thumb and nothing for the pointer to scroll, which is the shape the film shows.
+        Press(host, seat, Accept);
+        ctx.Check(shell.Rows.Count == DisplayWords.DisplayModes.Count
+            && List(shell, OriginalShell.DisplayModeKey) == null
+            && Row(shell, OriginalShell.DisplayModeKey + ":down") == null,
+            $"the Display Mode list fits its authored window and draws no bar ({shell.Rows.Count} rows)");
+        Press(host, seat, Back);
         Press(host, seat, Right);
         ctx.Check(shell.DisplayModeChoice == DisplayWords.Borderless,
             $"a sideways step on the focused row takes the next display mode ({shell.DisplayModeChoice ?? "unset"})");
         WalkTo(host, seat, shell, OriginalShell.VSyncKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenVideoOption == OriginalShell.VSyncKey && shell.Rows.Count == DisplayWords.VSyncChoices.Count,
-            $"Accept on the V-Sync row opens the dropdown over every choice ({shell.OpenVideoOption}, {shell.Rows.Count})");
+        OpenVideoListWindow(ctx, host, seat, shell);
+        WalkTo(host, seat, shell, OriginalShell.VSyncKey);
+        Press(host, seat, Accept);
         Press(host, seat, Down);
         Press(host, seat, Down);
         Press(host, seat, Accept);
@@ -682,6 +695,43 @@ internal static class MenuOriginalSuites
         },
             $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all three words ({exits.Count - before}, {exits[^1].GetType().Name})");
         ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
+    }
+
+    // The V-Sync list, whose five words outrun the four-row window its own layout row authors: every
+    // word is a row so the walk still reaches it, only the window's own are drawn, the arrows and the
+    // thumb stand inside the box's right edge, the pointer wheels and drags the window, and a press
+    // on the word outside it reaches no row at all. The list is left closed on nothing picked.
+    private static void OpenVideoListWindow(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
+    {
+        int drawn = 0;
+        foreach (var row in shell.Rows)
+        {
+            drawn += row.Kind == OriginalRowKind.ListRow && row.Visible ? 1 : 0;
+        }
+
+        ctx.Check(shell.OpenVideoOption == OriginalShell.VSyncKey
+            && shell.Rows.Count == DisplayWords.VSyncChoices.Count + 2 && drawn == 4,
+            $"Accept on the V-Sync row opens its five choices in the authored four-row window ({shell.Rows.Count} rows, {drawn} drawn)");
+        var bar = List(shell, OriginalShell.VSyncKey);
+        var arrow = Row(shell, OriginalShell.VSyncKey + ":down");
+        float edge = (bar?.Window.X ?? 0f) + (bar?.Window.Width ?? 0f);
+        ctx.Check(bar is { Window.Scrolls: true } && arrow != null
+            && bar.Window.ThumbX + bar.Window.ThumbWidth <= edge && arrow.X + arrow.Width <= edge,
+            $"with its thumb and its arrows inside the box's own right edge (thumb {bar?.Window.ThumbX ?? -1}, arrow {arrow?.X ?? -1}, edge {edge})");
+        var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        WheelAndDrag(ctx, host, seat, shell, fit, OriginalShell.VSyncKey, "the V-Sync page's open list");
+        var offscreen = Row(shell, OriginalShell.VSyncKey + ":4");
+        ctx.Check(offscreen is { Visible: false },
+            $"the word outside the window keeps its place for the walk, unseen ({offscreen?.Visible.ToString() ?? "missing"})");
+        if (offscreen == null)
+        {
+            return;
+        }
+
+        Click(host, seat, Pointer(fit, offscreen.X + 2f, offscreen.Y + 2f, pressed: true, clicked: true));
+        ctx.Check(shell.VSyncChoice == null && shell.OpenVideoOption == null,
+            $"and a press on it picks nothing, the pointer reaching no row it cannot see ({shell.VSyncChoice ?? "unset"})");
     }
 
     // Original's AUDIO route over the install's decoded sections: the Preferences page's second door

@@ -628,8 +628,10 @@ public class OriginalShellTests
 
         shell.Step(Accept);
         Assert.Equal(OriginalShell.VSyncKey, shell.OpenVideoOption);
-        Assert.Equal(DisplayWords.VSyncChoices.Count, shell.Rows.Count);
-        Assert.Equal((260f, 397f, 70f, 17f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
+        // Five words in the row's authored four-row window, so the list carries its two arrows
+        // beside the five item rows and the rows narrow by the column those stand in.
+        Assert.Equal(DisplayWords.VSyncChoices.Count + 2, shell.Rows.Count);
+        Assert.Equal((260f, 397f, 54f, 17f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Accept);
@@ -645,6 +647,80 @@ public class OriginalShellTests
         Assert.Equal(OriginalScreen.Video, shell.Screen);
         shell.Step(Back);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
+    }
+
+    /// <summary>A leaf's list that fits the window its own row authors stands exactly as tall as its
+    /// items and carries no chrome: no arrows, no thumb, no column given up and nothing for the
+    /// pointer to scroll.</summary>
+    [Fact]
+    public void AnOptionListInsideItsWindowIsAsTallAsItsItemsAndCarriesNoBar()
+    {
+        var shell = Shell(out _);
+        shell.OpenGameOptions();
+        shell.Step(Accept);
+
+        Assert.Equal(OriginalShell.DifficultyKey, shell.OpenGameOption);
+        Assert.Equal(3, shell.Rows.Count);
+        Assert.All(shell.Rows, r => Assert.Equal(OriginalRowKind.ListRow, r.Kind));
+        Assert.All(shell.Rows, r => Assert.True(r.Visible));
+        // The fixture's box is 144 wide at x 135, and a list with nowhere to scroll keeps all of it.
+        Assert.Equal((135f, 312f, 144f, 17f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
+        Assert.Empty(shell.Lists);
+        Assert.Empty(Box(shell).Pictures);
+    }
+
+    /// <summary>A leaf's list longer than the window its own row authors: every word is still a row
+    /// so the walk reaches it, only the window's are drawn and hit, the arrows and the thumb stand
+    /// inside the box's own right edge, and a wheel step, an arrow press and a press on a hidden
+    /// row each do what they should.</summary>
+    [Fact]
+    public void AnOptionListPastItsWindowScrollsOnItsOwnBarInsideTheBox()
+    {
+        var shell = Shell(out _);
+        shell.OpenVideoOn(OriginalShell.VSyncKey);
+        shell.Step(Accept);
+
+        // Five words in the authored four-row window: five item rows, four of them visible.
+        Assert.Equal(5, shell.Rows.Count(r => r.Kind == OriginalRowKind.ListRow));
+        Assert.Equal(4, shell.Rows.Count(r => r.Kind == OriginalRowKind.ListRow && r.Visible));
+        var up = Row(shell, OriginalShell.VSyncKey + ":up");
+        var down = Row(shell, OriginalShell.VSyncKey + ":down");
+        Assert.False(up.Enabled);
+        Assert.True(down.Enabled);
+
+        // The chrome stands inside the box, whose right edge is at 260 + 70: a 16-wide arrow at its
+        // head and its foot, the thumb between them, and the two arrow pictures and the thumb on
+        // the list's own panel.
+        Assert.Equal((314f, 397f, 16f, 11f), (up.X, up.Y, up.Width, up.Height));
+        Assert.Equal((314f, 454f, 16f, 11f), (down.X, down.Y, down.Width, down.Height));
+        var window = Assert.Single(shell.Lists).Window;
+        Assert.Equal(314f, window.ThumbX);
+        Assert.Equal((260f, 397f, 70f, 68f), (window.X, window.Y, window.Width, window.Height));
+        Assert.Equal(3, Box(shell).Pictures.Count);
+
+        // A wheel over the window moves it by a row, and the word that was outside it is the one
+        // drawn; both arrows then have somewhere to go but the down one does not.
+        shell.Step(Wheel(window.X + 2f, window.Y + 2f, 1));
+        Assert.True(Row(shell, OriginalShell.VSyncKey + ":4").Visible);
+        Assert.False(Row(shell, OriginalShell.VSyncKey + ":0").Visible);
+        Assert.True(Row(shell, OriginalShell.VSyncKey + ":up").Enabled);
+        Assert.False(Row(shell, OriginalShell.VSyncKey + ":down").Enabled);
+
+        // The up arrow puts the window back where it stood, and picks nothing on the way.
+        var arrow = Row(shell, OriginalShell.VSyncKey + ":up");
+        Click(shell, arrow.X + 2f, arrow.Y + 2f);
+        Assert.False(Row(shell, OriginalShell.VSyncKey + ":4").Visible);
+        Assert.Equal(OriginalShell.VSyncKey, shell.OpenVideoOption);
+        Assert.Null(shell.VSyncChoice);
+
+        // A press on the row outside the window lands on no row at all: it is built for the walk
+        // and hidden, so the list closes on nothing rather than picking the word under the pointer.
+        var hidden = Row(shell, OriginalShell.VSyncKey + ":4");
+        Assert.False(hidden.Visible);
+        Assert.Equal(string.Empty, HitTestKey(shell, hidden.X + 2f, hidden.Y + 2f));
+        Click(shell, hidden.X + 2f, hidden.Y + 2f);
+        Assert.Null(shell.OpenVideoOption);
+        Assert.Null(shell.VSyncChoice);
     }
 
     /// <summary>CANCEL CHANGES and Back both leave the VIDEO page with every choice dropped, and
@@ -1226,7 +1302,8 @@ public class OriginalShellTests
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the paper plaque
     // 160x112 (four 28-pixel frames), the checkbox 16x128 (eight 16-pixel frames), the dropdown
-    // arrows 15x56, the slider's slot and thumb at their shipped sizes, the panes unmeasured.
+    // arrows 15x56, the slider's slot and thumb and the scroll art at their shipped sizes, the
+    // panes unmeasured.
     private static (int Width, int Height)? Measure(string art) => art switch
     {
         // The fixture's movie at the shipped files' own picture size, which the layout row scales.
@@ -1236,6 +1313,9 @@ public class OriginalShellTests
         "PM_AboutBox.png" => (400, 300),
         "PP_B_Check8.png" => (16, 128),
         "PP_B_DropUp.png" or "PP_B_DropDown.png" => (15, 56),
+        // The option pages' scroll art at the shipped sizes: four-frame arrows and a one-frame bar.
+        "PP_B_ScrollUp.png" or "PP_B_ScrollDown.png" => (16, 44),
+        "PP_B_ScrollBar.png" => (16, 11),
         // The section's own slider art and the shipped names a row with no slider widget falls
         // back to, both at the shipped sizes: a three-pixel slot and a thumb that clears it.
         "PP_B_SliderSlot.png" or "PF_B_SliderSlot.png" => (171, 3),
@@ -1247,6 +1327,13 @@ public class OriginalShellTests
 
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false, bool right = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked, 0, right) };
+
+    private static MenuCommands Wheel(float x, float y, int steps) =>
+        new() { Pointer = new MenuPointer(x, y, false, false, steps) };
+
+    // One row of the screen by its key.
+    private static OriginalRow Row(OriginalShell shell, string key) =>
+        shell.Rows.Single(r => r.Key == key);
 
     // One click as the shell reads it: the press arms the row and the release on it fires, so the
     // step that carries the activation is the second one.

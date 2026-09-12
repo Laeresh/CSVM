@@ -28,6 +28,10 @@ public sealed partial class OriginalShell
     /// <summary>CANCEL CHANGES, back to Preferences with the choices dropped.</summary>
     public const string GameOptionsCancelKey = "GO_B_CANCELCHANGES";
 
+    // The one dropdown the section authors, whose box, window and scroll art every option row of
+    // the page takes: the page authors a single D row and our rows stand at its column.
+    private const string GameOptionDropKey = "GO_D_DIFFICULTY";
+
     // The page's authored row shape, used where a layout does not carry the section: the title
     // column and its box, the first row's line and the 62-pixel pitch, the dropdown box, the
     // checkbox's offset from its own row and the description column.
@@ -79,6 +83,7 @@ public sealed partial class OriginalShell
     };
 
     private string? _goOpen;
+    private int _goListTop;
 
     /// <summary>The open option list's key, or null when none is open.</summary>
     public string? OpenGameOption => _goOpen;
@@ -90,6 +95,7 @@ public sealed partial class OriginalShell
     public void OpenGameOptions()
     {
         _goOpen = null;
+        _goListTop = 0;
         _focus[(int)OriginalScreen.GameOptions] = -1;
         Open(OriginalScreen.GameOptions);
     }
@@ -142,20 +148,38 @@ public sealed partial class OriginalShell
             return;
         }
 
-        var page = ReadGameOptionsPage(screen);
-        if (_goOpen != null && GameOptionFor(_goOpen) is { } open)
+        if (OpenGameOptionDrop() is { } drop)
         {
-            var box = page.DropBoxFor(IndexOfGameOption(_goOpen));
-            for (int i = 0; i < open.Words.Count; i++)
-            {
-                rows.Add(new OriginalRow($"{_goOpen}:{i}", open.Words[i], OriginalRowKind.ListRow,
-                    box.X, box.Y + (box.Height * (i + 1)), box.Width, box.Height, true, 0, null));
-            }
-
+            _goListTop = DropListTop(drop, _goListTop, _focus[(int)_screen]);
+            AddDropListRows(drop, _goListTop, rows);
             return;
         }
 
-        BuildGameOptionsControls(screen, page, rows);
+        BuildGameOptionsControls(screen, ReadGameOptionsPage(screen), rows);
+    }
+
+    // The open option's list, or null while none is open: that option's words under the authored
+    // dropdown's box on its own row, windowed by the TotalDisplayed the section authors.
+    private OpenDropList? OpenGameOptionDrop()
+    {
+        if (_goOpen is not { } key || _layout.Screen(GameOptionsSection) is not { } screen
+            || GameOptionFor(key) is not { } open)
+        {
+            return null;
+        }
+
+        return DropList(key, screen.Widget(GameOptionDropKey), open.Words,
+            ReadGameOptionsPage(screen).DropBoxFor(IndexOfGameOption(key)));
+    }
+
+    // The page's lists for the pointer: an open option list alone, and only once it outruns the
+    // authored window.
+    private void GameOptionsLists(List<OriginalList> lists)
+    {
+        if (OpenGameOptionDrop() is { } drop && DropListWindow(drop, _goListTop) is { } window)
+        {
+            lists.Add(new OriginalList(drop.Key, window, top => _goListTop = ScrollDropList(drop, top)));
+        }
     }
 
     private void BuildGameOptionsControls(MenuLayoutScreen screen, GameOptionsPage page, List<OriginalRow> rows)
@@ -188,7 +212,7 @@ public sealed partial class OriginalShell
         var first = screen.Widget("GO_T_DIFFTITLE");
         var second = screen.Widget("GO_T_VIEWTITLE");
         var third = screen.Widget("GO_T_HEADTITLE");
-        var drop = screen.Widget("GO_D_DIFFICULTY");
+        var drop = screen.Widget(GameOptionDropKey);
         var box = screen.Widget("GO_B_HEADTURN");
         var description = screen.Widget("GO_T_DIFFDESC");
         float titleX = first?.Int("X", (int)GameOptionTitleX) ?? GameOptionTitleX;
@@ -239,7 +263,18 @@ public sealed partial class OriginalShell
         int colon = row.Key.IndexOf(':');
         if (colon > 0 && GameOptionFor(row.Key[..colon]) is { } picked)
         {
-            picked.Write(this, int.Parse(row.Key[(colon + 1)..], CultureInfo.InvariantCulture));
+            string suffix = row.Key[(colon + 1)..];
+            if (suffix is DropListUpSuffix or DropListDownSuffix)
+            {
+                if (OpenGameOptionDrop() is { } open)
+                {
+                    _goListTop = ScrollDropList(open, _goListTop + (suffix == DropListUpSuffix ? -1 : 1));
+                }
+
+                return null;
+            }
+
+            picked.Write(this, int.Parse(suffix, CultureInfo.InvariantCulture));
             _goOpen = null;
             FocusKey(picked.Key);
             return null;
@@ -262,6 +297,7 @@ public sealed partial class OriginalShell
         if (option.Kind == OriginalRowKind.Dropdown && _layout.Screen(GameOptionsSection) != null)
         {
             _goOpen = option.Key;
+            _goListTop = 0;
             _focus[(int)_screen] = Math.Max(0, option.Read(this));
             return null;
         }
@@ -401,28 +437,55 @@ public sealed partial class OriginalShell
                 boxOnFocus: true);
         }
 
-        if (_goOpen != null && rows.Count > 0)
+        if (OpenGameOptionDrop() is { } drop && rows.Count > 0)
         {
-            overlays.Add(ComposeOptionList(rows, focus));
+            overlays.Add(ComposeOptionList(drop, _goListTop, rows, focus));
         }
     }
 
-    // An open option list as the overlay, drawn by both option pages: the items are already rows,
-    // so this is their panel and nothing more.
-    private BoardPanel ComposeOptionList(IReadOnlyList<OriginalRow> rows, int focus)
+    // An open option list as the overlay, drawn by both option pages: the panel over the rows the
+    // window shows, each item's words on it, and once the list outruns the window the two arrows in
+    // their state frames and the thumb on its track. The panel runs the authored box's full width,
+    // the scroll column included, since the rows gave that column up so their words and their marks
+    // keep off the chrome, not the panel.
+    private BoardPanel ComposeOptionList(OpenDropList drop, int top, IReadOnlyList<OriginalRow> rows, int focus)
     {
         var panelFills = new List<BoardFill>();
         var panelLines = new List<BoardLine>();
-        var first = rows[0];
-        var last = rows[rows.Count - 1];
-        float height = last.Y + last.Height - first.Y;
+        var panelPictures = new List<BoardPicture>();
+        float head = float.MaxValue, foot = float.MinValue;
+        foreach (var row in rows)
+        {
+            if (row.Visible && row.Kind == OriginalRowKind.ListRow)
+            {
+                head = Math.Min(head, row.Y);
+                foot = Math.Max(foot, row.Y + row.Height);
+            }
+        }
+
         // A dark panel in the plate's own key, not the white one the paper pages open: this page
         // writes in the section's pale text colour, which no white ground would carry.
-        panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 16, 14, 12, 0.94f));
-        panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 200, 190, 170, 1f, Border: true));
+        if (head < foot)
+        {
+            panelFills.Add(new BoardFill(drop.X, head, drop.Width, foot - head, 16, 14, 12, 0.94f));
+            panelFills.Add(new BoardFill(drop.X, head, drop.Width, foot - head, 200, 190, 170, 1f, Border: true));
+        }
+
         for (int i = 0; i < rows.Count; i++)
         {
             var item = rows[i];
+            if (!item.Visible)
+            {
+                continue;
+            }
+
+            if (item.Kind == OriginalRowKind.Button && item.Art != null)
+            {
+                int frame = item.Enabled ? ComposedBoard.PlaqueFrame(item.Art.Frames, i == focus, i == _pressed) : 0;
+                panelPictures.Add(new BoardPicture(item.Art, item.X, item.Y, frame));
+                continue;
+            }
+
             if (i == focus)
             {
                 panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 255, 255, 255, 0.18f));
@@ -432,7 +495,12 @@ public sealed partial class OriginalShell
                 i == focus ? BoardInk.RowFocused : BoardInk.Row, i));
         }
 
-        return new BoardPanel(panelFills, Array.Empty<BoardPicture>(), panelLines);
+        if (DropListWindow(drop, top) is { } window && drop.Thumb is { } thumb)
+        {
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
+        }
+
+        return new BoardPanel(panelFills, panelPictures, panelLines);
     }
 
     // One option of the page: its title, its description (read off the shell, since a row can say

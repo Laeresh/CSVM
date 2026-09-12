@@ -53,6 +53,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The VIDEO aid's argument that leaves its Enhanced Graphics checkbox checked.</summary>
     public const string VideoCheckedAid = "checked";
 
+    /// <summary>The VIDEO aid's argument that leaves the Resolution list standing open, the one
+    /// leaf list whose items can outrun the window its own row authors.</summary>
+    public const string VideoOpenAid = "open";
+
     /// <summary>The aid value that opens the CONTROLS page behind the Preferences page's fourth
     /// door.</summary>
     public const string ControlsAid = "controls";
@@ -374,6 +378,12 @@ public sealed class OriginalPresentation : IMenuPresentation
                     // Onto the checkbox by name: the page opens on its first row, which is a
                     // display setting rather than the graphics one this pose is about.
                     _shell.OpenVideoOn(OriginalShell.GraphicsKey);
+                    _shell.Step(new MenuCommands { Accept = true });
+                    break;
+                case VideoAid + ":" + VideoOpenAid:
+                    // Onto the Resolution row by name: the page opens on the monitor row above it,
+                    // whose one screen on this machine says nothing about a windowed list.
+                    _shell.OpenVideoOn(OriginalShell.ResolutionKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case ControlsAid:

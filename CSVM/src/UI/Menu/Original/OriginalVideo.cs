@@ -85,6 +85,7 @@ public sealed partial class OriginalShell
     };
 
     private string? _vpOpen;
+    private int _vpListTop;
 
     /// <summary>The VIDEO page's open option list's key, or null when none is open.</summary>
     public string? OpenVideoOption => _vpOpen;
@@ -113,6 +114,7 @@ public sealed partial class OriginalShell
     public void OpenVideo()
     {
         _vpOpen = null;
+        _vpListTop = 0;
         _focus[(int)OriginalScreen.Video] = -1;
         Open(OriginalScreen.Video);
     }
@@ -157,20 +159,40 @@ public sealed partial class OriginalShell
             return;
         }
 
-        if (_vpOpen != null && VideoOptionFor(_vpOpen) is { } open)
+        if (OpenVideoDrop() is { } drop)
         {
-            var box = PlaceVideoRow(screen, open);
-            var words = open.Words(this);
-            for (int i = 0; i < words.Count; i++)
-            {
-                rows.Add(new OriginalRow($"{_vpOpen}:{i}", words[i], OriginalRowKind.ListRow,
-                    box.BoxX, box.BoxY + (box.BoxHeight * (i + 1)), box.BoxWidth, box.BoxHeight, true, 0, null));
-            }
-
+            _vpListTop = DropListTop(drop, _vpListTop, _focus[(int)_screen]);
+            AddDropListRows(drop, _vpListTop, rows);
             return;
         }
 
         BuildVideoControls(screen, rows);
+    }
+
+    // The open setting's list, or null while none is open: that row's words under its own authored
+    // control box, windowed by the TotalDisplayed that row authors. The Resolution row's words are
+    // enumerated per screen and can outrun that window; every other row's vocabulary fits it.
+    private OpenDropList? OpenVideoDrop()
+    {
+        if (_vpOpen is not { } key || _layout.Screen(VideoSection) is not { } screen
+            || VideoOptionFor(key) is not { } option)
+        {
+            return null;
+        }
+
+        var place = PlaceVideoRow(screen, option);
+        return DropList(key, screen.Widget(option.ControlKey), option.Words(this),
+            (place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight));
+    }
+
+    // The page's lists for the pointer: an open setting's list alone, and only once it outruns the
+    // authored window.
+    private void VideoLists(List<OriginalList> lists)
+    {
+        if (OpenVideoDrop() is { } drop && DropListWindow(drop, _vpListTop) is { } window)
+        {
+            lists.Add(new OriginalList(drop.Key, window, top => _vpListTop = ScrollDropList(drop, top)));
+        }
     }
 
     private void BuildVideoControls(MenuLayoutScreen screen, List<OriginalRow> rows)
@@ -267,7 +289,18 @@ public sealed partial class OriginalShell
         int colon = row.Key.IndexOf(':');
         if (colon > 0 && VideoOptionFor(row.Key[..colon]) is { } picked)
         {
-            picked.Write(this, int.Parse(row.Key[(colon + 1)..], CultureInfo.InvariantCulture));
+            string suffix = row.Key[(colon + 1)..];
+            if (suffix is DropListUpSuffix or DropListDownSuffix)
+            {
+                if (OpenVideoDrop() is { } open)
+                {
+                    _vpListTop = ScrollDropList(open, _vpListTop + (suffix == DropListUpSuffix ? -1 : 1));
+                }
+
+                return null;
+            }
+
+            picked.Write(this, int.Parse(suffix, CultureInfo.InvariantCulture));
             _vpOpen = null;
             FocusKey(picked.Key);
             return null;
@@ -290,6 +323,7 @@ public sealed partial class OriginalShell
         if (option.Kind == OriginalRowKind.Dropdown && _layout.Screen(VideoSection) != null)
         {
             _vpOpen = option.Key;
+            _vpListTop = 0;
             _focus[(int)_screen] = Math.Max(0, option.Read(this));
             return null;
         }
@@ -312,19 +346,27 @@ public sealed partial class OriginalShell
         return true;
     }
 
-    // Back from the page: an open list closes first, then the page leaves the way CANCEL CHANGES
-    // does, since VP_B_CANCELCHANGES is the declining answer the layout gives the page.
-    private void BackVideo()
+    private bool CloseVideoDropdown()
     {
         if (_vpOpen == null)
         {
-            BackToPreferences();
-            return;
+            return false;
         }
 
         string key = _vpOpen;
         _vpOpen = null;
         FocusKey(key);
+        return true;
+    }
+
+    // Back from the page: an open list closes first, then the page leaves the way CANCEL CHANGES
+    // does, since VP_B_CANCELCHANGES is the declining answer the layout gives the page.
+    private void BackVideo()
+    {
+        if (!CloseVideoDropdown())
+        {
+            BackToPreferences();
+        }
     }
 
     // The page as drawn: the Preferences page's logo (this section authors none and the original
@@ -410,9 +452,9 @@ public sealed partial class OriginalShell
                 boxOnFocus: true);
         }
 
-        if (_vpOpen != null && rows.Count > 0)
+        if (OpenVideoDrop() is { } drop && rows.Count > 0)
         {
-            overlays.Add(ComposeOptionList(rows, focus));
+            overlays.Add(ComposeOptionList(drop, _vpListTop, rows, focus));
         }
     }
 

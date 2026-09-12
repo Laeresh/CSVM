@@ -719,7 +719,11 @@ Video page stacks ACCEPT over CANCEL, the Keys page draws CANCEL left of ACCEPT,
 inside an armed rebind cell binds Escape. Original takes all four from its own data: the exit
 pairs at their authored corners (`VP_B_ACCEPTCHANGES` over `VP_B_CANCELCHANGES` on one column,
 `GO_B_ACCEPTCHANGES` left of `GO_B_CANCELCHANGES` on one line, `KB_B_CANCELCHANGES` left of
-`KB_B_ACCEPTCHANGES` for whoever builds that page) and an open list one row per item. The rebind
+`KB_B_ACCEPTCHANGES` for whoever builds that page) and an open list one row per item up to the
+window its own `D` row authors (`GO_D_DIFFICULTY` 4, `AP_D_SQuality` 4, `VP_D_Device` 4,
+`VP_D_Display` 8), past which it windows and scrolls on its own bar as every other list does. The
+film cannot speak to that case: the original's leaves carry three tiers and two sound qualities and
+never reach a window, while the Resolution row offers a size per mode the screen holds. The rebind
 capture is the one deliberate departure: the original writes Escape into an armed cell, CSVM keeps
 Escape (and the pad's Back) as the way out of one in both presentations, by the user's decision,
 since a keyboard seat must be able to abandon a capture without a controller. The chooser row
@@ -729,8 +733,8 @@ the release still on it activates anything, so a press released elsewhere fires 
 pointer's bitmap is set on an enter or a leave and never recomputed from what a new screen put
 under a still pointer; and `CrimFlag.MPG` plays behind the top level and Preferences,
 `ExtractRof.ps1` copying the install's loose MPGs in and every leaf still showing it still running
-behind the page. Where Original differs from the film today
-is an open list on a leaf outrunning its authored window (`BL-823`). Still unfilmed: every sound; whether any keyboard or pad focus exists at
+behind the page. Nothing the film shows of Preferences reads differently on Original today.
+Still unfilmed: every sound; whether any keyboard or pad focus exists at
 all (no take pressed a key outside an edit box, so Original's focus walk stays a remake
 equivalence); whether a setting reverts on CANCEL CHANGES (no leaf was re-entered after one);
 whether Preferences is reachable in flight; and whether a disabled button ever draws or sounds.
