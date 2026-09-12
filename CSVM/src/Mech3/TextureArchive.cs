@@ -639,6 +639,10 @@ public static class TextureDropIn
 /// docs/architecture.md.</summary>
 public sealed class TextureArchive : IDisposable
 {
+    /// <summary>The clamp the original's <c>MipBias</c> command applies before the bias reaches the
+    /// device, and the bound <see cref="MipBias"/> keeps (docs/org/textures.md).</summary>
+    public const float MipBiasLimit = 1.0f;
+
     // Bit 2 of the render-flags word at offset 0x0E of the 16-byte texture header: the original
     // draws a sprite from a texture carrying it with DESTBLEND ONE and alpha-mixes every other.
     // The decode, the other bits and the install-wide census are in docs/org/textures.md.
@@ -829,6 +833,43 @@ public sealed class TextureArchive : IDisposable
     /// KnownAbsentFromGameData) — callers render a neutral fallback, not the debug magenta.</summary>
     public static bool IsKnownAbsent(string materialTextureName) =>
         KnownAbsentFromGameData.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
+
+    /// <summary>The chapter's authored mip LOD bias, read from the interp extraction's
+    /// <c>MipBias</c> lines and clamped like the original's own command. 0 when the chapter authors
+    /// none, which is every chapter but C5 (docs/org/textures.md).
+    /// ⚠ Read <c>adjust.gw</c> only. <c>load.gw</c> is the data-compile path, which a retail
+    /// install cannot run: it sources the terrain <c>.flt</c> the install does not ship.</summary>
+    public static float MipBias(string interpPath, string chapter)
+    {
+        float bias = 0f;
+        if (!File.Exists(interpPath))
+        {
+            return bias;
+        }
+
+        var wanted = $"support\\{chapter.ToLowerInvariant()}\\adjust.gw";
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(interpPath));
+        foreach (var script in doc.RootElement.EnumerateArray())
+        {
+            if (!script.TryGetProperty("name", out var n)
+                || !string.Equals(n.GetString(), wanted, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var line in script.GetProperty("lines").EnumerateArray())
+            {
+                var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2 && parts[0] == "MipBias"
+                    && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+                {
+                    bias = Math.Clamp(v, -MipBiasLimit, MipBiasLimit);
+                }
+            }
+        }
+
+        return bias;
+    }
 
     /// <summary>True when the name is one the original draws nothing for (see AbsentAndUndrawn)
     /// AND this archive cannot resolve it, so the caller drops the polygon instead of surfacing it.

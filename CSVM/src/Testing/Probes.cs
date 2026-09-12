@@ -343,7 +343,8 @@ public static class Probes
     /// siblings — mean luminance and the share of pixels above 128 per level. Built through
     /// <see cref="TextureArchive.BuildMipped"/> under whatever <c>--mips=</c> policy is set, so
     /// <c>installed == authored</c> checks the policy took effect, not that files merely exist.</summary>
-    public static MipResult MipChains(string texturesPath, string chapter, string filter)
+    public static MipResult MipChains(string texturesPath, string chapter, string filter,
+        string interpPath = "")
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new MipResult();
@@ -362,6 +363,10 @@ public static class Probes
         var sb = new StringBuilder();
         sb.AppendLine($"# Texture mip chains — {chapter}, {texturesPath}");
         sb.AppendLine($"# policy: --mips={TextureArchive.Mips.ToString().ToLowerInvariant()}");
+        float bias = TextureArchive.MipBias(interpPath, chapter);
+        sb.AppendLine($"# mip LOD bias: adjust.gw MipBias={bias:0.##}; level N is first sampled at "
+                      + $"{Math.Pow(2.0, -bias):0.###}x the unbiased texel density, "
+                      + $"L1 at {Math.Pow(2.0, 1.0 - bias):0.###} texels per pixel.");
         sb.AppendLine($"# {textures.AuthoredMipBases.Count} base texture(s) ship an authored level; "
                       + $"{textures.AuthoredMipsAvailable} level(s) in all.");
         sb.AppendLine("# 'px>128' is the share of pixels above luminance 128 — what the artists kept "

@@ -371,7 +371,7 @@ public sealed class ProbeRunner
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         var r = Probes.MipChains(SessionPaths.ChapterTextures(_dataRoot, spec.Chapter),
-            spec.Chapter, spec.DumpMipsFilter);
+            spec.Chapter, spec.DumpMipsFilter, _interpPath);
         if (r.Error != null)
         {
             GD.PrintErr($"--dump-mips: {r.Error}");

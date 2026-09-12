@@ -595,6 +595,10 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The world sampler's mip LOD bias. 0 is the original's own device default, so a chapter
+        // authoring no MipBias renders exactly as it did (docs/org/textures.md).
+        RenderingServer.GlobalShaderParameterAdd("csky_mip_bias",
+            RenderingServer.GlobalShaderParameterType.Float, 0.0f);
         // Which keymap a seat is built on, resolved before the first seat exists. Both flags close
         // the door for the same reason: a run whose result is compared against a committed golden
         // must not depend on the keymap saved at whoever's machine ran it (verification.md, DET-8).
@@ -1122,6 +1126,11 @@ public partial class Launcher : Node3D
         // The saved difficulty, read at every launch so an Options apply reaches the next flight
         // in the same process. The flag and --det rules are the spec's (WithSavedDifficulty).
         _spec = _spec.WithSavedDifficulty(OptionsStore.UserOptions().Load().Difficulty);
+        // Set per launch, not once at startup: a relaunch can change chapter, and the original
+        // re-sources the new chapter's adjust.gw at the same point.
+        float mipBias = Mech3.TextureArchive.MipBias(_interpPath, _spec.Chapter);
+        RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
+        Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
         _session = new GameSession(_spec, new LauncherContext
         {
             RepoRoot = _repoRoot,

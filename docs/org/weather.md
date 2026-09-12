@@ -128,6 +128,23 @@ instead and keeps a much larger far plane, and that is a deliberate, standing di
 kept divergence, re-asserted by C22). A future session that "completes" the decode by plumbing the
 clip range through is changing behaviour, not fixing an omission.
 
+### That far plane is the only range limit on an ordinary scene node
+
+The zone apply writes the pair onto the camera's class data at `+0xb0`/`+0xb4` through
+`CameraSetNearFarClip` (`FUN_004d2930`); a camera is born at 1.0/5000.0 (`FUN_004d2180`, the store
+at `0x004d21f3`). Nothing narrower exists. The world walk `FUN_004d5910` draws whatever the chunk
+gather handed it, and that gather (`FUN_004d4db0`, the engine's own "diamond tiler") admits a chunk
+on three tests only: the camera frustum built from the camera's own corner points
+(`FUN_0055ffa0`), the occluder planes (`FUN_00560060`), and a bucket cap of 50 Manhattan rings by
+30 chunks. Ordinary nodes then draw through `FUN_004d4a20` with no distance test of their own, so
+there is no per-node, per-material or per-texture cull range anywhere in that path. What ends the
+world is the far plane, and what hides it before then is this fog.
+
+For C5 that means 2500 m below the deck and 300 m inside an armed `fvol`, at `HIGH`'s `CLIP_SCALE`
+of 1.0, with `ZONE1`'s fog reaching pure black (`FOG_COLOR 0 0 0`) at 2250 m, 250 m short of the
+clip. All eight C5 missions ship the same numbers. The mip level a facade reads at those distances
+is [textures.md](textures.md)'s.
+
 ⚠ **The fog parameters are GLOBAL, one set for the world.** The original has one such set and one
 `sunlight` node, not one per view.
 

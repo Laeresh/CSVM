@@ -430,6 +430,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   "the ray found nothing" reports the switch rather than a missing collision mesh.** Both
   multiplayer zeppelins are switched off by every mission script but `mp3.gw`; over the eight `MP3`
   worlds that keep them, all 48 belly rings meet hull 12.8 m straight up (`zeppelin-belly-hull`).
+- **WORLD-38** — **A boot-script setting counts only if a retail run reaches the script that sets
+  it.** `support\main.gw` sources `support\<chapter>\load.gw` in its `ifndef USEZBD` arm alone, and
+  that arm loads `%CAMPAIGN_DIR%\terrain\*.flt`, which no retail install ships. So `load.gw` is the
+  data-compile path: a command found there (`MipBias -1.0` in C1 to C4) never executes at retail,
+  while the same command in `adjust.gw`, sourced unconditionally, always does. Grep both before
+  reading a count of "the chapters that set X".
 
 ## SHELL — Windows, PowerShell, and processes
 

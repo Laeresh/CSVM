@@ -64,8 +64,8 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "75aa4ac95aca01f723243522cf8952cf",
-      "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, 51 beacons blinking on their authored periods off the sim clock, lit window skins, moon and stars; near-static, a beacon toggle is the only motion.",
+      "hash": "f6db3166cb3ddd0696fb8497c7bdecb3",
+      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons blinking on their authored periods, lit window skins, moon and stars, and the chapter's -0.8 mip LOD bias on the ground; a beacon toggle is the only motion.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {

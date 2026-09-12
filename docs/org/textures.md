@@ -39,6 +39,13 @@ bottom rather than hidden.
 | `FUN_005a5fa0` | The transparent-list sort itself |
 | `FUN_005b80a0` | Script-command dispatch, including `TextureAdditiveTransparent` |
 | `FUN_005d1940` | 2D screen-quad blitter, which toggles the same bit for HUD quads |
+| `FUN_00532060` | Links the `_1`/`_2` siblings into a mip chain on the registry slot |
+| `FUN_00531f00` | Walks that chain N links and hands back the level's image |
+| `FUN_00584ef0` | The SOFTWARE rasteriser's per-polygon level choice |
+| `FUN_0057d640` | Toggles software mipmapping (`DAT_00a0ca54`, on at init) |
+| `DAT_009be728` → `0x005a1840` | The hardware upload: counts the chain, creates a D3D mipmap surface |
+| `FUN_0059df30` | The `MipBias` command: clamps to `[-1, 1]` into `DAT_00a10324` |
+| `FUN_005a0c00` | Flushes it as `SetRenderState(46 /* MIPMAPLODBIAS */, …)` |
 
 ## The 16-byte texture header
 
@@ -270,7 +277,56 @@ The existing enum values map as: `None` = 0, `Horizontal` = 1, `Vertical` = 2, `
 Nothing else in the header needs renaming; `flags`, `width`, `height`, `palette_count` and `zero08`
 all match the engine's use.
 
-## How CSVM reads it
+## The mip chain, and what selects a level
+
+The `_1`/`_2` siblings that no material names ([formats/gamez.md](../formats/gamez.md)) are a mip
+chain the texture system builds itself. `FUN_00532060` runs on every load
+(`FUN_00531cb0` calls it right after the pixels arrive): it copies the base name, appends `_1`,
+and loops, linking each level it resolves onto the previous slot's `+0x28` and incrementing the
+last character, so `_1` becomes `_2` and so on until a name misses. Each level's image also gets
+`+0x1c` = base width / level width, the 2, 4, … scale. A slot already in use as a texture in its own
+right is refused with *"Mip file %s used externally. Mip chain broken."*, which is the engine
+saying these names are levels and not surfaces.
+
+**The two rasterisers then choose a level by different rules.**
+
+The software rasteriser chooses per polygon. `FUN_00584ef0` takes the polygon's widest projected
+texel span, rounds it, halves it, and asks `FUN_00531f00` for that many links down the chain. It is
+gated on `DAT_00a0ca54`, which the software init `FUN_0057ced0` sets to 1 and a debug toggle
+(`FUN_0057d640`, the *"MIP Mapping Enabled/Disabled"* console line) flips.
+
+The hardware draw hands the whole chain to Direct3D. `DAT_009be728` (`0x005a1840`, installed by
+`FUN_005a8c00`) walks `+0x28` to count the levels and, when there is at least one, sets
+`dwFlags |= DDSD_MIPMAPCOUNT` (`0x005a1ca0`), `ddsCaps.dwCaps |= DDSCAPS_MIPMAP | DDSCAPS_COMPLEX`
+(`0x005a1caa`) and `dwMipMapCount` = 1 + the chain length (`0x005a1cb8`) before `CreateSurface`.
+So the authored levels **are** the D3D7 mip chain, and which one a pixel reads is the card's own
+decision, offset by one engine knob.
+
+### The knob is `MipBias`, and only C5 sets it
+
+`MipBias <f>` is a boot-script command (`FUN_005b80a0` at `0x005ba8a4`). It applies on the hardware
+path only, clamps its argument into `[-1, 1]` (`FUN_0059df30`) and is flushed as
+`SetRenderState(46, …)` — `D3DRENDERSTATE_MIPMAPLODBIAS` — by `FUN_005a0c00`. The device default is
+0 (`FUN_005a8800` at `0x005a8857`). It is one global state for the whole device, not a per-texture
+setting, and nothing resets it between chapters.
+
+Five scripts in the install carry the command. Four are `support\c{1,2,3,4}\load.gw` at `-1.0`, and
+`load.gw` is the data-compile path: `support\main.gw` sources it only in the `ifndef USEZBD` arm,
+where it loads `%CAMPAIGN_DIR%\terrain\*.flt`, and a retail install ships no `data\` tree and no
+`.flt` at all. The fifth is `support\c5\adjust.gw` at **`-0.8`**, and `adjust.gw` is sourced
+unconditionally. So a retail run applies exactly one mip bias, C5's, and every other chapter draws
+at the device default.
+
+A negative bias selects a sharper level: each transition radius moves out by `2^0.8` = 1.741. The
+C5 ground is 256² texels over a 256 m tile, one texel per metre
+(`analysis/item9-depth-bias/CBLOCK-LOD.md`), and the original's external views are 60° horizontal
+at 4:3 ([cameraViews.md](cameraViews.md)), a 23.41° vertical half-angle, so at 640×480 a face-on
+surface subtends 554 px per metre-at-one-metre. Level 1 is therefore first fully read at
+`2^1.8` texels per pixel, 1930 m out, where C5's `ZONE1` fog is already 57 % of the way to its pure
+black and the far clip stands 570 m beyond ([weather.md](weather.md)). At a grazing angle the
+density rises and the radius shrinks, by the same factor in both the biased and unbiased case.
+
+## Where CSVM differs today
 
 `TextureArchive.RenderFlags` carries the word off each archive's own extraction manifest (the
 `stretch` field) and `IsAdditive` tests bit 2; a name the archive cannot resolve, and a PNG-only
@@ -311,3 +367,16 @@ which is the tripwire if that ever stops being true.
 The alpha-weighted luminance of the sprite a particle dies on decides one thing only, and it is not
 blend: the soft-particle depth fade, a render nicety with no counterpart in the original
 ([puffer.md](puffer.md)).
+
+`TextureArchive.MipBias` reads the chapter's `adjust.gw` line and `Launcher` writes it to the
+`csky_mip_bias` global that `SceneBuilder`'s `texture()` calls pass as their LOD bias, so C5
+samples at -0.8 and every other chapter at 0, which is why only the C5 golden moves when the
+reader is wired up. ⚠ Read `adjust.gw` and not `load.gw`: the compile-path -1.0 above never
+runs at retail, and taking it would bias four chapters the original leaves alone.
+
+Two divergences remain on the selection itself, and both widen the band the authored level 1
+draws. The world sampler is `filter_linear_mipmap_anisotropic`, which the original's D3D7
+hardware had no equivalent of, so a grazing ground surface holds level 0 much further out here and
+crosses into level 1 as a ring rather than a gradient. And the camera far plane is the remake's,
+not the zone's `CLIP_RANGES` far ([weather.md](weather.md)), so the ring has room to sit past
+where the original's world ends.

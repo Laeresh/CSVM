@@ -1545,11 +1545,16 @@ void fragment() {
         if (fullbright)
             sb.AppendLine(LightsInclude); // LIGHT_STATE spill — fullbright passes only
         if (textured)
+        {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
             // where isotropic selection blurs the ground to mush, and no higher-resolution archive
             // exists to fix it with (docs/formats/README.md on the rtexture tiers).
             sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, "
                 + (clampUv ? "repeat_disable;" : "repeat_enable;"));
+            // The chapter's own mip LOD bias, one global because the original's is one device
+            // render state a chapter sets once (docs/org/textures.md).
+            sb.AppendLine("global uniform float csky_mip_bias = 0.0;");
+        }
         // UV animation (the model's texture_scroll / the boot script's Object3DSetScroll). Emitted
         // only for surfaces that actually scroll, so every other shader's text is unchanged.
         // ⚠ The phase must come from csky_time, not Godot's TIME, or the scroll ignores the clock.
@@ -1606,13 +1611,13 @@ void fragment() {{");
                 sb.AppendLine("    suv.x = clamp(suv.x, uv_edge_inset.x, 1.0 - uv_edge_inset.x);");
             if (edgeClamp.HasFlag(UvClampAxes.V))
                 sb.AppendLine("    suv.y = clamp(suv.y, uv_edge_inset.y, 1.0 - uv_edge_inset.y);");
-            sb.AppendLine("    vec4 base_col = texture(albedo_tex, suv);");
+            sb.AppendLine("    vec4 base_col = texture(albedo_tex, suv, csky_mip_bias);");
         }
         else
         {
             sb.AppendLine(!textured ? "    vec4 base_col = albedo_color;"
-                : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * csky_time);"
-                : "    vec4 base_col = texture(albedo_tex, UV);");
+                : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * csky_time, csky_mip_bias);"
+                : "    vec4 base_col = texture(albedo_tex, UV, csky_mip_bias);");
         }
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
