@@ -983,7 +983,7 @@ always is; our side runs the walk unconditionally.
 the running emitter at `+8`, the expiry emitter at `+0xc`, the `TIME` at `+0x10` and the wash re-arm
 at `+0x14`. `FUN_004b8d50` fills the first two from its arguments and then, through
 `FUN_004edda0`/`FUN_004edc50`/`FUN_004ed8c0`, instances the effect record named
-**`generate_smokescreen`** and **attaches it to a scene node** — the mount's node (mount `+4`) when
+**`generate_smokescreen`** and **attaches it to a scene node**, the mount's node (mount `+4`) when
 the launch passed a mount, else the layer's own (layer `+0xc`). Attachment is what makes the smoke
 follow: nothing re-poses it per frame, it hangs on the aircraft's node and rides wherever the
 aircraft goes. `FUN_004ee160` then stores a callback (`LAB_004b9230`) and the object as its

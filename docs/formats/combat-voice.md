@@ -1,4 +1,4 @@
-# Combat voice — the 29 triggers and the accent chain
+# Combat voice, the 29 triggers and the accent chain
 
 Part of the [format documentation](README.md). The AI's radio chatter: which events make a pilot
 speak, which pilot's voice they speak in, and the rules that decide whether the line plays at all.
@@ -14,11 +14,11 @@ populates a pilot's voice slots runs `i` from `0` to `0x1d` exclusive.
 
 | id | Token | Fires when |
 |---|---|---|
-| 0 | `WA-Turret-A` | a turret acquires the player and has line of sight — broadcast |
-| 1–12 | `WA-Enemy-{12,3,6,9}{L,·,H}` | bearing call-out; see the index formula below — broadcast |
-| 13 | `WA-HighDmg-A` | the player's health crosses a 30 % threshold — broadcast |
+| 0 | `WA-Turret-A` | a turret acquires the player and has line of sight, broadcast |
+| 1–12 | `WA-Enemy-{12,3,6,9}{L,·,H}` | bearing call-out; see the index formula below, broadcast |
+| 13 | `WA-HighDmg-A` | the player's health crosses a 30 % threshold, broadcast |
 | 14 | `WA-Attack-A` | a pilot commits to an attack on the player |
-| 15 | `PR-DngrZn-A` | a Danger Zone run — broadcast |
+| 15 | `PR-DngrZn-A` | a Danger Zone run, broadcast |
 | 16 | `PR-EnemyDwn-A` | *(no dispatch site located)* |
 | 17 | `DI-LowDmg-A` | the speaker's health drops below **70 %** |
 | 18 | `DI-MedDmg-A` | …below **50 %** |
@@ -28,13 +28,13 @@ populates a pilot's voice slots runs `i` from `0` to `0x1d` exclusive.
 | 22 | `GL-AllyDwn-A` | gloat by the killer; the plane it downed was on the player's team |
 | 23 | `GL-EnemyDwn-A` | gloat by the killer; the plane it downed was not |
 | 24 | `GL-PlyrDwn-A` | gloat for the local player's own kill; raised on the player and broadcast |
-| 25 | `TA-FailTail-A` | taunt — a pursuer failed its tail check |
-| 26 | `TA-FailShk-A` | taunt — a shake attempt failed |
-| 27 | `TA-SucShk-A` | taunt — the speaker shook its pursuer (fires as the reaction flag clears) |
+| 25 | `TA-FailTail-A` | taunt, a pursuer failed its tail check |
+| 26 | `TA-FailShk-A` | taunt, a shake attempt failed |
+| 27 | `TA-SucShk-A` | taunt, the speaker shook its pursuer (fires as the reaction flag clears) |
 | 28 | `DS-Ally-A` | ally distress; the local player's round damaged a friendly, or the last of three tracked planes is alive |
 
 ⚠ **The token in the table is a family root, not a clip name.** The `-A`/`-B`/`-C` variants and the
-`Bail`/`NoBail` split are resolved below this layer — trigger 20 selects `DA-*`, not
+`Bail`/`NoBail` split are resolved below this layer, trigger 20 selects `DA-*`, not
 `DA-Bail-A` specifically. A reader that treats the table entry as a filename will find most of the
 shipped clips unreachable.
 
@@ -83,7 +83,7 @@ id = 1 + 3 * bearingIndex + altitudeBand
 ```
 
 This is the family only **7 of 31 pilot ids** carry any clips for (§ 6). A pilot without them simply
-has a null slot for those 12 ids and stays silent on bearings — which is the design's claim that
+has a null slot for those 12 ids and stays silent on bearings, which is the design's claim that
 positional detail is a per-pilot capability, expressed as missing data rather than as a check.
 
 ## Where a pilot's voice comes from
@@ -91,7 +91,7 @@ positional detail is a per-pilot capability, expressed as missing data rather th
 Each aircraft holds **29 voice slots**, one per trigger, at `vehicle + 0x730 + 12 * triggerId`.
 Each slot is three words: the sound set, the handle of the line currently playing, and the time the
 slot is next allowed to speak. A slot whose sound set is null means *this pilot has no line for
-this trigger* — every dispatch site tests for that before rolling anything.
+this trigger*, every dispatch site tests for that before rolling anything.
 
 The slots are filled at spawn from the pilot's voice set, which resolves through the chain the
 scoping study described:
@@ -102,7 +102,7 @@ aiv accentID (slot 65)  →  a row in zrdr/voice.zrd  →  a pool of pilot VO id
 ```
 
 ⚠ **`voice.zrd` is the accent table, not the trigger table.** Its 35 rows are keyed by `accentID`
-and their values are **pilot VO ids** (`soundsh/VO_id<N>_*`) — the numbers run over the same sparse
+and their values are **pilot VO ids** (`soundsh/VO_id<N>_*`), the numbers run over the same sparse
 id set the clip survey found. The row count coincidentally sits near the trigger count; they are
 unrelated tables and conflating them will mis-key every lookup. Row shape: `[accentId, voId, …]`;
 rows 0–10 hold 2–3-id pools, rows 11–34 a single id.
@@ -133,7 +133,7 @@ The extraction shows:
   28 → id 36, 30 → id 40. Accents 0 and 9 name a dead id inside a pool that also holds live ones, so
   they still speak. This is not confined to the far end of the table: **eight of the campaign's 26
   named aces (slot 67, [ai-rosters.md](ai-rosters.md)) sit on a dead single-id accent** and are
-  silent on this channel — A. Dixon (accent 20), C. Steele (28), Sir Charles Emmett Winthrop (19)
+  silent on this channel, A. Dixon (accent 20), C. Steele (28), Sir Charles Emmett Winthrop (19)
   and Utah Blacke (30), across seven missions. Two further ace blocks author no accent at all. A
   named ace's combat chatter therefore cannot be assumed to exist; where an ace speaks in the
   original it is usually the mission's own dialogue chain, which is a different system (below).
@@ -154,27 +154,27 @@ this seam.
 
 Every trigger goes through one gate function. In order:
 
-1. **Voice must not be globally muted**, and the mission clock must be **past 2.0 s** — nothing
+1. **Voice must not be globally muted**, and the mission clock must be **past 2.0 s**, nothing
    speaks in the first two seconds.
 2. **The speaker must be alive**, unless the caller passes a *force* flag. Only the death cries
    (ids 20/21) do, because the speaker has just been marked dead.
 3. **The speaker must not already be talking**, and must not be in the suppressed state.
 4. **The talker roll.** `rand01 < talkerChance`, where `talkerChance` is the per-pilot value the
-   `talker` skill slot indexes out of `ai_skill_parameters` (0.25 at rating 1 → 0.95 at rating 9 —
+   `talker` skill slot indexes out of `ai_skill_parameters` (0.25 at rating 1 → 0.95 at rating 9,
    [ai-rosters.md](ai-rosters.md)).
 
 ⚠ **Triggers 1–12 have their talker chance halved**, hardcoded. The bearing call-outs are
 deliberately half as likely as everything else, on top of only 7 pilots owning the clips at all.
 
-The binary carries the debug strings for both outcomes — *"Talker test passed. Play AI sound #%d."*
-and *"Talker test failed. Don't play AI sound #%d."* — which is how the numeric trigger id was
+The binary carries the debug strings for both outcomes, *"Talker test passed. Play AI sound #%d."*
+and *"Talker test failed. Don't play AI sound #%d."*, which is how the numeric trigger id was
 first spotted.
 
 ### The cooldown is armed by failure too
 
 ⚠ **Each slot has a 15-second cooldown, and losing the talker roll starts it exactly as winning
 does.** The failure path is the success path minus the play call: both stamp `now + 15` into the
-slot. So a low-`talker` pilot is not merely quieter — a failed roll silences that trigger for the
+slot. So a low-`talker` pilot is not merely quieter, a failed roll silences that trigger for the
 next 15 seconds rather than letting it retry on the next event.
 
 This is the single behaviour most likely to be got wrong by re-deriving from the design prose,
@@ -182,7 +182,7 @@ which describes `talker` only as a volume-of-chatter stat.
 
 ### Broadcasts elect one speaker
 
-Several triggers are not addressed to a pilot at all — they are broadcast to the flight. The
+Several triggers are not addressed to a pilot at all, they are broadcast to the flight. The
 broadcast helper:
 
 1. collects every AI pilot that is **alive**, **not the player**, on the caller's team or teamless,
@@ -198,33 +198,33 @@ death and taunt triggers address a specific aircraft.
 ## The remake's dispatch sites
 
 The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
-halving, election, DI tiers, bearing index — engine-free, seeded) and wired by
+halving, election, DI tiers, bearing index, engine-free, seeded) and wired by
 `CSVM/src/Session/AiVoiceRuntime.cs`. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
 site is recorded here:
 
 | ids | status | site / reason |
 |---|---|---|
-| 1–12, 14 | wired | our chosen site: the mode machine's patrol→pursue transition against a human target ("committing to an attack") — the attacker speaks `WA-Attack`, and the flight broadcasts the bearing call-out computed in the warned player's frame. The original's exact "enemy spotted" event is undecoded; this is the closest transition the machine has |
-| 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold) — broadcast |
+| 1–12, 14 | wired | our chosen site: the mode machine's patrol→pursue transition against a human target ("committing to an attack"), the attacker speaks `WA-Attack`, and the flight broadcasts the bearing call-out computed in the warned player's frame. The original's exact "enemy spotted" event is undecoded; this is the closest transition the machine has |
+| 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
-| 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice — it fires once a mission places an AI on the player's team |
-| 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it — its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
+| 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |
+| 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it, its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
 | 27 | wired | the speaker's own evade/evasive-maneuver reaction completing ("fires as the reaction flag clears", decoded) |
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
-| 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded — F17) |
+| 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded, F17) |
 | 16 | unwired | no dispatch site located in the binary (above) |
-| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists — no dispatch site chosen yet, left for a future item |
+| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists, no dispatch site chosen yet, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
-| 28 | unwired | both arms (above) are answerable now that a team model exists — no dispatch site chosen yet, left for a future item |
+| 28 | unwired | both arms (above) are answerable now that a team model exists, no dispatch site chosen yet, left for a future item |
 
 Stand-ins and inventions, named:
 
-- **Speakers register on their real `FlightController.Team`** — the teamless stand-in is retired.
+- **Speakers register on their real `FlightController.Team`**, the teamless stand-in is retired.
   Free flight and `--vs` still give every pilot its own default team (`AimAssist.TeamOfPilot`, pilot
   N = team N+1), so a broadcast only ever elects a "teamless" match there in practice; it goes live
   the moment a mission puts two AI, or an AI and the player, on the same explicit team.
-- **`Bail`/`NoBail` is a constitution roll** (`constitution_chance`, 0.35→0.95) — the open
+- **`Bail`/`NoBail` is a constitution roll** (`constitution_chance`, 0.35→0.95), the open
   item's natural-candidate reading, implemented and marked unconfirmed.
 - **Bearing quantisation**: the four clock quadrants split at ±45° (the natural reading of a
   nearest-quadrant index), and "level" is ±100 m (`AiVoiceDispatcher.LevelBandM`, invented).
@@ -239,7 +239,7 @@ Stand-ins and inventions, named:
   session's skill rating, same as before.
 - The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`), unwired:
   the remake's one-shots carry no per-speaker playing state yet.
-- **Force bypasses only the aliveness check**, as decoded — a forced death cry still respects
+- **Force bypasses only the aliveness check**, as decoded, a forced death cry still respects
   the slot cooldown and still rolls talker (`AiVoiceDispatcherTests` pins this).
 
 ## What is not pinned down
@@ -257,7 +257,7 @@ Stand-ins and inventions, named:
 
 ## What this is not
 
-- The **clip inventory** — 2,520 files, 31 pilot ids, the 11 `TYPE` families and their counts — is
+- The **clip inventory**, 2,520 files, 31 pilot ids, the 11 `TYPE` families and their counts, is
   not repeated here. This page covers only what the engine does with them.
 - **Mission-scripted dialogue** (`VO_<chapter>-<faction>-<mission>_<Character>_<n>.wav`, 990 clips)
   is a different system, driven by objectives scripting, and does not go through the trigger table.

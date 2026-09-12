@@ -26,7 +26,7 @@ The header (element 0) is a positional `(slotId, designerLabel)` list, **one pai
 in block order**. Labels mix character names with param-set names (`Eairg31_params`) that `egen.json`'s
 `vehicle.params` references ([mission-entities.md](mission-entities.md)).
 
-⚠ **Blocks are not fixed-width — trailing fields are simply omitted.** Field-count histogram across
+⚠ **Blocks are not fixed-width, trailing fields are simply omitted.** Field-count histogram across
 the 414: `{42: 20, 65: 1, 66: 33, 67: 14, 68: 39, 81: 307}`. A reader that assumes 81 throws on a
 quarter of the data; read defensively and treat a missing slot as unset.
 
@@ -37,40 +37,40 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | idx | name | notes |
 |---|---|---|
 | 0 | `netids` | patrol-net id into the chapter `neindex` ([ai-nets.md](ai-nets.md)); `-1` = none. The exe comment calls it a **list** and the reader agrees: `FUN_0047c210` (`0x0047c733`) takes the single id when the count is 1 and **`rand() % count`** when it is higher, drawn once at spawn. This install only ever authors a scalar, so the draw never fires. ⚠ **A `-1` here is not "no orders", it selects a different AI behaviour entirely** ([`org/aiPilot.md`](../org/aiPilot.md)); in the shipped campaign the only netless blocks are `player` and the wingmen (below) |
-| 1 | `(x y z)` | spawn position — the only list-typed slot, present on all 414 |
+| 1 | `(x y z)` | spawn position, the only list-typed slot, present on all 414 |
 | 2 | `yaw` | spawn heading, degrees |
 | 3 | `team` | |
 | 4 | `group` | **mission-logic cohort id, not a formation** (see [below](#group-is-a-cohort-id-not-a-formation)). Values 0-8; `0` (the default) is the at-mission-start population |
 | 5 | `enabled` | `1` = an aircraft present in the initial mission roster; `0` = a generator parameter template, not an initially placed aircraft. Exactly 14 blocks author `0`, and all 14 carry header labels consumed by `egen.json`'s `vehicle.params` (including the shipped spelling mismatch described in [enemy generators](mission-entities/enemy-generators.md)) |
 | 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
 | 7 | `init_health` | the whole-vehicle health-pool override, applied at spawn only when authored **greater than zero**; `0.0` and `-1` both mean "use the airframe default". Real values do occur (e.g. `216.0`), always raising a hostile's pool above its airframe default in the shipped campaign |
-| 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
+| 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}`, see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
 | 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)). **This is the targeting readout's name line**, and its only source: the spawn path resolves it into the AI entity's own name string, while the `vehicle.zrd` def's `title` goes to a different object the readout never reads ([`org/targeting.md`](../org/targeting.md#the-hud-the-label)). 175 of the 414 blocks author one; the other 239 show a marker with no name at all. ⚠ **A `mode ship` hull takes this slot on the same path an aeroplane does**, the spawn being one function for every dynamics class; of the 23 ship blocks only C1B/M03's four author it (`MSG_VEH_PATROLBOAT`), so a nameless boat elsewhere is faithful |
 | 21 | `deactivated` | |
-| 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
+| 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution`, see [below](#the-skill-vector) |
 | 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600. Spelled `preferred_engagement_altitude` in `vehicle.json`, which is also the fallback when this slot is `-1.0` (`basic_airplane` authors 300.0). ⚠ **It is a maneuver-selection weight, not an altitude order:** its one reader (`FUN_004201a0`, `0x004204da`) adds 1.0 to a candidate evasive maneuver's weight when the aircraft is on the wrong side of it. Nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)) |
-| 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature-maneuvers-bitmask) |
-| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks) — read defensively, preserve a third raw if one ever appears |
+| 32 | `signature_maneuvers` | **bitmask over the maneuver library**, see [below](#signature-maneuvers-bitmask) |
+| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks), read defensively, preserve a third raw if one ever appears |
 | 34 | `nitro` | |
 | 35 | `engine` | engines.json row id ([vehicle.md](vehicle.md)) |
 | 36 | `otherTarget` | |
-| 37 | `objectiveTarget` | a strict boolean over all 414 blocks (406 author `0`, exactly 8 author `1`), not a target-node reference despite the name: `1` marks the block's own aircraft as carrying the mission's objective marker. Gate on this, not on slot 39 alone — C4/M05's `blakepeace_3_1`/`_2` author a non-empty slot 39 with this at `0` |
+| 37 | `objectiveTarget` | a strict boolean over all 414 blocks (406 author `0`, exactly 8 author `1`), not a target-node reference despite the name: `1` marks the block's own aircraft as carrying the mission's objective marker. Gate on this, not on slot 39 alone, C4/M05's `blakepeace_3_1`/`_2` author a non-empty slot 39 with this at `0` |
 | 38 | `categoryLabel` | the MSG_* key the LABEL half of the marker's line 1 prints, beside slot 39's category half (`Bomber [Defend] -`). Exactly one shipped block authors it, C2/M05's `balmoral_1` (`MSG_BOMBER_NAME`); the other 413 leave it empty, which is why most flagged blocks show a bare `[Destroy] -` |
-| 39 | `helpLabel` | the objective-kind key — `MSG_OBJ_FOLLOW` / `MSG_OBJ_DESTROY` / `MSG_OBJ_DEFEND` — on every block that also authors slot 37 `1`; designer text (`blakepeace_3_1`/`_2`'s `"Blake Aviation"`) where slot 37 is `0` |
+| 39 | `helpLabel` | the objective-kind key, `MSG_OBJ_FOLLOW` / `MSG_OBJ_DESTROY` / `MSG_OBJ_DEFEND`, on every block that also authors slot 37 `1`; designer text (`blakepeace_3_1`/`_2`'s `"Blake Aviation"`) where slot 37 is `0` |
 | 40 | `taxiPath` | the authored waypoint path this vehicle is placed on instead of being flight-simulated, or `0` for none. Ten blocks across three missions carry one, all spelled `ppN`: C1/M04 `blakepeace_2_3`…`_6` (`pp1`…`pp4`), C2/M02 five, C5/M01 one. The waypoints are the chapter gamez's `ppN_aipath` subtree, its `ppN_aipM` children in ordinal order; the vehicle is frozen there until the mission's `START_TAXI` releases it. Law and lifecycle: [`org/flightModel.md`](../org/flightModel.md), "The scripted-path follower" |
 | 41 | `stickiness` | |
 | 42 | `bait` | |
 | 43 | `pilot` | pilot def name (`P_Wingman` and friends; see `pilots.zrd`) |
-| 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output — pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope. `-1.0` (which is what all 414 blocks author) means "fall through to the def". ⚠ **The def and the runtime hold these in roll/pitch/yaw order, not this file's pitch/roll/yaw** — the spawner transposes, slot by slot. Both orders are real; see [aiControlLaw.md](../org/aiControlLaw.md#where-the-gains-come-from) for the slot-to-offset table and the exact fallback |
+| 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output, pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope. `-1.0` (which is what all 414 blocks author) means "fall through to the def". ⚠ **The def and the runtime hold these in roll/pitch/yaw order, not this file's pitch/roll/yaw**, the spawner transposes, slot by slot. Both orders are real; see [aiControlLaw.md](../org/aiControlLaw.md#where-the-gains-come-from) for the slot-to-offset table and the exact fallback |
 | 56 | `attack_time_factor` | |
-| 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
+| 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right, the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
 | 66 | `armor` | the whole-vehicle armour-pool override, applied at spawn whenever authored **zero or greater**; only `-1` means "use the airframe default". ⚠ **The gate differs from slot 7's**: `0.0` is a real override here (none is shipped), but a block too short to carry the slot (33 of 414) is unset, never `0.0` |
 | 67 | `ace` | `1` on **26 blocks** across the 53 rosters and `0` on the other 388. Every one of the 26 also authors a `MSG_*_NAME` in slot 20 and a complete skill vector, and each is the block the mission's own script singles out. **It is read twice.** The block reader stores it at the block struct's `+0xa4` (`0x00437ea0`) and the spawn path copies it to the AI entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`); the entity constructor's default at `0x004b0427` is the field's only other write, so a roster block is the only thing that can set it. The read at `0x0047cde2`, immediately ahead of the skill block, **zeroes the difficulty's skill offset**, so an ace's nine ratings interpolate exactly as authored at every tier while an ordinary enemy's are shifted by `-2` / `0` / `+2` ([org/aiControlLaw.md](../org/aiControlLaw.md#the-rating-the-interpolation-receives-is-not-the-authored-one)). It exempts nothing else: the hull still takes the armour scale, which is applied earlier in the same function. The read at `0x004ba23a` is the scrapbook's, picking which of the mission's two per-airframe kill tallies a kill is credited to, the ace tally being the one the debrief draws with a star ([org/debrief.md](../org/debrief.md#what-the-tallies-count)). Narrower than the skill vector, see [below](#the-skill-vector) |
 | 68–71 | `pattern decal1 decal2 decal3` | livery ([paint.md](paint.md)) |
 | 72–80 | `r1 g1 b1 r2 g2 b2 r3 g3 b3` | livery colours ([paint.md](paint.md)) |
 
-**31 of the bare-number slots are constant across all 414 blocks** (8–19, 36, 43–56, 58, 60, 62, 64) —
+**31 of the bare-number slots are constant across all 414 blocks** (8–19, 36, 43–56, 58, 60, 62, 64),
 authored defaults, not signal.
 
 ### Who is netless: the player and the wingmen, nobody else
@@ -151,26 +151,26 @@ the field. Formation-looking behaviour in the original rides nets whose trailer 
 
 The exe's comment lists **78** fields; the shipped format has **81**. The surplus is localised
 exactly: `primary_target` is confirmed at 6 and `title` at 20, so the three extra slots fall inside
-**8–19**, the volume block — 12 slots where the comment names 9 (`{active,attack,return}` ×
+**8–19**, the volume block, 12 slots where the comment names 9 (`{active,attack,return}` ×
 `{rad,u,l}`). The natural reading is a fourth value per volume, and slot 11 is the one
 integer-typed slot among eleven floats, which fits a per-volume flag.
 
 ⚠ **Unresolvable from this install, and it does not matter.** All twelve slots are `0.0` in every
-one of the 414 blocks — the volumes are never authored, so every AI falls back to the airframe's
+one of the 414 blocks, the volumes are never authored, so every AI falls back to the airframe's
 `activation` / `attack` / `return_range` in `vehicle.json` and to `player.json`'s
 `min_ai_active_dist` (2000 m). Do not spend time on it; do not invent values for it.
 
-**Closed — treat them as inherited padding.** The likeliest explanation is that they are
+**Closed, treat them as inherited padding.** The likeliest explanation is that they are
 a remnant: this engine is a descendant of Zipper's `mech3` lineage (the same lineage the
-extraction toolchain targets — [extraction.md](extraction.md)), and a record layout that outlived
+extraction toolchain targets, [extraction.md](extraction.md)), and a record layout that outlived
 the fields it was written for is exactly what a carried-over roster format looks like. That is a
 hypothesis and this page does not assert it. What *is* established is enough to act on:
 
-- the exe's own editor comment — the authoritative field list — **names nine, not twelve**;
+- the exe's own editor comment, the authoritative field list, **names nine, not twelve**;
 - all twelve are `0.0` across every block in the install, so nothing reads a meaningful value;
 - the fallback path they defer to is fully documented and independently sourced.
 
-**A reader must still parse twelve slots** to keep the following field indices aligned — that part
+**A reader must still parse twelve slots** to keep the following field indices aligned, that part
 matters. Beyond preserving positions, ignore them. This question is closed and should not
 be reopened without new evidence (a different build, or an authored non-zero value).
 
@@ -201,11 +201,11 @@ one of the 26 authors a `MSG_*_NAME` in slot 20 that resolves in the string tabl
 
 Three shipped cases corroborate the ordering, each landing on a different slot:
 
-- **`MSG_CABBIE_NAME`** (a Manhattan cab autogyro) reads `9 6 6 3 3 6 9 7 8` — its two lowest values
+- **`MSG_CABBIE_NAME`** (a Manhattan cab autogyro) reads `9 6 6 3 3 6 9 7 8`, its two lowest values
   sit on `dead_eye` and `quick_draw`. A cabbie who cannot shoot.
-- **`MSG_STUNT_PLANE_NAME`** reads all 1s except a **9 on `steady_hand`** — a show plane that flies
+- **`MSG_STUNT_PLANE_NAME`** reads all 1s except a **9 on `steady_hand`**, a show plane that flies
   its routine unbothered.
-- **89 generic blocks** carry `-1` in eight slots and a lone **`1` on `dead_eye`** — mooks that can
+- **89 generic blocks** carry `-1` in eight slots and a lone **`1` on `dead_eye`**, mooks that can
   barely shoot, which is the observed gameplay.
 
 ⚠ **`0` is authored and `-1` is unset; the two are not the same slot value.** The spawn's
@@ -220,7 +220,7 @@ Read an authored rating as the design's intent for the middle tier, never as the
 
 The vector also scales with fame across a recurring antagonist's appearances (the Black Swan reads
 6s at first contact and all nines in the final encounter). ⚠ **It is not monotonic in chapter-directory
-order** — the chapter directories are not story order.
+order**, the chapter directories are not story order.
 
 ⚠ **Three of the design's twelve pilot stats are not in this vector**: preferred engagement altitude
 is slot 31, signature maneuvers is slot 32, and there is no signature-*approach* field at all.
@@ -286,12 +286,12 @@ Notes that matter to anyone implementing this:
 - **The scale is 1–9 and nothing else.** Ratings are an index into this table; there is no 0–100
   scale anywhere in the shipped data. (The original *design document* gives a Danger-Zone poll
   interval of `100 − DareDevil` seconds, which only type-checks on 0–100. That formula is design-era:
-  applied literally to shipped 1–9 data it yields a 91–99 s interval regardless of pilot — a stat
+  applied literally to shipped 1–9 data it yields a 91–99 s interval regardless of pilot, a stat
   with no effect. The shipped `daredevil_chance` pair replaces it.)
 - **`natural_touch` has no entry, by design.** It is compared directly against a maneuver's own
   `natural_touch` difficulty (below), so both sides are already on the same 1–9 scale and no
   interpolation is needed.
-- **Two stats improve downward** (`dead_eye_angle`, `steady_hand_chance`) — a tighter cone and a
+- **Two stats improve downward** (`dead_eye_angle`, `steady_hand_chance`), a tighter cone and a
   lower break-off chance are the *better* pilot. Do not normalise the direction away.
 - `sixth_sense` and `quick_draw` each spend two parameters; the other seven spend one.
 
@@ -303,7 +303,7 @@ failed; AI now stunned."*
 ## Maneuver library
 
 One shared reader; a flat alternating `name, [properties…]` list of **17 maneuvers**. Each is a
-timed control program plus a difficulty gate — the library is *data*, not code.
+timed control program plus a difficulty gate, the library is *data*, not code.
 
 | `natural_touch` | maneuver | steps | flags |
 |---|---|---|---|
@@ -325,20 +325,20 @@ timed control program plus a difficulty gate — the library is *data*, not code
 | 9 | `lag_pursuit_roll` | 3 | |
 | **99** | `high_yo_yo` | **0** | |
 
-- **`steps` is a list of `[duration_s, pitch, yaw, roll]`** — a target attitude in degrees held for a
+- **`steps` is a list of `[duration_s, pitch, yaw, roll]`**, a target attitude in degrees held for a
   duration. `climb` is one step of `[4.0, 60, 0, 0]`; `dive` mirrors it at `-60`; `rudder_turn` is
   `[0.0, 0, 50, 0]`; `roll` is `[3.0, 0, 0, 90]`. A `0.0` duration reads as "advance as soon as the
-  attitude is reached" rather than "hold for zero seconds" — every multi-step maneuver mixes zero
+  attitude is reached" rather than "hold for zero seconds", every multi-step maneuver mixes zero
   and non-zero durations.
 - ⚠ **Two steps carry 7 elements, not 4**: `barrel_roll`'s single step and `spiral_dive`'s second
-  are `[duration, pitch, yaw, roll, 0.5, 0.0, 1.0]` — three extra numbers, identical on both, on
+  are `[duration, pitch, yaw, roll, 0.5, 0.0, 1.0]`, three extra numbers, identical on both, on
   exactly the two corkscrew maneuvers. Undecoded (a rotating-input candidate); a reader must
   accept them and should preserve them raw rather than interpret or drop them.
-- **`relative`** — the step attitudes are relative to the current orientation rather than absolute.
-- **`autogyro_allowed`** — the maneuver is legal for autogyros (5 of 17 are).
-- **`bias`** — a fixed adjustment to the maneuver's selection rating; only `climb`/`dive` carry it,
+- **`relative`**, the step attitudes are relative to the current orientation rather than absolute.
+- **`autogyro_allowed`**, the maneuver is legal for autogyros (5 of 17 are).
+- **`bias`**, a fixed adjustment to the maneuver's selection rating; only `climb`/`dive` carry it,
   both `-0.5` (deprioritised).
-- ⚠ **`high_yo_yo` is shipped disabled** — difficulty 99 is unreachable against a stat capped at 9,
+- ⚠ **`high_yo_yo` is shipped disabled**, difficulty 99 is unreachable against a stat capped at 9,
   and it has no `steps` list at all. It is a stub. Do not implement it and do not "fix" its
   difficulty; there is no authored behaviour behind it.
 - ⚠ **`nitro_evade` is difficulty 0**, i.e. always available, and is the only maneuver flagged
@@ -362,7 +362,7 @@ lists them in**:
 ```
 
 17 entries = bits 0–16, and the shipped values fit exactly: singles run 1…65536 (65536 = bit 16 =
-`spiral_dive`), and the composites decode sensibly — `2064` = bits 4+11 = `dive` + `split_s`,
+`spiral_dive`), and the composites decode sensibly, `2064` = bits 4+11 = `dive` + `split_s`,
 `32896` = bits 7+15 = `rolling_scissors` + `barrel_roll`, `2048` = `split_s` alone (the Black Swan's
 signature). `0` on 174 blocks = no signature maneuver.
 
@@ -376,7 +376,7 @@ engine's debug readout dispatches on a single mode field with these states:
 `navigating danger zone`.
 
 ⚠ **`lay off` is a first-class mode, not a hidden fudge.** It is the "let the player catch up"
-behaviour — the same idea as `sixth_sense_factor` — and being a distinct mode makes it directly
+behaviour, the same idea as `sixth_sense_factor`, and being a distinct mode makes it directly
 observable and switchable rather than something buried in the steering maths.
 
 ⚠ **At most one AI per frame can be laying off.** The combat driver's break-off branch is gated on

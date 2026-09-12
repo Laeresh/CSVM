@@ -65,7 +65,7 @@ All four screens, id → handler (widget dispatcher unless noted):
 | HARDPOINTS | 2244 | `0x0040b81d` | dropdown labels (5 rows: `langui` 1165 "None", 1168 "1 Hardpoint", 1169 "%d Hardpoints") |
 | HARDPOINTS | 2245 | `0x0040ad0f` | get/set a wing's hardpoint count (record +0x34/+0x38) |
 | HARDPOINTS | 2227 | `0x0040bac6` | description text |
-| ARMOR | 2246 | `0x0040b7bd` | dropdown labels (13 rows: row 0 is string 1165 "None", rows 1-12 show `row×5` units via format 1170 — the display scale is the record's own ×5, not pounds) |
+| ARMOR | 2246 | `0x0040b7bd` | dropdown labels (13 rows: row 0 is string 1165 "None", rows 1-12 show `row×5` units via format 1170, the display scale is the record's own ×5, not pounds) |
 | ARMOR | 2247 | `0x0040ac3d` | get/set the four zone values (record +0x74..+0x80, stored premultiplied by 5) |
 | PAINT | 2229 | `0x0040d30e` | colour dropdown fill: 27 swatch chips from the table at `0x0061dd48` |
 | PAINT | 2230 | `0x0040d473` | the current effective colour chip per slot |

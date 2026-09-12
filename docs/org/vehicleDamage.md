@@ -28,7 +28,7 @@ consumed (`init_health`, the four zone pairs, `armor`).
 | `FUN_005abcf0` | The impact dispatcher: calls the handler the struck node registered at `+0xbc` |
 | `0x004b9750` | The handler a vehicle registers there, a thunk onto `FUN_004b9770` |
 | `FUN_004b9770` | Resolves the shooter from the round, files the radio and threat calls, then enters the wrapper |
-| `FUN_004b9b30` | **The take-hit entry point, a WRAPPER that LOOPS** (found 2026-08-14 — see the correction section) |
+| `FUN_004b9b30` | **The take-hit entry point, a WRAPPER that LOOPS** (found 2026-08-14, see the correction section) |
 | `FUN_004b3950` | The struck-zone resolver: matches hit geometry against parts **with health remaining only** |
 | `FUN_004b3b60` | The resolver's miss fallback: rand() over the first up-to-3 surviving parts |
 | `FUN_004b7f30` | Clamped pool subtract: pool -= damage floored at 0, returns the leftover |
@@ -204,7 +204,7 @@ and 2 of it, and **the per-part pools are not touched**. Implemented as
 
 ## Taking a hit
 
-⚠ *Corrected 2026-08-14: `FUN_004b9bc0` is NOT the entry point — `FUN_004b9b30` wraps it and
+⚠ *Corrected 2026-08-14: `FUN_004b9bc0` is NOT the entry point, `FUN_004b9b30` wraps it and
 loops the unabsorbed leftover back through. The section below stands for one pass; the
 correction section further down is the full contract.*
 
@@ -225,7 +225,7 @@ its own shooter, weapon classes that detonate or attach instead of damaging), it
    parts exist, and it is what everything downstream reads.
 5. **Death is one test and one test only: whole-vehicle health current at or below zero**, which
    sends it to `FUN_004b82d0`. *(Corrected 2026-08-14: under (4) every part exhausted is
-   SUFFICIENT, not necessary — the wrapper loop's zone-less overflow can drain the pool with
+   SUFFICIENT, not necessary, the wrapper loop's zone-less overflow can drain the pool with
    parts still alive.)*
 6. Along the way it prints the AI's steady-hand test (`Absorbed %f damage; steady hand test
    failed. Evading.`, `0062b1e8`) and picks a radio line by comparing combined
@@ -290,7 +290,7 @@ no anim running, it starts one and stores the handle in the instance's `+0x890` 
 fraction rises back above the threshold and a handle is live, it stops the anim and clears the
 handle. So the staging is reversible, not a latch, and repairing a vehicle visibly un-stages it.
 
-⚠ **Armour is not in the fraction.** The divide is literally `[inst+0x2d0] / [inst+0x2cc]` — the
+⚠ **Armour is not in the fraction.** The divide is literally `[inst+0x2d0] / [inst+0x2cc]`, the
 health pair only. The armour pair (`+0x2c4` / `+0x2c8`) is never read on this path, so a vehicle
 with its armour stripped and its health untouched has crossed no def-level stage. This matters
 because the combined armour+health progression is the right scale for the gauge (a hit walks one
@@ -498,7 +498,7 @@ ships (`fury-fury`, `kestrel-kestrel`, `player-player`), never a `*_crash_*` one
 `fury-fury`'s `destroy_craft` sequence is the choreography: `large_fireball` with `air_mixed_exp_sg`
 (the airburst), `large_firetrail` (the trail the wreck wears down), `chuteman` at **3.0 s** (the
 pilot's parachute), eight `ObjectActiveState` events swapping healthy for destroyed, `Callback 16`,
-`Callback 15`, then `CallSequence randomdestseq` — a second `large_fireball`/`plane_destroy_sg` pass
+`Callback 15`, then `CallSequence randomdestseq`, a second `large_fireball`/`plane_destroy_sg` pass
 with `call_trailburst` and the `ObjectMotion` that actually flies the hull down. Its own
 `destroyed_dirt`, `destroyed_water` and `bounce_effects` sequences carry the landing.
 `has_callbacks` is **true** here and false on the three `ai_crash_*` defs. ⚠ It is not the tell for
@@ -513,8 +513,8 @@ destroyed_water }`, so on all eleven airframe defs the destroy anim takes the hu
 the last of the fall and the ground explosion; from the handover on the vehicle no longer moves
 itself, so `FUN_0048b920` sees no contact and the `ai_crash_*` table is left to what it is for
 (that, and a wreck that reaches the ground inside the first three seconds), a LIVE aircraft flown into
-terrain. `player-player` authors no hull `ObjectMotion` at all — only `piece1seq`..`piece4seq`,
-each with its own `pNgrndhit` bounce — and its `Callback 15` is untimed, but it sits in
+terrain. `player-player` authors no hull `ObjectMotion` at all, only `piece1seq`..`piece4seq`,
+each with its own `pNgrndhit` bounce, and its `Callback 15` is untimed, but it sits in
 `destroy_craft`, which BOTH arms reach through a `WAIT_FOR_COMPLETION` call of `cpeject1`/
 `cpeject2`. The handover therefore waits for the cockpit eject to finish, about five seconds, and
 the player's hull flies itself until then exactly as an AI wreck does for its three; what falls
@@ -548,8 +548,8 @@ takes the arm that stops and sheds its rotor (`autogyro_stoprotor`, `autogyro_lo
 that eject call's `WAIT_FOR_COMPLETION`, so the breakup waits for the pilot to leave.
 
 `cpeject1`/`cpeject2` are the EXTERIOR bail-out: hide the airframe's seated `pilot` (under
-`healthy/geometry/…/pilot_pos`), show `cpilot` — a parentless root of `planes.zbd` holding an
-articulated pilot, `cpilot_parent > cpilot_drop > cp_torso`/`cp_head`/twelve limb nodes — reparent
+`healthy/geometry/…/pilot_pos`), show `cpilot`, a parentless root of `planes.zbd` holding an
+articulated pilot, `cpilot_parent > cpilot_drop > cp_torso`/`cp_head`/twelve limb nodes, reparent
 it onto `pilot_pos`, and drive every joint from the def's own SI scripts. `cpeject1` adds
 `snd_DA-Bail-A_id1_random` at 0.5 s and runs about five seconds; `cpeject2` is the shorter variant.
 `cpejectstop` is the teardown pair, `ObjectDeleteChild` plus a hide.
@@ -575,7 +575,7 @@ the 3.0 s chute gate on all ten AI airframes: **16 samples the velocity the wrec
 three seconds of falling on its own, 15 hands the hull over, and the `ObjectMotion` flies it from
 there.** `player-player` authors the same three untimed, but reaches them only through a
 `WAIT_FOR_COMPLETION` call of the cockpit eject, so a dead player's hull flies itself for the
-eject's own length instead. ⚠ Nothing about this is `start: null` semantics — an absent `start` is `Animation 0.0`
+eject's own length instead. ⚠ Nothing about this is `start: null` semantics, an absent `start` is `Animation 0.0`
 and always passes, so the events behind a timed one fire at that timed event's time
 (`FUN_004ecbb0`, and [anim-definitions.md](../formats/anim-definitions.md)'s "Event scheduling").
 The fall before the parachute is the VEHICLE's, not the anim's.
@@ -718,10 +718,10 @@ are recomputed as the parts' fraction of their summed maxima times the whole-veh
 hit that names no zone spends against the summary directly. An AI airframe's `armor`/`health` pair
 is the scale that summary is expressed in, not a competing pool; player defs resolve none, so the
 open thread above (the initialiser) stands. Kill threshold: **whole-vehicle health current at or
-below zero** — *corrected 2026-08-14: NOT "every zone exhausted". The wrapper loop
+below zero**, *corrected 2026-08-14: NOT "every zone exhausted". The wrapper loop
 (`FUN_004b9b30`, the correction section above) re-enters the unabsorbed leftover zone-less and
 drains the whole pair directly, so the kill can arrive with zones still healthy; and a dead zone
-is never struck — the resolver redirects the hit to a surviving zone. The whole pair is a real,
+is never struck, the resolver redirects the hit to a surviving zone. The whole pair is a real,
 independent pool, not only a running summary.* ⚠ The remake today
 kills on any `critical` part reaching zero (`FlightController.cs:823`, `:1957`); no code on the
 decoded death path reads that flag (the open thread below), so the current rule is a recorded
@@ -761,9 +761,9 @@ What each downstream item consumes:
   resolver's live-only rule and random-survivor fallback are ported exactly. D14 also retires
   the `critical` kill divergence above.
 - **A2's spawned aircraft** seed the ledger exactly as "Where the numbers come from at spawn":
-  the roster-named def chain's `armor`/`health` — and **no `destroyable_parts`, because no such
+  the roster-named def chain's `armor`/`health`, and **no `destroyable_parts`, because no such
   chain authors any** (see the 2026-08-16 correction below; this bullet said "the `r*` def chain's
-  `destroyable_parts` plus `armor`/`health`" and was wrong on both counts) — then the roster's
+  `destroyable_parts` plus `armor`/`health`" and was wrong on both counts), then the roster's
   `init_health` (only if > 0) and `armor` (if >= 0). The eight per-zone roster slots are parsed for
   index alignment and ignored (`-1` on all 414 blocks; the sum-derivation path is dead in this install).
   The difficulty scale (0.75/1.0/1.25) and the aircraft-only per-spawn jitter (uniform 5 %) are
@@ -792,33 +792,33 @@ method as the rest of this page. This section partially corrects "Taking a hit" 
   struck zone resolved by `FUN_004b3950`, and `FUN_004b9bc0` runs with it. The wrapper then sets
   part id := -1 and calls again while BOTH leftover damage values are still positive and
   whole-vehicle health (`+0x2d0`) is above zero. Every later pass is therefore the zone-less
-  route — the whole-vehicle spend `FUN_004b8070`, with NO recompute behind it.
+  route, the whole-vehicle spend `FUN_004b8070`, with NO recompute behind it.
 - **The spend writes its leftovers back.** `FUN_004b7f80` takes the damage pair in/out. The
   armour pool absorbs what it can of the armour damage (`FUN_004b7f30` clamps the pool at zero)
   and the unabsorbed armour damage is written back. Armour covering the armour damage outright
   ZEROES the health damage and ends the hit; so does armour standing against a hit that carries
   no armour damage at all. Otherwise the uncovered share of the health damage reaches the health
-  pool, and the write-back is the full health magnitude minus what the pool absorbed — both the
+  pool, and the write-back is the full health magnitude minus what the pool absorbed, both the
   pool's overflow AND the armour-shielded share re-enter the loop, where they meet the whole
   pair.
 - **A dead zone is never struck.** `FUN_004b3950` matches the hit geometry only against parts
   with health remaining, and its miss fallback `FUN_004b3b60` picks with `rand()` among the
   first up to three surviving parts. A hit aimed at a dead zone is REDIRECTED to a surviving
-  one; only with no survivor does a hit run zone-less from the first pass — and by then the
+  one; only with no survivor does a hit run zone-less from the first pass, and by then the
   recompute has already written whole health to zero.
 - **Net behaviour.** The struck zone absorbs what it can; the leftover drains the whole pair,
   gated once per pass by whatever whole armour the last recompute left standing. Concentrated
   one-bearing fire kills because the redirect walks the surviving zones down; a large warhead
-  kills through the overflow with zones still healthy. Death stays the single test — whole
-  health current at or below zero — but the overflow can reach it with parts alive, so
+  kills through the overflow with zones still healthy. Death stays the single test, whole
+  health current at or below zero, but the overflow can reach it with parts alive, so
   "every part exhausted" was sufficient, never necessary.
 - **The recompute quirk, kept.** A later part-scoped spend recomputes whole current from the
-  parts (`FUN_004b3bf0`) and OVERWRITES earlier zone-less dents — a partial heal. The engine's
+  parts (`FUN_004b3bf0`) and OVERWRITES earlier zone-less dents, a partial heal. The engine's
   own arithmetic does this; the remake reproduces it rather than fixing it
   (`PlaneDamageTests.ALaterPartSpendOverwritesAnEarlierOverflowDent`).
 - **Whole-pair seeding in the remake.** Where the def chain authors `armor`/`health` (the AI
   defs) that pair is the whole maxima; player defs author none, so the remake seeds the pair as
-  the sum over parts — `FUN_0047bd90`'s re-derivation is the decoded precedent for
+  the sum over parts, `FUN_0047bd90`'s re-derivation is the decoded precedent for
   sum-over-parts as the whole pair. The player-initialiser open thread below stands; this is a
   documented stand-in, not a decode. Measured: player_bhawk seeds 80/80 (4×20/20), the Fury
   90/90 (25+25+20+20). ⚠ That 90/90 is the parts sum and nothing else: the AI `fury` def authors
@@ -842,17 +842,17 @@ re-run: resolve the `kind_of` chain of every def named by all 414 `aiv` blocks a
 
 - **No roster block names an `r*` def.** Enemies are named by militia variants (`secfury`,
   `bhatwarhawk`, `habloodhawk`, `blakepeace`) or by a bare AI def directly (`devastator` on 36
-  blocks, `bloodhawk`, `autogyro`, `balmoral`). The `r*` family is the **remote-player** family —
+  blocks, `bloodhawk`, `autogyro`, `balmoral`). The `r*` family is the **remote-player** family,
   `formats/vehicle.md` names it that, and it carries `thirdp`-only turrets to match.
 - **Not one roster-named chain resolves `destroyable_parts`.** `secfury → fury → basic_airplane`
   carries `armor 72 / health 72` and the seven-entry injure ladder, and no zones anywhere.
-- **The 38 militia variants author no damage key at all** — no pair, no parts, no ladder — so the
+- **The 38 militia variants author no damage key at all**, no pair, no parts, no ladder, so the
   bare AI def is the whole damage answer for any of them. The eleven `w*` wingman defs likewise.
   Only `bswingman` (90/90, a one-entry ladder) and `wingman` (100/100) differ, and both are
   campaign defs.
 - **Exactly 37 of the 75 defs author any damage data**: the 11 player `p*` (4 zones, 2-entry
   ladder, no pair), the 11 `r*` (4 zones, 7-entry ladder), the 11 bare AI defs (a pair, a 7-entry
-  ladder — 8 on the balmoral — and no zones), plus `bswingman`, `wingman`, `patrolboat` and
+  ladder, 8 on the balmoral, and no zones), plus `bswingman`, `wingman`, `patrolboat` and
   `t_truck`.
 
 So the whole-vehicle pair is not a summary over a zone ledger on an AI aircraft; it **is** the
@@ -862,7 +862,7 @@ bloodhawk 64, peacemaker 68, fury 72, avenger 76, devastator 80, brigand 84, kes
 88, warhawk 96, balmoral 100.
 
 What this landed as (BL-386): `PlaneStats.LoadForAi` resolves the AI def for the damage trio while
-everything else — `DefName`, dynamics, turrets, the built model — stays on the player chain, since
+everything else, `DefName`, dynamics, turrets, the built model, stays on the player chain, since
 `DefName` keys the eleven-entry stock-loadout table. The `ai-plane-defs` suite pins all eleven
 airframes and a real spawn.
 

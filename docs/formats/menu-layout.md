@@ -1,4 +1,4 @@
-# `LAYOUT.CSV` — the menu widget layout
+# `LAYOUT.CSV`, the menu widget layout
 
 The authored geometry of the original's menus. `ASSETS/LAYOUT.CSV` inside `crimson.rof` declares
 every widget of every single-player screen: its rectangle, its artwork, its string id, its colours
@@ -14,12 +14,12 @@ what it exposes.
 
 ## Contents
 
-- [Conceptual model](#conceptual-model) — the four line kinds, the two macro mechanisms, the
+- [Conceptual model](#conceptual-model), the four line kinds, the two macro mechanisms, the
   three-file screen.
-- [Reference](#reference) — the field order of each of the ten used widget types, the navigation
+- [Reference](#reference), the field order of each of the ten used widget types, the navigation
   columns, and the emitted artifact's shape.
-- [Reader rules and edge cases](#reader-rules-and-edge-cases) — what a parser has to tolerate.
-- [Evidence & limits](#evidence--limits) — what is proven, what stays ambiguous.
+- [Reader rules and edge cases](#reader-rules-and-edge-cases), what a parser has to tolerate.
+- [Evidence & limits](#evidence--limits), what is proven, what stays ambiguous.
 
 ## Conceptual model
 

@@ -1,7 +1,7 @@
-# 📋 PLAN TEMPLATE — copy, don't edit in place
+# 📋 PLAN TEMPLATE, copy, don't edit in place
 
 > **This file is the skeleton, not a plan.** The normal way to start a plan is the **`/new-plan`
-> skill**, which writes a `docs/PLAN-<name>.md` with the right sections — and, when the session it
+> skill**, which writes a `docs/PLAN-<name>.md` with the right sections, and, when the session it
 > runs in has already done the analysis (a grilling, a backlog sweep, a capture analysis), offers to
 > fill the plan out from it rather than handing back a stub. It records only what that session
 > established: anything it can't source becomes a visible `<TODO: …>`, and each Evidence line's
@@ -14,7 +14,7 @@
 > **Naming:** milestone plans → `PLAN-M<n>-<name>.md`; feature/refactor plans → `PLAN-<name>.md`.
 >
 > **Sections are marked `[core]` or `[situational]`.** `[core]` sections belong in every plan, even
-> a quick 3-item one. `[situational]` sections earn their place only when they apply — prior work
+> a quick 3-item one. `[situational]` sections earn their place only when they apply, prior work
 > was disproven, decisions were negotiated, or the plan rests on a reverse-engineering pass. When in
 > doubt, keep `[core]`, cut `[situational]`.
 >
@@ -27,7 +27,7 @@
 
 <!-- ========================= THE PLAN STARTS HERE ========================= -->
 
-# <Milestone N — short scope name, e.g. "Milestone 3 — Weapons and Destruction">
+# <Milestone N, short scope name, e.g. "Milestone 3, Weapons and Destruction">
 
 <!-- [core] Status + location banner. While the plan is live it sits in docs/ and says so; when
      every item lands the closing commit deletes the file (git keeps it) and its message records the
@@ -37,58 +37,58 @@ a live plan; PROJECT_CONTEXT.md's "Current status" names it. When every item lan
 commit deletes this file, records the completion in its message, and clears the "Current status"
 pointer; any live prose linking this file by path is unlinked in the same commit.
 
-<!-- [core] Scope paragraph(s). State what this plan delivers, and — just as important — what it
+<!-- [core] Scope paragraph(s). State what this plan delivers, and, just as important, what it
      deliberately excludes and why. If the plan draws items from backlog.md, record that EACH was
      re-verified still-open against BOTH the record (git log --grep) AND the code (a backlog entry
      is not proof the work is undone). Convert any relative dates to absolute. -->
-<One or two paragraphs: the goal, the explicit boundaries ("X is out of scope — it's M<n+1>"), and
+<One or two paragraphs: the goal, the explicit boundaries ("X is out of scope, it's M<n+1>"), and
 any assumptions the plan rests on.>
 
 ## Milestone goal <!-- [core] -->
 
-<What is true when this plan is done, as a few bullets. End with the boundary line — the thing this
-plan pointedly does NOT do — so scope creep has a name to bump against.>
+<What is true when this plan is done, as a few bullets. End with the boundary line, the thing this
+plan pointedly does NOT do, so scope creep has a name to bump against.>
 
 - <capability 1>
 - <capability 2>
 
 **<The boundary, stated as a rule.>** <Why it's deliberate.>
 
-## Decisions (<YYYY-MM-DD>) <!-- [situational] — for plans where scope was negotiated (e.g. a grilling session). The table is the authority when the prose below contradicts itself. -->
+## Decisions (<YYYY-MM-DD>) <!-- [situational], for plans where scope was negotiated (e.g. a grilling session). The table is the authority when the prose below contradicts itself. -->
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | <the open question> | **<the call made>** — <one-line rationale> |
+| 1 | <the open question> | **<the call made>**, <one-line rationale> |
 
-## ⚠ Read this before implementing anything <!-- [situational] — include when prior work here was disproven, or the evidence is contested. The evidence-discipline RULE itself is core and lives in Ground rules; this section is the specifics that guard it. -->
+## ⚠ Read this before implementing anything <!-- [situational], include when prior work here was disproven, or the evidence is contested. The evidence-discipline RULE itself is core and lives in Ground rules; this section is the specifics that guard it. -->
 
 <!-- If earlier readings (in this plan or a predecessor) were disproven, tabulate them so nobody
-     re-derives them. This is not blame — it is the map of the minefield. -->
+     re-derives them. This is not blame, it is the map of the minefield. -->
 
 | # | The wrong claim | How it died |
 |---|---|---|
 | 1 | <the plausible-but-false reading> | <the data or playtest that killed it> |
 
-<!-- If the evidence quality is uneven across items, grade it — this tells the implementer how to
+<!-- If the evidence quality is uneven across items, grade it, this tells the implementer how to
      budget the session. Per-item confidence is already marked in each Evidence line (core); this
      summary table is the at-a-glance roll-up, worth it only on a large mixed-confidence plan. -->
 
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | <ids> | Confirm the trace, then implement. |
-| **Direction sound, magnitude a judgement call** | <ids> | The *what* is settled; the *how much* is TUNE — add it to `backlog.md`'s TUNE list, don't invent it as fact. |
-| **Leads only — no mechanism yet** | <ids> | Budget for investigation; this may end in a disproof. |
+| **Direction sound, magnitude a judgement call** | <ids> | The *what* is settled; the *how much* is TUNE, add it to `backlog.md`'s TUNE list, don't invent it as fact. |
+| **Leads only, no mechanism yet** | <ids> | Budget for investigation; this may end in a disproof. |
 
-**⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
+**⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
 worktree session here; use a local commit or a file copy. <Keep this line only if any item runs in a
 parallel worktree.>
 
-## What the data actually ships <!-- [situational] — the evidence survey, for plans that rest on a reverse-engineering pass. Census tables, key coverage, the canonical worked-example file. A routine plan folds this into each item's Evidence instead. -->
+## What the data actually ships <!-- [situational], the evidence survey, for plans that rest on a reverse-engineering pass. Census tables, key coverage, the canonical worked-example file. A routine plan folds this into each item's Evidence instead. -->
 
 <The measured facts the plan is built on: counts, histograms, the canonical worked example file, the
 exact fields/keys. Cite files by path. This is the shared evidence the per-item sections lean on.>
 
-## Ground rules <!-- [core] — carried verbatim from every prior plan here (self-contained history). Keep as-is unless a rule genuinely doesn't apply. -->
+## Ground rules <!-- [core], carried verbatim from every prior plan here (self-contained history). Keep as-is unless a rule genuinely doesn't apply. -->
 
 - **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
   never guess a value. Inventing content is the trap this project falls into most often.
@@ -100,7 +100,7 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
   bullet in `docs/architecture.md`) / `docs/formats/` are updated in the same turn** as each landed
   item; a landed item gets its record in the landing commit's message and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
-- **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
+- **Read `docs/verification.md` before measuring anything**, the instruments here mislead; cite the
   rule that bites per item.
 - **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
   mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
@@ -109,7 +109,7 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
   `docs/architecture.md`) before modifying it,** then the comments on the members you touch; dead
   ends are in the landing commits (`git log --grep=<ID>`), so search those before re-chasing one.
 
-## Checklist <!-- [core] — the canonical task list. /commit-next reads this to find the next open item, so keep the ID + status shape exact. -->
+## Checklist <!-- [core], the canonical task list. /commit-next reads this to find the next open item, so keep the ID + status shape exact. -->
 
 Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
 
@@ -118,19 +118,19 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
      in dependency notes ("B18 needs D29") and by /commit-next. A tiny single-wave plan is just
      A1…An. -->
 
-### Wave A — <name> <!-- group items into waves by dependency/theme -->
+### Wave A, <name> <!-- group items into waves by dependency/theme -->
 
 1. ☐ <one-line item title>
 2. ☐ <one-line item title>
 
-### Wave B — <name>
+### Wave B, <name>
 
 11. ☐ <one-line item title>
 
-## Dependency and parallelism notes <!-- [core] — what blocks what, what runs in parallel, which items contend on the same file (never run those in parallel worktrees); give each concurrent agent a stated file-ownership boundary. Collapses to a single line for a linear single-wave plan. -->
+## Dependency and parallelism notes <!-- [core], what blocks what, what runs in parallel, which items contend on the same file (never run those in parallel worktrees); give each concurrent agent a stated file-ownership boundary. Collapses to a single line for a linear single-wave plan. -->
 
 <Prose: "A1 blocks everything (all items read it). B11 → B12 is a chain. File contention: B16 and C23
-both edit FILE — don't run them in parallel." For a linear plan: "Items run in listed order; no
+both edit FILE, don't run them in parallel." For a linear plan: "Items run in listed order; no
 parallelism.">
 
 ---
@@ -140,31 +140,31 @@ parallelism.">
      and the status matches the checklist. The five bold sub-sections are [core]; ⚠ Traps is [core]
      the moment an item has a known pitfall. -->
 
-# Wave A — <name>
+# Wave A, <name>
 
 ## A1 ☐ <item title>
 
-**Goal.** <One or two sentences: the observable outcome when this item is done — a behaviour, not an
+**Goal.** <One or two sentences: the observable outcome when this item is done, a behaviour, not an
 implementation.>
 
 **Evidence (confidence: <traced / direction-sound / lead-only>).** <The facts, cited to files and
 line numbers. If it's a hypothesis, say so and name the instrument that will settle it. State what
 you've already ruled out so it isn't re-chased.>
 
-**Approach.** <How to do it, concretely — the files/functions to touch, the pattern to reuse. Name
+**Approach.** <How to do it, concretely, the files/functions to touch, the pattern to reuse. Name
 what NOT to touch if that's a live risk.>
 
-**Model recommendation.** <Which capability tier should execute this item — **low / medium /
-high / max**, tool-agnostic so any agent can map it onto its own model roster — with a one-line why:
+**Model recommendation.** <Which capability tier should execute this item, **low / medium /
+high / max**, tool-agnostic so any agent can map it onto its own model roster, with a one-line why:
 mechanical or exploratory work goes to a lower tier, judgement-heavy or high-blast-radius work to
 a higher one. Optionally suffix a reasoning-effort override when the item clearly warrants one
-(e.g. "medium, low effort" for a mechanical fan-out); omit it to inherit the session default —
-don't invent a tier you can't justify. **Only recommend low for exploration**  —
+(e.g. "medium, low effort" for a mechanical fan-out); omit it to inherit the session default,
+don't invent a tier you can't justify. **Only recommend low for exploration**,
 even mechanical work here needs at least medium-tier judgement; use low *effort* on medium instead
 when you want cheap execution.>
 
 **Verify.** <The specific check that proves it: the exact capture/pose/command, plus the regression
-surface. "An unchanged number is not evidence unless you've seen it able to fail" — take a baseline
+surface. "An unchanged number is not evidence unless you've seen it able to fail", take a baseline
 first when the change is global.>
 
 **⚠ Traps.** <[core once known] The misleading instruments, the rejected fixes and why, the values

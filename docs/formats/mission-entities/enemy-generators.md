@@ -1,11 +1,11 @@
-# Enemy generators — `egen.json`
+# Enemy generators, `egen.json`
 
 Part of [Mission entities](../mission-entities.md) in the [format documentation](../README.md).
 
-## `egen.json` — enemy generators
+## `egen.json`, enemy generators
 
 An **enemy generator** spawns AI aircraft into a live mission from a host entity. The host is
-either a zeppelin (fighters dropped out of its hangar) or a fixed installation — this install
+either a zeppelin (fighters dropped out of its hangar) or a fixed installation, this install
 has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `barracuda`.
 
 | Key | On | Meaning |
@@ -17,22 +17,22 @@ has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `ba
 | `wave_size` | 23/23 | planes per wave (1, once 3) |
 | `wave_period` | 23/23 | seconds between waves (1–20) |
 | `ind_period` | 23/23 | seconds between individuals inside a wave (0.5–10) |
-| `zeppelin` | 17/23 | `[1]` — marks the zeppelin-hangar variant |
+| `zeppelin` | 17/23 | `[1]`, marks the zeppelin-hangar variant |
 | `open_anim` / `close_anim` | 17/23 | the hangar-door animations, run before and after a wave |
-| `origin` | 17/23 | the node the fighters appear at — `cargobay` on 16 of 17 |
-| `rotation` | 17/23 | `[-90, 0, 0]` throughout — the drop attitude. Read as **three** angles (all converted to radians), not the single value the data suggests |
+| `origin` | 17/23 | the node the fighters appear at, `cargobay` on 16 of 17 |
+| `rotation` | 17/23 | `[-90, 0, 0]` throughout, the drop attitude. Read as **three** angles (all converted to radians), not the single value the data suggests |
 | `min_altitude` | 17/23 | **100–300 m: the launch gate** |
 | `healthy` | 1/23 | the node whose destruction stops the generator (`subhealthy`, the submarine) |
-| `moving_path` | 1/23 | bare flag — it makes the take-off path **host-relative**, see [Launching from a surface host](#launching-from-a-surface-host) |
+| `moving_path` | 1/23 | bare flag, it makes the take-off path **host-relative**, see [Launching from a surface host](#launching-from-a-surface-host) |
 
 **`min_altitude` is confirmed by the design document by name.** The design specifies that a
 zeppelin drops fighters through its hangar door and so must be high enough to do it; that the
 generator gets an extra altitude parameter for this; that generation is *held* until the
-altitude is reached; and it names the file — `egen.zrd`. The `open_anim` → spawn →
+altitude is reached; and it names the file, `egen.zrd`. The `open_anim` → spawn →
 `close_anim` sequence is spelled out there too. This is the one place in this page where the
 design document and the shipped data agree field-for-field.
 
-33 of the 53 `egen.json` files are an empty `[null]` — most multiplayer maps have no generator.
+33 of the 53 `egen.json` files are an empty `[null]`, most multiplayer maps have no generator.
 
 **One authored `params` label is a shipped typo.** The linkage is by exact label: an egen
 `vehicle.params` value names a designer label in the same mission's `aiv.json` header. 14 of the
@@ -87,9 +87,9 @@ Three things that reading pins down:
   individuals *within* a wave; the gap *between* waves is `ind_period + wave_period`, not
   `wave_period` alone.
 - **The door timings are hardcoded, not data.** The door opens **4 s before** a due spawn, stays
-  open at least 4 s, and only closes early if the next spawn is more than 8 s away — so a
+  open at least 4 s, and only closes early if the next spawn is more than 8 s away, so a
   fast-cycling generator simply leaves its hangar open.
-- **The altitude gate holds, it does not cancel** — exactly as the design document says. The wave
+- **The altitude gate holds, it does not cancel**, exactly as the design document says. The wave
   counter and the timer are untouched while blocked; only the door closes. The gate is skipped
   entirely when `min_altitude` is unset (a `-1.0` sentinel).
 
@@ -137,7 +137,7 @@ inside that half second, the decoded rule disables the bay before the credit arr
 launches, and OBJECTIVE38's `DEDG [5, 0]` fires the loss over an empty group. The designed path
 avoids it only because OBJECTIVE11's `all_dtzep_gasbags` spaces its pops 3 s apart. Two further load-time
 rejections: a generator whose `node` cannot be resolved is **dropped**, and so is one where **none**
-of its `vehicle.nets` names resolve — a generator with no valid net does not load inert, it does not
+of its `vehicle.nets` names resolve, a generator with no valid net does not load inert, it does not
 load at all.
 
 **A non-zeppelin generator also needs a take-off path, and is dropped without one.** `FUN_004518d0`
@@ -162,12 +162,12 @@ file authors; and the `vehicle` block additionally accepts **`primary_target`** 
 neither authored in this install.
 
 What the door names resolve to: every authored `open_anim`/
-`close_anim` is a **compiled `mis_anim` definition** — root `hangerdoors` under the host
-zeppelin, activation OnCall — whose sequences `OBJECT_MOTION_FROM_TO` the hull's `door_left`/
+`close_anim` is a **compiled `mis_anim` definition**, root `hangerdoors` under the host
+zeppelin, activation OnCall, whose sequences `OBJECT_MOTION_FROM_TO` the hull's `door_left`/
 `door_right` nodes 0 → ±90° about Z over **5 s** (close is the reverse), with the open's first
 event activating `cargobay`. The ground hangars' defaulted defs above are the same shape at a
 smaller scale. Two placement facts that bite: the chapter can
-carry several `hangerdoors` namesakes (C1 has three — the zeppelin's and two ground hangars'),
+carry several `hangerdoors` namesakes (C1 has three, the zeppelin's and two ground hangars'),
 so a door call must be scoped to the host's subtree; and the `cargobay` origin node sits ON the
 bay floor inside the hull. The remake releases fighters exactly there: the decoded 1.5 s carrier
 grace suppresses collision while the drop clears the hull. C1/IA1's mission setup deactivates its zeppelin at load (`support\c1\ia1.gw`). The mission builder

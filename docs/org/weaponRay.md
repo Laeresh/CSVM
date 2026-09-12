@@ -20,11 +20,11 @@ What sits either side of this page: what is done with a hit once it lands is
 | Address | Role |
 |---|---|
 | `FUN_004c7620` | sets the caller's node-flag exclusion mask (`DAT_0071e8b4`) for the next query |
-| `FUN_004cd210` | sets/clears a node's `INTERSECT_SURFACE` bit — how the firing plane excludes itself |
+| `FUN_004cd210` | sets/clears a node's `INTERSECT_SURFACE` bit, how the firing plane excludes itself |
 | `FUN_004c8ec0` | the segment query: gather every hit, then keep the nearest |
 | `FUN_004c8f70` | walks the world partition grid along the segment |
 | `FUN_004c9a00` | the per-node recursion: the flag gates, the LOD/switch descent, the bbox arm |
-| `FUN_0055c9c0` | the per-model polygon loop — the ray test proper |
+| `FUN_0055c9c0` | the per-model polygon loop, the ray test proper |
 | `FUN_0055d6c0` | ray vs polygon, geometry only |
 | `FUN_0055db90` | ray vs polygon, geometry only, plus the hit UV |
 | `FUN_005595e0` | stores that UV in `_DAT_00a06fec`/`_DAT_00a06ff0` |
@@ -37,7 +37,7 @@ What sits either side of this page: what is done with a hit once it lands is
 index of the smallest distance back into the array's first byte. `FUN_004c9a00` refuses to add a
 33rd (`0x1f < *DAT_0071e9f0`) and logs `Database intersections array is full`. A record is 44 bytes
 at `array + 4 + i*0x2c`: normal at `+0x00`, hit point at `+0x0c`, distance at `+0x1c`, the struck
-material pointer at `+0x20` — the same pointer `weaponImpact.md`'s `material + 0x20` soil id is
+material pointer at `+0x20`, the same pointer `weaponImpact.md`'s `material + 0x20` soil id is
 read off.
 
 Both weapon paths use this one query: the tracer/gun segment stepper (`FUN_005b0cb0`) and the
@@ -83,7 +83,7 @@ object.
   walk passes; the UV never gates anything.
 
 **Which of the two is called is decided by the material, not by transparency.** The selector is
-`*(byte *)(*(int *)poly[5] + 1) & 2` — bit 1 of the material record's flag byte, which is
+`*(byte *)(*(int *)poly[5] + 1) & 2`, bit 1 of the material record's flag byte, which is
 mech3ax's `MaterialFlags::UNKNOWN` and the `flag` field in extracted `materials.json`. Its other
 decoded consumer is `FUN_00558f80`, the bullet-hole stamper, which blits a decal bitmap into the
 material's own texture surface at exactly that stored UV and requires the same bit

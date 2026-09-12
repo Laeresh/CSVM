@@ -11,7 +11,7 @@ flies a **red** one: the remake draws the unpainted key texture.
 
 Extracted data and the user's reference screenshots show
 (`OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` = the in-game paint UI,
-`OriginalScreenshots/Kestrel.png` = a painted plane in flight). **Implemented** —
+`OriginalScreenshots/Kestrel.png` = a painted plane in flight). **Implemented**,
 see "Implementing this in the remake" at the bottom for what the remake actually does and
 where it knowingly diverges.
 
@@ -31,24 +31,24 @@ Same schema each time:
 
 Prefixes:
 
-- **`paint_*`** — in `vehicle.json`, on a vehicle def. Carried through `kind_of` inheritance
+- **`paint_*`**, in `vehicle.json`, on a vehicle def. Carried through `kind_of` inheritance
   like every other property (see [vehicle.md](vehicle.md)).
-- **`ace_*`** — in a mission's `ia.json` (`ace_pattern`, `ace_color1`, `ace_decal2`, …),
+- **`ace_*`**, in a mission's `ia.json` (`ace_pattern`, `ace_color1`, `ace_decal2`, …),
   alongside `ace_name` / `ace_plane` / `ace_stats`. The instant-action ace's personal scheme.
-- The player's customised plane stores the same thing binary — see "Saved custom planes".
+- The player's customised plane stores the same thing binary, see "Saved custom planes".
 
 The colour triples are **always integer 0–255** here, never the normalized-float encoding
-that `weather.json` mixes in (see the README's dual-encoding note) — no `>1` test needed.
+that `weather.json` mixes in (see the README's dual-encoding note), no `>1` test needed.
 
 ### Schemes shipped in `vehicle.json`
 
 Twelve named patterns across the AI roster. `devastator` and `wingman` carry a `paint_pattern`
-with **no colours or decals** — the Fortune Hunters player scheme, whose colours evidently come
+with **no colours or decals**, the Fortune Hunters player scheme, whose colours evidently come
 from elsewhere (the pattern's own defaults; see "Open").
 
 | Pattern | Used by | color1 | color2 | color3 | decal1/2/3 |
 |---|---|---|---|---|---|
-| `player_fortune` | `devastator`, `wingman` | — | — | — | — |
+| `player_fortune` | `devastator`, `wingman` | - | - | - | - |
 | `hughes` | `habloodhawk`, `hakestrel`, `hafury` | 243,194,0 | 0,0,0 | 255,255,255 | 21/11/11 |
 | `blackhat` | `bhatbrigand`, `bhatwarhawk`, `bhatgyro` | 177,130,66 | 119,74,43 | 66,39,15 | 21/2/2 |
 | `blake` | `blakebloodhawk`, `blakepeace` | 149,163,195 | 89,114,159 | 233,228,240 | 21/3/3 |
@@ -62,14 +62,14 @@ from elsewhere (the pattern's own defaults; see "Open").
 | `studio` | `secfury`, `secgyro` | 32,90,167 | 255,255,255 | 0,0,0 | 21/11/11 |
 
 Note `_2`/`_3`/`_5` suffixed defs (`blakepeace_2`, `bhatbrigand_5`) repeat their base def's
-scheme verbatim — they are per-chapter roster duplicates, not scheme variants.
+scheme verbatim, they are per-chapter roster duplicates, not scheme variants.
 
 ## The decal set
 
 Each chapter's `texture.zbd` carries a **gapless numbered set 00–49** (identical in every
 chapter, verified C1–C5), 64×64 with `Full` alpha, each with a half-size 32×32 `_1` LOD twin
 (index 49 has none). **`paint_decalN` indexes this set by the texture's zero-padded numeric
-prefix** — that is the whole mapping.
+prefix**, that is the whole mapping.
 
 | Range | Contents |
 |---|---|
@@ -88,14 +88,14 @@ range. The paint UI's three dropdowns are labelled Nose / Tail / Wing in that or
 ### Where a decal lands on the model
 
 Every player aircraft in `planes.zbd` carries **16×16 placeholder** decal textures named
-`<prefix>_noselogo`, `<prefix>_taillogo`, `<prefix>_winglogo` — one material each, on dedicated
-polygons — across the eleven aircraft prefixes `blo` `kes` `fur` `pea` `war` `bri` `bal` `hel`
+`<prefix>_noselogo`, `<prefix>_taillogo`, `<prefix>_winglogo`, one material each, on dedicated
+polygons, across the eleven aircraft prefixes `blo` `kes` `fur` `pea` `war` `bri` `bal` `hel`
 `agyro` `fir` `dev`. The engine swaps the chosen 64×64 decal texture onto these slots at load
 time; the shipped 16×16 image is a placeholder, not artwork to render. Placeholder and decal
 are both `alpha=Full`, so the swap does not disturb a renderer's alpha classification.
 
 **Not every aircraft has all three.** The Firebrand ships no `fir_noselogo` (only
-`fir_taillogo` / `fir_winglogo`) —, after keying the remake's aircraft
+`fir_taillogo` / `fir_winglogo`), and keying the remake's aircraft
 detection on the nose slot alone left the Firebrand unpainted. Detect on any of the three.
 
 Index → texture is unambiguous: in both C1 and C5 exactly 50 textures match "two digits
@@ -110,14 +110,14 @@ The per-plane skin textures (`blo_wing`, `blo_fin`, `blo_fusalagetop`, `kes_fuse
 Evidence, on the Bloodhawk:
 
 - `blo_fusalagetop`'s 234-entry palette is a near-monotone luminance ramp from `(0,0,0)` to
-  `(189,186,197)` with a slight blue cast. Its dominant pixel colour is `(74,81,99)` — a
+  `(189,186,197)` with a slight blue cast. Its dominant pixel colour is `(74,81,99)`, a
   desaturated blue-gray. There is no red anywhere in the file, yet the original's Fortune
   Hunters Bloodhawk is red.
 - `blo_fin` and `blo_wing` split into **two visually coherent regions**: a blue-gray body and a
   yellow-olive sweeping stripe. Rendering the texture region-coloured reproduces exactly the
-  body / swoosh-flash split visible on the painted plane in the reference screenshots — the
+  body / swoosh-flash split visible on the painted plane in the reference screenshots, the
   white swoosh on the red Bloodhawk, the black-and-white wing striping on the red Kestrel.
-- Neutral (unsaturated) areas are unpainted structure — cowl metal, canopy frames, panel lines.
+- Neutral (unsaturated) areas are unpainted structure, cowl metal, canopy frames, panel lines.
 
 ### The palette is not organised into reserved ramps
 
@@ -125,7 +125,7 @@ paint region", based on `blo_fin`'s indices **0–31** being a clean 32-step blu
 covering the fin body. **That generalisation is wrong**, and an implementation must not key
 on palette index:
 
-- On `blo_wing` — the same aircraft — the blue body region is scattered across the palette
+- On `blo_wing`, the same aircraft, the blue body region is scattered across the palette
   (indices 0, 6–7, 9, 13–14, 16–17, 20, 24–25, 28–31, …), not banded.
 - Every plane palette inspected is simply **sorted by luminance**, the ordinary output of a
   median-cut/octree quantizer. `blo_fin`'s tidy 0–31 run is a coincidence of that sort: the
@@ -137,18 +137,18 @@ on palette index:
 So the engine cannot be doing an index-range palette swap. Whatever table it uses to decide
 "this texel is paint slot 2" is keyed on something else and is not in the ZBD data.
 
-> **Found, — it is in `crimson.rof`.** The region table exists after all, in the UI
+> **Found, it is in `crimson.rof`.** The region table exists after all, in the UI
 > resource archive rather than the ZBD set: each `ASSETS/GRAPHICS/<PATTERN>/<SKIN>.BM` carries
 > a greyscale shading map plus **three 8-bit per-pixel weight masks, one per paint colour slot,
 > summing to 255**. That is a direct answer to "how the engine identifies a region", and it is
-> per *pattern* — which also answers "what a pattern actually varies" below. Full decode in
+> per *pattern*, which also answers "what a pattern actually varies" below. Full decode in
 > [rof.md](rof.md); `ExtractRof.ps1` writes each mask out as `<SKIN>_mask.png` (R/G/B = slots
-> 1/2/3). **The remake was reworked onto these masks on** — the hue-window sections
+> 1/2/3). **The remake was reworked onto these masks on**, the hue-window sections
 > below describe the source-skin analysis; the runtime uses the mask-based mapping described in this page.
 
 ### What the regions actually look like
 
-Region hue is **not** a stable slot key across aircraft — each aircraft's skins are authored
+Region hue is **not** a stable slot key across aircraft, each aircraft's skins are authored
 around **one dominant body hue**, and it differs per plane. Measured over every skin of each
 aircraft (saturated-texel hue histogram, C1; the skins are byte-identical in all eight
 chapters, verified, so this is chapter-independent):
@@ -158,20 +158,20 @@ chapters, verified, so this is chapter-independent):
 | `blo` | Bloodhawk | 217° blue | 58° olive swoosh | 54% |
 | `kes` | Kestrel | 199° blue | 58° olive flap | 43% |
 | `pea` | Peacemaker | 219° blue | 55° olive | 44% |
-| `bri` | Brigand | 200° blue | — | 43% |
-| `war` | Warhawk | 31° orange | — | 94% |
-| `bal` | Balmoral | 35° orange | — | 80% |
+| `bri` | Brigand | 200° blue | - | 43% |
+| `war` | Warhawk | 31° orange | - | 94% |
+| `bal` | Balmoral | 35° orange | - | 80% |
 | `hel` | Hellhound | 250° purple | 48° amber | 83% |
-| `fir` | Firebrand | 252° purple (wide, 230–270°) | — | 90% |
-| `dev` | Devastator | 1° red | — | 52% |
-| `agyro` | Autogyro | 58° olive | — | 88% |
-| `fur` | Fury | **none** | — | 3% |
+| `fir` | Firebrand | 252° purple (wide, 230–270°) | - | 90% |
+| `dev` | Devastator | 1° red | - | 52% |
+| `agyro` | Autogyro | 58° olive | - | 88% |
+| `fur` | Fury | **none** | - | 3% |
 
 The Devastator shipping red and the Warhawk orange suggests some skins were authored at their
 story colour. **The Fury is the outlier that disproves any pure hue-keying theory**: its skins
 are a near-black greyscale shading map (median value 0.00 on `fur_wing` and `fur_fusalage1`)
 with no saturated texels at all, yet `secfury` flies a studio-blue one in the original. So the
-engine's region table cannot be derived from the texture's colours alone — it is external data
+engine's region table cannot be derived from the texture's colours alone, it is external data
 we do not have.
 
 Note the yellow/olive secondary hue is partly **propeller spinners**, not paint: `dev_spinner`,
@@ -198,7 +198,7 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 | 0x44-0x4c | per-slot colour index 0-26 into the swatch table at `0x0061dd48` (see below) | callback 2237 get/set at `0x0040d3e2` |
 | 0x50-0x58 | per-slot shade-variant index into that colour's ramp; a colour pick resets it to the colour's own default variant | callback 2236 get/set at `0x0040d437`; the reset at `0x0040d402` |
 | 0x5c, 0x60, 0x64 | the three decal indices 0-49 (nose, tail, wing). The paint screen's 5-wide decal grid stores `row*5 + col`, which IS the flat index | callback 2239 at `0x0040d5b7`; `FUN_0041a320` consumes them by indexing the decal-name table at `0x0061da20` directly |
-| 0x68 | the three paint colours as RGBA bytes (`df 00 29 00` = `(223,0,41)`, ...) — a DERIVED cache: `FUN_00406840`, its only writer, recomputes it from the colour+shade indices, including at `0x0040b5cb` just before every save | the resolver `FUN_004067c0` |
+| 0x68 | the three paint colours as RGBA bytes (`df 00 29 00` = `(223,0,41)`, ...), a DERIVED cache: `FUN_00406840`, its only writer, recomputes it from the colour+shade indices, including at `0x0040b5cb` just before every save | the resolver `FUN_004067c0` |
 | 0x74-0x80 | four armour values, stored premultiplied by 5 | callback 2247 handler at `0x0040ac3d` divides by 5 on read |
 | 0x84 | per-gun-slot family bit byte (adds 5 to the dropdown row) | callback 2249 handler at `0x0040bea2` |
 | 0x88-0x94 | four gun ids, 5 = empty | callback 2249 |
@@ -250,7 +250,7 @@ The paint screen's aircraft preview is not the flying model's `.BM` composition.
 suffix a layer index: layer 0 is the detail plate (panel lines, canopy, prop, guns, with its
 coverage in the alpha channel) and layers 1-3 are the three colour slots' region masks, white
 RGB with the region in the **alpha**. The composite is: masks 1-3 alpha-over in slot order,
-each carrying its slot's resolved colour, then the plate over the result — no shading
+each carrying its slot's resolved colour, then the plate over the result, no shading
 multiply and no weight normalisation, so a fully-masked texel is exactly its resolved colour.
 Sets ship for exactly the pairs the availability mask allows (only itstaxi/Hoplite has none).
 Measured against the reference screenshots, the Fury's Fortune Hunters composite agrees to a
@@ -330,7 +330,7 @@ shaded_paint = shading * (w1*colour1 + w2*colour2 + w3*colour3) / 255
 then the pattern's overlay composited over it (4th channel as alpha). Two details
 matter: the shading map is the `.BM`'s own base plane, **not** the ZBD skin of the same
 name; and `.BM` rows are stored **bottom-up**, so each source row is read from `h-1-y` (see
-[rof.md](rof.md) — without the flip every livery is mirrored along V, which is how the bug
+[rof.md](rof.md), without the flip every livery is mirrored along V, which is how the bug
 first surfaced in-game). Parts a pattern ships no `.BM`
 for keep their shipped ZBD texture; the ZBD skin's alpha channel is carried onto the composite
 where the two agree on dimensions, so `SceneBuilder`'s blend-vs-scissor choice stays valid.
@@ -367,7 +367,7 @@ the aircraft's own set and paints decals only).
 
 ### Slot order, confirmed
 
-Slot 1 = identity/body, slot 2 = dark trim, slot 3 = light trim — the order the masks ship in
+Slot 1 = identity/body, slot 2 = dark trim, slot 3 = light trim, the order the masks ship in
 matches `paint_color1..3`. Settled by rendering the Fortune Hunters Bloodhawk with all three
 plausible assignments against `CustomPlane Paint1 Bloodhawk.png`: only *(red, black, white)*
 puts black on the outer wing panels and the white swoosh between them, as the reference shows.
@@ -381,8 +381,8 @@ positionally, so nothing between `vehicle.json` and the scheme record permutes t
 dispatch that decode stops at, so the assignment above still rests on the render test and the
 Colour/Shade reading.
 
-That also pins down **`player_fortune`'s missing colours** as `223,0,41 / 0,0,0 / 255,255,255`
-— the same shape every shipped scheme has (`hughes` is yellow/black/white). The red comes from
+That also pins down **`player_fortune`'s missing colours** as `223,0,41 / 0,0,0 / 255,255,255`,
+the same shape every shipped scheme has (`hughes` is yellow/black/white). The red comes from
 the paint UI's swatch and a saved `.pln` at 0x68; the trims are read off the reference. Still
 an inference from artwork, not a value found in a file.
 
@@ -392,7 +392,7 @@ Every divergence the hue-window version carried was a consequence of guessing re
 colour, and all of them are gone:
 
 - **Achromatic regions paint.** The Bloodhawk's outer wing panels are black under Fortune
-  Hunters, as in the original — a hue window could not see a region with no hue.
+  Hunters, as in the original, a hue window could not see a region with no hue.
 - **The Fury paints.** Its ZBD skin is featureless near-black, but its `.BM` masks are
   complete; all four of its patterns render correctly, including the Studio Security
   blue-and-white checkerboard.
@@ -419,7 +419,7 @@ colour, and all of them are gone:
 
   This also **independently confirms `player_fortune`'s colours**, which had been derived only
   by rendering. `CustomPlane Paint1 Bloodhawk.png` shows Colour/Shade of *red/red*,
-  *white/**black***, *white/white* — resolving to **red, black, white**, exactly the triple
+  *white/**black***, *white/white*, resolving to **red, black, white**, exactly the triple
   that the three-way render test singled out. Two unrelated routes, same answer.
 - **Overlay channel order** is still unconfirmed (see rof.md); treating the 4th channel as
   alpha over RGB renders correctly on the content inspected, which is greyscale and so cannot

@@ -57,7 +57,7 @@ moves under either is a defect in the item, not a re-pin.
   bullet in `docs/architecture.md`) / `docs/formats/` are updated in the same turn** as each landed
   item; a landed item gets its record in the landing commit's message and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
-- **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
+- **Read `docs/verification.md` before measuring anything**, the instruments here mislead; cite the
   rule that bites per item.
 - **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
   mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
@@ -70,7 +70,7 @@ moves under either is a defect in the item, not a re-pin.
 
 Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
 
-### Wave A — Hard standards violations
+### Wave A, Hard standards violations
 
 1. ☑ Two `_Avoid_` terms: "AI roster" and "deviation"
 2. ☑ `<para>` in three XML doc blocks
@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 6. ☑ A culture-dependent `ToString` and an empty interpolation
 7. ☐ Em-dash sweep, repo-wide
 
-### Wave B — Judgement calls
+### Wave B, Judgement calls
 
 11. ☑ One stopwatch bank for the three `--perf` cost meters
 12. ☑ `TemplateStage` freed-key walk shared
@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 17. ☑ The export set out of `SelectionService`
 18. ☑ Four small ones: the `MSG_` sniff, `SetTeam`'s hidden order, a hull's `ForAircraft`, `Messages.Parse`
 
-### Wave C — Spec fixes
+### Wave C, Spec fixes
 
 21. ☑ `New-ItemId.ps1` gets its BOM and loses its em dashes
 22. ☑ `SetNet` reports a missing net as no move
@@ -115,7 +115,7 @@ run beside anything except A7. Items otherwise run in listed order.
 
 ---
 
-# Wave A — Hard standards violations
+# Wave A, Hard standards violations
 
 ## A1 ☑ Two `_Avoid_` terms: "AI roster" and "deviation"
 
@@ -396,7 +396,7 @@ rewrites them breaks the dated-heading rule. (c) The two `New-ItemId.ps1` dashes
 also adds the BOM; do not let the sweep touch that file BOM-less. (d) Reflowing a comment can
 change its line count and fail a cap that passed.
 
-# Wave B — Judgement calls
+# Wave B, Judgement calls
 
 ## B11 ☑ One stopwatch bank for the three `--perf` cost meters
 
@@ -761,7 +761,7 @@ a `TargetRef.ForHull` (or a class-neutral factory) for the hull; `Parse` made `i
 **Verify.** `SET_AI_TEAM` suite on C4/M05 and C2/M05, `ai-vessel-targets`, the autodock prompt
 unit (`BL-510`) and the `Messages` tests green.
 
-# Wave C — Spec fixes
+# Wave C, Spec fixes
 
 ## C21 ☑ `New-ItemId.ps1` gets its BOM and loses its em dashes
 

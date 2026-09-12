@@ -1,15 +1,15 @@
-# `.rof` — the UI resource archive
+# `.rof`, the UI resource archive
 
 The game's menu/hangar/paint-shop resources: artwork, GUI scripts, the widget layout CSV and
 the scrapbook. Two archives ship in `GOSDATA\ASSETS\`:
 
 | File | Size | Contents |
 |---|---|---|
-| `crimson.rof` | ~57 MB | 846 files in 21 directories — the whole UI resource set |
-| `crimptch.rof` | 797 bytes | 1 file — a patch overlay that overrides the base archive at the same path |
+| `crimson.rof` | ~57 MB | 846 files in 21 directories, the whole UI resource set |
+| `crimptch.rof` | 797 bytes | 1 file, a patch overlay that overrides the base archive at the same path |
 
 mech3ax does not handle `.rof`; it is unrelated to the ZBD family. This project decodes it with
-`crimptch.rof` as the Rosetta Stone — one file, one directory chain, small enough to read by
+`crimptch.rof` as the Rosetta Stone, one file, one directory chain, small enough to read by
 hand. The reader it belongs to ships as `GOSDATA\ASSETS\BINARIES\roffile.dll`, which is where
 the format's name comes from.
 
@@ -17,12 +17,12 @@ the format's name comes from.
 masks straight out of this extraction and `src/Mech3/PlanePainter.cs` composites them, which
 is how aircraft get their liveries (see [paint.md](paint.md)).
 
-**This is where the plane customisation UI lives** — the screens behind the `CustomPlane`
-reference screenshots — and, most usefully, where the **paint region masks** are
+**This is where the plane customisation UI lives**, the screens behind the `CustomPlane`
+reference screenshots, and, most usefully, where the **paint region masks** are
 (see "Paint region masks" below, and [paint.md](paint.md)).
 
 The text those screens display is *not* here; it is a Win32 string table in
-`BINARIES\langui.dll` — see [strings.md](strings.md).
+`BINARIES\langui.dll`, see [strings.md](strings.md).
 
 ## Container
 
@@ -50,15 +50,15 @@ at offset 0 and holds exactly one entry, `ASSETS`.
 | `0x14` | `name_offset` | byte offset of the name **within this node's pool** |
 
 Names are ASCII and always upper-case. `name_offset` indexes the pool of the node the entry
-belongs to, not a global table — so a node is self-contained and can be parsed without state.
+belongs to, not a global table, so a node is self-contained and can be parsed without state.
 
-**Payloads.** `kind = 2` members are raw **zlib** streams (`78 01` — the game links zlib;
+**Payloads.** `kind = 2` members are raw **zlib** streams (`78 01`, the game links zlib;
 `DeflateStream` works after skipping the 2-byte zlib header). `kind = 0` members are stored
-verbatim, used for data that would not compress — every shipped `.PNG` and `.JPG` is stored,
+verbatim, used for data that would not compress, every shipped `.PNG` and `.JPG` is stored,
 every `.TGA`, `.BM`, `.SCRIPT` and `.CSV` is deflated.
 
 Verified across the whole archive: **all 846 members inflate to exactly their declared
-`size_uncompressed`**, and the last member ends at byte 60,236,221 — the archive's exact
+`size_uncompressed`**, and the last member ends at byte 60,236,221, the archive's exact
 length, so the layout is fully accounted for with no slack.
 
 ### The patch archive
@@ -73,22 +73,22 @@ than over the base extraction, so both versions are available to diff.
 | Count | Type | Notes |
 |---|---|---|
 | 313 | `.PNG` | UI artwork, stored uncompressed |
-| 184 | `.BM` | custom texture format, below — the per-pattern plane skins |
+| 184 | `.BM` | custom texture format, below, the per-pattern plane skins |
 | 143 | `.TGA` | fonts (`ARIAL8.TGA`, `FONT.TGA`), blueprints (`PX_0_BLUEPRINT` … `PX_10`, one per aircraft) |
 | 107 | `.JPG` | scrapbook / briefing photography |
 | 61 | `.SCRIPT` | the GUI scripts |
 | 25 | `.TIF` | |
 | 8 | `.WAV` | UI sounds (`MOUSECLICK`, `MOUSEOVER`, `MUSIC_SPLASH`, …) |
 | 2 | `.CSV` | `LAYOUT.CSV` (widget layout), `SCRAPBOOK.CSV` |
-| 2 | `.H` | `RESOURCE.H`, `RESRC1.H` — the string-ID map, see [strings.md](strings.md) |
+| 2 | `.H` | `RESOURCE.H`, `RESRC1.H`, the string-ID map, see [strings.md](strings.md) |
 | 1 | `.TXT` | `DEBUGINFO.TXT` |
 
-`ASSETS/BINARIES/` exists in the tree but is **empty** — those files (`langui.dll`,
+`ASSETS/BINARIES/` exists in the tree but is **empty**, those files (`langui.dll`,
 `language.dll`, `roffile.dll`, `ijl10.dll`) ship as loose files on disk at the same path.
 
 ### GUI scripts
 
-`ASSETS/SCRIPTS/*.SCRIPT` is a C-like UI scripting language — `gui_create` / `gui_init` /
+`ASSETS/SCRIPTS/*.SCRIPT` is a C-like UI scripting language, `gui_create` / `gui_init` /
 `gui_mailbox` blocks, `object` declarations bound to control classes, `callback(...)` into the
 engine, and `mail(id, target)` message passing between screens. Identifiers are **obfuscated**
 (single letters, `$$A$$` placeholders), but widget keys are plaintext and match `LAYOUT.CSV`
@@ -119,13 +119,13 @@ verbatim. `ComposedBoardView` applies this normalization after Godot decodes the
 creates the texture; `PngImage` applies the same rule on its engine-free path.
 
 The 184 `.BM` files are the per-pattern aircraft skins, in `ASSETS/GRAPHICS/<PATTERN>/`.
-Fourteen pattern folders exist — the twelve `paint_pattern` names from [paint.md](paint.md)
+Fourteen pattern folders exist, the twelve `paint_pattern` names from [paint.md](paint.md)
 plus `BROADWAY` and `ITSTAXI`. Filenames are the aircraft skin names (`BLO_WING.BM`,
 `FUR_FUSALAGE1.BM`, `KES_FLAP.BM`), matching the `blo`/`fur`/`kes` prefixes in
 [gamez.md](gamez.md). Not every pattern covers every aircraft: `FORTUNE` has all 62 skins,
 `BLCKSWAN` only the 5 Fury ones.
 
-**Header** — two `u16`, **height first**:
+**Header**, two `u16`, **height first**:
 
 | Offset | Field |
 |---|---|
@@ -137,14 +137,14 @@ The order was settled by comparing against the game's own textures of the same n
 
 **Row order is BOTTOM-UP.** Rows are stored last-to-first relative to
 the ZBD textures and to PNG, so a consumer must read source row `height-1-y` when writing row
-`y`. Rendering the masks without this mirrors every livery along the texture's V axis — found
+`y`. Rendering the masks without this mirrors every livery along the texture's V axis, found
 by the user in-game ("the stripes are on the wrong sides of the wings and tail", with the
 Black Swan Fury, whose livery should read close to its unpainted skin, as the clearest tell).
 
 Confirmed by structural (edge-map) cross-correlation of each `.BM` shading map against the
 ZBD texture of the same name, over all four orientations and all 55 same-sized `FORTUNE`
 pairs. Restricted to pairs that can actually discriminate (peak correlation > 0.25 and a
-margin > 0.08 over the runner-up), **flipV wins 24 to 3**, and it holds every large margin —
+margin > 0.08 over the runner-up), **flipV wins 24 to 3**, and it holds every large margin,
 `bal_fuslage` 0.68 vs 0.02, `bri_wingbottom` 0.70 vs −0.02, `pea_spinner` 0.78 vs 0.09,
 `war_engine` 0.91 vs 0.59. The same test on the paint masks against the ZBD skins' own
 body-hue regions agrees. The three dissenters (`fir_engine`, `dev_spinner`, `bri_reartop`)
@@ -155,14 +155,14 @@ are unexplained and listed under Open.
 | Range | Content |
 |---|---|
 | `[0, 3n)` | 24bpp RGB shading map |
-| `[3n, 6n)` | three 8-bit paint-region weight masks — slot 1, 2, 3 |
+| `[3n, 6n)` | three 8-bit paint-region weight masks, slot 1, 2, 3 |
 | `[6n, 10n)` | 32bpp pattern/decal overlay with alpha |
 
 ### The shading map
 
 Effectively greyscale: measured over the base plane of every pattern's most-saturated skin,
 mean chroma is **2.5–5.0 / 255**. It carries the panel lines, rivets and baked shading, and no
-paint. It is *not* the same image as the game's texture of the same name — `texture.zbd`'s
+paint. It is *not* the same image as the game's texture of the same name, `texture.zbd`'s
 `blo_wing` is the blue-gray key texture described in [paint.md](paint.md), while the `.BM` is
 a neutral luminance map at the same dimensions.
 
@@ -170,7 +170,7 @@ a neutral luminance map at the same dimensions.
 
 **The three 8-bit planes at `[3n, 6n)` are per-pixel blend weights, one per paint colour slot,
 and they sum to 255.** This is the region table [paint.md](paint.md) records as absent from the
-data — it was in the UI archive all along.
+data, it was in the UI archive all along.
 
 They are weights, not indices, which matters: the values cluster at 0 and 255 with a scatter of
 intermediates, and those intermediates are **antialiased region borders**. An index encoding
@@ -180,7 +180,7 @@ approach had to reintroduce soft membership precisely to stop borders speckling.
 Verification, over all 184 skins: the three planes sum to 250–260 for **>97% of pixels in 100
 files**, and for 89–96% in most of the rest (the shortfall is concentrated at borders and in
 fully-unpainted skins). Rendering slot1/slot2/slot3 as R/G/B makes the patterns legible
-directly — `HUGHES` resolves into clean rectangular blocks, `FORTUNE` into a curved swoosh
+directly, `HUGHES` resolves into clean rectangular blocks, `FORTUNE` into a curved swoosh
 that matches the white swoosh on the red Fortune Hunters Bloodhawk in
 `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png`.
 
@@ -191,14 +191,14 @@ shaded_paint = shading_map * (w1*colour1 + w2*colour2 + w3*colour3) / 255
 ```
 
 with the overlay composited over the result. Regions with **no hue at all** are expressible
-this way, which is what the hue-window approach structurally could not do — see "Known
+this way, which is what the hue-window approach structurally could not do, see "Known
 divergences" in [paint.md](paint.md).
 
 ### The overlay layer
 
 `[6n, 10n)` is 32bpp with a meaningful 4th channel, holding the pattern's decorative artwork
 (stripes, flashes, squadron marks) as a layer to composite over the painted skin. It is
-**all-zero for parts a pattern does not decorate** — `BLCKSWAN/FUR_WING.BM` has an empty
+**all-zero for parts a pattern does not decorate**, `BLCKSWAN/FUR_WING.BM` has an empty
 overlay, so a pattern can leave a part plain.
 
 Channel order within the overlay is unconfirmed: the content inspected so far is greyscale, so
@@ -209,13 +209,13 @@ RGBA and BGRA are indistinguishable on it.
 - **Overlay channel order and blend mode.** Greyscale content leaves RGBA vs BGRA
   undetermined. The remake composites it as straight alpha-over-RGB and renders correctly on
   everything inspected, which is consistent with but does not prove that reading.
-- **Slot order.** *Confirmed * — file order **is** `paint_color1..3`. Rendering the
+- **Slot order.** *Confirmed *, file order **is** `paint_color1..3`. Rendering the
   Fortune Hunters Bloodhawk with all three plausible assignments against
   `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` singled one out: only
   *(red, black, white)* puts black on the outer wing panels with the white swoosh between
   them. See [paint.md](paint.md) "Slot order, confirmed".
 - **`BROADWAY` and `ITSTAXI`** are pattern folders with no matching `paint_pattern` in
-  `vehicle.json` — probably story/cutscene liveries.
+  `vehicle.json`, probably story/cutscene liveries.
 - **The three dimension mismatches** (of 173) between `.BM` header and `texture.zbd` were not
   chased; likely UI-only variants.
 - **Three skins prefer unflipped rows.** `fir_engine` (0.95 vs 0.68), `dev_spinner` (0.99 vs
@@ -230,8 +230,8 @@ RGBA and BGRA are indistinguishable on it.
 
 `ExtractRof.ps1` (repo root) unpacks both archives into `extracted\rof\`, writing every member
 at its archive path, and additionally decodes each `.BM` to `<name>.png` (shading map) and
-`<name>_mask.png` (R/G/B = slots 1/2/3). It also emits the string table — see
-[strings.md](strings.md) — and the decoded menu layout `menu_layout.json` — see
+`<name>_mask.png` (R/G/B = slots 1/2/3). It also emits the string table, see
+[strings.md](strings.md), and the decoded menu layout `menu_layout.json`, see
 [menu-layout.md](menu-layout.md). Run `.\ExtractRof.ps1`; `-Raw` skips the decoding, `-Force`
 re-runs an up-to-date extraction.
 

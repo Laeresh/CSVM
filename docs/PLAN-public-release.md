@@ -67,7 +67,7 @@ release justifies it, which is a fact this plan cannot have in advance.
   bullet in `docs/architecture.md`) / `docs/formats/` are updated in the same turn** as each landed
   item; a landed item gets its record in the landing commit's message and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
-- **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
+- **Read `docs/verification.md` before measuring anything**, the instruments here mislead; cite the
   rule that bites per item.
 - **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
   mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
@@ -80,30 +80,30 @@ release justifies it, which is a fact this plan cannot have in advance.
 
 Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
 
-### Wave A — What must be true before strangers play
+### Wave A, What must be true before strangers play
 
 1. ☑ Triage `backlog.md` against the release bar
 2. ☑ `BL-694` CM14 becomes unwinnable when the Gemini dies before its cannon bays
 
-### Wave B — What the package says about itself
+### Wave B, What the package says about itself
 
 11. ☑ A version the build states in its exe, its log and its filename
 12. ☑ The third-party notices the binary is obliged to carry
 13. ☑ An exported build writes `logs\`, and the README says where saves live
 
-### Wave C — The first run on someone else's machine
+### Wave C, The first run on someone else's machine
 
 21. ☑ Extraction without a terminal, and a screen for the player who skipped it
 22. ☑ The renderer floor, observed rather than assumed
 
-### Wave D — What the public reads
+### Wave D, What the public reads
 
 31. ☑ Pre-flip audit: the method claim, and the tracked files a stranger reads
 32. ☑ `packaging/README.md` rewritten for a reader nobody knows
 33. ☑ `.github/`: the bug form and the policies
 34. ☑ `PublishRelease.ps1`: tag, versioned zip, checksum, release
 
-### Wave E — The flip
+### Wave E, The flip
 
 41. ☐ A clean-machine run of the downloaded zip, above and below the floor
 42. ☐ Release notes, the first tag, the flip, and an announcement draft
@@ -134,7 +134,7 @@ method wording, so it inherits their sentence rather than writing a second one.
 
 ---
 
-# Wave A — What must be true before strangers play
+# Wave A, What must be true before strangers play
 
 ## A1 ☑ Triage `backlog.md` against the release bar
 
@@ -333,7 +333,7 @@ are corrected in `backlog.md`: both were waiting on this open question, and `BL-
 evidence needs re-reading against `docs/verification.md`'s DIAG-25, since a bay killed by another
 definition's call writes no `[anim] damage:` line at all.
 
-# Wave B — What the package says about itself
+# Wave B, What the package says about itself
 
 ## B11 ☑ A version the build states in its exe, its log and its filename
 
@@ -444,7 +444,7 @@ directory.
 new top-level `logs/` would be committed. What the exported build writes must not change what a repo
 run writes.
 
-# Wave C — The first run on someone else's machine
+# Wave C, The first run on someone else's machine
 
 ## C21 ☑ Extraction without a terminal, and a screen for the player who skipped it
 
@@ -544,7 +544,7 @@ procedure of its own and `-MapReadOnly` for the retail install; `docs/tooling.md
 cost to make it honest, including that a `<VGpu>` spelling of the vGPU element is ignored silently,
 which makes a below-floor run test a machine with the host's GPU passed through.
 
-# Wave D — What the public reads
+# Wave D, What the public reads
 
 ## D31 ☑ Pre-flip audit: the method claim, and the tracked files a stranger reads
 
@@ -858,7 +858,7 @@ ended that run, because under `$ErrorActionPreference = 'Stop'` a native command
 stderr becomes a terminating `NativeCommandError`, and "release not found" is the expected answer
 when the tag has not been published yet.
 
-# Wave E — The flip
+# Wave E, The flip
 
 ## E41 ☐ A clean-machine run of the downloaded zip, above and below the floor
 

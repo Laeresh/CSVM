@@ -846,7 +846,7 @@ The four red-listed category ids are `0x1f42`, `0x1f46`, `0x1f49` and `0x1f8d`, 
 assigns the text into the `std::string` at entity `+0x10` at `0x0047c9c8`. A key the string table
 does not know is copied verbatim instead (`0x0047ca98`–`0x0047cafd`).
 
-⚠ **A block that authors an empty `title` gets no name line at all** — the branch at `0x0047c9a7`
+⚠ **A block that authors an empty `title` gets no name line at all**, the branch at `0x0047c9a7`
 leaves the string empty. That is 239 of the install's 414 roster blocks, so most enemies in the
 original show a box and no name.
 
@@ -963,7 +963,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 
 ⚠ **The "no reference to copy" claim once made in `VersusHud`'s module doc was false.** The
 original draws an edge arrow with a stacked tag and clock bearing, which is what CSVM's
-`DrawOpponent` edge branch already does — corrected in the code itself.
+`DrawOpponent` edge branch already does, corrected in the code itself.
 
 ⚠ **Fixed 20 × 16 pixels does not port literally.** The original never scales its box, so on a
 modern display it would be nearly invisible. Scaling through `HudMetrics` like every other CSVM HUD

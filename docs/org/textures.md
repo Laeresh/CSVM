@@ -73,7 +73,7 @@ Derived, not from the file: `+0x00` is `width * height` (`FUN_0052f700`), and `+
 | Bit | Meaning | Evidence |
 |---|---|---|
 | `0x01` | 2 bytes per pixel (16-bit rather than 8-bit paletted) | `FUN_0052f680` returns `1 + (flags & 1)`, and that is the multiplier in `FUN_0052f6b0`'s buffer size |
-| `0x02` | the texture has an alpha channel; the hardware draw routes a polygon carrying it through the sorted transparent queue, and the software draw alone skips its lighting | `FUN_00554550` tests it for sorting, blending and the shadow and lightmap passes only; `FUN_005524d0` skips the per-vertex light evaluation on it — see [`vertexLighting.md`](vertexLighting.md) |
+| `0x02` | the texture has an alpha channel; the hardware draw routes a polygon carrying it through the sorted transparent queue, and the software draw alone skips its lighting | `FUN_00554550` tests it for sorting, blending and the shadow and lightmap passes only; `FUN_005524d0` skips the per-vertex light evaluation on it, see [`vertexLighting.md`](vertexLighting.md) |
 | `0x04` | the texture has none; complementary to `0x02` in every shipped header | read off all eight `texture.zbd` directories against the extractor's own `alpha` field |
 | `0x08` | a separate alpha plane follows the pixel data | `FUN_0052f860` reads `width*height` further bytes into `+0x14` only when set |
 | `0x10` | use the global palette, skip the local one | `FUN_0052f860` skips the local palette read when set |
@@ -306,7 +306,7 @@ decision, offset by one engine knob.
 
 `MipBias <f>` is a boot-script command (`FUN_005b80a0` at `0x005ba8a4`). It applies on the hardware
 path only, clamps its argument into `[-1, 1]` (`FUN_0059df30`) and is flushed as
-`SetRenderState(46, …)` — `D3DRENDERSTATE_MIPMAPLODBIAS` — by `FUN_005a0c00`. The device default is
+`SetRenderState(46, …)`, `D3DRENDERSTATE_MIPMAPLODBIAS`, by `FUN_005a0c00`. The device default is
 0 (`FUN_005a8800` at `0x005a8857`). It is one global state for the whole device, not a per-texture
 setting, and nothing resets it between chapters.
 

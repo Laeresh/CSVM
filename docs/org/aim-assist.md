@@ -1,4 +1,4 @@
-# Sticky bullets — the gun aim assist, decoded from `crimson.exe`
+# Sticky bullets, the gun aim assist, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
 `crimson.exe`, `language x86:LE:32:default`), 2026-08-10, settling `BL-091`. Every claim below
@@ -8,9 +8,9 @@ names the function or address it came from. A second pass on 2026-08-12 settled 
 Everything here is a description of *behaviour*. No decompiler output is reproduced; the addresses
 are given so any claim can be re-checked at source.
 
-**Where the other halves live.** The authored side — the four `player.json` keys and their shipped
-values — is [`formats/vehicle.md`](../formats/vehicle.md)'s `player.json` table, which now points
-here rather than guessing. The weapon side — `RANGE`, `VELOCITY`, `CANNON_SPREAD` — is
+**Where the other halves live.** The authored side, the four `player.json` keys and their shipped
+values, is [`formats/vehicle.md`](../formats/vehicle.md)'s `player.json` table, which now points
+here rather than guessing. The weapon side, `RANGE`, `VELOCITY`, `CANNON_SPREAD`, is
 [`formats/weapons.md`](../formats/weapons.md). CSVM has **no implementation**; building one is
 `BL-342`.
 
@@ -31,18 +31,18 @@ It also applies to **the local player only**. AI gunnery is a separate, simpler 
 
 | Address | Role |
 |---|---|
-| `FUN_004735b0` @ `0x004744e0`–`0x004745ad` | `player.json` reader — parses the four keys into globals |
-| `FUN_004897c0` | Sim tick — advances `DAT_0071c470` (game time) and drives the two functions below |
-| `FUN_004b6820` | Per-weapon fire loop — decides a round goes out, then asks for its direction |
+| `FUN_004735b0` @ `0x004744e0`–`0x004745ad` | `player.json` reader, parses the four keys into globals |
+| `FUN_004897c0` | Sim tick, advances `DAT_0071c470` (game time) and drives the two functions below |
+| `FUN_004b6820` | Per-weapon fire loop, decides a round goes out, then asks for its direction |
 | `FUN_004b6530` | **The assist.** Builds the target scan, applies smoothing + scatter, returns the launch vector |
 | `FUN_004bae60` / `FUN_004bb110` / `FUN_004bb3b0` / `FUN_004bb660` | Per-candidate scorer, once per entity list. **Byte-identical scoring**; they differ only in the container accessor |
 | `FUN_00441830` | Post-spawn hook that registers a round in the tracked-ordnance list (`LAB_004417c0` removes it) |
-| `FUN_0041f9c0` | The shared "best target across all four lists" query — not part of the assist, but it fixes the lists' priority order |
+| `FUN_0041f9c0` | The shared "best target across all four lists" query, not part of the assist, but it fixes the lists' priority order |
 | `FUN_00460e30` | Lead/intercept solver (quadratic) |
-| `FUN_004b3e50` | **Per-frame slot update** — the forget timer and the catch-up slerp |
+| `FUN_004b3e50` | **Per-frame slot update**, the forget timer and the catch-up slerp |
 | `FUN_00460840` | Slerp-toward with snap (`FUN_00538d70` is the slerp) |
 | `FUN_00460940` → `FUN_004608a0` | Random cone scatter about a direction |
-| `FUN_00440ad0` | Returns `DAT_0064f750` — the **network-game flag** (set at `0x00440247` from the `"Network"` subsystem lookup at `0x006237f4`) |
+| `FUN_00440ad0` | Returns `DAT_0064f750`, the **network-game flag** (set at `0x00440247` from the `"Network"` subsystem lookup at `0x006237f4`) |
 
 Globals: `DAT_0071c470` = game time (seconds, advanced by `DAT_009ad744` = frame `dt`);
 `DAT_0071c298` = the local player's plane.
@@ -50,28 +50,28 @@ Globals: `DAT_0071c470` = game time (seconds, advanced by `DAT_009ad744` = frame
 Weapon-def offsets used: `+0x1c` = `RANGE`, `+0x20` = **`RANGE²`** (precomputed at `0x005adfb8`),
 `+0x2c` = `VELOCITY` in m/s (written at `0x005ae0b8`; a `TIME_TO_MAX_RANGE` reciprocal and a
 `GRAVITY`-derived `sqrt(2·g·RANGE)` both write the same slot earlier in the parse, and both are
-overwritten — `GRAVITY` is 0 for every weapon in this install), `+0x210` = pointer to a secondary
+overwritten, `GRAVITY` is 0 for every weapon in this install), `+0x210` = pointer to a secondary
 block whose `+0x08` is the **assist-cone cosine** (see below: it is `−cos(CANNON_SPREAD)`).
 
-## The four keys — what the parser actually stores
+## The four keys, what the parser actually stores
 
 | Key | Global | Transform at parse | Built-in default |
 |---|---|---|---|
 | `sticky_bullet_catchup_rate` | `0x0071c454` | stored raw | `1.0` |
-| `sticky_bullet_inaccuracy` | `0x0071c458` | **× `[0x006040e8]` = π/180** — the file value is in **degrees** | `1°` |
+| `sticky_bullet_inaccuracy` | `0x0071c458` | **× `[0x006040e8]` = π/180**, the file value is in **degrees** | `1°` |
 | `sticky_bullet_forget_interval` | `0x0071c45c` | stored raw, seconds | `0.5` |
 | `sticky_bullet_dist_factor` | `0x0071c460` | stored raw, per metre | `2.5e-4` |
 
 ⚠ **An original-game bug in the defaults.** The *missing-key* branch for `inaccuracy`
-(`0x00474550`) writes its default to **`0x0071c454`** — `catchup_rate`'s global — not to
+(`0x00474550`) writes its default to **`0x0071c454`**, `catchup_rate`'s global, not to
 `0x0071c458`. If `sticky_bullet_inaccuracy` were absent from `player.json`, the game would set
 catch-up to `0.001745` and leave inaccuracy uninitialised. The shipped `player.json` always
 carries the key, so the branch never fires; do not reproduce it.
 
 The key parsed immediately *before* `catchup_rate` lands in `0x0071c450` and has **zero readers**
-anywhere in the binary — genuinely dead, unlike these four.
+anywhere in the binary, genuinely dead, unlike these four.
 
-## Per-muzzle state — 8 slots on the plane
+## Per-muzzle state, 8 slots on the plane
 
 Eight 0x24-byte slots at plane `+0x3a4`, indexed `weaponGroup·2 + barrelToggle` (4 groups × the 2
 alternating barrels; `FUN_004b6820` computes the index from `+0x604`/`+0x4c4`).
@@ -79,24 +79,24 @@ alternating barrels; `FUN_004b6820` computes the index from `+0x604`/`+0x4c4`).
 | Offset in slot | Field |
 |---|---|
 | `+0x00` | muzzle attachment handle (0 = slot unused) |
-| `+0x04` | **smoothed direction** — what the round is actually fired along |
-| `+0x10` | **target direction** — what the smoothed one is chasing |
+| `+0x04` | **smoothed direction**, what the round is actually fired along |
+| `+0x10` | **target direction**, what the smoothed one is chasing |
 | `+0x1c` | last-update time |
 | `+0x20` | flags byte |
 
 ⚠ **Both directions are held in plane-local space.** `FUN_004b3e50` resets the target to
-`(0, 0, −1)` — local forward — and does the catch-up slerp there. The assist therefore lags *your
+`(0, 0, −1)`, local forward, and does the catch-up slerp there. The assist therefore lags *your
 own* manoeuvring as well as the target's, and a hard roll drags the gun line with it. Smoothing in
 world space is a different feel and would be the wrong port.
 
-## On fire — `FUN_004b6530`
+## On fire, `FUN_004b6530`
 
 Called from `FUN_004b6820` only when a round is actually going out, and only for
 `param_1 == DAT_0071c298`. Steps:
 
 1. Seed the slot's target direction with the plane's own forward axis, and stamp `+0x1c` with the
    current time. This is the "no target found" answer.
-2. Build a scan context — muzzle position, the weapon def, a best-score cell initialised to
+2. Build a scan context, muzzle position, the weapon def, a best-score cell initialised to
    **`−FLT_MAX`** (`0xff7fffff`), and a best-direction cell aliasing the slot's target direction.
 3. Run the four scorers over the four entity lists (identified below). All four score identically,
    so **the assist is not aircraft-only.**
@@ -104,34 +104,34 @@ Called from `FUN_004b6820` only when a round is actually going out, and only for
 5. Rotate the slot's **smoothed** direction local→world into the output. Note the asymmetry: the
    scan updates the *target*, and what gets fired is the *smoothed* value from previous frames.
 6. Apply the scatter cone (below).
-7. If the network flag is set, also cache the result at plane `+0x704` — the direction sent on the
+7. If the network flag is set, also cache the result at plane `+0x704`, the direction sent on the
    wire. Remote planes' shots use `+0x704`–`+0x70c` verbatim and never run the scan, so **the
    assist is computed once, by the shooter's own machine**.
 
-### The four lists — what the assist can snap onto
+### The four lists, what the assist can snap onto
 
 | Global | Scorer | What it holds |
 |---|---|---|
-| `DAT_0071dabc` | `FUN_004bae60` | **`VehicleList`** — aircraft and AI ground/sea vehicles. Named by its net registration at `FUN_004729b0` (`s_VehicleList_00627414`, packer `LAB_00472b20`); it is also the list `FUN_004897c0` walks as the per-plane sim pass. |
+| `DAT_0071dabc` | `FUN_004bae60` | **`VehicleList`**, aircraft and AI ground/sea vehicles. Named by its net registration at `FUN_004729b0` (`s_VehicleList_00627414`, packer `LAB_00472b20`); it is also the list `FUN_004897c0` walks as the per-plane sim pass. |
 | `DAT_0071d914` | `FUN_004bb110` | **Turrets.** The function that owns it, `FUN_004ac170`, carries three `D:\zipper\Crimson\turret.cpp` assert strings (`0x004ac1ce`, `0x004ac26f`, `0x004ac4f8`). |
-| `DAT_0071d33c` … `DAT_0071d340` | `FUN_004bb3b0` | **`MStructList`** — the mission structures loaded from `targets.zrd`. A flat `vector<T*>` (stride 4, addressed **by index** over the wire), net-registered at `0x004a2b17` under `MStructList` / `MStruct_%03d` (`0x00629678`). |
-| `DAT_0064f78c` | `FUN_004bb660` | **Live proximity-fused ordnance in flight** — see below. |
+| `DAT_0071d33c` … `DAT_0071d340` | `FUN_004bb3b0` | **`MStructList`**, the mission structures loaded from `targets.zrd`. A flat `vector<T*>` (stride 4, addressed **by index** over the wire), net-registered at `0x004a2b17` under `MStructList` / `MStruct_%03d` (`0x00629678`). |
+| `DAT_0064f78c` | `FUN_004bb660` | **Live proximity-fused ordnance in flight**, see below. |
 
 That last one is worth spelling out because it is not a static entity category. `FUN_00441830`
 runs immediately after **every** projectile spawn (both spawn sites in `FUN_004b6820`) and pushes a
 0x70-byte tracking record onto `DAT_0064f78c` when either
 
-- the weapon def's secondary-block flag `0x20` is set — the record then carries a localised label
+- the weapon def's secondary-block flag `0x20` is set, the record then carries a localised label
   pulled by `FUN_0059ce40(0x2f6a)`; or
 - the def's `+0x44` exceeds `0.01`. That field is **`DETONATION_DISTANCE` squared**
-  (`0x005adbb9`, key string at `0x0063d148`), so the test is a proximity fuse longer than 0.1 m —
+  (`0x005adbb9`, key string at `0x0063d148`), so the test is a proximity fuse longer than 0.1 m,
   the 13 ordnance carriers in [`formats/weapons.md`](../formats/weapons.md).
 
 The record is unhooked when the round dies (the removal thunk at `LAB_004417c0` is stored in the
 projectile at `+0x68c`), and `FUN_004bb660` additionally skips records whose `+0x6c` byte is clear.
 
-⚠ **So the assist will snap your guns onto an enemy rocket in flight.** `FUN_0041f9c0` — the shared
-"best target" query used elsewhere — ranks this list **above** all three others, which is
+⚠ **So the assist will snap your guns onto an enemy rocket in flight.** `FUN_0041f9c0`, the shared
+"best target" query used elsewhere, ranks this list **above** all three others, which is
 consistent with it being the incoming-threat list. It also matches `wep_14` (TORPDO) shipping
 `FLYOUT_HEALTH 10` + `TARGETABLE`: trackable ordnance is a deliberate design, not an accident of
 the container.
@@ -142,9 +142,9 @@ Rejections, in order:
 
 - the candidate is the local player itself;
 - a virtual predicate at vtable `+0x14` returns true (dead / not yet live);
-- **same team** — the `+0x08` team id matches the player's, or either is 0;
+- **same team**, the `+0x08` team id matches the player's, or either is 0;
 - `FUN_00460e30` finds no intercept;
-- `speed² · t² > RANGE²` — the round could not reach the intercept point inside the weapon's
+- `speed² · t² > RANGE²`, the round could not reach the intercept point inside the weapon's
   authored range;
 - the intercept direction falls outside the assist cone.
 
@@ -210,11 +210,11 @@ where `alignment` is the dot product of the intercept direction with the plane's
 score wins; the first survivor always beats the `−FLT_MAX` seed.
 
 ⚠ **`dist_factor` ships at `0.0`, which deletes the distance term entirely.** Selection is then
-purely "whose intercept is closest to my gun axis" — a distant target dead ahead outranks a near
+purely "whose intercept is closest to my gun axis", a distant target dead ahead outranks a near
 one slightly off-axis, at any range inside `RANGE`. The executable's own default is `2.5e-4` per
 metre, i.e. a 1000 m target loses 0.25 of alignment; the shipped data deliberately turns that off.
 
-### The lead solver — `FUN_00460e30`
+### The lead solver, `FUN_00460e30`
 
 A textbook constant-velocity intercept, in the numerically stable form. Given muzzle position,
 projectile speed, target position and the **relative** velocity (target velocity minus the
@@ -226,7 +226,7 @@ player's), it solves for `u = 1/t` in
 
 taking the root via `a / (b ± √disc)` rather than the unstable `(−b ± √disc) / 2a`, and returns
 `aimDir = normalize(relVel + displacement / t)` plus `t`. It fails (returns 0) on zero separation
-or a negative discriminant — i.e. a target outrunning the round is simply not assisted. The square
+or a negative discriminant, i.e. a target outrunning the round is simply not assisted. The square
 root is the `(x >> 1) + 0x1fc00000` bit-trick approximation, so the lead is accurate to roughly a
 per-cent, not exactly.
 
@@ -270,14 +270,14 @@ freeze flag `+0xd4` is set, so `+0x924` keeps the zero the spawner wrote, and th
 `FUN_00451bf0` places its hull with a zero velocity too. The velocity is a property of having been
 woken, not of having a route.
 
-### The scatter cone — `FUN_004608a0`
+### The scatter cone, `FUN_004608a0`
 
 Build any perpendicular to the aim direction, rotate it about the aim axis by `rand()/32767 · 2π`
 (uniform roll), then rotate the aim direction about that perpendicular by
 `rand()/32767 · inaccuracy`.
 
 ⚠ **The polar angle is uniform in `[0, θmax]`, not uniform over the solid angle.** Sampling
-uniformly on the cap — the reflex when porting — puts noticeably more shots near the rim. With
+uniformly on the cap, the reflex when porting, puts noticeably more shots near the rim. With
 `inaccuracy 1.0` the cone is 1° wide.
 
 **This is the only scatter.** `CANNON_SPREAD` was assumed to be a second, larger per-gun dispersion
@@ -285,7 +285,7 @@ term composing with it somehow; it is not a dispersion term at all (above). A pl
 perturbed once, by `inaccuracy`; an AI's round once, by the plane's `+0x95c` dead-eye scalar. There
 is no second stage.
 
-## Per frame — `FUN_004b3e50`
+## Per frame, `FUN_004b3e50`
 
 Called from `FUN_004897c0`'s per-plane pass, **local player only**. For each of the 8 slots with a
 live handle and its flag byte set:
@@ -298,10 +298,10 @@ live handle and its flag byte set:
 2. **Catch up.** Slerp the smoothed direction toward the target direction by
    `catchup_rate × dt`, snapping outright once that product reaches `1.0`.
 
-With the shipped `catchup_rate 5.0` that is a ~0.2 s time constant — and a **full snap on any
+With the shipped `catchup_rate 5.0` that is a ~0.2 s time constant, and a **full snap on any
 frame longer than 200 ms**, which is a real hitch-behaviour difference, not a rounding detail.
 
-## What the gun pipper follows — the assist stays invisible
+## What the gun pipper follows, the assist stays invisible
 
 Decoded 2026-08-13 for `BL-342`/B5, which asked the question rather than assuming the answer. **The
 pipper does not follow the assist.** It marks where a round fired now would be after **half a
@@ -310,7 +310,7 @@ second**, along the plane's **nose axis**, and it never reads the assist slots' 
 The sight is a world-space sprite object built once at startup in `FUN_00463f40`: the
 `impact_point` texture (string `0x00627280`) at `0x00464234` → `DAT_0064eef0`, beside a second
 sprite on `alignment_point` (`0x00627290`) → `DAT_0071d244`. Its constructor seeds the object's
-range field `+0x70` with **430.0** (`0x43d70000`) — the default muzzle speed below, halved. Its
+range field `+0x70` with **430.0** (`0x43d70000`), the default muzzle speed below, halved. Its
 class overrides three vtable slots at `0x00607bec`:
 
 | Slot | Function | What it does |
@@ -319,12 +319,12 @@ class overrides three vtable slots at `0x00607bec`:
 | 0 | `FUN_004267f0` | **Smooths its range** toward that position's distance (rate-limited, below) |
 | 2 | `FUN_00426930` | Pushes the result to the 2D sprite |
 
-`FUN_00426570` in detail. The speed is the selected weapon group's `VELOCITY` — the def pointer at
-plane `+0x4f4 + group × 0xc`, where `FUN_004b2550` stores it as the group is armed — falling back to
+`FUN_00426570` in detail. The speed is the selected weapon group's `VELOCITY`, the def pointer at
+plane `+0x4f4 + group × 0xc`, where `FUN_004b2550` stores it as the group is armed, falling back to
 **860.0** when no def resolves. It multiplies that by the negated forward row of the plane's basis
 (`+0x198`–`+0x1a0`, the same row `FUN_004b6530` negates for its "no target found" seed), adds the
 plane's own velocity (vtable `+4`), and halves the sum. The muzzle midpoint comes from the **two
-barrel slots of the selected group** at plane `+0x3a4 + i × 0x24` — the assist's own slot array,
+barrel slots of the selected group** at plane `+0x3a4 + i × 0x24`, the assist's own slot array,
 read for the attachment **handle** (`+0x00`) and flag (`+0x20`) only, never for `+0x04`/`+0x10`.
 One live barrel is used alone; neither leaves the plane's own position as the origin.
 
@@ -341,7 +341,7 @@ design, and the assist is meant to be felt, not seen.
 
 ## AI gunnery is a different system
 
-`FUN_004b6530`'s other branch — everything that is not the local player — reads the hardpoint's own
+`FUN_004b6530`'s other branch, everything that is not the local player, reads the hardpoint's own
 authored direction and perturbs it by plane `+0x95c`, the field behind the debug string
 `"Dead eye resulting in maximum inaccuracy %f"` (`0x0062b130`), through the same
 `FUN_00460940` cone. No target scan, no lead solve, no smoothing.
@@ -360,14 +360,14 @@ FEELS right is `PT-43`'s call at the controls, not this page's. Deltas worth nam
 
 | | Original | CSVM today |
 |---|---|---|
-| When it runs | at spawn, per round | built (2026-08-13) — `FlightController.ApplyFireOutcome` computes the direction per gun round and hands it to `ProjectilePool.Spawn`; rockets get none, as here |
-| Target set | vehicles + turrets + `MStruct` targets + **live proximity-fused ordnance**, cone- and range-gated, team-filtered | built (2026-08-13) — `AimAssist.Scan` over an `AimCandidateSet`'s four lists. Vehicles and ordnance (`ProjectilePool.CollectFusedOrdnance`) have real contents; turrets iterate nothing until M4; `MStruct` is approximated by `DestructibleRegistry`. No fire call feeds it yet |
-| Selection | most-aligned intercept (`dist_factor` off) | built — same score, on the shipped `dist_factor 0.0` now parsed into `PlaneStats.StickyBulletDistFactor` |
-| Lead | full constant-velocity intercept on **relative** velocity | built (2026-08-13) — `AimAssist.TryIntercept`, fed by the scan and driving every gun round |
-| Smoothing | slerp in **plane-local** space, ~0.2 s, snaps past 200 ms frames | built (2026-08-13) — `AimAssist.Tick`; what leaves the muzzle is this smoothed value |
-| Forget | resets on time since **last shot**, not since lock loss | built — every round through `AimAssist.FireDirection` restamps its barrel's slot |
-| Scatter | 1° cone, polar angle uniform in `[0, θ]` | built (2026-08-13) — `AimAssist.Scatter` off the shipped `sticky_bullet_inaccuracy`; the wrong `CANNON_SPREAD` scatter was removed in A1 and `ProjectilePool.ApplySpread` (solid-angle, effects only) is deliberately NOT reused |
-| Gun pipper | the nose axis at 0.5 s of flight, range-smoothed — never the assisted line | built — `FlightController.UpdateReticle`, same rule and the same smoother constants |
-| Cone gate | `CANNON_SPREAD` half-angle, per-target `+0x50` override | built — `AimAssist.WeaponConeCos`/`ConeCosFor`, the override branch included even though nothing ships a value |
-| Who gets it | the local player only (`param_1 == DAT_0071c298`); every other plane takes the AI dead-eye branch | built (2026-08-13) — `FlightController.IsHumanPiloted` (default true). CSVM's splitscreen has no single "local player"; the condition that generalises is human-versus-AI, not pane 1 (Decision 7), so every human pane is assisted and CSVM has no AI planes yet to gate out |
-| Multiplayer | shooter-authoritative; the assisted vector is transmitted | deferred to a networking milestone (Decision 5) — CSVM has no networking. `Projectile.cs`'s `Spawn(aimDir)` already keeps the invariant this needs: the direction is a value computed once at the fire call, never re-derived inside `Spawn`, so a future wire can feed a received vector in without re-running the scan per client (`BL-342`/B6) |
+| When it runs | at spawn, per round | built (2026-08-13), `FlightController.ApplyFireOutcome` computes the direction per gun round and hands it to `ProjectilePool.Spawn`; rockets get none, as here |
+| Target set | vehicles + turrets + `MStruct` targets + **live proximity-fused ordnance**, cone- and range-gated, team-filtered | built (2026-08-13), `AimAssist.Scan` over an `AimCandidateSet`'s four lists. Vehicles and ordnance (`ProjectilePool.CollectFusedOrdnance`) have real contents; turrets iterate nothing until M4; `MStruct` is approximated by `DestructibleRegistry`. No fire call feeds it yet |
+| Selection | most-aligned intercept (`dist_factor` off) | built, same score, on the shipped `dist_factor 0.0` now parsed into `PlaneStats.StickyBulletDistFactor` |
+| Lead | full constant-velocity intercept on **relative** velocity | built (2026-08-13), `AimAssist.TryIntercept`, fed by the scan and driving every gun round |
+| Smoothing | slerp in **plane-local** space, ~0.2 s, snaps past 200 ms frames | built (2026-08-13), `AimAssist.Tick`; what leaves the muzzle is this smoothed value |
+| Forget | resets on time since **last shot**, not since lock loss | built, every round through `AimAssist.FireDirection` restamps its barrel's slot |
+| Scatter | 1° cone, polar angle uniform in `[0, θ]` | built (2026-08-13), `AimAssist.Scatter` off the shipped `sticky_bullet_inaccuracy`; the wrong `CANNON_SPREAD` scatter was removed in A1 and `ProjectilePool.ApplySpread` (solid-angle, effects only) is deliberately NOT reused |
+| Gun pipper | the nose axis at 0.5 s of flight, range-smoothed, never the assisted line | built, `FlightController.UpdateReticle`, same rule and the same smoother constants |
+| Cone gate | `CANNON_SPREAD` half-angle, per-target `+0x50` override | built, `AimAssist.WeaponConeCos`/`ConeCosFor`, the override branch included even though nothing ships a value |
+| Who gets it | the local player only (`param_1 == DAT_0071c298`); every other plane takes the AI dead-eye branch | built (2026-08-13), `FlightController.IsHumanPiloted` (default true). CSVM's splitscreen has no single "local player"; the condition that generalises is human-versus-AI, not pane 1 (Decision 7), so every human pane is assisted and CSVM has no AI planes yet to gate out |
+| Multiplayer | shooter-authoritative; the assisted vector is transmitted | deferred to a networking milestone (Decision 5), CSVM has no networking. `Projectile.cs`'s `Spawn(aimDir)` already keeps the invariant this needs: the direction is a value computed once at the fire call, never re-derived inside `Spawn`, so a future wire can feed a received vector in without re-running the scan per client (`BL-342`/B6) |

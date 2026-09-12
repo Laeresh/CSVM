@@ -80,7 +80,7 @@ among them. `snd_turretgun` belongs to `wep_23`/`wep_29` and is reached only thr
 path, which is what a patrol boat and a turret truck run ([turrets.md](turrets.md)).
 
 Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_sound`
-(see [vehicle.md](vehicle.md)) — e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
+(see [vehicle.md](vehicle.md)), e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
 `damaged_engine_sound` is an array of swap candidates for that same slot (`snd_damagedengine`
 install-wide), not a second loop blended over it; the entry's two floats are a pitch-multiplier
 range drawn once per swap. See vehicle.md.
@@ -89,7 +89,7 @@ range drawn once per swap. See vehicle.md.
 
 A sibling of `SETS`: the weighted random sound groups a one-shot `SOUND` animation event resolves
 through when it names a group instead of a plain `snd_*` definition. The combat/destruction
-one-shots go through these — `air_mixed_exp_sg`, `ground_mixed_exp_sg`, `plane_destroy_sg`,
+one-shots go through these, `air_mixed_exp_sg`, `ground_mixed_exp_sg`, `plane_destroy_sg`,
 `bullet_hit_sg`, `bullet_warning_sg`, `window_hit_sg`. Parsed by `SoundDefs.LoadGroups`.
 ⚠ The last three are the incoming-fire set, and two of them are named in `player.json` rather than
 by a `SOUND` event: which one plays on a hit, that all of them play flat despite `snd_ricochet1-4`
@@ -105,10 +105,10 @@ Entry shapes (all start with the group name):
 [name, [dialogueRoot, [line], [line], …]]                         -- a VO chain, NOT a weighted group
 ```
 
-- **`DYNAMIC_WEIGHTS factor`** — the `factor` (0.5 everywhere it appears) is a **recency scalar**:
+- **`DYNAMIC_WEIGHTS factor`**, the `factor` (0.5 everywhere it appears) is a **recency scalar**:
   the member returned last has its weight multiplied by it on the next pick, so the same clip is
   less likely to repeat back-to-back. Members are single-element lists, each weight 1.
-- **Explicit `WEIGHT`** — `snd_plane_die`/`snd_plane_dmg` give each member its own weight and no
+- **Explicit `WEIGHT`**, `snd_plane_die`/`snd_plane_dmg` give each member its own weight and no
   recency decay; their `snd_nothing` at 0.7 is a 70% chance of silence.
 - **VO dialogue chains** (`snd_assignments`, `snd_HI1*`; 222 groups) nest a list where a weighted
   member's name would be: `[firstLine, [line], [line], …]`, an ordered sequence of snd names.

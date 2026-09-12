@@ -18,10 +18,10 @@ these danger zones and target-display flags from its own directives, is decoded 
 ## Stunt objective
 
 An instant-action Stunt Flying run's goal is to fly through a fixed set of **Danger Zones**
-(bridges, tunnels, hangars, arches — hence "stunt"), timed, completable in any order. Each
+(bridges, tunnels, hangars, arches, hence "stunt"), timed, completable in any order. Each
 zone is one gamez marker node whose display name comes from `targets.json`.
 
-### `ia.json` `dzones` — the zone list
+### `ia.json` `dzones`, the zone list
 
 The mission's `ia.json` (see [spawns.md](spawns.md) for the rest of that file) carries a
 top-level `dzones` key: a list of `[dzpathN, dzN]` string pairs, one per zone, in objective
@@ -31,43 +31,43 @@ order.
 "dzones", [ ["dzpath1", "dz1"], ["dzpath2", "dz2"], … ]
 ```
 
-- **`dzN`** is the completion marker — a gamez `Object3d` with `mesh_index -1` (no geometry),
+- **`dzN`** is the completion marker, a gamez `Object3d` with `mesh_index -1` (no geometry),
   sitting directly under the identity `world1` root, so its `translation` is already
   world-space (C1 `dz1` = `(-5186.2, 141.2, -6500.6)`). It sits on the tunnel/bridge/hangar
   opening the player must fly through.
 - **`dzpathN`** is an untextured, vertex-coloured **polyline ribbon** mesh under the world's
-  `dzpaths` group — the AI/guide route through the zone (`dzN`'s point is a vertex of it).
+  `dzpaths` group, the AI/guide route through the zone (`dzN`'s point is a vertex of it).
   Never rendered in the original; the world build skips the whole `dzpaths` subtree (see
   [world-structure.md](world-structure.md)). The remake builds it only under `--debug-dzpaths`.
-  Besides the route polyline it carries **two gate-outline polygons** — the entry and exit
+  Besides the route polyline it carries **two gate-outline polygons**, the entry and exit
   apertures (below).
 
 #### A `dzpathN` mesh is always route + exactly two gates
 
 **Measured over every `dzpathN` in this install: 80 of 80 meshes carry exactly three
 polygons.** One is the route ribbon (3–124 vertices, up to 6.5 km long); the other two are
-closed outline rings, and they are a *matched pair* — 64 of 80 agree in area within 10 %, 29
+closed outline rings, and they are a *matched pair*, 64 of 80 agree in area within 10 %, 29
 of them bit-equal. Their centroids sit a median 11.7 m apart along the route (0 m where the
 aperture is a thin slit, up to 1.65 km where the zone is a long tunnel or valley run). C2/IA1's
 `dzpath1` pair outlines the Seaplane Hangar's front aperture, 1.9 m from the `door`-leaf slit.
 
 The original design specifies a Danger Zone as an **entry volume and an exit volume, both of
-which must be crossed** — deliberately two, so that clipping one volume tangentially does not
+which must be crossed**, deliberately two, so that clipping one volume tangentially does not
 score. The matched polygon pair is that entry/exit pair: the three-polygon shape is
 data-confirmed, the entry/exit reading is design-informed and matches it exactly.
 
-Which polygon index is which is *not* fixed — the route is usually index 0 but not always
+Which polygon index is which is *not* fixed, the route is usually index 0 but not always
 (C4's `dzpath14` has the pair at indices 0 and 1). Classify by **material**: the two gate
 outlines share one material and the route has the odd material; never use polygon index.
 
-**A dzone's node is not always a `dzN` point marker** — it may name real world *geometry*:
+**A dzone's node is not always a `dzN` point marker**, it may name real world *geometry*:
 C2/IA1's first dzone is `sghangar`, the Seaplane Hangar structure itself. Its gamez
 `transform` is the no-transform string `"Initial"` (see [extraction.md](extraction.md)), so
-the node's own origin resolves to the world origin, ~8 km from the building — the zone's
+the node's own origin resolves to the world origin, ~8 km from the building, the zone's
 position must come from the subtree's mesh geometry, not the node transform. Every actual
 `dzN` marker in this install (all 53, measured) is a childless `mesh_index -1` node, so the
 two cases are cleanly distinguishable. The remake anchors such geometry zones on the
-`door`-named leaf pair when present (the flown aperture — the hangar's `sgh_door1`/`sgh_door2`
+`door`-named leaf pair when present (the flown aperture, the hangar's `sgh_door1`/`sgh_door2`
 leave a 20 m front slit), corroborated by `dzpath1`, whose second polygon outlines that front
 aperture 1.9 m away.
 
@@ -77,12 +77,12 @@ gamez contains a `dz6` that is **not** an objective. Always drive the zone set f
 `dzones` list.
 
 Zone counts (this install): C1 5, C1B 5, C2 9, C3 4, C4 14, C5 17; **C1C and C2B have no
-`dzones`** (their IA1 is a different instant-action type) — a stunt run there is empty and
+`dzones`** (their IA1 is a different instant-action type), a stunt run there is empty and
 falls back to free flight.
 
 ### Completion test
 
-**The original does have gate geometry** — the `dzpathN` entry/exit polygon pair above — and
+**The original does have gate geometry**, the `dzpathN` entry/exit polygon pair above, and
 its completion rule is a crossing of both. The remake reads the material-matched pair and requires
 a segment crossing inside each polygon, in either order. `dzN` remains the HUD anchor; `DzRadius`
 is retained for its existing non-scoring consumers. A tangential touch or a plane crossing outside
@@ -95,7 +95,7 @@ Over"); both use the same authored gate test (revisit only if a real mission rea
 
 A **second, separate** file, in the mission's own zrdr archive, keyed on `dzpathN` rather than
 `dzN` (23 files: story missions plus C5/IA1). It is what makes one chapter's fixed zone set
-behave differently per mission. **Nothing in the remake opens it** — it is decoded here, not
+behave differently per mission. **Nothing in the remake opens it**, it is decoded here, not
 consumed. Flat alternating `KEY, [values…]`; all three keys are optional.
 
 | Key | Value | Meaning |
@@ -105,7 +105,7 @@ consumed. Flat alternating `KEY, [values…]`; all three keys are optional.
 | `nosnapshot` | `[dzpathN, …]` | zones that score but capture no scrapbook snapshot |
 
 - **`objective_numbers`** values occupy a fixed **18–31** band across the whole install (14
-  distinct values, contiguous within a mission) — a reserved slot range for danger zones in the
+  distinct values, contiguous within a mission), a reserved slot range for danger zones in the
   mission's objective list, not a zone id. C5/M01 uses all 14.
 - **`disable`** is how a story mission narrows the chapter's zone set: C1/M05 disables five of
   six, leaving one; C2/M05 and C4/M05 disable **every** zone, so those missions have none. It
@@ -119,7 +119,7 @@ consumed. Flat alternating `KEY, [values…]`; all three keys are optional.
 ## Target display keys
 
 A mission's `targets.json` maps world-node names to their objective display text. It is a
-**list of target entries**, and each entry is a **list of `[key, value]` pairs** — *not* the
+**list of target entries**, and each entry is a **list of `[key, value]` pairs**, *not* the
 flat-alternating `KEY, [values…]` reader shape (see the [shared conventions](README.md)); it
 must be walked as pairs.
 
@@ -140,7 +140,7 @@ must be walked as pairs.
 | `category_label` | The target *type* key (`MSG_OBJ_DZ` = "Danger Zone"). Optional. |
 | `help_label` | The *action* key (`MSG_OBJ_FLYTHROUGH` / `MSG_OBJ_FLYOVER` / `MSG_OBJ_REFPOINT`). |
 
-The file is generic across mission types — the same schema labels dogfight zeppelins
+The file is generic across mission types, the same schema labels dogfight zeppelins
 (`MSG_TRGT_ZEP_ENEMY` / `MSG_OBJ_DISABLEENG`) and reference points (`ap_transmitter`
 radio tower). The stunt loader reads only the entries whose node is a `dzN` from `dzones`.
 
@@ -156,7 +156,7 @@ the path wins is unobservable there.
 ## Message table
 
 `MSG_*` keys resolve through the game's localized string table. **This is not a zrdr
-reader** — it is a single top-level file (`extracted/messages.json`, default `--messages=`),
+reader**, it is a single top-level file (`extracted/messages.json`, default `--messages=`),
 a plain JSON object, not a nested list:
 
 ```
