@@ -99,8 +99,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "50b782785c5a9c52ecb57866532020d4",
-      "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, distance puffers on the texture-flag blend, ranged tumble, vector-form pieces, flydirt delta, pooled repeat calls, over world-lit C1 scenery.",
+      "hash": "b61e7b874f1fb235c1a29cab5b2bf1ab",
+      "exercises": "player_crash_default five steps in: corrected pre-crash attitude, crash rig and airframe, texture-flag distance puffers, ranged tumble, vector-form pieces, flydirt delta, pooled repeats, the crash notice over the hidden HUD, on world-lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {

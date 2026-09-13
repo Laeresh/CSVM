@@ -2475,20 +2475,29 @@ public partial class GameSession : Node3D
         // works from here on, at build or at any later sim step.
         _flightRoster = flightRoster;
 
-        // Every death posts one line into every pane's message stack, worded and coloured as that
-        // pane reads it (docs/org/vehicleDamage.md "The kill message"). ⚠ Subscribe the roster hook
-        // too: an aircraft a wave or a generator releases never passes through the _rigs loop.
+        // A spent hull posts one line into every pane's stack, worded and coloured as that pane
+        // reads it (docs/org/vehicleDamage.md); one flown into the world takes the notice instead.
+        // ⚠ The roster hook too: an aircraft a wave releases never passes through the _rigs loop.
         void PostKillLine(FlightController victim, int victimId, int? killer)
         {
+            if (!HudMessages.WordsKillLine(victim))
+            {
+                return;
+            }
+
             foreach (var pane in _rigs)
             {
                 if (pane.Controller is not { MessageStack: { } stack } viewer)
                 {
                     continue;
                 }
-                if (_versus is { } m && killer is int k && k >= 0 && k < m.PlayerCount)
+                // Dogfight words a death by seat, so the gate is the VICTIM being one: the decoded
+                // post reads nothing off the killer, and an unattributed death (a mid-air, the
+                // ground) still posts its line. An AI in a match keeps the decoded wording.
+                if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
                 {
-                    stack.Post(VersusHud.KillLine(killer, victimId),
+                    int? seat = killer is int k && k >= 0 && k < m.PlayerCount ? k : null;
+                    stack.Post(VersusHud.KillLine(seat, victimId),
                         HudMessages.SideOf(victim.Team, viewer.Team));
                     continue;
                 }
@@ -2502,6 +2511,15 @@ public partial class GameSession : Node3D
             if (rig.Controller is { } human)
             {
                 human.Downed += (victimId, killer) => PostKillLine(human, victimId, killer);
+                // The crash notice is the local player's own announcement, so it lands in the
+                // crashing pane's stack alone rather than in every pane's.
+                human.GroundImpact += crashed =>
+                {
+                    if (crashed.MessageStack is { } own)
+                    {
+                        HudMessages.PostCrash(own, weaponMessages);
+                    }
+                };
             }
         }
 
@@ -3042,6 +3060,22 @@ public partial class GameSession : Node3D
                 }
 
                 rig.HudParent.AddChild(UI.MissionEndFade.Build(campaign));
+            }
+
+            // The mission clock running out posts its two notices into the same stack a kill line
+            // lands in, every pane's, since every seat is flying the mission that just expired.
+            if (campaign.Graph is { } timerGraph)
+            {
+                timerGraph.TimerExpired += () =>
+                {
+                    foreach (var rig in _rigs)
+                    {
+                        if (rig.Controller?.MessageStack is { } stack)
+                        {
+                            HudMessages.PostTimeExpired(stack, objectiveStrings);
+                        }
+                    }
+                };
             }
             var sites = new ObjectiveSites(campaign, objectiveStrings,
                 MissionTargets.Load(state.MissionZrdrPath,
@@ -3944,7 +3978,7 @@ public partial class GameSession : Node3D
         _originalPause?.Reprime();
         // ⚠ Prime every board reader and re-seed every pause edge, ExitPhotoMode's own hazard: the
         // Escape that left the leaf is still under the player's finger, and would otherwise dismiss
-        // the sheet that just came back or resume the mission behind it (BL-279, BL-429).
+        // the sheet that just came back or resume the mission behind it.
         foreach (var rig in _rigs)
         {
             rig.Controller?.EndPauseLeaf();

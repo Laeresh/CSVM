@@ -676,14 +676,14 @@ has. The per-opponent marker is CSVM's splitscreen answer to the original's rada
 provenance is in [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/HudMessages.cs
-The original's one centred HUD message element, where a kill line lands: four slots a fifth of the
-way down the pane, newest in slot 0, each carrying its own colour and its own five seconds, a newer
-line pushing the older ones down with their remaining time and a re-post of slot 0 refreshing it
-rather than duplicating it. `KillLine` words one death the way the reading pane sees it (the pane's
-own pilot by name, a wingman with no name at all, any other aeroplane by its title, anything that is
-not an aeroplane destroyed), `SideOf` picks the colour arm from the victim's team, and both are
-static, so a suite asserts the decode with no `Control`. Decode:
-[../org/vehicleDamage.md](../org/vehicleDamage.md) "Death".
+The original's one centred HUD message element: four slots a fifth of the way down the pane, newest
+in slot 0, each carrying its own colour and its own five seconds, a newer line pushing the older
+ones down with their remaining time and a re-post of slot 0 refreshing it rather than duplicating
+it. `KillLine` words one death as the reading pane sees it (its own pilot by name, a wingman with
+no name, any other aeroplane by its title, anything else destroyed), `SideOf` picks the colour arm
+off the victim's team, `WordsKillLine` keeps a hull flown into the world off that line, and
+`PostCrash`/`PostTimeExpired` are the two notices that are not a death. All static, so a suite
+asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/AutoDockLine.cs
 The original's auto-dock prompt: one centred line three tenths of the way down the pane, in the
@@ -1050,7 +1050,7 @@ ground-blow write stay on `FlightController`, which has the live world a source 
 ## src/Flight/FlightHud.cs
 Everything one pane draws for its pilot, none of it written from outside: the heading tape, the
 cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker, the targeting
-HUD, `HudMessages`' kill line, `AutoDockLine`'s auto-dock prompt, the `--hud-font-test` overlay and
+HUD, `HudMessages`' message stack, `AutoDockLine`'s auto-dock prompt, the `--hud-font-test` overlay and
 the flight text block. With the cockpit interior on screen the dials, tape and text block come off
 (`SetCockpitView`), its panel carrying them; the pipper, marker, message and prompt HUDs stay.
 `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so text, dials and

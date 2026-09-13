@@ -9,8 +9,9 @@ namespace CSVM.Flight;
 /// lands in: four lines a fifth of the way down the pane, newest in slot 0, each carrying its own
 /// colour and its own five seconds. A new line pushes the older ones down with their remaining
 /// time, and re-posting the line already in slot 0 refreshes it instead of pushing a duplicate.
-/// The kill line's wording, its side colour and the slot geometry are static, so a suite asserts
-/// the decode with no Control in the process. Decode: docs/org/vehicleDamage.md "Death".</summary>
+/// A death, a ground impact and the mission clock running out all post here. The wording, the side
+/// colour and the slot geometry are static, so a suite asserts the decode with no Control in the
+/// process. Decode: docs/org/vehicleDamage.md "The kill message", docs/formats/objectives.md.</summary>
 public sealed partial class HudMessages : Control
 {
     /// <summary>Lines the stack holds (<c>FUN_00458660</c> writes 4 at <c>0x00458698</c>).</summary>
@@ -35,6 +36,19 @@ public sealed partial class HudMessages : Control
     /// <summary>"was destroyed", row 180, taken by any victim that is not an aeroplane, whatever
     /// its team (<c>FUN_0059ce40(0xb4)</c> at <c>0x004b852e</c>).</summary>
     public const string DestroyedKey = "MSG_DESTROYED";
+
+    /// <summary>"Fatal Crash!", row 162, the notice a ground impact posts for the local player
+    /// alone (<c>FUN_0059ce40(0xa2)</c> inside <c>FUN_0048b920</c>'s
+    /// <c>DAT_0071c298</c> arm).</summary>
+    public const string CrashKey = "MSG_CRASH";
+
+    /// <summary>"Time Expired", row 6002, the first line the mission clock running out posts
+    /// (<c>FUN_0059ce40(0x1772)</c> at the objectives tick's head).</summary>
+    public const string TimeExpiredKey = "MSG_TIME_EXPIRED";
+
+    /// <summary>"Mission LOST!", row 137, posted after <see cref="TimeExpiredKey"/> so it reads
+    /// above it, and only where the mission is not already won.</summary>
+    public const string MissionLostKey = "MSG_MISSION_LOST";
 
     // The placement, from FUN_00458a10: x is 0.5 of the display width (0x006032e0) with the
     // centring flag set (the text object's +0x1044, read at 0x005c7e4f), y is 0.2 of its height
@@ -133,6 +147,28 @@ public sealed partial class HudMessages : Control
         int viewerTeam, bool victimIsViewer, string? viewerName) =>
         stack.Post(KillLine(strings, victim, viewerTeam, victimIsViewer, viewerName),
             SideOf(victim.Team, viewerTeam));
+
+    /// <summary>Whether a victim's death report words a kill line at all. The original's
+    /// ground-impact routine posts the crash notice alone, and only its health-zero routine words a
+    /// line, so an aircraft flown into the world is reported to the score and the mission without
+    /// one. The remake carries both deaths on a single report, which is why the fork is here.
+    /// </summary>
+    public static bool WordsKillLine(FlightController victim) =>
+        !victim.Crashed || victim.Destroyed;
+
+    /// <summary>Posts the crash notice into the crashing pilot's own pane, in that player's own
+    /// colour. The original posts it for the local player alone and on every ground impact its
+    /// aircraft performs, the shot-down wreck reaching the ground included.</summary>
+    public static void PostCrash(HudMessages stack, Messages? strings) =>
+        stack.Post(Text(strings, CrashKey), Side.Friendly);
+
+    /// <summary>Posts the mission clock's expiry into one pane's stack: "Time Expired" and then
+    /// "Mission LOST!" over it, both in the stack's default colour.</summary>
+    public static void PostTimeExpired(HudMessages stack, Messages? strings)
+    {
+        stack.Post(Text(strings, TimeExpiredKey), Side.Neutral);
+        stack.Post(Text(strings, MissionLostKey), Side.Neutral);
+    }
 
     /// <summary>Where slot <paramref name="slot"/>'s line is anchored in a pane of
     /// <paramref name="paneSize"/> at HUD scale <paramref name="scale"/>: the horizontal centre,
