@@ -13,7 +13,9 @@ namespace CSVM.Testing;
 /// table flags the radio tower and C1's zeppelin match flags the two rearm bases, and each reaches
 /// the pilot's cycles off the table's own keys with no graph behind them. The destructibles
 /// standing in the same world, the chapter's crates among them, are in the pilot's own structure
-/// scan and reach no cycle at all, which is what the curated list is for.</summary>
+/// scan and reach no cycle at all, which is what the curated list is for. The last arm is the
+/// binding rule that decides who gets this feed, including a campaign launch whose profile did not
+/// load and which therefore flies with no director to edit one.</summary>
 internal static class ModeTargetTableSuites
 {
     private const string Chapter = "C1";
@@ -37,8 +39,9 @@ internal static class ModeTargetTableSuites
         + "Instant Action table's one other_target entry, the radio tower, reaches the pilot's "
         + "Non-Aircraft cycle and neither other cycle; the zeppelin match's two rearm bases reach "
         + "it too while the same table's two airships ride the Enemy cycle as objectives; each "
-        + "cycle holds its own flagged half and nothing else; and not one of the hundred-odd "
-        + "destructibles in the same scan, the chapter's crates among them, reaches any cycle")]
+        + "cycle holds its own flagged half and nothing else; not one of the hundred-odd "
+        + "destructibles in the same scan, the chapter's crates among them, reaches any cycle; "
+        + "and the binding rule itself, which a campaign launch flying without a director passes")]
     internal static void ModeTargetTable(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -49,9 +52,44 @@ internal static class ModeTargetTableSuites
         var report = new StringBuilder();
         Mode(ctx, messages, report, "IA1", NoKeys, new[] { RadioTower });
         Mode(ctx, messages, report, "MP3", MatchAirships, RearmBases);
+        WhoBindsTheTable(ctx, report);
         ctx.Note($"{Chapter}/IA1 and {Chapter}/MP3 offer their own targets.zrd flags with no director bound");
         ctx.WriteArtifact($"test-mode-target-table-{Chapter}.txt", report.ToString());
     }
+
+    // Which sessions reach that feed at all. The director owns the channel when one exists, so a
+    // campaign launch whose profile did not load flies director-free and still gets its mission's
+    // table, where keying the rule on the launch left it with none.
+    private static void WhoBindsTheTable(TestContext ctx, StringBuilder report)
+    {
+        var campaign = SessionSpec.Parse(new[]
+        {
+            "--campaign=csvm-golden:6", "--players=4",
+            "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute",
+        });
+        ctx.Check(campaign.CampaignProfile != null && campaign.WorldMode,
+            $"a --campaign= launch is a world flight that names a profile");
+        ctx.Check(Binds(campaign, hasDirector: false),
+            $"…and with no director behind it, because the profile did not load, it binds the mission's own table");
+        ctx.Check(!Binds(campaign, hasDirector: true),
+            $"…while the same launch with a director bound leaves the channel to the graph");
+
+        var mode = SessionSpec.Parse(new[] { "--chapter=C1", "--mission=IA1" });
+        ctx.Check(Binds(mode, hasDirector: false),
+            $"Instant Action still binds it, the case the rule was written for");
+        ctx.Check(!Binds(mode, hasDirector: false, stunting: true),
+            $"…a stunt run does not, since it owns the same channel per pane");
+        ctx.Check(!Binds(SessionSpec.Parse(new[] { "--stage=empty" }), hasDirector: false),
+            $"…and the empty stage does not, having no mission to read a table from");
+        ctx.Check(!Binds(mode, hasDirector: false, hasWorld: false) && !Binds(mode, hasDirector: false, rigs: 0),
+            $"…and neither does a session with no world runtime or no rig to aim");
+        report.AppendLine("binding: campaign without a director yes, with one no; "
+            + "IA1 yes; stunt, empty stage, worldless and rigless no");
+    }
+
+    private static bool Binds(SessionSpec spec, bool hasDirector, bool stunting = false,
+        bool hasWorld = true, int rigs = 1) =>
+        GameSession.BindsMissionTargetTable(spec, hasDirector, stunting, hasWorld, rigs);
 
     // One mode's session: its own table, the director-free feed over the built world, and the
     // three cycles a pilot standing in it would walk.

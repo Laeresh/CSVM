@@ -812,6 +812,15 @@ public partial class GameSession : Node3D
             HasMissionRecords(() => EnemyGenerators.Load(missionZrdr)));
     }
 
+    // Whether a session binds the mission's own targets.zrd, read with nothing editing it while the
+    // session runs. The director owns that channel when one exists, so this asks for the director
+    // and not for the launch: a --campaign= launch whose profile did not load flies without one and
+    // still gets the table its mission ships. ⚠ Keep the stunt term; a stunt run binds the same
+    // channel per pane. Internal so the mode-target-table suite pins the rule the build runs.
+    internal static bool BindsMissionTargetTable(
+        SessionSpec spec, bool hasDirector, bool stunting, bool hasWorld, int rigs) =>
+        !hasDirector && spec.WorldMode && !spec.EmptyStage && !stunting && hasWorld && rigs > 0;
+
     private static void CopyInstanceShaderParams(Node source, Node copy)
     {
         if (source is GeometryInstance3D from && copy is GeometryInstance3D to)
@@ -3054,12 +3063,12 @@ public partial class GameSession : Node3D
             int flagged = offered.Count(c => c.Source is ObjectiveSite { Objective: true });
             Log.Info("core", $"campaign: {flagged} objective site(s) and {offered.Count - flagged} other-target site(s) on the player's target cycles");
         }
-        else if (_spec.WorldMode && !_spec.EmptyStage && _spec.CampaignProfile == null
-                 && stuntZones == null && state.WorldRuntime != null && _rigs.Count > 0)
+        else if (BindsMissionTargetTable(_spec, _campaign != null, stuntZones != null,
+                                         state.WorldRuntime != null, _rigs.Count))
         {
-            // Instant Action and the multiplayer modes: the same site feed with no director behind
-            // it, since their objectives.zrd carries no target directive. ⚠ A stunt run owns this
-            // channel per pane, and a campaign launch whose profile failed flies as it always has.
+            // Instant Action, the multiplayer modes, and a campaign launch flying without a
+            // director: the same site feed with no graph behind it, so the table's own objective
+            // and other_target keys are the whole answer (see BindsMissionTargetTable).
             var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
                 MissionTargets.Load(state.MissionZrdrPath,
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),

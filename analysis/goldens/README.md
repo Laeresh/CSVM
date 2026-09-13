@@ -45,6 +45,11 @@ current numbers were drawn on. The stage prints a loud line when the running ada
 the recorded one; **that is the case where regenerating is the correct response**, and the commit
 message says so. Every other mass flip is a defect.
 
+One shot depends on the machine in a second way: `campaign-4p-grid` names a campaign profile,
+`csvm-golden`, that lives in `user://Profiles/` and that no checkout carries, so it is pinned as a
+campaign launch flying with no director. A machine whose cabin holds a profile of that name renders
+a different frame from the same tree (`docs/verification.md` GOLD-17).
+
 ## The rule this file exists to enforce
 
 **A landed visual change updates `manifest.json` in the same commit and names the shots it moved in

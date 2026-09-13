@@ -277,6 +277,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   bit. Moving that scale, or normalising the rotated offset, would have moved every flown shot
   without changing the feature at all.
 
+- **GOLD-17**, **A shot whose command line names machine-local user state pins whether that state
+  is present, not the code alone; name the assumption in its `exercises` field.**
+  `campaign-4p-grid` launches `--campaign=csvm-golden:6`, a `CampaignProfileStore` name under
+  `user://Profiles/` that no checkout carries, so the frame it pins is a campaign launch flying
+  with no director, and a machine holding that profile renders a different one.
+
 ## DET, determinism and randomness
 
 - **DET-2**, **Disable live input during scripted runs.**

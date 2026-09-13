@@ -2119,15 +2119,6 @@ usual.
   all inside the damage routine `FUN_004b9bc0`. *Fix shape:* set the flag only from the damage
   arm's entry, and add an `ai-modes` phase that orders an Evade without damage and reads the roll
   still available. *Cross-refs:* `BL-558`'s closing commit, `docs/org/aiControlLaw.md` (SRC-13).
-- `BL-839` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A campaign launch whose profile
-  failed to load binds no target table, because the guard that keeps a director-free world
-  flight off the mode table also excludes it.** *Evidence:* `CSVM/src/Session/GameSession.cs:3013`
-  (at `7d2e9881`) tests `CampaignProfile == null`; it was added because `campaign-4p-grid` flies
-  without its `csvm-golden` profile on the test machine and moved when the mode table bound.
-  *Fix shape:* key the guard on "launched as a campaign", not on the profile having loaded, then
-  either give the grid golden its profile or re-pin it with the cause named. *Cross-refs:*
-  `BL-828`'s closing commit, `docs/verification.md` SRC-14, `analysis/goldens/README.md`.
-
 ## Missions, modes & campaign
 
 - `BL-469` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **An escort cannot hold station on a leader using nitro, and nothing measures
