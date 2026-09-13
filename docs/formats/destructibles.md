@@ -178,15 +178,24 @@ suite asserts both cannons boot standing, and `called-death-chain` asserts the b
 ⚠ The same swap read backwards is a revival, and a def's own death choreography is never one. A
 wreck that clears itself away switches its own destroyed-role nodes back off as a late step of
 dying, and `dbase` is a destroyed-role name here, so taking those events for a repair hands a
-killed pool full HP back after the visible death has played. The sweep finds fourteen defs
-authoring a revival-shaped `OBJECT_ACTIVE_STATE` inside a non-ON_CALL sequence, all of them a
-wreck removing itself: the Barracuda (`sub_destruction`, in both C3/M03 and C3/IA1) switches
-`dbase` off in the same block that hides `subhealthy` and shows `subdestroyed`, then sinks
-`subdestroyed` away 115 s later; C2/M01's four barges (`tugandbarge01` to `04`) drop `dbase1`
-some ten seconds into `barge_destroy0n`, once the hull has settled; and C1/M05's nine lifesavers
-(`lifesaver11` to `lifesaver33`) switch `healthy` and `destroyed` both off in one breath. No def
-in the install authors a genuine repair there, so a revival can only arrive from a `RESET_STATE`,
-an ON_CALL sequence, or another def's script. Regression: the `death-not-a-revival` suite.
+killed pool full HP back after the visible death has played. The death chain that reading covers
+is `AnimRuntime.OwnDeathSequencesOf`: the def's non-ON_CALL sequences, its compiled destruction
+slot, and the ON_CALL sequences those two reach through `CALL_SEQUENCE`. A sweep of the 2,603 defs
+carrying `HEALTH` across all eight chapters' mission programs (a def with no pool has nothing to
+revive, which leaves the aircraft crash defs out of scope) finds fifteen whose death chain authors
+a revival-shaped `OBJECT_ACTIVE_STATE`, all of them a wreck removing itself: the Barracuda
+(`sub_destruction`, in both C3/M03 and C3/IA1) switches `dbase` off in the same block that hides
+`subhealthy` and shows `subdestroyed`, then sinks `subdestroyed` away 115 s later; C2/M01's four
+barges (`tugandbarge01` to `04`) drop `dbase1` some ten seconds into `barge_destroy0n`, once the
+hull has settled; C1/M05's nine lifesavers (`lifesaver11` to `lifesaver33`) switch `healthy` and
+`destroyed` both off in one breath; and C5's `agyrobus` authors its switch in a called sequence,
+`destroy_craft` ending on a `CALL_SEQUENCE` into the ON_CALL `randomdestseq`, one of whose two
+even-odds branches drops `destroyed` as the wreck tumbles under gravity. That last one is the only
+def of the fifteen whose switch sits in a called sequence rather than in its own non-ON_CALL
+sequences or its destruction slot. No def in the install authors a genuine
+repair there, so a revival can only arrive from a `RESET_STATE`, another def's script, or an
+ON_CALL sequence the def's own death chain never calls. Regression: the `death-not-a-revival`
+suite.
 
 The cross-mission state log is the other way an object starts destroyed. The original opens a
 later mission of the chapter on the carried state itself, a destroyed pose (the `PERSIST_LOG`

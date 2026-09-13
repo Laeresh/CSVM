@@ -520,7 +520,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   empty; if it does not, skip `none` cells on the non-swap path. *Cross-refs:* `BL-718`'s closing
   commit (the swap table holds weapon ids, not counts), `docs/formats/vehicle.md`.
 
-- `BL-847` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`docs/formats/destructibles.md` counts an ON_CALL sequence among a wreck's revival sources without the qualifier the runtime now applies.** *Evidence:* the revival paragraph says a revival can arrive from a `RESET_STATE`, an ON_CALL sequence, or another def's script; the runtime treats an ON_CALL sequence the def's own death chain calls through `CALL_SEQUENCE` as part of the death (`AnimRuntime.OwnDeathSequencesOf`), so only an ON_CALL sequence the chain does not call revives. The page's census of defs whose death chain switches `destroyed` back off (fourteen defs in three families) lacks C5's `agyrobus`, whose `destroy_craft` calls `randomdestseq` and one random branch of that switches `destroyed` off. *Fix shape:* qualify the sentence and add the fifteenth def. *Cross-refs:* PLAN-code-review-orch C23 (the runtime change and the census over the 16,114 compiled definitions).
 - `BL-873` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` **C1's refuel-tank debris draws near-black and reads as a
   hole punched through the flame.** *Evidence:* `--freecam --chapter=C1 --destroy=refuel
   --frames=120` and `=240` put faceted shards over the left tank's fire column, each a flat dark
