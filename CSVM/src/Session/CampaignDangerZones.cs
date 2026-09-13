@@ -64,10 +64,10 @@ internal sealed class CampaignDangerZones
         }
 
         if (skipped.Count > 0)
-            Log.Info("campaign", $"danger zones: {skipped.Count} name(s) not armed: {string.Join(", ", skipped)}");
+            Log.Info("core", $"danger zones: {skipped.Count} name(s) not armed: {string.Join(", ", skipped)}");
         if (zones.Count == 0)
             return null;
-        Log.Info("campaign", $"danger zones: {zones.Count} gate(s) armed from objectives.zrd");
+        Log.Info("core", $"danger zones: {zones.Count} gate(s) armed from objectives.zrd");
         return new CampaignDangerZones(zones);
     }
 
@@ -101,7 +101,7 @@ internal sealed class CampaignDangerZones
                 if (z.GreenCrossed && z.RedCrossed)
                 {
                     z.Completed = true;
-                    Log.Info("campaign", $"danger zone '{z.PathName}' completed");
+                    Log.Info("core", $"danger zone '{z.PathName}' completed");
                     onCompleted(z.PathName);
                 }
             }

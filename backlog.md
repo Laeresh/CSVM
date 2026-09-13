@@ -2564,8 +2564,6 @@ usual.
 
 - `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.
 
-- `BL-845` `[Cleanup]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **Five log calls emit under a `campaign` category the vocabulary does not declare, and the logging page names a method that does not exist.** *Evidence:* `Log.Categories` and `docs/org/logging.md` declare nine closed names; `CampaignDirector.cs` (one site), `CampaignDangerZones.cs` (three) and `CampaignPersistLog.cs` (one) emit under `campaign`. The page documents `Log.Block(text)` where the code has `Log.Raw(text)`. *Fix shape:* either add `campaign` to the vocabulary and the page, or move the five to `core`; correct the method name. *Cross-refs:* PLAN-code-review-orch A3.
-
 - `BL-870` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **F16 toggles the all-aircraft markers HUD;
   the node-name labels lose their key.** *Evidence:* `docs/controls.md` has F16 on the node-name
   labels (`--debug-names`), and the markers HUD (`--debug-markers`, every live aircraft's

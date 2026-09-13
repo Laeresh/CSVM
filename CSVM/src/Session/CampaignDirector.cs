@@ -979,7 +979,7 @@ public sealed class CampaignDirector
         string by = t.Source > 0 ? $" by {t.Source}" : "";
         string nap = t.Kind == ObjectiveTransitionKind.Napped ? Log.Format($" for {t.Seconds:0.#}s") : "";
         string gated = t.Gated ? " (held: TICK_DEPENDS_ON_OBJ dependency not awake)" : "";
-        Log.Info("campaign", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
+        Log.Info("core", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
         if (t.Kind == ObjectiveTransitionKind.Completed)
         {
             RetireObjectiveMarkers(t.Number);

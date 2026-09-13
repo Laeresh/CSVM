@@ -13,7 +13,7 @@ reads `16.667` on every machine and never `16,667`. Pass one interpolated string
 concatenation of two, since only the whole `FormattableString` is rendered invariantly.
 
 `Log.Error(cat, message, exception)` adds the exception: the console gets its type and message,
-the file also gets the stack. `Log.Block(text)` writes an already-formatted multi-line block
+the file also gets the stack. `Log.Raw(text)` writes an already-formatted multi-line block
 verbatim to both sinks.
 
 ## Categories
@@ -31,10 +31,15 @@ up on its own.
 | `perf` | the instrument lines (`[perf] startup`, `[perf] hitch`) |
 | `test` | the in-engine assertion harness |
 | `ui` | the launchscreen, the screens and the inspection labs |
-| `core` | the session spine |
+| `core` | the session spine, including the campaign's mission progression |
 
 `ui` is separate from `core` because a user reads the labs' state dumps on purpose and has to be
 able to silence them without silencing the session spine.
+
+A subsystem earns a name of its own only when someone needs to turn it up or down separately from
+everything else. The campaign does not: its director already logs the sortie under `core`, and its
+objective, danger-zone and persist-log lines are the same spine at the same level. A unit test
+walks `CSVM/src` and fails on any category a call site names that is not in the table above.
 
 ## Levels
 
