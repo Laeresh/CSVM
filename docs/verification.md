@@ -258,8 +258,10 @@ member, and it does not go here.
   its state at the moment you measure, not at process start.** A no-fade baseline read 0 steps run
   alone and 44 once an earlier suite in the same process had freed a world.
 - **PERF-28**, **An exact-zero allocation claim needs more than one measurement window: take
-  several and require that ONE of them reads zero, rather than widening the assertion to a
-  tolerance.** A real allocator charges every window alike; a lone charged window is the runtime's.
+  several and require that EVERY one reads zero, rather than widening the assertion to a
+  tolerance.** A rule that accepts one clean window of several passes an allocator that charges
+  intermittently. Report the first charged window's bytes, its gen-0 count, the thread and the
+  module id, which a rerun cannot recover, and prove the windows with a negative control.
 
 ## LOG, logs, error censuses, and exit codes
 

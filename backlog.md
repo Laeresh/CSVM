@@ -2350,16 +2350,6 @@ usual.
   same script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
   PlaneConstruction rows), `docs/org/hangar.md`.
 
-- `BL-833` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The allocation-free scope
-  test passes when any one of its five windows is clean, so an allocator that charges
-  intermittently, the failure shape that was observed, passes.** *Evidence:*
-  `CSVM.Tests/PerfSampleTests.cs:288-305` (at `7d2e9881`) accepts one exactly-zero window of
-  five; the negative control proves only that a constant allocator is still caught. `BL-584`
-  closed with the cause of the original flake unknown. *Fix shape:* require every window clean,
-  keeping PERF-28's diagnostics on the first non-zero one; if that flakes again, the diagnostics
-  are the lead. *⚠ Traps:* do not widen to a tolerance; gen-0 charging and tiered JIT are ruled
-  out twice over (`git log --grep=BL-584`). *Cross-refs:* `BL-584`'s closing commit,
-  `docs/verification.md` PERF-28, `BL-818` (the scrapbook race found on the way).
 - `BL-840` `[Feature]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **Six of the eight stored
   campaign profiles, `Gab` with 18 missions done among them, are schema version 2 and the
   version-3 store refuses them.** *Evidence:* `BL-675`'s close (`git log --grep=BL-675`): the
