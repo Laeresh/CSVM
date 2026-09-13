@@ -2318,29 +2318,6 @@ usual.
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
 
-- `BL-831` `[Testing]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The suite harness's physics space can miss
-  collision shapes the scene marks enabled, so a suite can pass on geometry the game does not have.**
-  *Evidence:* every suite runs inside one `_Ready` call with no frame or physics step between them.
-  In single-process runs of `world-turrets` an `aagun` site's `col_buildings` pad and the 12-face
-  pyramid shape of `col` answered no ray, overlap or sphere query while `CollisionShape3D.Disabled`
-  was false, `PhysicsServer3D.BodyGetShapeCount` listed them and the body was in the space; the
-  72-face base shape of the same body did answer. In some four-shard runs of the same list all
-  three answered, which is how the ground AA guns' self-blocked sight line surfaced as a
-  shard-only failure (`git log --grep=BL-830`). Node transforms written
-  during a suite never reach the physics server either (`BodyGetState` stays at the build pose
-  while the barrel slews), which the existing `ForceUpdateTransform` in `world-query-reuse` works
-  around one node at a time. The mechanism behind the missing shapes is not found; it is not the
-  physics thread (`run_on_separate_thread` is false) and not the decode cache (the same suite list
-  in one process builds identical node ids and passes). *Fix shape:* find why an enabled shape is
-  absent from the broadphase after a hide-then-show inside one frame (`WorldCollision.Sync`
-  toggling `Disabled` around `TreeEntered` is the suspect), then give `TestContext` one call that
-  brings the physics space in step with the scene before a suite casts, and have `world-turrets`
-  assert the mount is present. *⚠ Traps:* a suite that passes alone and fails sharded is not
-  load flakiness by default; trace the ray. A live session (`--fly` with `--log-file` and a
-  `Log.Info` probe) is the reference for what physics holds. *Cross-refs:* `PT-142` (the flak
-  flight the fix this hid still owes), `docs/verification.md`, `CSVM/src/Testing/TestHarness.cs`
-  (`WithPrivateWorld`).
-
 - `BL-843` `[Cleanup]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`GD.Print` still stands in every `CSVM/src` file outside the three session files that now log through `Log`.** *Evidence:* about 263 calls remain, 124 of them under `Session/` in nineteen files (`CutsceneController.cs` holds ten, one in `Begin`). Each renders through the current culture and reaches neither the file sink nor the `--log=` filter. *Fix shape:* the same conversion the three session files took: `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), `Log.Error` for `PrintErr`, `Log.Raw` for a multi-line report, one interpolated string per call since `Log` takes a `FormattableString`; grep `CSVM.Tests`, `CSVM/src/Testing`, the root scripts and `analysis/` for every printed prefix first and move any reader in the same change. *⚠ Traps:* a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`docs/verification.md` LOG-23), so a converted line still needs its pre-built pieces checked. *Cross-refs:* PLAN-code-review-orch A3 (the three files and the before/after log diff method).
 
 - `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.

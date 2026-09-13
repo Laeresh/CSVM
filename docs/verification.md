@@ -417,9 +417,10 @@ member, and it does not go here.
   it can see, so sample over the window rather than at its end, and ask what is left behind.**
 - **INSTR-13**, **An in-engine suite runs inside ONE frame, so the physics space never sees a body
   moved, shown or enabled after it was built: aim at bodies where they were created, build a world
-  the object already stands in, or call `ForceUpdateTransform()` over a moved static subtree.**
-  An `AnimatableBody3D` is worse: the server reads a transform write as a kinematic target and no
-  repair commits it, so a flown aeroplane leaves its collider behind.
+  the object already stands in, or call `TestContext.SyncPhysics()` (`ForceUpdateTransform()` for
+  one node) between the change and the cast.** An `AnimatableBody3D` is worse: the server reads a
+  transform write as a kinematic target and no repair commits it, so a flown aeroplane leaves its
+  collider behind.
 - **INSTR-14**, **Every automated session check runs on a PARENT-DRIVEN clock, so verify the shared
   step owner rather than either clock adapter alone.** A wave sequencer lived only in that path and
   waves 2 to 4 never arrived at the controls while every scripted check stayed green.
@@ -524,6 +525,15 @@ member, and it does not go here.
   camera's Shift boost and every menu key, which no test of the flight map would catch.** Ask the
   map itself whether it holds that key under a modifier, and assert the silencing both where a map
   contests the key and where none does.
+- **INSTR-67**, **Re-enabling a `CollisionShape3D` only QUEUES the shape's broadphase rebuild for
+  the next physics step, so the node reads `Disabled=false` and the server still answers nothing;
+  a suite that hides or shows anything must sync before it casts.** aagun32's woken mount answered
+  0 of its 6 enabled shapes and 6 of 6 after the sync, and one unrelated `BodyTestMotion` anywhere
+  in the world repaired all six, which is the server's own pending-shape flush.
+- **INSTR-68**, **A suite passing on a space that is missing colliders is passing on geometry the
+  game does not have, so re-read every verdict the sync changes rather than only the red one.**
+  The armed zeppelin leg had been parking its bait 200 m from a ring, which is inside a 657 m by
+  136 m hull, and it engaged only while the hull's own shapes were absent.
 
 ## SRC, sources and documents
 

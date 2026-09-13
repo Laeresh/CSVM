@@ -675,6 +675,49 @@ internal static class AiSuites
                 world.Runtime.SetTargetActive(aagun.Site, true);
                 ctx.Check(aagun.Alive, $"…and alive once its site is switched on");
 
+                // ⚠ Sync the space before anything here casts. The site stood hidden when the
+                // world joined the tree, so its colliders were disabled, and re-enabling one only
+                // QUEUES the broadphase rebuild the next physics step would run.
+                ctx.SyncPhysics();
+                var mountSpace = ctx.Host.GetWorld3D().DirectSpaceState;
+                var mountShapes = aagun.Site.FindChildren("*", "StaticBody3D", true, false)
+                    .OfType<StaticBody3D>()
+                    .Where(b => (b.GetParent() as Node3D)?.IsVisibleInTree() == true)
+                    .SelectMany(b => b.GetChildren().OfType<CollisionShape3D>()
+                        .Where(cs => !cs.Disabled).Select(cs => (Body: b, Shape: cs)))
+                    .ToList();
+                static int Faces(CollisionShape3D shape) =>
+                    shape.Shape is ConcavePolygonShape3D mesh ? mesh.GetFaces().Length / 3 : -1;
+                bool Answers((StaticBody3D Body, CollisionShape3D Shape) part)
+                {
+                    var box = new Aabb();
+                    if (part.Shape.Shape is ConcavePolygonShape3D mesh && mesh.GetFaces() is { Length: > 0 } points)
+                    {
+                        box = new Aabb(points[0], Vector3.Zero);
+                        foreach (var point in points)
+                        {
+                            box = box.Expand(point);
+                        }
+                    }
+                    var at = part.Body.GlobalTransform * part.Shape.Transform * box.GetCenter();
+                    var query = new PhysicsShapeQueryParameters3D
+                    {
+                        Shape = new SphereShape3D { Radius = 4f },
+                        Transform = new Transform3D(Basis.Identity, at),
+                        CollisionMask = CollisionLayers.World,
+                    };
+                    return mountSpace.IntersectShape(query, 64)
+                        .Any(hit => hit["rid"].AsRid() == part.Body.GetRid());
+                }
+                ctx.Note($"aagun32's woken mount: {string.Join(", ", mountShapes.Select(p => $"{p.Body.Name}[{Faces(p.Shape)}]"))}");
+                ctx.Same(mountShapes.Count, mountShapes.Count(Answers),
+                    $"every enabled shape of the woken mount answers a query");
+                var pad = mountShapes.FirstOrDefault(p => p.Body.Name.ToString() == "col_buildings");
+                var pyramid = mountShapes.FirstOrDefault(
+                    p => p.Body.Name.ToString() == "col" && Faces(p.Shape) == 12);
+                ctx.Check(pad.Shape != null && Answers(pad) && pyramid.Shape != null && Answers(pyramid),
+                    $"…the site's col_buildings pad and its 12-face col pyramid among them");
+
                 FlightController BuildRig(string plane, int playerIndex, Vector3 pos, Vector3 look)
                 {
                     var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -772,17 +815,29 @@ internal static class AiSuites
                     // touch the aagun figures. ⚠ Show the hull first, exactly as the Instant Action builder does:
                     // C1/IA1 hides multiplayer1zep, and a hidden hull has no live colliders to block a turret.
                     mp1[0].Visible = true;
+                    ctx.SyncPhysics();
                     int ZepShots() => mp1Rings.Sum(t => t.ShotsFired);
-                    var ringPos = mp1Rings.Count > 0 ? mp1Rings[0].WorldPosition : Vector3.Zero;
-                    zepBait = BuildRig(ctx.PlaneName, 0, ringPos + new Vector3(0f, -80f, 200f), ringPos);
+                    // ⚠ Park the bait OUTSIDE the hull's own envelope, which is 657 m long and 136 m
+                    // deep: a plane placed a couple of hundred metres off one ring is inside it, and
+                    // every ring then reads its own hull as cover and holds fire.
+                    var envelope = new Aabb(mp1[0].GlobalPosition, Vector3.Zero);
+                    foreach (var mesh in mp1[0].FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
+                    {
+                        envelope = envelope.Merge(mesh.GlobalTransform * mesh.GetAabb());
+                    }
+                    // Offset along the hull as well as under it: a rig looking straight up has no
+                    // heading, and the look basis refuses a target colinear with up.
+                    var baitAt = envelope.GetCenter()
+                        + new Vector3(0f, -((envelope.Size.Y * 0.5f) + 100f), 150f);
+                    zepBait = BuildRig(ctx.PlaneName, 0, baitAt, envelope.GetCenter());
                     float baitBefore = Combined(zepBait);
                     Step(300);
                     ctx.Check(ZepShots() > 0,
-                        $"the armed zeppelin engages a hostile plane alongside shots={ZepShots()}");
+                        $"the armed zeppelin engages a hostile plane below it shots={ZepShots()}");
                     ctx.Check(Combined(zepBait) < baitBefore,
                         $"…with rounds striking it moved={baitBefore - Combined(zepBait):0.##}");
 
-                    zepBait.PlaceHeld(ringPos + new Vector3(0f, -80f, 20000f), ringPos);
+                    zepBait.PlaceHeld(baitAt + new Vector3(0f, 0f, 20000f), baitAt);
 
                     ctx.Same(14, runtime.SetActivatedUnder(mp1[0], false),
                         $"the same call with the flag cleared stows them again (the b=0 arm)");
@@ -793,13 +848,13 @@ internal static class AiSuites
                 // a 1.0-1.8 s fire rate can hold one shot before a 3-5 s bored window outlasts the leg.
                 aagun.Def.BoredMin = 0f;
                 aagun.Def.BoredMax = 0f;
-                // The harness's physics space does not always hold the mount's shapes inside one
-                // frame (BL-831), so whether this leg exercised the own-rig exclusion is recorded,
-                // not asserted; turret-own-mount-sightline proves the rule on bodies it builds.
+                // The leg below only exercises the own-rig exclusion while the mount is solid, so
+                // the UNEXCLUDED cast has to read blocked first: that is the gun's own rig in the
+                // way, the thing the exclusion removes and nothing else does.
                 var sightSpace = ctx.Host.GetWorld3D().DirectSpaceState;
-                bool mountAnswers = TurretController.WorldBlocksEmplacementLine(
-                    sightSpace, aagun.WorldPosition, targetPos + Vector3.Up * 0.2f);
-                ctx.Note($"aagun32's own mount answers the unexcluded sight-line ray: {mountAnswers}");
+                ctx.Check(TurretController.WorldBlocksEmplacementLine(
+                        sightSpace, aagun.WorldPosition, targetPos + Vector3.Up * 0.2f),
+                    $"aagun32's own mount blocks the unexcluded sight-line ray");
                 int woken = runtime.WakeAll();
                 ctx.Same(runtime.Count - 15, woken, $"--wake-turrets stand-in wakes every dormant emplacement");
                 float before = Combined(target);
@@ -823,6 +878,7 @@ internal static class AiSuites
                 {
                     world.Runtime.SetTargetActive(hull, true);
                 }
+                ctx.SyncPhysics();
                 ctx.Check(allied.All(t => t.Alive),
                     $"the piratezep's rings are alive once the hull is switched on alive={allied.Count(t => t.Alive)} of {allied.Count}");
                 if (allied.Count > 0)

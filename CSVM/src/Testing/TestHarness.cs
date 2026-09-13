@@ -840,6 +840,32 @@ public sealed class TestContext
         Log.Info("test", $"artifact file={path}");
     }
 
+    /// <summary>Brings the physics space in step with the scene, which a suite must do after it
+    /// shows, moves or re-enables anything a later cast has to find. The whole run happens inside
+    /// one <c>_Ready</c>, so nothing ever flushes what the server defers to its next step: a
+    /// re-enabled <c>CollisionShape3D</c> is only QUEUED for its broadphase rebuild, and a
+    /// transform written to a node waits for the next frame. Pushing every in-tree collider's pose
+    /// through the server does both. ⚠ Not a kinematic body: that write is read as a move target.</summary>
+    public void SyncPhysics()
+    {
+        foreach (var node in Host.FindChildren("*", "CollisionObject3D", recursive: true, owned: false))
+        {
+            if (node is not CollisionObject3D collider || !collider.IsInsideTree())
+            {
+                continue;
+            }
+            if (collider is Area3D)
+            {
+                PhysicsServer3D.AreaSetTransform(collider.GetRid(), collider.GlobalTransform);
+            }
+            else
+            {
+                PhysicsServer3D.BodySetState(collider.GetRid(),
+                    PhysicsServer3D.BodyState.Transform, collider.GlobalTransform);
+            }
+        }
+    }
+
     /// <summary>Builds (or reuses) a chapter world and runs <paramref name="body"/> against it. The
     /// run's own chapter is cached; any other chapter is freed once the body returns, so a
     /// per-chapter census does not hold eight worlds at once. The subtree is in the scene tree with
