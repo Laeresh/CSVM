@@ -2054,7 +2054,7 @@ public partial class FlightController : Node3D
 
         // heading of the nose: 0 = north (−Z), 90 = east (+X), shared by the compass and the marker
         var nose = -_model.Attitude.Z;
-        float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
+        float headingDeg = CompassTape.ReadingDeg(nose);
         // Player target selection: rebuild-then-input, the original's own order, the
         // per-frame candidate pass runs first and a handler then steps the list it just built.
         if (Targeting != null && IsHumanPiloted)

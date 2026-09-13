@@ -1239,11 +1239,16 @@ public partial class Launcher : Node3D
         if (sheet.Shared.OwnShip.Length > 0
             && Flight.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
         {
-            // The chart's turn is clockwise revolutions from a nose at -Z, which is what the
-            // spawn's own heading degrees already measure (CompassTape's convention).
-            icons.Add(new UI.PauseWorldIcon(
+            // Through the readout's own conversion off a nose vector, never off the spawn's heading
+            // degrees: those are the mission data's yaw, which runs opposite the compass.
+            var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
+            if (UI.PauseReadout.Icon(
                 sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
-                init.Spawn.HeadingDeg / 360f));
+                nose.X, nose.Z) is { } ship)
+            {
+                icons.Add(ship);
+            }
+
             if (sheet.State.Map is { } map
                 && !map.TryProject(init.Spawn.Position.X, init.Spawn.Position.Z, out _))
             {

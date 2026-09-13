@@ -847,6 +847,23 @@ is a judgement on our own remake.
   ace that feels no different from the rest, mean the offset or the exemption is mis-wired, since
   the ratings themselves are the roster's own. *Blocks:* nothing; a fail mints a new `BL`.
 
+### Any campaign mission · the pause chart's icons against the compass
+
+```powershell
+./RunGame.ps1 --campaign=<profile>
+```
+
+- `PT-146` `[Own]` **The pause chart's plane icon points where the compass tape says, on every
+  heading.** The chart's turn is the compass reading, and the player's own icon art is drawn an
+  eighth of a turn counter-clockwise of the top of the sheet, which the sheet now takes back off
+  (`git log --grep=BL-895`); a suite pins the agreement on seven headings, but only an eye at the
+  controls says the drawn nose looks right on the drawn chart. Fly a mission whose chart shows the
+  plane (CM05's window holds its own spawn), note the compass, then pause. *Look for:* (a) the
+  plane icon's nose along the heading the tape read, the chart being north up; (b) the same after
+  turning onto two or three other headings, so a sign error cannot hide at one pose; (c) the
+  zeppelin icon, where the mission draws one, lying along the hull's own course. *Blocks:* nothing;
+  a fail mints a new `BL`.
+
 ### CM18 (C4/M03) · the cargo zeppelin's first Fury waits for its hangar door
 
 ```powershell

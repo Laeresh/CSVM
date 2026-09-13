@@ -49,6 +49,13 @@ public sealed partial class CompassTape : Control
     /// each frame by the flight controller.</summary>
     public float HeadingDeg { get; set; }
 
+    /// <summary>What this tape reads for a nose direction: degrees clockwise from north, which is
+    /// world -Z, so +X is 90. Every gauge and the pause chart's icons turn off this one conversion.
+    /// ⚠ Not <see cref="AiPilot.HeadingDegOf"/>: the mission data's yaw runs the other way, and the
+    /// two agree only at north and south.</summary>
+    public static float ReadingDeg(Vector3 nose) =>
+        Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
+
     /// <summary>Null when the chapter's texture archive lacks the two HUD textures
     /// (the archive itself logs the miss).</summary>
     public static CompassTape? Build(TextureArchive textures)

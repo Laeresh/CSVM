@@ -319,10 +319,12 @@ test over the five 132x28 plates, and a pointer draws the dialog's own cursor; a
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
 cropped picture, a reveal's visible elements as pictures in placement order over two layers, its
-connector lines as strokes, and one icon placed by world position through the map's own window. It
-exists as one module because the original reaches all of it through one control class from two
-dialog constructors, so the briefing, the pause screen and the campaign load screen cannot drift
-apart here. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+connector lines as strokes, and one icon placed by world position through the map's own window,
+turned so its drawn nose reads against the compass: the heading, less however far that bitmap's own
+art is drawn off the top of the sheet. It exists as one module because the original reaches all of
+it through one control class from two dialog constructors, so the briefing, the pause screen and
+the campaign load screen cannot drift apart here.
+Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/BoardMenuItem.cs
 The rows a board menu can offer: Resume, Photo, Restart, Preferences and Exit. The board owning the

@@ -197,6 +197,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   board's text is rasterised at `round(size x fit.Scale)` points in a box of `width x fit.Scale`, so
   the same objective row wrapped to one line at 800x600 and two at 1280x720 in the same build, and a
   departure chosen from the shot alone was wrong at the fit the suite measures.
+- **SHOT-37**, **Where a drawn icon points is its art's own nose plus the turn applied, so measure
+  the bitmap before blaming the conversion.** The pause chart's `singledev` is drawn along the
+  45-degree diagonal, which a per-degree mirror-symmetry scan of its alpha gives exactly (0.95
+  against 0.83 one degree either side), and a scan plus the layout (propeller disc, wing at 30 % of
+  the length, tailplane at the end) says which end of that axis is the nose.
 
 ## GOLD, golden images
 

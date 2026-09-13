@@ -1102,7 +1102,8 @@ The original's top-centre heading tape, rebuilt from the game's own compass tick
 as a cylindrical drum seen edge-on, headings increasing to the left under a cosine fade toward the
 rim. Metrics are probe-fitted reference constants times `HudMetrics.Scale`, `Build` returns null
 where a texture is missing, and the control re-anchors on resize. The heading itself comes from
-`GaugeCluster`. Rendering model: [../formats/hud.md](../formats/hud.md).
+`GaugeCluster`, and `ReadingDeg` is the one conversion from a nose vector to a heading that every
+gauge and the pause chart's icons share. Rendering model: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/GaugeCluster.cs
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, the

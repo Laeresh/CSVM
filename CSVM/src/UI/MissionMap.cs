@@ -16,6 +16,15 @@ namespace CSVM.UI;
 /// </summary>
 public static class MissionMap
 {
+    // Where the ownship art's own nose is drawn, in revolutions clockwise from the top of the
+    // sheet: an eighth of a turn counter-clockwise of it, measured off the bitmap's own mirror
+    // axis. The original turns that art by the heading alone, so its own chart leans by this much.
+    private const float OwnShipArtRevs = -0.125f;
+
+    // The bitmap the shared block names for the player, and the only art the chart places that is
+    // not drawn nose up (docs/org/pause-screen.md).
+    private const string OwnShipArt = "singledev";
+
     /// <summary>The chart sheet as a picture, cropped to the window the dialog authors and placed
     /// so the crop's top left lands on the map's own position. A map with no clip draws whole.</summary>
     public static BoardPicture Sheet(EscapeMap map) => new(
@@ -77,9 +86,21 @@ public static class MissionMap
             new BoardArt(BoardArtLibrary.Rimage, bitmap), at.X, at.Y, 0, true, 1f, revs);
     }
 
-    /// <summary>The turn an icon takes for a forward vector, in revolutions clockwise. The chart
-    /// puts world +X right and world -Z up, and the icon art points up, so a nose at -Z is zero.
-    /// The original reads the same angle off two members of the player's transform.</summary>
+    /// <summary>The heading a forward vector reads, in revolutions clockwise. The chart puts world
+    /// +X right and world -Z up, which is the compass tape's own zero, so a nose at -Z is zero and
+    /// this is the number the pilot reads off the tape.</summary>
     public static float Heading(float forwardX, float forwardZ) =>
         (float)(Math.Atan2(forwardX, -forwardZ) / (Math.PI * 2d));
+
+    /// <summary>The turn one icon takes for a forward vector, in revolutions clockwise: its heading
+    /// less however far its own art is drawn off the top of the sheet, so the drawn nose lands on
+    /// the heading the compass reads.</summary>
+    public static float IconRevs(string bitmap, float forwardX, float forwardZ) =>
+        Heading(forwardX, forwardZ) - ArtRevs(bitmap);
+
+    /// <summary>Where one icon bitmap's own nose is drawn, in revolutions clockwise from the top of
+    /// the sheet, which a turn has to take back off before the icon can read against an
+    /// instrument.</summary>
+    public static float ArtRevs(string bitmap) =>
+        bitmap.Equals(OwnShipArt, StringComparison.OrdinalIgnoreCase) ? OwnShipArtRevs : 0f;
 }

@@ -158,7 +158,8 @@ the same value the memento takes.
 - **`OWNSHIP`** (`singledev`, `CENTER [1]`) is the player. Its world position is read from
   `DAT_0071c298 + 0x204` and its rotation from
   `atan2(-*(float *)(DAT_0071c298 + 0x1e0), -*(float *)(DAT_0071c298 + 0x1e8))`, which is the
-  player transform's own forward vector, so the icon turns with the nose.
+  player transform's own forward vector, so the icon turns with the nose. That angle is the
+  mission data's own yaw, which runs opposite a compass heading, and nothing is added to it.
 - **`MYZEP`** (`NW-m1wv_icon`, `CENTER [1]`) is the zeppelin named `piratezep`. `FUN_004bd3e0`
   looks that object up by name and takes its transform's translation and its own stored angle;
   failing that, `FUN_004d0280(7, "piratezep")` is tried and the object's position is taken with a
@@ -384,6 +385,19 @@ board keeps its own Photo Mode row.
 no tween is live, so a `Wait` releases and a `Spin` lands at its end revolutions. The screen is a
 still and the original's pump reaches the same state within a frame or two, so nothing here animates
 what the original animates once.
+
+**The ownship art is drawn off the top of the sheet, and this port takes that back off.** The
+`singledev` bitmap is a 32x32 plan view whose own mirror axis lies at exactly 45 degrees: rotating
+it 225 degrees clockwise is what stands it upright, the propeller disc at the top and the tailplane
+at the end of the rear fuselage, so its drawn nose points up and to the left, an eighth of a turn
+counter-clockwise of the chart's north. `nw-m1wv_icon`, the zeppelin, is drawn nose up, as is every
+other icon the chart places. The original turns that art by the heading alone, so its own sheet
+draws the player leaning by that eighth; `UI/MissionMap.cs` takes the art's own nose off the turn
+instead (`ArtRevs`, keyed by bitmap name), so the drawn nose lands on the heading the compass tape
+reads. A chart whose icon and compass disagree is the one thing a pilot reads the sheet for, which
+is why the departure is taken rather than reproduced. The chart is north up: its projection puts
+world -Z at the top, which is the compass's own zero, and the sheet's own printed compass rose
+agrees.
 
 **The ownship icon needs a position inside the window.** Nothing draws it where the flown position
 falls off the chart, which is the original's own answer and is what a mission's authored spawn hits:
