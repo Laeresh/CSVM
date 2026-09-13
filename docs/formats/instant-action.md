@@ -668,7 +668,10 @@ the sequencer at all: that mode takes the other arm.
 ### The end conditions
 
 Whatever the arm, the tick finishes by deciding whether the mission is over, and ends it with
-`+0xc58 = 1` and a **3-second** timer on the object at `0x0071b480`. The per-mode predicates:
+`+0xc58 = 1` and a **3-second** timer on the object at `0x0071b480`. That timer is a live world, not
+a pause: what it holds, and what follows it, is
+[instant-action/wrap-up.md](instant-action/wrap-up.md), "The hold after the ending". The per-mode
+predicates:
 
 | mode | over when |
 |---|---|

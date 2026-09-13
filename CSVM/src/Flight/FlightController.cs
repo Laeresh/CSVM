@@ -413,6 +413,14 @@ public partial class FlightController : Node3D
     /// "put me back at the spawn". Pinned by the session's own director, never from here.</summary>
     public bool AllowLiveRespawn = true;
 
+    /// <summary>Whether this seat's controls are held back while the world flies on: the stick
+    /// reads neutral over the lever the pilot left, and every discrete flight command (the two
+    /// triggers, the selectors, respawn) is swallowed. Set by the session's own director around an
+    /// ending the player watches out, never from here; an aircraft nobody holds is unaffected.
+    /// ⚠ Not a freeze. Physics, the wreck's fall, weapons already in the air and the cameras all
+    /// carry on, which is the point.</summary>
+    public bool ControlsHeld;
+
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     // Spawn throttle/speed come from the mission's PLAYER_INIT via Setup (docs/formats/spawns.md).
     // ⚠ These two are only the no-mission fallback (labs, tests, AI rigs), and they are the OLD
@@ -1709,7 +1717,11 @@ public partial class FlightController : Node3D
         }
         else
         {
-            var input = InputSource.Read(dt);
+            // A held seat commands nothing: the stick centres over the lever it was left on, so the
+            // aeroplane flies on as trimmed instead of being frozen or cut to idle.
+            var input = ControlsHeld
+                ? new FlightInput { Throttle = _throttle }
+                : InputSource.Read(dt);
             // Read AFTER the input: R respawns inside it, and a sweep from the pose before that
             // respawn would run the whole way to the spawn point and strike whatever lies between.
             var entered = _model.Position;       // the position this step enters with
@@ -2275,8 +2287,13 @@ public partial class FlightController : Node3D
 
     // Every discrete flight command reads through here, so one still-down control is swallowed
     // once for whichever commands it is bound to (FlightReentryLatch.Latched names them).
-    private bool ReadLatched(InputAction action) =>
-        _reentryLatch.Read(action, _actions.Held(action));
+    // ⚠ The latch is read even while the seat is held; skipping it would leave a control that went
+    // down during the hold reading as a fresh press the moment the hold ends.
+    private bool ReadLatched(InputAction action)
+    {
+        bool down = _reentryLatch.Read(action, _actions.Held(action));
+        return down && !ControlsHeld;
+    }
 
     // Called at flight's own resume/skip re-entry points (the Inert setter above, and
     // PollPauseAndHalt's halt-clearing edge) so a press that just confirmed a cutscene skip or a

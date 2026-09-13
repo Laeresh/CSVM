@@ -103,7 +103,7 @@ the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `Bui
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
 chain, every configured wave built inert at the world origin); `Step` ticks the sequencer and
 activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
-ledger and the whole-window wrap-up board. The decoded rules stay engine-free in
+ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
 ## src/Session/SpectateHandoff.cs
@@ -117,7 +117,7 @@ Candidate and tracking lists are optional for callers without a roster or rerun 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
 and rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin
-selection, and the mission's end. The static, engine-free helpers `InstantActionDirector` calls
+selection, and the mission's end with the decoded `WrapupHoldS` that `Advance` spends between that ending and the `WrapupDue` cue for the board. The static, engine-free helpers `InstantActionDirector` calls
 are here (`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`,
 `RandomPilotStats`/`ResolveWaveAccentId`, the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
 The end half holds no engine type and calls no `GD.*`, the same construction rule `VersusMatch`

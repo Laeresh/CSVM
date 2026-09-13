@@ -1066,7 +1066,7 @@ reports, and holds the state the engine can only hold as state. Every physics qu
 one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
-damage are the player's path exactly. `Held`, `Inert`, `Spectating`, `CameraOwned` and
+damage are the player's path exactly. `Held`, `ControlsHeld` (the stick reads neutral and every discrete command is swallowed while the aeroplane flies on as trimmed), `Inert`, `Spectating`, `CameraOwned` and
 `AllowLiveRespawn` are the flags a session or a lab pins it with. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it to `AiTargetRanking.SelectBest` under the session's targeting order. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs

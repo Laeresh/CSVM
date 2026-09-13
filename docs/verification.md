@@ -187,6 +187,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   (239 × 240/255 = 224.9); the original's measured 209 plateau is 32 % of the fogged background
   showing through, and a vertex-colour scale calibrated to it corrects the wrong quantity
   (`docs/org/cloudCards.md`).
+- **SHOT-35**, **An Instant Action wrap-up board is not on screen at the frame the mission ends; a
+  shot of it must drive frames past the decoded hold or it catches the live world instead.** The
+  ending arms `InstantActionRuntime.WrapupHoldS` (3 s) of running world before the board is
+  presented, so a `--screenshot` run whose `--frames` stops inside that hold photographs aeroplanes
+  and a falling wreck, and reading the missing board as the board being broken is the error.
 
 ## GOLD, golden images
 
