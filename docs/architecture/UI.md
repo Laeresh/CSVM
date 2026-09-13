@@ -809,7 +809,7 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through; the other screens are its own partials, below. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through; most other screens are its own partials, below, the hangar family the one screen group standing outside the partial as `OriginalHangarScreen.cs`, reached through `IOriginalHangarHost` and read through the one `Hangar` accessor. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -823,7 +823,7 @@ so a short list is exactly as tall as its items and carries no chrome. Every ite
 ones outside the window built but hidden, since the rows are the hit-test surface and a dropped row would let a pointer
 hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right edge and
 hangs the thumb between them. The Instant Action screen, the loadout screen and the two option pages come through here;
-`OriginalHangar.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
+`OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -912,7 +912,7 @@ their authored boxes, the enemy rows on two pages under both paging buttons, the
 buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an
 open list is windowed by `OriginalDropList.cs`, bands its picked row and the row under the pointer, and a closed box redraws its outline
 in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat.
-Build opens the wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
+Build opens the wallet-free hangar (`OriginalHangarScreen.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/Menu/Original/OriginalLoadout.cs
 The Weapon Loadout screen, the shell's partial over the decoded `[@OrdinanceLayout@]` section (the
@@ -924,14 +924,14 @@ the stock table's option lists, the snapshot CANCEL and Back restore, the airfra
 and the description pane; rows and open lists reuse the Instant Action partial's dropdown machinery.
 What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
-## src/UI/Menu/Original/OriginalHangar.cs
-The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
+## src/UI/Menu/Original/OriginalHangarScreen.cs
+The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
-the cabin, the door naming the airframe a default build opens on. It owns the plane picture over
+the cabin, the door naming the airframe a default build opens on. It reaches `OriginalShell` only through `IOriginalHangarHost`, the shell's own explicit-interface implementation narrowing it to the screen/cursor/dialog surface a screen family needs (`Open`, `FocusKey`, `RaiseDialog`, the focused row and the campaign plane roster), so `OriginalHangarTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to this module by `OriginalScreen` range and exposes it whole as `Hangar` (its typed name, open list, last build and `OriginalHangarInks`) rather than forwarding member by member. It owns the plane picture over
 the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost line reddening on that bill's funds verdict and the weight line on its capacity verdict, bar a previewed airframe row, whose weight line is pending and plain; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
-caret, the airframe swap's own three-answer question as the shared messagebox, and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+caret, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalCampaign.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

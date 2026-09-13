@@ -299,7 +299,10 @@ public sealed class OriginalPresentation : IMenuPresentation
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);
-            _hangarPalette = PaletteFor(_shell.HangarInks);
+            if (_shell.Hangar != null)
+            {
+                _hangarPalette = PaletteFor(_shell.Hangar.Inks);
+            }
         }
 
         if (_layer == null)
@@ -492,7 +495,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
                     if (aid.EndsWith(PlanePaintDecalsAid, StringComparison.Ordinal))
                     {
-                        _shell.OpenHangarDropdownOn(OriginalShell.NoseDecalKey);
+                        _shell.Hangar?.OpenHangarDropdownOn(OriginalHangarScreen.NoseDecalKey);
                     }
 
                     break;

@@ -511,7 +511,7 @@ public sealed partial class OriginalShell
             }
         }
 
-        private UiStrings Strings => _shell._campaign?.Strings ?? _shell._hangar?.Strings ?? UiStrings.Empty;
+        private UiStrings Strings => _shell._campaign?.Strings ?? _shell._hangarModule?.Strings ?? UiStrings.Empty;
 
         private BoardButton[] Plaques => _seat.Locked ? SelectedPlaques : BrowsingPlaques;
 

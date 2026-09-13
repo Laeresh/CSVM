@@ -374,7 +374,7 @@ public sealed partial class OriginalShell
         }
 
         AddStrip(screen, rows, ViewStoryKey, OriginalRowKind.TextButton, true, 0);
-        AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, _hangar != null && _planes != null, 0);
+        AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, _hangarModule != null && _planes != null, 0);
 
         // A box a setting has nothing to say through keeps its place blank and inert rather than
         // leaving the page: the wingman plane at zero wingmen, every enemy box under the ace duel

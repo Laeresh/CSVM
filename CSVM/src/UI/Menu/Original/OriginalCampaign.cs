@@ -407,7 +407,7 @@ public sealed partial class OriginalShell
 
     private string DialogWord(int id, string fallback)
     {
-        var strings = _campaign?.Strings ?? _hangar?.Strings;
+        var strings = _campaign?.Strings ?? _hangarModule?.Strings;
         string word = strings?.Text(id, fallback) ?? fallback;
         return word.Length > 0 ? word : fallback;
     }

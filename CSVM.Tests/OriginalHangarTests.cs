@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -14,22 +14,19 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Original hangar over the hand-authored layout fixture: the door, the name screen's typing
-/// and its two exits, the hub's tab bar as siblings, the dropdowns binding to the shared feature,
-/// the defaults ask as a dialog, the totals page committing into a scratch store, the inventory
-/// selling, and the cancel that leaves no residue. Every rectangle here is the fixture's invented
-/// geometry; the game's is read the same way.
+/// The Original hangar module over the hand-authored layout fixture and a hand-written host: the
+/// name screen's typing and its two exits, the hub's tab bar as siblings, the dropdowns binding to
+/// the shared feature, the defaults ask as a dialog, the totals page committing into a scratch
+/// store, the inventory selling, and the cancel that leaves no residue. No <see cref="OriginalShell"/>
+/// stands behind these; what the module asks of one (the screen, the focus, a dialog, a roster
+/// re-read) the host records. The door from Instant Action and the keyboard's column walk are the
+/// shell's and are in <see cref="OriginalShellTests"/>. Every rectangle here is the fixture's
+/// invented geometry; the game's is read the same way.
 /// </summary>
 public class OriginalHangarTests : IDisposable
 {
     // The name screen's own refusal, langui 203, which the empty string table falls back to.
     private const string EmptyNameRefusal = "You must enter a name for your new plane.";
-
-    private static readonly MenuCommands Accept = new() { Accept = true };
-    private static readonly MenuCommands Back = new() { Back = true };
-    private static readonly MenuCommands Down = new() { MoveY = 1 };
-    private static readonly MenuCommands Up = new() { MoveY = -1 };
-    private static readonly MenuCommands Right = new() { MoveX = 1 };
 
     private readonly string _dir;
     private readonly CustomPlaneStore _store;
@@ -53,68 +50,62 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheDoorOpensTheNameScreenWhoseOkAnswersAnEmptyBoxWithAMessageBox()
     {
-        var shell = Shell(out var hangar, out _);
-        Assert.DoesNotContain(shell.Rows, r => r.Key == "HANGAR");
-        Click(shell, "MM_B_INSTANTACTION");
-        var door = shell.Rows.Single(r => r.Key == OriginalShell.BuildKey);
-        Assert.True(door.Enabled);
+        var host = Host(out var hangar);
+        host.Module.OpenHangar(null, HangarFeature.DefaultAirframe);
 
-        Click(shell, door.X + 2f, door.Y + 2f);
-
-        Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+        Assert.Equal(OriginalScreen.PlaneName, host.Screen);
         Assert.True(hangar.IsOpen);
-        Assert.True(shell.CapturingText);
+        Assert.True(host.Module.CapturingText);
         Assert.Equal(
-            new[] { OriginalShell.NameFieldKey, OriginalShell.NameDefaultsKey, OriginalShell.NameOkKey, OriginalShell.NameCancelKey },
-            shell.Rows.Select(r => r.Key));
-        Assert.True(shell.LoadDefaultsChecked);
+            new[] { OriginalHangarScreen.NameFieldKey, OriginalHangarScreen.NameDefaultsKey, OriginalHangarScreen.NameOkKey, OriginalHangarScreen.NameCancelKey },
+            host.Rows.Select(r => r.Key));
+        Assert.True(host.Module.LoadDefaultsChecked);
 
         // OK stands on an empty box and the refusal is the press's answer, not a standing line.
-        Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.NameOkKey).Enabled);
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text == EmptyNameRefusal);
-        Click(shell, OriginalShell.NameOkKey);
-        Assert.Equal(EmptyNameRefusal, shell.Dialog!.Message);
-        Assert.Equal(DialogIcon.Warning, shell.Dialog!.Icon);
-        Assert.Equal(new[] { OriginalShell.DialogOkKey }, shell.Rows.Select(r => r.Key));
-        Assert.False(shell.CapturingText);
-        Assert.Contains(shell.Compose().Overlays, o => o.Lines.Any(l => l.Text == EmptyNameRefusal));
-        Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+        Assert.True(Row(host, OriginalHangarScreen.NameOkKey).Enabled);
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Text == EmptyNameRefusal);
+        Click(host, OriginalHangarScreen.NameOkKey);
+        Assert.Equal(EmptyNameRefusal, host.Dialog!.Message);
+        Assert.Equal(DialogIcon.Warning, host.Dialog!.Icon);
+        Assert.Equal(new[] { OriginalShell.DialogOkKey }, host.Dialog!.Answers.Select(a => a.Key));
+        Assert.False(host.Module.CapturingText);
+        Assert.Equal(OriginalScreen.PlaneName, host.Screen);
 
         // Its one OK puts the cursor back in the box, which is where the script leaves it.
-        Click(shell, OriginalShell.DialogOkKey);
-        Assert.Null(shell.Dialog);
-        Assert.Equal(OriginalShell.NameFieldKey, shell.FocusedKey);
-        Assert.True(shell.CapturingText);
+        Click(host, OriginalShell.DialogOkKey);
+        Assert.Null(host.Dialog);
+        Assert.Equal(OriginalHangarScreen.NameFieldKey, host.FocusedKey);
+        Assert.True(host.Module.CapturingText);
 
-        shell.Step(new MenuCommands { Typed = "Ace/1" });
-        Assert.Equal("Ace1", shell.HangarName);
-        shell.Step(new MenuCommands { Erase = true });
-        Assert.Equal("Ace", shell.HangarName);
-        Assert.Equal(8, shell.Rows.Single(r => r.Key == OriginalShell.NameDefaultsKey).Art!.Frames);
+        Type(host, "Ace/1");
+        Assert.Equal("Ace1", host.Module.HangarName);
+        Erase(host);
+        Assert.Equal("Ace", host.Module.HangarName);
+        Assert.Equal(8, Row(host, OriginalHangarScreen.NameDefaultsKey).Art!.Frames);
 
         // The box writes its text alone and hangs the caret off it in its own CursorColor.
-        var box = shell.Rows.Single(r => r.Key == OriginalShell.NameFieldKey);
-        var typed = shell.Compose().Lines.Single(l => l.Text == "Ace" && l.Caret != null);
+        var box = Row(host, OriginalHangarScreen.NameFieldKey);
+        var typed = Compose(host).Lines.Single(l => l.Text == "Ace" && l.Caret != null);
         Assert.Equal(new BoardCaret(0xEF, 0x00, 0x10, 2f, box.Height - 2f), typed.Caret);
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text.EndsWith('_'));
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Text.EndsWith('_'));
     }
 
     [Fact]
     public void TheNameDialogAndItsRowsRideThePaneCentredOnTheBoard()
     {
-        var shell = Shell(out _, out _);
-        OpenName(shell, "Ace");
+        var host = Host(out _);
+        OpenName(host, "Ace");
 
         // The fixture's pane is 260x180 on the 800x600 board, so it centres at 270,210 and every
         // row and text of the section is drawn from that corner rather than from the screen's.
-        var board = shell.Compose();
+        var board = Compose(host);
         Assert.Contains(board.Backdrop, p => p.Art.Name == "PH_NamePanel.png" && p.X == 270f && p.Y == 210f);
         Assert.Contains(board.Backdrop, p => p.Art.Name == "PH_Back.jpg" && p.X == 0f && p.Y == 0f);
-        var field = shell.Rows.Single(r => r.Key == OriginalShell.NameFieldKey);
+        var field = Row(host, OriginalHangarScreen.NameFieldKey);
         Assert.Equal((290f, 250f), (field.X, field.Y));
-        var ok = shell.Rows.Single(r => r.Key == OriginalShell.NameOkKey);
+        var ok = Row(host, OriginalHangarScreen.NameOkKey);
         Assert.Equal((330f, 350f), (ok.X, ok.Y));
-        var defaults = shell.Rows.Single(r => r.Key == OriginalShell.NameDefaultsKey);
+        var defaults = Row(host, OriginalHangarScreen.NameDefaultsKey);
         Assert.Equal((290f, 300f), (defaults.X, defaults.Y));
         Assert.Contains(board.Lines, l => l.X == 300f && l.Y == 230f);
     }
@@ -122,20 +113,20 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheHubsNameBoxRenamesTheScratchPlaneInPlace()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
 
         // The box runs from the title's end to the script's own 302, at the row's own line.
-        var box = shell.Rows.Single(r => r.Key == OriginalShell.HubNameFieldKey);
+        var box = Row(host, OriginalHangarScreen.HubNameFieldKey);
         Assert.Equal(OriginalRowKind.TextField, box.Kind);
         Assert.Equal((120f, 12f, 182f, 17f), (box.X, box.Y, box.Width, box.Height));
         Assert.Equal("Ace", box.Label);
-        Assert.False(shell.CapturingText);
+        Assert.False(host.Module.CapturingText);
 
-        Click(shell, OriginalShell.HubNameFieldKey);
-        Assert.Equal(OriginalShell.HubNameFieldKey, shell.FocusedKey);
-        Assert.True(shell.CapturingText);
-        shell.Step(new MenuCommands { Typed = "2" });
+        Click(host, OriginalHangarScreen.HubNameFieldKey);
+        Assert.Equal(OriginalHangarScreen.HubNameFieldKey, host.FocusedKey);
+        Assert.True(host.Module.CapturingText);
+        Type(host, "2");
 
         Assert.Equal("Ace2", hangar.Scratch.Name);
         Assert.Null(hangar.DefaultsAsk);
@@ -145,137 +136,133 @@ public class OriginalHangarTests : IDisposable
         // screen's own words, which is the refusal the feature already carried.
         for (int i = 0; i < 4; i++)
         {
-            shell.Step(new MenuCommands { Erase = true });
+            Erase(host);
         }
 
         Assert.Equal(string.Empty, hangar.Scratch.Name);
         Assert.False(hangar.CanCommit);
-        shell.Step(new MenuCommands { Typed = "Ace2" });
-        var board = shell.Compose();
+        Type(host, "Ace2");
+        var board = Compose(host);
         var line = board.Lines.Single(l => l.Text == "Ace2" && l.Caret != null);
         Assert.Equal(new BoardCaret(0xEF, 0x00, 0x10, 2f, 15f), line.Caret);
         Assert.Equal(BoardInk.Dialog, line.Ink);
         Assert.Contains(board.Fills, f => f.Border && f.R == 0x73 && f.G == 0x69 && f.B == 0x9C && f.X == box.X);
 
         // A box nobody is in draws no caret, on this tab or the next.
-        Click(shell, "PX_B_ENGINE");
-        Assert.False(shell.CapturingText);
-        Assert.Equal("Ace2", shell.Rows.Single(r => r.Key == OriginalShell.HubNameFieldKey).Label);
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Caret != null);
+        Click(host, "PX_B_ENGINE");
+        Assert.False(host.Module.CapturingText);
+        Assert.Equal("Ace2", Row(host, OriginalHangarScreen.HubNameFieldKey).Label);
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Caret != null);
     }
 
     [Fact]
     public void OkWithTheBoxCheckedOpensTheHubOnADefaultConfiguration()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenName(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenName(host, "Ace");
 
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.NameOkKey, shell.FocusedKey);
-        shell.Step(Accept);
+        host.FocusKey(OriginalHangarScreen.NameOkKey);
+        Accept(host);
 
-        Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
+        Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
         Assert.Equal("Ace", hangar.Scratch.Name);
         Assert.True(hangar.AirframeChosen);
         Assert.Equal(HangarFeature.DefaultAirframe, hangar.Scratch.Airframe);
         Assert.Equal(1, hangar.Scratch.Engine);
         Assert.Equal(
-            new[] { OriginalShell.AirframeDropKey, "PX_B_AIRFRAME", "PX_B_ENGINE", "PX_B_ARMOR", "PX_B_GUNS", "PX_B_HARDPOINTS", "PX_B_PAINT", OriginalShell.SellPlanesKey, OriginalShell.ReadyKey, OriginalShell.CancelBuildKey, OriginalShell.HubNameFieldKey },
-            shell.Rows.Select(r => r.Key));
-        Assert.True(shell.Rows.Single(r => r.Key == "PX_B_AIRFRAME").Enabled);
-        Assert.Equal("Airframe 5", shell.Rows.Single(r => r.Key == OriginalShell.AirframeDropKey).Label);
+            new[] { OriginalHangarScreen.AirframeDropKey, "PX_B_AIRFRAME", "PX_B_ENGINE", "PX_B_ARMOR", "PX_B_GUNS", "PX_B_HARDPOINTS", "PX_B_PAINT", OriginalHangarScreen.SellPlanesKey, OriginalHangarScreen.ReadyKey, OriginalHangarScreen.CancelBuildKey, OriginalHangarScreen.HubNameFieldKey },
+            host.Rows.Select(r => r.Key));
+        Assert.True(Row(host, "PX_B_AIRFRAME").Enabled);
+        Assert.Equal("Airframe 5", Row(host, OriginalHangarScreen.AirframeDropKey).Label);
     }
 
     [Fact]
     public void TheDefaultConfigurationTakesTheAirframeTheDoorWasOpenedOver()
     {
-        var shell = Shell(out var hangar, out _, pilotPlane: 2);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace", doorAirframe: 2);
 
         Assert.True(hangar.AirframeChosen);
         Assert.Equal(2, hangar.Scratch.Airframe);
         Assert.Equal(1, hangar.Scratch.Engine);
-        Assert.Equal("Airframe 2", shell.Rows.Single(r => r.Key == OriginalShell.AirframeDropKey).Label);
+        Assert.Equal("Airframe 2", Row(host, OriginalHangarScreen.AirframeDropKey).Label);
     }
 
     [Fact]
     public void OkWithTheBoxClearedStartsBareAndAnUneditedBuildsAirframeSwapAsksNothing()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenName(shell, "Ace");
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.False(shell.LoadDefaultsChecked);
-        shell.Step(Down);
-        shell.Step(Accept);
+        var host = Host(out var hangar);
+        OpenName(host, "Ace");
+        Click(host, OriginalHangarScreen.NameDefaultsKey);
+        Assert.False(host.Module.LoadDefaultsChecked);
+        Click(host, OriginalHangarScreen.NameOkKey);
 
-        Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
+        Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
         Assert.False(hangar.AirframeChosen);
-        Assert.Equal(string.Empty, shell.Rows.Single(r => r.Key == OriginalShell.AirframeDropKey).Label);
-        Assert.Contains(shell.Compose().Pictures, p => p.Art.Name == "PX_0_BLUEPRINT.TGA" && p.X == 16f && p.Y == 44f);
+        Assert.Equal(string.Empty, Row(host, OriginalHangarScreen.AirframeDropKey).Label);
+        Assert.Contains(Compose(host).Pictures, p => p.Art.Name == "PX_0_BLUEPRINT.TGA" && p.X == 16f && p.Y == 44f);
 
-        shell.Step(Accept);
-        Assert.Equal(OriginalShell.AirframeDropKey, shell.OpenHangarDropdown);
-        Assert.Equal(11, shell.Rows.Count);
-        Assert.Equal(OriginalShell.AirframeDropKey + ":0", shell.FocusedKey);
-        shell.Step(Down);
-        shell.Step(Accept);
+        // The tab opens focused on its dropdown, so Accept opens the list on its first row.
+        Accept(host);
+        Assert.Equal(OriginalHangarScreen.AirframeDropKey, host.Module.OpenHangarDropdown);
+        Assert.Equal(11, host.Rows.Count);
+        Assert.Equal(OriginalHangarScreen.AirframeDropKey + ":0", host.FocusedKey);
+        host.FocusKey(OriginalHangarScreen.AirframeDropKey + ":1");
+        Accept(host);
 
         // Nothing had been edited away from the opened build, so the swap takes the box's own
         // answer (clear: a bare airframe) and raises no question.
         Assert.Null(hangar.DefaultsAsk);
-        Assert.Null(shell.Dialog);
+        Assert.Null(host.Dialog);
         Assert.Equal(1, hangar.Scratch.Airframe);
         Assert.Equal(CustomPlaneDef.EngineNone, hangar.Scratch.Engine);
-        Assert.Equal(OriginalShell.AirframeDropKey, shell.FocusedKey);
+        Assert.Equal(OriginalHangarScreen.AirframeDropKey, host.FocusedKey);
     }
 
     [Fact]
     public void AnEditedBuildsAirframeSwapAsksWithThreeAnswersAndCancelPutsTheAirframeBack()
     {
-        var shell = Shell(out var hangar, out _, pilotPlane: 2);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace", doorAirframe: 2);
         Assert.Equal(2, hangar.Scratch.Airframe);
         Assert.Equal(1, hangar.Scratch.Engine);
 
         // The engine is the edit; the swap that follows is what the original asks about.
-        Click(shell, "PX_B_ENGINE");
-        PickEngine(shell, 2);
+        Click(host, "PX_B_ENGINE");
+        PickEngine(host, 2);
         Assert.Equal(2, hangar.Scratch.Engine);
-        Click(shell, "PX_B_AIRFRAME");
-        SwapAirframeTo(shell, 4);
+        Click(host, "PX_B_AIRFRAME");
+        SwapAirframeTo(host, 4);
 
         Assert.Equal(4, hangar.DefaultsAsk);
-        Assert.Equal(hangar.DefaultsAskText, shell.Dialog!.Message);
-        Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
+        Assert.Equal(hangar.DefaultsAskText, host.Dialog!.Message);
+        Assert.Equal(DialogIcon.Query, host.Dialog!.Icon);
         Assert.Equal(
             new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey, OriginalShell.DialogCancelKey },
-            shell.Rows.Select(r => r.Key));
+            host.Dialog!.Answers.Select(a => a.Key));
         Assert.Equal(
             new[] { CampaignBoards.DialogLeftKey, CampaignBoards.DialogCenterKey, CampaignBoards.DialogRightKey },
-            shell.Dialog!.Answers.Select(a => a.LayoutKey));
-        Assert.Contains(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text == hangar.DefaultsAskText);
+            host.Dialog!.Answers.Select(a => a.LayoutKey));
 
         // Cancel is the only answer that keeps the edit, which is what string 206 says of it.
-        Click(shell, OriginalShell.DialogCancelKey);
+        Click(host, OriginalShell.DialogCancelKey);
         Assert.Null(hangar.DefaultsAsk);
         Assert.Equal(2, hangar.Scratch.Airframe);
         Assert.Equal(2, hangar.Scratch.Engine);
-        Assert.Equal(OriginalShell.AirframeDropKey, shell.FocusedKey);
+        Assert.Equal(OriginalHangarScreen.AirframeDropKey, host.FocusedKey);
     }
 
     [Fact]
     public void TheAsksYesTakesTheStockBuildAndItsNoTakesABareAirframe()
     {
-        var shell = Shell(out var hangar, out _, pilotPlane: 2);
-        OpenHub(shell, "Ace");
-        Click(shell, "PX_B_ENGINE");
-        PickEngine(shell, 2);
-        Click(shell, "PX_B_AIRFRAME");
-        SwapAirframeTo(shell, 4);
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace", doorAirframe: 2);
+        Click(host, "PX_B_ENGINE");
+        PickEngine(host, 2);
+        Click(host, "PX_B_AIRFRAME");
+        SwapAirframeTo(host, 4);
 
-        Click(shell, OriginalShell.DialogNoKey);
+        Click(host, OriginalShell.DialogNoKey);
         Assert.Equal(4, hangar.Scratch.Airframe);
         Assert.Equal(CustomPlaneDef.EngineNone, hangar.Scratch.Engine);
         Assert.Equal(0, hangar.Scratch.ArmourNose);
@@ -283,14 +270,14 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(0, hangar.Scratch.LeftHardpoints);
 
         // The answered build is the new opened-as build, so an edit has to come first again.
-        SwapAirframeTo(shell, 5);
+        SwapAirframeTo(host, 5);
         Assert.Null(hangar.DefaultsAsk);
-        Click(shell, "PX_B_ENGINE");
-        PickEngine(shell, 2);
-        Click(shell, "PX_B_AIRFRAME");
-        SwapAirframeTo(shell, 6);
+        Click(host, "PX_B_ENGINE");
+        PickEngine(host, 2);
+        Click(host, "PX_B_AIRFRAME");
+        SwapAirframeTo(host, 6);
 
-        Click(shell, OriginalShell.DialogYesKey);
+        Click(host, OriginalShell.DialogYesKey);
         Assert.Equal(6, hangar.Scratch.Airframe);
         Assert.Equal(1, hangar.Scratch.Engine);
     }
@@ -298,105 +285,102 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheTabsAreSiblingsAndASidewaysStepOnADropdownChangesItsValue()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
 
-        Click(shell, "PX_B_PAINT");
-        Assert.Equal(OriginalScreen.HangarPaint, shell.Screen);
-        Click(shell, "PX_B_ENGINE");
-        Assert.Equal(OriginalScreen.HangarEngine, shell.Screen);
-        Assert.Equal(OriginalShell.EngineDropKey, shell.FocusedKey);
+        Click(host, "PX_B_PAINT");
+        Assert.Equal(OriginalScreen.HangarPaint, host.Screen);
+        Click(host, "PX_B_ENGINE");
+        Assert.Equal(OriginalScreen.HangarEngine, host.Screen);
+        Assert.Equal(OriginalHangarScreen.EngineDropKey, host.FocusedKey);
         int engine = hangar.Scratch.Engine;
-        shell.Step(Right);
+        Right(host);
         Assert.Equal(engine + 1, hangar.Scratch.Engine);
 
-        shell.Step(Accept);
-        Assert.Equal(CustomPlaneDef.EngineNone + 1, shell.Rows.Count);
-        Assert.Equal(OriginalShell.EngineDropKey + ":" + (engine + 1), shell.FocusedKey);
-        shell.Step(Back);
-        Assert.Null(shell.OpenHangarDropdown);
-        Assert.Equal(OriginalScreen.HangarEngine, shell.Screen);
+        Accept(host);
+        Assert.Equal(CustomPlaneDef.EngineNone + 1, host.Rows.Count);
+        Assert.Equal(OriginalHangarScreen.EngineDropKey + ":" + (engine + 1), host.FocusedKey);
+        Back(host);
+        Assert.Null(host.Module.OpenHangarDropdown);
+        Assert.Equal(OriginalScreen.HangarEngine, host.Screen);
 
-        Click(shell, "PX_B_ARMOR");
-        Click(shell, "AR_D_POINT1");
-        Assert.Equal(CustomPlaneDef.MaxArmourUnits + 1, shell.Rows.Count);
-        var three = shell.Rows.Single(r => r.Key == "AR_D_POINT1:3");
-        Click(shell, three.X + 2f, three.Y + 2f);
+        Click(host, "PX_B_ARMOR");
+        Click(host, "AR_D_POINT1");
+        Assert.Equal(CustomPlaneDef.MaxArmourUnits + 1, host.Rows.Count);
+        Click(host, "AR_D_POINT1:3");
         Assert.Equal(3, hangar.Scratch.ArmourTail);
-        Assert.Equal("15 units", shell.Rows.Single(r => r.Key == "AR_D_POINT1").Label);
+        Assert.Equal("15 units", Row(host, "AR_D_POINT1").Label);
 
-        Click(shell, "PX_B_HARDPOINTS");
-        Click(shell, "HP_D_POINT0");
-        Click(shell, "HP_D_POINT0:2");
+        Click(host, "PX_B_HARDPOINTS");
+        Click(host, "HP_D_POINT0");
+        Click(host, "HP_D_POINT0:2");
         Assert.Equal(2, hangar.Scratch.LeftHardpoints);
-        Click(shell, "PX_B_GUNS");
-        Click(shell, "GN_D_GUN3");
-        Click(shell, "GN_D_GUN3:6");
+        Click(host, "PX_B_GUNS");
+        Click(host, "GN_D_GUN3");
+        Click(host, "GN_D_GUN3:6");
         Assert.Equal(new GunChoice(1, true), hangar.Scratch.Guns[3]);
     }
 
     [Fact]
-    public void TheKeyboardWalksFromTheDropdownsOntoTheTabBarAndAlongIt()
+    public void ASidewaysStepOnTheTabBarWalksAlongItAndABoxTakesNone()
     {
-        var shell = Shell(out _, out _);
-        OpenHub(shell, "Ace");
+        var host = Host(out _);
+        OpenHub(host, "Ace");
 
-        // The standing tab is a sibling like the other five, so the walk steps onto it too.
-        shell.Step(Down);
-        Assert.Equal("PX_B_AIRFRAME", shell.FocusedKey);
-        shell.Step(Right);
-        Assert.Equal("PX_B_ENGINE", shell.FocusedKey);
-        shell.Step(Right);
-        shell.Step(Right);
-        shell.Step(Right);
-        shell.Step(Right);
-        Assert.Equal("PX_B_PAINT", shell.FocusedKey);
-        shell.Step(Right);
-        Assert.Equal(OriginalShell.SellPlanesKey, shell.FocusedKey);
-        shell.Step(Up);
-        Assert.Equal("PX_B_PAINT", shell.FocusedKey);
+        // The standing tab is a sibling like the other five, so the walk steps onto it too, and
+        // past the last tab it reaches the buttons beside the bar.
+        host.FocusKey("PX_B_AIRFRAME");
+        Right(host);
+        Assert.Equal("PX_B_ENGINE", host.FocusedKey);
+        host.FocusKey("PX_B_PAINT");
+        Right(host);
+        Assert.Equal(OriginalHangarScreen.SellPlanesKey, host.FocusedKey);
+        Assert.True(host.Module.StepHangarSideways(host.Rows, host.Focus, -1));
+        Assert.Equal("PX_B_PAINT", host.FocusedKey);
+
+        host.FocusKey(OriginalHangarScreen.HubNameFieldKey);
+        Assert.False(host.Module.StepHangarSideways(host.Rows, host.Focus, 1));
+        Assert.Equal(OriginalHangarScreen.HubNameFieldKey, host.FocusedKey);
     }
 
     [Fact]
     public void ThePaintTabWindowsItsColourListAndDrawsSwatchesAndTiles()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
-        Click(shell, "PX_B_PAINT");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
+        Click(host, "PX_B_PAINT");
 
-        var colours = shell.Rows.Single(r => r.Key == "PT_D_COLORS0");
+        var colours = Row(host, "PT_D_COLORS0");
         Assert.Equal(string.Empty, colours.Label);
-        var decal = shell.Rows.Single(r => r.Key == "PT_D_DECALS2");
+        var decal = Row(host, "PT_D_DECALS2");
         Assert.Equal(73f, decal.Height);
-        Assert.Contains(shell.Compose().Fills, f => f.X == colours.X + 2f && f.Y == colours.Y + 2f && !f.Border);
+        Assert.Contains(Compose(host).Fills, f => f.X == colours.X + 2f && f.Y == colours.Y + 2f && !f.Border);
 
         int start = hangar.Scratch.PaintColours[0];
-        Click(shell, "PT_D_COLORS0");
+        Click(host, "PT_D_COLORS0");
         int swatches = HangarPaintTables.Default.Swatches.Count;
-        Assert.Equal(swatches + 2, shell.Rows.Count);
-        Assert.Equal(18, shell.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
-        Assert.Equal("PT_D_COLORS0:" + start, shell.FocusedKey);
-        Assert.True(shell.Rows.Single(r => r.Key == shell.FocusedKey).Visible);
-        Assert.True(shell.Rows.Single(r => r.Key == "PT_D_COLORS0:up").Enabled || shell.Rows.Single(r => r.Key == "PT_D_COLORS0:down").Enabled);
+        Assert.Equal(swatches + 2, host.Rows.Count);
+        Assert.Equal(18, host.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
+        Assert.Equal("PT_D_COLORS0:" + start, host.FocusedKey);
+        Assert.True(Row(host, host.FocusedKey).Visible);
+        Assert.True(Row(host, "PT_D_COLORS0:up").Enabled || Row(host, "PT_D_COLORS0:down").Enabled);
+
+        // The window follows the focus onto the last swatch, so the first scrolls out of it.
         int last = swatches - 1;
-        for (int i = 0; i < ((last - start) % swatches + swatches) % swatches; i++)
-        {
-            shell.Step(Down);
-        }
-
-        Assert.True(shell.Rows.Single(r => r.Key == "PT_D_COLORS0:" + last).Visible);
-        Assert.False(shell.Rows.Single(r => r.Key == "PT_D_COLORS0:0").Visible);
-        Assert.False(shell.Rows.Single(r => r.Key == "PT_D_COLORS0:down").Enabled);
-        shell.Step(Accept);
+        host.FocusKey("PT_D_COLORS0:" + last);
+        Assert.True(Row(host, "PT_D_COLORS0:" + last).Visible);
+        Assert.False(Row(host, "PT_D_COLORS0:0").Visible);
+        Assert.False(Row(host, "PT_D_COLORS0:down").Enabled);
+        Accept(host);
         Assert.Equal(last, hangar.Scratch.PaintColours[0]);
-        Assert.Null(shell.OpenHangarDropdown);
+        Assert.Null(host.Module.OpenHangarDropdown);
 
-        Click(shell, "PT_D_DECALS0");
-        Assert.Equal(10, shell.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
-        Click(shell, "PT_D_DECALS0:1");
+        Click(host, "PT_D_DECALS0");
+        Assert.Equal(10, host.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
+        Click(host, "PT_D_DECALS0:1");
         Assert.Equal(1, hangar.Scratch.NoseDecal);
-        Assert.Contains(shell.Compose().Pictures, p => p.Art.Name == "PH_Decals.tga" && p.Frame == 1);
-        Assert.Contains(shell.Compose().Pictures, p => p.Art.Name.StartsWith("PX_ICON_5_", StringComparison.Ordinal) && p.Tint != null);
+        Assert.Contains(Compose(host).Pictures, p => p.Art.Name == "PH_Decals.tga" && p.Frame == 1);
+        Assert.Contains(Compose(host).Pictures, p => p.Art.Name.StartsWith("PX_ICON_5_", StringComparison.Ordinal) && p.Tint != null);
     }
 
     /// <summary>The decal picker as the original opens it: a five-across, two-down grid of the
@@ -405,16 +389,16 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheDecalListOpensAsAFiveAcrossGridWhoseChromeMovesWithIt()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
-        Click(shell, "PX_B_PAINT");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
+        Click(host, "PX_B_PAINT");
         hangar.SetDecal(0, 40);
 
-        Click(shell, "PT_D_DECALS0");
+        Click(host, "PT_D_DECALS0");
 
         // Ten of the fifty tiles show, five across and two down, at the sheet's own tile size and
         // on the page's own rectangle rather than under the box.
-        var cells = shell.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).ToList();
+        var cells = host.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).ToList();
         Assert.Equal(10, cells.Count);
         Assert.All(cells, cell => Assert.Equal((66f, 66f), (cell.Width, cell.Height)));
         Assert.Equal(new[] { 407f, 473f, 539f, 605f, 671f }, cells.Take(5).Select(c => c.X).ToArray());
@@ -422,9 +406,9 @@ public class OriginalHangarTests : IDisposable
 
         // The window opens on the row its pick stands in, so decal 40 heads the grid, and the
         // tiles are drawn over the whole cell with no name beside them.
-        Assert.Equal("PT_D_DECALS0:40", shell.FocusedKey);
+        Assert.Equal("PT_D_DECALS0:40", host.FocusedKey);
         Assert.Equal(new[] { "PT_D_DECALS0:40", "PT_D_DECALS0:49" }, new[] { cells[0].Key, cells[9].Key });
-        var panel = shell.Compose().Overlays.Single(o => o.Fills.Count > 0);
+        var panel = Compose(host).Overlays.Single(o => o.Fills.Count > 0);
         Assert.Equal(10, panel.Pictures.Count(p => p.Art.Name == "PH_Decals.tga"));
         Assert.Contains(panel.Pictures, p => p.Art.Name == "PH_Decals.tga" && p.Frame == 40 && p.X == 407f && p.Y == 375f);
         Assert.Empty(panel.Lines);
@@ -434,8 +418,8 @@ public class OriginalHangarTests : IDisposable
         var back = panel.Fills[0];
         Assert.Equal((406f, 374f), (back.X, back.Y));
         Assert.Equal(((5f * 66f) + 15f + 2f, (2f * 66f) + 2f), (back.Width, back.Height));
-        var up = shell.Rows.Single(r => r.Key == "PT_D_DECALS0:up");
-        var down = shell.Rows.Single(r => r.Key == "PT_D_DECALS0:down");
+        var up = Row(host, "PT_D_DECALS0:up");
+        var down = Row(host, "PT_D_DECALS0:down");
         Assert.Equal((737f, 375f), (up.X, up.Y));
         Assert.Equal((737f, 374f + (2f * 66f) + 1f - up.Height), (down.X, down.Y));
         Assert.True(up.Enabled);
@@ -443,27 +427,28 @@ public class OriginalHangarTests : IDisposable
 
         // The scrollbar counts grid rows: ten of them, two showing, the window on the last pair,
         // and the thumb drawn to the height the window gives it rather than the art's own.
-        var window = shell.Lists.Single(l => l.Key == "PT_D_DECALS0").Window;
-        Assert.Equal((10, 2, 8), (window.Count, window.Rows, window.Top));
-        Assert.Contains(panel.Pictures, p => p.Art.Name == "PH_B_ScrollBar.png" && p.Height == window.ThumbHeight);
+        var list = Lists(host).Single(l => l.Key == "PT_D_DECALS0");
+        Assert.Equal((10, 2, 8), (list.Window.Count, list.Window.Rows, list.Window.Top));
+        Assert.Contains(panel.Pictures, p => p.Art.Name == "PH_B_ScrollBar.png" && p.Height == list.Window.ThumbHeight);
 
-        // A wheel notch and an arrow press are both one row of five.
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(500f, 400f, false, false, -1) });
-        Assert.Equal("PT_D_DECALS0:35", shell.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
-        Click(shell, "PT_D_DECALS0:up");
-        Assert.Equal("PT_D_DECALS0:30", shell.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
-        Click(shell, "PT_D_DECALS0:down");
-        Assert.Equal("PT_D_DECALS0:35", shell.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
+        // A wheel notch over the grid and an arrow press are both one row of five.
+        Assert.True(list.Window.Contains(500f, 400f));
+        list.ScrollTo(list.Window.TopAfterWheel(-1));
+        Assert.Equal("PT_D_DECALS0:35", host.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
+        Click(host, "PT_D_DECALS0:up");
+        Assert.Equal("PT_D_DECALS0:30", host.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
+        Click(host, "PT_D_DECALS0:down");
+        Assert.Equal("PT_D_DECALS0:35", host.Rows.First(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Key);
 
         // A tile picks the decal its own cell carries.
-        Click(shell, "PT_D_DECALS0:36");
+        Click(host, "PT_D_DECALS0:36");
         Assert.Equal(36, hangar.Scratch.NoseDecal);
-        Assert.Null(shell.OpenHangarDropdown);
+        Assert.Null(host.Module.OpenHangarDropdown);
 
         // The colour lists stay one column wide.
-        Click(shell, "PT_D_COLORS0");
-        Assert.Equal(18, shell.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
-        Assert.Single(shell.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Select(r => r.X).Distinct());
+        Click(host, "PT_D_COLORS0");
+        Assert.Equal(18, host.Rows.Count(r => r.Visible && r.Kind == OriginalRowKind.ListRow));
+        Assert.Single(host.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Select(r => r.X).Distinct());
     }
 
     /// <summary>The tab pages' description box: the component's figures on their own lines, the
@@ -473,11 +458,11 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheTabPagesDescriptionBoxCarriesTheHeadingAndTheComponentsProse()
     {
-        var shell = Shell(out _, out _, strings: HangarInfoStrings());
-        OpenHub(shell, "Ace");
-        Click(shell, "PX_B_ENGINE");
+        var host = Host(out _, strings: HangarInfoStrings());
+        OpenHub(host, "Ace");
+        Click(host, "PX_B_ENGINE");
 
-        var board = shell.Compose();
+        var board = Compose(host);
         Assert.Contains(board.Lines, l => l.Text == "COST: $1700" && l.Italic);
         Assert.Contains(board.Lines, l => l.Text == "WEIGHT: 2000 lbs.");
         Assert.Contains(board.Lines, l => l.Text == "TOP SPEED: 251 m.p.h.");
@@ -495,8 +480,8 @@ public class OriginalHangarTests : IDisposable
         Assert.True(note.Y + note.Height <= 330f + 160f, "the prose stays inside the authored box");
 
         // Armour names itself off the shipped string and carries its prose inside it.
-        Click(shell, "PX_B_ARMOR");
-        board = shell.Compose();
+        Click(host, "PX_B_ARMOR");
+        board = Compose(host);
         Assert.Contains(board.Lines, l => l.Text == "ABOUT ARMOR");
         Assert.Contains(board.Lines, l => l.Text == "COST: $20/5 units" && l.Italic);
         Assert.Contains(board.Lines, l => l.Text == "NOTE: Left and right wings must be balanced!");
@@ -504,76 +489,78 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal("Aero-armor.", Assert.Single(Assert.Single(board.Notes).Entries));
 
         // An empty gun slot is its own string, with no figures and no heading over it.
-        Click(shell, "PX_B_GUNS");
-        Click(shell, "GN_D_GUN0");
-        Click(shell, "GN_D_GUN0:" + (HangarFeature.GunCycleRows - 1));
-        board = shell.Compose();
+        Click(host, "PX_B_GUNS");
+        Click(host, "GN_D_GUN0");
+        Click(host, "GN_D_GUN0:" + (HangarFeature.GunCycleRows - 1));
+        board = Compose(host);
         Assert.DoesNotContain(board.Lines, l => l.Text == "DESCRIPTION");
         Assert.Equal("No Information Available", Assert.Single(Assert.Single(board.Notes).Entries));
     }
 
     [Fact]
-    public void ReadyOpensTheTotalsWhosePurchaseCommitsIntoTheStoreAndTheRoster()
+    public void ReadyOpensTheTotalsWhosePurchaseCommitsIntoTheStoreAndAsksForTheRosters()
     {
-        var shell = Shell(out var hangar, out var setup);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
 
-        Click(shell, OriginalShell.ReadyKey);
-        Assert.Equal(OriginalScreen.HangarPurchase, shell.Screen);
-        var purchase = shell.Rows.Single(r => r.Key == OriginalShell.PurchaseNowKey);
+        Click(host, OriginalHangarScreen.ReadyKey);
+        Assert.Equal(OriginalScreen.HangarPurchase, host.Screen);
+        var purchase = Row(host, OriginalHangarScreen.PurchaseNowKey);
         Assert.True(purchase.Enabled);
         // The wallet-free door commits with Export, over the row's own Purchase Now.
         Assert.Equal("Export", purchase.Label);
-        Assert.False(shell.Rows.Single(r => r.Key == OriginalShell.ReadyKey).Enabled);
-        var board = shell.Compose();
+        Assert.False(Row(host, OriginalHangarScreen.ReadyKey).Enabled);
+        var board = Compose(host);
         Assert.Contains(board.Lines, l => l.Text == "Airframe 5");
         Assert.Contains(board.Lines, l => l.Text == "$" + hangar.Bill.Total.Cost);
 
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
-        Click(shell, OriginalShell.ReadyKey);
-        Click(shell, OriginalShell.PurchaseNowKey);
+        Back(host);
+        Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
+        Click(host, OriginalHangarScreen.ReadyKey);
+        Click(host, OriginalHangarScreen.PurchaseNowKey);
 
         // The commit returns to the screen the door was pressed on, the Instant Action screen,
-        // with its Pilot Plane list re-read so the build is offered at once.
-        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
-        Assert.Equal(OriginalShell.BuildKey, shell.FocusedKey);
-        Assert.Equal("Ace", shell.LastBuiltPlane);
+        // asking the host for the sortie roster and that screen's Pilot Plane list re-read so the
+        // build is offered at once.
+        Assert.Equal(OriginalScreen.InstantAction, host.Screen);
+        Assert.Equal("Ace", host.Module.LastBuiltPlane);
         Assert.False(hangar.IsOpen);
         Assert.Equal(HangarFeature.DefaultAirframe, _store.Load("Ace")!.Airframe);
-        Assert.Contains(setup.Roster, a => a.Name == "Ace" && a.IsCustom);
-        Assert.Contains(shell.PilotRoster, a => a.Name == "Ace" && a.IsCustom);
+        Assert.Equal(1, host.RosterRefreshes);
+        Assert.Equal(1, host.InstantActionRefreshes);
+        Assert.Equal(0, host.CampaignResumes);
     }
 
     [Fact]
     public void AnUnbuildablePlaneKeepsPurchaseNowDisabledWithTheReasonShowing()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
         hangar.SetEngine(CustomPlaneDef.EngineNone);
 
-        Click(shell, OriginalShell.ReadyKey);
-        Assert.False(shell.Rows.Single(r => r.Key == OriginalShell.PurchaseNowKey).Enabled);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "CAN'T PURCHASE: No Engine Selected");
+        Click(host, OriginalHangarScreen.ReadyKey);
+        Assert.False(Row(host, OriginalHangarScreen.PurchaseNowKey).Enabled);
+        Assert.Contains(Compose(host).Lines, l => l.Text == "CAN'T PURCHASE: No Engine Selected");
     }
 
     [Fact]
     public void CancelFromATabAndBackFromTheNameScreenLeaveNoResidue()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
-        Click(shell, "PX_B_GUNS");
-        Click(shell, OriginalShell.CancelBuildKey);
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
+        Click(host, "PX_B_GUNS");
+        Click(host, OriginalHangarScreen.CancelBuildKey);
 
-        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        Assert.Equal(OriginalScreen.InstantAction, host.Screen);
         Assert.False(hangar.IsOpen);
         Assert.Empty(_store.List());
 
-        OpenName(shell, "Ace");
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        OpenName(host, "Ace");
+        Back(host);
+        Assert.Equal(OriginalScreen.InstantAction, host.Screen);
         Assert.False(hangar.IsOpen);
         Assert.Empty(_store.List());
+        Assert.Equal(0, host.RosterRefreshes);
     }
 
     [Fact]
@@ -581,52 +568,48 @@ public class OriginalHangarTests : IDisposable
     {
         _store.Save(new CustomPlaneDef { Name = "Old", Airframe = 2, Engine = 1 });
         _store.Save(new CustomPlaneDef { Name = "Spare", Airframe = 3, Engine = 1 });
-        var shell = Shell(out var hangar, out var setup);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
 
-        Click(shell, OriginalShell.SellPlanesKey);
-        Assert.Equal(OriginalScreen.HangarInventory, shell.Screen);
+        Click(host, OriginalHangarScreen.SellPlanesKey);
+        Assert.Equal(OriginalScreen.HangarInventory, host.Screen);
         // Wallet-free the Export row is not built at all: Instant Action has nowhere to export to,
         // and the removal is a delete rather than a sale.
         Assert.Equal(
-            new[] { OriginalShell.InventoryPlanesKey, OriginalShell.InventorySellKey, OriginalShell.InventoryDoneKey },
-            shell.Rows.Select(r => r.Key));
-        Assert.Equal("Delete", shell.Rows.Single(r => r.Key == OriginalShell.InventorySellKey).Label);
-        Assert.Equal("Old", shell.Rows[0].Label);
-        Assert.Contains(shell.Compose().Pictures, p => p.Art.Name == "PH_PlaneIcons.png" && p.Frame == 2);
+            new[] { OriginalHangarScreen.InventoryPlanesKey, OriginalHangarScreen.InventorySellKey, OriginalHangarScreen.InventoryDoneKey },
+            host.Rows.Select(r => r.Key));
+        Assert.Equal("Delete", Row(host, OriginalHangarScreen.InventorySellKey).Label);
+        Assert.Equal("Old", host.Rows[0].Label);
+        Assert.Contains(Compose(host).Pictures, p => p.Art.Name == "PH_PlaneIcons.png" && p.Frame == 2);
 
-        shell.Step(Right);
-        Assert.Equal(1, shell.InventoryIndex);
-        Assert.Equal("Spare", shell.Rows[0].Label);
+        Right(host);
+        Assert.Equal(1, host.Module.InventoryIndex);
+        Assert.Equal("Spare", host.Rows[0].Label);
         // Sell asks first, the two-answer messagebox opening on its first answer; No keeps the
         // plane, Yes sells it, and Back declines.
-        Click(shell, OriginalShell.InventorySellKey);
-        Assert.NotNull(shell.Dialog);
-        Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
-        Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
-        Assert.Contains(shell.Compose().Overlays, o => o.Lines.Any(l => l.Text == shell.Dialog!.Message));
+        Click(host, OriginalHangarScreen.InventorySellKey);
+        Assert.NotNull(host.Dialog);
+        Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, host.Dialog!.Answers.Select(a => a.Key));
+        Assert.Equal(OriginalShell.DialogYesKey, host.FocusedKey);
         // The question is the delete one, with no price on a plane that cost nothing.
-        Assert.Contains("delete it?", shell.Dialog!.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("$", shell.Dialog!.Message, StringComparison.Ordinal);
+        Assert.Contains("delete it?", host.Dialog!.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("$", host.Dialog!.Message, StringComparison.Ordinal);
         // The sell question is HANGAR.SCRIPT's 0x4 mask, so it keeps the query icon.
-        Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
-        Assert.Equal(
-            (int)DialogIcon.Query,
-            DialogIconTests.IconFrame(shell.Compose().Overlays.First(o => o.Lines.Count > 0)));
-        shell.Step(Back);
-        Assert.Null(shell.Dialog);
+        Assert.Equal(DialogIcon.Query, host.Dialog!.Icon);
+        Back(host);
+        Assert.Null(host.Dialog);
         Assert.NotNull(_store.Load("Spare"));
-        Assert.Equal(OriginalShell.InventorySellKey, shell.FocusedKey);
-        Click(shell, OriginalShell.InventorySellKey);
-        Click(shell, OriginalShell.DialogYesKey);
-        Assert.Null(shell.Dialog);
+        Assert.Equal(OriginalHangarScreen.InventorySellKey, host.FocusedKey);
+        Click(host, OriginalHangarScreen.InventorySellKey);
+        Click(host, OriginalShell.DialogYesKey);
+        Assert.Null(host.Dialog);
         Assert.Null(_store.Load("Spare"));
         Assert.Equal(new[] { "Old" }, hangar.Saved.Select(p => p.Name));
-        Assert.DoesNotContain(setup.Roster, a => a.Name == "Spare");
+        Assert.Equal(1, host.RosterRefreshes);
         Assert.Equal("Ace", hangar.Scratch.Name);
 
-        Click(shell, OriginalShell.InventoryDoneKey);
-        Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
+        Click(host, OriginalHangarScreen.InventoryDoneKey);
+        Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
     }
 
     [Fact]
@@ -634,26 +617,26 @@ public class OriginalHangarTests : IDisposable
     {
         var owned = new CustomPlaneDef { Name = "Old", Airframe = 2, Engine = 1 };
         _store.Save(owned);
-        var shell = Shell(out var hangar, out _);
+        var host = Host(out var hangar);
         var wallet = new OwningWallet(owned);
-        shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", wallet);
-        Click(shell, OriginalShell.SellPlanesKey);
+        host.Module.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", wallet, HangarFeature.DefaultAirframe);
+        Click(host, OriginalHangarScreen.SellPlanesKey);
 
         // Export is the campaign's own verb, so the wallet's page keeps both shipped words.
         Assert.Equal(
-            new[] { OriginalShell.InventoryPlanesKey, OriginalShell.InventorySellKey, OriginalShell.InventoryExportKey, OriginalShell.InventoryDoneKey },
-            shell.Rows.Select(r => r.Key));
-        Assert.Equal("Sell", shell.Rows.Single(r => r.Key == OriginalShell.InventorySellKey).Label);
-        Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.InventoryExportKey).Enabled);
-        Click(shell, OriginalShell.InventoryExportKey);
-        Assert.NotNull(shell.Dialog);
+            new[] { OriginalHangarScreen.InventoryPlanesKey, OriginalHangarScreen.InventorySellKey, OriginalHangarScreen.InventoryExportKey, OriginalHangarScreen.InventoryDoneKey },
+            host.Rows.Select(r => r.Key));
+        Assert.Equal("Sell", Row(host, OriginalHangarScreen.InventorySellKey).Label);
+        Assert.True(Row(host, OriginalHangarScreen.InventoryExportKey).Enabled);
+        Click(host, OriginalHangarScreen.InventoryExportKey);
+        Assert.NotNull(host.Dialog);
         // The export box is the one-button 0x1 mask, so it keeps the notice icon.
-        Assert.Equal(DialogIcon.Warning, shell.Dialog!.Icon);
-        Assert.Equal(new[] { OriginalShell.DialogOkKey }, shell.Rows.Select(r => r.Key));
-        Assert.Contains("exported", shell.Dialog!.Message, StringComparison.Ordinal);
-        Click(shell, OriginalShell.DialogOkKey);
+        Assert.Equal(DialogIcon.Warning, host.Dialog!.Icon);
+        Assert.Equal(new[] { OriginalShell.DialogOkKey }, host.Dialog!.Answers.Select(a => a.Key));
+        Assert.Contains("exported", host.Dialog!.Message, StringComparison.Ordinal);
+        Click(host, OriginalShell.DialogOkKey);
 
-        Assert.Null(shell.Dialog);
+        Assert.Null(host.Dialog);
         Assert.NotNull(_store.Load("Old"));
         Assert.Equal(new[] { "Old" }, hangar.Saved.Select(p => p.Name));
     }
@@ -661,11 +644,11 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheHubComposesTheChromeTabsAndButtonsFromTheLayout()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
-        Click(shell, "PX_B_ENGINE");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
+        Click(host, "PX_B_ENGINE");
 
-        var board = shell.Compose();
+        var board = Compose(host);
         Assert.Equal("PH_Back.jpg", Assert.Single(board.Backdrop).Art.Name);
         // The standing tab is latched, not gated: the depressed frame in that frame's own ink,
         // against the normal frame the other five draw.
@@ -687,16 +670,16 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheHubReddensThePlaneCostPastTheWalletAndTheWeightPastTheCapacity()
     {
-        var shell = Shell(out var hangar, out _);
-        shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", new TightWallet(1_000_000));
-        var board = shell.Compose();
+        var host = Host(out var hangar);
+        host.Module.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", new TightWallet(1_000_000), HangarFeature.DefaultAirframe);
+        var board = Compose(host);
         Assert.Equal(BoardInk.Dialog, Figure(board, "PLANE COST").Ink);
         Assert.Equal(BoardInk.Dialog, Figure(board, "CURRENT WEIGHT").Ink);
 
         // The same build over funds that cannot cover it: the cost line alone reddens, since the
         // weight is unchanged by what the wallet holds.
-        shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", new TightWallet(1));
-        board = shell.Compose();
+        host.Module.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace", new TightWallet(1), HangarFeature.DefaultAirframe);
+        board = Compose(host);
         Assert.Equal(BoardInk.Alarm, Figure(board, "PLANE COST").Ink);
         Assert.Equal(BoardInk.Dialog, Figure(board, "CURRENT WEIGHT").Ink);
 
@@ -708,22 +691,20 @@ public class OriginalHangarTests : IDisposable
         hangar.SetHardpoints(0, CustomPlaneDef.MaxHardpointsPerWing);
         hangar.SetHardpoints(1, CustomPlaneDef.MaxHardpointsPerWing);
         Assert.Equal(PurchaseVerdict.Overweight, hangar.Bill.Verdict);
-        board = shell.Compose();
+        board = Compose(host);
         Assert.Equal(BoardInk.Alarm, Figure(board, "CURRENT WEIGHT").Ink);
     }
 
     [Fact]
     public void TheHubLeavesBothFiguresPlainBeforeAnAirframeIsChosen()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenName(shell, "Ace");
-        shell.Step(Down);
-        shell.Step(Accept);
-        shell.Step(Down);
-        shell.Step(Accept);
+        var host = Host(out var hangar);
+        OpenName(host, "Ace");
+        Click(host, OriginalHangarScreen.NameDefaultsKey);
+        Click(host, OriginalHangarScreen.NameOkKey);
         Assert.False(hangar.AirframeChosen);
 
-        var board = shell.Compose();
+        var board = Compose(host);
         Assert.EndsWith("Pending", Figure(board, "CURRENT WEIGHT").Text, StringComparison.Ordinal);
         Assert.Equal(BoardInk.Dialog, Figure(board, "CURRENT WEIGHT").Ink);
         Assert.Equal(BoardInk.Dialog, Figure(board, "PLANE COST").Ink);
@@ -732,25 +713,25 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void TheHubFiguresFollowTheFocusedRowAndComeBackWhenTheListCloses()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
-        Click(shell, "PX_B_ENGINE");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
+        Click(host, "PX_B_ENGINE");
         var committed = hangar.Bill;
-        Click(shell, OriginalShell.EngineDropKey);
-        Assert.Equal(OriginalShell.EngineDropKey, shell.OpenHangarDropdown);
-        shell.Step(Down);
-        int row = int.Parse(shell.FocusedKey[(OriginalShell.EngineDropKey.Length + 1)..], CultureInfo.InvariantCulture);
+        Click(host, OriginalHangarScreen.EngineDropKey);
+        Assert.Equal(OriginalHangarScreen.EngineDropKey, host.Module.OpenHangarDropdown);
+        int row = int.Parse(host.FocusedKey[(OriginalHangarScreen.EngineDropKey.Length + 1)..], CultureInfo.InvariantCulture) + 1;
+        host.FocusKey(OriginalHangarScreen.EngineDropKey + ":" + row.ToString(CultureInfo.InvariantCulture));
         var preview = hangar.BillWithEngine(row);
         Assert.NotEqual(committed.Total.Cost, preview.Total.Cost);
 
-        var board = shell.Compose();
+        var board = Compose(host);
         Assert.Contains("$" + preview.Total.Cost, Figure(board, "PLANE COST").Text, StringComparison.Ordinal);
         Assert.Contains(preview.Total.Weight.ToString(CultureInfo.InvariantCulture), Figure(board, "CURRENT WEIGHT").Text, StringComparison.Ordinal);
         Assert.Equal(committed.Total.Cost, hangar.Bill.Total.Cost);
 
         // Back closes the list without taking the row, so both figures are the standing build's again.
-        shell.Step(Back);
-        board = shell.Compose();
+        Back(host);
+        board = Compose(host);
         Assert.Contains("$" + committed.Total.Cost, Figure(board, "PLANE COST").Text, StringComparison.Ordinal);
         Assert.Contains(committed.Total.Weight.ToString(CultureInfo.InvariantCulture), Figure(board, "CURRENT WEIGHT").Text, StringComparison.Ordinal);
     }
@@ -758,8 +739,8 @@ public class OriginalHangarTests : IDisposable
     [Fact]
     public void DiscardingTheFeatureMidBuildLeavesNothingBehind()
     {
-        var shell = Shell(out var hangar, out _);
-        OpenHub(shell, "Ace");
+        var host = Host(out var hangar);
+        OpenHub(host, "Ace");
         hangar.Discard();
 
         Assert.False(hangar.IsOpen);
@@ -767,45 +748,135 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(string.Empty, hangar.Scratch.Name);
     }
 
+    // The fixture's strips: the tabs and buttons four frames each, the checkbox eight, the paper
+    // plaque 160x112, the decal sheet fifty 66-pixel tiles, the blueprint and icon sets present,
+    // the name dialog's pane smaller than the board and the full-page backgrounds unmeasured.
+    internal static (int Width, int Height)? Measure(string art) => art switch
+    {
+        "PH_NamePanel.png" => (260, 180),
+        "PM_B_Paper.png" or "PH_B_Paper.png" => (160, 112),
+        "PH_Tab.png" => (120, 120),
+        "PH_B_OkCancel.png" => (80, 96),
+        "PH_B_Check8.png" => (16, 128),
+        "PH_B_DropUp.png" or "PH_B_DropDown.png" => (15, 56),
+        "PH_Decals.tga" => (66, 3300),
+        "PH_PlaneIcons.png" => (100, 1200),
+        _ when art.StartsWith("PH_B_", StringComparison.Ordinal) => (200, 128),
+        _ when art.StartsWith("PX_ICON_", StringComparison.Ordinal) => (358, 335),
+        _ when art.StartsWith("PM_B_", StringComparison.Ordinal) => (240, 200),
+        _ => null,
+    };
+
     // One of the hub's figure lines by the words it opens with, the layout's own text around them.
     private static BoardLine Figure(ComposedBoard board, string label) =>
         board.Lines.Single(l => l.Text.StartsWith(label, StringComparison.Ordinal));
 
-    private static void Click(OriginalShell shell, string key)
+    private static OriginalRow Row(HangarHost host, string key) => host.Rows.Single(r => r.Key == key);
+
+    // One click as the shell reads it: the press puts the focus on the row and the release on it
+    // activates. Over a dialog the key names one of its answers.
+    private static void Click(HangarHost host, string key)
     {
-        var row = shell.Rows.Single(r => r.Key == key);
-        Click(shell, row.X + 2f, row.Y + 2f);
+        if (host.Dialog != null)
+        {
+            host.Answer(key);
+            return;
+        }
+
+        var rows = host.Rows;
+        int index = rows.ToList().FindIndex(r => r.Key == key);
+        Assert.True(index >= 0, $"no row {key}");
+        Assert.True(rows[index].Enabled, $"{key} is disabled");
+        host.FocusedRow = index;
+        host.Module.ActivateHangar(rows[index]);
+    }
+
+    // Accept on the focused row, or on a dialog's focused answer.
+    private static void Accept(HangarHost host)
+    {
+        if (host.Dialog != null)
+        {
+            host.Answer(host.FocusedKey);
+            return;
+        }
+
+        var rows = host.Rows;
+        host.Module.ActivateHangar(rows[host.Focus]);
+    }
+
+    // Back declines a dialog with its last answer, else steps back inside the hangar.
+    private static void Back(HangarHost host)
+    {
+        if (host.Dialog != null)
+        {
+            host.Answer(host.Dialog.Answers[^1].Key);
+            return;
+        }
+
+        host.Module.BackHangar();
+    }
+
+    private static void Right(HangarHost host) => host.Module.StepHangarSideways(host.Rows, host.Focus, 1);
+
+    private static void Type(HangarHost host, string text) =>
+        host.Module.TypeName(new MenuCommands { Typed = text }, new List<string>());
+
+    private static void Erase(HangarHost host) =>
+        host.Module.TypeName(new MenuCommands { Erase = true }, new List<string>());
+
+    private static IReadOnlyList<OriginalList> Lists(HangarHost host)
+    {
+        var lists = new List<OriginalList>();
+        host.Module.HangarLists(lists);
+        return lists;
+    }
+
+    // The screen as the module draws it, assembled the way the shell assembles its own board.
+    private static ComposedBoard Compose(HangarHost host)
+    {
+        var rows = host.Rows;
+        var backdrop = new List<BoardPicture>();
+        var pictures = new List<BoardPicture>();
+        var fills = new List<BoardFill>();
+        var lines = new List<BoardLine>();
+        var plaques = new List<BoardPlaque>();
+        var notes = new List<BoardNote>();
+        var overlays = new List<BoardPanel>();
+        host.Module.ComposeHangar(rows, host.Focus, backdrop, pictures, fills, lines, plaques, notes, overlays);
+        return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques, notes,
+            backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
     // The airframe tab's own swap, through the presses a pilot has: the closed box opens its list
     // and the row is picked out of it. The engine tab's pick is the same gesture.
-    private static void SwapAirframeTo(OriginalShell shell, int airframe) =>
-        PickFromList(shell, OriginalShell.AirframeDropKey, airframe);
+    private static void SwapAirframeTo(HangarHost host, int airframe) =>
+        PickFromList(host, OriginalHangarScreen.AirframeDropKey, airframe);
 
-    private static void PickEngine(OriginalShell shell, int engine) =>
-        PickFromList(shell, OriginalShell.EngineDropKey, engine);
+    private static void PickEngine(HangarHost host, int engine) =>
+        PickFromList(host, OriginalHangarScreen.EngineDropKey, engine);
 
-    private static void PickFromList(OriginalShell shell, string key, int row)
+    private static void PickFromList(HangarHost host, string key, int row)
     {
-        Click(shell, key);
-        Click(shell, key + ":" + row.ToString(CultureInfo.InvariantCulture));
+        Click(host, key);
+        Click(host, key + ":" + row.ToString(CultureInfo.InvariantCulture));
     }
 
-    // The way in: the top level's Instant Action row, then the screen's Build Custom Plane.
-    private static void OpenName(OriginalShell shell, string name)
+    // The way in: the wallet-free door from the Instant Action screen, which is where CANCEL and
+    // a commit return to, over the airframe the door names.
+    private static void OpenName(HangarHost host, string name, int doorAirframe = HangarFeature.DefaultAirframe)
     {
-        shell.Open(OriginalScreen.TopLevel);
-        Click(shell, "MM_B_INSTANTACTION");
-        Click(shell, OriginalShell.BuildKey);
-        shell.Step(new MenuCommands { Typed = name });
+        host.Open(OriginalScreen.InstantAction);
+        host.Module.OpenHangar(null, doorAirframe);
+        Assert.Equal(OriginalScreen.PlaneName, host.Screen);
+        Type(host, name);
     }
 
     // The name screen's OK with the box checked: the default configuration under the typed name.
-    private static void OpenHub(OriginalShell shell, string name)
+    private static void OpenHub(HangarHost host, string name, int doorAirframe = HangarFeature.DefaultAirframe)
     {
-        OpenName(shell, name);
-        Click(shell, OriginalShell.NameOkKey);
-        Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
+        OpenName(host, name, doorAirframe);
+        Click(host, OriginalHangarScreen.NameOkKey);
+        Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
     }
 
     // The info rows the boxes are built from, with stand-in prose: the two shipped format strings
@@ -830,47 +901,150 @@ public class OriginalHangarTests : IDisposable
             new { id = 3335, dll = UiStrings.Table, text = "No Information Available" },
         }));
 
-    // The fixture's strips: the tabs and buttons four frames each, the checkbox eight, the paper
-    // plaque 160x112, the decal sheet fifty 66-pixel tiles, the blueprint and icon sets present,
-    // the name dialog's pane smaller than the board and the full-page backgrounds unmeasured.
-    private static (int Width, int Height)? Measure(string art) => art switch
+    // The module over a fresh feature, the suite's scratch store and the layout fixture, standing
+    // on the Instant Action screen, which is the wallet-free door's own.
+    private HangarHost Host(out HangarFeature hangar, UiStrings? strings = null)
     {
-        "PH_NamePanel.png" => (260, 180),
-        "PM_B_Paper.png" or "PH_B_Paper.png" => (160, 112),
-        "PH_Tab.png" => (120, 120),
-        "PH_B_OkCancel.png" => (80, 96),
-        "PH_B_Check8.png" => (16, 128),
-        "PH_B_DropUp.png" or "PH_B_DropDown.png" => (15, 56),
-        "PH_Decals.tga" => (66, 3300),
-        "PH_PlaneIcons.png" => (100, 1200),
-        _ when art.StartsWith("PH_B_", StringComparison.Ordinal) => (200, 128),
-        _ when art.StartsWith("PX_ICON_", StringComparison.Ordinal) => (358, 335),
-        _ when art.StartsWith("PM_B_", StringComparison.Ordinal) => (240, 200),
-        _ => null,
-    };
-
-    // One click as the shell reads it: the press arms the row and the release on it fires, so the
-    // step that carries the activation is the second one.
-    private static OriginalStep Click(OriginalShell shell, float x, float y)
-    {
-        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, true, true) });
-        return shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, false, false) });
+        hangar = new HangarFeature(strings ?? UiStrings.Empty, PlanePickerRoster.AirframeNode);
+        var host = new HangarHost();
+        host.Module = new OriginalHangarScreen(hangar, _store, MenuLayoutReaderTests.OriginalLayout(), Measure, host);
+        return host;
     }
 
-    // The Instant Action door's Pilot Plane pick is what a default-configuration build inherits, so
-    // every shell here states the pick it opens the door from; the Devastator is the suite's.
-    private OriginalShell Shell(
-        out HangarFeature hangar, out PlayerSetupFeature setup,
-        int pilotPlane = HangarFeature.DefaultAirframe, UiStrings? strings = null)
+    // The shell's side of the seam, hand-written: the screen showing, one focus per screen (the
+    // first live row where none was set, as the shell's own EnsureFocus rules), a standing dialog
+    // opened on its first answer, and a count of each re-read the module asks for. Rows the module
+    // has no drawing of its own for become a plaque or a line, standing in for the shell's rule.
+    private sealed class HangarHost : IOriginalHangarHost
     {
-        setup = new PlayerSetupFeature();
-        setup.SetRoster(OriginalRosters.Roster(Array.Empty<CustomPlaneDef>()));
-        setup.Join(new ScriptedMenuSeat());
-        hangar = new HangarFeature(strings ?? UiStrings.Empty, PlanePickerRoster.AirframeNode);
-        var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
-        instantAction.SelectPlayerPlane(pilotPlane);
-        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
-            instantAction: instantAction, hangar: hangar, planes: _store);
+        private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
+        private int _focusBeforeDialog = -1;
+        private int _dialogFocus;
+
+        internal HangarHost()
+        {
+            Array.Fill(_focus, -1);
+        }
+
+        public OriginalHangarScreen Module { get; set; } = null!;
+
+        public OriginalScreen Screen { get; private set; } = OriginalScreen.InstantAction;
+
+        public OriginalDialog? Dialog { get; private set; }
+
+        public int RosterRefreshes { get; private set; }
+
+        public int InstantActionRefreshes { get; private set; }
+
+        public int CampaignResumes { get; private set; }
+
+        public bool DialogOpen => Dialog != null;
+
+        public int PressedRow => -1;
+
+        public CustomPlaneStore? CampaignPlanes => null;
+
+        public IReadOnlyList<OriginalRow> Rows
+        {
+            get
+            {
+                var rows = new List<OriginalRow>();
+                Module.BuildHangarRows(rows);
+                return rows;
+            }
+        }
+
+        public int Focus
+        {
+            get
+            {
+                var rows = Rows;
+                int focus = _focus[(int)Screen];
+                if (focus >= 0 && focus < rows.Count)
+                {
+                    return focus;
+                }
+
+                focus = rows.ToList().FindIndex(r => r.Enabled);
+                _focus[(int)Screen] = focus;
+                return focus;
+            }
+        }
+
+        public string FocusedKey
+        {
+            get
+            {
+                if (Dialog != null)
+                {
+                    return Dialog.Answers[_dialogFocus].Key;
+                }
+
+                int focus = Focus;
+                return focus >= 0 ? Rows[focus].Key : string.Empty;
+            }
+        }
+
+        public int FocusedRow
+        {
+            get => _focus[(int)Screen];
+            set => _focus[(int)Screen] = value;
+        }
+
+        public void Open(OriginalScreen screen) => Screen = screen;
+
+        public void FocusKey(string key)
+        {
+            var rows = Rows;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].Key == key)
+                {
+                    _focus[(int)Screen] = i;
+                    return;
+                }
+            }
+        }
+
+        public void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
+        {
+            _focusBeforeDialog = _focus[(int)Screen];
+            Dialog = new OriginalDialog(message, icon, answers);
+            _dialogFocus = 0;
+        }
+
+        // One answer taken, the way the shell takes one: the box goes first, the focus behind it
+        // comes back, then the answer runs over the bare screen.
+        public void Answer(string key)
+        {
+            var dialog = Dialog!;
+            var answer = dialog.Answers.Single(a => a.Key == key);
+            Dialog = null;
+            _focus[(int)Screen] = _focusBeforeDialog;
+            answer.Run?.Invoke();
+        }
+
+        public (int Width, int Height)? Measure(string art) => OriginalHangarTests.Measure(art);
+
+        public void ResumeCampaign() => CampaignResumes++;
+
+        public void RefreshInstantActionRoster() => InstantActionRefreshes++;
+
+        public void RefreshRosterFromStore() => RosterRefreshes++;
+
+        public void ComposeGenericRow(
+            OriginalRow row, bool focused, bool pressed, int index,
+            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
+        {
+            if (row.Art != null)
+            {
+                int frame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
+                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, frame, row.Label, BoardInk.Row));
+                return;
+            }
+
+            lines.Add(new BoardLine(row.Label, row.X, row.Y, row.Width, 12f, BoardInk.Row, index));
+        }
     }
 
     // A wallet with a stated purse and no aircraft, for the pages whose subject is the money: what

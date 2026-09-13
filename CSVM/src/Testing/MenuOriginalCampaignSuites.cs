@@ -647,7 +647,7 @@ internal static class MenuOriginalCampaignSuites
             $"PLANE CONSTRUCTION opens the name screen over the profile's wallet ({shell.Screen}, wallet {hangar.Wallet != null})");
 
         Press(host, seat, new MenuCommands { Typed = "Decalled" });
-        var ok = Row(shell, OriginalShell.NameOkKey)!;
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey)!;
         Click(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
         var paint = Row(shell, "PX_B_PAINT")!;
         Click(host, seat, Pointer(fit, paint.X + 5f, paint.Y + 5f, pressed: true, clicked: true));
@@ -657,7 +657,7 @@ internal static class MenuOriginalCampaignSuites
         if (decals != null)
         {
             Click(host, seat, Pointer(fit, decals.X + 5f, decals.Y + 5f, pressed: true, clicked: true));
-            ctx.Check(shell.OpenHangarDropdown == "PT_D_DECALS0", $"a click opens its list ({shell.OpenHangarDropdown ?? "none"})");
+            ctx.Check(shell.Hangar!.OpenHangarDropdown == "PT_D_DECALS0", $"a click opens its list ({shell.Hangar!.OpenHangarDropdown ?? "none"})");
             WheelAndDrag(ctx, host, seat, shell, fit, "PT_D_DECALS0", "Plane Construction's decal list");
             Press(host, seat, Back);
         }

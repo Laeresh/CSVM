@@ -906,15 +906,15 @@ internal static class MenuInstantActionSuites
 
         Click(host, seat, Pointer(fit, build.X + 5f, build.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = built });
-        var ok = Row(shell, OriginalShell.NameOkKey);
-        ctx.Check(ok is { Enabled: true } && shell.HangarName == built, $"typed frames name the plane ({shell.HangarName})");
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey);
+        ctx.Check(ok is { Enabled: true } && shell.Hangar!.HangarName == built, $"typed frames name the plane ({shell.Hangar!.HangarName})");
         if (ok == null)
         {
             return;
         }
 
         Click(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
-        var ready = Row(shell, OriginalShell.ReadyKey);
+        var ready = Row(shell, OriginalHangarScreen.ReadyKey);
         ctx.Check(shell.Screen == OriginalScreen.HangarAirframe && ready != null, $"OK opens the hub on the default configuration ({shell.Screen})");
         if (ready == null)
         {
@@ -922,7 +922,7 @@ internal static class MenuInstantActionSuites
         }
 
         Click(host, seat, Pointer(fit, ready.X + 5f, ready.Y + 5f, pressed: true, clicked: true));
-        var purchase = Row(shell, OriginalShell.PurchaseNowKey);
+        var purchase = Row(shell, OriginalHangarScreen.PurchaseNowKey);
         ctx.Check(shell.Screen == OriginalScreen.HangarPurchase && purchase is { Enabled: true }, $"READY opens the totals page with Purchase Now live ({shell.Screen})");
         if (purchase == null)
         {

@@ -71,7 +71,7 @@ public sealed partial class OriginalShell
     /// <summary>The stock node whose fit the loadout screen is editing, or null while it is not showing.</summary>
     public string? LoadoutNode => _loadoutNode;
 
-    private UiStrings LoadoutStrings => _campaign?.Strings ?? _hangar?.Strings ?? UiStrings.Empty;
+    private UiStrings LoadoutStrings => _campaign?.Strings ?? _hangarModule?.Strings ?? UiStrings.Empty;
 
     /// <summary>Opens the Weapon Loadout for the seat the radio pair names: the wingmen's airframe
     /// and shared fit, or the picked pilot row (a build edits its airframe's stock fit) and seat

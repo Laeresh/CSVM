@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -198,7 +199,7 @@ public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutCol
 /// stand over any screen, and while one does its answers are the only rows. Every rectangle and art
 /// name comes from the layout, the art's pixel size from the measurer the presentation injects.
 /// </summary>
-public sealed partial class OriginalShell
+public sealed partial class OriginalShell : IOriginalHangarHost
 {
     /// <summary>The Free Flight door's key on the top level.</summary>
     public const string FreeFlightKey = "FREEFLIGHT";
@@ -344,6 +345,8 @@ public sealed partial class OriginalShell
     private readonly Func<CSVM.Utils.SizeList>? _screenSizes;
     private readonly Func<CSVM.Utils.ScreenList>? _screens;
     private readonly ControlsFeature? _controls;
+    private readonly CSVM.Flight.CustomPlaneStore? _planes;
+    private readonly OriginalHangarScreen? _hangarModule;
     private readonly SliderControl _slider = new();
     private readonly CinemaFilm _film = new();
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
@@ -425,7 +428,6 @@ public sealed partial class OriginalShell
         _flightDevices = flightDevices ?? (_ => Array.Empty<int>());
         _chapters = chapters ?? OriginalRosters.Chapters;
         _instantAction = instantAction ?? new InstantActionFeature(_ => Mech3.InstantAction.Defaults());
-        _hangar = hangar;
         _planes = planes;
         _campaign = campaign;
         _profiles = profiles;
@@ -435,13 +437,13 @@ public sealed partial class OriginalShell
         _screenSizes = screenSizes;
         _screens = screens;
         _controls = controls;
+        _hangarModule = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
         PreferencesInks = ReadPreferencesInks(layout, Inks);
         InstantActionInks = ReadInstantActionInks(layout);
-        HangarInks = ReadHangarInks(layout);
         _activePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "activepointerz.png"));
         _passivePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "passivepointerz.png"));
         for (int i = 0; i < _focus.Length; i++)
@@ -525,13 +527,27 @@ public sealed partial class OriginalShell
                     CampaignLists(lists);
                     break;
                 case var _ when IsHangarScreen:
-                    HangarLists(lists);
+                    _hangarModule?.HangarLists(lists);
                     break;
             }
 
             return lists;
         }
     }
+
+    /// <summary>Whether the screen showing is one of the hangar's: the name screen, a tab, the
+    /// totals page or the inventory.</summary>
+    public bool IsHangarScreen => _hangarModule?.Owns(_screen) ?? false;
+
+    /// <summary>Whether seat 0's typed characters feed a text field right now: the campaign
+    /// roster's name box, or one of the hangar's own. None of them while a dialog stands over the
+    /// screen.</summary>
+    public bool CapturingText =>
+        _dialog == null && (_screen == OriginalScreen.CampaignRoster || (_hangarModule?.CapturingText ?? false));
+
+    /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
+    /// on a shell built without a hangar feature.</summary>
+    public OriginalHangarScreen? Hangar => _hangarModule;
 
     /// <summary>The list whose thumb the pointer is dragging, or null.</summary>
     public string? Dragging => _drag?.Key;
@@ -592,6 +608,16 @@ public sealed partial class OriginalShell
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
 
+    /// <summary>Opens the hangar from the screen showing, wallet-free from Instant Action's Build
+    /// Custom Plane and over <paramref name="wallet"/> from the cabin's PLANE CONSTRUCTION. Nothing
+    /// happens when the shell has no hangar feature or no store.</summary>
+    public void OpenHangar(IHangarWallet? wallet = null) => _hangarModule?.OpenHangar(wallet, DoorAirframe());
+
+    /// <summary>Opens a hangar tab directly on a default-configuration build named
+    /// <paramref name="name"/>, the screenshot aids' door.</summary>
+    public void OpenHangarTab(OriginalScreen tab, string name, IHangarWallet? wallet = null) =>
+        _hangarModule?.OpenHangarTab(tab, name, wallet, DoorAirframe());
+
     /// <summary>Stands the shell on its top level, the landing point of every return and of a
     /// cold start: the list cursors stay where they were, every seat's pick goes back to browsing
     /// so a return from flight cannot fly again on a stale pick, and an open campaign is dropped,
@@ -632,6 +658,42 @@ public sealed partial class OriginalShell
     /// for one and the campaign check's screens on a guest's, only its pointer counts. The pointer,
     /// when present, is in authored pixels.</summary>
     public OriginalStep Step(MenuCommands commands) => StepSeat(0, commands);
+
+    // The airframe a default-configuration build opens on: the pilot's current plane on whichever
+    // screen the hangar door stands on. Instant Action's door means its Pilot Plane pick, the
+    // cabin's the seated pilot's own aircraft, and any other door has no current plane to inherit
+    // (docs/org/hangar.md, "What Load Default Configuration loads").
+    private int DoorAirframe()
+    {
+        if (_screen == OriginalScreen.InstantAction && _instantAction != null)
+        {
+            return _instantAction.PlayerPlaneIndex;
+        }
+
+        return _campaign?.Field.Plane(0)?.Airframe ?? HangarFeature.DefaultAirframe;
+    }
+
+    // Typed characters and Backspace into whichever edit box is showing: the campaign roster's own
+    // rule, else whichever the hangar owns (the name screen and the hub share the hangar name's
+    // character set and cap).
+    private bool TypeName(MenuCommands commands, List<string> cues) =>
+        _screen == OriginalScreen.CampaignRoster
+            ? TypeRosterName(commands, cues)
+            : _hangarModule?.TypeName(commands, cues) ?? false;
+
+    private void RefreshRosterFromStore()
+    {
+        if (_planes == null)
+        {
+            return;
+        }
+
+        _setup.SetRoster(OriginalRosters.Roster(_planes.List()));
+        foreach (var seat in _setup.Seats)
+        {
+            seat.Cursor = Math.Clamp(seat.Cursor, 0, Math.Max(0, _setup.Roster.Count - 1));
+        }
+    }
 
     // One seat's frame applied to the screen showing, the seat's own right to drive it already
     // settled by StepSeat.
@@ -770,7 +832,7 @@ public sealed partial class OriginalShell
                 focus = EnsureFocus(rows);
             }
             else if (pointer.Clicked && over < 0
-                && (CloseInstantActionDropdown() || CloseHangarDropdown() || CloseCampaignCombo()
+                && (CloseInstantActionDropdown() || (_hangarModule?.CloseHangarDropdown() ?? false) || CloseCampaignCombo()
                     || CloseGameOptionsDropdown() || CloseVideoDropdown()))
             {
                 // A click off an open list closes it and picks nothing.
@@ -821,7 +883,7 @@ public sealed partial class OriginalShell
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
-            else if (IsHangarScreen && StepHangarSideways(rows, focus, commands.MoveX))
+            else if (IsHangarScreen && (_hangarModule?.StepHangarSideways(rows, focus, commands.MoveX) ?? false))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -916,7 +978,7 @@ public sealed partial class OriginalShell
                 ComposeSeatPlane(focus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case var _ when IsHangarScreen:
-                ComposeHangar(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, notes, overlays);
+                _hangarModule?.ComposeHangar(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, notes, overlays);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
@@ -988,6 +1050,19 @@ public sealed partial class OriginalShell
         var labelRollover = plaque != null && plaque.TryColor("ColorRollover", out var r) ? r : rollover;
         var labelDepressed = plaque != null && plaque.TryColor("ColorDepressed", out var d) ? d : depressed;
         return new OriginalInks(disabled, active, rollover, depressed, labelNormal, labelRollover, labelDepressed);
+    }
+
+    // A slot number a keyed widget carries after a shared prefix, or null for a key from another
+    // family or a plain key with none. Shared by the loadout screen's ammo and pylon fields and the
+    // hangar's own numbered rows.
+    private static int? Indexed(string key, string prefix)
+    {
+        if (!key.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return int.TryParse(key.AsSpan(prefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : null;
     }
 
     // The pointer bitmaps are named by the globals script, not by any layout row, so they are
@@ -1103,6 +1178,40 @@ public sealed partial class OriginalShell
         }
 
         return ordinal;
+    }
+
+    // Where a section's pane lands on the board, which for art smaller than the board is centred
+    // rather than left at the corner it is authored at. PLANENAME.SCRIPT initializes
+    // pn_p_background with relative = 1 and then sets the screen's own location to
+    // ((getresx() - its width) / 2, (getresy() - its height) / 2); the messagebox does the same,
+    // its 410x300 pane landing on the 195,150 the reference shots measure. A pane that fills the
+    // board centres onto its own corner, and one authored away from the corner keeps it.
+    private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key)
+    {
+        if (screen.Widget(key) is not { Art.Count: > 0 } pane)
+        {
+            return (0f, 0f);
+        }
+
+        float x = pane.Int("X");
+        float y = pane.Int("Y");
+        if (x != 0f || y != 0f || _measure(pane.Art[0]) is not { } size)
+        {
+            return (x, y);
+        }
+
+        return (
+            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredWidth - size.Width) / 2f)),
+            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredHeight - size.Height) / 2f)));
+    }
+
+    private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key)
+    {
+        if (screen.Widget(key) is { Art.Count: > 0 } pane)
+        {
+            var at = PaneOrigin(screen, key);
+            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)), at.X, at.Y));
+        }
     }
 
     // A thumb drag: a click on a list's thumb takes hold of it, and while the button stays down
@@ -1380,7 +1489,7 @@ public sealed partial class OriginalShell
             case var _ when IsCampaignScreen:
                 return ActivateCampaign(row);
             case var _ when IsHangarScreen:
-                return ActivateHangar(row);
+                return _hangarModule?.ActivateHangar(row);
             case OriginalScreen.Options:
                 switch (row.Key)
                 {
@@ -1491,7 +1600,7 @@ public sealed partial class OriginalShell
 
         if (IsHangarScreen)
         {
-            return BackHangar();
+            return _hangarModule?.BackHangar();
         }
 
         Open(OriginalScreen.TopLevel);
@@ -1538,7 +1647,7 @@ public sealed partial class OriginalShell
                 BuildCampaignRows(rows);
                 break;
             case var _ when IsHangarScreen:
-                BuildHangarRows(rows);
+                _hangarModule?.BuildHangarRows(rows);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
@@ -1712,4 +1821,44 @@ public sealed partial class OriginalShell
 
         return size;
     }
+
+#pragma warning disable SA1201 // Explicit, since the interface's own vocabulary (Screen, FocusedRow, RaiseDialog, ...) is
+    // narrower and sometimes differently named than the shell's public one; grouped here rather
+    // than beside each member it wraps, the seam being the hangar module's alone to see.
+    OriginalScreen IOriginalHangarHost.Screen => _screen;
+
+    bool IOriginalHangarHost.DialogOpen => _dialog != null;
+
+    string IOriginalHangarHost.FocusedKey => FocusedKey;
+
+    int IOriginalHangarHost.FocusedRow
+    {
+        get => _focus[(int)_screen];
+        set => _focus[(int)_screen] = value;
+    }
+
+    int IOriginalHangarHost.PressedRow => _pressed;
+
+    CSVM.Flight.CustomPlaneStore? IOriginalHangarHost.CampaignPlanes => _campaign?.Planes;
+
+    void IOriginalHangarHost.Open(OriginalScreen screen) => Open(screen);
+
+    void IOriginalHangarHost.FocusKey(string key) => FocusKey(key);
+
+    void IOriginalHangarHost.RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers) =>
+        RaiseDialog(message, icon, answers);
+#pragma warning restore SA1201
+
+    (int Width, int Height)? IOriginalHangarHost.Measure(string art) => Measure(art);
+
+    void IOriginalHangarHost.ResumeCampaign() => ResumeCampaign();
+
+    void IOriginalHangarHost.RefreshInstantActionRoster() => RefreshInstantActionRoster();
+
+    void IOriginalHangarHost.RefreshRosterFromStore() => RefreshRosterFromStore();
+
+    void IOriginalHangarHost.ComposeGenericRow(
+        OriginalRow row, bool focused, bool pressed, int index,
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures) =>
+        ComposeInstantActionRow(row, focused, pressed, index, fills, lines, plaques, pictures);
 }

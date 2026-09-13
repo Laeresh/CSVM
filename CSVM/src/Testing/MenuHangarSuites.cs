@@ -615,7 +615,7 @@ internal static class MenuHangarSuites
     // langui 203 under the warning icon, drawn over the dialog and leaving the cursor in the box.
     private static void OriginalEmptyNameRefusal(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
-        var ok = Row(shell, OriginalShell.NameOkKey);
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey);
         if (ok == null)
         {
             return;
@@ -632,7 +632,7 @@ internal static class MenuHangarSuites
         }
 
         Click(host, seat, Pointer(fit, answer.X + 5f, answer.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Dialog == null && shell.FocusedKey == OriginalShell.NameFieldKey,
+        ctx.Check(shell.Dialog == null && shell.FocusedKey == OriginalHangarScreen.NameFieldKey,
             $"its one OK closes it and puts the cursor back in the box ({shell.FocusedKey})");
     }
 
@@ -654,14 +654,14 @@ internal static class MenuHangarSuites
         // that corner: the edit box's authored 23,40 lands at 291,251.
         ctx.Check(shell.Compose().Backdrop.Any(p => p.Art.Name == "PX_PlaneNameBackground.Png" && p.X == 268f && p.Y == 211f),
             $"the dialog's pane is centred on the board");
-        ctx.Check(Row(shell, OriginalShell.NameFieldKey) is { X: 291f, Y: 251f, Width: 211f } && Row(shell, OriginalShell.NameOkKey) is { X: 342f, Y: 341f, Enabled: true },
+        ctx.Check(Row(shell, OriginalHangarScreen.NameFieldKey) is { X: 291f, Y: 251f, Width: 211f } && Row(shell, OriginalHangarScreen.NameOkKey) is { X: 342f, Y: 341f, Enabled: true },
             $"the edit box and OK ride the centred pane, OK live on an empty box");
         ctx.Check(host.Seats[0].CapturingText, $"seat 0 captures text on the name screen");
         OriginalEmptyNameRefusal(ctx, host, seat, shell, fit);
         Press(host, seat, new MenuCommands { Typed = scratch });
-        ctx.Check(shell.HangarName == scratch && Row(shell, OriginalShell.NameOkKey) is { Enabled: true },
-            $"typed frames name the plane and OK stands ({shell.HangarName})");
-        var ok = Row(shell, OriginalShell.NameOkKey)!;
+        ctx.Check(shell.Hangar!.HangarName == scratch && Row(shell, OriginalHangarScreen.NameOkKey) is { Enabled: true },
+            $"typed frames name the plane and OK stands ({shell.Hangar!.HangarName})");
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey)!;
         Click(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarAirframe && hangar.Scratch.Name == scratch,
             $"OK opens the hub on the airframe tab under the typed name ({shell.Screen}, {hangar.Scratch.Name})");
@@ -680,25 +680,25 @@ internal static class MenuHangarSuites
         var paint = Row(shell, "PX_B_PAINT")!;
         Click(host, seat, Pointer(fit, paint.X + 5f, paint.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarPaint, $"a click on Paint opens the paint tab out of order ({shell.Screen})");
-        ctx.Check(Row(shell, OriginalShell.PatternDropKey) is { X: 445f, Y: 120f, Width: 225f, Height: 15f },
-            $"the pattern dropdown stands at its authored box ({Row(shell, OriginalShell.PatternDropKey)?.X})");
+        ctx.Check(Row(shell, OriginalHangarScreen.PatternDropKey) is { X: 445f, Y: 120f, Width: 225f, Height: 15f },
+            $"the pattern dropdown stands at its authored box ({Row(shell, OriginalHangarScreen.PatternDropKey)?.X})");
         ctx.Check(Row(shell, "PT_D_DECALS0") is { Height: 73f }, $"the decal boxes are their authored 73 high");
         var engineTab = Row(shell, "PX_B_ENGINE")!;
         Click(host, seat, Pointer(fit, engineTab.X + 5f, engineTab.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.HangarEngine && shell.FocusedKey == OriginalShell.EngineDropKey,
+        ctx.Check(shell.Screen == OriginalScreen.HangarEngine && shell.FocusedKey == OriginalHangarScreen.EngineDropKey,
             $"a click on Engine opens the engine tab focused on its dropdown ({shell.Screen}, {shell.FocusedKey})");
         int cost = hangar.Bill.Total.Cost;
         Press(host, seat, Right);
         ctx.Check(hangar.Scratch.Engine == 2 && hangar.Bill.Total.Cost != cost,
             $"Right steps the engine and the running total follows ({hangar.Scratch.Engine}, ${cost} -> ${hangar.Bill.Total.Cost})");
-        ctx.Check(Row(shell, OriginalShell.EngineDropKey)?.Label == hangar.EngineName(hangar.Scratch.Airframe, 2),
-            $"the box shows the new engine ({Row(shell, OriginalShell.EngineDropKey)?.Label})");
+        ctx.Check(Row(shell, OriginalHangarScreen.EngineDropKey)?.Label == hangar.EngineName(hangar.Scratch.Airframe, 2),
+            $"the box shows the new engine ({Row(shell, OriginalHangarScreen.EngineDropKey)?.Label})");
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenHangarDropdown == OriginalShell.EngineDropKey && shell.Rows.Count == CustomPlaneDef.EngineNone + 1,
-            $"Accept opens the seven-row engine list ({shell.OpenHangarDropdown}, {shell.Rows.Count})");
+        ctx.Check(shell.Hangar!.OpenHangarDropdown == OriginalHangarScreen.EngineDropKey && shell.Rows.Count == CustomPlaneDef.EngineNone + 1,
+            $"Accept opens the seven-row engine list ({shell.Hangar!.OpenHangarDropdown}, {shell.Rows.Count})");
         Press(host, seat, Up);
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenHangarDropdown == null && hangar.Scratch.Engine == 1,
+        ctx.Check(shell.Hangar!.OpenHangarDropdown == null && hangar.Scratch.Engine == 1,
             $"Up and Accept pick the row above and close the list ({hangar.Scratch.Engine})");
         var board = shell.Compose();
         ctx.Check(board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == "PX_BackGround.jpg",
@@ -710,7 +710,7 @@ internal static class MenuHangarSuites
         // and checks no price against them at all.
         ctx.Check(board.Lines.Any(l => l.Text == hangar.Strings.Text(1149, "$$$ on Hand:"))
             && board.Lines.Any(l => l.Text == "$50000")
-            && Row(shell, OriginalShell.EngineDropKey)?.Label == hangar.EngineName(hangar.Scratch.Airframe, 1),
+            && Row(shell, OriginalHangarScreen.EngineDropKey)?.Label == hangar.EngineName(hangar.Scratch.Airframe, 1),
             $"the export door's cash note reads $50000 over a bare engine row");
         // The squat frames' plaque is the bottom twenty rows of a 36-pixel frame, so a label
         // centred in the frame would stand off the tab and against the page above it.
@@ -786,7 +786,7 @@ internal static class MenuHangarSuites
         ctx.Check(scrolled.Top == Math.Min(top + 1, scrolled.LastTop),
             $"a wheel notch moves the window one row of five ({top} -> {scrolled.Top})");
         Press(host, seat, Back);
-        ctx.Check(shell.OpenHangarDropdown == null, $"Back closes the grid ({shell.OpenHangarDropdown})");
+        ctx.Check(shell.Hangar!.OpenHangarDropdown == null, $"Back closes the grid ({shell.Hangar!.OpenHangarDropdown})");
         var tab = Row(shell, here == OriginalScreen.HangarArmor ? "PX_B_ARMOR" : "PX_B_AIRFRAME")!;
         Click(host, seat, Pointer(fit, tab.X + 5f, tab.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == here, $"and the hub is left on the tab this page found ({shell.Screen})");
@@ -817,12 +817,12 @@ internal static class MenuHangarSuites
         // builds the window from them, which is the compose standing here.
         counted(rows.Total, rows.Fits);
         shell.Compose();
-        var bar = GridWindow(shell, OriginalShell.DescriptionListKey);
+        var bar = GridWindow(shell, OriginalHangarScreen.DescriptionListKey);
         ctx.Check(bar.Scrolls && bar.Count == rows.Total && bar.Rows == rows.Fits,
             $"and the box stands as a window the pointer can move ({bar.Count} lines, {bar.Rows} showing)");
         Press(host, seat, new MenuCommands { Pointer = new MenuPointer(fit.X(bar.X + 10f), fit.Y(bar.Y + 10f), false, false, bar.LastTop) });
         var scrolled = shell.Compose().Notes.FirstOrDefault();
-        ctx.Check(scrolled?.Skip == bar.LastTop && GridWindow(shell, OriginalShell.DescriptionListKey).Top == bar.LastTop,
+        ctx.Check(scrolled?.Skip == bar.LastTop && GridWindow(shell, OriginalHangarScreen.DescriptionListKey).Top == bar.LastTop,
             $"a wheel over it takes the window to its last line ({scrolled?.Skip} of {bar.LastTop})");
         string later = scrolled != null && scrolled.Flow(Flowed).Count > 0 ? scrolled.Flow(Flowed)[0].Text : string.Empty;
         int reached = later.Length > 0 ? body.Entries[0].IndexOf(later, StringComparison.Ordinal) + later.Length : 0;
@@ -853,7 +853,7 @@ internal static class MenuHangarSuites
         hangar.ApplyDefaultConfiguration(true);
         var tab = Row(shell, "PX_B_AIRFRAME")!;
         Click(host, seat, Pointer(fit, tab.X + 5f, tab.Y + 5f, pressed: true, clicked: true));
-        var box = Row(shell, OriginalShell.AirframeDropKey)!;
+        var box = Row(shell, OriginalHangarScreen.AirframeDropKey)!;
         Click(host, seat, Pointer(fit, box.X + 5f, box.Y + 5f, pressed: true, clicked: true));
         var rows = shell.Rows.Where(r => r.Kind == OriginalRowKind.ListRow).ToList();
         bool bare = rows.Count == HangarEconomy.Airframes.Length;
@@ -900,12 +900,12 @@ internal static class MenuHangarSuites
     // the row is clicked out of it.
     private static void SwapAirframe(MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, int airframe)
     {
-        if (shell.OpenHangarDropdown == null && Row(shell, OriginalShell.AirframeDropKey) is { } box)
+        if (shell.Hangar!.OpenHangarDropdown == null && Row(shell, OriginalHangarScreen.AirframeDropKey) is { } box)
         {
             Click(host, seat, Pointer(fit, box.X + 5f, box.Y + 5f, pressed: true, clicked: true));
         }
 
-        if (Row(shell, OriginalShell.AirframeDropKey + ":" + airframe.ToString(CultureInfo.InvariantCulture)) is { } row)
+        if (Row(shell, OriginalHangarScreen.AirframeDropKey + ":" + airframe.ToString(CultureInfo.InvariantCulture)) is { } row)
         {
             Click(host, seat, Pointer(fit, row.X + 2f, row.Y + 2f, pressed: true, clicked: true));
         }
@@ -948,7 +948,7 @@ internal static class MenuHangarSuites
 
     private static void OriginalPurchase(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, PlayerSetupFeature setup, CustomPlaneStore store, string scratch)
     {
-        var ready = Row(shell, OriginalShell.ReadyKey);
+        var ready = Row(shell, OriginalHangarScreen.ReadyKey);
         ctx.Check(ready is { Enabled: true, X: 400f, Y: 564f }, $"READY TO PURCHASE stands at its authored place");
         if (ready == null)
         {
@@ -956,11 +956,11 @@ internal static class MenuHangarSuites
         }
 
         Click(host, seat, Pointer(fit, ready.X + 5f, ready.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.HangarPurchase && Row(shell, OriginalShell.PurchaseNowKey) is { Enabled: true, X: 510f, Y: 465f },
+        ctx.Check(shell.Screen == OriginalScreen.HangarPurchase && Row(shell, OriginalHangarScreen.PurchaseNowKey) is { Enabled: true, X: 510f, Y: 465f },
             $"it opens the totals page with the commit live at its authored place ({shell.Screen})");
         string exportWord = hangar.Strings.Text(1139, "Export");
-        ctx.Check(Row(shell, OriginalShell.PurchaseNowKey)?.Label == exportWord,
-            $"reading Export off the inventory's own string on the wallet-free door ({Row(shell, OriginalShell.PurchaseNowKey)?.Label})");
+        ctx.Check(Row(shell, OriginalHangarScreen.PurchaseNowKey)?.Label == exportWord,
+            $"reading Export off the inventory's own string on the wallet-free door ({Row(shell, OriginalHangarScreen.PurchaseNowKey)?.Label})");
         var board = shell.Compose();
         ctx.Check(board.Lines.Any(l => l.Text == "$" + hangar.Bill.Total.Cost) && board.Lines.Any(l => l.Text == hangar.AirframeName(hangar.Scratch.Airframe)),
             $"the page lists the airframe and the total cost");
@@ -969,11 +969,11 @@ internal static class MenuHangarSuites
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.HangarArmor, $"Back returns to the tab the hub last showed ({shell.Screen})");
         Click(host, seat, Pointer(fit, ready.X + 5f, ready.Y + 5f, pressed: true, clicked: true));
-        var purchase = Row(shell, OriginalShell.PurchaseNowKey)!;
+        var purchase = Row(shell, OriginalHangarScreen.PurchaseNowKey)!;
         ctx.Check(store.Load(scratch) == null, $"nothing is in the store before the press");
         Click(host, seat, Pointer(fit, purchase.X + 5f, purchase.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.LastBuiltPlane == scratch && !hangar.IsOpen,
-            $"Purchase Now saves, drops the build and returns to the Instant Action screen ({shell.Screen}, {shell.LastBuiltPlane})");
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.Hangar!.LastBuiltPlane == scratch && !hangar.IsOpen,
+            $"Purchase Now saves, drops the build and returns to the Instant Action screen ({shell.Screen}, {shell.Hangar!.LastBuiltPlane})");
         ctx.Check(shell.FocusedKey == OriginalShell.BuildKey, $"with the focus back on Build Custom Plane ({shell.FocusedKey})");
         int built = host.Features.Get<InstantActionFeature>().PlayerPlaneIndex;
         ctx.Check(store.Load(scratch) is { Engine: 1 } saved && saved.Airframe == built, $"the store holds the plane as built ({built})");
@@ -987,9 +987,9 @@ internal static class MenuHangarSuites
         var door = BuildDoor(host, seat, shell, fit)!;
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = "Other" });
-        var ok = Row(shell, OriginalShell.NameOkKey)!;
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey)!;
         Click(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
-        var sell = Row(shell, OriginalShell.SellPlanesKey);
+        var sell = Row(shell, OriginalHangarScreen.SellPlanesKey);
         ctx.Check(sell is { Enabled: true, X: 100f, Y: 564f }, $"SELL PLANES stands at its authored place");
         if (sell == null)
         {
@@ -997,19 +997,19 @@ internal static class MenuHangarSuites
         }
 
         Click(host, seat, Pointer(fit, sell.X + 5f, sell.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.HangarInventory && Row(shell, OriginalShell.InventoryPlanesKey) is { X: 138f, Y: 132f, Width: 271f },
+        ctx.Check(shell.Screen == OriginalScreen.HangarInventory && Row(shell, OriginalHangarScreen.InventoryPlanesKey) is { X: 138f, Y: 132f, Width: 271f },
             $"it opens the inventory with the plane dropdown at its authored box ({shell.Screen})");
-        ctx.Check(Row(shell, OriginalShell.InventoryExportKey) == null && Row(shell, OriginalShell.InventorySellKey)?.Label == "Delete",
-            $"the wallet-free page builds no Export row and calls the removal Delete ({Row(shell, OriginalShell.InventorySellKey)?.Label})");
+        ctx.Check(Row(shell, OriginalHangarScreen.InventoryExportKey) == null && Row(shell, OriginalHangarScreen.InventorySellKey)?.Label == "Delete",
+            $"the wallet-free page builds no Export row and calls the removal Delete ({Row(shell, OriginalHangarScreen.InventorySellKey)?.Label})");
         var inventory = shell.Compose();
         ctx.Check(inventory.Lines.Any(l => l.Text == "Delete a Plane")
             && !inventory.Lines.Any(l => l.Text == hangar.Strings.Text(1256, "Sell or Export a Plane")),
             $"and its prompt names the one verb it offers rather than the campaign's two");
         int index = IndexOf(hangar.Saved, scratch);
         ctx.Check(index >= 0, $"the inventory lists the scratch plane ({hangar.Saved.Count} saved)");
-        var planes = Row(shell, OriginalShell.InventoryPlanesKey)!;
+        var planes = Row(shell, OriginalHangarScreen.InventoryPlanesKey)!;
         Click(host, seat, Pointer(fit, planes.X + 5f, planes.Y + 5f, pressed: true, clicked: true));
-        var item = Row(shell, OriginalShell.InventoryPlanesKey + ":" + index);
+        var item = Row(shell, OriginalHangarScreen.InventoryPlanesKey + ":" + index);
         ctx.Check(item != null, $"the open list carries its row");
         if (item == null)
         {
@@ -1031,12 +1031,12 @@ internal static class MenuHangarSuites
             Click(host, seat, Pointer(fit, item.X + 5f, item.Y + 5f, pressed: true, clicked: true));
         }
 
-        ctx.Check(shell.InventoryIndex == index && Row(shell, OriginalShell.InventoryPlanesKey)?.Label == scratch,
-            $"picking it puts it in the box ({Row(shell, OriginalShell.InventoryPlanesKey)?.Label})");
+        ctx.Check(shell.Hangar!.InventoryIndex == index && Row(shell, OriginalHangarScreen.InventoryPlanesKey)?.Label == scratch,
+            $"picking it puts it in the box ({Row(shell, OriginalHangarScreen.InventoryPlanesKey)?.Label})");
         var picked = shell.Compose();
         ctx.Check(InventoryFigure(layout, picked, "HA_T_AGILITYP") != null && InventoryFigure(layout, picked, "HA_T_VALUEP") == null,
             $"whose figures stand without the Value row, this door pricing nothing ({InventoryFigure(layout, picked, "HA_T_VALUEP")?.Text})");
-        var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
+        var sellButton = Row(shell, OriginalHangarScreen.InventorySellKey)!;
         Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogYesKey && store.Load(scratch) != null,
             $"Delete asks first with the two-answer messagebox opening on Yes ({shell.Dialog?.Message})");
@@ -1055,10 +1055,10 @@ internal static class MenuHangarSuites
             $"Yes removes the plane from the store and the roster");
         ctx.Check(!Contains(setup.Roster, scratch), $"and from the shared aircraft roster");
         ctx.Check(hangar.Scratch.Name == "Other" && hangar.IsOpen, $"the open build is untouched ({hangar.Scratch.Name})");
-        var done = Row(shell, OriginalShell.InventoryDoneKey)!;
+        var done = Row(shell, OriginalHangarScreen.InventoryDoneKey)!;
         Click(host, seat, Pointer(fit, done.X + 5f, done.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarAirframe, $"Done returns to the tab ({shell.Screen})");
-        var cancel = Row(shell, OriginalShell.CancelBuildKey)!;
+        var cancel = Row(shell, OriginalHangarScreen.CancelBuildKey)!;
         Click(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && store.Load("Other") == null,
             $"CANCEL drops the build, returns to the Instant Action screen and leaves no residue ({shell.Screen})");
@@ -1080,7 +1080,7 @@ internal static class MenuHangarSuites
 
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = "Wallet" });
-        var ok = Row(shell, OriginalShell.NameOkKey)!;
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey)!;
         Click(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarAirframe && hangar.Wallet != null, $"OK opens the hub over the wallet ({shell.Screen})");
         if (hangar.Wallet is not { } wallet)
@@ -1096,8 +1096,8 @@ internal static class MenuHangarSuites
         // The rows stay bare whatever the funds: the decoded screen reports them at the purchase
         // alone and reddens the cost figure meanwhile (docs/org/hangar.md).
         ctx.Check(wallet.Funds < hangar.Bill.Total.Cost
-            && Row(shell, OriginalShell.AirframeDropKey)?.Label == hangar.AirframeName(hangar.Scratch.Airframe),
-            $"the airframe box reads bare over a build the wallet cannot cover ({Row(shell, OriginalShell.AirframeDropKey)?.Label})");
+            && Row(shell, OriginalHangarScreen.AirframeDropKey)?.Label == hangar.AirframeName(hangar.Scratch.Airframe),
+            $"the airframe box reads bare over a build the wallet cannot cover ({Row(shell, OriginalHangarScreen.AirframeDropKey)?.Label})");
         // The script's own two arms: the cost line red past the wallet, the weight line in the
         // page's ink while the build is inside its capacity.
         ctx.Check(HubFigure(layout, board, "PX_T_PLANECOST")?.Ink == BoardInk.Alarm
@@ -1109,20 +1109,20 @@ internal static class MenuHangarSuites
         ctx.Check(shell.Screen == OriginalScreen.HangarEngine && board.Lines.Any(l => l.Text == title) && board.Lines.Any(l => l.Text == figure),
             $"the engine tab draws the same note ({shell.Screen})");
         // The click leaves the focus on the tab bar; Up walks it onto the page's one dropdown.
-        for (int i = 0; i < 8 && shell.FocusedKey != OriginalShell.EngineDropKey; i++)
+        for (int i = 0; i < 8 && shell.FocusedKey != OriginalHangarScreen.EngineDropKey; i++)
         {
             Press(host, seat, Up);
         }
 
         int engine = hangar.Scratch.Engine;
         Press(host, seat, Right);
-        ctx.Check(hangar.Scratch.Engine == engine + 1 && shell.FocusedKey == OriginalShell.EngineDropKey,
+        ctx.Check(hangar.Scratch.Engine == engine + 1 && shell.FocusedKey == OriginalHangarScreen.EngineDropKey,
             $"Right steps the engine on the focused box ({engine} -> {hangar.Scratch.Engine}, {shell.FocusedKey})");
         Press(host, seat, Accept);
-        var cheapest = Row(shell, OriginalShell.EngineDropKey + ":0");
-        ctx.Check(shell.OpenHangarDropdown == OriginalShell.EngineDropKey && cheapest != null
+        var cheapest = Row(shell, OriginalHangarScreen.EngineDropKey + ":0");
+        ctx.Check(shell.Hangar!.OpenHangarDropdown == OriginalHangarScreen.EngineDropKey && cheapest != null
             && cheapest.Label == hangar.EngineName(hangar.Scratch.Airframe, 0),
-            $"the open list's rows are bare, over-priced or not ({shell.OpenHangarDropdown}, {shell.FocusedKey}, {cheapest?.Label})");
+            $"the open list's rows are bare, over-priced or not ({shell.Hangar!.OpenHangarDropdown}, {shell.FocusedKey}, {cheapest?.Label})");
         Press(host, seat, Up);
         // The hub prices the row under the cursor as though it were taken, which is what the
         // description box and the blueprint already preview, and takes nothing.
@@ -1133,12 +1133,12 @@ internal static class MenuHangarSuites
             && HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Text.Contains(previewed.Total.Weight.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true,
             $"the focused row's build is what the two figures read while the list stands ({HubFigure(layout, board, "PX_T_PLANECOST")?.Text}, {HubFigure(layout, board, "PX_T_CURRENTWEIGHT")?.Text})");
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenHangarDropdown == null && hangar.Scratch.Engine == engine,
+        ctx.Check(shell.Hangar!.OpenHangarDropdown == null && hangar.Scratch.Engine == engine,
             $"a row past the funds still takes the pick ({hangar.Scratch.Engine}, {shell.FocusedKey})");
         board = shell.Compose();
         ctx.Check(HubFigure(layout, board, "PX_T_PLANECOST")?.Text.Contains("$" + hangar.Bill.Total.Cost.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal) == true,
             $"and the closed box leaves the figures on the build that stands ({HubFigure(layout, board, "PX_T_PLANECOST")?.Text})");
-        var ready = Row(shell, OriginalShell.ReadyKey)!;
+        var ready = Row(shell, OriginalHangarScreen.ReadyKey)!;
         Click(host, seat, Pointer(fit, ready.X + 5f, ready.Y + 5f, pressed: true, clicked: true));
         board = shell.Compose();
         ctx.Check(shell.Screen == OriginalScreen.HangarPurchase && board.Lines.Any(l => l.Text == figure)
@@ -1197,8 +1197,8 @@ internal static class MenuHangarSuites
         string word = hangar.Strings.Text(PendingWeightString, "CURRENT WEIGHT: Pending").Split('\n')[^1].Trim();
         var airframeTab = Row(shell, "PX_B_AIRFRAME")!;
         Click(host, seat, Pointer(fit, airframeTab.X + 5f, airframeTab.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.OpenHangarDropdownOn(OriginalShell.AirframeDropKey) && shell.Screen == OriginalScreen.HangarAirframe,
-            $"the airframe list opens over the overweight build ({shell.Screen}, {shell.OpenHangarDropdown})");
+        ctx.Check(shell.Hangar!.OpenHangarDropdownOn(OriginalHangarScreen.AirframeDropKey) && shell.Screen == OriginalScreen.HangarAirframe,
+            $"the airframe list opens over the overweight build ({shell.Screen}, {shell.Hangar!.OpenHangarDropdown})");
         var board = shell.Compose();
         var weight = HubFigure(layout, board, "PX_T_CURRENTWEIGHT");
         ctx.Check(word.Length > 0 && weight?.Text.EndsWith(word, StringComparison.Ordinal) == true
@@ -1211,7 +1211,7 @@ internal static class MenuHangarSuites
 
         var hardpointTab = Row(shell, "PX_B_HARDPOINTS")!;
         Click(host, seat, Pointer(fit, hardpointTab.X + 5f, hardpointTab.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.OpenHangarDropdownOn("HP_D_POINT0"), $"a hardpoint list opens over the same build ({shell.OpenHangarDropdown})");
+        ctx.Check(shell.Hangar!.OpenHangarDropdownOn("HP_D_POINT0"), $"a hardpoint list opens over the same build ({shell.Hangar!.OpenHangarDropdown})");
         board = shell.Compose();
         weight = HubFigure(layout, board, "PX_T_CURRENTWEIGHT");
         var previewed = hangar.BillWithHardpoints(0, CustomPlaneDef.MaxHardpointsPerWing);
@@ -1221,19 +1221,19 @@ internal static class MenuHangarSuites
         Press(host, seat, Back);
         var engineTab = Row(shell, "PX_B_ENGINE")!;
         Click(host, seat, Pointer(fit, engineTab.X + 5f, engineTab.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.HangarEngine && shell.OpenHangarDropdown == null,
-            $"and the hub is left on the tab this page found ({shell.Screen}, {shell.OpenHangarDropdown})");
+        ctx.Check(shell.Screen == OriginalScreen.HangarEngine && shell.Hangar!.OpenHangarDropdown == null,
+            $"and the hub is left on the tab this page found ({shell.Screen}, {shell.Hangar!.OpenHangarDropdown})");
     }
 
     // A hub figure by the authored box it stands in, which is what tells the cost line from the
     // cash note without this suite restating the shipped words.
     private static BoardLine? HubFigure(MenuLayout layout, ComposedBoard board, string key)
-        => Figure(layout, OriginalShell.PlaneConstructionSection, board, key);
+        => Figure(layout, OriginalHangarScreen.PlaneConstructionSection, board, key);
 
     // The same reading on the inventory page, where a row's absence is the claim being made and
     // matching English text would only find the row that was not drawn.
     private static BoardLine? InventoryFigure(MenuLayout layout, ComposedBoard board, string key)
-        => Figure(layout, OriginalShell.InventorySection, board, key);
+        => Figure(layout, OriginalHangarScreen.InventorySection, board, key);
 
     private static BoardLine? Figure(MenuLayout layout, string section, ComposedBoard board, string key)
     {
@@ -1253,25 +1253,25 @@ internal static class MenuHangarSuites
     private static void WalletInventory(
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, MenuLayout layout)
     {
-        var sell = Row(shell, OriginalShell.SellPlanesKey)!;
+        var sell = Row(shell, OriginalHangarScreen.SellPlanesKey)!;
         Click(host, seat, Pointer(fit, sell.X + 5f, sell.Y + 5f, pressed: true, clicked: true));
         var board = shell.Compose();
         ctx.Check(shell.Screen == OriginalScreen.HangarInventory && hangar.Saved.Count > 0
-            && Row(shell, OriginalShell.InventoryExportKey) is { Enabled: true }
-            && Row(shell, OriginalShell.InventorySellKey)?.Label == hangar.Strings.Text(1003, "Sell"),
+            && Row(shell, OriginalHangarScreen.InventoryExportKey) is { Enabled: true }
+            && Row(shell, OriginalHangarScreen.InventorySellKey)?.Label == hangar.Strings.Text(1003, "Sell"),
             $"the wallet's inventory keeps Export live beside the shipped Sell ({shell.Screen}, {hangar.Saved.Count} owned)");
         ctx.Check(board.Lines.Any(l => l.Text == hangar.Strings.Text(1256, "Sell or Export a Plane")),
             $"and the shipped prompt naming both verbs");
         ctx.Check(InventoryFigure(layout, board, "HA_T_VALUEP") is { } worth && worth.Text.Contains('$'),
             $"and the Value row the wallet can price ({InventoryFigure(layout, board, "HA_T_VALUEP")?.Text})");
-        var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
+        var sellButton = Row(shell, OriginalHangarScreen.InventorySellKey)!;
         Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog is { Icon: DialogIcon.Query, Answers.Count: 2 } ask && ask.Message.Contains("sell it?", StringComparison.Ordinal)
             && ask.Message.Contains('$'), $"whose Sell asks the priced sale question ({shell.Dialog?.Message})");
         var no = Row(shell, OriginalShell.DialogNoKey)!;
         Click(host, seat, Pointer(fit, no.X + 5f, no.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog == null && hangar.Saved.Count > 0, $"and No keeps the plane ({hangar.Saved.Count} owned)");
-        var done = Row(shell, OriginalShell.InventoryDoneKey)!;
+        var done = Row(shell, OriginalHangarScreen.InventoryDoneKey)!;
         Click(host, seat, Pointer(fit, done.X + 5f, done.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarEngine, $"Done returns to the tab ({shell.Screen})");
     }
@@ -1281,7 +1281,7 @@ internal static class MenuHangarSuites
         var door = BuildDoor(host, seat, shell, fit)!;
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = "Dropped" });
-        var ok = Row(shell, OriginalShell.NameOkKey)!;
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey)!;
         Click(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.HangarAirframe && hangar.IsOpen, $"mid-build on the hub ({shell.Screen})");
         host.Deactivate();

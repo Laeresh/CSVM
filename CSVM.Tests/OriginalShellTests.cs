@@ -1293,6 +1293,93 @@ public class OriginalShellTests
         Assert.DoesNotContain(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
     }
 
+    /// <summary>The seam to the hangar module (<see cref="OriginalHangarTests"/> drives the module
+    /// alone): the Build door opens it on the screen the door stands on, a dialog it raises is the
+    /// shell's messagebox, its typing goes through the shell's one text seam, and a commit comes
+    /// back to the door's screen with both rosters re-read off the store.</summary>
+    [Fact]
+    public void TheBuildDoorOpensTheHangarModuleAndACommitComesBackWithTheRostersReRead()
+    {
+        WithHangarShell((shell, hangar, setup, store) =>
+        {
+            Assert.DoesNotContain(shell.Rows, r => r.Key == "HANGAR");
+            Click(shell, "MM_B_INSTANTACTION");
+            var door = Row(shell, OriginalShell.BuildKey);
+            Assert.True(door.Enabled);
+            Click(shell, door.X + 2f, door.Y + 2f);
+
+            Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+            Assert.True(shell.IsHangarScreen);
+            Assert.True(hangar.IsOpen);
+            Assert.True(shell.CapturingText);
+            Assert.Equal(OriginalHangarScreen.NameFieldKey, shell.FocusedKey);
+
+            // The refusal the module raises is the shell's messagebox: its rows are the answer
+            // alone, it is drawn as an overlay, and its OK hands the focus back to the box.
+            Click(shell, OriginalHangarScreen.NameOkKey);
+            Assert.NotNull(shell.Dialog);
+            Assert.Equal(new[] { OriginalShell.DialogOkKey }, shell.Rows.Select(r => r.Key));
+            Assert.False(shell.CapturingText);
+            Assert.Contains(Box(shell).Lines, l => l.Text == shell.Dialog!.Message);
+            Click(shell, OriginalShell.DialogOkKey);
+            Assert.Null(shell.Dialog);
+            Assert.Equal(OriginalHangarScreen.NameFieldKey, shell.FocusedKey);
+
+            shell.Step(new MenuCommands { Typed = "Ace" });
+            Assert.Equal("Ace", shell.Hangar!.HangarName);
+            Click(shell, OriginalHangarScreen.NameOkKey);
+            Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
+            Assert.False(shell.CapturingText);
+
+            Click(shell, OriginalHangarScreen.ReadyKey);
+            Click(shell, OriginalHangarScreen.PurchaseNowKey);
+            Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+            Assert.False(shell.IsHangarScreen);
+            Assert.Equal(OriginalShell.BuildKey, shell.FocusedKey);
+            Assert.Equal("Ace", shell.Hangar!.LastBuiltPlane);
+            Assert.NotNull(store.Load("Ace"));
+            Assert.Contains(setup.Roster, a => a.Name == "Ace" && a.IsCustom);
+            Assert.Contains(shell.PilotRoster, a => a.Name == "Ace" && a.IsCustom);
+        });
+    }
+
+    [Fact]
+    public void TheKeyboardWalksFromTheHangarDropdownsOntoTheTabBarAndAlongIt()
+    {
+        WithHangarShell((shell, _, _, _) =>
+        {
+            shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace");
+            Assert.Equal(OriginalHangarScreen.AirframeDropKey, shell.FocusedKey);
+
+            // Down is the shell's own column walk and Right along the bar the module's sideways
+            // step; the standing tab is a sibling like the other five, so the walk steps onto it.
+            shell.Step(Down);
+            Assert.Equal("PX_B_AIRFRAME", shell.FocusedKey);
+            shell.Step(Right);
+            Assert.Equal("PX_B_ENGINE", shell.FocusedKey);
+            shell.Step(Right);
+            shell.Step(Right);
+            shell.Step(Right);
+            shell.Step(Right);
+            Assert.Equal("PX_B_PAINT", shell.FocusedKey);
+            shell.Step(Right);
+            Assert.Equal(OriginalHangarScreen.SellPlanesKey, shell.FocusedKey);
+            shell.Step(Up);
+            Assert.Equal("PX_B_PAINT", shell.FocusedKey);
+        });
+    }
+
+    [Fact]
+    public void AShellWithoutAHangarFeatureHasNoModuleAndNoHangarDoor()
+    {
+        var shell = Shell(out _);
+        Assert.Null(shell.Hangar);
+        shell.OpenHangar();
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Assert.False(shell.IsHangarScreen);
+        Assert.False(shell.CapturingText);
+    }
+
     // The characters the script stores, shifted down by three the way its own loop shifts them.
     private static string Shifted(string cipher) => string.Concat(cipher.Select(c => (char)(c - 3)));
 
@@ -1315,6 +1402,35 @@ public class OriginalShellTests
             hangar: new HangarFeature(strings, PlanePickerRoster.AirframeNode));
         shell.Open(OriginalScreen.Credits);
         return shell;
+    }
+
+    // A shell with the hangar behind its Build door, over a scratch store in a temp directory
+    // that goes with the test: the hangar's own art measure, since the door's screens are the
+    // module's, and the Devastator as the Instant Action pick a default build inherits.
+    private static void WithHangarShell(System.Action<OriginalShell, HangarFeature, PlayerSetupFeature, CSVM.Flight.CustomPlaneStore> test)
+    {
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "csvm-original-shell-hangar-" + System.Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new CSVM.Flight.CustomPlaneStore(dir);
+            var setup = new PlayerSetupFeature();
+            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+            setup.Join(new ScriptedMenuSeat());
+            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
+            instantAction.SelectPlayerPlane(HangarFeature.DefaultAirframe);
+            var shell = new OriginalShell(
+                MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, OriginalHangarTests.Measure,
+                instantAction: instantAction, hangar: hangar, planes: store);
+            test(shell, hangar, setup, store);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(dir))
+            {
+                System.IO.Directory.Delete(dir, true);
+            }
+        }
     }
 
     // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs. No
@@ -1370,6 +1486,13 @@ public class OriginalShellTests
     {
         shell.Step(Pointer(x, y, pressed: true, clicked: true));
         return shell.Step(Pointer(x, y));
+    }
+
+    // The same click, landing just inside the corner of the row carrying a key.
+    private static OriginalStep Click(OriginalShell shell, string key)
+    {
+        var row = Row(shell, key);
+        return Click(shell, row.X + 2f, row.Y + 2f);
     }
 
     // The standing dialog's panel: the one overlay carrying words, the pointer's own carrying none.
