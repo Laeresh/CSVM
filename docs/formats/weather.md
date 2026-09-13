@@ -705,7 +705,7 @@ reproduce that rather than reconcile it (`WORLD-26`, `BL-165`).
 the original's shadow renderer (`FUN_0049d0a0`), and all 53 shipped files author
 `[-90, 0, 0]` → straight down; `SHADE_ANGLES`, the parser's second key, appears in none. The
 ground shadow CSVM draws therefore projects straight down whatever the sun bearing is, and reads
-this key not at all (`BL-331`, `org/shadows.md`).
+this key not at all (`org/shadows.md`).
 
 ⚠ **It shades aircraft only.** The world is fullbright, so an unshaded surface takes neither light
 nor shadow from this, which is why the eight `--freecam` goldens did not move when it landed and

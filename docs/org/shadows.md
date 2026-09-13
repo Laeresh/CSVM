@@ -1,8 +1,8 @@
 # The aircraft ground shadow, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-13, for `BL-331`. Every claim below names the
-function it came from.
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-13, for the ground shadow port. Every claim
+below names the function it came from.
 
 Everything here is a description of *behaviour and constants*. No decompiler output is reproduced;
 the addresses are given so any claim can be re-checked at source.
@@ -12,8 +12,8 @@ keys, and the `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` pair the shadow colour is de
 [`formats/weather.md`](../formats/weather.md); the sunlight node those two land on is
 [`weather.md`](weather.md)'s "The sun". The implementation half is
 [`../architecture/Flight.md`](../architecture/Flight.md)'s `GroundShadowLaw`/`GroundShadowPass`
-entries, and the last section says what it takes from here and where it departs; `BL-331` carries
-what is left, and `BL-332` owns the authored light intensities.
+entries, and the last section says what it takes from here and where it departs; the departures
+are kept by decision (`git log --grep=BL-331`), and `BL-332` owns the authored light intensities.
 
 ⚠ **This page is a decode, not a proposal.** Where it disagrees with a footage measurement, the
 decode wins and the disagreement is a note. Nothing on this page has been checked against footage;
@@ -316,8 +316,8 @@ from this page and where it departs:
 
 ## Open questions, and how to falsify this page
 
-None of this has been checked against footage. `BL-331` still owes an original-game A/B, and it now
-has specific predictions to shoot at:
+None of this has been checked against footage. No item owes the original-game A/B any more (the
+port reads right at the controls), but the page keeps its specific predictions to shoot at:
 
 1. The **player's own** shadow runs roughly 1.5 × its altitude AHEAD of the aircraft along the
    flight direction and grows to 3× its footprint by 250 units, while an AI aircraft's shadow stays

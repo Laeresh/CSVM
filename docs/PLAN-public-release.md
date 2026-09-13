@@ -1060,8 +1060,8 @@ Anything A2 or a later wave closes comes off this list.
   script's handoff in the animation runtime.)
 - **In CM02 the player's own Pandora fires its turrets at the Balmoral the mission wants
   captured.** Close on the last Balmoral and finish the wing-walk promptly rather than circling.
-  (`BL-717`; the only commit naming it is its filing, and turret acquisition still treats an
-  enemy-team aircraft as any other hostile.)
+  (Kept by decision: the original's own turrets do the same, since nothing in its turret path
+  reads an objective, capture or pickup flag; `git log --grep=BL-717`.)
 - **In CM13 the flight check offers the change-plane button to the wingman and never grants the
   mission's own aeroplane.** Fly the aeroplane the profile already owns, which completes the
   mission. (`BL-689`; no landing commit, `CampaignFlightCheckPage` still hands one slot-less
@@ -1093,18 +1093,14 @@ Anything A2 or a later wave closes comes off this list.
   carries Master, Music, Effects and Voice levels, so a player can pull the effects category down,
   but nothing separates that one loop from the rest of its category. (`BL-391`; no landing commit,
   and the gain in question is the loop's own rather than a category's.)
-- **An aircraft's ground shadow is a soft blob rather than its own outline.** It is placed, sized,
-  faded and coloured the way the original places its own, but the original fills that footprint
-  with a live top-down raster of the aircraft and this fills it with a blurred ellipse; on a steep
-  slope it also rides over the ground rather than wrapping it. Set Enhanced Graphics in Game
-  Options and restart for real shadow maps instead, which are not the shadow the original drew.
-  (`BL-331`; the placement half has a landing commit and an engine suite, the silhouette and the
-  ground conformance do not.)
-- **In the New York chapter the lit building faces read darker than the original, with a distinct
-  dark band at middle distance.** No workaround; it is a matter of how the shipped textures are
-  sampled and nothing is missing from the world. (`BL-322` and `BL-538`; both have had their
-  premises narrowed by decodes, and `BL-538`'s landing commit applies the chapter's own mip LOD
-  bias, which moves the band out rather than removing it, while `BL-322` has none.)
+- **An aircraft's ground shadow lies on a flat quad.** It is placed, sized, faded, coloured and
+  shaped the way the original draws its own, but on a steep slope it rides over the ground rather
+  than wrapping it, and water takes no shadow. Set Enhanced Graphics in Game Options and restart
+  for real shadow maps instead, which are not the shadow the original drew. (Kept by decision, no
+  item tracks it; `git log --grep=BL-331`.)
+- **In the New York chapter the lit building faces read darker than the original.** No
+  workaround; it is a matter of how the shipped textures are sampled and nothing is missing from
+  the world. (`BL-322`; its premise has been narrowed by decodes and it has no landing commit.)
 - **Every wave of AI aircraft arriving in a mission costs a visible hitch.** No workaround; it
   passes in a frame or two. (`BL-699`; no landing commit, and the model build and controller bind
   still sit on the launch frame.)

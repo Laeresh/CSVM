@@ -810,11 +810,11 @@ transition, one per damaged-engine swap, whose edge waits out `PlaneStats.Damage
 The weapon half of the positional pair an AI-flown aircraft carries instead of `FlightAudio`: the
 sustained-fire gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding this node, so
 another aircraft's guns are heard from where that aircraft is, which is where the original's fire
-tick puts its own ([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle offset belongs here.
-`Attach` is the whole spawner-side surface; the cues come from `WeaponAudioCues`. The cull is each
-cue's own authored audible distance and rides `StartGunLoop`, which the fire path already calls every
-frame the loop is wanted; the listeners are the human pilots, the one seam `AiEngineAudio` and
-`ProjectilePool` read too. No `3D` flag means no world player, and the `sound` log names each verdict.
+tick puts its own ([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle offset belongs here;
+the dry cue is positional by decision where the original's is flat. `Attach` is the whole
+spawner-side surface; the cues come from `WeaponAudioCues`. The cull is each cue's own audible
+distance and rides `StartGunLoop`, called every frame the loop is wanted; the listeners are the human
+pilots, the seam `AiEngineAudio` and `ProjectilePool` read too. No `3D` flag means no world player.
 
 ## src/Flight/GunVoice.cs
 One mounted gun's firing voice: a single `AudioStreamPlayer3D` on the mount's own cue, moved to where

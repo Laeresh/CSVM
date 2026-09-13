@@ -406,29 +406,6 @@ reasons that have nothing to do with any of these checks.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
   one-pixel tolerance are in the landing commit (`git log --grep=BL-778`).
 
-- `PT-141` `[Own]` **Gun smoke, sparks, gun-hit fire and the crash plume alpha-mix instead of
-  glowing, and every emitter now paints its particles back to front.** Blend is the texture's own
-  additive bit and not one shipped puffer sprite carries it, so every emitter in the install
-  alpha-mixes. Eleven authored sprite sets change under that rule and all of them are in this
-  sortie: the muzzle smoke (`muzzlepuffer`), the gun-hit fire (`firepuffer`), the yellow and red
-  sparks (`sparker1`-`4`, `man_sparkly_spark`, `ind_please_spark`, `red_trailpuffer_01`), the
-  magnesium flash (`whitehotpuffer`), the rocket and torpedo trails (`trailpuffer`,
-  `torpufferblast`) and the crash smoke (`trailpuffer2`). Riding with it is the original's
-  transparent-list order, farthest particle first, which changes any emitter whose flipbook has two
-  columns alive at once: the gun-hit fire, the crash plume and the burning buildings.
-  *Look for:*
-  - (a) muzzle smoke and spark showers read as lit smoke and lit specks over the scenery rather
-    than as white blowout, at close range and against both sky and dark ground;
-  - (b) the crash plume's specks still separate from the fireball instead of disappearing into it;
-  - (c) no dark puff sitting on top of a brighter one behind it, at the gun hits, the crash plume
-    and a burning building watched from close in as the fire ages.
-  *Variations:* rockets and torpedoes for the trails, `--weapon=wep_07`; the crash plume alone,
-  `--crash=5`.
-  *Blocks:* both decoded rules are landed either way, so a fail here is not a revert but a
-  question about what else the original does to those sprites; it mints a new `BL` naming the
-  emitter and what it should look like. A pass retires this item. The two landing commits carry the
-  decodes and the moved goldens (`git log --grep=textures.md`, `git log -S depth-sorted`).
-
 ### C1 · two pilots, Dogfight (splitscreen VS)
 
 ```powershell
@@ -717,24 +694,6 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
 
-- `PT-140` `[Own]` **Holding a key through the wing-walk fast-forwards it, and letting go slows it
-  back down.** In the same sortie, when the capture's picture comes up, hold any key (or any pad
-  button) rather than tapping it. The scene arms no skip, so the key is taken as a fast-forward
-  instead.
-  *Look for:*
-  - (a) the picture spools up to about four times speed rather than jumping there, and spools back
-    to normal speed over about the same quarter second when you let go;
-  - (b) the sound rises in pitch with it and drops back, rather than staying at its own speed;
-  - (c) nothing is skipped: the wing walk, the hand-over and the cut back to flight all happen, in
-    order, and you fly out of it in the Balmoral exactly as when you watch it through;
-  - (d) 4x and the quarter-second ramp are a judgement with nothing in the original behind them, so
-    say if either reads wrong and the constants move
-    (`Mech3/Anim/CutsceneFastForward.cs`, `Target` and `RampSeconds`);
-  - (e) a mission INTRO still takes a key press as a skip, ending it at once, rather than running
-    fast.
-  *Blocks:* the held-input glue is the one half no instrument reaches (no synthetic input), and (d)
-  is a taste call; the rest is covered by the `campaign-cutscene-fast-forward` suite.
-
 ### CM14 (C2B/M04) · the Gemini, both kill orders
 
 ```powershell
@@ -812,23 +771,6 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
-### Any mission · the chase camera's rest pose and its outward-only zoom
-
-```powershell
-./RunGame.ps1
-```
-
-- `PT-138` `[Own]` **The chase view opens at its nearest distance and numpad minus is the only zoom
-  that moves it.** The decode put the external camera's distance under the airframe's authored
-  clamp pair with a flat 10 m of zoom added outward from the near bound, and the key sense the
-  earlier port had inverted is corrected (`git log --grep=BL-702`). Fly any aircraft in chase
-  view. *Look for:* the view opening close behind the aircraft, numpad plus held from that pose
-  doing nothing, numpad minus held to the stop backing off by roughly one fuselage length and
-  no more, the look-behind view sitting at its own distance untouched by the zoom, and the
-  Kestrel opening noticeably closer than the Balmoral. A rest pose that sits mid-range, a plus
-  key that moves the view from rest, or a zoom that runs past ten metres mints a new `BL`.
-  *Blocks:* nothing.
-
 ### Any campaign mission · enemy skill under the difficulty offset
 
 ```powershell
@@ -863,23 +805,6 @@ is a judgement on our own remake.
   turning onto two or three other headings, so a sign error cannot hide at one pose; (c) the
   zeppelin icon, where the mission draws one, lying along the hull's own course. *Blocks:* nothing;
   a fail mints a new `BL`.
-
-### CM18 (C4/M03) · the cargo zeppelin's first Fury waits for its hangar door
-
-```powershell
-./RunGame.ps1 --campaign=<profile>:17
-```
-
-- `PT-136` `[Own]` **The first Fury leaves `cargozep1` only once its hangar door has nearly
-  opened, like the four behind it.** A generator credited minutes into the mission used to fire
-  its first launch on the same step its door started opening, so the Fury flew out through closed
-  panels; the cycle now waits out the door lead first, as the original's four-state door makes it
-  (`git log --grep=BL-771`). Play to the docking film where the five allied Furies drop about 4 s
-  apart and watch the first one only. *Look for:* the door panels roughly four fifths open before
-  the first Fury moves, and the four behind it unchanged. A Fury still leaving through a closed
-  door, or a first launch noticeably later than the door's full open, mints a new `BL`. *Blocks:*
-  nothing.
-
 
 ### CM24 (C5/M04) · the Dante's engine bank, external view
 
