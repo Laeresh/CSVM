@@ -548,6 +548,13 @@ member, and it does not go here.
 - **INSTR-70**, **A new in-engine suite is not finished when it passes: `analysis/engine-suite-weights.json`
   must name it too, and a unit test fails until it does.** The balancer weighs every registered
   suite, so an unweighted one leaves a shard's plan guessing at its cost.
+- **INSTR-71**, **Anything a screen animates off the wall clock keeps determinism only if the thing
+  that installs its draw is the interactive path alone; install it from the build and every
+  scripted and golden run inherits the wobble.** The load screen's fill and its 6 fps propeller are
+  reported unconditionally by the session build, but the pump that draws them is installed by the
+  load board's `_Ready` and cleared by its `_ExitTree`, so a CLI launch leaves the ambient null and
+  every report is a no-op: 19 of 19 goldens unmoved, and the motion is testable only through a
+  suite that installs its own pump.
 
 ## SRC, sources and documents
 

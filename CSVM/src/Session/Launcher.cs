@@ -1319,11 +1319,13 @@ public partial class Launcher : Node3D
         // flight in the same process. The flag and --det rules are the spec's own.
         var saved = OptionsStore.UserOptions().Load();
         _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill);
+        LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
         float mipBias = Mech3.TextureArchive.MipBias(_interpPath, _spec.Chapter);
         RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
         Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
+        LoadProgress.Report(LoadStep.ChapterPaths);
         _session = new GameSession(_spec, new LauncherContext
         {
             RepoRoot = _repoRoot,

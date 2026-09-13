@@ -221,7 +221,7 @@ extraction roots, and caches a miss so an absent extraction is probed once per n
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
 picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step and
 `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font metric a flowed
-`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, and the two-line hint band a pad needs.
+`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width.
 
 ## src/UI/CinemaScreen.cs
 One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
@@ -296,7 +296,10 @@ The load screen drawn over the whole window while a session builds: `LoadScreens
 through `ComposedBoardView`, so it inherits the authored-pixel surface and `BoardFit`'s scaling.
 Populated in `_Ready`, since the view sizes itself off the viewport, and it tracks the window every
 frame the way every shared board does. Holds no composition of its own, so what the screen says
-tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves.
+tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves. It is
+also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tree lifetime alone:
+a step the build reports repaints the bar and the propeller and forces a frame out of a loop the
+build owns, which is how the screen moves at all.
 
 ## src/UI/LoadScreens.cs
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
@@ -304,7 +307,7 @@ one `Loading.zrd` dialog with its mission's objectives and the seated profile's 
 composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
 Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
 blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
-mode's name and nothing else. An absent extraction yields the frame and the bar rather than
+mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, and `Painted` re-lays those two into `Overlays` at a fraction and a frame, so the still composition under them is never rewritten. An absent extraction yields the frame and the bar rather than
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 

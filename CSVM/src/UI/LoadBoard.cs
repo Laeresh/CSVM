@@ -1,3 +1,4 @@
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -5,17 +6,20 @@ namespace CSVM.UI;
 /// <summary>
 /// The load screen drawn over the whole window while a session builds: the composition
 /// <see cref="LoadScreens"/> makes, through the campaign boards' authored-pixel surface.
-/// A build is one synchronous block that stalls the frame loop for a second or two, so nothing can
-/// be drawn DURING it; the Launcher shows this, lets one frame render, and builds on the next tick.
-/// ⚠ Deliberately has no progress fill and no turning propeller: both need the build decoupled
-/// from the draw, which is a different item, so the bar draws its unlit strip and the propeller one
-/// still frame. Nothing here reports a fraction the build has not measured.
+/// A build is one synchronous block that stalls the frame loop, so this board draws from inside
+/// it: the build reports each of its steps to <see cref="LoadProgress"/>, and the pump repaints
+/// the bar's fill and the propeller's frame and asks the renderer for a frame then and there.
+/// ⚠ Install the pump nowhere but this node's own tree lifetime; a build with no screen over it
+/// (every CLI launch) must leave <see cref="LoadProgress.Current"/> null and gain no draw.
 /// </summary>
 public sealed partial class LoadBoard : Control
 {
     private ComposedBoard _board = LoadScreens.Empty;
+    private LoadMotion _motion = LoadScreens.MotionFor(false, null);
     private BoardPalette _palette = BoardPalette.Paper;
     private string _dataRoot = string.Empty;
+    private ComposedBoardView? _view;
+    private LoadProgress? _progress;
 
     /// <summary>Builds the board for one launch. <paramref name="campaign"/> picks the paper sheet
     /// over the blackboard, and <paramref name="missionType"/> the Instant Action dialog whose four
@@ -30,6 +34,7 @@ public sealed partial class LoadBoard : Control
         {
             _dataRoot = dataRoot,
             _board = LoadScreens.For(campaign, subject, missionType, zrdrPath, messagesPath, sheet),
+            _motion = LoadScreens.MotionFor(campaign, sheet),
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
@@ -39,12 +44,25 @@ public sealed partial class LoadBoard : Control
     }
 
     /// <summary>Populates on entry rather than in <see cref="Build"/>: the view sizes itself off
-    /// the viewport, which a node outside the tree cannot read.</summary>
+    /// the viewport, which a node outside the tree cannot read. Takes the build's progress with
+    /// it, so the screen is the pump and the pump dies with the screen.</summary>
     public override void _Ready()
     {
         var view = ComposedBoardView.Build(_dataRoot);
         AddChild(view);
+        _view = view;
         view.Show(_board, _palette, string.Empty, string.Empty);
+        _progress = new LoadProgress { Repaint = Repaint };
+        LoadProgress.Current = _progress;
+    }
+
+    /// <inheritdoc/>
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(LoadProgress.Current, _progress))
+        {
+            LoadProgress.Current = null;
+        }
     }
 
     /// <inheritdoc/>
@@ -54,5 +72,22 @@ public sealed partial class LoadBoard : Control
         // shared board follows.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
+    }
+
+    // One pumped repaint: the fill at the fraction the build has reached and the propeller frame
+    // the wall clock is on, then a frame asked for rather than waited on, since the build owns the
+    // loop until it returns.
+    private void Repaint()
+    {
+        if (_view is not { } view || _progress is not { } progress)
+        {
+            return;
+        }
+
+        var art = view.ArtSize(new BoardArt(BoardArtLibrary.Rimage, _motion.FillArt));
+        view.Show(
+            LoadScreens.Painted(_board, _motion, art.X, art.Y, progress.Fraction, progress.Frame),
+            _palette, string.Empty, string.Empty);
+        RenderingServer.ForceDraw();
     }
 }

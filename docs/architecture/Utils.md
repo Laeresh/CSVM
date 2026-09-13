@@ -72,6 +72,16 @@ caller that wants to aggregate the spans without emitting the line, which is how
 `src/Testing/PhaseAttribution.cs` reads a harness build. Line grammar, the phase rules and the
 `boot` / `rest` / `first_frame` terms: [../org/startup-profile.md](../org/startup-profile.md).
 
+## src/Utils/LoadProgress.cs
+The load screen's progress while a build holds the frame loop: the original's sixteen authored
+milestone fractions, one per `LoadStep`, a monotonic setter that no step can drag backwards, and a
+wall-clock pump throttled to one repaint every 0.1 s. Ambient over `Current` for the reason
+`StartupProfile` is, so `Launcher`, `GameSession` and `WorldSession` report a boundary they have
+crossed without being handed a sink, and a launch with no screen over it draws nothing at all.
+Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propeller's frame, and
+`UI/LoadBoard.cs` is what turns them into a drawn frame. Decode:
+[../org/loading-screen.md](../org/loading-screen.md).
+
 ## src/Utils/HitchMonitor.cs
 The always-on frame-hitch detector, ticked from `Launcher._Process` in every mode: a frame costing
 far more than its recent neighbours gets a `HitchRecord` assembled for it, describing the frame's

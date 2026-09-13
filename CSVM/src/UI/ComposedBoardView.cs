@@ -168,6 +168,11 @@ public sealed partial class ComposedBoardView : Control
         return flipped && _caretOnBoard;
     }
 
+    /// <summary>One bitmap's own size in its own pixels, or zero where the extraction does not
+    /// carry it. The one measurement a composed board cannot make for itself: a progress fill is a
+    /// pixel clip against the fill bitmap's own width.</summary>
+    public Vector2 ArtSize(BoardArt art) => Load(art) is { } texture ? texture.GetSize() : Vector2.Zero;
+
     /// <summary>Puts a composed board on screen, with the two lines the shell adds under it.</summary>
     public void Show(ComposedBoard board, BoardPalette palette, string detail, string footer)
     {

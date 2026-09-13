@@ -1801,36 +1801,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
-- `BL-812` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The load
-  screen stands still for the whole build, so a launch reads as a freeze: the bar never fills and
-  the propeller never turns.** *Evidence:* `Launcher.BeginLaunch` shows the board, lets one frame
-  render, and then `LaunchSession` builds in one synchronous block on the next tick, so nothing is
-  redrawn until the world is up (`CSVM/src/Session/Launcher.cs:1043-1076`). `LoadBoard` draws the
-  unlit strip and `prp0` on purpose (`CSVM/src/UI/LoadBoard.cs:11-13`). The original fills its bar
-  from a hand-authored milestone table, sixteen literal fractions from 0.01 to 0.90 set at fixed
-  points of the load, monotonic, never reaching 1.0, and repaints through a pump throttled to one
-  draw per 0.1 s called after each milestone; the propeller is a six-frame cycle at 6 fps
-  (`docs/org/loading-screen.md`, "The progress bar is a hand-authored milestone table" and "How the
-  screen keeps drawing"). On film the campaign bar visibly steps over the load
-  (`OriginalScreenshots/Videos/Loading Screen Mission1.mkv`, about 3 s of screen, the fill growing
-  from nothing to half; `Loading Screen Mission CM01.mkv` shows the first step only). *Fix shape:*
-  split `LaunchSession`'s build into phases the frame loop can interleave with a draw (a build that
-  yields between its steps, or one that runs off the main thread and hands scene-tree work back to
-  it), then assign each phase boundary a fraction the way the original does and let the board
-  repaint between them: the fill as `floor(fillWidth * fraction)` pixels of `prog_red` over
-  `prog_blk` (`prog_redload` over `prog_blkload` on the campaign sheet), and the propeller cycling
-  its six frames at 6 fps. *⚠ Traps:* do not derive the fractions from measured durations; the
-  original's are authored and the screen is torn down at 0.90, so a full bar is never drawn. The
-  extraction carries only the six range endpoints of the propeller cycle (`prp0`, `prp7`, `prp15`,
-  `prp22`, `prp30`, `prp37`), so the cycle is six frames, not 38. A CLI launch does not come through
-  `BeginLaunch` at all, so no scripted or golden run may gain a frame from this. The original does
-  not thread its load either; a pump from inside a blocking build is a legitimate shape if the
-  Godot frame loop can be driven that way. *Playtest after fix:* launch any Instant Action mission
-  from the menu and watch the bar step and the propeller turn until the world appears; then a
-  campaign launch for the sheet's own bar. *Cross-refs:* `BL-314` (the splitscreen
-  race whose clock starts while a load screen is still up), `docs/org/loading-screen.md` (the
-  campaign sheet's own content, which this one has to make move without changing).
-
 - `BL-834` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The warning-shot shield
   arms on every human-piloted aeroplane, where the original ticks it only for the player vehicle
   while the `Network` key is zero.** *Evidence:* `BL-826`'s decode: the world tick calls the

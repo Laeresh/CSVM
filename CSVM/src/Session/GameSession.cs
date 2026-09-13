@@ -423,6 +423,7 @@ public partial class GameSession : Node3D
                 : GameClock.RunMode.Realtime,
         };
         GameClock.Current = _clock;
+        LoadProgress.Report(LoadStep.Scaffold);
         _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? 62 : 50;
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
@@ -455,6 +456,7 @@ public partial class GameSession : Node3D
             (playerIndex, colour, weight, duration) => screenFlashSink.PlayBlend(playerIndex, colour, weight, duration));
         // A fresh list per build: a tag never outlives the session that painted it.
         _beeperTags = new BeeperTags<FlightController>();
+        LoadProgress.Report(LoadStep.Rigs);
 
         // The chapter-dependent paths are recomputed here so a new launchscreen chapter selection
         // takes effect on rebuild, and ride BuildState so no phase method re-derives them.
@@ -477,6 +479,7 @@ public partial class GameSession : Node3D
                 ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter)
                 : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
+        LoadProgress.Report(LoadStep.Paths);
 
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
         // lives on InstantActionDirector.TryCreate.
@@ -535,11 +538,14 @@ public partial class GameSession : Node3D
             }
         }
 
+        LoadProgress.Report(LoadStep.Directors);
+
         Stopwatch sw;
         try
         {
             sw = Stopwatch.StartNew();
             LoadArchives(state);
+            LoadProgress.Report(LoadStep.Archives);
             // The SOUND archive is scoped to this build everywhere but the lab, whose node owns its
             // disposal. ⚠ Do not scope the TEXTURE archive here: the world runtime bakes puffers
             // all session, so LoadArchives hands it to the session instead.
@@ -572,6 +578,7 @@ public partial class GameSession : Node3D
                 return false;
             AssignCloudDeckIfBuilt(state);
             BuildFreecamSpectator(state);
+            LoadProgress.Report(LoadStep.WorldStage);
             if (_spec.Fly)
             {
                 BuildFlightRigs(state);
@@ -595,6 +602,7 @@ public partial class GameSession : Node3D
                     _cutscene.ClearOrdnance = () => _projectiles?.Clear();
                 }
             }
+            LoadProgress.Report(LoadStep.PlayerRigs);
             ApplyDestroyOverride(state);
             ApplyObjectiveOverride(state);
             LogBuildSummary(state, sw);
@@ -622,6 +630,7 @@ public partial class GameSession : Node3D
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
+        LoadProgress.Report(LoadStep.Finished);
         return true;
     }
 
