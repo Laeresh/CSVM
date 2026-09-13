@@ -187,9 +187,9 @@ What a composed campaign screen is made of, engine-free: the screen's fixed back
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
 plaques and flowed list widgets, each in draw order. The backdrop is its own layer so a fill can
 sit over the background and stay under the page's pictures, where a selection bar goes. `BoardNote`
-is a widget's entries plus its wrap box, cut at a word where the box has no room for the rest, its
-marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can
-measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
+is a widget's entries plus its wrap box (cut at a word where the box has no room for the rest, or
+no box at all where the widget's own list stops nowhere), its marks, and `BoardCaret` an edit box's
+cursor on the line it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
 part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
 
 ## src/UI/CampaignBoards.cs

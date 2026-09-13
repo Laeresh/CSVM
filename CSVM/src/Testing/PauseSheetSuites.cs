@@ -39,10 +39,15 @@ internal static class PauseSheetSuites
     private const float OddAceHeadX = 325f;
     private const float AceHeadX = 365f;
 
-    // How many objectives across the whole sequence still run past the parchment's authored box and
-    // so are not drawn at all. C2/M05's five rows take twelve lines, one more than the box holds;
-    // the other 23 missions fit. A fix lowers this, and the tripwire is that nothing raises it.
-    private const int OverrunRows = 1;
+    // How many objectives across the whole sequence are composed away rather than drawn. The
+    // executable's list walks its whole row vector and stops at no height, so every row reaches
+    // both screens; nothing may raise this.
+    private const int OverrunRows = 0;
+
+    // How far the deepest mission's last row reaches past the parchment art's own bottom edge, in
+    // authored pixels, negative while the rows stay on the art. That edge is the real room, since
+    // the authored WORDWRAP height is the box one row wraps in rather than the list's.
+    private const float RowsPastParchment = -8f;
 
     // How many lines each of the filmed mission's four objectives takes on the parchment, read off
     // the reference crop of the original's own sheet. The face is ours, so the count is what a row
@@ -114,8 +119,9 @@ internal static class PauseSheetSuites
         + "OBJECTIVE15, and its two-second wake objective must not check it), C3/M01's own "
         + "sheet matches the reference stills flag for flag, every parchment sets its rows in the "
         + "slanted face the original's ObjList authors and breaks C3/M01's four where the reference "
-        + "crop breaks them, with C2/M05 the one mission whose rows still outrun the parchment's "
-        + "255 px box, and a pointer over a strip moves the "
+        + "crop breaks them, every objective is drawn rather than composed away at a height the "
+        + "original's own list stops at nowhere, with C2/M05's five, the deepest in the sequence, "
+        + "still ending above the parchment art's bottom edge, and a pointer over a strip moves the "
         + "shared cursor onto it and fires it on the release while a press let go elsewhere fires "
         + "nothing")]
     internal static void PauseSheetScreen(TestContext ctx)
@@ -1012,6 +1018,8 @@ internal static class PauseSheetSuites
     {
         var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
         int slanted = 0, tall = 0, rows = 0, dropped = 0;
+        float edge = ParchmentBottom(ctx, sheets[0].Sheet), past = float.NegativeInfinity;
+        string deepest = "-";
         var filmed = System.Array.Empty<int>();
         var numbered = System.Array.Empty<int>();
         foreach (var (mission, sheet) in sheets)
@@ -1026,12 +1034,20 @@ internal static class PauseSheetSuites
             slanted += note.Italic ? 1 : 0;
             var counts = RowLines(fit, font, note);
             rows += counts.Length;
-            int lost = note.Entries.Count
-                - note.Flow(ComposedBoardView.Measure(fit, font, note)).Count;
+            var height = ComposedBoardView.Measure(fit, font, note);
+            var placed = note.Flow(height);
+            int lost = note.Entries.Count - placed.Count;
             dropped += lost;
             foreach (int lines in counts)
             {
                 tall += lines > 2 ? 1 : 0;
+            }
+
+            float over = Bottom(placed, height, note.Width) - edge;
+            if (over > past)
+            {
+                past = over;
+                deepest = $"{mission.ChapterFolder}/{mission.MissionFolder}";
             }
 
             if (Named(mission, FilmedChapter, FilmedMission))
@@ -1044,7 +1060,8 @@ internal static class PauseSheetSuites
             }
 
             report.AppendLine(
-                $"{mission.ChapterFolder}/{mission.MissionFolder} rows {string.Join("/", counts)} dropped {lost}");
+                $"{mission.ChapterFolder}/{mission.MissionFolder} rows {string.Join("/", counts)} "
+                + $"dropped {lost} bottom {Bottom(placed, height, note.Width):0.0}");
         }
 
         ctx.Same(sheets.Count, slanted, $"every campaign parchment sets its rows in the slanted face");
@@ -1058,9 +1075,37 @@ internal static class PauseSheetSuites
             $"{NumberedChapter}/{NumberedMission}'s take {second}, the crop's {wantSecond}");
         ctx.Same(
             OverrunRows, dropped,
-            $"and {OverrunRows} objective in the sequence still outruns the parchment's 255 px box");
-        report.AppendLine($"wrap: {rows} rows, {tall} of them on three lines or more, {dropped} dropped");
+            $"every objective in the sequence is drawn rather than composed away ({dropped} lost)");
+        ctx.Check(
+            past <= RowsPastParchment,
+            $"and the deepest rows, {deepest}'s, end {-past:0.0} px above the parchment's bottom edge");
+        report.AppendLine(
+            $"wrap: {rows} rows, {tall} of them on three lines or more, {dropped} dropped; "
+            + $"parchment ends at {edge:0.0}, deepest rows {deepest} at {edge + past:0.0}");
     }
+
+    // The parchment art's own bottom edge in authored pixels, measured from the extraction rather
+    // than assumed. That edge is the room the rows really have: the executable's list stops at no
+    // height, so what holds a mission's rows is the artwork under them.
+    private static float ParchmentBottom(TestContext ctx, PauseSheet sheet)
+    {
+        if (sheet.Shared.Objectives is not { } list)
+        {
+            return 0f;
+        }
+
+        string path = Path.Combine(
+            ctx.DataRoot, "extracted", "rimage", list.Background.ToLowerInvariant() + ".png");
+        return File.Exists(path) && Godot.Image.LoadFromFile(path) is { } art && !art.IsEmpty()
+            ? list.BackgroundAt.Y + art.GetHeight()
+            : 0f;
+    }
+
+    // Where the flowed rows end, in authored pixels: the last line's own top plus how tall it drew.
+    private static float Bottom(
+        IReadOnlyList<BoardLine> placed, System.Func<string, float, float> height, float width) =>
+        placed.Count == 0 ? 0f
+            : placed[placed.Count - 1].Y + height(placed[placed.Count - 1].Text, width);
 
     // One note's entries as line counts: a short word measured in the same box is one line's worth,
     // so an entry's own measured height divided by it is how many lines it wrapped to.

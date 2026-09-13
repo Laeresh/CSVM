@@ -2116,8 +2116,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   footing follows it rather than `ComposeTextLines`. *Cross-refs:* `CSVM/src/Flight/FlightHud.cs`,
   `CSVM/src/Bindings/ActiveDevice.cs`, `CSVM/src/Bindings/BindingLabels.cs`.
 
-- `BL-898` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **CM15's fifth objective is drawn on neither the pause sheet nor the campaign load screen: its five rows outrun the parchment's authored box.** *Evidence:* the `pause-sheet` suite measures every campaign parchment with the face the screen writes it in; C2/M05's five rows take twelve lines and the fifth does not fit the authored `WORDWRAP [190, 255]` box, so `BoardNote.Placed` stops at the fourth and the fifth row is composed away in silence. The other 23 missions fit. The suite pins the count as `OverrunRows`, so the state is visible rather than merely present. *Fix shape:* decide what the original does with a list longer than its box, since `FUN_00470c40`'s control is the one the executable scrolls or clips, then either follow that or set `BoardNote.Cut` so the last row shows the words that do fit rather than nothing. *⚠ Traps:* the line count is a font metric, so it moves with the window scale; measure at the authored 1:1 fit the suite uses, not at a capture's resolution. The box height is authored data and is not the place to depart. *Cross-refs:* `CSVM/src/UI/ComposedBoard.cs` (`BoardNote.Placed`), `CSVM/src/UI/Menu/EscapeDialog.cs`, `docs/org/pause-screen.md`, `git log --grep=BL-889`.
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored

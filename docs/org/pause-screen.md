@@ -27,6 +27,9 @@ this page does not repeat. How the 800x600 source artwork meets a modern window 
 | `FUN_0041a820` | The profile's memento image name, with its extension stripped |
 | `FUN_005c4b30` / `FUN_005c4a70` | Bind a named `PRIMITIVES` entry / a named `BUTTONS` entry into a dialog member |
 | `FUN_00470c40` / `FUN_00429280` | The objectives-list control's constructor and its name binding |
+| `FUN_00470df0` / `FUN_00470f10` | The objectives-list control's reader and its draw, vtable `PTR_FUN_00607f90` slots `+0x78` and `+0x24` |
+| `FUN_004710c0` / `FUN_00471230` | Appends one row to the list, and turns a row on or off |
+| `FUN_005c8280` / `FUN_00455ac0` | A text control's reader, and the `WORDWRAP` rectangle it sets |
 | `FUN_0042ab40` | The script interpreter the screen's `ESC_SCRIPT` runs through |
 | `FUN_004a15d0` / `FUN_004a1630` / `FUN_004a1620` / `FUN_004a15f0` | RESUME, RESTART, PREFERENCES and QUIT |
 | `FUN_004a1650` / `FUN_004a1660` | LOAD GAME and SAVE GAME, which the shipped data never draws |
@@ -165,6 +168,42 @@ the same value the memento takes.
   failing that, `FUN_004d0280(7, "piratezep")` is tried and the object's position is taken with a
   zero angle; failing both, the icon is turned off. A mission with no `piratezep` therefore draws
   no zeppelin icon.
+
+## The objectives list stops nowhere, and its authored box is one row's, not the list's
+
+`FUN_00470df0`, the list control's reader, takes five named entries out of `OBJECTIVESLIST`:
+`BACKGROUND` into `+0x38`, `TITLE` into `+0x12c`, `SPACING` into `+0x22d8` as an integer, `LIST`
+into the text control at `+0x22dc`, and `CHECKMARK` into `+0x21e4`. The lookup `FUN_00579ff0`
+recurses into nested blocks, which is why `SPACING [5]`, authored inside `LIST`, is found from the
+`OBJECTIVESLIST` block. The rows themselves are a vector of `0x20bc`-byte entries at `+0x4398`,
+`+0x439c` and `+0x43a0`, each a copy of the `LIST` control with the row's completed byte in front
+of it.
+
+**`WORDWRAP`'s height is the box one row wraps in, and it is never a limit.** `FUN_005c8280` reads
+the pair at `0x005c82c2` into the rectangle `{0, 0, 190, 255}` and hands it to the text control's
+vtable slot `+0x70`, `FUN_00455ac0`, which stores it at `+0x2080`..`+0x208c` and raises the flag at
+`+0x207c`. The layout then takes the larger of the two in each axis: at `0x005c76a1` the laid-out
+bottom becomes `max(bottom, 255)` and at `0x005c76b3` the right becomes `max(right, 190)`, so the
+rectangle is a **minimum** extent on the control's reported box, never a clip on its text. The
+height the list advances by, `+0x20b0`, is taken at `0x005c7692`, before that clamp, and is the
+text's own measured height. Because every row is a copy of the one `LIST` control, the 255 belongs
+to each row separately, and no single objective is anywhere near that tall.
+
+**So the original neither scrolls, clips nor shrinks a list longer than its artwork.** The draw
+`FUN_00470f10` walks the row vector from `0x00470f7c` to `0x00471013`, and the only condition
+inside the loop is each row's own hidden flag and whether its checkmark is set; the y accumulator
+grows at `0x00470fe7`..`0x00470ffb` by the row's measured height plus `SPACING`, and the loop ends
+only when the row pointer reaches `+0x439c`. Nothing is compared against a box. `FUN_004710c0`,
+which appends a row, is called only from the script's `Objective` opcode at `0x00429590` and is
+guarded by the display row count alone (`FUN_004ad180`), so it refuses nothing either. A list
+taller than the 240x312 `parchment` bitmap would simply run down off it and keep drawing.
+
+The remake follows that: `EscapeObjectivesList.RowStop` is 0 and `UI/ComposedBoard.cs`'s
+`BoardNote` places every entry when its height is 0. What holds a mission's rows is therefore the
+artwork, not the authored 255, and the `pause-sheet` suite pins the deepest sequence against the
+parchment's own bottom edge rather than against that number. In the substitute face, at the
+authored 1:1 fit, `CM15` (`C2/M05`) is the deepest: its five objectives take twelve lines and end 8
+pixels above the parchment's bottom edge, so no mission's rows leave the art.
 
 ## The flags are authored art, not a runtime reveal
 

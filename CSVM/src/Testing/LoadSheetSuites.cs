@@ -174,7 +174,7 @@ internal static class LoadSheetSuites
             {
                 parchments += note.Entries.Count == ObjectiveBeats(sheet)
                     && note.X == list.ListAt.X && note.Y == list.ListAt.Y
-                    && note.Width == list.RowWrap && note.Height == list.WrapHeight
+                    && note.Width == list.RowWrap && note.Height == EscapeObjectivesList.RowStop
                     && note.Italic && Lists(note.Entries, sheet.Objectives) ? 1 : 0;
                 marks += note.Marked == null && note.Mark == null ? 0 : 1;
             }
@@ -195,7 +195,9 @@ internal static class LoadSheetSuites
 
         int all = sheets.Count;
         ctx.Same(all, charts, $"every sheet draws its chart at its authored source crop and position");
-        ctx.Same(all, parchments, $"every parchment lists that mission's own objectives in the box it authors");
+        ctx.Same(
+            all, parchments,
+            $"every parchment lists that mission's own objectives, all of them, in the widened measure");
         ctx.Same(0, marks, $"no row is marked, the screen standing before the mission it lists has run");
         ctx.Same(all, mementos, $"every memento sits at its authored point over its centred shadow");
         ctx.Same(all, propellers, $"every sheet draws the propeller cycle's first frame at its authored point");

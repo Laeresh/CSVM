@@ -326,7 +326,8 @@ public static class PauseScreens
         return new[]
         {
             new BoardNote(
-                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap, list.WrapHeight,
+                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap,
+                EscapeObjectivesList.RowStop,
                 list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row,
                 list.CheckMark.Length > 0
                     ? new BoardArt(BoardArtLibrary.Rimage, list.CheckMark)

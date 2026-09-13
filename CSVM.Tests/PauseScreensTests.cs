@@ -274,8 +274,9 @@ public class PauseScreensTests
         Assert.StartsWith("1)", note.Entries[0]);
 
         // The measure is the authored WORDWRAP widened to the room the parchment holds, since the
-        // substitute face is wider per character than the Andy Bold the rows were written for.
-        Assert.Equal((580f, 50f, 210f, 255f, 5f), (note.X, note.Y, note.Width, note.Height, note.Spacing));
+        // substitute face is wider per character than the Andy Bold the rows were written for. The
+        // rows stop at no height, which is where the original's own list stops them.
+        Assert.Equal((580f, 50f, 210f, 0f, 5f), (note.X, note.Y, note.Width, note.Height, note.Spacing));
         Assert.True(note.Italic);
         Assert.Equal("obj_check1", note.Mark!.Name);
         Assert.Equal(new[] { true, false, false, false }, note.Marked);

@@ -86,6 +86,12 @@ public sealed record EscapeObjectivesList(
     /// 14.</summary>
     public const float RowFont = 14f;
 
+    /// <summary>The height the stacked rows stop at: none. The authored <c>WORDWRAP</c> height is
+    /// the box one row wraps in, not the list's, and the executable's list walks its whole row
+    /// vector, so a list taller than the parchment runs on rather than losing its last rows.
+    /// Decode: docs/org/pause-screen.md.</summary>
+    public const float RowStop = 0f;
+
     // How much wider than the authored WORDWRAP a row is allowed to run, in authored pixels.
     private const float RowWrapGain = 20f;
 

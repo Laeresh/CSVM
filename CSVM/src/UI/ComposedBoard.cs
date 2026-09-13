@@ -274,7 +274,8 @@ public sealed record BoardLine(
 /// <paramref name="Italic"/> slants every entry, the way a langui row's own <c>[FONTID]</c> tag
 /// slants a line, and <paramref name="Cut"/> keeps as many words of an entry too tall for the room
 /// left as do fit instead of dropping it whole, which is how a box the original gives a scrollbar
-/// shows its opening lines.
+/// shows its opening lines. A <paramref name="Height"/> of 0 stops the entries nowhere, for a
+/// widget whose own list runs on past the artwork rather than clipping.
 /// </summary>
 public sealed record BoardNote(
     IReadOnlyList<string> Entries, float X, float Y, float Width, float Height, float Spacing,
@@ -282,8 +283,9 @@ public sealed record BoardNote(
     bool Italic = false, bool Cut = false)
 {
     /// <summary>The entries as placed lines, stacked from the widget's top-left and stopped at its
-    /// authored height. <paramref name="height"/> measures one entry wrapped to a width, in
-    /// authored pixels; a fixed pitch instead draws a wrapped entry over the one under it.</summary>
+    /// authored height, or at nothing where that height is 0. <paramref name="height"/> measures one
+    /// entry wrapped to a width, in authored pixels; a fixed pitch instead draws a wrapped entry
+    /// over the one under it.</summary>
     public IReadOnlyList<BoardLine> Flow(Func<string, float, float> height)
     {
         ArgumentNullException.ThrowIfNull(height);
@@ -325,9 +327,14 @@ public sealed record BoardNote(
         for (int i = 0; i < Entries.Count; i++)
         {
             string entry = Entries[i];
-            float room = Y + Height - top;
-            float tall = height(entry, Width);
-            string text = tall <= room ? entry : Cut ? Fit(entry, room, height) : string.Empty;
+            string text = entry;
+            if (Height > 0f)
+            {
+                float room = Y + Height - top;
+                text = height(entry, Width) <= room ? entry
+                    : Cut ? Fit(entry, room, height) : string.Empty;
+            }
+
             if (text.Length == 0)
             {
                 break;
