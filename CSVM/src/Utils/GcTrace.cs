@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Tracing;
+using System.Text;
 using System.Threading;
 
 namespace CSVM.Utils;
@@ -11,7 +13,10 @@ namespace CSVM.Utils;
 /// rarer, longer collections without shrinking the total, and the pause tracks the
 /// finalization-promoted count rather than promoted bytes (docs/verification.md PERF-20). Every
 /// line carries process uptime, so the world-build settling regime is excluded by dropping the
-/// windows below it instead of guessing at a warm-up (PERF-19).</summary>
+/// windows below it instead of guessing at a warm-up (PERF-19). Under <c>--gc-types</c> the listener
+/// runs Verbose and adds a <c>[perf] gc-types</c> line naming the types the runtime's allocation
+/// sampler saw most, which is how a finalizable count is traced back to the call that makes the
+/// wrappers.</summary>
 public sealed class GcTrace : EventListener
 {
     /// <summary>Seconds of wall time one reported window covers. Long enough that a settled
@@ -24,8 +29,21 @@ public sealed class GcTrace : EventListener
     private const string RuntimeSourceName = "Microsoft-Windows-DotNETRuntime";
     private const string HeapStatsPrefix = "GCHeapStats";
     private const string FinalizationCountField = "FinalizationPromotedCount";
+    private const string AllocationTickPrefix = "GCAllocationTick";
+    private const string TypeNameField = "TypeName";
+    // Sixteen, not a top ten: the listener's own per-event objects (MoreEventInfo,
+    // EventWrittenEventArgs, the boxed payload and its ReadOnlyCollection) take the first places
+    // on every window and a reader must see past them to the frame path's own types.
+    private const int TypesReported = 16;
+
+    // Read by OnEventSourceCreated, which the base constructor raises before any instance field
+    // initialiser has run, so the choice cannot travel through the constructor.
+    private static bool s_sampleTypes;
 
     private readonly Stopwatch _since = Stopwatch.StartNew();
+    private readonly Dictionary<string, long> _typeSamples = new(StringComparer.Ordinal);
+    private readonly List<KeyValuePair<string, long>> _typeRows = new();
+    private readonly StringBuilder _typeLine = new();
 
     // How much of the process this instance missed: it is built on the first --perf frame, which is
     // already past the world build, and the reported uptime is what PERF-19's cutoff is stated in.
@@ -41,6 +59,14 @@ public sealed class GcTrace : EventListener
     private int _markGen0;
     private int _markGen1;
     private int _markGen2;
+
+    /// <summary>Builds the listener, Verbose with the allocation sampler when
+    /// <paramref name="sampleTypes"/>, else Informational.</summary>
+    public static GcTrace Create(bool sampleTypes)
+    {
+        s_sampleTypes = sampleTypes;
+        return new GcTrace();
+    }
 
     /// <summary>Emits a window line once the window has elapsed, else returns having read one
     /// stopwatch. Called from the frame path, so it must stay free of allocation until it
@@ -70,21 +96,35 @@ public sealed class GcTrace : EventListener
         _markGen0 = gen0;
         _markGen1 = gen1;
         _markGen2 = gen2;
+        if (s_sampleTypes)
+        {
+            ReportTypes(windowSeconds);
+        }
     }
 
     protected override void OnEventSourceCreated(EventSource eventSource)
     {
-        // ⚠ Touch no field of this class here: the base constructor raises this for every source
-        // that already exists, before the derived field initialisers have run.
+        // ⚠ Touch no instance field of this class here: the base constructor raises this for every
+        // source that already exists, before the derived field initialisers have run.
         if (eventSource.Name == RuntimeSourceName)
         {
-            EnableEvents(eventSource, EventLevel.Informational, (EventKeywords)GcKeyword);
+            var level = s_sampleTypes ? EventLevel.Verbose : EventLevel.Informational;
+            EnableEvents(eventSource, level, (EventKeywords)GcKeyword);
         }
     }
 
     protected override void OnEventWritten(EventWrittenEventArgs eventData)
     {
-        if (eventData.EventName is not { } name || !name.StartsWith(HeapStatsPrefix, StringComparison.Ordinal))
+        if (eventData.EventName is not { } name)
+        {
+            return;
+        }
+        if (name.StartsWith(AllocationTickPrefix, StringComparison.Ordinal))
+        {
+            TallyType(eventData);
+            return;
+        }
+        if (!name.StartsWith(HeapStatsPrefix, StringComparison.Ordinal))
         {
             return;
         }
@@ -110,5 +150,53 @@ public sealed class GcTrace : EventListener
     {
         using var self = Process.GetCurrentProcess();
         return (DateTime.Now - self.StartTime).TotalSeconds;
+    }
+
+    // One sample per ~100 KB allocated, so the tally is a share of BYTES, not of objects: a small
+    // wrapper type high on this list is made in very large numbers.
+    private void TallyType(EventWrittenEventArgs eventData)
+    {
+        var names = eventData.PayloadNames;
+        if (names == null || eventData.Payload == null)
+        {
+            return;
+        }
+        for (int i = 0; i < names.Count; i++)
+        {
+            if (names[i] == TypeNameField && eventData.Payload[i] is string typeName)
+            {
+                lock (_typeSamples)
+                {
+                    _typeSamples[typeName] = _typeSamples.GetValueOrDefault(typeName) + 1;
+                }
+                return;
+            }
+        }
+    }
+
+    private void ReportTypes(double windowSeconds)
+    {
+        long total = 0;
+        _typeRows.Clear();
+        lock (_typeSamples)
+        {
+            foreach (var row in _typeSamples)
+            {
+                _typeRows.Add(row);
+                total += row.Value;
+            }
+            _typeSamples.Clear();
+        }
+        _typeRows.Sort((a, b) => b.Value.CompareTo(a.Value));
+        _typeLine.Clear();
+        for (int i = 0; i < _typeRows.Count && i < TypesReported; i++)
+        {
+            if (i > 0)
+            {
+                _typeLine.Append(',');
+            }
+            _typeLine.Append(_typeRows[i].Key).Append(':').Append(_typeRows[i].Value);
+        }
+        Log.Info("perf", $"gc-types win_s={windowSeconds:0.00} samples={total} per_s={total / windowSeconds:0.0} top={_typeLine}");
     }
 }

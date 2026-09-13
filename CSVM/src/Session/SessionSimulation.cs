@@ -69,15 +69,27 @@ public sealed class SessionSimulation
         {
             ReportPhaseFailure(e);
         }
+        finally
+        {
+            // The phase in progress banks whether the step ended or threw, so a throwing phase
+            // still shows its cost in the --perf split rather than being carried into the next one.
+            SimPhaseCost.Leave();
+        }
     }
 
-    // Every phase assigns _phase first: the name is what makes the report actionable, and a field
-    // write per phase is nothing beside the work each one does.
+    // Every phase enters itself first: the name is what makes the failure report actionable, and
+    // the same call opens the phase's --perf slot (SimPhaseCost), closing the one before it.
+    private void Enter(SimPhase phase)
+    {
+        _phase = SimPhaseCost.Label(phase);
+        SimPhaseCost.Enter(phase);
+    }
+
     private void StepPhases(float dt)
     {
         if (_runtime.EndingHold)
         {
-            _phase = "EndingHold";
+            Enter(SimPhase.EndingHold);
             _runtime.StepEndingHold(dt);
             return;
         }
@@ -86,48 +98,48 @@ public sealed class SessionSimulation
 
         // Membership is fixed at step entry. A generator may append aircraft below, but those
         // aircraft are not eligible until the next step (including the next catch-up substep).
-        _phase = "CaptureAiAircraft";
+        Enter(SimPhase.CaptureAiAircraft);
         _runtime.CaptureAiAircraft();
 
-        _phase = "IncomingFire";
+        Enter(SimPhase.IncomingFire);
         _runtime.StepIncomingFire(dt);
-        _phase = "Projectiles";
+        Enter(SimPhase.Projectiles);
         _runtime.StepProjectiles(dt);
-        _phase = "HumanAircraft";
+        Enter(SimPhase.HumanAircraft);
         _runtime.StepHumanAircraft(dt);
-        _phase = "Zeppelins";
+        Enter(SimPhase.Zeppelins);
         _runtime.StepZeppelins(dt);
-        _phase = "TurretEmplacements";
+        Enter(SimPhase.TurretEmplacements);
         _runtime.StepTurretEmplacements(dt);
-        _phase = "Generators";
+        Enter(SimPhase.Generators);
         _runtime.StepGenerators(dt);
         // A hull a generator launched this step is not eligible until the next one, the same
         // admission the captured-aircraft membership above takes.
-        _phase = "SurfaceVehicles";
+        Enter(SimPhase.SurfaceVehicles);
         _runtime.StepSurfaceVehicles(dt);
-        _phase = "CapturedAiAircraft";
+        Enter(SimPhase.CapturedAiAircraft);
         _runtime.StepCapturedAiAircraft(dt);
-        _phase = "LandingApproaches";
+        Enter(SimPhase.LandingApproaches);
         _runtime.StepLandingApproaches();
         if (_runtime.SimHeld)
             return;
 
-        _phase = "InstantAction";
+        Enter(SimPhase.InstantAction);
         _runtime.StepInstantAction(dt);
-        _phase = "Campaign";
+        Enter(SimPhase.Campaign);
         _runtime.StepCampaign(dt);
         if (_runtime.EndingHold || _runtime.SimHeld)
             return;
 
-        _phase = "Radio";
+        Enter(SimPhase.Radio);
         _runtime.StepRadio(dt);
-        _phase = "SmokeScreens";
+        Enter(SimPhase.SmokeScreens);
         _runtime.StepSmokeScreens(dt);
-        _phase = "BeeperTags";
+        Enter(SimPhase.BeeperTags);
         _runtime.StepBeeperTags(dt);
-        _phase = "AiVoice";
+        Enter(SimPhase.AiVoice);
         _runtime.StepAiVoice(dt);
-        _phase = "Versus";
+        Enter(SimPhase.Versus);
         _runtime.StepVersus(dt);
     }
 

@@ -476,12 +476,15 @@ internal sealed class MotionRuntime : IAnimMotion
         // The original's column is a query at (x, z), so a body already under a surface is lifted
         // back onto it. ⚠ The second cast comes DOWN from above, never up from below: a one-sided
         // collider answers nothing from behind, and every water polygon in the install is one.
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            from, from + Vector3.Down * ColumnDepth, _contactMask));
-        if (hit.Count == 0)
-            hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                from + Vector3.Up * ColumnDepth, from, _contactMask));
-        if (hit.Count == 0)
+        using var down = PhysicsRayQueryParameters3D.Create(
+            from, from + Vector3.Down * ColumnDepth, _contactMask);
+        using var downHit = space.IntersectRay(down); // disposed, per motion per tick (PERF-20)
+        using var up = downHit.Count == 0
+            ? PhysicsRayQueryParameters3D.Create(from + Vector3.Up * ColumnDepth, from, _contactMask)
+            : null;
+        using var upHit = up != null ? space.IntersectRay(up) : null;
+        var hit = downHit.Count > 0 ? downHit : upHit;
+        if (hit == null || hit.Count == 0)
             return Watchdog(dt, next);
 
         float surfaceY = hit["position"].AsVector3().Y;
@@ -539,7 +542,8 @@ internal sealed class MotionRuntime : IAnimMotion
         if (from.DistanceSquaredTo(to) < 1e-8f)
             return false;
 
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, _contactMask));
+        using var query = PhysicsRayQueryParameters3D.Create(from, to, _contactMask);
+        using var hit = space.IntersectRay(query);
         if (hit.Count == 0)
             return Watchdog(dt, next);
 

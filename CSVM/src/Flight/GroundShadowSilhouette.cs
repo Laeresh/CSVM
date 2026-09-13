@@ -201,9 +201,9 @@ public sealed class GroundShadowSilhouette
             return found;
         }
 
-        foreach (var child in root.GetChildren())
+        for (int i = 0, count = root.GetChildCount(); i < count; i++)
         {
-            if (FindByName(child, name) is { } hit)
+            if (FindByName(root.GetChild(i), name) is { } hit)
                 return hit;
         }
 
@@ -240,8 +240,9 @@ public sealed class GroundShadowSilhouette
                 Surfaces(mesh, within, group);
         }
 
-        foreach (var child in node.GetChildren())
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
         {
+            var child = node.GetChild(i);
             var step = child is Node3D spatial ? spatial.Transform : Transform3D.Identity;
             Collect(child, at * step, within * step, drawn, group, groups, ref box, ref any);
         }

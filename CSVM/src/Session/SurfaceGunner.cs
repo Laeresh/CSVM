@@ -233,9 +233,10 @@ internal sealed class SurfaceGunner
         {
             into.Add(body.GetRid());
         }
-        foreach (var child in node.GetChildren())
+        // By index: a hull walk per shot through GetChildren() is an engine array per node (PERF-20).
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
         {
-            CollectRids(child, into);
+            CollectRids(node.GetChild(i), into);
         }
     }
 

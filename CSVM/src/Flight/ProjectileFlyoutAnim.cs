@@ -169,9 +169,9 @@ public sealed partial class ProjectilePool : ISequenceHost
             rig.ByIndex.TryAdd(node.GetMeta(AnimRuntime.IndexMeta).AsInt32(), node);
         if (node.HasMeta(AnimRuntime.NameMeta))
             rig.ByName.TryAdd(node.GetMeta(AnimRuntime.NameMeta).AsString(), node);
-        foreach (var child in node.GetChildren())
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
         {
-            if (child is Node3D child3d)
+            if (node.GetChild(i) is Node3D child3d)
                 IndexRigNodes(rig, child3d);
         }
     }

@@ -102,9 +102,9 @@ public sealed partial class ZeppelinRuntime
                     return;
                 }
             }
-            foreach (var child in node.GetChildren())
+            for (int i = 0, count = node.GetChildCount(); i < count; i++)
             {
-                Walk(child);
+                Walk(node.GetChild(i));
             }
         }
         Walk(root);

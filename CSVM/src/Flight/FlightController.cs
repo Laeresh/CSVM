@@ -1966,6 +1966,7 @@ public partial class FlightController : Node3D
 
     public override void _Process(double delta)
     {
+        using var _ = ProcessSiteCost.Enter(ProcessSite.Flight);
         PollInput();
         var clock = GameClock.Current;
         if (!Inert)
@@ -2376,8 +2377,8 @@ public partial class FlightController : Node3D
     {
         if (node is Node3D n3d && PropParts.Spin(PropParts.Classify(AnimRuntime.NameOf(n3d)), out _, out _))
             rig.SetSubtreeOpacity(n3d, 1f);
-        foreach (var child in node.GetChildren())
-            RestoreDiscOpacity(rig, child);
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
+            RestoreDiscOpacity(rig, node.GetChild(i));
     }
 
     // Space / gamepad B, the gun trigger (caller drives the fire-rate clock);

@@ -462,12 +462,15 @@ public sealed class TurretController
         {
             return false;
         }
-        var query = PhysicsRayQueryParameters3D.Create(from + span * (MountSkirtM / len), to, CollisionLayers.World);
+        // Both disposed on the way out: the query object and the hit dictionary are finalizable
+        // wrappers otherwise, one pair per turret per tick (PERF-20).
+        using var query = PhysicsRayQueryParameters3D.Create(from + span * (MountSkirtM / len), to, CollisionLayers.World);
         if (exclude is { Count: > 0 })
         {
             query.Exclude = exclude;
         }
-        return space.IntersectRay(query).Count > 0;
+        using var hit = space.IntersectRay(query);
+        return hit.Count > 0;
     }
 
     /// <summary>Writes the team the acquisition gate runs on, for the fan a zeppelin record's team

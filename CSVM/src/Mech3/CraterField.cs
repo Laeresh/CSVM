@@ -75,18 +75,25 @@ public sealed class CraterField
         {
             return Result.NoTerrain;
         }
+        // Both halves are timed on the log line: a carve runs inside the projectile tick, and the
+        // line is the only reading of what one costs a flight.
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
         if (TerrainCarve.Carve(owner, body, shape) is not { } cut)
         {
             return Result.ClipFailed;
         }
 
+        long carved = System.Diagnostics.Stopwatch.GetTimestamp();
         _craters.Add(shape);
         int flattened = ClutterCull.Destroy(_world.GetNodeOrNull<Node3D>("clutter"), shape);
+        long culled = System.Diagnostics.Stopwatch.GetTimestamp();
         DecorationsDestroyed += flattened;
+        double perMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         string where = FormattableString.Invariant($"({impact.X:0},{impact.Y:0},{impact.Z:0}) on {owner.Name}");
         string ground = FormattableString.Invariant($"{cut.Removed} ground triangles replaced by {cut.Added}");
         string bowl = FormattableString.Invariant($"{cut.BowlTriangles} bowl triangles over {cut.Opened} opened collision faces, {cut.RimOnGround}/{shape.Rim.Count} rim on ground");
-        Log.Info("world", $"crater {_craters.Count} at {where}: {ground}, {bowl}, {flattened} decorations destroyed");
+        string cost = FormattableString.Invariant($"carve_ms={(carved - start) * perMs:0.0} cull_ms={(culled - carved) * perMs:0.0}");
+        Log.Info("world", $"crater {_craters.Count} at {where}: {ground}, {bowl}, {flattened} decorations destroyed, {cost}");
         return Result.Carved;
     }
 
