@@ -121,7 +121,9 @@ public sealed partial class AiWeaponAudio : Node3D
     /// <summary>The trigger came off, or the aircraft respawned.</summary>
     public void StopGunLoop() => _gunLoop?.Stop();
 
-    /// <summary>The dry-trigger cue, one shot when this aircraft's guns or pylons come up empty. Not
+    /// <summary>The dry-trigger cue, one shot when this aircraft's guns or pylons come up empty.
+    /// Positional by decision: the original plays every aircraft's flat and at full volume from any
+    /// distance (docs/org/weaponFire.md), and this port keeps the world emitter instead. Not
     /// culled by hand: the player's own <c>MaxDistance</c> already clips it silent past the
     /// definition's audible distance, and a one-shot holds a voice for a fraction of a second.</summary>
     public void PlayEmptyClip()

@@ -692,46 +692,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-717` `[Feature]` `[S]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]` `[CM02]` **The Pandora's
-  turrets fire at the Balmoral the player is about to capture, and the original's turrets do the
-  same, so the remaining question is whether to diverge.** *Evidence:* the turret path was read end
-  to end in `crimson.exe`. The gun update `FUN_004aabb0` builds its query through `FUN_00422850`
-  (own position, own team, the `SHOOT_UP_ONLY` byte, and `DETECTION_RANGE` at query `+0x18`) and
-  calls the shared picker `FUN_0041f9c0`. A candidate passes exactly three tests and no others:
-  pool membership, the hostility predicate `FUN_00422890` into `FUN_004a5b90`, and the cost
-  function `0x004ac720`. `FUN_004a5b90` reads the candidate's `+0x8c` (the scene node's active bit
-  walked up the parent chain, rewritten every frame at `0x004a2840` from `FUN_004a32c0`), its
-  `+0x90` (a construction byte written 1 at `0x004a264f` and cleared only for `targets.zrd` world
-  objects at `0x004a3000` and `0x004a34b5`), and the raw team compare. The cost is a hard range
-  gate against the authored `DETECTION_RANGE`, then `1200 * weight + distance`, the weights being
-  the local player (0.8), a `TargetProjectile` under the turret's `+0x6f` flag (0.6) and a
-  `wingman`-mode vehicle (1.4); they are slack in a distance race, not filters. `+0x4d`
-  (`objectiveTarget`) and `+0x4c` (`otherTarget`) are read in one place only, `FUN_004b5cd0`, the
-  player's own candidate class filter, so `ADD_OBJECTIVE_TARGET` moves a marker and changes nothing
-  about who shoots; there is no capture state and no marked-for-pickup bit anywhere in the turret
-  path. On CM02 in particular: `extracted/zrdr/ai.zrd.json`'s four `piratezep` turret entries author
-  `TEAM 1` with `DETECTION_RANGE` 600 m and 800 m, `extracted/C3/M05/zrdr/objectives.zrd.json`'s
-  `OBJECTIVE1` wakes them two seconds in, the three `britbalmoral_*` blocks author team `2` in
-  `aiv.zrd.json` slot 3 and never take a `SET_AI_TEAM`, and the `britbalmoral` def in
-  `extracted/zrdr/vehicle.zrd.json` inherits `mode jet`, so the bomber carries the same 1.0 weight a
-  Peacemaker carries and is the nearest candidate of all while it flies its approach to
-  `pzhookpoint`. The full decode is `docs/org/targeting.md` ("Nothing in the turret path reads an
-  objective, capture or pickup flag"). *Question for the user:* keep the original's behaviour and
-  close this, or add a remake-only hold-fire rule (a ring skips an aircraft the mission has flagged
-  `objectiveTarget`, or one inside its own zeppelin's docking approach) and accept the divergence?
-  *Fix shape if the answer is "diverge":* one predicate in `TurretController.AcquireTarget`
-  (`CSVM/src/Flight/TurretController.cs`) over the flag `AiFlightAssembler` already stamps, plus an
-  engine suite over C3/M05's built world where a ring holds fire on a Balmoral in range and still
-  engages a Peacemaker. *⚠ Traps:* a Balmoral carrying the objective flag is one candidate on the
-  Enemy cycle, not two, and that is a HUD matter; this entry is about rounds leaving the Pandora. Do
-  not fix it by making the Balmorals friendly, since the player has to shoot them to the capture
-  threshold. The one thing the original genuinely does is fall silent the instant the docking
-  sequence switches the flying airframe off, because `+0x8c` goes to 0; if CSVM keeps firing through
-  the swap that is a separate defect from this preference. *Playtest after fix:* CM02, let the third
-  Balmoral reach the Pandora and watch the rings. *Cross-refs:* `BL-714` (the same rings,
-  the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
-  967).
-
 - `BL-866` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Allied AI and turret gunners engage a destroyed
   zeppelin's surviving parts and non-enemy buildings while the live enemies go unfought.**
   *Evidence:* reported at the controls from CM04 (C3/M03) on: wingmen, allied aircraft and the
@@ -795,7 +755,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-447` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The mouse-flying arm's `is_autogyro` roll/yaw exchange has
+- `BL-447` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The mouse-flying arm's `is_autogyro` roll/yaw exchange has
   nowhere to land: CSVM has no mouse flight-control mode.** `0x4876f4` sits inside
   `FUN_00487460`'s mouse arm, reached only with the mouse control bit of `DAT_0071c2a0` set and the
   free-look flag `DAT_00654120` clear, and there it exchanges and negates the roll and yaw sources,
@@ -803,10 +763,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ([`docs/org/flightModel.md`](docs/org/flightModel.md), "`is_autogyro` reaches no flight-plant
   term"). CSVM's mouse is head-look, so porting the exchange means first adding a mouse
   flight-control scheme and a way to select it, which is a product decision rather than a parity
-  gap. *Decision owed:* does CSVM offer mouse flying at all? With one, the exchange is a few lines
-  inside the new arm and closes with it; without one, the ledger row moves from unsupported to an
-  exception carrying that reason. Ledger row "the mouse-flying arm's `is_autogyro` roll/yaw
-  exchange" in the same page's "Parity ledger".
+  gap. *Decided:* CSVM offers mouse flying. *Fix shape:* a mouse flight-control scheme selectable
+  beside the keyboard and pad ones (the original's mouse control bit of `DAT_0071c2a0` is the
+  model: mouse motion drives roll and pitch, and free-look is a separate flag that hands the mouse
+  back to head-look), with the `is_autogyro` exchange inside its arm so an autogyro yaws with
+  sideways mouse motion; then the ledger row "the mouse-flying arm's `is_autogyro` roll/yaw
+  exchange" in the same page's "Parity ledger" moves to supported. *⚠ Traps:* the free-look flag
+  decides which of two consumers the mouse feeds, so the scheme needs a way to toggle it that the
+  Controls door exposes; do not take the mouse away from head-look on the keyboard and pad schemes.
 - `BL-774` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The sustained climb plateaus at 204 mph against the original's
   filmed 163, and every term that could move a steady climb is now ruled out by arithmetic.**
   `--dump-flight`'s sustained climb settles at 204.03 mph on a 56.3° path where the footage reads
@@ -882,42 +846,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   "The hardware draw"); the only exemption is the model's own `lighting` flag, and whether the
   `poleflare` and `lightpole` decoration models carry it is read off the templates, not fitted.
   What remains here is the billboard-axis question, and it still needs the A/B.
-
-- `BL-331` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The ground shadow is placed and shaped like the original's, but it lies on a flat quad rather than conforming to the ground**
-  (split out of `BL-324`). The placement and the silhouette are landed and pinned
-  (`Flight/GroundShadowLaw.cs`, `Flight/GroundShadowPass.cs`,
-  `Flight/GroundShadowSilhouette.cs`, suite `ground-shadow`): the straight-down projection with
-  the player's forward skew, the 1/200 horizontal distance fade, the 60/250 altitude ramp, the
-  player's 3× growth, the colour derived from the mission's `SUNLIGHT` pair, and the aircraft's
-  own triangles rasterised top down into the 32×32 modulate texture every frame off the node the
-  original reads. The decode is [`docs/org/shadows.md`](docs/org/shadows.md), whose last section
-  lists what the port takes and where it departs. What is left:
-  - **The ground conformance.** The original applies the texture as a modulate pass over the
-    world's own polygons, chunk by chunk (`FUN_005668b0`), so it wraps whatever lies inside the
-    footprint; CSVM draws a flat quad at the probed height and lifts it half a unit clear, which
-    rides visibly over a steep slope and cuts into a building. Godot's `Decal` is the obvious
-    candidate and needs checking against the fullbright world's own materials first.
-  - **Fog.** The quad multiplies an already-fogged frame buffer with `fog_disabled`, so a distant
-    shadow stays darker than the ground it lies on. The original modulates before fog.
-  - **Water, and anything with no collider**, takes no shadow at all: the ground comes from one
-    downward ray. The original's terrain column answers the water surface.
-  - **The Spruce Goose** has its own four constants (300/600 range, 180/750 altitude) and an
-    enable switch on its `shadow` child node. Neither is wired.
-  ⚠ **Godot shadow mapping cannot be the mechanism**, and the decode confirms it: the original
-  casts no shadow map at all. The world is built `fullbright: true` and an unshaded material
-  receives nothing, so `BL-324`'s removal of `_sun.ShadowEnabled` (`git log --grep=BL-324`) stays
-  correct and is not a regression to rediscover. The pass is therefore **original graphics mode
-  only**; enhanced mode casts real shadow maps and builds none of this.
-  ⚠ **The authored `shadow` node is the SOFTWARE fallback, not the real shadow.** It is real and it
-  is used, but only when the projected path is off: `FUN_00565aa0` enables that path for the
-  hardware renderer only, and `FUN_004b3050` hides the card whenever it is on. Keeping `shadow` out
-  of `PlaneBuilder.cs` is right; do not build the card.
-  *Needs, still:* an original-game A/B, a low pass over flat ground showing size and softness
-  against altitude. The decode's four falsifiable predictions are in `docs/org/shadows.md`'s last
-  section; the one to shoot at first is that the **player's own** shadow runs ~1.5 × its altitude
-  **ahead** of the aircraft along the flight direction while an AI aircraft's sits directly
-  beneath it. That direction was decoded backwards once already, from reading row 2 of the
-  orientation matrix as the nose when it is minus the nose (`SRC-12`), so the capture decides it.
 
 - `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
   one remake-only rule is deliberately held back** (`Precipitation.cs:29-62`, type/tint/rate/density
@@ -1233,8 +1161,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only, while the billboard arm (`:1729`), the facade arm (`:1816`) and
   `CSVM/src/Mech3/Clutter.cs:655` sample unbiased. *Fix shape:* route the same shader global
   through every sampling arm; `c5-city-night` re-pins with the cause named. *⚠ Traps:* the bias
-  moves C5's dark band out by 1.74x and does not remove it; the band itself is `BL-538`'s open
-  look, and this item is not evidence about it. *Cross-refs:* `BL-538`, `docs/verification.md`
+  moves C5's dark band out by 1.74x and does not remove it; with the bias applied the band no
+  longer reads wrong at the controls (`git log --grep=BL-538`), so this item is about the other
+  sampling arms, not the band. *Cross-refs:* `git log --grep=BL-538`, `docs/verification.md`
   WORLD-38, `docs/org/textures.md`.
 
 - `BL-874` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original
@@ -1312,12 +1241,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-231` (closed; the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-535` (the per-burst re-reset cost measured under the same instrument), `BL-296`/`BL-299` (the other splitscreen-scoped items).
-- `BL-538` `[Bug]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's ground draws a dark band the original never draws; the chapter's own mip LOD bias is now applied, and whether that is enough is a look.** The band is the shipped hand-authored mip chain of the `cblock*` textures, whose level 1 is a non-monotone dip: `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) → 4.41 (L1) → 6.77 (L2) and `cblock2` at 9.60 → 0.83 → 1.84. The chain installs correctly (every `installed` line reads `== authored`) and the levels are the original's own art, so what is wrong is *selection*. **The premise that the original stops drawing the surface before L1 is disproved.** `docs/org/textures.md` now decodes the whole path: `FUN_00532060` links the `_1`/`_2` siblings onto the slot's `+0x28`, and the hardware upload (`DAT_009be728` → `0x005a1840`) counts that chain and creates the DDraw surface with `DDSD_MIPMAPCOUNT` and `DDSCAPS_MIPMAP|DDSCAPS_COMPLEX`, so the authored levels *are* the D3D7 mip chain and the card selects among them. The one engine knob is `MipBias`, clamped to `[-1, 1]` by `FUN_0059df30` and flushed as `SetRenderState(46 /* MIPMAPLODBIAS */)` by `FUN_005a0c00`, device default 0. Exactly one retail script sets it: `support\c5\adjust.gw` at **-0.8** (the `-1.0` in C1–C4's `load.gw` is the data-compile path `support\main.gw` skips under `USEZBD`, `WORLD-38`). `TextureArchive.MipBias` now reads it and `Launcher` writes `csky_mip_bias`, which the world shaders pass to `texture()`; the C5 golden moved and no other shot did.
-  *Owed look:* fly C5 at the reproduce pose below and say whether a dark band still reads across the ground at mid distance, and if so roughly how far out and whether it brightens again beyond. The instrument cannot answer it: the bias moves every level transition out by 2^0.8 = 1.741, it does not remove one, and the before/after pair shows the ground rows changing by up to +8.5 mean luminance at the horizon rows and -6.4 nearer in (13.9 % of pixels differ). If it still reads wrong, the two remaining divergences to weigh are the sampler and the draw distance, both below.
-  *Where to look next, if the look says it is still wrong:* (1) the world sampler is `filter_linear_mipmap_anisotropic`, which the original's D3D7 hardware had no equivalent of; anisotropic selection holds L0 far out along a grazing ground and then crosses into L1 as a ring, where trilinear-only crosses as a gradient. Try the isotropic sampler for the world arm and judge. (2) The original ends the world at the zone's `CLIP_RANGES` far, 2500 m in C5 (300 m inside an armed `fvol`), with `ZONE1` fog reaching pure black at 2250 m; the remake keeps a 40000 m far plane and fogs instead, which is B11/C22's standing kept divergence, reopening it is a decision, not a fix.
-  *Reproduce:* `.\RunProbe.ps1 --freecam --chapter=C5 "--pos=-9256,178,-3155" "--direction=-0.588,-0.1,-0.809" --det --mute "--screenshot=.scratch\band.png"`, which is the `c5-city-night` golden's own pose; `--mips=generated` still lifts the band completely and stays the A/B.
-  *Ruled out, do not re-chase:* the clutter fade (`graphics.clutterFarFade=false` does not touch it); collapsed clutter cards writing depth or a dark fragment; C5's fog-volume clutter overlapping the templates fade; the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter paths behind `CameraRenderClutter`, while ordinary scene nodes draw through `FUN_004d4a20`); a per-node, per-chunk, per-material or per-texture cull range (there is none, the chunk gather `FUN_004d4db0` admits on frustum, occluder planes and a 50-ring bucket cap only, so the far plane is the sole range limit); a per-texture lighting term; and decorrelating the dither lattice per stamp.
-  *Cross-refs:* `BL-337` (closed; the fade), `docs/org/textures.md` (the chain, the two selection rules, the bias), `docs/org/weather.md` (the far plane), `docs/formats/gamez.md`, `analysis/item9-depth-bias/CBLOCK-LOD.md` (the `cblock` ground is 256² over a 256 m tile, one texel per metre).
 
 - `BL-720` `[Bug]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM24]` **The Dante's
   engine fires moved between the engines because the effect-template pool was shorter than the
@@ -1347,7 +1270,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-231` (the pool's tuning entry), `BL-121` (the `trail-world-anchor` suite),
   `BL-700` (the same zeppelin family's wreck rest).
 
-- `BL-797` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
+- `BL-797` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
   *Evidence:* the disabled-systems mask's bit-`0x2` edges call `FUN_004b15c0` and `FUN_004b1630`,
   which swap the airframe def's `stop_props_anim` and `spin_props_anim` on two anim slots at
   vehicle `+0x6c8`/`+0x6cc` (decode: `docs/org/ordnanceTypes.md`, "What the mask's bit-2 edges
@@ -1365,8 +1288,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `OBJECT_MOTION` and keep `PropAnimator`, or hand the spin to the anim runtime for the whole
   flight. Do not reach for `startprops` on the restart: it carries `snd_propstart`, and the
   original's restart is silent. Do not double the death-time `stopprops` when a choked aircraft
-  then crashes. *Playtest after fix:* fly into a `TANGLER` cloud and watch and listen to the prop
-  through the choke and the recovery. *Cross-refs:* `docs/formats/vehicle.md`
+  then crashes. *The user's steer:* the restart side is decided, `PropAnimator` holds the spin, so
+  `spinprops` runs with its `OBJECT_MOTION` suppressed. *Decode first, before the port:* when the
+  original really plays the pair. The decode has the choke edges, the death routine and the
+  spawn/reset caller; the user asks whether `stopprops`/`spinprops` also run at mission start and
+  on a captured aeroplane (the airframe swap, `docs/formats/anim-definitions/cutscenes.md`, "The
+  airframe swap codes"), so read every caller of `FUN_004b15c0`/`FUN_004b1630` and the anim
+  runtime's own `start_anims` path and list each site the pair fires from, then port the whole
+  set, not the choke alone. *Playtest after fix:* fly into a `TANGLER` cloud and watch and listen
+  to the prop through the choke and the recovery. *Cross-refs:* `docs/formats/vehicle.md`
   (`spin_props_anim`/`stop_props_anim`), `docs/org/vehicleDamage.md` (the mask), `BL-406` (the
   choke itself), `BL-285` (the engine loop's start/stop inputs).
 
@@ -1390,19 +1320,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-815` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original plays the dry-trigger cue flat, from no position at all, while an AI aircraft's in CSVM is a world emitter.**
-  *Evidence:* `NO_AMMO_WARNING` resolves once at `wep.ini` load into a global (`FUN_005ad630` at
-  `005ad71e`) and is played by `FUN_005ac560`, which calls the general play entry with no position
-  argument; `FUN_005936e0` takes that null as 2D and puts the voice in the head-relative mode, so the
-  cue is flat even though its definition carries `3D` and `RANGE [80, 800]`. Its play site is the fire
-  routine's out-of-ammo arm (`FUN_004b6820`) and is not owner-gated, so a non-player aircraft running
-  dry sounds it flat too (`docs/org/weaponFire.md`). `FlightAudio` matches this for the pilot;
-  `AiWeaponAudio` gives it an `AudioStreamPlayer3D` culled at the definition's 800 m instead.
-  *Fix shape:* either drop the AI dry-cue emitter and let the flat own-ship player carry the cue for
-  everybody, or keep the positional one as a deliberate departure and say so on the member. *⚠ Traps:*
-  the flat form is heard at full volume from any distance, which is what the original does and is
-  plausibly why nobody has reported it; `ai-weapon-emitters` asserts a two-emitter roll-call per
-  aircraft and its count moves with the behaviour. *Cross-refs:* `BL-794`'s closing commit.
 - `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.
@@ -1863,7 +1780,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-827` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **Six of the original's eleven targeting actions have no key here: a
+- `BL-827` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Six of the original's eleven targeting actions have no key here: a
   Previous and a class-restarting Nearest per class.** CSVM ships five of the eleven, one Next per
   class plus nearest-crosshairs and Target Nothing, on `T`/`Y`/`U`/`I`/`O`. The original ships all
   eleven, three directions for each of the three classes: `E`/`Shift+E`/`Ctrl+E` for
@@ -1887,8 +1804,46 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   targeting actions on a joystick (buttons 3 and 6), so pad defaults for these six would be an
   invention. (d) Do not reach for a modifier without pricing it: `Shift` and `Ctrl` are throttle up
   and down in flight here, so `Shift+T` would also change the throttle.
+  *The user's steer:* "Use the default bindings if possible. Add them all (look at
+  `OriginalScreenshots/Keybinds Targeting.png`) so that they can be bound via the controls menu.
+  Don't bind them to controller, cycle + crosshair work good with controller." So: all six actions
+  exist as `InputAction` members, appear on the Controls door and take a keyboard default; the
+  default is the original's own key where it is free here, otherwise a free key of the
+  implementer's choice (the modifier form is not available without the binding-model work above,
+  so a bare key stands in for `Shift+E`/`Ctrl+E`); no pad default for any of the six, the pad
+  keeps Next and nearest-crosshairs alone.
   *Cross-refs:* `docs/controls.md`'s flight table, `CSVM/src/Bindings/`, `docs/org/input.md`'s
   shipped-defaults table.
+
+- `BL-897` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The weapon
+  selectors' four keys should be the original's own `F3`..`F6`, and the pad's one direction per
+  class wants a hold to step the other way.** *Evidence:* the user at the controls with the two
+  backward steps landed (`git log --grep=BL-357`): CSVM binds the forward steps on `G`/`H` and the
+  backward ones on `F3`/`F4`, where the original's Weapons keybind page
+  (`OriginalScreenshots/Keybinds Weapons.png`, `docs/org/input.md`'s shipped-defaults table) puts
+  `Cycle guns clockwise` on `F3`, `Cycle guns counterclockwise` on `F4`, `Cycle rockets clockwise`
+  on `F5` and `Cycle rockets counterclockwise` on `F6`. `F5` is the damage lab's hard-coded key
+  (`Flight/DamageLab.cs`, `UI/WorldDamageLab.cs`) and `F6` is `SelectChaseView`'s default
+  (`Bindings/DefaultBindings.cs`). On the pad each class has one direction (D-pad right and left,
+  the original's own joystick 7 and 8 are also one direction each), and `FireControl.StepSelectors`
+  moves on rising edges only, so holding the D-pad does nothing today. *Fix shape:* (1) defaults
+  `F3` guns clockwise, `F4` guns counterclockwise, `F5` rockets clockwise, `F6` rockets
+  counterclockwise, which the user asked for verbatim; the damage lab and the chase view each take a
+  new key, named in `docs/controls.md`, `docs/cli.md` if a flag names the key, and the debug-key
+  block's own rule if the lab moves there. (2) A hold on the pad's selector button past the same
+  250 ms the targeting hold already uses steps the selector the other way, one step per hold, so
+  the pad reaches both directions without a second button; keyboard holds stay inert. *⚠ Traps:*
+  `docs/org/input.md` says the original's clockwise/counterclockwise names are inverted against
+  its message keys, so bind by the displayed name the user typed, not by `MSG_CMD_CANNON_PREV`. A
+  stored keymap that names `F3`/`F4` for the backward steps keeps them (the store does not bump
+  its version for a default change), so the new defaults reach only a profile that never saved
+  those two rows; say so in `docs/controls.md`. The hold must not also fire the rising-edge step
+  on press and then the backward step on release; feed the pad's selector level through
+  `TapHoldButton` (`CSVM/src/Utils/TapHoldButton.cs`) as the targeting hold does, so the tap
+  resolves on release and a spent hold never also taps. *Playtest after fix:* any sortie, both selectors both
+  ways on the keyboard, and a short press against a held press on the D-pad. *Cross-refs:*
+  `CSVM/src/Flight/FireControl.cs` (`StepSelectors`), `CSVM/src/Bindings/DefaultBindings.cs`,
+  `docs/controls.md`'s flight table, `docs/org/input.md` (the inverted names, the joystick column).
 
 - `BL-431` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
   first person, and whether it should is undecided.** The drive itself has landed:
@@ -2097,19 +2052,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   race whose clock starts while a load screen is still up), `docs/org/loading-screen.md` (the
   campaign sheet's own content, which this one has to make move without changing).
 
-- `BL-825` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: footage]` **Whether the
-  build stamp stays in the corner of the Original menu, where the original draws no text at all.**
+- `BL-825` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The build
+  stamp stays in the corner of the Original menu and reads `CSVM v<version>`, so it is not taken
+  for the original's own version number.**
   *Evidence:* `BuildStamp.cs` writes `v<version>` in the bottom-right corner whenever the menu is
   up, on every presentation, so a screenshot a stranger sends carries the build it was taken on
   (`CSVM/src/UI/BuildStamp.cs:6-12`). The original's top level draws no text outside the art: the
   script creates `mm_t_title` and fills it from `uiData` 2152, and CAP-49's static-pixel map over
   ten seconds leaves only the logo, the six plaques and the frame. Original draws nothing at
   `mm_t_title` and never did; what the film contradicts is the corner stamp, which is ours and
-  which no take can speak to. *Fix shape:* either keep it (the stamp is a fact about the binary,
-  and the presentation most likely to be screenshot is the one that would lose it) or hide it under
-  `PresentationId.Original` alone, which costs one condition in `BuildStamp.Tick`. *⚠ Traps:* the
-  stamp's placement is deliberate and cross-presentation, so hiding it on one presentation is a
-  decision about what a bug report carries, not a fidelity fix. *Cross-refs:* `BL-805`'s closing
+  which no take can speak to. *Decided:* keep it on every presentation, the stamp is a fact about
+  the binary and the presentation most likely to be screenshot is the one that would lose it.
+  *Fix shape:* the text becomes `CSVM v<version>` (the user's words: "change it to CSVM v0.1.0 so
+  it is not confused with the original's version number"), one string in `BuildStamp`, and any
+  suite or doc that quotes the `v<version>` form follows. *⚠ Traps:* the stamp's placement is
+  deliberate and cross-presentation, so do not make the prefix presentation-dependent; a bug
+  report reads the same string whichever menu it was shot on. *Cross-refs:* `BL-805`'s closing
   commit (the rest of the top level's reading), `docs/org/menu-inventory.md` Part 4.
 - `BL-834` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The warning-shot shield
   arms on every human-piloted aeroplane, where the original ticks it only for the player vehicle
@@ -2125,10 +2083,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   skew, threefold growth and fade exemption key on any human-piloted aeroplane, so a four-pilot
   launch draws four player-shaped shadows in every pane.** *Evidence:*
   `CSVM/src/Flight/GroundShadowPass.cs:228` (at `7d2e9881`) tests `IsHumanPiloted`; the decode
-  behind `BL-331` keys the skew on the one local player. *Fix shape:* decide whether each pane's
-  own pilot takes the player shape (per-pane, the decoded intent read per viewer) or only seat 0;
-  then key on the pane's viewer, pinned in the `ground-shadow` suite over a two-pane session.
-  *Cross-refs:* `BL-331` (the shadow's open halves), `docs/verification.md` SRC-12.
+  (`docs/org/shadows.md`) keys the skew on the one local player. *Fix shape:* decide whether each
+  pane's own pilot takes the player shape (per-pane, the decoded intent read per viewer) or only
+  seat 0; then key on the pane's viewer, pinned in the `ground-shadow` suite over a two-pane
+  session. *Cross-refs:* `docs/org/shadows.md`, `git log --grep=BL-331` (the shadow's landed
+  placement and silhouette, and the halves dropped with it), `docs/verification.md` SRC-12.
 
 - `BL-875` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's campaign
   screens take the key or pad press that skipped a chapter or closing film.** *Evidence:* a read of
