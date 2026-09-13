@@ -115,16 +115,25 @@ that no seat owns.
 While the scheme is on, where the cursor stands in that seat's pane is a stick
 position: across the pane banks, down the pane pulls the nose up, and the middle
 is a centred stick. The reading is the original's own mouse arm
-(`FUN_00487460`, `docs/org/flightModel.md`): each axis is dead inside its own
-deadzone (0.1 of the travel for bank and pitch, 0.3 for yaw) and the travel left
-over is rescaled so the pane's edge is full deflection. An autogyro exchanges the
-two lateral sources, so sideways motion yaws it where it banks an aeroplane. The
+(`FUN_00487460`, `docs/org/flightModel.md`): each source is dead inside its own
+deadzone (0.1 of the travel for the cursor's two axes, 0.3 for the third axis)
+and the travel left over is rescaled so the pane's edge is full deflection. The
 mouse's deflections are SUMMED with the keys and the pad rather than replacing
-them, which is what the original's arm does to the same slots, so an autogyro's
-pilot still banks with the roll keys while the mouse yaws.
+them, which is what the original's arm does to the same slots.
 
 The original's third mouse axis has no counterpart here, so that source is always
-zero: an aeroplane takes no yaw from the mouse, and an autogyro no bank.
+zero: an aeroplane takes no yaw from the mouse.
+
+**An autogyro flies the same two cursor axes on a different pair of slots.** The
+original exchanges its two lateral sources, so sideways motion yaws it where it
+banks an aeroplane, and its bank comes off the third axis. With no third axis
+here the autogyro's mouse is exactly two axes: **across the pane yaws, down the
+pane pulls the nose up, and its bank stays on the roll keys**, which the mouse
+sums into rather than replacing. The sideways travel carries its own 0.1
+deadzone on the yaw slot, not the third axis's 0.3, so the cursor offset that
+banks an aeroplane yaws an autogyro by the same amount; gating it at the absent
+device's wider band left every ordinary offset flying nothing. That narrower
+band is this port's rule, not a decoded one.
 
 **Free look is hold-to-look under both mouse schemes.** The free-look control
 (right mouse button by default, rebindable on the KEYS AND BUTTONS page's Views 1

@@ -3814,7 +3814,7 @@ which are findings rather than code.
 | the far-field speed-hold plant | decoded | `0x48c4e9`–`0x48c603` |
 | ground blow as a control bias | decoded | `FUN_0048c220`, called at `0x48cf95` |
 | the keyboard stick accumulator | decoded | `FUN_00487460` |
-| the mouse-flying arm's `is_autogyro` roll/yaw exchange | decoded | `0x4876f4`, inside `FUN_00487460`'s mouse arm; `MouseFlight.Read` exchanges and negates the same two sources |
+| the mouse-flying arm's `is_autogyro` roll/yaw exchange | decoded | `0x4876f4`, inside `FUN_00487460`'s mouse arm; `MouseFlight.Read` exchanges and negates the same two sources. ⚠ One port deviation rides on it: the original gates the yaw slot at `0x48774c`'s 0.3 whatever the exchange put there, and with no third mouse axis here that slot is an autogyro's only cursor-fed lateral source, so it takes the cursor travel's own 0.1 instead (`docs/controls.md`) |
 | the six-slot control-surface mix and its 2/s exponential | decoded | `FUN_004b27e0` / `FUN_004b2a40` / `FUN_004b2ca0`, smoothing `FUN_00460490` |
 | contact placement, normal impulse and angular deposit | decoded | `FUN_0048d7f0`, `0x48e4bc` |
 | collision damage, armour before health | decoded | `FUN_0048d2c0` |

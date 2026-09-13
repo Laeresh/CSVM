@@ -726,23 +726,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-20 and PERF-23.
-- `BL-914` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **An autogyro takes no
-  input from the mouse under mouse flying.** Reported at the controls after `BL-447` landed: with
-  Mouse set to Fly, the autogyro does not respond to the mouse at all and the mouse keeps driving
-  the head look. *Evidence:* `MouseFlight.Read` implements the decoded roll/yaw exchange but the
-  port reads two mouse axes and hard-codes the third to zero, so the exchange leaves the
-  autogyro's roll at zero; that explains a missing roll, not a missing yaw and pitch. The second
-  candidate is gone: the right button is hold-to-look, so `MouseFlightRead` returns nothing only
-  while that button is down and no earlier tap can leave the mouse on the head for the sortie. The
-  cause is not confirmed. *Fix shape:* find why the autogyro gets nothing (a headless probe that
-  logs the mouse deflection reaching `_model` per tick, on an autogyro and on a Fury), fix that,
-  and make the autogyro's mapping the decoded exchange with two axes: mouse left and right yaws,
-  up and down pitches, roll stays on the keys. *⚠ Traps:* the right button is hold-to-look under
-  both mouse schemes, so no free-look toggle stands between a reading and the stick.
-  *Playtest after fix:* Instant Action in an autogyro with Mouse on Fly: the nose follows the
-  mouse in yaw and pitch from the first frame, no button pressed. *Cross-refs:* `BL-447`'s
-  closing commit (the exchange and its honest limit), `BL-916`, `BL-917`,
-  `CSVM/src/Flight/MouseFlight.cs`.
 - `BL-916` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The mouse pointer
   stays visible and free while flying; it should be hidden and captured by the window.**
   *Evidence:* nothing in flight sets `Input.MouseMode`; the only writers are the pause boards, the
@@ -753,7 +736,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   read moves to relative motion under capture. *⚠ Traps:* the hidden test desktop and `--det`
   runs must not depend on the mouse mode; guard the capture on a real display. *Playtest after
   fix:* fly on a two-monitor rig, the pointer never appears and never leaves the game window;
-  pause shows it again. *Cross-refs:* `BL-447`'s closing commit, `BL-914`,
+  pause shows it again. *Cross-refs:* `BL-447`'s closing commit,
   `CSVM/src/Flight/FlightController.cs` (the mouse read).
 
 
@@ -1833,7 +1816,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (the Original options screen builds it with `ControlsPlayerBox(screen)`'s width and height), so where the
   original's Mouse Sensitivity slot differs in size the row sits off its neighbours. *Fix shape:*
   size the row from its own layout entry. *Cross-refs:*
-  `CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs` (the controls page), `BL-447`'s closing commit, `BL-914`.
+  `CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs` (the controls page), `BL-447`'s closing commit.
 - `BL-919` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The Ammo
   Selection screen offers a rocket row for a pylon the build never bought; the original hides
   it.** *Evidence:* the rows come from the airframe's stock fit, and since `BL-841` a pick on an

@@ -22,10 +22,10 @@ public class MouseFlightTests
         Assert.Equal(1f, MouseFlight.Gate(1f, MouseFlight.YawDeadzone), 5);
     }
 
-    /// <summary>The yaw source's deadzone is three times the other two, so a cursor that already
-    /// banks an aeroplane hard is still inside the yaw source's dead band.</summary>
+    /// <summary>The third axis's deadzone is three times the other two, so a source that already
+    /// banks an aeroplane hard is still inside that axis's dead band.</summary>
     [Fact]
-    public void Gate_TakesAWiderDeadzoneOnYaw()
+    public void Gate_TakesAWiderDeadzoneOnTheThirdAxis()
     {
         Assert.NotEqual(0f, MouseFlight.Gate(0.25f, MouseFlight.AttitudeDeadzone));
         Assert.Equal(0f, MouseFlight.Gate(0.25f, MouseFlight.YawDeadzone));
@@ -52,9 +52,32 @@ public class MouseFlightTests
         var right = MouseFlight.Read(0.8f, 0f, 0f, isAutogyro: true);
 
         Assert.True(right.Yaw < 0f, $"a cursor right of the middle yaws right, got {right.Yaw}");
-        // (0.8 - 0.3) / 0.7, the yaw source's own deadzone and rescale.
-        Assert.Equal(-0.7142857f, right.Yaw, 5);
+        // (0.8 - 0.1) / 0.9: the yaw slot carries the sideways travel here, so it carries that
+        // travel's own deadzone rather than the absent third axis's.
+        Assert.Equal(-0.7777778f, right.Yaw, 5);
         Assert.Equal(0f, right.Roll);
+    }
+
+    /// <summary>The autogyro's whole mouse mapping, on the two axes this port has: an offset that
+    /// banks an aeroplane yaws the autogyro by the same amount, the pitch source is the same on
+    /// both, and the mouse never touches the autogyro's roll, which stays the keys'. The offset is
+    /// deliberately inside the third axis's 0.3 dead band, where an autogyro used to read exactly
+    /// nothing sideways while the same cursor already banked an aeroplane.</summary>
+    [Fact]
+    public void Read_PutsTheAutogyrosLateralAxisWhereTheAeroplanesBankIs()
+    {
+        var plane = MouseFlight.Read(0.25f, 0.25f, 0f, isAutogyro: false);
+        var gyro = MouseFlight.Read(0.25f, 0.25f, 0f, isAutogyro: true);
+
+        // (0.25 - 0.1) / 0.9, the sideways travel's own gate, on the bank slot and the yaw slot.
+        Assert.Equal(-0.1666667f, plane.Roll, 5);
+        Assert.Equal(-0.1666667f, gyro.Yaw, 5);
+        Assert.Equal(0f, gyro.Roll);
+        Assert.Equal(plane.Pitch, gyro.Pitch);
+        Assert.True(gyro.Pitch > 0f, $"a cursor below the middle pulls the nose up, got {gyro.Pitch}");
+        // The able-to-fail half: the aeroplane's yaw is the one that still sits on the absent third
+        // axis, so it reads zero at an offset that yaws the autogyro.
+        Assert.Equal(0f, plane.Yaw);
     }
 
     /// <summary>Both airframes pitch off the same source: the exchange is between the other two, and

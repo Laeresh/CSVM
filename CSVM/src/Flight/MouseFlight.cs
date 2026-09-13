@@ -15,7 +15,9 @@ public static class MouseFlight
     public const float AttitudeDeadzone = 0.1f;
 
     /// <summary>The yaw source's own, three times the other two: <c>0x006034ac</c> and its negative
-    /// at <c>0x006035ac</c>, read at <c>0x48774c</c>.</summary>
+    /// at <c>0x006035ac</c>, read at <c>0x48774c</c>. It belongs to the third axis, so an autogyro,
+    /// whose yaw is fed by the cursor's own sideways travel, does not take it
+    /// (<see cref="Read"/>).</summary>
     public const float YawDeadzone = 0.3f;
 
     /// <summary>One source past its deadzone, rescaled so the travel left over spans the whole
@@ -39,19 +41,24 @@ public static class MouseFlight
     {
         float rollSource = x;
         float yawSource = wheel;
+        float yawDeadzone = YawDeadzone;
         // 0x4876f4: an autogyro takes its roll off the third axis and its yaw off the sideways
         // travel, each negated, so it yaws where an aeroplane banks. The pitch write at 0x4876e1
         // has already happened and the exchange leaves it alone.
         if (isAutogyro)
         {
             (rollSource, yawSource) = (-yawSource, -rollSource);
+            // ⚠ Remake-only, and NOT the decoded 0.3: the exchange has just put the cursor's own
+            // sideways travel in the yaw slot, so that travel keeps its own dead band rather than
+            // the absent third axis's (docs/controls.md, "Flying with the mouse").
+            yawDeadzone = AttitudeDeadzone;
         }
 
         return new FlightInput
         {
             Roll = -Gate(rollSource, AttitudeDeadzone),
             Pitch = Gate(y, AttitudeDeadzone),
-            Yaw = Gate(yawSource, YawDeadzone),
+            Yaw = Gate(yawSource, yawDeadzone),
             Throttle = 0f,
         };
     }

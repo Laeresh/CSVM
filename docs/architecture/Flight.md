@@ -900,13 +900,13 @@ engine-free; `FlightController` steps one per keyboard axis. Decode:
 
 ## src/Flight/MouseFlight.cs
 The mouse as a stick, decoded from the mouse arm of `FUN_00487460`: a cursor offset over the pane in
-`[-1, 1]` per axis, each source dead inside its own deadzone (0.1 bank and pitch, 0.3 yaw) and
-rescaled so the pane's edge is full deflection, plus the `is_autogyro` exchange that takes an
-autogyro's bank off the third axis and its yaw off the sideways travel, both negated. Pure and
-engine-free, so a suite drives it with no window; `FlightController` sums what it returns into the
-keyboard and pad deflections, as the original's arm sums into the same slots. The third mouse axis
-has no counterpart here and is always passed zero. Decode:
-[../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
+`[-1, 1]` per axis, each source dead inside its own deadzone (0.1 for the cursor's two axes, 0.3 for
+the third) and rescaled so the pane's edge is full deflection, plus the `is_autogyro` exchange that
+takes an autogyro's bank off the third axis and its yaw off the sideways travel, both negated. That
+third axis is always zero here, so an autogyro's yaw is the one slot the exchange feeds from a cursor
+axis and takes that travel's own 0.1, a port rule and not a decoded one. Pure and engine-free, so a
+suite drives it with no window; `FlightController` sums what it returns into the keyboard and pad
+deflections. Decode: [../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
 
 ## src/Flight/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free: a 30-unit tank burned at 4/s while boosting and

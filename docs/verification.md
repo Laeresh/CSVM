@@ -676,6 +676,13 @@ member, and it does not go here.
 - **SRC-17**, **Two definition files keyed alike are not copies of each other; compare the bodies
   before reading one screen's content out of the other's file.** Every `LOADING_SCRIPT` is a
   superset of the matching `ESC_SCRIPT` under identical keys.
+- **SRC-18**, **A decoded constant read per SLOT stops being decoded the moment the port feeds that
+  slot from a different device; carrying it over is a substitution, not fidelity.** The mouse arm
+  gates its yaw slot at 0.3 whatever the `is_autogyro` exchange put there, and that 0.3 is the third
+  mouse axis's own dead band. This port has two axes, so for an autogyro the exchange feeds the yaw
+  slot the cursor's sideways travel, and gating that travel three times as wide as the same travel's
+  bank left an ordinary cursor offset flying the autogyro nothing while it already banked an
+  aeroplane. Ask which SOURCE a decoded threshold was measured on before keeping it.
 
 ## What this project cannot verify itself
 
