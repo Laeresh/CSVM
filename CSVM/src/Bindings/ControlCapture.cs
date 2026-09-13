@@ -60,6 +60,11 @@ public sealed class ControlCapture
     // against a stable index. Anything past SdlMax is device-specific and has no name to print.
     private static readonly JoyAxis[] Axes = BuildAxes();
 
+    // The modifier keys, which are captured differently from every other key: held, they qualify the
+    // key pressed after them, so one alone can only be meant once it is let go with nothing else
+    // pressed. Without that a player reaching for Shift+E would latch Shift the moment it went down.
+    private static readonly Key[] ModifierKeys = { Key.Shift, Key.Ctrl, Key.Alt };
+
     private readonly HashSet<int> _maskedKeys = new();
     private readonly HashSet<int> _maskedButtons = new();
     private readonly HashSet<int> _maskedMouse = new();
@@ -71,6 +76,7 @@ public sealed class ControlCapture
 
     private readonly DeviceId _pad;
     private readonly bool _readsKeyboard;
+    private int _pendingModifier = -1;
 
     /// <summary>A capture for one seat: <paramref name="pad"/> is the identity that seat's pad
     /// bindings sit on, and <paramref name="readsKeyboard"/> is false for a pad-only splitscreen
@@ -90,6 +96,7 @@ public sealed class ControlCapture
         _maskedButtons.Clear();
         _maskedMouse.Clear();
         _maskedAxes.Clear();
+        _pendingModifier = -1;
         foreach (var axis in Axes)
         {
             if (!AtRest(state, axis))
@@ -127,14 +134,21 @@ public sealed class ControlCapture
 
     /// <summary>The control the player pressed since <see cref="Arm"/>, or null while none has
     /// been. Keys first, then pad buttons, then the mouse, then the axes, so a frame holding
-    /// several answers the same way twice and a button beats the stick a thumb rested on.</summary>
+    /// several answers the same way twice and a button beats the stick a thumb rested on. A key
+    /// pressed under Shift, Ctrl or Alt carries them; a modifier alone is captured on its release.
+    /// </summary>
     public Binding? Poll(IDeviceState state)
     {
+        var modifiers = HeldModifiers(state);
         foreach (var key in Keys)
         {
-            if (key != CancelKey && Fresh(_maskedKeys, (int)key, KeyDown(state, key)))
-                return new Binding(DeviceId.Keyboard, BindingControl.Key((int)key));
+            if (key != CancelKey && BindingControl.ModifierOf((int)key) == KeyModifiers.None
+                && Fresh(_maskedKeys, (int)key, KeyDown(state, key)))
+                return new Binding(DeviceId.Keyboard, BindingControl.Key((int)key, modifiers));
         }
+
+        if (ModifierAlone(state) is { } alone)
+            return alone;
 
         foreach (var button in Buttons)
         {
@@ -231,6 +245,40 @@ public sealed class ControlCapture
     }
 
     private bool AtRest(IDeviceState state, JoyAxis axis) => InBand(state.AxisValue(_pad, (int)axis));
+
+    private KeyModifiers HeldModifiers(IDeviceState state)
+    {
+        var held = KeyModifiers.None;
+        foreach (var key in ModifierKeys)
+        {
+            if (KeyDown(state, key))
+                held |= BindingControl.ModifierOf((int)key);
+        }
+
+        return held;
+    }
+
+    // A modifier bound on its own, which only resolves on release: while one is down it may still be
+    // qualifying a key to come. Pressing a second modifier hands the pending one over, so the last
+    // one released is never the answer to a chord the player abandoned.
+    private Binding? ModifierAlone(IDeviceState state)
+    {
+        foreach (var key in ModifierKeys)
+        {
+            bool down = KeyDown(state, key);
+            if (Fresh(_maskedKeys, (int)key, down))
+            {
+                _pendingModifier = (int)key;
+            }
+            else if (!down && _pendingModifier == (int)key)
+            {
+                _pendingModifier = -1;
+                return new Binding(DeviceId.Keyboard, BindingControl.Key((int)key));
+            }
+        }
+
+        return null;
+    }
 
     private bool KeyDown(IDeviceState state, Key key) =>
         _readsKeyboard && state.IsKeyDown(DeviceId.Keyboard, (int)key);

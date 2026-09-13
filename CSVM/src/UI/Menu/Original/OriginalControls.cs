@@ -92,17 +92,25 @@ public sealed partial class OriginalShell
     private const float ControlsDescX = 349f;
     private const float ControlsDescWidth = 310f;
 
-    // The six named tabs are the original's own action categories, over this port's flight actions.
-    // The seventh, Other, is every action the six leave over, in context then enum order, so a new
-    // action lands on a page rather than nowhere. docs/org/menu-inventory.md holds the reading.
+    // The six named tabs are the original's own action categories, over this port's flight actions,
+    // each in that page's own row order (`OriginalScreenshots/Keybinds *.png`). The seventh, Other,
+    // takes its own flight rows first and then every action the six leave over, in context then enum
+    // order, so a new action lands on a page rather than nowhere. docs/org/menu-inventory.md holds
+    // the reading.
     private static readonly InputAction[][] KeysFlightGroups =
     {
         new[]
         {
-            InputAction.PitchUp, InputAction.PitchDown, InputAction.RollLeft, InputAction.RollRight,
+            InputAction.PitchDown, InputAction.PitchUp, InputAction.RollLeft, InputAction.RollRight,
             InputAction.YawLeft, InputAction.YawRight,
         },
-        new[] { InputAction.ThrottleUp, InputAction.ThrottleDown, InputAction.Nitro, InputAction.AutoLand },
+        new[]
+        {
+            InputAction.ThrottleUp, InputAction.ThrottleDown, InputAction.ThrottleSet0,
+            InputAction.ThrottleSet1, InputAction.ThrottleSet2, InputAction.ThrottleSet3,
+            InputAction.ThrottleSet4, InputAction.ThrottleSet5, InputAction.ThrottleSet6,
+            InputAction.ThrottleSet7, InputAction.ThrottleSet8,
+        },
         new[]
         {
             InputAction.FireGuns, InputAction.FireRockets, InputAction.SelectGunGroup,
@@ -117,8 +125,8 @@ public sealed partial class OriginalShell
         },
         new[]
         {
-            InputAction.CycleCockpitViews, InputAction.SelectChaseView, InputAction.FlybyView,
-            InputAction.ToggleSpyglass, InputAction.LookBack, InputAction.LookCenter,
+            InputAction.ToggleSpyglass, InputAction.CycleCockpitViews, InputAction.FlybyView,
+            InputAction.SelectChaseView, InputAction.LookBack, InputAction.LookCenter,
             InputAction.FreeLook,
         },
         new[]
@@ -126,6 +134,13 @@ public sealed partial class OriginalShell
             InputAction.LookUp, InputAction.LookDown, InputAction.LookLeft, InputAction.LookRight,
             InputAction.LookAimUp, InputAction.LookAimDown, InputAction.LookAimLeft, InputAction.LookAimRight,
         },
+    };
+
+    // The Other tab's own flight rows, in the original's Other page order. The rest of that tab is
+    // whatever the seven groups leave over, which is every menu and free-camera action.
+    private static readonly InputAction[] KeysOtherFlightGroup =
+    {
+        InputAction.AutoLand, InputAction.Nitro, InputAction.Respawn, InputAction.Pause,
     };
 
     private static readonly string[] KeysTabNames =
@@ -241,6 +256,12 @@ public sealed partial class OriginalShell
         }
 
         var other = new List<ControlsTabRow>();
+        foreach (var action in KeysOtherFlightGroup)
+        {
+            claimed.Add(action);
+            other.Add(new ControlsTabRow(InputContext.Flight, action));
+        }
+
         foreach (var context in Enum.GetValues<InputContext>())
         {
             foreach (var action in DefaultBindings.ActionsIn(context))

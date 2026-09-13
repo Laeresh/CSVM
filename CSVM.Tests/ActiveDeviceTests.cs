@@ -28,7 +28,7 @@ public class ActiveDeviceTests
         Assert.Equal(DeviceSide.Pad, device.Side);
 
         var keys = new Fake();
-        keys.Keys.Add((int)Key.F9);
+        keys.Keys.Add((int)Key.A);
         Assert.True(Observe(device, map, keys, new Fake()));
         Assert.Equal(DeviceSide.Keyboard, device.Side);
     }
@@ -59,7 +59,7 @@ public class ActiveDeviceTests
         Observe(device, map, new Fake(), stick);
 
         var keys = new Fake();
-        keys.Keys.Add((int)Key.S);
+        keys.Keys.Add((int)Key.Down);
         Assert.True(Observe(device, map, keys, stick));
         Assert.Equal(DeviceSide.Keyboard, device.Side);
 
@@ -93,7 +93,7 @@ public class ActiveDeviceTests
         var device = new ActiveDevice();
         var map = FlightMap();
         var keys = new Fake();
-        keys.Keys.Add((int)Key.F9);
+        keys.Keys.Add((int)Key.A);
 
         Assert.True(device.Observe(map.Resolve(keys), map.Resolve(new Fake()), readsKeyboard: false));
         Assert.Equal(DeviceSide.Pad, device.Side);
@@ -104,14 +104,14 @@ public class ActiveDeviceTests
     [Fact]
     public void APromptNamesTheActiveSidesBindingAndFallsBackToTheOthers()
     {
-        var keyAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
-        Assert.Equal(KeyBinding(Key.F9),
+        var keyAndPad = new[] { KeyBinding(Key.A), PadBinding(JoyButton.LeftStick) };
+        Assert.Equal(KeyBinding(Key.A),
             ActiveDevice.PromptBinding(keyAndPad, DeviceSide.Keyboard, readsKeyboard: true));
         Assert.Equal(PadBinding(JoyButton.LeftStick),
             ActiveDevice.PromptBinding(keyAndPad, DeviceSide.Pad, readsKeyboard: true));
 
-        var keyOnly = new[] { KeyBinding(Key.F9) };
-        Assert.Equal(KeyBinding(Key.F9),
+        var keyOnly = new[] { KeyBinding(Key.A) };
+        Assert.Equal(KeyBinding(Key.A),
             ActiveDevice.PromptBinding(keyOnly, DeviceSide.Pad, readsKeyboard: true));
 
         var padOnly = new[] { PadBinding(JoyButton.LeftStick) };
@@ -122,11 +122,11 @@ public class ActiveDeviceTests
     [Fact]
     public void APadOnlySeatIsNeverNamedAKeyAndAnUnboundActionNamesNothing()
     {
-        var keyAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
+        var keyAndPad = new[] { KeyBinding(Key.A), PadBinding(JoyButton.LeftStick) };
         Assert.Equal(PadBinding(JoyButton.LeftStick),
             ActiveDevice.PromptBinding(keyAndPad, DeviceSide.Keyboard, readsKeyboard: false));
 
-        var keyOnly = new[] { KeyBinding(Key.F9) };
+        var keyOnly = new[] { KeyBinding(Key.A) };
         Assert.Null(ActiveDevice.PromptBinding(keyOnly, DeviceSide.Pad, readsKeyboard: false));
         Assert.Null(ActiveDevice.PromptBinding(System.Array.Empty<Binding>(), DeviceSide.Keyboard, true));
     }
@@ -134,8 +134,8 @@ public class ActiveDeviceTests
     [Fact]
     public void AKeyBeatsAMouseButtonOnTheKeyboardSideAndAMouseButtonBeatsThePad()
     {
-        var all = new[] { MouseBinding(MouseButton.Middle), KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
-        Assert.Equal(KeyBinding(Key.F9),
+        var all = new[] { MouseBinding(MouseButton.Middle), KeyBinding(Key.A), PadBinding(JoyButton.LeftStick) };
+        Assert.Equal(KeyBinding(Key.A),
             ActiveDevice.PromptBinding(all, DeviceSide.Keyboard, readsKeyboard: true));
 
         var mouseAndPad = new[] { MouseBinding(MouseButton.Middle), PadBinding(JoyButton.LeftStick) };

@@ -31,7 +31,7 @@ public class ControlsFeatureTests
         Assert.Null(feature.Pending);
         Assert.Contains(Key(Godot.Key.M), feature.Bindings(InputAction.Nitro));
         Assert.DoesNotContain(Key(Godot.Key.M), map.Bindings(InputAction.Nitro));
-        Assert.Equal("Nitro is now M.", feature.Status);
+        Assert.Equal("Use Nitro-Booster is now M.", feature.Status);
     }
 
     [Fact]
@@ -584,13 +584,28 @@ public class ControlsFeatureTests
         Assert.Equal(BindingLabels.Unbound, BindingLabels.Row(System.Array.Empty<Binding>(), 4));
     }
 
-    /// <summary>A digit-row key prints its keycap rather than its enum name, which is what the
-    /// per-class Previous and Nearest rows stand on.</summary>
+    /// <summary>A digit-row key prints its keycap rather than its enum name, which is what the nine
+    /// throttle eighths stand on.</summary>
     [Fact]
     public void ADigitRowKeyPrintsItsKeycapRatherThanItsEnumName()
     {
         Assert.Equal("5", BindingLabels.Describe(Key(Godot.Key.Key5)));
         Assert.Equal("0", BindingLabels.Describe(Key(Godot.Key.Key0)));
+    }
+
+    /// <summary>A modified key prints its modifier ahead of the keycap, so the two rows on one
+    /// letter read as two different controls on the page.</summary>
+    [Fact]
+    public void AModifiedKeyPrintsItsModifierAheadOfTheKeycap()
+    {
+        Assert.Equal(
+            "Shift+E",
+            BindingLabels.Describe(
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.E, KeyModifiers.Shift))));
+        Assert.Equal(
+            "Ctrl+E",
+            BindingLabels.Describe(
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.E, KeyModifiers.Ctrl))));
     }
 
     [Fact]

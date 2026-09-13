@@ -473,7 +473,7 @@ public partial class FlightController : Node3D
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly List<AimCandidate> _targetSites = new(); // this frame's objective sites
     private readonly bool[] _targetKeyPrev = new bool[13];  // the eleven targeting keys, spyglass pair last
-    private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F1/F7 + pad view-selection edges
+    private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F2/F7 + pad view-selection edges
     // Decision 7: D-pad Up down longer than the shared threshold is a HOLD, not a tap. The two
     // weapon selectors' pad buttons split on the same number, inside FireControl.
     private readonly TapHoldButton _targetHold = new(TapHoldButton.PadHoldSeconds);
@@ -2384,7 +2384,7 @@ public partial class FlightController : Node3D
     // bound themselves and means exactly one step back.
     private bool GunSelectBackPressed() => ReadLatched(InputAction.SelectGunGroupPrev);
 
-    // F9 / gamepad left-stick click, the auto-land button, read live by
+    // A / gamepad left-stick click, the auto-land button, read live by
     // LandingApproachRuntime.Tick() so a press lands in the same frame it happens. Kept beside the
     // other button reads rather than hoisted for SA1202's sake, the same trade made elsewhere here.
 #pragma warning disable SA1202
@@ -3343,7 +3343,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down advances the original's
-    /// three-stop Cockpit → Nose → Chase cycle; F1 or the pad's Back/Select selects Chase directly.
+    /// three-stop Cockpit → Nose → Chase cycle; F2 or the pad's Back/Select selects Chase directly.
     /// The keyboard bindings and pad slots are this port's choices; the original's binding menu
     /// also places its cycle action on a joystick button.
     /// The pad half makes the views reachable for a pad-only pilot (P2–P4), who has no keyboard.</summary>
@@ -3854,6 +3854,12 @@ public partial class FlightController : Node3D
                     * ThrottleRate * dt,
                 0f, 1f);
 
+        // The digit row's nine absolute settings (the original's Throttle page). A requested eighth
+        // is the DESIRED lever and the live one traverses to it at the same rate the up and down
+        // keys move it, which is the original's own desired/live split rather than a jump.
+        if (leverFree && RequestedThrottle() is { } requested)
+            _throttle = Mathf.MoveToward(_throttle, requested, ThrottleRate * dt);
+
         // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
         _keyPitch = StickRamp.Step(
             _keyPitch, Mathf.Sign(_keyActions.Axis(InputAction.PitchUp, InputAction.PitchDown)), dt);
@@ -3869,6 +3875,20 @@ public partial class FlightController : Node3D
             Yaw = Mathf.Clamp(_keyYaw + padYaw, -1f, 1f),
             Throttle = _throttle,
         };
+    }
+
+    // Which eighth the digit row is asking for, or null while none of the nine is held. The highest
+    // held wins, so two digits at once open the lever rather than fighting over it.
+    private float? RequestedThrottle()
+    {
+        float? requested = null;
+        for (int eighths = 0; eighths <= 8; eighths++)
+        {
+            if (_keyActions.Held(InputAction.ThrottleSet0 + eighths))
+                requested = eighths / 8f;
+        }
+
+        return requested;
     }
 #pragma warning restore SA1202
 

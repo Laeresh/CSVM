@@ -546,7 +546,7 @@ anchored net draws where it actually is, the trailer offset applied per frame as
 position, so nothing is rebuilt. The key range: [../controls.md](../controls.md).
 
 ## src/UI/ClassOverlay.cs
-The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) over the same modes as
+The colour-by-class overlay (key H, `--debug-classoverlay` scripts it) over the same modes as
 `ColliderOverlay`, a findable-targets view rather than a collision one. Mixes a class colour over
 every drawn mesh at half strength, so a target stays recognisable as itself: destructible through
 the registry's own resolve, facade through the billboard classification, clutter as every multimesh

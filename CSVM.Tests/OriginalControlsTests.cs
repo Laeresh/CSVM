@@ -64,16 +64,36 @@ public class OriginalControlsTests
         }
     }
 
+    /// <summary>The Movement tab is the six attitude half-axes in the original page's own order,
+    /// which begins with Point Nose Down rather than with the enum's first member
+    /// (<c>OriginalScreenshots/Keybinds Movement.png</c>).</summary>
     [Fact]
-    public void TheMovementTabIsTheSixAttitudeHalfAxes()
+    public void TheMovementTabIsTheSixAttitudeHalfAxesInTheOriginalsOrder()
     {
         Assert.Equal(
             new[]
             {
-                InputAction.PitchUp, InputAction.PitchDown, InputAction.RollLeft, InputAction.RollRight,
+                InputAction.PitchDown, InputAction.PitchUp, InputAction.RollLeft, InputAction.RollRight,
                 InputAction.YawLeft, InputAction.YawRight,
             },
             OriginalShell.ControlTabs[0].Rows.Select(r => r.Action).ToArray());
+    }
+
+    /// <summary>The Throttle tab is the two lever keys and then the nine absolute eighths, which are
+    /// the digit row the original reserves for them.</summary>
+    [Fact]
+    public void TheThrottleTabCarriesTheNineEighthsBelowTheLeverPair()
+    {
+        var rows = OriginalShell.ControlTabs[1].Rows.Select(r => r.Action).ToArray();
+
+        Assert.Equal(InputAction.ThrottleUp, rows[0]);
+        Assert.Equal(InputAction.ThrottleDown, rows[1]);
+        for (int eighths = 0; eighths <= 8; eighths++)
+        {
+            Assert.Equal(InputAction.ThrottleSet0 + eighths, rows[2 + eighths]);
+        }
+
+        Assert.Equal(11, rows.Length);
     }
 
     /// <summary>The Targeting tab lists all eleven of the original's targeting actions in the

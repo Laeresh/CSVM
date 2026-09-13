@@ -136,8 +136,8 @@ internal static class WeaponSelectorSuites
             }
         }
 
-        ctx.Check(!onWeaponKey && Bound(chase, Key.F1),
-            $"the chase view sits on F1 and on no key the original spends on a weapon cycle");
+        ctx.Check(!onWeaponKey && Bound(chase, Key.F2),
+            $"the chase view sits on F2 and on no key the original spends on a weapon cycle");
     }
 
     private static bool Bound(IReadOnlyList<Binding> bindings, Key key)

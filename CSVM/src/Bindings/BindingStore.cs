@@ -21,8 +21,10 @@ public sealed class BindingStore
 {
     /// <summary>The schema version written into every file. It says how the tokens below are
     /// encoded, not which actions exist: an added action is already handled, since a file that does
-    /// not name one leaves it at its default. Bump it when a token's shape changes.</summary>
-    public const int Version = 1;
+    /// not name one leaves it at its default. Bump it when a token's shape changes.
+    /// Version 2 is the key token's optional modifier prefix (<c>key:Shift+E</c>). A version 1 file
+    /// names no modifier and still loads whole, which is why the reader checks no version.</summary>
+    public const int Version = 2;
 
     private const string KeyboardToken = "keyboard";
     private const string MouseToken = "mouse";
@@ -148,7 +150,7 @@ public sealed class BindingStore
         var c = binding.Control;
         return c.Kind switch
         {
-            ControlKind.Key => $"{device}/key:{EnumName<Key>(c.Index)}",
+            ControlKind.Key => $"{device}/key:{BindingControl.Prefix(c.Modifiers)}{EnumName<Key>(c.Index)}",
             ControlKind.Button => $"{device}/button:{EnumName<JoyButton>(c.Index)}",
             ControlKind.Axis => string.Format(
                 CultureInfo.InvariantCulture,
@@ -291,7 +293,7 @@ public sealed class BindingStore
         switch (kind)
         {
             case "key":
-                return TryIndex<Key>(rest, out int keyCode) && Made(BindingControl.Key(keyCode), out control);
+                return TryKey(rest, out control);
             case "button":
                 return TryIndex<JoyButton>(rest, out int button) && Made(BindingControl.Button(button), out control);
             case "axis":
@@ -301,6 +303,30 @@ public sealed class BindingStore
             default:
                 return false;
         }
+    }
+
+    // A key token, with any number of modifier names in front of the key: "E", "Shift+E",
+    // "Ctrl+Shift+E". Order and case are not required of a file a player edits by hand, only that
+    // every part before the last names a modifier and the last names a key.
+    private static bool TryKey(string text, out BindingControl control)
+    {
+        control = default;
+        var modifiers = KeyModifiers.None;
+        int start = 0;
+        for (int plus = text.IndexOf('+', start); plus >= 0; plus = text.IndexOf('+', start))
+        {
+            if (!Enum.TryParse(text[start..plus], ignoreCase: true, out KeyModifiers named)
+                || named == KeyModifiers.None)
+            {
+                return false;
+            }
+
+            modifiers |= named;
+            start = plus + 1;
+        }
+
+        return TryIndex<Key>(text[start..], out int keyCode)
+            && Made(BindingControl.Key(keyCode, modifiers), out control);
     }
 
     private static bool TryAxis(string text, out BindingControl control)

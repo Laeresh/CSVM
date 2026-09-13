@@ -112,4 +112,17 @@ public enum InputAction
     TargetNearestAlly,
     TargetPreviousNonAircraft,
     TargetNearestNonAircraft,
+
+    // The nine absolute throttle settings, the original's Throttle page: 0/8 is idle, 8/8 is full.
+    // Nine actions rather than one with a number, because a binding carries no argument.
+    // ⚠ Keep the nine contiguous and in order; the caption and the lever both index off the first.
+    ThrottleSet0,
+    ThrottleSet1,
+    ThrottleSet2,
+    ThrottleSet3,
+    ThrottleSet4,
+    ThrottleSet5,
+    ThrottleSet6,
+    ThrottleSet7,
+    ThrottleSet8,
 }

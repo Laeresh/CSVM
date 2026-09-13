@@ -13,8 +13,9 @@ recording what the original does, not setting a bar for the port. See "What this
 
 **Where the neighbours live.** The eleven targeting actions this page lists by id are decoded as
 *behaviour* in [`targeting.md`](targeting.md). The camera actions (`0x30`-`0x39`) are
-[`cameraViews.md`](cameraViews.md). The bindings CSVM ships today are `../controls.md`, which is a
-record of our keymap and not of the original's.
+[`cameraViews.md`](cameraViews.md). The bindings CSVM ships today are `../controls.md`, whose
+flight table is the shipped defaults below, key for key, with this port's own actions on the keys
+the original leaves free.
 
 ## The headline
 
@@ -227,7 +228,7 @@ defaults, load from the registry over the top, then rebuild the reverse arrays.
 
 | | Original | CSVM today |
 |---|---|---|
-| Binding identity | a physical scancode plus three modifier bits, or a bare button index | a device identity plus a tagged control (`Binding`), resolved through a hardware seam |
+| Binding identity | a physical scancode plus three modifier bits, or a bare button index | a device identity plus a tagged control (`Binding`); a key control carries the same three modifier bits, so `E` and Shift+`E` are two controls |
 | Slots per action | four, fixed by type: keyboard, keyboard, joystick button, mouse button | a list of any length, ORed together (`BindingSet`) |
 | Joystick devices | exactly one, `DAT_0075c1e0`, with no index in the record | any number, named by stable hardware string and resolved to a live index per tick |
 | Bindable joystick controls | buttons 1-10 only. Axes and hats are read outside the map and cannot be bound | every button the platform reports and either half of any axis; no hat, since a d-pad arrives as buttons |
@@ -253,12 +254,13 @@ default, so adding one needs no bump.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "player": 1,
   "contexts": {
     "flight": {
       "FireGuns": ["keyboard/key:Space", "pad:*/button:B"],
       "PitchUp": ["pad:*/axis:LeftY+@0.25"],
+      "TargetPreviousEnemy": ["keyboard/key:Shift+E"],
       "TargetNextAlly": []
     },
     "menu": { },
@@ -276,6 +278,10 @@ row by hand.
   `hat:<index>:<direction>`. A name is the engine's own enum name, or `#<number>` for a code the
   engine does not name; a bare number is accepted on the way back in either way. An axis carries its
   sign and its deadzone, which is both the noise gate and the digital threshold.
+- A key name may carry the original's own modifiers in front of it, `key:Shift+E`, `key:Ctrl+E`,
+  any of `Shift`, `Ctrl` and `Alt` in any order and any case. That prefix is version 2 of the file;
+  a version 1 file names no modifier, and since a bare key token means the same thing in both, such
+  a file still loads whole and the reader checks no version.
 
 Every action of every context is written, the ones bound to nothing included, so a deliberate unbind
 survives a reload rather than coming back at its default. Whether a seat reads the keyboard is not

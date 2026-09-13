@@ -25,6 +25,47 @@ public class DefaultBindingsTests
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp3)),
     };
 
+    /// <summary>The original's shipped keyboard rows, action by action, for
+    /// <see cref="TheFlightKeys_AreTheOriginalsOwnTable"/>. The rows it binds that this port has no
+    /// action for (level off, bail out, the external cameras, the look modes) are absent rather than
+    /// approximated, and the two actions it has no row for are pinned separately.</summary>
+    public static TheoryData<InputAction, Key, KeyModifiers> TheOriginalsKeys => new()
+    {
+        { InputAction.PitchUp, Key.Down, KeyModifiers.None },
+        { InputAction.PitchDown, Key.Up, KeyModifiers.None },
+        { InputAction.RollLeft, Key.Left, KeyModifiers.None },
+        { InputAction.RollRight, Key.Right, KeyModifiers.None },
+        { InputAction.YawLeft, Key.Comma, KeyModifiers.None },
+        { InputAction.YawRight, Key.Period, KeyModifiers.None },
+        { InputAction.ThrottleUp, Key.Equal, KeyModifiers.None },
+        { InputAction.ThrottleDown, Key.Minus, KeyModifiers.None },
+        { InputAction.FireGuns, Key.Space, KeyModifiers.None },
+        { InputAction.FireRockets, Key.X, KeyModifiers.None },
+        { InputAction.SelectGunGroup, Key.F3, KeyModifiers.None },
+        { InputAction.SelectGunGroupPrev, Key.F4, KeyModifiers.None },
+        { InputAction.SelectOrdnance, Key.F5, KeyModifiers.None },
+        { InputAction.SelectOrdnancePrev, Key.F6, KeyModifiers.None },
+        { InputAction.TargetNextEnemy, Key.E, KeyModifiers.None },
+        { InputAction.TargetPreviousEnemy, Key.E, KeyModifiers.Shift },
+        { InputAction.TargetNearestEnemy, Key.E, KeyModifiers.Ctrl },
+        { InputAction.TargetNextAlly, Key.W, KeyModifiers.None },
+        { InputAction.TargetPreviousAlly, Key.W, KeyModifiers.Shift },
+        { InputAction.TargetNearestAlly, Key.W, KeyModifiers.Ctrl },
+        { InputAction.TargetNextNonAircraft, Key.R, KeyModifiers.None },
+        { InputAction.TargetPreviousNonAircraft, Key.R, KeyModifiers.Shift },
+        { InputAction.TargetNearestNonAircraft, Key.R, KeyModifiers.Ctrl },
+        { InputAction.TargetNearest, Key.Q, KeyModifiers.None },
+        { InputAction.TargetClear, Key.T, KeyModifiers.None },
+        { InputAction.ToggleSpyglass, Key.S, KeyModifiers.Shift },
+        { InputAction.FlybyView, Key.F7, KeyModifiers.None },
+        { InputAction.CycleCockpitViews, Key.F8, KeyModifiers.None },
+        { InputAction.LookCenter, Key.Kp5, KeyModifiers.None },
+        { InputAction.LookBack, Key.Kp0, KeyModifiers.None },
+        { InputAction.Nitro, Key.N, KeyModifiers.None },
+        { InputAction.AutoLand, Key.A, KeyModifiers.None },
+        { InputAction.Pause, Key.Escape, KeyModifiers.None },
+    };
+
     /// <summary>The coverage gate: a migrating polling site must never discover a missing default
     /// one call at a time, so every member of the enum is accounted for here.</summary>
     [Fact]
@@ -134,8 +175,8 @@ public class DefaultBindingsTests
     }
 
     /// <summary>Spot checks against `docs/controls.md`: the throttle pair is the trigger pair, the
-    /// gun-group step is the right d-pad as a button, and pausing reads three controls at once.
-    /// </summary>
+    /// gun-group step is the right d-pad as a button, and pausing reads the original's one key plus
+    /// the pad's Start.</summary>
     [Fact]
     public void FlightDefaults_MatchTheControlsRecord()
     {
@@ -147,7 +188,95 @@ public class DefaultBindingsTests
         Assert.Contains(
             new Binding(Pad, BindingControl.Button((int)JoyButton.DpadRight)),
             map.Bindings(InputAction.SelectGunGroup));
-        Assert.Equal(3, map.Bindings(InputAction.Pause).Count);
+        Assert.Equal(2, map.Bindings(InputAction.Pause).Count);
+    }
+
+    /// <summary>The flight keymap is the original's shipped table, key for key
+    /// (`docs/org/input.md`'s 64 rows from `FUN_004936c0`). Pinned row by row rather than spot
+    /// checked, because the whole point of the table is that it is theirs and not this port's.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TheOriginalsKeys))]
+    public void TheFlightKeys_AreTheOriginalsOwnTable(InputAction action, Key key, KeyModifiers modifiers)
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        Assert.Contains(
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)key, modifiers)), map.Bindings(action));
+    }
+
+    /// <summary>The nine absolute throttle settings are the digit row, 1 for idle through 9 for
+    /// full, which is why no targeting action may take a digit any more.</summary>
+    [Fact]
+    public void TheDigitRow_IsTheThrottleEighths()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        for (int eighths = 0; eighths <= 8; eighths++)
+        {
+            var key = (Key)((int)Key.Key1 + eighths);
+            Assert.Equal(
+                new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)) },
+                map.Bindings(InputAction.ThrottleSet0 + eighths));
+        }
+    }
+
+    /// <summary>A key and the same key under a modifier are two controls, so the pair drives two
+    /// actions and neither steals from the other.</summary>
+    [Fact]
+    public void AModifiedKey_IsADifferentControlFromTheBareKey()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var bare = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.E));
+        var shifted = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.E, KeyModifiers.Shift));
+
+        Assert.False(ActionMap.SameControl(bare, shifted));
+        Assert.Equal(new[] { InputAction.TargetNextEnemy }, map.OwnersOf(bare));
+        Assert.Equal(new[] { InputAction.TargetPreviousEnemy }, map.OwnersOf(shifted));
+    }
+
+    /// <summary>A bare key stands down under a modifier its own map holds it under, so Shift+E
+    /// steps the cycle back without also stepping it forward. The gate is the map's rather than
+    /// global: the free camera binds Shift alone and its bare keys must still fire under it.
+    /// </summary>
+    [Fact]
+    public void AHeldModifier_SilencesTheBareKeyOnlyWhereTheMapContestsIt()
+    {
+        var flight = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var state = new ModifierDevices();
+        state.Keys.Add((int)Key.E);
+        state.Keys.Add((int)Key.Shift);
+        var snapshot = flight.Resolve(state);
+
+        Assert.False(snapshot.Held(InputAction.TargetNextEnemy));
+        Assert.True(snapshot.Held(InputAction.TargetPreviousEnemy));
+        Assert.False(snapshot.Held(InputAction.TargetNearestEnemy));
+
+        var camera = DefaultBindings.MapFor(InputContext.Camera, Pad);
+        state.Keys.Clear();
+        state.Keys.Add((int)Key.W);
+        state.Keys.Add((int)Key.Shift);
+        var moving = camera.Resolve(state);
+
+        Assert.True(moving.Held(InputAction.CameraForward));
+        Assert.True(moving.Held(InputAction.CameraBoost));
+    }
+
+    /// <summary>And a modified binding wants exactly its own modifiers: Ctrl+Shift+E is neither of
+    /// the two rows, so holding both fires nothing on that key.</summary>
+    [Fact]
+    public void AModifiedBinding_WantsExactlyTheModifiersItNames()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var state = new ModifierDevices();
+        state.Keys.Add((int)Key.E);
+        state.Keys.Add((int)Key.Shift);
+        state.Keys.Add((int)Key.Ctrl);
+        var snapshot = map.Resolve(state);
+
+        Assert.False(snapshot.Held(InputAction.TargetNextEnemy));
+        Assert.False(snapshot.Held(InputAction.TargetPreviousEnemy));
+        Assert.False(snapshot.Held(InputAction.TargetNearestEnemy));
     }
 
     /// <summary>The four weapon selectors are the original's own keys, by the name its keybind page
@@ -191,18 +320,19 @@ public class DefaultBindingsTests
             map.Bindings(InputAction.SelectOrdnancePrev));
     }
 
-    /// <summary>The chase view moved off F6 when the rocket selector took it, and the debug damage
-    /// lab off F5 for the same reason. Recorded so neither is quietly handed back a key the
-    /// original spends on a weapon cycle.</summary>
+    /// <summary>Selecting the chase view is this port's own action, so it takes F2, the one key of
+    /// the original's function-key run left free (F1 is its View Help, F3 to F8 its selectors and
+    /// views). Recorded so it is not quietly handed back a key the original spends on a weapon
+    /// cycle or a camera.</summary>
     [Fact]
-    public void TheChaseView_LeavesTheOriginalsWeaponKeysAlone()
+    public void TheChaseView_TakesTheOneFreeFunctionKey()
     {
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
 
         Assert.Contains(
-            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F1)),
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2)),
             map.Bindings(InputAction.SelectChaseView));
-        foreach (var key in new[] { Key.F3, Key.F4, Key.F5, Key.F6 })
+        foreach (var key in new[] { Key.F1, Key.F3, Key.F4, Key.F5, Key.F6, Key.F7, Key.F8 })
         {
             Assert.DoesNotContain(
                 new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)),
@@ -210,38 +340,40 @@ public class DefaultBindingsTests
         }
     }
 
-    /// <summary>The other two directions of each target class ship on the keyboard alone, on the
-    /// digit row above the class keys. The original spends Shift and Ctrl on the class letter for
-    /// these, which no binding here can hold, and the pad keeps the cycle and the crosshairs alone.
-    /// Recorded so a later edit cannot hand one a pad control or move it off its row.</summary>
+    /// <summary>The other two directions of each target class are the original's own Shift and Ctrl
+    /// on the class letter, and they ship on the keyboard alone: the pad keeps the cycle and the
+    /// crosshairs. Recorded so a later edit cannot hand one a pad control or move it back onto the
+    /// digit row, which the throttle eighths now own.</summary>
     [Fact]
-    public void ThePerClassPreviousAndNearest_ShipOnTheDigitRowAndOnTheKeyboardOnly()
+    public void ThePerClassPreviousAndNearest_AreTheModifiedClassKeysAndKeyboardOnly()
     {
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
-        var expected = new Dictionary<InputAction, Key>
+        var expected = new Dictionary<InputAction, (Key Key, KeyModifiers Modifiers)>
         {
-            [InputAction.TargetPreviousEnemy] = Key.Key5,
-            [InputAction.TargetPreviousAlly] = Key.Key6,
-            [InputAction.TargetPreviousNonAircraft] = Key.Key7,
-            [InputAction.TargetNearestEnemy] = Key.Key8,
-            [InputAction.TargetNearestAlly] = Key.Key9,
-            [InputAction.TargetNearestNonAircraft] = Key.Key0,
+            [InputAction.TargetPreviousEnemy] = (Key.E, KeyModifiers.Shift),
+            [InputAction.TargetPreviousAlly] = (Key.W, KeyModifiers.Shift),
+            [InputAction.TargetPreviousNonAircraft] = (Key.R, KeyModifiers.Shift),
+            [InputAction.TargetNearestEnemy] = (Key.E, KeyModifiers.Ctrl),
+            [InputAction.TargetNearestAlly] = (Key.W, KeyModifiers.Ctrl),
+            [InputAction.TargetNearestNonAircraft] = (Key.R, KeyModifiers.Ctrl),
         };
 
-        foreach (var (action, key) in expected)
+        foreach (var (action, control) in expected)
         {
             Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(action));
             Assert.Equal(
-                new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)) },
+                new[]
+                {
+                    new Binding(
+                        DeviceId.Keyboard, BindingControl.Key((int)control.Key, control.Modifiers)),
+                },
                 map.Bindings(action));
         }
     }
 
-    /// <summary>The spyglass toggle ships on both devices. The original's own Shift+S is
-    /// unreachable (a binding is one control, and both halves are flight actions here), so the
-    /// keyboard takes F2 for its camera 2 and the pad takes Misc1, the one control no other flight
-    /// action holds. Recorded so a later edit cannot quietly leave a pad-only pilot without it.
-    /// </summary>
+    /// <summary>The spyglass toggle ships on both devices, on the original's own Shift+S now that a
+    /// binding carries the modifier. Misc1 is the pad's one free control, and the original spends a
+    /// joystick button on this too, so a pad-only pilot is not left without it.</summary>
     [Fact]
     public void TheSpyglassToggle_ShipsOnBothDevices()
     {
@@ -249,7 +381,8 @@ public class DefaultBindingsTests
         var bound = map.Bindings(InputAction.ToggleSpyglass);
 
         Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.ToggleSpyglass));
-        Assert.Contains(new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2)), bound);
+        Assert.Contains(
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.S, KeyModifiers.Shift)), bound);
         Assert.Contains(new Binding(Pad, BindingControl.Button((int)JoyButton.Misc1)), bound);
         Assert.Equal(2, bound.Count);
     }
@@ -282,6 +415,23 @@ public class DefaultBindingsTests
         Assert.True(profile.Actions(InputContext.Menu).ReadsKeyboard);
     }
 
+    /// <summary>The two flight actions the original has no row for take keys it leaves free:
+    /// Backspace is out of the flying hand's reach for the respawn, which throws the airframe away,
+    /// and F2 is the gap in its function-key run for the chase view. Recorded so neither drifts onto
+    /// a key the original spends.</summary>
+    [Fact]
+    public void ThePortsOwnFlightActions_TakeKeysTheOriginalLeavesFree()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        Assert.Contains(
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Backspace)),
+            map.Bindings(InputAction.Respawn));
+        Assert.Contains(
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2)),
+            map.Bindings(InputAction.SelectChaseView));
+    }
+
     private static IEnumerable<(InputAction Action, Binding Binding)> AllDefaults()
     {
         foreach (var context in Enum.GetValues<InputContext>())
@@ -295,5 +445,22 @@ public class DefaultBindingsTests
                 }
             }
         }
+    }
+
+    // A keyboard alone, which is all the modifier rule reads.
+    private sealed class ModifierDevices : IDeviceState
+    {
+        public HashSet<int> Keys { get; } = new();
+
+        public bool IsKeyDown(DeviceId device, int keyCode) =>
+            device == DeviceId.Keyboard && Keys.Contains(keyCode);
+
+        public bool IsButtonDown(DeviceId device, int button) => false;
+
+        public bool IsMouseButtonDown(DeviceId device, int button) => false;
+
+        public float AxisValue(DeviceId device, int axis) => 0f;
+
+        public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
     }
 }

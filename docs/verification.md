@@ -519,6 +519,11 @@ member, and it does not go here.
   see a flag the state ENTRY sets rather than the cause; enter the state through the scripted seam
   too, and assert the flag is still clear there.** Every evade phase arrived by damage, so a mode
   transition that stamped the evade flag stood unseen and swallowed the next steady-hand roll.
+- **INSTR-66**, **Scope a modifier rule to the one binding table that names the modified key, never
+  to the whole session: a global "a held Shift silences every bare key" also silences the free
+  camera's Shift boost and every menu key, which no test of the flight map would catch.** Ask the
+  map itself whether it holds that key under a modifier, and assert the silencing both where a map
+  contests the key and where none does.
 
 ## SRC, sources and documents
 

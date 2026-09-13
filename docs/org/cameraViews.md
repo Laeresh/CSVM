@@ -137,7 +137,7 @@ Camera** keys, and the menu's `F7` **Access Chase View** binding is exactly this
 "Access Chase View", i.e. the flyby (mode 9), not the look-around. CSVM binds `F7` to the flyby for
 that reason, and the snap cluster, the centre key and the mouse to the one head in every view; the
 four **External Camera** keys are left unbound, since they are not among the controller's own key
-slots and CSVM already spends `F9`-`F12` on debug keys.
+slots and CSVM already spends `F10`-`F12` on its own instruments.
 
 ### The in-binary strings expose no view-name tokens
 

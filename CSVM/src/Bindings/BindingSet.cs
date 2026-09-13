@@ -52,13 +52,17 @@ public sealed class BindingSet
     /// <summary>What the action reads this tick: held if any binding is held, and the deepest
     /// deflection any of them reports. Deepest rather than first, so a half-pressed trigger cannot
     /// beat a fully held button that is bound to the same action.</summary>
-    public ControlValue Resolve(IDeviceState state)
+    public ControlValue Resolve(IDeviceState state) => Resolve(state, default);
+
+    /// <summary>The same read against a tick's <see cref="ModifierGate"/>, which is how a key
+    /// binding learns what its map holds under a modifier.</summary>
+    public ControlValue Resolve(IDeviceState state, ModifierGate gate)
     {
         bool pressed = false;
         float value = 0f;
         foreach (var binding in _bindings)
         {
-            var read = binding.Resolve(state);
+            var read = binding.Resolve(state, gate);
             pressed |= read.Pressed;
             if (read.Value > value)
                 value = read.Value;

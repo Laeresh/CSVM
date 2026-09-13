@@ -14,6 +14,12 @@ public sealed class ActionMap
 {
     private readonly Dictionary<InputAction, BindingSet> _sets = new();
 
+    // Which modifiers this map holds each key under, rebuilt when the map changes. A bare binding
+    // reads it to know which modifier it must stand down under, so E and Shift+E can be two actions
+    // without making every context's bare keys die under a held modifier.
+    private readonly Dictionary<int, KeyModifiers> _contested = new();
+    private bool _contestedStale = true;
+
     /// <summary>The actions that currently hold at least one binding, in no particular order. An
     /// action absent here is unbound and resolves to nothing.</summary>
     public IEnumerable<InputAction> BoundActions => _sets.Keys;
@@ -30,8 +36,17 @@ public sealed class ActionMap
         {
             ControlKind.Axis => left.Control.Sign == right.Control.Sign,
             ControlKind.Hat => left.Control.Direction == right.Control.Direction,
+            ControlKind.Key => left.Control.Modifiers == right.Control.Modifiers,
             _ => true,
         };
+    }
+
+    /// <summary>Which modifiers this map holds that key under, which is what a bare binding on it
+    /// must stand down under. Empty for a key no action names with a modifier.</summary>
+    public KeyModifiers ContestedFor(int keyCode)
+    {
+        RebuildContested();
+        return _contested.TryGetValue(keyCode, out var modifiers) ? modifiers : KeyModifiers.None;
     }
 
     /// <summary>Gives a control to an action, taking it off every action that held it, and returns
@@ -53,6 +68,7 @@ public sealed class ActionMap
         var set = SetFor(action);
         RemoveMatching(set, binding);
         set.Add(binding);
+        _contestedStale = true;
         return stolenFrom;
     }
 
@@ -61,16 +77,31 @@ public sealed class ActionMap
     /// once, and <see cref="Assign"/> would undo the second one.
     /// ⚠ Not for a rebinding screen. A control a player assigns goes through <see cref="Assign"/>,
     /// which is the only path that keeps the steal rule.</summary>
-    public bool Add(InputAction action, Binding binding) => SetFor(action).Add(binding);
+    public bool Add(InputAction action, Binding binding)
+    {
+        _contestedStale = true;
+        return SetFor(action).Add(binding);
+    }
 
     /// <summary>Drops one control from one action, leaving every other action alone. This is the
     /// unbind a screen performs; it is not part of the steal rule.</summary>
-    public bool Unassign(InputAction action, Binding binding) =>
-        _sets.TryGetValue(action, out var set) && RemoveMatching(set, binding);
+    public bool Unassign(InputAction action, Binding binding)
+    {
+        _contestedStale = true;
+        return _sets.TryGetValue(action, out var set) && RemoveMatching(set, binding);
+    }
 
-    public void Clear(InputAction action) => _sets.Remove(action);
+    public void Clear(InputAction action)
+    {
+        _contestedStale = true;
+        _sets.Remove(action);
+    }
 
-    public void Clear() => _sets.Clear();
+    public void Clear()
+    {
+        _contestedStale = true;
+        _sets.Clear();
+    }
 
     /// <summary>The controls bound to that action, in the order they were added, which is the order
     /// a screen lists them. Empty for an unbound action.</summary>
@@ -134,8 +165,10 @@ public sealed class ActionMap
     public void ResolveInto(ActionSnapshot snapshot, IDeviceState state)
     {
         snapshot.Reset();
+        RebuildContested();
+        var gate = ModifierGate.Read(state, _contested);
         foreach (var pair in _sets)
-            snapshot.Store(pair.Key, pair.Value.Resolve(state));
+            snapshot.Store(pair.Key, pair.Value.Resolve(state, gate));
     }
 
     /// <summary>A fresh snapshot of this tick, for a caller that keeps no snapshot of its own.
@@ -158,6 +191,26 @@ public sealed class ActionMap
         }
 
         return removed;
+    }
+
+    private void RebuildContested()
+    {
+        if (!_contestedStale)
+            return;
+
+        _contestedStale = false;
+        _contested.Clear();
+        foreach (var pair in _sets)
+        {
+            foreach (var binding in pair.Value.Bindings)
+            {
+                if (binding.Control.Kind != ControlKind.Key || binding.Control.Modifiers == KeyModifiers.None)
+                    continue;
+                int key = binding.Control.Index;
+                _contested[key] = (_contested.TryGetValue(key, out var held) ? held : KeyModifiers.None)
+                    | binding.Control.Modifiers;
+            }
+        }
     }
 
     private BindingSet SetFor(InputAction action)

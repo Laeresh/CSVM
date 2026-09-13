@@ -89,23 +89,31 @@ public static class DefaultBindings
         _ => CameraDefaults,
     };
 
-    // Flight, from docs/controls.md's flight table. The attitude signs follow FlightController's
-    // own key pairs: S and Down pitch up, A and Left roll left, Q and the left shoulder yaw left.
-    // The numpad snap-look diagonals each drive two actions at once, which the OR rule expresses
-    // and four typed slots cannot.
+    // Flight, the original's own shipped table (docs/org/input.md's 64 rows, docs/controls.md's
+    // flight table). The attitude signs follow FlightController's key pairs: Down pitches up, Left
+    // rolls left, the comma and the left shoulder yaw left. The numpad snap-look diagonals each
+    // drive two actions at once, which the OR rule expresses and four typed slots cannot.
     private static ContextBuilder BuildFlight()
     {
         var b = new ContextBuilder();
-        b.Keys(InputAction.PitchUp, Key.S, Key.Down).Stick(InputAction.PitchUp, JoyAxis.LeftY, 1, 0f);
-        b.Keys(InputAction.PitchDown, Key.W, Key.Up).Stick(InputAction.PitchDown, JoyAxis.LeftY, -1, 0f);
-        b.Keys(InputAction.RollLeft, Key.A, Key.Left).Stick(InputAction.RollLeft, JoyAxis.LeftX, -1, 0f);
-        b.Keys(InputAction.RollRight, Key.D, Key.Right).Stick(InputAction.RollRight, JoyAxis.LeftX, 1, 0f);
-        b.Keys(InputAction.YawLeft, Key.Q).Buttons(InputAction.YawLeft, JoyButton.LeftShoulder);
-        b.Keys(InputAction.YawRight, Key.E).Buttons(InputAction.YawRight, JoyButton.RightShoulder);
-        b.Keys(InputAction.ThrottleUp, Key.Shift).Stick(InputAction.ThrottleUp, JoyAxis.TriggerRight, 1, 0f);
-        b.Keys(InputAction.ThrottleDown, Key.Ctrl).Stick(InputAction.ThrottleDown, JoyAxis.TriggerLeft, 1, 0f);
+        b.Keys(InputAction.PitchUp, Key.Down).Stick(InputAction.PitchUp, JoyAxis.LeftY, 1, 0f);
+        b.Keys(InputAction.PitchDown, Key.Up).Stick(InputAction.PitchDown, JoyAxis.LeftY, -1, 0f);
+        b.Keys(InputAction.RollLeft, Key.Left).Stick(InputAction.RollLeft, JoyAxis.LeftX, -1, 0f);
+        b.Keys(InputAction.RollRight, Key.Right).Stick(InputAction.RollRight, JoyAxis.LeftX, 1, 0f);
+        b.Keys(InputAction.YawLeft, Key.Comma).Buttons(InputAction.YawLeft, JoyButton.LeftShoulder);
+        b.Keys(InputAction.YawRight, Key.Period).Buttons(InputAction.YawRight, JoyButton.RightShoulder);
+        b.Keys(InputAction.ThrottleUp, Key.Equal).Stick(InputAction.ThrottleUp, JoyAxis.TriggerRight, 1, 0f);
+        b.Keys(InputAction.ThrottleDown, Key.Minus).Stick(InputAction.ThrottleDown, JoyAxis.TriggerLeft, 1, 0f);
+
+        // The nine eighths on the digit row, 1 for idle through 9 for full, which is why no targeting
+        // action may take a digit. The pad has no counterpart: its trigger pair is the whole lever.
+        for (int eighths = 0; eighths <= 8; eighths++)
+        {
+            b.Keys(InputAction.ThrottleSet0 + eighths, (Key)((int)Key.Key1 + eighths));
+        }
+
         b.Keys(InputAction.FireGuns, Key.Space).Buttons(InputAction.FireGuns, JoyButton.B);
-        b.Keys(InputAction.FireRockets, Key.F).Buttons(InputAction.FireRockets, JoyButton.A);
+        b.Keys(InputAction.FireRockets, Key.X).Buttons(InputAction.FireRockets, JoyButton.A);
         b.Keys(InputAction.SelectGunGroup, Key.F3).Buttons(InputAction.SelectGunGroup, JoyButton.DpadRight);
         b.Keys(InputAction.SelectOrdnance, Key.F5).Buttons(InputAction.SelectOrdnance, JoyButton.DpadLeft);
 
@@ -115,37 +123,41 @@ public static class DefaultBindings
         b.Keys(InputAction.SelectGunGroupPrev, Key.F4);
         b.Keys(InputAction.SelectOrdnancePrev, Key.F6);
         b.Keys(InputAction.Nitro, Key.N).Buttons(InputAction.Nitro, JoyButton.X);
-        b.Keys(InputAction.Respawn, Key.R).Buttons(InputAction.Respawn, JoyButton.Y);
-        b.Keys(InputAction.AutoLand, Key.F9).Buttons(InputAction.AutoLand, JoyButton.LeftStick);
-        b.Keys(InputAction.Pause, Key.P, Key.Escape).Buttons(InputAction.Pause, JoyButton.Start);
-        b.Keys(InputAction.TargetNextEnemy, Key.T).Buttons(InputAction.TargetNextEnemy, JoyButton.DpadUp);
-        b.Keys(InputAction.TargetNextAlly, Key.Y);
-        b.Keys(InputAction.TargetNextNonAircraft, Key.U);
-        b.Keys(InputAction.TargetNearest, Key.I);
-        b.Keys(InputAction.TargetClear, Key.O);
 
-        // The other two directions of each class, on the digit row above the T/Y/U run. The
-        // original's Shift and Ctrl forms want a modifier no binding here carries (docs/controls.md).
-        // No pad default for any of them: the pad keeps the cycle and the crosshairs alone.
-        b.Keys(InputAction.TargetPreviousEnemy, Key.Key5);
-        b.Keys(InputAction.TargetPreviousAlly, Key.Key6);
-        b.Keys(InputAction.TargetPreviousNonAircraft, Key.Key7);
-        b.Keys(InputAction.TargetNearestEnemy, Key.Key8);
-        b.Keys(InputAction.TargetNearestAlly, Key.Key9);
-        b.Keys(InputAction.TargetNearestNonAircraft, Key.Key0);
+        // Respawn is this port's own action and the original binds nothing to Backspace, so it sits
+        // out of the flying hand's reach: it throws the airframe away and must not be brushed in a
+        // manoeuvre. The original's Ctrl+X stays free for the bail-out this port does not have.
+        b.Keys(InputAction.Respawn, Key.Backspace).Buttons(InputAction.Respawn, JoyButton.Y);
+        b.Keys(InputAction.AutoLand, Key.A).Buttons(InputAction.AutoLand, JoyButton.LeftStick);
+        b.Keys(InputAction.Pause, Key.Escape).Buttons(InputAction.Pause, JoyButton.Start);
+
+        // The eleven targeting actions, the original's own run across Q W E R T with Shift stepping
+        // a cycle back and Ctrl restarting it at its head. Only the three Next actions reach a pad
+        // control, as the original gives only two of the eleven a joystick button.
+        b.Keys(InputAction.TargetNextEnemy, Key.E).Buttons(InputAction.TargetNextEnemy, JoyButton.DpadUp);
+        b.Mod(InputAction.TargetPreviousEnemy, KeyModifiers.Shift, Key.E);
+        b.Mod(InputAction.TargetNearestEnemy, KeyModifiers.Ctrl, Key.E);
+        b.Keys(InputAction.TargetNextAlly, Key.W);
+        b.Mod(InputAction.TargetPreviousAlly, KeyModifiers.Shift, Key.W);
+        b.Mod(InputAction.TargetNearestAlly, KeyModifiers.Ctrl, Key.W);
+        b.Keys(InputAction.TargetNextNonAircraft, Key.R);
+        b.Mod(InputAction.TargetPreviousNonAircraft, KeyModifiers.Shift, Key.R);
+        b.Mod(InputAction.TargetNearestNonAircraft, KeyModifiers.Ctrl, Key.R);
+        b.Keys(InputAction.TargetNearest, Key.Q);
+        b.Keys(InputAction.TargetClear, Key.T);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
-        // F1 rather than a key in the F6-F8 run: the original spends F3 to F6 on the weapon
-        // selectors and this port reproduces that, leaving F1 (its own View Help, which this port
-        // has no screen for) as the function key the views cluster can still take.
-        b.Keys(InputAction.SelectChaseView, Key.F1).Buttons(InputAction.SelectChaseView, JoyButton.Back);
+
+        // Selecting the chase view without walking the cycle is this port's own action; F2 is the
+        // one key in the original's function-key run it leaves free, F1 being its View Help and
+        // F3 to F8 its selectors and views.
+        b.Keys(InputAction.SelectChaseView, Key.F2).Buttons(InputAction.SelectChaseView, JoyButton.Back);
         // F7 is the original's own key for this camera ("Access Chase View", which its own decode
         // settles as the flyby rather than the following chase view); the pad has no spare button.
         b.Keys(InputAction.FlybyView, Key.F7);
 
-        // The spyglass. Shift+S is unreachable here (a binding is one control, and both halves are
-        // flight actions), so F2 stands for its camera 2; Misc1 is the pad's one free control, and
-        // the original spends a joystick button on this too (docs/controls.md).
-        b.Keys(InputAction.ToggleSpyglass, Key.F2)
+        // The spyglass on the original's own Shift+S, now that a binding carries the modifier; Misc1
+        // is the pad's one free control, and the original spends a joystick button on this too.
+        b.Mod(InputAction.ToggleSpyglass, KeyModifiers.Shift, Key.S)
             .Buttons(InputAction.ToggleSpyglass, JoyButton.Misc1);
         b.Keys(InputAction.LookUp, Key.Kp7, Key.Kp8, Key.Kp9);
         b.Keys(InputAction.LookDown, Key.Kp1, Key.Kp2, Key.Kp3);
@@ -248,6 +260,15 @@ public static class DefaultBindings
                 Map.Add(action, new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)));
             }
 
+            return this;
+        }
+
+        // One key under modifiers, the original's Shift and Ctrl forms. Its own method rather than a
+        // parameter on Keys, because every other row is bare and would carry a None argument.
+        public ContextBuilder Mod(InputAction action, KeyModifiers modifiers, Key key)
+        {
+            Track(action);
+            Map.Add(action, new Binding(DeviceId.Keyboard, BindingControl.Key((int)key, modifiers)));
             return this;
         }
 

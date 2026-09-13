@@ -211,10 +211,71 @@ public class BindingStoreTests
     {
         var json = BindingStore.Serialize(1, BindingProfile.Defaults(Pad, readsKeyboard: true));
 
-        Assert.Contains("\"version\": 1", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 2", json, StringComparison.Ordinal);
         Assert.Contains("\"FireGuns\"", json, StringComparison.Ordinal);
         Assert.Contains("keyboard/key:Space", json, StringComparison.Ordinal);
+        Assert.Contains("keyboard/key:Shift+S", json, StringComparison.Ordinal);
         Assert.Contains("axis:TriggerRight+@0", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>A modified key round-trips through its own token: the prefix is part of the control,
+    /// so a file written before it existed and one written after it are both read as written.
+    /// </summary>
+    [Fact]
+    public void RoundTrip_PreservesAModifiedKey()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var loaded = BindingStore.Deserialize(BindingStore.Serialize(1, profile), Pad, readsKeyboard: true)
+            .Map(InputContext.Flight);
+
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.E, KeyModifiers.Shift)) },
+            loaded.Bindings(InputAction.TargetPreviousEnemy));
+    }
+
+    /// <summary>A version 1 file, which has no modifier prefix on any token, still loads whole: the
+    /// reader checks no version and a bare key token means a bare key in either version. A player who
+    /// last played before the modifiers existed keeps the keymap they chose.</summary>
+    [Fact]
+    public void Load_AVersionOneFile_KeepsEveryRowItNames()
+    {
+        var json = """
+        {
+          "version": 1,
+          "player": 1,
+          "contexts": {
+            "flight": {
+              "FireGuns": ["keyboard/key:Z"],
+              "TargetPreviousEnemy": ["keyboard/key:Key5"],
+              "ToggleSpyglass": ["keyboard/key:F2"]
+            }
+          }
+        }
+        """;
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
+
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Z)) },
+            loaded.Bindings(InputAction.FireGuns));
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Key5)) },
+            loaded.Bindings(InputAction.TargetPreviousEnemy));
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2)) },
+            loaded.Bindings(InputAction.ToggleSpyglass));
+    }
+
+    /// <summary>An unreadable modifier name costs the row it stands on and nothing else, on the same
+    /// rule as any other unreadable token.</summary>
+    [Fact]
+    public void Load_UnknownModifierName_LeavesTheWholeRowAtItsDefault()
+    {
+        var json = Row("flight", "\"ToggleSpyglass\": [\"keyboard/key:Hyper+S\"]");
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
+
+        Assert.Equal(
+            DefaultBindings.MapFor(InputContext.Flight, Pad).Bindings(InputAction.ToggleSpyglass),
+            loaded.Bindings(InputAction.ToggleSpyglass));
     }
 
     /// <summary>A saved keymap is written atomically, so a run killed mid-write leaves the previous

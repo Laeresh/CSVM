@@ -28,7 +28,7 @@ internal static class PromptDeviceSuites
     {
         ctx.RequireData(ctx.MessagesPath, $"the install's message table");
         var strings = Messages.Load(ctx.MessagesPath);
-        string onKey = strings.Format(PressKey, "F9");
+        string onKey = strings.Format(PressKey, "A");
         string onPad = strings.Format(PressKey, "Pad Left Stick");
         var rig = new FlightController
         {
@@ -52,7 +52,7 @@ internal static class PromptDeviceSuites
                 $"…and a tick with nothing held leaves it there: '{rig.PilotHud.AutoLandPrompt}'");
 
             var key = new OneSide();
-            key.Keys.Add((int)Key.F9);
+            key.Keys.Add((int)Key.A);
             rig.ObserveDeviceForTest(key, new OneSide());
             ctx.Check(rig.ActiveDeviceSide == DeviceSide.Keyboard && rig.PilotHud.AutoLandPrompt == onKey,
                 $"a key press takes the line back to the keyboard: '{rig.PilotHud.AutoLandPrompt}'");
@@ -77,7 +77,7 @@ internal static class PromptDeviceSuites
         ctx.RequireData(ctx.MessagesPath, $"the install's message table");
         Anchor(ctx);
         var strings = Messages.Load(ctx.MessagesPath);
-        string onKey = strings.Format(PressKey, "F9");
+        string onKey = strings.Format(PressKey, "A");
         string onPad = strings.Format(PressKey, "Pad Left Stick");
         var canvas = new CanvasLayer();
         var rig = new FlightController
